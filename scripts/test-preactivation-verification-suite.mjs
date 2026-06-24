@@ -727,6 +727,10 @@ const guardChecks = [
     script: "scripts/test-driver-live-location-consent-runtime-evidence-contract-guard.mjs",
   },
   {
+    label: "Driver Live Location Share/Stop runtime wiring guard",
+    script: "scripts/test-driver-live-location-share-stop-runtime-wiring-guard.mjs",
+  },
+  {
     label: "Driver Live Location disabled scaffold guard",
     script: "scripts/test-driver-live-location-disabled-scaffold-guard.mjs",
   },

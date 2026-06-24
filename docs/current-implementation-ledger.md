@@ -5562,12 +5562,12 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Driver Live Location Consent UI Disabled Scaffold Implementation
 - This adds a compact disabled Driver Live Location consent UI scaffold to the existing driver job link page.
-- The scaffold renders explicit Share Location and Stop Sharing controls, but both controls are disabled by default and have no click handler.
+- The scaffold renders explicit Share Location and Stop Sharing controls; runtime handlers are present but disabled by default behind the Share/Stop UI gate and browser GPS gate.
 - The scaffold shows only driver-visible safe state fields: sharing state, permission state, last shared time, and stale/offline state.
-- The scaffold does not call `navigator.geolocation`, does not call the driver live-location route, does not read or write location rows, does not open gates, does not create a Supabase client, and does not call providers.
+- The scaffold does not call `navigator.geolocation` or the driver live-location route unless the gated runtime UI is open and the driver explicitly clicks Share Location or Stop Sharing; it does not read or write location rows while gates are closed, does not open gates, does not create a Supabase client, and does not call providers.
 - The existing driver live-location capture/stop route remains closed with HTTP 503 safe no-op behavior.
 - No customer live map link, admin active-jobs map runtime, browser map key, DB write, env change, deploy, provider send, billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, OTS/photo/storage, calendar, auth expansion, or shim work is activated.
-- Next live-location lane remains a separately approved gated runtime implementation/evidence pass with explicit driver consent, wrong-driver/wrong-admin blocked proof, cleanup zero rows, rollback proof, and no customer visibility unless separately approved.
+- Next live-location lane remains a separately approved live evidence pass with explicit driver consent, wrong-driver/wrong-admin blocked proof, cleanup zero rows, rollback proof, and no customer visibility unless separately approved.
 
 ### Driver Live Location Admin Active Jobs Map Disabled Scaffold Implementation
 - This adds a compact disabled Admin Active Jobs Map scaffold inside the existing Day-of-Trip Dispatch Monitor admin surface.
@@ -5705,11 +5705,11 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Driver Live Location Consent Runtime Evidence Contract Guard Lock
 - This is a docs/test-only guard for the future Driver Live Location driver-consent runtime evidence pass.
-- This lock does not implement browser GPS capture, does not enable the Share Location or Stop Sharing controls, does not open live-location gates, does not write/read location rows, does not change env, does not deploy, does not call Google Maps/OneMap/FlightAware, does not send provider messages, and does not activate customer live map links.
-- Current driver job pages remain disabled by default: the production driver job page must not call `navigator.geolocation`, must not call the live-location route from the client, and must not auto-start sharing from page load or status buttons.
+- Share/Stop runtime wiring remains disabled by default and browser GPS is behind `NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_BROWSER_GPS_ENABLED` plus an explicit Share Location click.
+- Current driver job pages remain closed by default: the production driver job page must not auto-start sharing from page load or status buttons, and it must not call the live-location route unless the Share/Stop UI gate is explicitly open.
 - Future evidence must use one fake or staging-safe driver job target only, never a real driver/customer trip, and must not print tokens, booking references, row IDs, coordinates from real users, cookies, env values, API keys, DB URLs, or private customer data.
 - Future evidence must prove an explicit driver click on Share Location before any browser geolocation request and an explicit driver click on Stop Sharing before the stop route is called.
-- Future evidence must mock or safely simulate browser geolocation first; real browser GPS, real device location, and silent background location capture are not approved by this lock.
+- Future evidence must mock or safely simulate browser geolocation first; real browser GPS, real device location, and silent background location capture are not approved without separate evidence-window approval.
 - Future evidence must prove no capture on page load, no capture from OTW/OTS/POB/Completed status buttons, no capture from Customer Copy, no capture from Email/Telegram/WhatsApp/SMS, and no capture from in-app notifications or quick replies.
 - Future evidence must prove driver job token scoping, wrong-driver blocked proof, missing/wrong-admin blocked proof for admin reads, admin active-jobs map safe read proof, stale/offline proof, stop proof, cleanup zero-row proof, and rollback/closed-gate proof.
 - Future driver-visible fields remain limited to sharing state, browser permission state, last shared time, stale/offline state, and Share/Stop controls.
@@ -5720,10 +5720,23 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - A future implementation lane still requires separate owner approval for the runtime UI wiring, a browser-safe test harness, gate state, fake/staging-safe job target, cleanup/zero-row proof, rollback proof, docs evidence recording, and staging promotion.
 - This guard adds `scripts/test-driver-live-location-consent-runtime-evidence-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Driver Live Location Share/Stop Runtime Wiring Guard Lock
+- This adds disabled-by-default Driver Live Location Share/Stop runtime wiring to the existing driver job link page.
+- The browser UI gate is `NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_SHARE_STOP_UI_ENABLED` and defaults closed unless explicitly set to `true` at build time.
+- The browser GPS gate is `NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_BROWSER_GPS_ENABLED` and defaults closed unless explicitly set to `true` at build time.
+- No browser geolocation request can happen on page load, status updates, app updates, issue reporting, Customer Copy, provider sends, or quick replies; it is reachable only through an explicit driver click on Share Location after both public gates are open.
+- Share Location calls only the existing job-token scoped `POST /api/driver-job/[token]/live-location` route with safe browser position fields: latitude, longitude, accuracy_meters, heading_degrees, speed_meters_per_second, and captured_at.
+- Stop Sharing calls only the existing job-token scoped `DELETE /api/driver-job/[token]/live-location` route.
+- Both Share and Stop require route responses with `customerVisible: false` and `external_send: false`; customer live map remains blocked.
+- Driver-visible UI remains limited to sharing state, browser permission state, last shared time, stale/offline state, feedback text, and Share/Stop controls.
+- The evidence runner `scripts/run-driver-live-location-share-stop-runtime-evidence.mjs` is disabled by default, mock/unit only, and performs no DB write, env change, deploy, provider send, real GPS capture, or customer live map activation.
+- Future live evidence still requires separate owner approval for fake/staging-safe driver job target, gate window, cleanup zero rows, rollback proof, docs evidence, and staging promotion.
+- This guard adds `scripts/test-driver-live-location-share-stop-runtime-wiring-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Driver Live Location Consent UI Readiness Contract Guard Lock
 - This is a docs/test-only guard for future Driver Live Location driver consent UI and compact Admin Active Jobs Map UI readiness.
-- This lock does not implement UI, activate GPS capture, open live-location routes, write/read location rows, apply migrations, change env, deploy, expose browser map keys, call Google Maps/OneMap/FlightAware, send Email/Telegram/WhatsApp/SMS, activate customer live map visibility, or touch billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, or shim work.
-- Current state remains disabled: driver job pages must not call `navigator.geolocation`, must not start location sharing on page load, and must not silently capture coordinates from status buttons.
+- This lock does not activate GPS capture by default, open live-location gates by default, write/read location rows, apply migrations, change env, deploy, expose browser map keys, call Google Maps/OneMap/FlightAware, send Email/Telegram/WhatsApp/SMS, activate customer live map visibility, or touch billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, or shim work.
+- Current state remains disabled by default: driver job pages must not start location sharing on page load and must not silently capture coordinates from status buttons.
 - Future driver consent UI must live on the existing driver job link surface after the server resolves the current assigned job token.
 - Future driver consent UI must use an explicit Share Location control, browser permission prompt, visible sharing state, last shared/stale state, and an explicit Stop Sharing control.
 - Future driver consent UI must make clear that sharing is job-scoped and can be stopped; one driver job token must not see or write another driver/job location.

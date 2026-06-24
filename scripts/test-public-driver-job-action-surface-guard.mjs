@@ -301,19 +301,24 @@ for (const forbiddenIssuePattern of [
   assertExcludes(issueChoices, forbiddenIssuePattern, "driver issue choices forbidden fields");
 }
 
-assert.equal(countOccurrences(driverPage, "fetch("), 4, "driver page fetch count");
-assert.equal(countOccurrences(driverPage, 'cache: "no-store"'), 4, "driver page no-store count");
-assert.equal(countOccurrences(driverPage, 'method: "POST"'), 1, "driver page POST count");
+assert.equal(countOccurrences(driverPage, "fetch("), 6, "driver page fetch count");
+assert.equal(countOccurrences(driverPage, 'cache: "no-store"'), 6, "driver page no-store count");
+assert.equal(countOccurrences(driverPage, 'method: "POST"'), 2, "driver page POST count");
+assert.equal(countOccurrences(driverPage, 'method: "DELETE"'), 1, "driver page DELETE count");
 assert.equal(countOccurrences(driverPage, 'method: "PATCH"'), 1, "driver page PATCH count");
 for (const fragment of [
   "fetch(`/api/driver-job/${encodeURIComponent(token)}`",
   "`/api/driver-job/${encodeURIComponent(token)}/notifications?limit=5&page=1`",
   "fetch(`/api/driver-job/${encodeURIComponent(token)}/issue-alert`",
   "body: JSON.stringify({ issue_type: issueChoice.value })",
+  "fetch(driverLiveLocationRoute()",
+  "customerVisible !== false",
+  "external_send !== false",
   "fetch(`/api/driver-job/${encodeURIComponent(token)}/status`",
   "const requestBody: Record<string, unknown> = {\n        status: transitionGuard.status,\n      };",
   'headers: { "content-type": "application/json" }',
   'method: "POST"',
+  'method: "DELETE"',
   'method: "PATCH"',
 ]) {
   assertIncludes(driverPage, fragment, `driver page action caller ${fragment}`);
@@ -323,7 +328,7 @@ for (const forbiddenPagePattern of [
   /credentials\s*:/,
   forbiddenClientAuthPattern,
   /localStorage|sessionStorage|navigator\.credentials/i,
-  /navigator\.geolocation|navigator\.mediaDevices|getUserMedia|type=["']file["']|new FormData|URL\.createObjectURL/i,
+  /watchPosition|clearWatch|navigator\.mediaDevices|getUserMedia|type=["']file["']|new FormData|URL\.createObjectURL/i,
   /type="submit"|formAction|download|href=/,
   /\/api\/admin|\/api\/admin-saved-bookings|\/api\/ai-parse/i,
   /method:\s*"PATCH"[\s\S]{0,220}notifications/i,

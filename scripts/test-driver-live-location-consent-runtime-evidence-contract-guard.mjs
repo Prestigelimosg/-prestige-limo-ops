@@ -59,11 +59,11 @@ const serverLiveLocationSourceWithoutDenylist = serverLiveLocationSource.replace
 
 for (const phrase of [
   "This is a docs/test-only guard for the future Driver Live Location driver-consent runtime evidence pass.",
-  "This lock does not implement browser GPS capture, does not enable the Share Location or Stop Sharing controls, does not open live-location gates, does not write/read location rows, does not change env, does not deploy, does not call Google Maps/OneMap/FlightAware, does not send provider messages, and does not activate customer live map links.",
-  "Current driver job pages remain disabled by default: the production driver job page must not call `navigator.geolocation`, must not call the live-location route from the client, and must not auto-start sharing from page load or status buttons.",
+  "Share/Stop runtime wiring remains disabled by default and browser GPS is behind `NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_BROWSER_GPS_ENABLED` plus an explicit Share Location click.",
+  "Current driver job pages remain closed by default: the production driver job page must not auto-start sharing from page load or status buttons, and it must not call the live-location route unless the Share/Stop UI gate is explicitly open.",
   "Future evidence must use one fake or staging-safe driver job target only, never a real driver/customer trip, and must not print tokens, booking references, row IDs, coordinates from real users, cookies, env values, API keys, DB URLs, or private customer data.",
   "Future evidence must prove an explicit driver click on Share Location before any browser geolocation request and an explicit driver click on Stop Sharing before the stop route is called.",
-  "Future evidence must mock or safely simulate browser geolocation first; real browser GPS, real device location, and silent background location capture are not approved by this lock.",
+  "Future evidence must mock or safely simulate browser geolocation first; real browser GPS, real device location, and silent background location capture are not approved without separate evidence-window approval.",
   "Future evidence must prove no capture on page load, no capture from OTW/OTS/POB/Completed status buttons, no capture from Customer Copy, no capture from Email/Telegram/WhatsApp/SMS, and no capture from in-app notifications or quick replies.",
   "Future evidence must prove driver job token scoping, wrong-driver blocked proof, missing/wrong-admin blocked proof for admin reads, admin active-jobs map safe read proof, stale/offline proof, stop proof, cleanup zero-row proof, and rollback/closed-gate proof.",
   "Future driver-visible fields remain limited to sharing state, browser permission state, last shared time, stale/offline state, and Share/Stop controls.",
@@ -71,7 +71,6 @@ for (const phrase of [
   "Future customer live map links, Customer Copy live-location URLs, customer portal tracking, customer in-app tracking, Telegram true live-location sends, Email/WhatsApp/SMS provider sends, and free-form chat are not approved by this lock.",
   "Future evidence must not expose pricing, payout, PayNow, payout preferences, `driver_payout_rules`, `customer_rates`, billing/payment/PDF/invoice, internal/admin/finance notes, parser/debug fields, secrets/tokens/cookies/JWTs, raw provider payloads, customer contact details, customer messages, Save Booking internals, `/api/admin-saved-bookings` internals, OTS/photo/storage, calendar data, or mock QA/dev archive.",
   "This guard depends on the completed Driver Live Location table/RLS evidence, admin runtime evidence, runtime settings migration apply, and Vercel env drift names-only audit guard; it does not repeat those lanes.",
-  "A future implementation lane still requires separate owner approval for the runtime UI wiring, a browser-safe test harness, gate state, fake/staging-safe job target, cleanup/zero-row proof, rollback proof, docs evidence recording, and staging promotion.",
   "This guard adds `scripts/test-driver-live-location-consent-runtime-evidence-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {
   assertIncludes(ledgerSection, phrase, `ledger consent runtime evidence phrase ${phrase}`);
@@ -104,7 +103,7 @@ for (const forbiddenPhrase of [
 }
 
 const driverLiveLocationUiStart = driverJobPage.indexOf(
-  'data-driver-live-location-consent-ui="disabled"',
+  "data-driver-live-location-consent-ui={driverLiveLocationUiState}",
 );
 assert.notEqual(driverLiveLocationUiStart, -1, "Driver live-location disabled UI must remain present.");
 const driverLiveLocationUiEnd = driverJobPage.indexOf("</section>", driverLiveLocationUiStart);
@@ -112,37 +111,47 @@ assert.notEqual(driverLiveLocationUiEnd, -1, "Driver live-location disabled UI s
 const driverLiveLocationUi = driverJobPage.slice(driverLiveLocationUiStart, driverLiveLocationUiEnd);
 
 for (const fragment of [
-  'data-driver-live-location-share-button="disabled"',
-  'data-driver-live-location-stop-button="disabled"',
-  'data-driver-live-location-sharing-state="inactive"',
-  'data-driver-live-location-permission-state="not_requested"',
-  'data-driver-live-location-last-shared="not_shared"',
-  'data-driver-live-location-stale-state="inactive"',
+  "data-driver-live-location-share-button={driverLiveLocationUiState}",
+  "data-driver-live-location-stop-button={driverLiveLocationUiState}",
+  "data-driver-live-location-sharing-state={driverLiveLocation.sharingState}",
+  "data-driver-live-location-permission-state={driverLiveLocation.permissionState}",
+  "data-driver-live-location-last-shared={driverLiveLocation.lastSharedAt ? \"shared\" : \"not_shared\"}",
+  "data-driver-live-location-stale-state={driverLiveLocation.staleState}",
   "Share Location",
   "Stop Sharing",
 ]) {
   assertIncludes(driverLiveLocationUi, fragment, `disabled driver consent UI fragment ${fragment}`);
 }
 
-for (const forbiddenPattern of [
-  /navigator\.geolocation|getCurrentPosition|watchPosition|clearWatch|GeolocationPosition/i,
-  /fetch\([^)]*live-location|\/api\/driver-job\/[^"'`]+\/live-location/i,
-  /gpsCaptureEnabled\s*[:=]\s*true|locationStorageEnabled\s*[:=]\s*true|liveMapEnabled\s*[:=]\s*true|customerVisible\s*[:=]\s*true/i,
+for (const fragment of [
+  "NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_SHARE_STOP_UI_ENABLED",
+  "NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_BROWSER_GPS_ENABLED",
+  "driverLiveLocationBrowserGpsEnabled",
+  "navigator.geolocation.getCurrentPosition",
+  "onClick={shareDriverLiveLocation}",
+  "onClick={stopDriverLiveLocation}",
+  "customerVisible !== false",
+  "external_send !== false",
 ]) {
-  assertExcludes(driverJobPage, forbiddenPattern, "driver job page live-location runtime activation");
+  assertIncludes(driverJobPage, fragment, `gated driver live-location runtime fragment ${fragment}`);
 }
 
 for (const forbiddenPattern of [
-  /onClick|useEffect\s*\([^)]*location|setInterval|setTimeout/i,
-  /fetch\(|\/live-location|navigator\.geolocation|getCurrentPosition|watchPosition/i,
+  /void\s+shareDriverLiveLocation\(|shareDriverLiveLocation\(\);|shareDriverLiveLocation\(\)\.catch/i,
+  /setInterval|setTimeout|watchPosition|clearWatch/i,
+]) {
+  assertExcludes(
+    driverJobPage,
+    forbiddenPattern,
+    "driver live-location consent runtime wiring",
+  );
+}
+
+for (const forbiddenPattern of [
   /customer_price|driver_payout|customer_rates|driver_payout_rules|paynow|billing|invoice|payment|payout/i,
   /internal_admin|internal_finance|parser_debug|service_role|server_secret|access_token|api_key/i,
 ]) {
-  assertExcludes(
-    driverLiveLocationUi,
-    forbiddenPattern,
-    "disabled driver live-location consent UI runtime wiring",
-  );
+  assertExcludes(driverLiveLocationUi, forbiddenPattern, "driver live-location consent UI");
 }
 
 for (const fragment of [

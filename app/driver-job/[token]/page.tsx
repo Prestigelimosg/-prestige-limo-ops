@@ -97,10 +97,44 @@ type DriverIssueAlertApiResponse =
       reason?: DriverJobApiBlockedReason;
     };
 
+type DriverLiveLocationApiResponse =
+  | {
+      customerVisible?: false;
+      external_send?: false;
+      ok: true;
+      sharing_state?: string | null;
+    }
+  | {
+      customerVisible?: false;
+      external_send?: false;
+      ok: false;
+      reason?: string;
+    };
+
 type DriverAppUpdateState = {
   feedback: ControlFeedback | null;
   kind: "idle" | "loading" | "loaded" | "empty" | "unavailable" | "error";
   updates: DriverAppUpdateRecord[];
+};
+
+type DriverLiveLocationBrowserPosition = {
+  coords: {
+    accuracy: number;
+    heading: number | null;
+    latitude: number;
+    longitude: number;
+    speed: number | null;
+  };
+  timestamp: number;
+};
+
+type DriverLiveLocationState = {
+  action: "idle" | "sharing" | "stopping";
+  feedback: ControlFeedback | null;
+  lastSharedAt: string;
+  permissionState: "denied" | "granted" | "not_requested" | "unavailable";
+  sharingState: "active" | "inactive" | "stopped";
+  staleState: "active" | "inactive" | "stale";
 };
 
 type DriverDetails = {
@@ -162,6 +196,20 @@ const emptyDriverAppUpdateState: DriverAppUpdateState = {
   kind: "idle",
   updates: [],
 };
+
+const emptyDriverLiveLocationState: DriverLiveLocationState = {
+  action: "idle",
+  feedback: null,
+  lastSharedAt: "",
+  permissionState: "not_requested",
+  sharingState: "inactive",
+  staleState: "inactive",
+};
+
+const driverLiveLocationShareStopRuntimeUiEnabled =
+  process.env.NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_SHARE_STOP_UI_ENABLED === "true";
+const driverLiveLocationBrowserGpsEnabled =
+  process.env.NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_BROWSER_GPS_ENABLED === "true";
 
 const blockedMessages: Record<DriverJobApiBlockedReason, string> = {
   already_completed: "This job is already completed. Contact dispatch if this is incorrect.",
@@ -364,6 +412,47 @@ function formatDriverAppUpdateTime(value: unknown) {
   });
 }
 
+function formatDriverLiveLocationTime(value: string) {
+  const date = value ? new Date(value) : null;
+
+  if (!date || Number.isNaN(date.getTime())) {
+    return "Not shared";
+  }
+
+  return date.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function driverLiveLocationPermissionLabel(value: DriverLiveLocationState["permissionState"]) {
+  if (value === "granted") {
+    return "Allowed";
+  }
+
+  if (value === "denied") {
+    return "Denied";
+  }
+
+  if (value === "unavailable") {
+    return "Unavailable";
+  }
+
+  return "Not requested";
+}
+
+function driverLiveLocationStaleLabel(value: DriverLiveLocationState["staleState"]) {
+  if (value === "active") {
+    return "Active";
+  }
+
+  if (value === "stale") {
+    return "Stale";
+  }
+
+  return "Not active";
+}
+
 function normalizeStatusKey(value: unknown) {
   return String(value || "")
     .replace(/([a-z])([A-Z])/g, "$1_$2")
@@ -445,6 +534,8 @@ export default function DriverJobPage() {
   const [selectedDriverIssue, setSelectedDriverIssue] = useState("");
   const [driverAppUpdates, setDriverAppUpdates] =
     useState<DriverAppUpdateState>(emptyDriverAppUpdateState);
+  const [driverLiveLocation, setDriverLiveLocation] =
+    useState<DriverLiveLocationState>(emptyDriverLiveLocationState);
   const [statusFeedback, setStatusFeedback] = useState<StatusFeedback | null>(null);
   const [workflowStatus, setWorkflowStatus] = useState("assigned");
   const [updatingStatus, setUpdatingStatus] = useState("");
@@ -495,6 +586,7 @@ export default function DriverJobPage() {
       setReportingDriverIssue(false);
       setSelectedDriverIssue("");
       setDriverAppUpdates({ feedback: null, kind: "loading", updates: [] });
+      setDriverLiveLocation(emptyDriverLiveLocationState);
       setSavedDriverDetails(null);
       setStatusFeedback(null);
       setWorkflowStatus("assigned");
@@ -722,6 +814,205 @@ export default function DriverJobPage() {
     }
   }
 
+  function driverLiveLocationRoute() {
+    return `/api/driver-job/${encodeURIComponent(token)}/live-location`;
+  }
+
+  async function requestDriverLiveLocationPosition() {
+    if (!driverLiveLocationBrowserGpsEnabled) {
+      setDriverLiveLocation((currentState) => ({
+        ...currentState,
+        action: "idle",
+        feedback: {
+          tone: "error",
+          text: "Browser GPS capture is still disabled for this build.",
+        },
+        permissionState: "unavailable",
+      }));
+      return null;
+    }
+
+    if (!("geolocation" in navigator)) {
+      setDriverLiveLocation((currentState) => ({
+        ...currentState,
+        action: "idle",
+        feedback: {
+          tone: "error",
+          text: "Location is not available in this browser.",
+        },
+        permissionState: "unavailable",
+      }));
+      return null;
+    }
+
+    try {
+      const position = await new Promise<DriverLiveLocationBrowserPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          maximumAge: 0,
+          timeout: 10000,
+        });
+      });
+
+      setDriverLiveLocation((currentState) => ({
+        ...currentState,
+        permissionState: "granted",
+      }));
+
+      return position;
+    } catch {
+      setDriverLiveLocation((currentState) => ({
+        ...currentState,
+        action: "idle",
+        feedback: {
+          tone: "error",
+          text: "Location permission was not granted. Share only when you approve browser location.",
+        },
+        permissionState: "denied",
+      }));
+      return null;
+    }
+  }
+
+  async function shareDriverLiveLocation() {
+    if (!driverLiveLocationShareStopRuntimeUiEnabled || !token || pageState.kind !== "ready") {
+      setDriverLiveLocation((currentState) => ({
+        ...currentState,
+        feedback: {
+          tone: "error",
+          text: "Location sharing is closed for this job.",
+        },
+      }));
+      return;
+    }
+
+    setDriverLiveLocation((currentState) => ({
+      ...currentState,
+      action: "sharing",
+      feedback: null,
+    }));
+
+    const position = await requestDriverLiveLocationPosition();
+
+    if (!position) {
+      return;
+    }
+
+    try {
+      const response = await fetch(driverLiveLocationRoute(), {
+        body: JSON.stringify({
+          accuracy_meters: position.coords.accuracy,
+          captured_at: new Date(position.timestamp).toISOString(),
+          heading_degrees: position.coords.heading,
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          speed_meters_per_second: position.coords.speed,
+        }),
+        cache: "no-store",
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      });
+      const result = await response.json() as DriverLiveLocationApiResponse;
+
+      if (!response.ok || !result.ok || result.customerVisible !== false || result.external_send !== false) {
+        setDriverLiveLocation((currentState) => ({
+          ...currentState,
+          action: "idle",
+          feedback: {
+            tone: "error",
+            text: "Location sharing was not accepted. Contact dispatch.",
+          },
+        }));
+        return;
+      }
+
+      const sharedAt = new Date(position.timestamp).toISOString();
+
+      setDriverLiveLocation((currentState) => ({
+        ...currentState,
+        action: "idle",
+        feedback: {
+          tone: "success",
+          text: "Location shared for this job only.",
+        },
+        lastSharedAt: sharedAt,
+        permissionState: "granted",
+        sharingState: "active",
+        staleState: "active",
+      }));
+      addActivity("Location shared", "Driver location was shared in-app for this assigned job only.");
+    } catch {
+      setDriverLiveLocation((currentState) => ({
+        ...currentState,
+        action: "idle",
+        feedback: {
+          tone: "error",
+          text: "Location sharing failed. Contact dispatch.",
+        },
+      }));
+    }
+  }
+
+  async function stopDriverLiveLocation() {
+    if (!driverLiveLocationShareStopRuntimeUiEnabled || !token || pageState.kind !== "ready") {
+      setDriverLiveLocation((currentState) => ({
+        ...currentState,
+        feedback: {
+          tone: "error",
+          text: "Location sharing is closed for this job.",
+        },
+      }));
+      return;
+    }
+
+    setDriverLiveLocation((currentState) => ({
+      ...currentState,
+      action: "stopping",
+      feedback: null,
+    }));
+
+    try {
+      const response = await fetch(driverLiveLocationRoute(), {
+        cache: "no-store",
+        method: "DELETE",
+      });
+      const result = await response.json() as DriverLiveLocationApiResponse;
+
+      if (!response.ok || !result.ok || result.customerVisible !== false || result.external_send !== false) {
+        setDriverLiveLocation((currentState) => ({
+          ...currentState,
+          action: "idle",
+          feedback: {
+            tone: "error",
+            text: "Stop sharing was not accepted. Contact dispatch.",
+          },
+        }));
+        return;
+      }
+
+      setDriverLiveLocation((currentState) => ({
+        ...currentState,
+        action: "idle",
+        feedback: {
+          tone: "success",
+          text: "Location sharing stopped for this job.",
+        },
+        sharingState: "stopped",
+        staleState: "inactive",
+      }));
+      addActivity("Location stopped", "Driver location sharing was stopped for this assigned job.");
+    } catch {
+      setDriverLiveLocation((currentState) => ({
+        ...currentState,
+        action: "idle",
+        feedback: {
+          tone: "error",
+          text: "Stop sharing failed. Contact dispatch.",
+        },
+      }));
+    }
+  }
+
   async function updateStatus(nextStatus: string, label: string) {
     if (!token || pageState.kind !== "ready") {
       return;
@@ -806,6 +1097,23 @@ export default function DriverJobPage() {
       setUpdatingStatus("");
     }
   }
+
+  const driverLiveLocationControlsDisabled =
+    !driverLiveLocationShareStopRuntimeUiEnabled ||
+    driverLiveLocation.action !== "idle" ||
+    pageState.kind !== "ready";
+  const driverLiveLocationUiState = driverLiveLocationShareStopRuntimeUiEnabled
+    ? "runtime-ready"
+    : "disabled";
+  const driverLiveLocationHelperText = driverLiveLocationShareStopRuntimeUiEnabled
+    ? "Share only when dispatch tells you to start tracking for this job."
+    : "Location sharing is not active for this job.";
+  const driverLiveLocationSharingLabel =
+    driverLiveLocation.sharingState === "active"
+      ? "Sharing"
+      : driverLiveLocation.sharingState === "stopped"
+        ? "Stopped"
+        : "Off";
 
   return (
     <main className="min-h-screen bg-stone-50 text-slate-950">
@@ -1117,7 +1425,7 @@ export default function DriverJobPage() {
             <section
               className="order-[82] space-y-2"
               aria-labelledby="driver-live-location-heading"
-              data-driver-live-location-consent-ui="disabled"
+              data-driver-live-location-consent-ui={driverLiveLocationUiState}
               data-driver-primary-step="live-location-consent"
             >
               <div className="space-y-2 rounded-md border border-slate-200 bg-white p-2.5">
@@ -1130,51 +1438,71 @@ export default function DriverJobPage() {
                       className="mt-1 text-sm font-medium leading-5 text-slate-600"
                       data-driver-live-location-helper="true"
                     >
-                      Location sharing is not active for this job.
+                      {driverLiveLocationHelperText}
                     </p>
                   </div>
                   <span
                     className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200"
-                    data-driver-live-location-sharing-state="inactive"
+                    data-driver-live-location-sharing-state={driverLiveLocation.sharingState}
                   >
-                    Off
+                    {driverLiveLocationSharingLabel}
                   </span>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   <button
                     className="h-10 w-full rounded-md border border-slate-300 bg-slate-50 px-3 text-sm font-semibold text-slate-500 disabled:cursor-not-allowed disabled:opacity-70"
-                    data-driver-live-location-share-button="disabled"
-                    disabled
+                    data-driver-live-location-share-button={driverLiveLocationUiState}
+                    disabled={driverLiveLocationControlsDisabled}
+                    onClick={shareDriverLiveLocation}
                     type="button"
                   >
-                    Share Location
+                    {driverLiveLocation.action === "sharing" ? "Sharing..." : "Share Location"}
                   </button>
                   <button
                     className="h-10 w-full rounded-md border border-slate-300 bg-slate-50 px-3 text-sm font-semibold text-slate-500 disabled:cursor-not-allowed disabled:opacity-70"
-                    data-driver-live-location-stop-button="disabled"
-                    disabled
+                    data-driver-live-location-stop-button={driverLiveLocationUiState}
+                    disabled={driverLiveLocationControlsDisabled}
+                    onClick={stopDriverLiveLocation}
                     type="button"
                   >
-                    Stop Sharing
+                    {driverLiveLocation.action === "stopping" ? "Stopping..." : "Stop Sharing"}
                   </button>
                 </div>
+                {driverLiveLocation.feedback ? (
+                  <p
+                    aria-live="polite"
+                    className={`rounded-md border px-2.5 py-1.5 text-sm font-semibold ${feedbackClassName(driverLiveLocation.feedback.tone)}`}
+                    data-driver-live-location-feedback="true"
+                  >
+                    {driverLiveLocation.feedback.text}
+                  </p>
+                ) : null}
                 <dl className="grid gap-1.5 text-xs font-semibold text-slate-600 sm:grid-cols-3">
                   <div className="rounded-md bg-slate-50 px-2.5 py-1.5 ring-1 ring-slate-200">
                     <dt className="uppercase text-slate-500">Permission</dt>
-                    <dd className="mt-1 text-slate-800" data-driver-live-location-permission-state="not_requested">
-                      Not requested
+                    <dd
+                      className="mt-1 text-slate-800"
+                      data-driver-live-location-permission-state={driverLiveLocation.permissionState}
+                    >
+                      {driverLiveLocationPermissionLabel(driverLiveLocation.permissionState)}
                     </dd>
                   </div>
                   <div className="rounded-md bg-slate-50 px-2.5 py-1.5 ring-1 ring-slate-200">
                     <dt className="uppercase text-slate-500">Last shared</dt>
-                    <dd className="mt-1 text-slate-800" data-driver-live-location-last-shared="not_shared">
-                      Not shared
+                    <dd
+                      className="mt-1 text-slate-800"
+                      data-driver-live-location-last-shared={driverLiveLocation.lastSharedAt ? "shared" : "not_shared"}
+                    >
+                      {formatDriverLiveLocationTime(driverLiveLocation.lastSharedAt)}
                     </dd>
                   </div>
                   <div className="rounded-md bg-slate-50 px-2.5 py-1.5 ring-1 ring-slate-200">
                     <dt className="uppercase text-slate-500">State</dt>
-                    <dd className="mt-1 text-slate-800" data-driver-live-location-stale-state="inactive">
-                      Not active
+                    <dd
+                      className="mt-1 text-slate-800"
+                      data-driver-live-location-stale-state={driverLiveLocation.staleState}
+                    >
+                      {driverLiveLocationStaleLabel(driverLiveLocation.staleState)}
                     </dd>
                   </div>
                 </dl>

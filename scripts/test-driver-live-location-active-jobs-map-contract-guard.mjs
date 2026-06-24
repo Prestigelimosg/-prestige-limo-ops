@@ -261,13 +261,31 @@ const driverJobRuntimeSource = `${driverJobPage}\n${driverJobDemo}`;
 
 assertExcludes(
   driverJobPage,
-  /navigator\.geolocation|getCurrentPosition|watchPosition|clearWatch|GeolocationPosition/i,
-  "production driver job page",
+  /watchPosition|clearWatch|GeolocationPosition/i,
+  "production driver job page background GPS",
 );
 assertExcludes(
   driverJobPage,
-  /latitude|longitude|coords|gpsCaptureEnabled\s*[:=]\s*true|liveMapEnabled\s*[:=]\s*true/i,
-  "production driver job page live-location fields",
+  /gpsCaptureEnabled\s*[:=]\s*true|liveMapEnabled\s*[:=]\s*true|customerVisible\s*[:=]\s*true|external_send\s*[:=]\s*true|google\.maps|maps\.google|new\s+google\.maps\.Map|mapCanvas|map-canvas|<canvas/i,
+  "production driver job page live-location activation",
+);
+for (const fragment of [
+  "NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_SHARE_STOP_UI_ENABLED",
+  "NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_BROWSER_GPS_ENABLED",
+  "navigator.geolocation.getCurrentPosition",
+  "customerVisible !== false",
+  "external_send !== false",
+]) {
+  assertIncludes(
+    driverJobPage,
+    fragment,
+    `production driver job page gated live-location fragment ${fragment}`,
+  );
+}
+assertIncludes(
+  driverJobPage,
+  "Browser GPS capture is still disabled for this build.",
+  "production driver job page default-closed GPS copy",
 );
 assertIncludes(
   driverJobRuntimeSource,

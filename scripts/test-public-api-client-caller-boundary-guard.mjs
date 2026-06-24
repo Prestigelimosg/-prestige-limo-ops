@@ -224,28 +224,42 @@ for (const [label, source] of [
 }
 
 const driverPage = files[driverPagePath];
-assert.equal(countOccurrences(driverPage, "fetch("), 4, "driver page fetch call count");
-assert.equal(countOccurrences(driverPage, 'cache: "no-store"'), 4, "driver page no-store fetch count");
+assert.equal(countOccurrences(driverPage, "fetch("), 6, "driver page fetch call count");
+assert.equal(countOccurrences(driverPage, 'cache: "no-store"'), 6, "driver page no-store fetch count");
 for (const fragment of [
   "fetch(`/api/driver-job/${encodeURIComponent(token)}`",
   "`/api/driver-job/${encodeURIComponent(token)}/notifications?limit=5&page=1`",
   "fetch(`/api/driver-job/${encodeURIComponent(token)}/issue-alert`",
+  "fetch(driverLiveLocationRoute()",
   "fetch(`/api/driver-job/${encodeURIComponent(token)}/status`",
   "body: JSON.stringify({ issue_type: issueChoice.value })",
   "const requestBody: Record<string, unknown> = {\n        status: transitionGuard.status,\n      };",
+  "customerVisible !== false",
+  "external_send !== false",
   'headers: { "content-type": "application/json" }',
   'method: "POST"',
+  'method: "DELETE"',
   'method: "PATCH"',
 ]) {
   assertIncludes(driverPage, fragment, `driver page caller ${fragment}`);
 }
-assert.equal(countOccurrences(driverPage, 'method: "POST"'), 1, "driver page POST count");
+assert.equal(countOccurrences(driverPage, 'method: "POST"'), 2, "driver page POST count");
+assert.equal(countOccurrences(driverPage, 'method: "DELETE"'), 1, "driver page DELETE count");
 assert.equal(countOccurrences(driverPage, 'method: "PATCH"'), 1, "driver page PATCH count");
 assertIncludes(driverPage, "const driverPaymentDetailLinePattern =", "driver page pasted payment-detail filter");
 assertExcludes(driverPage, /credentials\s*:/, "driver page manual credentials");
 assertExcludes(driverPage, forbiddenClientAuthPattern, "driver page manual auth/header/env-token plumbing");
 assertExcludes(sourceWithoutDriverPaymentFilter(driverPage), forbiddenDriverVisiblePattern, "driver page forbidden visible/source fields");
 assertExcludes(driverPage, /localStorage|sessionStorage|document\.cookie|navigator\.credentials/i, "driver page browser credential storage");
-assertExcludes(driverPage, /navigator\.geolocation|navigator\.mediaDevices|getUserMedia|type=["']file["']|new FormData|URL\.createObjectURL/i, "driver page live location/photo client APIs");
+assertIncludes(
+  driverPage,
+  "NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_BROWSER_GPS_ENABLED",
+  "driver page browser GPS gate",
+);
+assertExcludes(
+  driverPage,
+  /watchPosition|clearWatch|navigator\.mediaDevices|getUserMedia|type=["']file["']|new FormData|URL\.createObjectURL/i,
+  "driver page background live location/photo client APIs",
+);
 
 console.log("Public API client caller boundary guard passed");

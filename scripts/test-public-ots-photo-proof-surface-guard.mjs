@@ -350,44 +350,53 @@ for (const [path, source] of [
   assertExcludes(source, unsafeOutputPattern, `${path} unsafe OTS output`);
 }
 
+const publicClientForbiddenFragments = [
+  "/api/admin-ots-photo-proof-setup",
+  "/api/admin-ots-photo-proof-preview-readiness-setup",
+  "/api/admin-ots-photo-proof-access-upload-disabled-setup",
+  "admin-ots-photo-proof-setup",
+  "admin-ots-photo-proof-preview-readiness-setup",
+  "admin-ots-photo-proof-access-upload-disabled-setup",
+  "photoUploadEnabled",
+  "storageEnabled",
+  "adminViewerEnabled",
+  "customerVisible",
+  "liveAccessEnabled",
+  "input type=\"file\"",
+  "input type='file'",
+  "FormData",
+  "URL.createObjectURL",
+  "navigator.mediaDevices",
+  "getUserMedia",
+  "FileReader",
+  "readAsDataURL",
+  "storage.from",
+  ".upload(",
+  "x-prestige-admin-purpose",
+  "x-prestige-admin-session-token",
+  "Authorization",
+  "document.cookie",
+  "localStorage",
+  "sessionStorage",
+  "service_role",
+  "SUPABASE_SERVICE",
+  "STORAGE_",
+  "AWS_",
+];
+const driverJobApprovedLiveLocationFragments = new Set(["customerVisible"]);
+
 for (const path of publicClientPaths) {
   const source = files[path];
 
-  for (const fragment of [
-    "/api/admin-ots-photo-proof-setup",
-    "/api/admin-ots-photo-proof-preview-readiness-setup",
-    "/api/admin-ots-photo-proof-access-upload-disabled-setup",
-    "admin-ots-photo-proof-setup",
-    "admin-ots-photo-proof-preview-readiness-setup",
-    "admin-ots-photo-proof-access-upload-disabled-setup",
-    "photoUploadEnabled",
-    "storageEnabled",
-    "adminViewerEnabled",
-    "customerVisible",
-    "liveAccessEnabled",
-    "input type=\"file\"",
-    "input type='file'",
-    "FormData",
-    "URL.createObjectURL",
-    "navigator.mediaDevices",
-    "getUserMedia",
-    "FileReader",
-    "readAsDataURL",
-    "storage.from",
-    ".upload(",
-    "x-prestige-admin-purpose",
-    "x-prestige-admin-session-token",
-    "Authorization",
-    "document.cookie",
-    "localStorage",
-    "sessionStorage",
-    "service_role",
-    "SUPABASE_SERVICE",
-    "STORAGE_",
-    "AWS_",
-  ]) {
+  for (const fragment of publicClientForbiddenFragments) {
+    if (path === "app/driver-job/[token]/page.tsx" && driverJobApprovedLiveLocationFragments.has(fragment)) {
+      continue;
+    }
+
     assertExcludes(source, fragment, `${path} OTS photo proof caller fragment`);
   }
+
+  assertExcludes(source, liveOtsFlagPattern, `${path} live OTS public activation flag`);
 }
 
 console.log("Public OTS photo proof surface guard passed");

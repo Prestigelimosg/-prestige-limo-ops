@@ -97,7 +97,7 @@ const serverMapSource = `${locationSearchHelper}\n${routeEstimateHelper}`;
 const liveLocationSource = `${liveLocationScaffold}\n${adminActiveJobsRoute}`;
 
 for (const forbiddenPattern of [
-  /NEXT_PUBLIC_(?:GOOGLE|.*MAP|.*LOCATION)/i,
+  /NEXT_PUBLIC_(?:GOOGLE|.*MAP)/i,
   /PRESTIGE_GOOGLE_MAPS_BROWSER_API_KEY/,
   /PRESTIGE_ADMIN_ACTIVE_JOBS_MAP_BROWSER_PROVIDER/,
   /PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS/,
@@ -106,9 +106,17 @@ for (const forbiddenPattern of [
   /@googlemaps\/js-api-loader|google\.maps|new google/i,
   /<script[^>]+maps\.googleapis\.com/i,
   /data-admin-active-jobs-map-canvas|data-driver-live-location-map-canvas/i,
-  /navigator\.geolocation|getCurrentPosition|watchPosition|clearWatch|GeolocationPosition/i,
+  /watchPosition|clearWatch|GeolocationPosition/i,
 ]) {
   assertExcludes(browserFacingSource, forbiddenPattern, "current browser-facing app source");
+}
+
+for (const fragment of [
+  "NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_SHARE_STOP_UI_ENABLED",
+  "NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_BROWSER_GPS_ENABLED",
+  "navigator.geolocation.getCurrentPosition",
+]) {
+  assertIncludes(browserFacingSource, fragment, `approved driver browser live-location gate ${fragment}`);
 }
 
 assertIncludes(serverMapSource, "PRESTIGE_GOOGLE_MAPS_API_KEY", "server-side Google Maps key remains server helper only");

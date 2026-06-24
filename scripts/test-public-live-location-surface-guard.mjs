@@ -339,40 +339,74 @@ for (const [path, source] of [
   assertExcludes(source, unsafeOutputPattern, `${path} unsafe live-location output`);
 }
 
+const publicClientForbiddenFragments = [
+  "/api/admin-live-location-setup",
+  "/api/admin-live-location-window-policy-preview-readiness-setup",
+  "/api/admin-live-location-access-capture-disabled-setup",
+  "admin-live-location-setup",
+  "admin-live-location-window-policy-preview-readiness-setup",
+  "admin-live-location-access-capture-disabled-setup",
+  "gpsCaptureEnabled",
+  "liveMapEnabled",
+  "locationStorageEnabled",
+  "liveAccessEnabled",
+  "customerVisible",
+  "navigator.geolocation",
+  "getCurrentPosition",
+  "watchPosition",
+  "mapbox",
+  "google.maps",
+  "maps.google",
+  "x-prestige-admin-purpose",
+  "x-prestige-admin-session-token",
+  "Authorization",
+  "document.cookie",
+  "localStorage",
+  "sessionStorage",
+  "service_role",
+  "SUPABASE_SERVICE",
+  "MAPBOX_",
+  "GOOGLE_MAPS_",
+];
+const driverJobApprovedLiveLocationFragments = new Set([
+  "customerVisible",
+  "navigator.geolocation",
+  "getCurrentPosition",
+]);
+
 for (const path of publicClientPaths) {
   const source = files[path];
 
-  for (const fragment of [
-    "/api/admin-live-location-setup",
-    "/api/admin-live-location-window-policy-preview-readiness-setup",
-    "/api/admin-live-location-access-capture-disabled-setup",
-    "admin-live-location-setup",
-    "admin-live-location-window-policy-preview-readiness-setup",
-    "admin-live-location-access-capture-disabled-setup",
-    "gpsCaptureEnabled",
-    "liveMapEnabled",
-    "locationStorageEnabled",
-    "liveAccessEnabled",
-    "customerVisible",
-    "navigator.geolocation",
-    "getCurrentPosition",
-    "watchPosition",
-    "mapbox",
-    "google.maps",
-    "maps.google",
-    "x-prestige-admin-purpose",
-    "x-prestige-admin-session-token",
-    "Authorization",
-    "document.cookie",
-    "localStorage",
-    "sessionStorage",
-    "service_role",
-    "SUPABASE_SERVICE",
-    "MAPBOX_",
-    "GOOGLE_MAPS_",
-  ]) {
+  for (const fragment of publicClientForbiddenFragments) {
+    if (path === "app/driver-job/[token]/page.tsx" && driverJobApprovedLiveLocationFragments.has(fragment)) {
+      continue;
+    }
+
     assertExcludes(source, fragment, `${path} live-location caller fragment`);
   }
+
+  assertExcludes(source, liveLocationFlagPattern, `${path} live-location public activation flag`);
 }
+
+assertIncludes(
+  files["app/driver-job/[token]/page.tsx"],
+  "NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_SHARE_STOP_UI_ENABLED",
+  "driver job approved live-location UI gate",
+);
+assertIncludes(
+  files["app/driver-job/[token]/page.tsx"],
+  "NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_BROWSER_GPS_ENABLED",
+  "driver job approved browser GPS gate",
+);
+assertIncludes(
+  files["app/driver-job/[token]/page.tsx"],
+  "customerVisible !== false",
+  "driver job customer-invisible live-location response guard",
+);
+assertIncludes(
+  files["app/driver-job/[token]/page.tsx"],
+  "external_send !== false",
+  "driver job provider-send-free live-location response guard",
+);
 
 console.log("Public live-location surface guard passed");

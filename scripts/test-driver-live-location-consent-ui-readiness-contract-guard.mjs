@@ -65,8 +65,8 @@ const disabledScaffoldSection = sectionBetween(
 
 for (const phrase of [
   "This is a docs/test-only guard for future Driver Live Location driver consent UI and compact Admin Active Jobs Map UI readiness.",
-  "This lock does not implement UI, activate GPS capture, open live-location routes, write/read location rows, apply migrations, change env, deploy, expose browser map keys, call Google Maps/OneMap/FlightAware, send Email/Telegram/WhatsApp/SMS, activate customer live map visibility, or touch billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, or shim work.",
-  "Current state remains disabled: driver job pages must not call `navigator.geolocation`, must not start location sharing on page load, and must not silently capture coordinates from status buttons.",
+  "This lock does not activate GPS capture by default, open live-location gates by default, write/read location rows, apply migrations, change env, deploy, expose browser map keys, call Google Maps/OneMap/FlightAware, send Email/Telegram/WhatsApp/SMS, activate customer live map visibility, or touch billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, or shim work.",
+  "Current state remains disabled by default: driver job pages must not start location sharing on page load and must not silently capture coordinates from status buttons.",
   "Future driver consent UI must live on the existing driver job link surface after the server resolves the current assigned job token.",
   "Future driver consent UI must use an explicit Share Location control, browser permission prompt, visible sharing state, last shared/stale state, and an explicit Stop Sharing control.",
   "Future driver consent UI must make clear that sharing is job-scoped and can be stopped; one driver job token must not see or write another driver/job location.",
@@ -108,28 +108,25 @@ for (const forbiddenPhrase of [
 
 assertExcludes(
   driverJobPage,
-  /navigator\.geolocation|getCurrentPosition|watchPosition|clearWatch|GeolocationPosition/i,
-  "driver job production page",
-);
-assertExcludes(
-  driverJobPage,
-  /gpsCaptureEnabled\s*[:=]\s*true|liveMapEnabled\s*[:=]\s*true|locationStorageEnabled\s*[:=]\s*true|customerVisible\s*[:=]\s*true/i,
+  /watchPosition|clearWatch|void\s+shareDriverLiveLocation\(|shareDriverLiveLocation\(\);|shareDriverLiveLocation\(\)\.catch|gpsCaptureEnabled\s*[:=]\s*true|liveMapEnabled\s*[:=]\s*true|locationStorageEnabled\s*[:=]\s*true|customerVisible\s*[:=]\s*true/i,
   "driver job production page live-location activation flags",
 );
 
 for (const phrase of [
   "This adds a compact disabled Driver Live Location consent UI scaffold to the existing driver job link page.",
-  "The scaffold renders explicit Share Location and Stop Sharing controls, but both controls are disabled by default and have no click handler.",
+  "The scaffold renders explicit Share Location and Stop Sharing controls; runtime handlers are present but disabled by default behind the Share/Stop UI gate and browser GPS gate.",
   "The scaffold shows only driver-visible safe state fields: sharing state, permission state, last shared time, and stale/offline state.",
-  "The scaffold does not call `navigator.geolocation`, does not call the driver live-location route, does not read or write location rows, does not open gates, does not create a Supabase client, and does not call providers.",
+  "The scaffold does not call `navigator.geolocation` or the driver live-location route unless the gated runtime UI is open and the driver explicitly clicks Share Location or Stop Sharing; it does not read or write location rows while gates are closed, does not open gates, does not create a Supabase client, and does not call providers.",
   "The existing driver live-location capture/stop route remains closed with HTTP 503 safe no-op behavior.",
   "No customer live map link, admin active-jobs map runtime, browser map key, DB write, env change, deploy, provider send, billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, OTS/photo/storage, calendar, auth expansion, or shim work is activated.",
-  "Next live-location lane remains a separately approved gated runtime implementation/evidence pass with explicit driver consent, wrong-driver/wrong-admin blocked proof, cleanup zero rows, rollback proof, and no customer visibility unless separately approved.",
+  "Next live-location lane remains a separately approved live evidence pass with explicit driver consent, wrong-driver/wrong-admin blocked proof, cleanup zero rows, rollback proof, and no customer visibility unless separately approved.",
 ]) {
   assertIncludes(disabledScaffoldSection, phrase, `disabled consent UI scaffold ledger phrase ${phrase}`);
 }
 
-const liveLocationUiStart = driverJobPage.indexOf('data-driver-live-location-consent-ui="disabled"');
+const liveLocationUiStart = driverJobPage.indexOf(
+  "data-driver-live-location-consent-ui={driverLiveLocationUiState}",
+);
 assert.notEqual(liveLocationUiStart, -1, "Driver live-location disabled consent UI must exist.");
 const liveLocationUiEnd = driverJobPage.indexOf("</section>", liveLocationUiStart);
 assert.notEqual(liveLocationUiEnd, -1, "Driver live-location disabled consent UI section must close.");
@@ -137,13 +134,13 @@ const liveLocationUi = driverJobPage.slice(liveLocationUiStart, liveLocationUiEn
 
 for (const fragment of [
   "Live Location",
-  "Location sharing is not active for this job.",
-  'data-driver-live-location-share-button="disabled"',
-  'data-driver-live-location-stop-button="disabled"',
-  'data-driver-live-location-sharing-state="inactive"',
-  'data-driver-live-location-permission-state="not_requested"',
-  'data-driver-live-location-last-shared="not_shared"',
-  'data-driver-live-location-stale-state="inactive"',
+  "{driverLiveLocationHelperText}",
+  "data-driver-live-location-share-button={driverLiveLocationUiState}",
+  "data-driver-live-location-stop-button={driverLiveLocationUiState}",
+  "data-driver-live-location-sharing-state={driverLiveLocation.sharingState}",
+  "data-driver-live-location-permission-state={driverLiveLocation.permissionState}",
+  "data-driver-live-location-last-shared={driverLiveLocation.lastSharedAt ? \"shared\" : \"not_shared\"}",
+  "data-driver-live-location-stale-state={driverLiveLocation.staleState}",
   "Share Location",
   "Stop Sharing",
 ]) {
@@ -152,26 +149,31 @@ for (const fragment of [
 
 assertMatches(
   liveLocationUi,
-  /data-driver-live-location-share-button="disabled"[\s\S]*?\bdisabled\b[\s\S]*?Share Location/,
+  /data-driver-live-location-share-button=\{driverLiveLocationUiState\}[\s\S]*?disabled=\{driverLiveLocationControlsDisabled\}[\s\S]*?Share Location/,
   "disabled Share Location control",
 );
 assertMatches(
   liveLocationUi,
-  /data-driver-live-location-stop-button="disabled"[\s\S]*?\bdisabled\b[\s\S]*?Stop Sharing/,
+  /data-driver-live-location-stop-button=\{driverLiveLocationUiState\}[\s\S]*?disabled=\{driverLiveLocationControlsDisabled\}[\s\S]*?Stop Sharing/,
   "disabled Stop Sharing control",
 );
 for (const forbiddenPattern of [
-  /onClick|fetch\(|\/live-location|navigator\.geolocation|getCurrentPosition|watchPosition|clearWatch|GeolocationPosition/i,
+  /watchPosition|clearWatch|GeolocationPosition/i,
   /customer_price|driver_payout|customer_rates|driver_payout_rules|paynow|billing|invoice|payment|payout/i,
   /internal_admin|internal_finance|parser_debug|service_role|server_secret|access_token|api_key/i,
 ]) {
   assertExcludes(liveLocationUi, forbiddenPattern, "disabled live-location consent UI");
 }
-assertExcludes(
-  driverJobPage,
-  /fetch\([^)]*live-location|\/api\/driver-job\/[^"'`]+\/live-location/i,
-  "driver job production page live-location route caller",
-);
+for (const fragment of [
+  "NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_SHARE_STOP_UI_ENABLED",
+  "NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_BROWSER_GPS_ENABLED",
+  "driverLiveLocationBrowserGpsEnabled",
+  "navigator.geolocation.getCurrentPosition",
+  "onClick={shareDriverLiveLocation}",
+  "onClick={stopDriverLiveLocation}",
+]) {
+  assertIncludes(driverJobPage, fragment, `gated consent UI runtime fragment ${fragment}`);
+}
 assertIncludes(
   driverJobDemo,
   "Mock live location",

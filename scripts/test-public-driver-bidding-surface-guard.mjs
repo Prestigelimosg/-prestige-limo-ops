@@ -456,11 +456,16 @@ for (const [label, source] of [
 ]) {
   assertExcludes(source, forbiddenPublicCallerPattern, `${label} bidding caller/secret exposure`);
 }
-assert.equal(countOccurrences(files[driverPagePath], "fetch("), 4, "driver job page fetch count must not grow for bidding");
+assert.equal(countOccurrences(files[driverPagePath], "fetch("), 6, "driver job page fetch count must not grow for bidding");
 assert.equal(
   countOccurrences(files[driverPagePath], 'cache: "no-store"'),
-  4,
+  6,
   "driver job page no-store fetch count must match existing safe callers",
+);
+assertIncludes(
+  files[driverPagePath],
+  "fetch(driverLiveLocationRoute()",
+  "driver job page approved live-location caller",
 );
 
 for (const { label, requiredFragments, script } of contractChecks) {

@@ -119,21 +119,31 @@ for (const relatedGuard of [
   assertIncludes(preactivationSuite, relatedGuard, `related guard registration ${relatedGuard}`);
 }
 
-const driverConsentStart = driverJobPage.indexOf('data-driver-live-location-consent-ui="disabled"');
+const driverConsentStart = driverJobPage.indexOf("data-driver-live-location-consent-ui={driverLiveLocationUiState}");
 assert.notEqual(driverConsentStart, -1, "Driver consent UI disabled scaffold must exist.");
 const driverConsentEnd = driverJobPage.indexOf("</section>", driverConsentStart);
 assert.notEqual(driverConsentEnd, -1, "Driver consent UI disabled scaffold must close.");
 const driverConsentUi = driverJobPage.slice(driverConsentStart, driverConsentEnd);
 
 for (const fragment of [
-  'data-driver-live-location-share-button="disabled"',
-  'data-driver-live-location-stop-button="disabled"',
-  'data-driver-live-location-sharing-state="inactive"',
-  'data-driver-live-location-permission-state="not_requested"',
+  "data-driver-live-location-share-button={driverLiveLocationUiState}",
+  "data-driver-live-location-stop-button={driverLiveLocationUiState}",
+  "data-driver-live-location-sharing-state={driverLiveLocation.sharingState}",
+  "data-driver-live-location-permission-state={driverLiveLocation.permissionState}",
   "Share Location",
   "Stop Sharing",
 ]) {
   assertIncludes(driverConsentUi, fragment, `driver consent disabled UI fragment ${fragment}`);
+}
+
+for (const fragment of [
+  "driverLiveLocationShareStopRuntimeUiEnabled",
+  "driverLiveLocationBrowserGpsEnabled",
+  "navigator.geolocation.getCurrentPosition",
+  "customerVisible !== false",
+  "external_send !== false",
+]) {
+  assertIncludes(driverJobPage, fragment, `driver job gated live-location fragment ${fragment}`);
 }
 
 const adminScaffoldStart = adminPage.indexOf(
@@ -159,6 +169,18 @@ for (const fragment of [
 }
 
 for (const forbiddenPattern of [
+  /\/api\/admin-active-jobs-map-locations/i,
+  /watchPosition|clearWatch|GeolocationPosition/i,
+  /google\.maps|maps\.google|Map\(|<canvas|NEXT_PUBLIC|PRESTIGE_GOOGLE_MAPS/i,
+  /createClient|supabase|\.from\(|\.(?:insert|upsert|update|delete|select)\s*\(/i,
+  /customerVisible\s*[:=]\s*true|external_send\s*[:=]\s*true/i,
+  /customer_price|driver_payout|customer_rates|driver_payout_rules|paynow|billing|invoice|payment|payout/i,
+  /internal_admin|internal_finance|parser_debug|service_role|server_secret|access_token|api_key/i,
+]) {
+  assertExcludes(driverConsentUi, forbiddenPattern, "disabled driver consent UI runtime evidence surface");
+}
+
+for (const forbiddenPattern of [
   /onClick|fetch\(|\/live-location|\/api\/admin-active-jobs-map-locations/i,
   /navigator\.geolocation|getCurrentPosition|watchPosition|clearWatch|GeolocationPosition/i,
   /google\.maps|maps\.google|Map\(|<canvas|NEXT_PUBLIC|PRESTIGE_GOOGLE_MAPS/i,
@@ -167,7 +189,6 @@ for (const forbiddenPattern of [
   /customer_price|driver_payout|customer_rates|driver_payout_rules|paynow|billing|invoice|payment|payout/i,
   /internal_admin|internal_finance|parser_debug|service_role|server_secret|access_token|api_key/i,
 ]) {
-  assertExcludes(driverConsentUi, forbiddenPattern, "disabled driver consent UI runtime evidence surface");
   assertExcludes(adminActiveJobsUi, forbiddenPattern, "disabled admin active-jobs UI runtime evidence surface");
 }
 

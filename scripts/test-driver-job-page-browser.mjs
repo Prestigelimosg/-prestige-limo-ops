@@ -88,10 +88,29 @@ async function assertNoRealLocationImplementation() {
   ]);
   const source = guardedSources.join("\n");
 
-  assert.doesNotMatch(source, /navigator\.geolocation/i, "Driver pages must not call navigator.geolocation.");
+  assert.match(
+    source,
+    /NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_SHARE_STOP_UI_ENABLED/,
+    "Driver live-location Share/Stop UI must stay behind a public build-time gate.",
+  );
+  assert.match(
+    source,
+    /NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_BROWSER_GPS_ENABLED/,
+    "Driver browser GPS must stay behind a separate public build-time gate.",
+  );
+  assert.match(
+    source,
+    /navigator\.geolocation\.getCurrentPosition/,
+    "Driver live-location may request browser position only through the explicit gated Share click path.",
+  );
+  assert.doesNotMatch(source, /watchPosition|clearWatch/i, "Driver pages must not add background GPS watching.");
+  assert.doesNotMatch(
+    source,
+    /void\s+shareDriverLiveLocation\(|shareDriverLiveLocation\(\);|shareDriverLiveLocation\(\)\.catch/i,
+    "Driver pages must not auto-start live location from page load or status changes.",
+  );
   assert.doesNotMatch(source, /navigator\.mediaDevices|getUserMedia/i, "Driver pages must not call camera APIs.");
   assert.doesNotMatch(source, /localStorage|sessionStorage/i, "Driver pages must not add browser storage persistence.");
-  assert.doesNotMatch(source, /\/api\/(?:driver-)?live-location/i, "Driver pages must not add live location endpoints.");
   assert.doesNotMatch(source, /\/api\/(?:driver-)?(?:ots-photo|photo-proof)/i, "Driver pages must not add photo upload endpoints.");
   assert.doesNotMatch(source, /\/api\/[^"')\s]*(?:upload|storage|file)/i, "Driver pages must not add upload, storage, or file APIs.");
   assert.doesNotMatch(source, /\/api\/(?:driver-)?(?:flight|eta|reminder|notification|notify|sms|whatsapp)/i, "Driver pages must not add flight or notification endpoints.");

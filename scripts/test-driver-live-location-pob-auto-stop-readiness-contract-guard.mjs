@@ -188,9 +188,16 @@ for (const forbiddenPattern of [
 
 assertExcludes(
   driverJobPage,
-  /navigator\.geolocation|getCurrentPosition|watchPosition|clearWatch|GeolocationPosition|setInterval|setTimeout/i,
-  "production driver job page",
+  /watchPosition|clearWatch|GeolocationPosition|setInterval|setTimeout/i,
+  "production driver job page background GPS/timer",
 );
+for (const fragment of [
+  "NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_SHARE_STOP_UI_ENABLED",
+  "NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_BROWSER_GPS_ENABLED",
+  "navigator.geolocation.getCurrentPosition",
+]) {
+  assertIncludes(driverJobPage, fragment, `production driver job page gated share-location fragment ${fragment}`);
+}
 assertIncludes(driverJobDemo, "Mock live location", "driver demo live-location copy remains mock");
 assertIncludes(
   driverJobDemo,

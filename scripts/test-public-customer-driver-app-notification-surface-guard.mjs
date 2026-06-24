@@ -529,11 +529,16 @@ assertIncludes(
   "`/api/driver-job/${encodeURIComponent(token)}/notifications?limit=5&page=1`",
   "driver page safe notification GET caller",
 );
-assert.equal(countOccurrences(files[driverPagePath], "fetch("), 4, "driver page fetch count must not grow for app notifications");
+assert.equal(countOccurrences(files[driverPagePath], "fetch("), 6, "driver page fetch count must not grow for app notifications");
 assert.equal(
   countOccurrences(files[driverPagePath], 'cache: "no-store"'),
-  4,
+  6,
   "driver page no-store fetch count must match existing safe callers",
+);
+assertIncludes(
+  files[driverPagePath],
+  "fetch(driverLiveLocationRoute()",
+  "driver page approved live-location caller",
 );
 
 for (const { label, requiredFragments, script } of contractChecks) {

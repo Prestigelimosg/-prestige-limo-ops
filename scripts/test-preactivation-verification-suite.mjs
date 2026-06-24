@@ -679,6 +679,10 @@ const guardChecks = [
     script: "scripts/test-driver-live-location-active-jobs-map-contract-guard.mjs",
   },
   {
+    label: "Driver Live Location gated runtime evidence contract guard",
+    script: "scripts/test-driver-live-location-gated-runtime-evidence-contract-guard.mjs",
+  },
+  {
     label: "Driver Live Location disabled scaffold guard",
     script: "scripts/test-driver-live-location-disabled-scaffold-guard.mjs",
   },

@@ -5732,6 +5732,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The evidence runner `scripts/run-driver-live-location-share-stop-runtime-evidence.mjs` is disabled by default, mock/unit only, and performs no DB write, env change, deploy, provider send, real GPS capture, or customer live map activation.
 - Future live evidence still requires separate owner approval for fake/staging-safe driver job target, gate window, cleanup zero rows, rollback proof, docs evidence, and staging promotion.
 - This guard adds `scripts/test-driver-live-location-share-stop-runtime-wiring-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+- A no-behavior-change alias guard `scripts/test-driver-live-location-share-stop-runtime-scaffold-guard.mjs` runs the same wiring guard so promotion checklists using the scaffold name remain covered without changing runtime code.
 
 ### Driver Live Location Consent UI Readiness Contract Guard Lock
 - This is a docs/test-only guard for future Driver Live Location driver consent UI and compact Admin Active Jobs Map UI readiness.

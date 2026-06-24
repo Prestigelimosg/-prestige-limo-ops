@@ -5475,6 +5475,20 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Future runtime must remain separate from Customer In-App, Driver In-App, Customer Copy, Driver Details Email, Google Maps admin search/route estimates, OneMap, FlightAware, billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, and shim work.
 - This guard adds `scripts/test-driver-live-location-consent-ui-readiness-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Driver Live Location Browser Map Key Readiness Contract Guard Lock
+- This is a docs/test-only guard for any future browser-rendered base map in the Admin Active Jobs Map UI.
+- This lock does not create a browser map key, change Vercel env, expose any key to the browser, render a map, activate admin active-jobs map runtime, activate driver GPS capture, open live-location gates, read/write database rows, call Google Maps/OneMap/FlightAware, deploy, send provider messages, or activate production.
+- Current state remains closed: no browser Google Maps JavaScript loader, no `NEXT_PUBLIC_` map key, no active map canvas, and no customer-visible live map.
+- Future admin active-jobs browser map must use a separate browser-safe key from the existing server-side `PRESTIGE_GOOGLE_MAPS_API_KEY`; the server-side key must never be sent to client code, HTML, logs, errors, or API responses.
+- Future browser key setup requires separate owner approval, Google Cloud key creation, API restriction to browser map rendering APIs only, HTTP referrer/domain restrictions, and names-only ledger recording with no key value.
+- Future names-only env plan must use `PRESTIGE_ADMIN_ACTIVE_JOBS_MAP_BROWSER_PROVIDER`, `PRESTIGE_GOOGLE_MAPS_BROWSER_API_KEY`, `PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS`, and optional `PRESTIGE_GOOGLE_MAPS_BROWSER_MAP_ID`; values must never be printed, logged, committed, or pasted into docs.
+- Future allowed origins must be explicit and limited to approved staging/production app origins; wildcard, unrestricted, localhost-only production, mobile-app, IP-address, or server-key reuse configurations are not approved.
+- Future browser map APIs must remain separate from server-side admin location search/route estimates, driver GPS capture/write routes, customer portal, customer in-app notifications, Driver Details Email, Telegram, WhatsApp, SMS, billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, OTS/photo/storage, calendar, and shim work.
+- Future closed gates must not read `PRESTIGE_GOOGLE_MAPS_BROWSER_API_KEY`, must not render map scripts, must not call `navigator.geolocation`, must not fetch location rows, and must not expose coordinates.
+- Future map UI evidence must prove no key appears in page source, route responses, server logs, normalized evidence, or committed files; it must also prove rollback removes the browser map surface.
+- Future admin map UI remains admin/dispatcher-only and may show only approved operational marker/status fields; customer live map links remain separately blocked.
+- This guard adds `scripts/test-driver-live-location-browser-map-key-readiness-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Blocked OneMap Admin Map Staging Evidence Safe Failure Record
 
 - Evidence reference: `ONEMAP-ADMIN-MAP-STAGING-BLOCKED-20260621222308`.

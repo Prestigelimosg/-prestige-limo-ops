@@ -5505,6 +5505,19 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Future auto-stop remains separate from Telegram True Live Location, Email/WhatsApp/SMS provider sends, Customer In-App, Driver In-App, Customer Copy, Driver Details Email, Google Maps admin search/route estimates, OneMap, FlightAware, billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, and shim work.
 - This guard adds `scripts/test-driver-live-location-pob-auto-stop-readiness-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Driver Live Location Stale/Offline Readiness Contract Guard Lock
+- This is a docs/test-only guard for future Driver Live Location stale/offline behavior.
+- This lock does not activate GPS capture, live-location runtime, admin active-jobs map runtime, customer live map links, route/helper reads or writes, table writes, migration application, env changes, deploy, provider calls, provider sends, billing/payment/PDF/payout, or production activation.
+- Current state remains closed: driver capture returns blocked/no-op, admin active-jobs returns no rows, customer visibility is false, and no stale/offline calculation is executed at runtime.
+- Future stale/offline handling must use server-side persisted `captured_at` and `stale_after` values from `driver_live_location_latest_positions`, not browser local time, localStorage, demo/mock state, route text, or customer-visible status text.
+- Future stale/offline threshold must be explicit through `PRESTIGE_DRIVER_LIVE_LOCATION_STALE_AFTER_SECONDS`; if the threshold is missing or invalid, future runtime must fail closed instead of displaying a driver as live.
+- Future admin active-jobs map must show stale/offline state instead of silently hiding a stale driver, pretending the driver is still live, or exposing a customer live map.
+- Future stale/offline evidence must prove closed gates, fake/staging-safe rows first, active row shown as active, stale row shown as stale/offline, expired/stopped row excluded or marked stopped, wrong-driver blocked, wrong-admin blocked, cleanup zero temporary rows, rollback disabled, and no customer live map.
+- Future stale/offline behavior must be scoped to the resolved driver job token and assigned job only; one driver's stale/offline state must not affect another driver/job.
+- Future stale/offline implementation may not add indefinite polling, retry storm, scheduler, fallback send, provider send, queue, cron, blast, or background worker without separate owner approval.
+- Future stale/offline fields must be limited to safe operational fields and must not include pricing, payout, PayNow, payout preferences, `driver_payout_rules`, `customer_rates`, billing/payment/PDF/invoice, internal/admin notes, parser/debug fields, secrets/tokens/cookies/JWTs, raw provider payloads, customer contact details, customer messages, Save Booking internals, `/api/admin-saved-bookings` internals, OTS/photo/storage, or calendar data.
+- This guard adds `scripts/test-driver-live-location-stale-offline-readiness-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Blocked OneMap Admin Map Staging Evidence Safe Failure Record
 
 - Evidence reference: `ONEMAP-ADMIN-MAP-STAGING-BLOCKED-20260621222308`.

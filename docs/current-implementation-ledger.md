@@ -4629,6 +4629,35 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This lock does not approve Google Maps, OneMap retry, live location, auth activation, provider sends, env changes, DB writes, Save Booking changes, `/api/admin-saved-bookings` changes, parser changes, pricing/rates/customer_rates changes, driver_payout_rules changes, payout/payment/PDF/billing changes, UI sector/card expansion, or new shims.
 - This lock adds `scripts/test-customer-driver-in-app-notification-channel-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Driver Status to Customer In-App Automatic Notification Readiness Contract Guard Lock
+- This is a docs/test-only guard for future Driver Status -> Customer In-App automatic notifications.
+- This lock does not implement runtime notification writes, DB writes, provider sends, Email/Telegram/WhatsApp/SMS, free-form chat, customer-driver messaging runtime, auth/session changes, env changes, deploys, GPS/location activation, billing/payment/PDF/payout, or production activation.
+- Future OTW status may create exactly one safe `customer_app` notification scoped to the correct customer/account/booking.
+- OTW title: `Driver is on the way`.
+- OTW message: `Your Prestige Limo driver is on the way to pickup.`
+- Future OTS status may create exactly one safe `customer_app` notification scoped to the correct customer/account/booking.
+- OTS title: `Driver has arrived`.
+- OTS message: `Your Prestige Limo driver is at the pickup location.`
+- Future POB status may create exactly one safe `customer_app` notification scoped to the correct customer/account/booking.
+- POB title: `Passenger on board`.
+- POB message: `Your trip has started.`
+- Status-triggered customer notifications must be template-only.
+- Status-triggered customer notifications must use the guarded driver status workflow `driver_otw -> ots -> pob -> completed`.
+- Status-triggered customer notifications must use persisted status evidence and must not rely on local/demo/mock UI state, customer-visible status text, localStorage, or untrusted browser-submitted status history.
+- Customer-visible reads must stay behind the existing Customer In-App read path and customer/account isolation.
+- The customer must see only their own booking notification.
+- Admin/dispatch must be able to see the status-triggered in-app notification/audit trail through approved admin surfaces.
+- POB must stop any future pre-POB customer-driver quick replies for that job.
+- No phone number exposure is approved.
+- No Email, Resend, Telegram, WhatsApp, SMS, SMTP, IMAP, push provider, fallback, scheduler, retry, polling, or blast is approved by this lock.
+- Customer-driver quick replies are a later separate lane, not implemented by this guard.
+- Future customer-to-driver quick reply templates are limited to `I am at the lobby.`, `I am running 5 minutes late.`, `Please wait at pickup point.`, and `I cannot find the car.` unless separately approved.
+- Future driver-to-customer quick reply templates are limited to `I am on the way.`, `I have arrived.`, `Please meet me at pickup point.`, and `I am waiting nearby.` unless separately approved.
+- Future quick replies must be in-app only, job-token scoped, customer/account scoped, visible to admin/dispatch, audited, disabled automatically at POB, and must not expose phone numbers.
+- No free-form customer-driver text is approved until a later explicit approval.
+- Forbidden fields remain pricing, payout, PayNow, payout preferences, payout comparisons, `driver_payout_rules`, `customer_rates`, billing/payment/PDF/invoice, internal/admin/finance notes, parser/debug fields, secrets/tokens/cookies/JWTs, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, provider-send payloads, live-location/GPS coordinates, OTS/photo/storage, calendar, customer/driver phone numbers, customer/driver private contact data, and mock QA/dev archive fields.
+- This guard adds `scripts/test-driver-status-customer-in-app-readiness-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Driver In-App Notification Staging Evidence Contract Guard Lock
 - This is a docs/test-only guard for a future separately approved Driver In-App Notification staging evidence pass.
 - This lock is distinct from the Customer/Driver In-App Notification Admin-Selected Channel Contract Lock; it locks the exact future one-row staging evidence window for driver notifications.

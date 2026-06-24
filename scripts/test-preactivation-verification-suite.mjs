@@ -707,6 +707,10 @@ const guardChecks = [
     script: "scripts/test-driver-live-location-admin-runtime-gate-readiness-guard.mjs",
   },
   {
+    label: "Driver Live Location admin-controlled runtime gate scaffold guard",
+    script: "scripts/test-driver-live-location-admin-runtime-gate-scaffold-guard.mjs",
+  },
+  {
     label: "Driver Live Location disabled scaffold guard",
     script: "scripts/test-driver-live-location-disabled-scaffold-guard.mjs",
   },

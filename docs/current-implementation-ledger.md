@@ -5631,6 +5631,19 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No provider sends, Email/Telegram/WhatsApp/SMS, Google Maps/OneMap/FlightAware calls, billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, shim work, customer live map, free-form chat, or production activation is approved by this readiness lock.
 - This guard adds `scripts/test-driver-live-location-admin-runtime-gate-readiness-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Driver Live Location Admin-Controlled Runtime Gate Scaffold
+- This lane adds the disabled-by-default server-side scaffold for a future admin-controlled Driver Live Location runtime gate.
+- No admin toggle UI, no setting write route, no DB migration, no env change, no deploy, no GPS activation, no customer live map, and no provider send is included.
+- The existing env gates remain the stable server-side kill switch and must still be open before any runtime setting can be read.
+- `evidence` mode preserves the existing bounded env-gated evidence path and still requires explicit allowed job references.
+- `runtime` mode requires the server to read exactly one admin-controlled setting row from `driver_live_location_runtime_settings` with `setting_name=driver_live_location_runtime`.
+- The runtime setting row must be `active`, `driver_live_location_mode=runtime`, have the relevant purpose enabled, and name explicit safe job references before capture or admin map reads can proceed.
+- Missing settings, closed settings, missing references, invalid references, or missing Supabase config fail closed with safe 503/no-op responses.
+- The scaffold rejects broad/all-driver activation by requiring explicit safe booking/job references and rejecting wildcard or empty reference lists.
+- Driver capture remains job-token scoped and explicit-driver-consent scoped; admin active-jobs map remains admin/dispatcher-boundary scoped; customer visibility remains false.
+- No pricing, payout, PayNow, billing/payment/PDF, internal/admin notes, parser/debug, secrets/tokens, raw provider payloads, customer contact data, phone numbers, OTS/photo/storage, or mock QA/dev archive fields are exposed.
+- This guard adds `scripts/test-driver-live-location-admin-runtime-gate-scaffold-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Driver Live Location Consent UI Readiness Contract Guard Lock
 - This is a docs/test-only guard for future Driver Live Location driver consent UI and compact Admin Active Jobs Map UI readiness.
 - This lock does not implement UI, activate GPS capture, open live-location routes, write/read location rows, apply migrations, change env, deploy, expose browser map keys, call Google Maps/OneMap/FlightAware, send Email/Telegram/WhatsApp/SMS, activate customer live map visibility, or touch billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, or shim work.

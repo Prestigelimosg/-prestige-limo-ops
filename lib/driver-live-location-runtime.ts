@@ -20,6 +20,8 @@ type UnknownRecord = Record<string, unknown>;
 type DriverLiveLocationAction = "share" | "stop";
 type DriverLiveLocationBlockedReason =
   | "admin_active_jobs_map_gate_closed"
+  | "driver_live_location_admin_runtime_config_not_ready"
+  | "driver_live_location_admin_runtime_gate_closed"
   | "driver_live_location_capture_gate_closed"
   | "driver_live_location_config_not_ready"
   | "driver_live_location_invalid_position"
@@ -53,6 +55,8 @@ type DriverLiveLocationPosition = {
 const latestPositionsTable = "driver_live_location_latest_positions";
 const auditEventsTable = "driver_live_location_audit_events";
 const driverJobLinkTable = "driver_job_links";
+const runtimeSettingsTable = "driver_live_location_runtime_settings";
+const runtimeSettingName = "driver_live_location_runtime";
 const allowedRuntimeModes = new Set(["runtime", "evidence"]);
 const allowedPositionFields = new Set([
   "accuracy_meters",
@@ -63,6 +67,7 @@ const allowedPositionFields = new Set([
   "speed_meters_per_second",
 ]);
 const maxSafeLabelLength = 160;
+const maxRuntimeAllowedReferences = 50;
 const safeReferencePattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/;
 
 let driverLiveLocationClientForTests: DriverLiveLocationClient | null = null;
@@ -180,10 +185,9 @@ function runtimeModeOpen(env: DriverLiveLocationEnv) {
 }
 
 function allowedJobReferences(env: DriverLiveLocationEnv) {
-  return envValue(env, "PRESTIGE_DRIVER_LIVE_LOCATION_ALLOWED_JOB_REFERENCES")
-    .split(/[,\n]/)
-    .map((item) => item.trim())
-    .filter((item) => safeReferencePattern.test(item));
+  return allowedReferencesFromUnknown(
+    envValue(env, "PRESTIGE_DRIVER_LIVE_LOCATION_ALLOWED_JOB_REFERENCES"),
+  );
 }
 
 function evidenceReference(env: DriverLiveLocationEnv) {
@@ -206,6 +210,197 @@ function blockedResult(reason: DriverLiveLocationBlockedReason, status: number) 
       version: driverLiveLocationRuntimeVersion,
     },
     status,
+  };
+}
+
+function uniqueSafeReferences(values: unknown[]) {
+  return [...new Set(values.map(safeIdentifier).filter(Boolean))].slice(
+    0,
+    maxRuntimeAllowedReferences,
+  );
+}
+
+function allowedReferencesFromUnknown(value: unknown) {
+  if (Array.isArray(value)) {
+    return uniqueSafeReferences(value);
+  }
+
+  if (typeof value === "string") {
+    return uniqueSafeReferences(value.split(/[,\n\s]+/));
+  }
+
+  return [];
+}
+
+function booleanSettingOpen(value: unknown) {
+  return value === true || value === "true";
+}
+
+function runtimeSettingNumber(
+  value: unknown,
+  min: number,
+  max: number,
+) {
+  const parsed = asFiniteNumber(value);
+
+  if (parsed === null || !Number.isInteger(parsed)) {
+    return null;
+  }
+
+  return parsed >= min && parsed <= max ? parsed : null;
+}
+
+type DriverLiveLocationRuntimePolicyPurpose = "admin_map" | "capture";
+
+type DriverLiveLocationRuntimePolicy = {
+  allowedJobReferences: string[];
+  retentionMinutes: number;
+  source: "admin_runtime_setting" | "env_evidence";
+  staleAfterSeconds: number;
+};
+
+type DriverLiveLocationRuntimePolicyResult =
+  | {
+      ok: true;
+      policy: DriverLiveLocationRuntimePolicy;
+    }
+  | {
+      ok: false;
+      reason: DriverLiveLocationBlockedReason;
+      status: number;
+    };
+
+function envEvidenceRuntimePolicy(
+  env: DriverLiveLocationEnv,
+): DriverLiveLocationRuntimePolicyResult {
+  const allowedReferences = allowedJobReferences(env);
+
+  if (allowedReferences.length === 0) {
+    return {
+      ok: false,
+      reason: "driver_live_location_config_not_ready",
+      status: 503,
+    };
+  }
+
+  return {
+    ok: true,
+    policy: {
+      allowedJobReferences: allowedReferences,
+      retentionMinutes: positiveIntegerEnv(
+        env,
+        "PRESTIGE_DRIVER_LIVE_LOCATION_RETENTION_MINUTES",
+        120,
+      ),
+      source: "env_evidence",
+      staleAfterSeconds: positiveIntegerEnv(
+        env,
+        "PRESTIGE_DRIVER_LIVE_LOCATION_STALE_AFTER_SECONDS",
+        300,
+      ),
+    },
+  };
+}
+
+async function readAdminControlledRuntimePolicy({
+  client,
+  env,
+  purpose,
+}: {
+  client: DriverLiveLocationClient;
+  env: DriverLiveLocationEnv;
+  purpose: DriverLiveLocationRuntimePolicyPurpose;
+}): Promise<DriverLiveLocationRuntimePolicyResult> {
+  const gateState = readDriverLiveLocationScaffoldGateState(env);
+
+  if (gateState.mode === "evidence") {
+    return envEvidenceRuntimePolicy(env);
+  }
+
+  if (gateState.mode !== "runtime") {
+    return {
+      ok: false,
+      reason: "driver_live_location_runtime_mode_closed",
+      status: 503,
+    };
+  }
+
+  const { data, error } = await client
+    .from(runtimeSettingsTable)
+    .select(
+      "setting_name, setting_status, driver_live_location_capture_enabled, admin_active_jobs_map_enabled, driver_live_location_mode, driver_live_location_allowed_job_references, driver_live_location_stale_after_seconds, driver_live_location_retention_minutes",
+    )
+    .eq("setting_name", runtimeSettingName)
+    .maybeSingle();
+
+  if (error) {
+    return {
+      ok: false,
+      reason: "driver_live_location_admin_runtime_config_not_ready",
+      status: 503,
+    };
+  }
+
+  const setting = asRecord(data);
+  const settingStatus = cleanText(setting.setting_status, 40);
+  const settingMode = cleanText(setting.driver_live_location_mode, 40);
+  const captureOpen = booleanSettingOpen(
+    setting.driver_live_location_capture_enabled,
+  );
+  const adminMapOpen = booleanSettingOpen(setting.admin_active_jobs_map_enabled);
+  const allowedReferences = allowedReferencesFromUnknown(
+    setting.driver_live_location_allowed_job_references,
+  );
+
+  if (
+    settingStatus !== "active" ||
+    settingMode !== "runtime" ||
+    (purpose === "capture" && !captureOpen) ||
+    (purpose === "admin_map" && !adminMapOpen)
+  ) {
+    return {
+      ok: false,
+      reason: "driver_live_location_admin_runtime_gate_closed",
+      status: 503,
+    };
+  }
+
+  if (allowedReferences.length === 0) {
+    return {
+      ok: false,
+      reason: "driver_live_location_admin_runtime_config_not_ready",
+      status: 503,
+    };
+  }
+
+  return {
+    ok: true,
+    policy: {
+      allowedJobReferences: allowedReferences,
+      retentionMinutes:
+        runtimeSettingNumber(
+          setting.driver_live_location_retention_minutes,
+          5,
+          1440,
+        ) ??
+        positiveIntegerEnv(
+          env,
+          "PRESTIGE_DRIVER_LIVE_LOCATION_RETENTION_MINUTES",
+          120,
+        ),
+      source: "admin_runtime_setting",
+      staleAfterSeconds:
+        runtimeSettingNumber(
+          setting.driver_live_location_stale_after_seconds,
+          30,
+          3600,
+        ) ??
+        positiveIntegerEnv(
+          env,
+          "PRESTIGE_DRIVER_LIVE_LOCATION_STALE_AFTER_SECONDS",
+          300,
+        ),
+    },
   };
 }
 
@@ -273,11 +468,9 @@ function normalizeDriverJobLinkRow(row: UnknownRecord): DriverJobLinkRow | null 
 
 async function resolveDriverJobLink({
   client,
-  env,
   token,
 }: {
   client: DriverLiveLocationClient;
-  env: DriverLiveLocationEnv;
   token: string;
 }) {
   let tokenHash = "";
@@ -314,12 +507,6 @@ async function resolveDriverJobLink({
     isDriverJobLinkExpiryOutsideAllowedWindow(link.expires_at)
   ) {
     return blockedResult("driver_live_location_token_expired", 410);
-  }
-
-  const allowedReferences = allowedJobReferences(env);
-
-  if (!allowedReferences.includes(link.booking_reference)) {
-    return blockedResult("driver_live_location_job_not_allowlisted", 403);
   }
 
   return {
@@ -469,14 +656,31 @@ export async function handleDriverLiveLocationRuntimeRequest({
     return blockedResult(clientResult.reason, 503);
   }
 
-  const resolved = await resolveDriverJobLink({
+  const runtimePolicy = await readAdminControlledRuntimePolicy({
     client: clientResult.client,
     env,
+    purpose: "capture",
+  });
+
+  if (!runtimePolicy.ok) {
+    return blockedResult(runtimePolicy.reason, runtimePolicy.status);
+  }
+
+  const resolved = await resolveDriverJobLink({
+    client: clientResult.client,
     token,
   });
 
   if ("status" in resolved) {
     return resolved;
+  }
+
+  if (
+    !runtimePolicy.policy.allowedJobReferences.includes(
+      resolved.link.booking_reference,
+    )
+  ) {
+    return blockedResult("driver_live_location_job_not_allowlisted", 403);
   }
 
   if (action === "stop") {
@@ -522,11 +726,7 @@ export async function handleDriverLiveLocationRuntimeRequest({
     return blockedResult("driver_live_location_invalid_position", 400);
   }
 
-  const staleAfterSeconds = positiveIntegerEnv(
-    env,
-    "PRESTIGE_DRIVER_LIVE_LOCATION_STALE_AFTER_SECONDS",
-    300,
-  );
+  const staleAfterSeconds = runtimePolicy.policy.staleAfterSeconds;
   const staleAfter = new Date(
     new Date(position.captured_at).getTime() + staleAfterSeconds * 1000,
   ).toISOString();
@@ -646,11 +846,17 @@ export async function handleAdminActiveJobsMapRuntimeRequest({
     return blockedResult(clientResult.reason, 503);
   }
 
-  const allowedReferences = allowedJobReferences(env);
+  const runtimePolicy = await readAdminControlledRuntimePolicy({
+    client: clientResult.client,
+    env,
+    purpose: "admin_map",
+  });
 
-  if (allowedReferences.length === 0) {
-    return blockedResult("driver_live_location_config_not_ready", 503);
+  if (!runtimePolicy.ok) {
+    return blockedResult(runtimePolicy.reason, runtimePolicy.status);
   }
+
+  const allowedReferences = runtimePolicy.policy.allowedJobReferences;
 
   const { data, error } = await clientResult.client
     .from(latestPositionsTable)
@@ -706,4 +912,5 @@ export const driverLiveLocationRuntimeContract = {
   auditEventsTable,
   driverJobLinkTable,
   scaffoldVersion: driverLiveLocationScaffoldVersion,
+  runtimeSettingsTable,
 };

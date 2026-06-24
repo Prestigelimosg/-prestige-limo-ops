@@ -5454,6 +5454,27 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - A future evidence pass still requires separate owner approval for migration application state, staging-safe driver job target, DB evidence window, cleanup/zero-row proof, rollback/disable proof, docs evidence recording, and staging promotion.
 - This guard adds `scripts/test-driver-live-location-table-rls-retention-evidence-runner-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Driver Live Location Consent UI Readiness Contract Guard Lock
+- This is a docs/test-only guard for future Driver Live Location driver consent UI and compact Admin Active Jobs Map UI readiness.
+- This lock does not implement UI, activate GPS capture, open live-location routes, write/read location rows, apply migrations, change env, deploy, expose browser map keys, call Google Maps/OneMap/FlightAware, send Email/Telegram/WhatsApp/SMS, activate customer live map visibility, or touch billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, or shim work.
+- Current state remains disabled: driver job pages must not call `navigator.geolocation`, must not start location sharing on page load, and must not silently capture coordinates from status buttons.
+- Future driver consent UI must live on the existing driver job link surface after the server resolves the current assigned job token.
+- Future driver consent UI must use an explicit Share Location control, browser permission prompt, visible sharing state, last shared/stale state, and an explicit Stop Sharing control.
+- Future driver consent UI must make clear that sharing is job-scoped and can be stopped; one driver job token must not see or write another driver/job location.
+- Future capture must never auto-start from page load, POB, OTW, OTS, completed, copy, email, in-app, Telegram, WhatsApp, or SMS actions.
+- Future auto-stop may be added only after separately approved persisted status evidence and must stop on POB/completed policy without indefinite polling.
+- Future admin active-jobs UI must be compact and placed in the existing admin dispatch/active-jobs area, not a new giant card, not a new sector, and not inside Customer Copy.
+- Future admin active-jobs UI must support simultaneous active jobs with one admin-only marker/status row per actively sharing driver/job and visible stale/offline state.
+- Future admin active-jobs UI must remain admin/dispatcher-only, same-origin/admin-boundary protected, and must not expose driver coordinates to customers.
+- Future customer live map links remain not approved; customer portal, customer in-app notifications, and customer copy must not display live driver movement unless separately approved.
+- Future browser map rendering must not use the existing server-side `PRESTIGE_GOOGLE_MAPS_API_KEY`; any browser key requires a separately approved domain-restricted names-only env plan.
+- Future driver-visible fields are limited to current job sharing state, browser permission state, last shared time, stale/offline state, and share/stop controls.
+- Future admin-visible fields are limited to driver display label, assigned job label/reference, job status, vehicle/plate label if already assigned, latest latitude/longitude, accuracy, heading/speed if browser provides them, last updated time, stale/offline flag, and sharing state.
+- Future UI must not show pricing, payout, PayNow, payout preferences, `driver_payout_rules`, `customer_rates`, billing/payment/PDF/invoice, internal/admin notes, parser/debug fields, secrets/tokens/cookies/JWTs, raw provider payloads, customer contact details, customer messages, Save Booking internals, `/api/admin-saved-bookings` internals, OTS/photo/storage, or calendar data.
+- Future UI evidence must prove closed gates, explicit driver consent, wrong-driver blocked paths, wrong-admin blocked paths, mobile-friendly layout, no text overlap, no new giant cards/sectors, no provider sends, no forbidden fields, rollback/disable, and zero matching temporary location rows after cleanup.
+- Future runtime must remain separate from Customer In-App, Driver In-App, Customer Copy, Driver Details Email, Google Maps admin search/route estimates, OneMap, FlightAware, billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, and shim work.
+- This guard adds `scripts/test-driver-live-location-consent-ui-readiness-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Blocked OneMap Admin Map Staging Evidence Safe Failure Record
 
 - Evidence reference: `ONEMAP-ADMIN-MAP-STAGING-BLOCKED-20260621222308`.

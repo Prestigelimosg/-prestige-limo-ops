@@ -5664,13 +5664,14 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Driver Live Location Runtime Settings Migration Scaffold Lock
 - This adds a file-only SQL migration scaffold for the missing `driver_live_location_runtime_settings` table.
 - The migration is `supabase/migrations/202606240002_driver_live_location_runtime_settings_foundation.sql`.
-- This migration scaffold was not applied to any database in this lane.
-- No env change, deploy, DB read/write, GPS capture, admin active-jobs runtime, customer live map, provider call/send, Email/Telegram/WhatsApp/SMS, billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, or shim work is activated.
+- The migration was applied through the Supabase SQL Editor on 2026-06-24 after separate owner approval; Supabase reported success with no rows returned.
+- The database change was limited to this table/index/comment/RLS/grant migration. No env change, deploy, GPS capture, admin active-jobs runtime, customer live map, provider call/send, Email/Telegram/WhatsApp/SMS, billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, or shim work is activated.
 - The table is a singleton keyed by `setting_name=driver_live_location_runtime`.
 - Default state is closed: `setting_status=closed`, `driver_live_location_mode=closed`, capture disabled, admin map disabled, and no allowed job references.
 - The table permits only explicit safe job references and rejects wildcard/all-driver/all-job references.
 - RLS is enabled with no public, customer, anonymous, broad authenticated, or direct driver policies.
 - `anon` and `authenticated` grants are revoked; only `service_role` is granted server-side table access.
+- Runtime evidence has not been rerun after the migration apply. Vercel `env pull` masks sensitive values, so local evidence remains blocked until the private runner env values are available without printing them.
 - The future evidence pass must prove closed default state, explicit reference scoping, cleanup/zero-row proof, rollback/disable proof, and no customer live map before runtime evidence can be accepted.
 - This guard adds `scripts/test-driver-live-location-runtime-settings-migration-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 

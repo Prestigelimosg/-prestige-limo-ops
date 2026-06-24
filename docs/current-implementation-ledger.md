@@ -5393,6 +5393,20 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Future runtime must remain separate from Telegram True Live Location, Email/WhatsApp/SMS provider sends, Google Maps admin search/route estimates, OneMap, FlightAware, customer portal/in-app runtime, billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, and shim work.
 - This guard adds `scripts/test-driver-live-location-active-jobs-map-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Driver Live Location Disabled Scaffold Implementation
+- This adds disabled-by-default scaffold routes for future Driver Live Location Capture and Admin Active Jobs Map runtime wiring.
+- `POST /api/driver-job/[token]/live-location` is present as a future driver share/capture scaffold, but returns safe HTTP 503 no-op.
+- `DELETE /api/driver-job/[token]/live-location` is present as a future driver stop-sharing scaffold, but returns safe HTTP 503 no-op.
+- `GET /api/admin-active-jobs-map-locations` is present as a future admin active-jobs map read scaffold, but remains admin-boundary protected and returns safe HTTP 503 no-op with an empty active-jobs list.
+- The scaffold does not call browser GPS APIs, does not parse coordinate request bodies, does not create a Supabase client, does not read or write location rows, does not render a map, does not read map/provider keys, and does not call Google Maps, OneMap, Telegram, WhatsApp, Email, SMS, or any provider.
+- The driver scaffold does not print or return the driver token; it exposes only whether a token parameter was present.
+- The admin scaffold reuses the internal admin/dispatcher boundary before returning the closed no-op payload.
+- Gate/env names are names-only and values must not be printed: `PRESTIGE_DRIVER_LIVE_LOCATION_CAPTURE_ENABLED`, `PRESTIGE_ADMIN_ACTIVE_JOBS_MAP_ENABLED`, `PRESTIGE_DRIVER_LIVE_LOCATION_MODE`, `PRESTIGE_DRIVER_LIVE_LOCATION_ALLOWED_JOB_REFERENCES`, `PRESTIGE_DRIVER_LIVE_LOCATION_UPDATE_INTERVAL_SECONDS`, `PRESTIGE_DRIVER_LIVE_LOCATION_STALE_AFTER_SECONDS`, and `PRESTIGE_DRIVER_LIVE_LOCATION_RETENTION_MINUTES`.
+- Safe scaffold responses keep `gpsCaptureEnabled`, `locationStorageEnabled`, `liveMapEnabled`, `customerVisible`, and `external_send` false; driver sharing state remains inactive and admin active-jobs output remains empty.
+- This lane does not add UI, map rendering, database schema, table/RLS policy, evidence runner, env change, deploy, production activation, provider send, Telegram true live-location, customer live map link, billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, OTS/photo/storage, calendar, or shim work.
+- Next activation blockers remain: table/RLS/retention proof for live position storage, driver consent UI, admin active-jobs map UI, browser-safe domain-restricted map key plan if a browser map is needed, closed-gate evidence, fake/staging-safe evidence, cleanup proof, rollback proof, and owner approval.
+- This scaffold adds `lib/driver-live-location-scaffold.ts`, `POST/DELETE /api/driver-job/[token]/live-location`, `GET /api/admin-active-jobs-map-locations`, `scripts/test-driver-live-location-disabled-scaffold-guard.mjs`, and preactivation suite registration.
+
 ### Blocked OneMap Admin Map Staging Evidence Safe Failure Record
 
 - Evidence reference: `ONEMAP-ADMIN-MAP-STAGING-BLOCKED-20260621222308`.

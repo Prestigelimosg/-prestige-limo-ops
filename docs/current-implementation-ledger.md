@@ -5703,6 +5703,23 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - A missing env name is only a configuration drift signal; the audit does not approve opening gates, DB writes, provider sends, GPS activation, production activation, billing/payment/PDF/payout, or deploys.
 - This guard adds `scripts/test-vercel-env-drift-audit-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Driver Live Location Consent Runtime Evidence Contract Guard Lock
+- This is a docs/test-only guard for the future Driver Live Location driver-consent runtime evidence pass.
+- This lock does not implement browser GPS capture, does not enable the Share Location or Stop Sharing controls, does not open live-location gates, does not write/read location rows, does not change env, does not deploy, does not call Google Maps/OneMap/FlightAware, does not send provider messages, and does not activate customer live map links.
+- Current driver job pages remain disabled by default: the production driver job page must not call `navigator.geolocation`, must not call the live-location route from the client, and must not auto-start sharing from page load or status buttons.
+- Future evidence must use one fake or staging-safe driver job target only, never a real driver/customer trip, and must not print tokens, booking references, row IDs, coordinates from real users, cookies, env values, API keys, DB URLs, or private customer data.
+- Future evidence must prove an explicit driver click on Share Location before any browser geolocation request and an explicit driver click on Stop Sharing before the stop route is called.
+- Future evidence must mock or safely simulate browser geolocation first; real browser GPS, real device location, and silent background location capture are not approved by this lock.
+- Future evidence must prove no capture on page load, no capture from OTW/OTS/POB/Completed status buttons, no capture from Customer Copy, no capture from Email/Telegram/WhatsApp/SMS, and no capture from in-app notifications or quick replies.
+- Future evidence must prove driver job token scoping, wrong-driver blocked proof, missing/wrong-admin blocked proof for admin reads, admin active-jobs map safe read proof, stale/offline proof, stop proof, cleanup zero-row proof, and rollback/closed-gate proof.
+- Future driver-visible fields remain limited to sharing state, browser permission state, last shared time, stale/offline state, and Share/Stop controls.
+- Future admin-visible fields remain limited to operational marker/status fields already allowed for the admin active-jobs map; customer visibility remains false until a separate customer live-location lane is approved.
+- Future customer live map links, Customer Copy live-location URLs, customer portal tracking, customer in-app tracking, Telegram true live-location sends, Email/WhatsApp/SMS provider sends, and free-form chat are not approved by this lock.
+- Future evidence must not expose pricing, payout, PayNow, payout preferences, `driver_payout_rules`, `customer_rates`, billing/payment/PDF/invoice, internal/admin/finance notes, parser/debug fields, secrets/tokens/cookies/JWTs, raw provider payloads, customer contact details, customer messages, Save Booking internals, `/api/admin-saved-bookings` internals, OTS/photo/storage, calendar data, or mock QA/dev archive.
+- This guard depends on the completed Driver Live Location table/RLS evidence, admin runtime evidence, runtime settings migration apply, and Vercel env drift names-only audit guard; it does not repeat those lanes.
+- A future implementation lane still requires separate owner approval for the runtime UI wiring, a browser-safe test harness, gate state, fake/staging-safe job target, cleanup/zero-row proof, rollback proof, docs evidence recording, and staging promotion.
+- This guard adds `scripts/test-driver-live-location-consent-runtime-evidence-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Driver Live Location Consent UI Readiness Contract Guard Lock
 - This is a docs/test-only guard for future Driver Live Location driver consent UI and compact Admin Active Jobs Map UI readiness.
 - This lock does not implement UI, activate GPS capture, open live-location routes, write/read location rows, apply migrations, change env, deploy, expose browser map keys, call Google Maps/OneMap/FlightAware, send Email/Telegram/WhatsApp/SMS, activate customer live map visibility, or touch billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, or shim work.

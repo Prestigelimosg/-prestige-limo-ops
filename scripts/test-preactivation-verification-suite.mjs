@@ -723,6 +723,10 @@ const guardChecks = [
     script: "scripts/test-vercel-env-drift-audit-guard.mjs",
   },
   {
+    label: "Driver Live Location consent runtime evidence contract guard",
+    script: "scripts/test-driver-live-location-consent-runtime-evidence-contract-guard.mjs",
+  },
+  {
     label: "Driver Live Location disabled scaffold guard",
     script: "scripts/test-driver-live-location-disabled-scaffold-guard.mjs",
   },

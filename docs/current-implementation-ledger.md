@@ -5519,6 +5519,20 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Gate/env names are names-only and values must not be printed: `PRESTIGE_DRIVER_LIVE_LOCATION_CAPTURE_ENABLED`, `PRESTIGE_ADMIN_ACTIVE_JOBS_MAP_ENABLED`, `PRESTIGE_DRIVER_LIVE_LOCATION_MODE`, `PRESTIGE_DRIVER_LIVE_LOCATION_ALLOWED_JOB_REFERENCES`, `PRESTIGE_DRIVER_LIVE_LOCATION_UPDATE_INTERVAL_SECONDS`, `PRESTIGE_DRIVER_LIVE_LOCATION_STALE_AFTER_SECONDS`, `PRESTIGE_DRIVER_LIVE_LOCATION_RETENTION_MINUTES`, `PRESTIGE_DRIVER_LIVE_LOCATION_TABLE_RLS_EVIDENCE_REFERENCE`, and any separately approved browser-safe map key env name.
 - This guard adds `scripts/test-driver-live-location-gated-runtime-evidence-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Driver Live Location Gated Runtime Path Implementation
+- This wires a disabled-by-default server-only Driver Live Location runtime path behind the existing driver capture and admin active-jobs map scaffold routes.
+- Default state remains closed: without `PRESTIGE_DRIVER_LIVE_LOCATION_CAPTURE_ENABLED=true`, `PRESTIGE_ADMIN_ACTIVE_JOBS_MAP_ENABLED=true`, and `PRESTIGE_DRIVER_LIVE_LOCATION_MODE=runtime` or `evidence`, the routes return the existing safe HTTP 503 no-op scaffold payloads.
+- The route files do not statically create Supabase clients and do not parse coordinate request bodies before the gate check; the server-only runtime helper is loaded by dynamic import only after the relevant gate and mode are open.
+- Driver share/stop writes are scoped to the server-resolved driver job token hash and the allowlisted booking references in `PRESTIGE_DRIVER_LIVE_LOCATION_ALLOWED_JOB_REFERENCES`.
+- Driver share accepts only `latitude`, `longitude`, `accuracy_meters`, `heading_degrees`, `speed_meters_per_second`, and `captured_at` from the approved driver job link request body.
+- Driver stop deletes the latest-position row for the resolved driver job link and writes a bounded audit event.
+- Admin active-jobs reads remain admin/dispatcher-boundary protected and return only allowlisted active/stale latest-position rows for admin use.
+- Runtime responses keep `customerVisible: false` and `external_send: false`; customer live-location links and customer tracking remain blocked.
+- No browser GPS UI activation, no admin browser map rendering, no customer live map link, no provider send, no Telegram live-location send, no Email/WhatsApp/SMS, no Google Maps/OneMap/FlightAware call, no billing/payment/PDF/payout, no parser, no Save Booking, no `/api/admin-saved-bookings`, no auth expansion, no OTS/photo/storage, no calendar, no shim, and no production activation is approved by this lane.
+- Future evidence still requires a separately approved gate window, safe driver job target, cleanup zero-row proof, rollback proof, and no-forbidden-field proof.
+- Runtime env names are names-only and values must never be recorded: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `PRESTIGE_DRIVER_LIVE_LOCATION_TABLE_RLS_EVIDENCE_REFERENCE`.
+- This guard adds `scripts/test-driver-live-location-gated-runtime-path-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Driver Live Location Consent UI Readiness Contract Guard Lock
 - This is a docs/test-only guard for future Driver Live Location driver consent UI and compact Admin Active Jobs Map UI readiness.
 - This lock does not implement UI, activate GPS capture, open live-location routes, write/read location rows, apply migrations, change env, deploy, expose browser map keys, call Google Maps/OneMap/FlightAware, send Email/Telegram/WhatsApp/SMS, activate customer live map visibility, or touch billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, or shim work.

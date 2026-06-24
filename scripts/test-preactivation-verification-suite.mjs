@@ -683,6 +683,10 @@ const guardChecks = [
     script: "scripts/test-driver-live-location-gated-runtime-evidence-contract-guard.mjs",
   },
   {
+    label: "Driver Live Location gated runtime path guard",
+    script: "scripts/test-driver-live-location-gated-runtime-path-guard.mjs",
+  },
+  {
     label: "Driver Live Location disabled scaffold guard",
     script: "scripts/test-driver-live-location-disabled-scaffold-guard.mjs",
   },

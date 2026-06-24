@@ -1,6 +1,7 @@
 import {
   buildDriverLiveLocationCaptureScaffoldResponse,
   driverLiveLocationScaffoldVersion,
+  readDriverLiveLocationScaffoldGateState,
 } from "../../../../../lib/driver-live-location-scaffold";
 
 export const dynamic = "force-dynamic";
@@ -28,11 +29,63 @@ async function tokenPresent(context: DriverLiveLocationRouteContext) {
   return Boolean(token?.trim());
 }
 
+async function readToken(context: DriverLiveLocationRouteContext) {
+  const { token } = await context.params;
+
+  return token?.trim() || "";
+}
+
+function runtimeGateOpen() {
+  const gateState = readDriverLiveLocationScaffoldGateState();
+
+  return (
+    gateState.capture_gate_configured &&
+    (gateState.mode === "runtime" || gateState.mode === "evidence")
+  );
+}
+
+async function runtimeResponse({
+  action,
+  context,
+  request,
+}: {
+  action: "share" | "stop";
+  context: DriverLiveLocationRouteContext;
+  request: Request;
+}) {
+  const token = await readToken(context);
+
+  if (!runtimeGateOpen() || !token) {
+    return null;
+  }
+
+  const { handleDriverLiveLocationRuntimeRequest } = await import(
+    "../../../../../lib/driver-live-location-runtime"
+  );
+  const result = await handleDriverLiveLocationRuntimeRequest({
+    action,
+    request,
+    token,
+  });
+
+  return Response.json(result.body, { status: result.status });
+}
+
 export async function POST(
-  _request: Request,
+  request: Request,
   context: DriverLiveLocationRouteContext,
 ) {
   try {
+    const runtime = await runtimeResponse({
+      action: "share",
+      context,
+      request,
+    });
+
+    if (runtime) {
+      return runtime;
+    }
+
     return Response.json(
       {
         ok: false,
@@ -49,10 +102,20 @@ export async function POST(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: DriverLiveLocationRouteContext,
 ) {
   try {
+    const runtime = await runtimeResponse({
+      action: "stop",
+      context,
+      request,
+    });
+
+    if (runtime) {
+      return runtime;
+    }
+
     return Response.json(
       {
         ok: false,

@@ -1,6 +1,7 @@
 import {
   buildAdminActiveJobsMapScaffoldResponse,
   driverLiveLocationScaffoldVersion,
+  readDriverLiveLocationScaffoldGateState,
 } from "../../../lib/driver-live-location-scaffold";
 import {
   adminBookingPersistencePurpose,
@@ -56,12 +57,32 @@ function safeFailureResponse() {
   );
 }
 
+function runtimeGateOpen() {
+  const gateState = readDriverLiveLocationScaffoldGateState();
+
+  return (
+    gateState.active_jobs_map_gate_configured &&
+    (gateState.mode === "runtime" || gateState.mode === "evidence")
+  );
+}
+
 export async function GET(request: Request) {
   try {
     const boundary = requireAdminDispatcherBoundary(request);
 
     if (!boundary.ok) {
       return boundary.response;
+    }
+
+    if (runtimeGateOpen()) {
+      const { handleAdminActiveJobsMapRuntimeRequest } = await import(
+        "../../../lib/driver-live-location-runtime"
+      );
+      const result = await handleAdminActiveJobsMapRuntimeRequest({
+        actorRole: boundary.context.role,
+      });
+
+      return Response.json(result.body, { status: result.status });
     }
 
     return Response.json(

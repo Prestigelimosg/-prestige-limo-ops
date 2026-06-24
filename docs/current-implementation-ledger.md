@@ -5466,6 +5466,18 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - A future evidence pass still requires separate owner approval for migration application state, staging-safe driver job target, DB evidence window, cleanup/zero-row proof, rollback/disable proof, docs evidence recording, and staging promotion.
 - This guard adds `scripts/test-driver-live-location-table-rls-retention-evidence-runner-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Driver Live Location Table/RLS Evidence Record
+- Evidence reference: `DRIVER-LIVE-LOCATION-RLS-EVIDENCE-20260624T121500`.
+- Owner approved applying the existing Driver Live Location table/RLS/retention migration or equivalent Supabase RLS/grant fix after the first evidence attempt found anonymous table access was not blocked.
+- The checked-in migration `supabase/migrations/202606240001_driver_live_location_table_rls_retention_foundation.sql` was applied externally through the Supabase SQL editor; no secrets, API keys, env values, row IDs, booking references, driver job tokens, private customer data, or real coordinates were printed or recorded.
+- After migration application, direct anonymous reads were blocked for both `driver_live_location_latest_positions` and `driver_live_location_audit_events`.
+- Pre-window closed-route proof passed: admin active-jobs map remained blocked, driver live-location capture remained closed, and driver live-location stop remained closed.
+- Bounded DB evidence used exactly one temporary fake `driver_job_links` row, one fake latest-position row, and one fake audit row through a Supabase SQL window; the proof enforced count `1` for each fake live-location row before cleanup and then deleted all temporary rows.
+- Cleanup proof passed with zero matching fake latest-position rows, zero matching fake audit rows, and zero matching fake driver-job-link rows remaining.
+- Post-rollback closed-route proof passed: admin active-jobs map remained blocked, driver live-location capture remained closed, and driver live-location stop remained closed.
+- No GPS capture, browser geolocation, admin active-jobs map runtime, customer live map, customer live-location link, provider call, provider send, Email/Telegram/WhatsApp/SMS, Google Maps/OneMap/FlightAware call, billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, env change, deploy, or production activation was performed.
+- Driver Live Location remains closed by default; the next lane is still explicit driver consent UI and guarded runtime implementation/evidence, not automatic GPS activation.
+
 ### Driver Live Location Consent UI Readiness Contract Guard Lock
 - This is a docs/test-only guard for future Driver Live Location driver consent UI and compact Admin Active Jobs Map UI readiness.
 - This lock does not implement UI, activate GPS capture, open live-location routes, write/read location rows, apply migrations, change env, deploy, expose browser map keys, call Google Maps/OneMap/FlightAware, send Email/Telegram/WhatsApp/SMS, activate customer live map visibility, or touch billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, or shim work.

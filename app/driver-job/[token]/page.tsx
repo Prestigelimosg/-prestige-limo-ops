@@ -1114,6 +1114,73 @@ export default function DriverJobPage() {
               </div>
             </section>
 
+            <section
+              className="order-[82] space-y-3"
+              aria-labelledby="driver-live-location-heading"
+              data-driver-live-location-consent-ui="disabled"
+              data-driver-primary-step="live-location-consent"
+            >
+              <div className="space-y-3 rounded-md border border-slate-200 bg-white p-3">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <h2 id="driver-live-location-heading" className="text-base font-semibold text-slate-900">
+                      Live Location
+                    </h2>
+                    <p
+                      className="mt-1 text-sm font-medium leading-6 text-slate-600"
+                      data-driver-live-location-helper="true"
+                    >
+                      Location sharing is not active for this job.
+                    </p>
+                  </div>
+                  <span
+                    className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200"
+                    data-driver-live-location-sharing-state="inactive"
+                  >
+                    Off
+                  </span>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <button
+                    className="h-11 w-full rounded-md border border-slate-300 bg-slate-50 px-3 text-sm font-semibold text-slate-500 disabled:cursor-not-allowed disabled:opacity-70"
+                    data-driver-live-location-share-button="disabled"
+                    disabled
+                    type="button"
+                  >
+                    Share Location
+                  </button>
+                  <button
+                    className="h-11 w-full rounded-md border border-slate-300 bg-slate-50 px-3 text-sm font-semibold text-slate-500 disabled:cursor-not-allowed disabled:opacity-70"
+                    data-driver-live-location-stop-button="disabled"
+                    disabled
+                    type="button"
+                  >
+                    Stop Sharing
+                  </button>
+                </div>
+                <dl className="grid gap-2 text-xs font-semibold text-slate-600 sm:grid-cols-3">
+                  <div className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
+                    <dt className="uppercase text-slate-500">Permission</dt>
+                    <dd className="mt-1 text-slate-800" data-driver-live-location-permission-state="not_requested">
+                      Not requested
+                    </dd>
+                  </div>
+                  <div className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
+                    <dt className="uppercase text-slate-500">Last shared</dt>
+                    <dd className="mt-1 text-slate-800" data-driver-live-location-last-shared="not_shared">
+                      Not shared
+                    </dd>
+                  </div>
+                  <div className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
+                    <dt className="uppercase text-slate-500">State</dt>
+                    <dd className="mt-1 text-slate-800" data-driver-live-location-stale-state="inactive">
+                      Not active
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+            </section>
+
             <section className="order-[84] space-y-3" aria-labelledby="driver-activity-log-heading">
               <h2 id="driver-activity-log-heading" className="text-base font-semibold text-slate-900">
                 Driver Activity Log

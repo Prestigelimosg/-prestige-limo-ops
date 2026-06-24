@@ -5478,6 +5478,15 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No GPS capture, browser geolocation, admin active-jobs map runtime, customer live map, customer live-location link, provider call, provider send, Email/Telegram/WhatsApp/SMS, Google Maps/OneMap/FlightAware call, billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, env change, deploy, or production activation was performed.
 - Driver Live Location remains closed by default; the next lane is still explicit driver consent UI and guarded runtime implementation/evidence, not automatic GPS activation.
 
+### Driver Live Location Consent UI Disabled Scaffold Implementation
+- This adds a compact disabled Driver Live Location consent UI scaffold to the existing driver job link page.
+- The scaffold renders explicit Share Location and Stop Sharing controls, but both controls are disabled by default and have no click handler.
+- The scaffold shows only driver-visible safe state fields: sharing state, permission state, last shared time, and stale/offline state.
+- The scaffold does not call `navigator.geolocation`, does not call the driver live-location route, does not read or write location rows, does not open gates, does not create a Supabase client, and does not call providers.
+- The existing driver live-location capture/stop route remains closed with HTTP 503 safe no-op behavior.
+- No customer live map link, admin active-jobs map runtime, browser map key, DB write, env change, deploy, provider send, billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, OTS/photo/storage, calendar, auth expansion, or shim work is activated.
+- Next live-location lane remains a separately approved gated runtime implementation/evidence pass with explicit driver consent, wrong-driver/wrong-admin blocked proof, cleanup zero rows, rollback proof, and no customer visibility unless separately approved.
+
 ### Driver Live Location Consent UI Readiness Contract Guard Lock
 - This is a docs/test-only guard for future Driver Live Location driver consent UI and compact Admin Active Jobs Map UI readiness.
 - This lock does not implement UI, activate GPS capture, open live-location routes, write/read location rows, apply migrations, change env, deploy, expose browser map keys, call Google Maps/OneMap/FlightAware, send Email/Telegram/WhatsApp/SMS, activate customer live map visibility, or touch billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, or shim work.

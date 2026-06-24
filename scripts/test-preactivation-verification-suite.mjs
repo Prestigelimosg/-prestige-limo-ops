@@ -719,6 +719,10 @@ const guardChecks = [
     script: "scripts/test-driver-live-location-runtime-settings-migration-guard.mjs",
   },
   {
+    label: "Vercel env drift names-only audit guard",
+    script: "scripts/test-vercel-env-drift-audit-guard.mjs",
+  },
+  {
     label: "Driver Live Location disabled scaffold guard",
     script: "scripts/test-driver-live-location-disabled-scaffold-guard.mjs",
   },

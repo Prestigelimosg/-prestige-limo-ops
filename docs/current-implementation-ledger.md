@@ -5691,6 +5691,18 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Post-rollback closed proof passed: driver capture returned HTTP 503 and admin active-jobs map returned HTTP 403 after the runtime window.
 - No real GPS, browser geolocation, real driver/customer data, customer live map, provider send, Email/Telegram/WhatsApp/SMS, Google Maps/OneMap/FlightAware call, billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, or shim work was activated.
 
+### Vercel Env Drift Names-Only Audit Guard Lock
+- This adds a no-value Vercel env drift audit guard for env-sensitive runtime lanes.
+- The optional audit runner is `scripts/run-vercel-env-name-drift-audit.mjs`.
+- The preactivation suite runs `scripts/test-vercel-env-drift-audit-guard.mjs`; it does not call Vercel.
+- The optional runner checks Vercel project env names only and must not pull, print, compare, or store env values.
+- The optional runner is read-only and must not add, remove, edit, sync, or deploy Vercel env.
+- The optional runner must never use `vercel env pull`, `vercel env add`, `vercel env rm`, `vercel deploy`, `vercel --prod`, or deployment-time overrides.
+- The required names-only set covers Supabase, admin dispatcher auth, booking persistence, typed Load Bookings, Driver Live Location stable gates, Google Maps admin map gates, and Driver Details Email/Resend gates.
+- The audit output is normalized to counts and missing env names only; it must not print Supabase URLs, service-role keys, Resend keys, Google keys, admin session tokens, env values, cookies, DB URLs, row IDs, booking references, or private customer/driver data.
+- A missing env name is only a configuration drift signal; the audit does not approve opening gates, DB writes, provider sends, GPS activation, production activation, billing/payment/PDF/payout, or deploys.
+- This guard adds `scripts/test-vercel-env-drift-audit-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Driver Live Location Consent UI Readiness Contract Guard Lock
 - This is a docs/test-only guard for future Driver Live Location driver consent UI and compact Admin Active Jobs Map UI readiness.
 - This lock does not implement UI, activate GPS capture, open live-location routes, write/read location rows, apply migrations, change env, deploy, expose browser map keys, call Google Maps/OneMap/FlightAware, send Email/Telegram/WhatsApp/SMS, activate customer live map visibility, or touch billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, or shim work.

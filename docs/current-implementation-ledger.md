@@ -4658,6 +4658,27 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Forbidden fields remain pricing, payout, PayNow, payout preferences, payout comparisons, `driver_payout_rules`, `customer_rates`, billing/payment/PDF/invoice, internal/admin/finance notes, parser/debug fields, secrets/tokens/cookies/JWTs, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, provider-send payloads, live-location/GPS coordinates, OTS/photo/storage, calendar, customer/driver phone numbers, customer/driver private contact data, and mock QA/dev archive fields.
 - This guard adds `scripts/test-driver-status-customer-in-app-readiness-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Customer/Driver Quick Replies Readiness Contract Guard Lock
+- This is a docs/test-only guard for future Customer/Driver Quick Replies.
+- This lock does not implement runtime quick replies, notification writes, DB writes, provider sends, Email/Telegram/WhatsApp/SMS, free-form chat, auth/session changes, env changes, deploys, GPS/location activation, billing/payment/PDF/payout, or production activation.
+- Future Customer -> Driver quick replies are limited to exactly four fixed templates: `I am at the lobby.`, `I am running 5 minutes late.`, `Please wait at pickup point.`, and `I cannot find the car.`
+- Future Driver -> Customer quick replies are limited to exactly four fixed templates: `I am on the way.`, `I have arrived.`, `Please meet me at pickup point.`, and `I am waiting nearby.`
+- Quick replies must be in-app only.
+- Quick replies must be job-token scoped for the driver side.
+- Quick replies must be customer/account scoped for the customer side.
+- Quick replies must be scoped to the correct booking and must not cross bookings, customers, accounts, drivers, or driver job links.
+- Quick replies must be visible to admin/dispatch through approved admin surfaces.
+- Quick replies must be audited with safe operational metadata only.
+- Quick replies must be disabled automatically at POB for that job.
+- Quick replies must not expose customer or driver phone numbers, email addresses, chat IDs, device identifiers, or private contact details.
+- No free-form customer-driver text is approved until a later explicit owner approval.
+- No provider send is approved for quick replies; quick replies are not Email, Resend, Telegram, WhatsApp, SMS, SMTP, IMAP, push provider, fallback, scheduler, retry, polling, or blast.
+- Future Customer -> Driver quick replies must be visible only through the driver job token notification/read path or a separately approved equivalent driver-token-scoped in-app path.
+- Future Driver -> Customer quick replies must be visible only through the customer in-app read path and customer/account isolation.
+- Future quick-reply evidence must prove customer-to-driver send/read, driver-to-customer send/read, admin/dispatch visibility, audit proof, wrong-customer blocked, wrong-driver blocked, wrong-booking blocked, anonymous blocked, post-POB blocked, cleanup/zero-row proof, and rollback disabled proof.
+- Forbidden fields remain pricing, payout, PayNow, payout preferences, payout comparisons, `driver_payout_rules`, `customer_rates`, billing/payment/PDF/invoice, internal/admin/finance notes, parser/debug fields, secrets/tokens/cookies/JWTs, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, provider-send payloads, live-location/GPS coordinates, OTS/photo/storage, calendar, customer/driver phone numbers, customer/driver private contact data, chat IDs, device identifiers, and mock QA/dev archive fields.
+- This guard adds `scripts/test-customer-driver-quick-replies-readiness-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Driver In-App Notification Staging Evidence Contract Guard Lock
 - This is a docs/test-only guard for a future separately approved Driver In-App Notification staging evidence pass.
 - This lock is distinct from the Customer/Driver In-App Notification Admin-Selected Channel Contract Lock; it locks the exact future one-row staging evidence window for driver notifications.

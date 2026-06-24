@@ -583,6 +583,10 @@ const guardChecks = [
     script: "scripts/test-driver-status-customer-in-app-readiness-contract-guard.mjs",
   },
   {
+    label: "Customer/Driver Quick Replies readiness contract guard",
+    script: "scripts/test-customer-driver-quick-replies-readiness-contract-guard.mjs",
+  },
+  {
     label: "Driver In-App Notification staging evidence contract guard",
     script: "scripts/test-driver-in-app-notification-staging-evidence-contract-guard.mjs",
   },

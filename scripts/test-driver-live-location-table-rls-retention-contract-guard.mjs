@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { readdir, readFile } from "node:fs/promises";
-import path from "node:path";
+import { readFile } from "node:fs/promises";
 
 const ledgerPath = "docs/current-implementation-ledger.md";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
@@ -11,7 +10,6 @@ const disabledScaffoldGuard =
 const helperPath = "lib/driver-live-location-scaffold.ts";
 const driverRoutePath = "app/api/driver-job/[token]/live-location/route.ts";
 const adminRoutePath = "app/api/admin-active-jobs-map-locations/route.ts";
-const migrationsDir = "supabase/migrations";
 const futureLatestTable = "driver_live_location_latest_positions";
 const futureAuditTable = "driver_live_location_audit_events";
 
@@ -36,16 +34,6 @@ function sectionBetween(source, startHeading, nextHeadingPrefix = "\n### ") {
   return next === -1 ? source.slice(start) : source.slice(start, next);
 }
 
-async function readMigrationSources() {
-  const entries = await readdir(migrationsDir, { withFileTypes: true });
-  const sqlFiles = entries
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".sql"))
-    .map((entry) => path.join(migrationsDir, entry.name));
-  const sources = await Promise.all(sqlFiles.map((filePath) => readFile(filePath, "utf8")));
-
-  return sources.join("\n");
-}
-
 const [
   ledger,
   preactivationSuite,
@@ -53,7 +41,6 @@ const [
   helper,
   driverRoute,
   adminRoute,
-  migrationSources,
 ] = await Promise.all([
   readFile(ledgerPath, "utf8"),
   readFile(preactivationSuitePath, "utf8"),
@@ -61,7 +48,6 @@ const [
   readFile(helperPath, "utf8"),
   readFile(driverRoutePath, "utf8"),
   readFile(adminRoutePath, "utf8"),
-  readMigrationSources(),
 ]);
 
 const ledgerSection = sectionBetween(
@@ -121,14 +107,6 @@ for (const fragment of [
   "{ status: 503 }",
 ]) {
   assertIncludes(runtimeScaffold, fragment, `current scaffold remains closed fragment ${fragment}`);
-}
-
-for (const forbiddenPattern of [
-  new RegExp(futureLatestTable, "i"),
-  new RegExp(futureAuditTable, "i"),
-  /driver_live_location|live_location_latest|live_location_audit/i,
-]) {
-  assertExcludes(migrationSources, forbiddenPattern, "current migrations");
 }
 
 for (const forbiddenPattern of [

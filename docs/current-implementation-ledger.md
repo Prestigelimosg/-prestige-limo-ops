@@ -5425,6 +5425,19 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This guard keeps the current disabled scaffold closed until a separately approved table/RLS migration scaffold is reviewed and promoted.
 - This guard adds `scripts/test-driver-live-location-table-rls-retention-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Driver Live Location Table/RLS Migration Scaffold Lock
+- This adds a disabled-by-default SQL migration scaffold for Driver Live Location table/RLS/retention storage.
+- This migration scaffold is file-only and was not applied to any database in this lane.
+- No DB read/write, GPS capture, coordinate collection, admin active-jobs map runtime, customer live map, env change, deploy, provider call, provider send, billing/payment/PDF/payout, parser, Save Booking, or `/api/admin-saved-bookings` behavior is activated.
+- The future latest-position table is `driver_live_location_latest_positions`.
+- The future bounded audit table is `driver_live_location_audit_events`.
+- RLS is enabled for both tables with no public, customer, anonymous, broad authenticated, or direct driver policies in this scaffold.
+- Direct grants to `anon` and `authenticated` are revoked in the scaffold.
+- The latest-position table is one-row-per-driver-job-link through `driver_live_location_latest_positions_job_link_key`.
+- The scaffold stores safe driver/job/location operational fields only and excludes raw driver job tokens, token hashes, cookies, JWTs, API keys, service-role keys, customer contact details, customer messages, pricing, payout, PayNow, `driver_payout_rules`, `customer_rates`, billing/payment/PDF/invoice, internal/admin notes, parser/debug fields, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, OTS/photo/storage, and calendar data.
+- A later separately approved route/helper evidence lane must prove server-side driver job token resolution, driver write isolation, admin read isolation, stale cleanup, evidence cleanup, zero temporary rows, rollback disabled state, and no customer live map before GPS capture or active map runtime is enabled.
+- This lane adds `supabase/migrations/202606240001_driver_live_location_table_rls_retention_foundation.sql`, `scripts/test-driver-live-location-table-rls-migration-scaffold-guard.mjs`, updates the table/RLS/retention contract guard for the new migration-scaffold state, and registers the new guard in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Blocked OneMap Admin Map Staging Evidence Safe Failure Record
 
 - Evidence reference: `ONEMAP-ADMIN-MAP-STAGING-BLOCKED-20260621222308`.

@@ -11,6 +11,13 @@ import {
   applyCustomerBookingMemoryToRequestForm,
   findCustomerBookingMemorySuggestion,
 } from "../../lib/customer-booking-memory-form";
+import {
+  applyCustomerBookingLocalVoiceDraftFieldFillToForm,
+  getCustomerBookingSpeechRecognitionConstructor,
+  transcriptFromCustomerBookingSpeechEvent,
+  type CustomerBookingLocalVoiceDraftSupportedField,
+  type CustomerBookingSpeechRecognition,
+} from "../../lib/customer-booking-local-voice-draft";
 import { submitCustomerBookingRequest } from "../../lib/customer-booking-request-adapter";
 
 const serviceOptions = [
@@ -60,45 +67,6 @@ type CustomerBookingConfirmationStatus = {
   title: string;
 };
 
-type BrowserSpeechRecognitionAlternative = {
-  transcript: string;
-};
-
-type BrowserSpeechRecognitionResult = {
-  readonly 0?: BrowserSpeechRecognitionAlternative;
-};
-
-type BrowserSpeechRecognitionResultList = {
-  readonly length: number;
-  readonly [index: number]: BrowserSpeechRecognitionResult | undefined;
-};
-
-type BrowserSpeechRecognitionEvent = {
-  results: BrowserSpeechRecognitionResultList;
-};
-
-type BrowserSpeechRecognitionErrorEvent = {
-  error?: string;
-};
-
-type BrowserSpeechRecognition = {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  onend: (() => void) | null;
-  onerror: ((event: BrowserSpeechRecognitionErrorEvent) => void) | null;
-  onresult: ((event: BrowserSpeechRecognitionEvent) => void) | null;
-  start: () => void;
-  stop: () => void;
-};
-
-type BrowserSpeechRecognitionConstructor = new () => BrowserSpeechRecognition;
-
-type CustomerVoiceWindow = Window & {
-  SpeechRecognition?: BrowserSpeechRecognitionConstructor;
-  webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor;
-};
-
 const initialForm: BookingRequestForm = {
   companyName: "",
   contactNo: "",
@@ -144,9 +112,20 @@ const requiredFields: Array<keyof BookingRequestForm> = [
   "dropoffLocation",
 ];
 
+const pickupHourOptions = Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, "0"));
+const pickupMinuteOptions = Array.from({ length: 12 }, (_, index) => String(index * 5).padStart(2, "0"));
+
 function fieldClass(hasError = false) {
   return [
-    "mt-2 min-h-11 w-full rounded-md border bg-white px-3 py-2 font-sans text-base text-slate-950 shadow-sm outline-none transition",
+    "mt-2 min-h-11 w-full rounded-md border bg-white px-3 py-2 font-sans text-base font-normal text-slate-950 shadow-sm outline-none transition",
+    "focus:border-sky-500 focus:ring-2 focus:ring-sky-100",
+    hasError ? "border-red-400" : "border-slate-300",
+  ].join(" ");
+}
+
+function timePartClass(hasError = false) {
+  return [
+    "min-h-11 rounded-md border bg-white px-3 py-2 font-sans text-base font-normal text-slate-950 shadow-sm outline-none transition",
     "focus:border-sky-500 focus:ring-2 focus:ring-sky-100",
     hasError ? "border-red-400" : "border-slate-300",
   ].join(" ");
@@ -176,251 +155,23 @@ function applyBookingMemoryToForm(
   });
 }
 
-function getSpeechRecognitionConstructor() {
-  if (typeof window === "undefined") {
-    return null;
-  }
+function splitPickupTime(value: string) {
+  const [hour = "", minute = ""] = value.split(":");
 
-  const browserWindow = window as CustomerVoiceWindow;
-
-  return browserWindow.SpeechRecognition ?? browserWindow.webkitSpeechRecognition ?? null;
-}
-
-function transcriptFromSpeechEvent(event: BrowserSpeechRecognitionEvent) {
-  return Array.from({ length: event.results.length }, (_, index) => event.results[index]?.[0]?.transcript || "")
-    .join(" ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-const localVoiceDraftApprovedFields = [
-  "companyName",
-  "contactNo",
-  "emailAddress",
-  "passengerName",
-  "pickupDate",
-  "pickupTime",
-  "flightNumber",
-  "pickupLocation",
-  "dropoffLocation",
-  "serviceType",
-  "vehicleType",
-  "passengerCount",
-  "luggage",
-  "extraStops",
-] as const;
-
-const localVoiceDraftSupportedFields = [
-  "passengerName",
-  "pickupDate",
-  "pickupTime",
-  "flightNumber",
-  "pickupLocation",
-  "dropoffLocation",
-] as const;
-
-type LocalVoiceDraftSupportedField = (typeof localVoiceDraftSupportedFields)[number];
-
-type LocalVoiceDraftFillResult = {
-  filledFields: LocalVoiceDraftSupportedField[];
-  nextForm: BookingRequestForm;
-};
-
-const localVoiceDraftApprovedFieldSet = new Set<keyof BookingRequestForm>(localVoiceDraftApprovedFields);
-
-const localVoiceDraftMonthNumbers: Record<string, string> = {
-  jan: "01",
-  january: "01",
-  feb: "02",
-  february: "02",
-  mar: "03",
-  march: "03",
-  apr: "04",
-  april: "04",
-  may: "05",
-  jun: "06",
-  june: "06",
-  jul: "07",
-  july: "07",
-  aug: "08",
-  august: "08",
-  sep: "09",
-  sept: "09",
-  september: "09",
-  oct: "10",
-  october: "10",
-  nov: "11",
-  november: "11",
-  dec: "12",
-  december: "12",
-};
-
-function normalizeLocalVoiceDraftText(value: string) {
-  return value.replace(/\s+/g, " ").trim();
-}
-
-function cleanLocalVoiceDraftValue(value: string) {
-  return normalizeLocalVoiceDraftText(value)
-    .replace(/^[\s,.:;-]+/, "")
-    .replace(/[\s,.:;-]+$/, "");
-}
-
-function titleCaseLocalVoiceDraftName(value: string) {
-  return cleanLocalVoiceDraftValue(value)
-    .split(" ")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
-    .join(" ");
-}
-
-function safeLocalVoiceDraftValue(value: string) {
-  return value.length > 0 && value.length <= 160 && !/[<>]/.test(value);
-}
-
-function localVoiceDraftPassengerName(transcript: string) {
-  const normalizedTranscript = normalizeLocalVoiceDraftText(transcript);
-  const namedMatch = normalizedTranscript.match(
-    /\b(?:passenger|passenger name|name)\s*(?:is|:)?\s*([a-z][a-z' -]{1,60}?)(?=\s+(?:needs?|requires?|has|from|to|on|at)\b|[,.]|$)/i,
-  );
-  const leadingMatch = normalizedTranscript.match(
-    /^\s*([a-z][a-z' -]{1,60}?)\s+(?:needs?|requires?|has|is requesting)\b/i,
-  );
-  const name = titleCaseLocalVoiceDraftName(namedMatch?.[1] ?? leadingMatch?.[1] ?? "");
-
-  return safeLocalVoiceDraftValue(name) ? name : "";
-}
-
-function localVoiceDraftPickupDate(transcript: string) {
-  const normalizedTranscript = normalizeLocalVoiceDraftText(transcript);
-  const isoMatch = normalizedTranscript.match(/\b(20\d{2})-(\d{1,2})-(\d{1,2})\b/);
-  const numericMatch = normalizedTranscript.match(/\b(\d{1,2})[/.](\d{1,2})[/.](20\d{2})\b/);
-  const namedMatch = normalizedTranscript.match(
-    /\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(20\d{2})\b/i,
-  );
-  const year = isoMatch?.[1] ?? numericMatch?.[3] ?? namedMatch?.[3] ?? "";
-  const month =
-    isoMatch?.[2] ??
-    numericMatch?.[2] ??
-    localVoiceDraftMonthNumbers[namedMatch?.[2]?.toLowerCase() ?? ""] ??
-    "";
-  const day = isoMatch?.[3] ?? numericMatch?.[1] ?? namedMatch?.[1] ?? "";
-  const monthNumber = Number(month);
-  const dayNumber = Number(day);
-
-  if (!year || monthNumber < 1 || monthNumber > 12 || dayNumber < 1 || dayNumber > 31) {
-    return "";
-  }
-
-  return `${year}-${String(monthNumber).padStart(2, "0")}-${String(dayNumber).padStart(2, "0")}`;
-}
-
-function localVoiceDraftPickupTime(transcript: string) {
-  const normalizedTranscript = normalizeLocalVoiceDraftText(transcript);
-  const separatedMatch = normalizedTranscript.match(/\b([01]?\d|2[0-3])[:.]([0-5]\d)\b/);
-  const compactMatch = normalizedTranscript.match(/\b([01]\d|2[0-3])([0-5]\d)\s*(?:hrs?|h)\b/i);
-  const hour = separatedMatch?.[1] ?? compactMatch?.[1] ?? "";
-  const minute = separatedMatch?.[2] ?? compactMatch?.[2] ?? "";
-
-  if (!hour || !minute) {
-    return "";
-  }
-
-  return `${String(Number(hour)).padStart(2, "0")}:${minute}`;
-}
-
-function localVoiceDraftFlightNumber(transcript: string) {
-  const match = normalizeLocalVoiceDraftText(transcript)
-    .toUpperCase()
-    .match(/\b([A-Z]{2,3})\s?(\d{2,4}[A-Z]?)\b/);
-  const flightNumber = cleanLocalVoiceDraftValue(`${match?.[1] ?? ""}${match?.[2] ?? ""}`);
-
-  return safeLocalVoiceDraftValue(flightNumber) ? flightNumber : "";
-}
-
-function localVoiceDraftRouteMatch(transcript: string) {
-  return normalizeLocalVoiceDraftText(transcript).match(
-    /\bfrom\s+(.+?)\s+to\s+(.+?)(?=\s+[a-z]{2,3}\s?\d{2,4}[a-z]?\b|\s+on\b|\s+at\b|[,.]|$)/i,
-  );
-}
-
-function cleanLocalVoiceDraftLocation(value: string) {
-  const cleaned = cleanLocalVoiceDraftValue(value)
-    .replace(/\b(?:on|at)\s+\d{1,2}(?:st|nd|rd|th)?\s+[a-z]+.*$/i, "")
-    .replace(/\b(?:on|at)\s+20\d{2}.*$/i, "")
-    .replace(/\b[a-z]{2,3}\s?\d{2,4}[a-z]?\b.*$/i, "")
-    .replace(/\b(?:please|thanks?)\b.*$/i, "");
-
-  return cleanLocalVoiceDraftValue(cleaned);
-}
-
-function localVoiceDraftKnownPickupAddress(transcript: string) {
-  const normalizedTranscript = normalizeLocalVoiceDraftText(transcript);
-  const stayMatch = normalizedTranscript.match(/\b(?:stays?|lives?)\s+at\s+([^,.]+)(?=[,.]|$)/i);
-  const addressMatch = normalizedTranscript.match(/\b(?:home|address)\s+is\s+([^,.]+)(?=[,.]|$)/i);
-  const address = cleanLocalVoiceDraftLocation(stayMatch?.[1] ?? addressMatch?.[1] ?? "");
-
-  return safeLocalVoiceDraftValue(address) ? address : "";
-}
-
-function localVoiceDraftPickupLocation(transcript: string) {
-  const knownAddress = localVoiceDraftKnownPickupAddress(transcript);
-  if (knownAddress) {
-    return knownAddress;
-  }
-
-  const routeMatch = localVoiceDraftRouteMatch(transcript);
-  const pickupLocation = cleanLocalVoiceDraftLocation(routeMatch?.[1] ?? "");
-
-  return safeLocalVoiceDraftValue(pickupLocation) ? pickupLocation : "";
-}
-
-function localVoiceDraftDropoffLocation(transcript: string) {
-  const routeMatch = localVoiceDraftRouteMatch(transcript);
-  const dropoffLocation = cleanLocalVoiceDraftLocation(routeMatch?.[2] ?? "");
-
-  return safeLocalVoiceDraftValue(dropoffLocation) ? dropoffLocation : "";
-}
-
-const localVoiceDraftFieldExtractors: Record<LocalVoiceDraftSupportedField, (transcript: string) => string> = {
-  passengerName: localVoiceDraftPassengerName,
-  pickupDate: localVoiceDraftPickupDate,
-  pickupTime: localVoiceDraftPickupTime,
-  flightNumber: localVoiceDraftFlightNumber,
-  pickupLocation: localVoiceDraftPickupLocation,
-  dropoffLocation: localVoiceDraftDropoffLocation,
-};
-
-function applyLocalVoiceDraftFieldFillToForm(
-  currentForm: BookingRequestForm,
-  transcript: string,
-): LocalVoiceDraftFillResult {
-  let nextForm = currentForm;
-  const filledFields: LocalVoiceDraftSupportedField[] = [];
-
-  for (const field of localVoiceDraftSupportedFields) {
-    if (!localVoiceDraftApprovedFieldSet.has(field) || currentForm[field].trim()) {
-      continue;
-    }
-
-    const value = localVoiceDraftFieldExtractors[field](transcript);
-    if (!safeLocalVoiceDraftValue(value)) {
-      continue;
-    }
-
-    nextForm = { ...nextForm, [field]: value };
-    filledFields.push(field);
-  }
-
-  return { filledFields, nextForm };
+  return {
+    hour: pickupHourOptions.includes(hour) ? hour : "",
+    minute: pickupMinuteOptions.includes(minute) ? minute : "",
+  };
 }
 
 export default function CustomerBookingPage() {
   const [form, setForm] = useState<BookingRequestForm>(initialForm);
+  const [pickupTimeDraft, setPickupTimeDraft] = useState(() => splitPickupTime(initialForm.pickupTime));
   const [missingFields, setMissingFields] = useState<Array<keyof BookingRequestForm>>([]);
   const [bookingMemorySuggestions, setBookingMemorySuggestions] = useState<CustomerBookingMemorySuggestion[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const bookingMemoryLoadStarted = useRef(false);
-  const voiceRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const voiceRecognitionRef = useRef<CustomerBookingSpeechRecognition | null>(null);
   const voiceRecognitionErroredRef = useRef(false);
   const voiceTranscriptRef = useRef("");
   const formRef = useRef<BookingRequestForm>(initialForm);
@@ -429,7 +180,7 @@ export default function CustomerBookingPage() {
   const [voiceHelperText, setVoiceHelperText] = useState(
     "Use Speak as a local draft helper. Review the transcript, then type or edit the trip fields yourself.",
   );
-  const [voiceDraftFilledFields, setVoiceDraftFilledFields] = useState<LocalVoiceDraftSupportedField[]>([]);
+  const [voiceDraftFilledFields, setVoiceDraftFilledFields] = useState<CustomerBookingLocalVoiceDraftSupportedField[]>([]);
   const [confirmationStatus, setConfirmationStatus] = useState<CustomerBookingConfirmationStatus | null>(null);
   const [feedback, setFeedback] = useState<Feedback>({
     tone: "info",
@@ -448,6 +199,15 @@ export default function CustomerBookingPage() {
     updateForm((current) => ({ ...current, [field]: value }));
     setMissingFields((current) => current.filter((item) => item !== field));
     setConfirmationStatus(null);
+  }
+
+  function updatePickupTimeSelect(part: "hour" | "minute", value: string) {
+    setPickupTimeDraft((current) => {
+      const base = current.hour || current.minute ? current : splitPickupTime(formRef.current.pickupTime);
+      const next = { ...base, [part]: value };
+      updateField("pickupTime", next.hour && next.minute ? `${next.hour}:${next.minute}` : "");
+      return next;
+    });
   }
 
   async function ensureBookingMemorySuggestions() {
@@ -494,7 +254,7 @@ export default function CustomerBookingPage() {
   }
 
   function applyLocalVoiceDraftFieldFill(transcript: string) {
-    const result = applyLocalVoiceDraftFieldFillToForm(formRef.current, transcript);
+    const result = applyCustomerBookingLocalVoiceDraftFieldFillToForm(formRef.current, transcript);
     setVoiceDraftFilledFields(result.filledFields);
 
     if (result.filledFields.length === 0) {
@@ -506,8 +266,11 @@ export default function CustomerBookingPage() {
 
     formRef.current = result.nextForm;
     setForm(result.nextForm);
+    if (result.filledFields.includes("pickupTime")) {
+      setPickupTimeDraft(splitPickupTime(result.nextForm.pickupTime));
+    }
     setMissingFields((current) =>
-      current.filter((item) => !result.filledFields.includes(item as LocalVoiceDraftSupportedField)),
+      current.filter((item) => !result.filledFields.includes(item as CustomerBookingLocalVoiceDraftSupportedField)),
     );
     setConfirmationStatus(null);
     setVoiceHelperText(
@@ -523,7 +286,7 @@ export default function CustomerBookingPage() {
       return;
     }
 
-    const SpeechRecognitionConstructor = getSpeechRecognitionConstructor();
+    const SpeechRecognitionConstructor = getCustomerBookingSpeechRecognitionConstructor();
 
     if (!SpeechRecognitionConstructor) {
       setVoiceHelperText("Voice dictation is not supported in this browser. Type the trip details manually.");
@@ -535,7 +298,7 @@ export default function CustomerBookingPage() {
     recognition.interimResults = true;
     recognition.lang = "en-SG";
     recognition.onresult = (event) => {
-      const transcript = transcriptFromSpeechEvent(event);
+      const transcript = transcriptFromCustomerBookingSpeechEvent(event);
 
       if (transcript) {
         setVoiceTranscript(transcript);
@@ -632,6 +395,15 @@ export default function CustomerBookingPage() {
   function isMissing(field: keyof BookingRequestForm) {
     return missingFields.includes(field);
   }
+
+  const visiblePickupTimeParts = (() => {
+    const formParts = splitPickupTime(form.pickupTime);
+
+    return {
+      hour: pickupTimeDraft.hour || formParts.hour,
+      minute: pickupTimeDraft.minute || formParts.minute,
+    };
+  })();
 
   return (
     <main
@@ -734,14 +506,11 @@ export default function CustomerBookingPage() {
                 <h2 className="text-lg font-semibold text-slate-950" id="contact-section-title">
                   Contact Details
                 </h2>
-                <p className="text-sm text-slate-600">Required fields are marked with *.</p>
                 <div
                   className="mt-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm leading-6 text-sky-950"
                   data-customer-booking-request-notice="true"
                 >
-                  <p className="font-semibold">
-                    Prestige Limo will review and confirm your booking shortly.
-                  </p>
+                  <p>Prestige Limo will review and confirm your booking shortly.</p>
                   <p>This is a booking request only. It is not confirmed until Prestige confirms it.</p>
                 </div>
               </div>
@@ -760,7 +529,7 @@ export default function CustomerBookingPage() {
                 </label>
 
                 <label className="text-sm font-semibold text-slate-800">
-                  Contact no. *
+                  Contact no.
                   <input
                     aria-invalid={isMissing("contactNo")}
                     className={fieldClass(isMissing("contactNo"))}
@@ -795,7 +564,7 @@ export default function CustomerBookingPage() {
               </h2>
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <label className="text-sm font-semibold text-slate-800">
-                  Passenger name *
+                  Passenger name
                   <input
                     aria-invalid={isMissing("passengerName")}
                     autoComplete="off"
@@ -842,7 +611,7 @@ export default function CustomerBookingPage() {
                 </label>
 
                 <label className="text-sm font-semibold text-slate-800">
-                  Pickup date *
+                  Pickup date
                   <input
                     aria-invalid={isMissing("pickupDate")}
                     className={fieldClass(isMissing("pickupDate"))}
@@ -856,23 +625,57 @@ export default function CustomerBookingPage() {
                 </label>
 
                 <label className="text-sm font-semibold text-slate-800">
-                  Pickup time *
+                  Pickup time
                   <input
                     aria-invalid={isMissing("pickupTime")}
-                    className={`${fieldClass(isMissing("pickupTime"))} max-w-48`}
                     data-customer-booking-field="pickupTime"
-                    data-customer-booking-time-control="native-time"
                     name="pickupTime"
-                    onChange={(event) => updateField("pickupTime", event.target.value)}
                     required
-                    step="300"
-                    type="time"
+                    type="hidden"
                     value={form.pickupTime}
                   />
+                  <div
+                    className="mt-2 flex max-w-xs items-center gap-2"
+                    data-customer-booking-time-control="compact-selects"
+                  >
+                    <select
+                      aria-invalid={isMissing("pickupTime")}
+                      aria-label="Pickup hour"
+                      className={`${timePartClass(isMissing("pickupTime"))} w-20`}
+                      data-customer-booking-time-part="hour"
+                      onChange={(event) => updatePickupTimeSelect("hour", event.target.value)}
+                      value={visiblePickupTimeParts.hour}
+                    >
+                      <option value="">HH</option>
+                      {pickupHourOptions.map((hour) => (
+                        <option key={hour} value={hour}>
+                          {hour}
+                        </option>
+                      ))}
+                    </select>
+                    <span aria-hidden="true" className="text-base text-slate-500">
+                      :
+                    </span>
+                    <select
+                      aria-invalid={isMissing("pickupTime")}
+                      aria-label="Pickup minute"
+                      className={`${timePartClass(isMissing("pickupTime"))} w-20`}
+                      data-customer-booking-time-part="minute"
+                      onChange={(event) => updatePickupTimeSelect("minute", event.target.value)}
+                      value={visiblePickupTimeParts.minute}
+                    >
+                      <option value="">MM</option>
+                      {pickupMinuteOptions.map((minute) => (
+                        <option key={minute} value={minute}>
+                          {minute}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </label>
 
                 <label className="text-sm font-semibold text-slate-800">
-                  Pickup location *
+                  Pickup location
                   <input
                     aria-invalid={isMissing("pickupLocation")}
                     className={fieldClass(isMissing("pickupLocation"))}
@@ -887,7 +690,7 @@ export default function CustomerBookingPage() {
                 </label>
 
                 <label className="text-sm font-semibold text-slate-800">
-                  Drop-off location *
+                  Drop-off location
                   <input
                     aria-invalid={isMissing("dropoffLocation")}
                     className={fieldClass(isMissing("dropoffLocation"))}
@@ -928,7 +731,7 @@ export default function CustomerBookingPage() {
                     onChange={(event) => updateField("vehicleType", event.target.value)}
                     value={form.vehicleType}
                   >
-                    <option value="">No preference / Prestige to advise</option>
+                    <option value="">No preference</option>
                     {vehicleOptions.map((option) => (
                       <option key={option} value={option}>
                         {option}

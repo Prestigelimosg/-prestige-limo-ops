@@ -1,12 +1,19 @@
 "use client";
 
 import type { FormEvent } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   loadCustomerPortalSavedBookings,
   type CustomerPortalBooking,
 } from "../../lib/customer-portal-saved-bookings-adapter";
+import {
+  applyCustomerBookingLocalVoiceDraftFieldFillToForm,
+  getCustomerBookingSpeechRecognitionConstructor,
+  transcriptFromCustomerBookingSpeechEvent,
+  type CustomerBookingLocalVoiceDraftSupportedField,
+  type CustomerBookingSpeechRecognition,
+} from "../../lib/customer-booking-local-voice-draft";
 
 type BookingFilter = "Cancelled" | "Completed" | "Upcoming";
 type PortalSection = "New Booking Request" | BookingFilter;
@@ -109,6 +116,27 @@ const requiredBookingRequestFields: Array<keyof BookingRequestForm> = [
   "pickupTime",
 ];
 
+const bookingRequestFieldLabels: Record<keyof BookingRequestForm, string> = {
+  companyName: "Customer / company name",
+  contactNo: "Contact no.",
+  emailAddress: "Email address",
+  passengerName: "Passenger name",
+  pickupDate: "Pickup date",
+  pickupTime: "Pickup time",
+  flightNumber: "Flight number if any",
+  pickupLocation: "Pickup location",
+  dropoffLocation: "Drop-off location",
+  serviceType: "Trip type",
+  vehicleType: "Preferred vehicle",
+  passengerCount: "Number of passengers",
+  luggage: "Luggage",
+  extraStops: "Extra stops",
+  specialRequest: "Special request / note",
+};
+
+const pickupHourOptions = Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, "0"));
+const pickupMinuteOptions = Array.from({ length: 12 }, (_, index) => String(index * 5).padStart(2, "0"));
+
 function rowMatchesFilter(booking: CustomerPortalBooking, filter: BookingFilter) {
   if (filter === "Completed") {
     return booking.status === "Completed";
@@ -159,7 +187,15 @@ function getCurrentPortalMonthInfo(date = new Date()) {
 
 function fieldClass(hasError = false) {
   return [
-    "mt-2 min-h-11 w-full rounded-md border bg-white px-3 py-2 font-sans text-base text-slate-950 shadow-sm outline-none transition",
+    "mt-2 min-h-11 w-full rounded-md border bg-white px-3 py-2 font-sans text-base font-normal text-slate-950 shadow-sm outline-none transition",
+    "focus:border-sky-500 focus:ring-2 focus:ring-sky-100",
+    hasError ? "border-red-400" : "border-slate-300",
+  ].join(" ");
+}
+
+function timePartClass(hasError = false) {
+  return [
+    "min-h-11 rounded-md border bg-white px-3 py-2 font-sans text-base font-normal text-slate-950 shadow-sm outline-none transition",
     "focus:border-sky-500 focus:ring-2 focus:ring-sky-100",
     hasError ? "border-red-400" : "border-slate-300",
   ].join(" ");
@@ -181,6 +217,15 @@ function canRequestBookingReview(booking: CustomerPortalBooking) {
   return booking.status !== "Completed" && booking.status !== "Cancelled";
 }
 
+function splitPickupTime(value: string) {
+  const [hour = "", minute = ""] = value.split(":");
+
+  return {
+    hour: pickupHourOptions.includes(hour) ? hour : "",
+    minute: pickupMinuteOptions.includes(minute) ? minute : "",
+  };
+}
+
 export default function CustomerPortalPage() {
   const [activeSection, setActiveSection] = useState<PortalSection>("Upcoming");
   const [expandedBookingId, setExpandedBookingId] = useState("");
@@ -193,7 +238,18 @@ export default function CustomerPortalPage() {
   const [selectedBookingMonths, setSelectedBookingMonths] =
     useState<Record<BookingFilter, string>>(initialSelectedBookingMonths);
   const [bookingRequestForm, setBookingRequestForm] = useState<BookingRequestForm>(initialBookingRequestForm);
+  const [pickupTimeDraft, setPickupTimeDraft] = useState(() => splitPickupTime(initialBookingRequestForm.pickupTime));
   const [missingBookingRequestFields, setMissingBookingRequestFields] = useState<Array<keyof BookingRequestForm>>([]);
+  const bookingRequestFormRef = useRef<BookingRequestForm>(initialBookingRequestForm);
+  const voiceRecognitionRef = useRef<CustomerBookingSpeechRecognition | null>(null);
+  const voiceRecognitionErroredRef = useRef(false);
+  const voiceTranscriptRef = useRef("");
+  const [voiceListening, setVoiceListening] = useState(false);
+  const [voiceTranscript, setVoiceTranscript] = useState("");
+  const [voiceHelperText, setVoiceHelperText] = useState(
+    "Use Speak as a local draft helper. Review the transcript, then type or edit the trip fields yourself.",
+  );
+  const [voiceDraftFilledFields, setVoiceDraftFilledFields] = useState<CustomerBookingLocalVoiceDraftSupportedField[]>([]);
   const [bookingRequestFeedback, setBookingRequestFeedback] = useState<BookingRequestFeedback>({
     tone: "info",
     text: "Submit a booking request and our staff will review availability before confirming.",
@@ -371,8 +427,108 @@ export default function CustomerPortalPage() {
   }
 
   function updateBookingRequestField(field: keyof BookingRequestForm, value: string) {
-    setBookingRequestForm((current) => ({ ...current, [field]: value }));
+    setBookingRequestForm((current) => {
+      const nextForm = { ...current, [field]: value };
+      bookingRequestFormRef.current = nextForm;
+      return nextForm;
+    });
     setMissingBookingRequestFields((current) => current.filter((item) => item !== field));
+  }
+
+  function updatePickupTimeSelect(part: "hour" | "minute", value: string) {
+    setPickupTimeDraft((current) => {
+      const base =
+        current.hour || current.minute
+          ? current
+          : splitPickupTime(bookingRequestFormRef.current.pickupTime);
+      const next = { ...base, [part]: value };
+      updateBookingRequestField("pickupTime", next.hour && next.minute ? `${next.hour}:${next.minute}` : "");
+      return next;
+    });
+  }
+
+  function applyLocalVoiceDraftFieldFill(transcript: string) {
+    const result = applyCustomerBookingLocalVoiceDraftFieldFillToForm(bookingRequestFormRef.current, transcript);
+    setVoiceDraftFilledFields(result.filledFields);
+
+    if (result.filledFields.length === 0) {
+      setVoiceHelperText(
+        "Voice draft captured locally. No safe empty fields changed. Review the transcript and type details manually.",
+      );
+      return;
+    }
+
+    bookingRequestFormRef.current = result.nextForm;
+    setBookingRequestForm(result.nextForm);
+    if (result.filledFields.includes("pickupTime")) {
+      setPickupTimeDraft(splitPickupTime(result.nextForm.pickupTime));
+    }
+    setMissingBookingRequestFields((current) =>
+      current.filter((item) => !result.filledFields.includes(item as CustomerBookingLocalVoiceDraftSupportedField)),
+    );
+    setVoiceHelperText(
+      `Voice draft filled ${result.filledFields.map((field) => bookingRequestFieldLabels[field]).join(", ")}. Review and edit before submitting.`,
+    );
+  }
+
+  function handleSpeakDraft() {
+    if (voiceListening) {
+      voiceRecognitionRef.current?.stop();
+      setVoiceListening(false);
+      setVoiceHelperText("Voice draft stopped. Review the transcript, then type or edit the trip fields yourself.");
+      return;
+    }
+
+    const SpeechRecognitionConstructor = getCustomerBookingSpeechRecognitionConstructor();
+
+    if (!SpeechRecognitionConstructor) {
+      setVoiceHelperText("Voice dictation is not supported in this browser. Type the trip details manually.");
+      return;
+    }
+
+    const recognition = new SpeechRecognitionConstructor();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = "en-SG";
+    recognition.onresult = (event) => {
+      const transcript = transcriptFromCustomerBookingSpeechEvent(event);
+
+      if (transcript) {
+        setVoiceTranscript(transcript);
+        voiceTranscriptRef.current = transcript;
+        setVoiceDraftFilledFields([]);
+        setVoiceHelperText("Voice draft captured locally. Review it, then type or edit the trip fields yourself.");
+      }
+    };
+    recognition.onerror = () => {
+      voiceRecognitionErroredRef.current = true;
+      setVoiceListening(false);
+      setVoiceHelperText("Voice draft was not captured. Type the trip details manually.");
+    };
+    recognition.onend = () => {
+      if (!voiceRecognitionErroredRef.current) {
+        applyLocalVoiceDraftFieldFill(voiceTranscriptRef.current);
+      }
+      voiceRecognitionErroredRef.current = false;
+      setVoiceListening(false);
+      voiceRecognitionRef.current = null;
+    };
+
+    voiceRecognitionRef.current = recognition;
+    setVoiceTranscript("");
+    voiceTranscriptRef.current = "";
+    voiceRecognitionErroredRef.current = false;
+    setVoiceDraftFilledFields([]);
+    setVoiceListening(true);
+    setVoiceHelperText("Listening locally. Speak the trip details, then review the transcript before editing fields.");
+
+    try {
+      recognition.start();
+    } catch {
+      setVoiceListening(false);
+      voiceRecognitionRef.current = null;
+      setVoiceHelperText("Voice dictation could not start. Type the trip details manually.");
+    }
   }
 
   function handleBookingRequestSubmit(event: FormEvent<HTMLFormElement>) {
@@ -400,6 +556,15 @@ export default function CustomerPortalPage() {
     return missingBookingRequestFields.includes(field);
   }
 
+  const visiblePickupTimeParts = (() => {
+    const formParts = splitPickupTime(bookingRequestForm.pickupTime);
+
+    return {
+      hour: pickupTimeDraft.hour || formParts.hour,
+      minute: pickupTimeDraft.minute || formParts.minute,
+    };
+  })();
+
   return (
     <main
       className="min-h-screen overflow-x-hidden bg-stone-50 px-3 py-4 text-slate-950 sm:px-4 lg:px-6"
@@ -418,23 +583,6 @@ export default function CustomerPortalPage() {
           >
             Mobile web trip view for your confirmed and requested rides. Use request review for changes.
           </p>
-          <div
-            className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm"
-            data-customer-portal-guidance="true"
-          >
-            <p className="text-slate-700">
-              <span className="font-semibold text-slate-950">New request: </span>
-              Send a trip request from this page.
-            </p>
-            <p className="text-slate-700">
-              <span className="font-semibold text-slate-950">Check trips: </span>
-              Search upcoming, completed, or cancelled bookings.
-            </p>
-            <p className="text-slate-700">
-              <span className="font-semibold text-slate-950">Need changes: </span>
-              Request a review before the booking is updated.
-            </p>
-          </div>
         </header>
 
         <nav
@@ -477,18 +625,49 @@ export default function CustomerPortalPage() {
             <div className="flex flex-col gap-4">
               <section aria-labelledby="portal-request-contact-title">
                 <div className="flex flex-col gap-1">
-                  <h2 className="text-base font-semibold text-slate-950" id="portal-request-contact-title">
-                    New Booking Request
-                  </h2>
-                  <p className="text-sm text-slate-600">Required fields are marked with *.</p>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <h2 className="text-base font-semibold text-slate-950" id="portal-request-contact-title">
+                      New Booking Request
+                    </h2>
+                    <button
+                      aria-pressed={voiceListening}
+                      className="inline-flex min-h-9 w-fit items-center justify-center rounded-md border border-sky-300 bg-sky-50 px-3 py-1.5 text-sm font-semibold text-sky-950 transition hover:border-sky-500 disabled:cursor-not-allowed disabled:opacity-70"
+                      data-customer-portal-voice-booking-mode="local-transcript-helper"
+                      data-customer-portal-voice-booking-speak-button="true"
+                      onClick={handleSpeakDraft}
+                      type="button"
+                    >
+                      {voiceListening ? "Listening" : "Speak"}
+                    </button>
+                  </div>
                   <div
                     className="mt-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm leading-6 text-sky-950"
                     data-customer-portal-request-notice="true"
                   >
-                    <p className="font-semibold">
-                      Prestige Limo will review and confirm your booking shortly.
-                    </p>
+                    <p>Prestige Limo will review and confirm your booking shortly.</p>
                     <p>This is a booking request only. It is not confirmed until Prestige confirms it.</p>
+                  </div>
+                  <div
+                    className="text-sm leading-6 text-slate-600"
+                    data-customer-portal-voice-booking-helper="true"
+                    data-customer-portal-voice-booking-local-only="true"
+                  >
+                    <p data-customer-portal-voice-booking-status="true">{voiceHelperText}</p>
+                    {voiceTranscript ? (
+                      <p className="mt-1" data-customer-portal-voice-booking-draft-note="true">
+                        <span>Voice draft: </span>
+                        <span data-customer-portal-voice-booking-transcript="true">{voiceTranscript}</span>
+                      </p>
+                    ) : null}
+                    {voiceDraftFilledFields.length > 0 ? (
+                      <p
+                        className="mt-1"
+                        data-customer-portal-voice-booking-draft-fill="local-only"
+                        data-customer-portal-voice-booking-draft-fill-fields={voiceDraftFilledFields.join(",")}
+                      >
+                        Filled fields: {voiceDraftFilledFields.map((field) => bookingRequestFieldLabels[field]).join(", ")}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
                 <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -506,7 +685,7 @@ export default function CustomerPortalPage() {
                   </label>
 
                   <label className="text-sm font-semibold text-slate-800">
-                    Contact no. *
+                    Contact no.
                     <input
                       aria-invalid={isBookingRequestMissing("contactNo")}
                       className={fieldClass(isBookingRequestMissing("contactNo"))}
@@ -541,7 +720,7 @@ export default function CustomerPortalPage() {
                 </h2>
                 <div className="mt-3 grid gap-3 md:grid-cols-2">
                   <label className="text-sm font-semibold text-slate-800">
-                    Passenger name *
+                    Passenger name
                     <input
                       aria-invalid={isBookingRequestMissing("passengerName")}
                       className={fieldClass(isBookingRequestMissing("passengerName"))}
@@ -569,7 +748,7 @@ export default function CustomerPortalPage() {
                   </label>
 
                   <label className="text-sm font-semibold text-slate-800">
-                    Pickup date *
+                    Pickup date
                     <input
                       aria-invalid={isBookingRequestMissing("pickupDate")}
                       className={fieldClass(isBookingRequestMissing("pickupDate"))}
@@ -583,20 +762,53 @@ export default function CustomerPortalPage() {
                   </label>
 
                   <label className="text-sm font-semibold text-slate-800">
-                    Pickup time *
+                    Pickup time
                     <input
                       aria-invalid={isBookingRequestMissing("pickupTime")}
-                      className={`${fieldClass(isBookingRequestMissing("pickupTime"))} max-w-48`}
-                      data-customer-portal-pickup-time="native-time"
                       data-customer-portal-request-field="pickupTime"
-                      data-step="300"
                       name="pickupTime"
-                      onChange={(event) => updateBookingRequestField("pickupTime", event.target.value)}
                       required
-                      step="300"
-                      type="time"
+                      type="hidden"
                       value={bookingRequestForm.pickupTime}
                     />
+                    <div
+                      className="mt-2 flex max-w-xs items-center gap-2"
+                      data-customer-portal-pickup-time="compact-selects"
+                    >
+                      <select
+                        aria-invalid={isBookingRequestMissing("pickupTime")}
+                        aria-label="Pickup hour"
+                        className={`${timePartClass(isBookingRequestMissing("pickupTime"))} w-20`}
+                        data-customer-portal-pickup-time-part="hour"
+                        onChange={(event) => updatePickupTimeSelect("hour", event.target.value)}
+                        value={visiblePickupTimeParts.hour}
+                      >
+                        <option value="">HH</option>
+                        {pickupHourOptions.map((hour) => (
+                          <option key={hour} value={hour}>
+                            {hour}
+                          </option>
+                        ))}
+                      </select>
+                      <span aria-hidden="true" className="text-base text-slate-500">
+                        :
+                      </span>
+                      <select
+                        aria-invalid={isBookingRequestMissing("pickupTime")}
+                        aria-label="Pickup minute"
+                        className={`${timePartClass(isBookingRequestMissing("pickupTime"))} w-20`}
+                        data-customer-portal-pickup-time-part="minute"
+                        onChange={(event) => updatePickupTimeSelect("minute", event.target.value)}
+                        value={visiblePickupTimeParts.minute}
+                      >
+                        <option value="">MM</option>
+                        {pickupMinuteOptions.map((minute) => (
+                          <option key={minute} value={minute}>
+                            {minute}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </label>
 
                   <label className="text-sm font-semibold text-slate-800">
@@ -652,7 +864,7 @@ export default function CustomerPortalPage() {
                       onChange={(event) => updateBookingRequestField("vehicleType", event.target.value)}
                       value={bookingRequestForm.vehicleType}
                     >
-                      <option value="">No preference / Prestige to advise</option>
+                      <option value="">No preference</option>
                       {vehicleOptions.map((option) => (
                         <option key={option} value={option}>
                           {option}
@@ -1003,17 +1215,6 @@ export default function CustomerPortalPage() {
                 </dl>
               </section>
             ) : null}
-
-            <details
-              className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-700 shadow-sm"
-              data-customer-portal-help="true"
-            >
-              <summary className="cursor-pointer font-semibold text-slate-900">Help</summary>
-              <div className="mt-2 grid gap-1">
-                <p>Requests here are reviewed by the Prestige Limo team before any booking is updated.</p>
-                <p>For urgent same-day help, contact our team directly with the passenger name or pickup time.</p>
-              </div>
-            </details>
           </>
         )}
       </div>

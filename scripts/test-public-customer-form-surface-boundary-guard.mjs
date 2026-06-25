@@ -341,7 +341,7 @@ assertSafeFormFieldNames(
 );
 assertIncludes(
   portalPage,
-  'data-customer-portal-pickup-time="native-time"',
+  'data-customer-portal-pickup-time="compact-selects"',
   "/my-bookings pickup time request control",
 );
 assertSafeFormFieldNames(

@@ -353,13 +353,19 @@ assertSafeFormFieldNames(
 for (const fragment of [
   "submitCustomerBookingRequest(form)",
   "data-customer-booking-form=\"true\"",
-  "Prestige Limo will review and confirm your booking shortly.",
+  "Admin will review and confirm your booking shortly. Thank you",
   "This is a booking request only, not a confirmed booking yet.",
-  "This is a booking request only. It is not confirmed until Prestige confirms it.",
   "No price, payment, invoice, PDF, or billing file is created here.",
   "Booking request received. Our team will review and confirm availability.",
 ]) {
   assertIncludes(bookPage, fragment, `/book form surface ${fragment}`);
+}
+
+for (const removedFragment of [
+  "Prestige Limo will review and confirm your booking shortly.",
+  "This is a booking request only. It is not confirmed until Prestige confirms it.",
+]) {
+  assertExcludes(bookPage, removedFragment, `/book removed request notice ${removedFragment}`);
 }
 
 for (const forbiddenPattern of [
@@ -374,11 +380,18 @@ for (const forbiddenPattern of [
 
 for (const fragment of [
   "data-customer-portal-request-form=\"true\"",
-  "Prestige Limo will review and confirm your booking shortly.",
-  "This is a booking request only. It is not confirmed until Prestige confirms it.",
+  "Admin will review and confirm your booking shortly. Thank you",
   "Booking request received for review. This is not confirmed yet. Our staff will reply to confirm availability.",
 ]) {
   assertIncludes(portalPage, fragment, `/my-bookings form surface ${fragment}`);
+}
+
+for (const removedFragment of [
+  "Mobile web trip view for your confirmed and requested rides. Use request review for changes.",
+  "Prestige Limo will review and confirm your booking shortly.",
+  "This is a booking request only. It is not confirmed until Prestige confirms it.",
+]) {
+  assertExcludes(portalPage, removedFragment, `/my-bookings removed copy ${removedFragment}`);
 }
 
 for (const forbiddenPattern of [

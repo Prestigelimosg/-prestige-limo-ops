@@ -577,12 +577,6 @@ export default function CustomerPortalPage() {
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-700">
             Customers can view booking requests and booking history here after staff confirmation.
           </p>
-          <p
-            className="mt-2 border-l-2 border-sky-300 bg-sky-50/70 px-3 py-1.5 text-sm font-medium leading-6 text-sky-950"
-            data-customer-portal-mobile-web-note="true"
-          >
-            Mobile web trip view for your confirmed and requested rides. Use request review for changes.
-          </p>
         </header>
 
         <nav
@@ -644,8 +638,7 @@ export default function CustomerPortalPage() {
                     className="mt-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm leading-6 text-sky-950"
                     data-customer-portal-request-notice="true"
                   >
-                    <p>Prestige Limo will review and confirm your booking shortly.</p>
-                    <p>This is a booking request only. It is not confirmed until Prestige confirms it.</p>
+                    <p>Admin will review and confirm your booking shortly. Thank you</p>
                   </div>
                   <div
                     className="text-sm leading-6 text-slate-600"

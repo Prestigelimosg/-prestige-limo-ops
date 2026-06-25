@@ -32253,7 +32253,10 @@ async function runChromeTest() {
         const preSubmitReview = document.querySelector("[data-customer-booking-pre-submit-review]");
         const portalLink = document.querySelector("[data-customer-booking-portal-link]");
         const preSubmitReviewText = preSubmitReview?.innerText || "";
-        const lowerTextForForbidden = text.replace(preSubmitReviewText, "").toLowerCase();
+        const lowerTextForForbidden = text
+          .replace(preSubmitReviewText, "")
+          .replace("Admin will review and confirm your booking shortly. Thank you", "")
+          .toLowerCase();
         const submitRect = submit?.getBoundingClientRect();
         const feedbackRect = feedback?.getBoundingClientRect();
         const confirmationStatusRect = confirmationStatus?.getBoundingClientRect();
@@ -32920,14 +32923,9 @@ async function runChromeTest() {
         "Expected /book to show mobile-web request guidance",
       );
       assert.equal(
-        initialState.text.includes("Prestige Limo will review and confirm your booking shortly."),
+        initialState.text.includes("Admin will review and confirm your booking shortly. Thank you"),
         true,
-        "Expected /book to show clear Prestige review notice",
-      );
-      assert.equal(
-        initialState.text.includes("This is a booking request only. It is not confirmed until Prestige confirms it."),
-        true,
-        "Expected /book to clarify the request is not confirmed yet",
+        "Expected /book to show clear admin review notice",
       );
       assertNoNativeAppOnlyLanguage(initialState.text, "/book desktop");
       for (const expectedField of [
@@ -33782,7 +33780,8 @@ async function runChromeTest() {
         const documentHistory = document.querySelector("[data-customer-booking-document-history]");
         const documentHistoryRect = documentHistory?.getBoundingClientRect();
         const documentHistoryRows = [...document.querySelectorAll("[data-customer-booking-document-history-row]")];
-        const visibleLeakText = documentHistory?.innerText ? text.replace(documentHistory.innerText, "") : text;
+        const visibleLeakText = (documentHistory?.innerText ? text.replace(documentHistory.innerText, "") : text)
+          .replace("Admin will review and confirm your booking shortly. Thank you", "");
         const lowerVisibleLeakText = visibleLeakText.toLowerCase();
         const help = document.querySelector("[data-customer-portal-help]");
         const helpRect = help?.getBoundingClientRect();
@@ -34724,6 +34723,7 @@ async function runChromeTest() {
         "New request: Send a trip request from this page.",
         "Check trips: Search upcoming, completed, or cancelled bookings.",
         "Need changes: Request a review before the booking is updated.",
+        "Mobile web trip view for your confirmed and requested rides. Use request review for changes.",
       ]) {
         assert.equal(
           initialState.text.includes(removedGuidanceText),
@@ -34735,13 +34735,6 @@ async function runChromeTest() {
         initialState.guidance.height <= 190,
         true,
         `Expected /my-bookings guidance to stay compact, got ${initialState.guidance.height}px`,
-      );
-      assert.equal(
-        initialState.text.includes(
-          "Mobile web trip view for your confirmed and requested rides. Use request review for changes.",
-        ),
-        true,
-        "Expected /my-bookings to show mobile-web trip guidance",
       );
       assertNoNativeAppOnlyLanguage(initialState.text, "/my-bookings desktop");
       assert.equal(initialState.searchVisible, true, "Expected /my-bookings search input to be visible");
@@ -35014,14 +35007,9 @@ async function runChromeTest() {
       assert.equal(requestFormState.activeSection, "New Booking Request", "Expected /my-bookings request form tab");
       assert.equal(requestFormState.form.submitVisible, true, "Expected customer portal request submit button");
       assert.equal(
-        requestFormState.text.includes("Prestige Limo will review and confirm your booking shortly."),
+        requestFormState.text.includes("Admin will review and confirm your booking shortly. Thank you"),
         true,
-        "Expected /my-bookings request form to show clear Prestige review notice",
-      );
-      assert.equal(
-        requestFormState.text.includes("This is a booking request only. It is not confirmed until Prestige confirms it."),
-        true,
-        "Expected /my-bookings request form to clarify the request is not confirmed yet",
+        "Expected /my-bookings request form to show clear admin review notice",
       );
       assert.equal(
         requestFormState.form.nativePickupTimeInputCount,

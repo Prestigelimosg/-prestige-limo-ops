@@ -64,8 +64,6 @@ const responsiveRoutes = [
     path: "/book",
   },
   {
-    expectedMobileWebText:
-      "Mobile web trip view for your confirmed and requested rides. Use request review for changes.",
     expectedText: "My Bookings",
     label: "/my-bookings",
     path: "/my-bookings",

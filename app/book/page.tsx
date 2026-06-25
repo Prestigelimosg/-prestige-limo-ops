@@ -510,8 +510,7 @@ export default function CustomerBookingPage() {
                   className="mt-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm leading-6 text-sky-950"
                   data-customer-booking-request-notice="true"
                 >
-                  <p>Prestige Limo will review and confirm your booking shortly.</p>
-                  <p>This is a booking request only. It is not confirmed until Prestige confirms it.</p>
+                  <p>Admin will review and confirm your booking shortly. Thank you</p>
                 </div>
               </div>
               <div className="mt-4 grid gap-4 md:grid-cols-2">

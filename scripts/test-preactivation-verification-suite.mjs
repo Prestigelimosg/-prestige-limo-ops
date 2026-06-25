@@ -795,6 +795,10 @@ const guardChecks = [
     script: "scripts/test-customer-live-location-app-side-runtime-path.mjs",
   },
   {
+    label: "One-real-booking live-location app-side evidence runner guard",
+    script: "scripts/test-one-real-booking-live-location-app-side-evidence-runner-guard.mjs",
+  },
+  {
     label: "Google Maps admin map evidence contract guard",
     script: "scripts/test-google-maps-admin-map-evidence-contract-guard.mjs",
   },

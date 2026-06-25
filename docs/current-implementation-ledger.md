@@ -5878,6 +5878,24 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The runtime does not call Google Maps, OneMap, FlightAware, Telegram, WhatsApp, SMS, Email, Resend, or any provider API; browser map rendering and real GPS remain separate lanes.
 - This guard adds `scripts/test-customer-live-location-map-runtime-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Customer Live Location Map Staging Evidence Record
+- Evidence reference: `CUSTOMER-LIVE-LOCATION-MAP-STAGING-20260625`.
+- Source-of-truth commit under test: `5465f1d Add customer live location map runtime scaffold`.
+- Evidence was run through the guarded staging runner `scripts/run-customer-live-location-link-map-staging-evidence.mjs`.
+- Pre-window proof: anonymous access returned HTTP 403, customer-boundary read returned safe closed HTTP 503, write method returned HTTP 403, `customer_live_map false`, `db_write false`, `gps_activation false`, `provider_send false`, and `secrets_printed false`.
+- Staging map gates were opened only for the bounded evidence window through Vercel dashboard project env: `PRESTIGE_CUSTOMER_LIVE_LOCATION_MAP_ENABLED`, `PRESTIGE_CUSTOMER_LIVE_LOCATION_MAP_MODE`, `PRESTIGE_CUSTOMER_LIVE_LOCATION_MAP_ACCOUNT_ALLOWLIST`, `PRESTIGE_CUSTOMER_LIVE_LOCATION_MAP_ALLOWED_BOOKING_REFERENCES`, and `PRESTIGE_CUSTOMER_LIVE_LOCATION_MAP_STALE_AFTER_SECONDS`.
+- Evidence used one fake staging account reference and one fake staging booking reference only.
+- Runtime-window proof: the runner wrote exactly one fake `driver_job_links` row and exactly one fake `driver_live_location_latest_positions` row, customer map read returned HTTP 200, `marker_count` was 1, anonymous access returned HTTP 403, wrong-customer access returned HTTP 403, cross-origin access returned HTTP 403, and cleanup proved zero matching rows remained.
+- Rollback proof: `PRESTIGE_CUSTOMER_LIVE_LOCATION_MAP_ENABLED` was returned to a closed value and staging was redeployed closed.
+- Post-rollback proof: anonymous access returned HTTP 403, customer-boundary read returned safe closed HTTP 503, write method returned HTTP 403, `customer_live_map false`, `db_write false`, `gps_activation false`, `provider_send false`, and `secrets_printed false`.
+- No real GPS capture occurred.
+- No browser geolocation call occurred.
+- No customer live map was broadly exposed.
+- No real customer data, real booking data, private coordinates, private customer contact data, driver phone number, raw driver job token, raw booking ID, row ID tied to a real user, env value, API key, cookie, password, token, DB URL, or secret was printed or recorded.
+- No provider call or provider send occurred.
+- No Google Maps, OneMap, FlightAware, Telegram, WhatsApp, SMS, Email, Resend, billing/payment/PDF, payout, parser, Save Booking, `/api/admin-saved-bookings`, OTS/photo/storage, calendar, shim, production activation, or broad/all-customer activation occurred.
+- Customer-visible evidence output stayed limited to the single safe fake marker context and did not expose pricing, payout, PayNow, payout preferences, `driver_payout_rules`, `customer_rates`, billing/payment/PDF/invoice, internal/admin notes, parser/debug fields, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, OTS/photo/storage, calendar data, or mock QA/dev archive.
+
 ### Blocked OneMap Admin Map Staging Evidence Safe Failure Record
 
 - Evidence reference: `ONEMAP-ADMIN-MAP-STAGING-BLOCKED-20260621222308`.

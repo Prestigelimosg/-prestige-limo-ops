@@ -19,6 +19,31 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This fix does not open broad public writes, provider sends, parser changes, billing/payment/PDF/payout, live location/GPS, Vercel env changes, deploys, or `/api/admin-saved-bookings` behavior.
 - Guard coverage lives in `scripts/test-customer-booking-request-api-contract.mjs` and locks the exact customer-request actor in `lib/admin-booking-supabase-adapter.ts`.
 
+### Local Production-Mode CRM E2E Evidence Record
+
+- Evidence marker: `E2E-CUSTOMER-JC-CRM-20260625113956`.
+- Source-of-truth commit during evidence: `ea83944 Allow customer booking request persistence actor`.
+- Evidence ran on a local production-mode server from `npm run build` plus `npm start` on port 3001.
+- This was local production-mode evidence only, not deployed staging evidence and not production launch readiness.
+- `/`, `/book`, and `/my-bookings` returned HTTP 200.
+- `/book` customer request submission succeeded through the bounded customer booking request path.
+- Admin CRM load returned HTTP 200 and included the submitted booking.
+- Passenger name mapping appeared correctly in the admin CRM-loaded booking.
+- Admin confirm/edit returned HTTP 200.
+- Customer in-app confirmation notification remained safely gated with HTTP 403.
+- Driver job link create returned HTTP 200 with token display-once behavior.
+- Driver job link load returned HTTP 200 with the expected single evidence link.
+- Driver job page returned HTTP 200.
+- Driver job link revoke returned HTTP 200.
+- Anonymous customer portal read remained blocked with HTTP 403.
+- Customer-safe projection included only safe booking fields: customer-facing status, service type, pickup datetime, pickup location, drop-off location, passenger name, passenger count, and luggage count.
+- Cleanup completed after the evidence run.
+- Zero matching rows remained for `bookings`, `driver_job_links`, and `customer_driver_app_notification_outbox`.
+- No Vercel CLI, Vercel env change, browser/dashboard automation, or redeploy occurred.
+- No provider sends/calls, Email/Telegram/WhatsApp/SMS, real GPS, broad customer live map, billing/payment/PDF/invoice/payout, or calendar sync occurred.
+- No parser behavior, runtime code, test code, route/helper, shim, DB schema, or app deployment change occurred in this evidence record.
+- Checks from the evidence lane passed: `npm run build`, `npm run lint`, `git diff --check`, `git diff --cached --check`, and final `git status --short` clean.
+
 ## Next GPT Lock / Uncompleted Backlog
 
 - Last verified repo checkpoint before this Load Bookings typed primary display source staging smoke record: `a682e97 Implement Load Bookings typed primary display source`.

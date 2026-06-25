@@ -8,6 +8,7 @@ const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mj
 const guardScript = "scripts/test-customer-voice-booking-draft-input-contract.mjs";
 
 const bookPagePath = "app/book/page.tsx";
+const customerBookingLocalVoiceDraftPath = "lib/customer-booking-local-voice-draft.ts";
 const customerRequestAdapterPath = "lib/customer-booking-request-adapter.ts";
 const customerRequestRoutePath = "app/api/customer-booking-requests/route.ts";
 const adminBookingPersistencePath = "lib/admin-booking-persistence.ts";
@@ -119,6 +120,7 @@ const [
   ledger,
   preactivationSuite,
   bookPage,
+  customerBookingLocalVoiceDraft,
   customerRequestAdapter,
   customerRequestRoute,
   adminBookingPersistence,
@@ -133,6 +135,7 @@ const [
     ledgerPath,
     preactivationSuitePath,
     bookPagePath,
+    customerBookingLocalVoiceDraftPath,
     customerRequestAdapterPath,
     customerRequestRoutePath,
     adminBookingPersistencePath,
@@ -245,13 +248,22 @@ for (const fragment of [
   'data-customer-voice-booking-mode="local-transcript-helper"',
   'data-customer-voice-booking-local-only="true"',
   'data-customer-voice-booking-transcript="true"',
-  "browserWindow.SpeechRecognition ?? browserWindow.webkitSpeechRecognition ?? null",
+  "getCustomerBookingSpeechRecognitionConstructor()",
   "Voice dictation is not supported in this browser. Type the trip details manually.",
   "submitCustomerBookingRequest(form)",
   "This is a booking request only, not a confirmed booking yet.",
   "Our team will review and confirm availability before your booking is confirmed.",
 ]) {
   assertIncludes(bookPage, fragment, `/book evidence ${fragment}`);
+}
+
+for (const fragment of [
+  "type CustomerVoiceWindow = Window &",
+  "SpeechRecognition?: BrowserSpeechRecognitionConstructor",
+  "webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor",
+  "browserWindow.SpeechRecognition ?? browserWindow.webkitSpeechRecognition ?? null",
+]) {
+  assertIncludes(customerBookingLocalVoiceDraft, fragment, `local voice draft helper evidence ${fragment}`);
 }
 
 for (const fragment of [

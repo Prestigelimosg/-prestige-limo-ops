@@ -255,7 +255,7 @@ assertIncludes(
 const passengerUpdateBlock = blockBetween(
   bookPage,
   "function updatePassengerName(value: string)",
-  "function updatePickupTimePart",
+  "function applyLocalVoiceDraftFieldFill",
 );
 assertIncludes(
   passengerUpdateBlock,

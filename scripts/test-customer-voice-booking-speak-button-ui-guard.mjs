@@ -3,6 +3,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
 const bookPagePath = "app/book/page.tsx";
+const customerBookingLocalVoiceDraftPath = "lib/customer-booking-local-voice-draft.ts";
 const customerRequestAdapterPath = "lib/customer-booking-request-adapter.ts";
 const customerRequestRoutePath = "app/api/customer-booking-requests/route.ts";
 const adminBookingPersistencePath = "lib/admin-booking-persistence.ts";
@@ -52,6 +53,7 @@ async function listFiles(root) {
 
 const [
   bookPage,
+  customerBookingLocalVoiceDraft,
   customerRequestAdapter,
   customerRequestRoute,
   adminBookingPersistence,
@@ -60,6 +62,7 @@ const [
   libFiles,
 ] = await Promise.all([
   readFile(bookPagePath, "utf8"),
+  readFile(customerBookingLocalVoiceDraftPath, "utf8"),
   readFile(customerRequestAdapterPath, "utf8"),
   readFile(customerRequestRoutePath, "utf8"),
   readFile(adminBookingPersistencePath, "utf8"),
@@ -112,8 +115,7 @@ assert.equal(
 assertIncludes(bookPage, 'href="/my-bookings"', "Portal href remains unchanged");
 
 for (const fragment of [
-  "getSpeechRecognitionConstructor",
-  "browserWindow.SpeechRecognition ?? browserWindow.webkitSpeechRecognition ?? null",
+  "getCustomerBookingSpeechRecognitionConstructor",
   "Voice dictation is not supported in this browser. Type the trip details manually.",
   "voiceRecognitionRef",
   "voiceTranscript",
@@ -122,6 +124,14 @@ for (const fragment of [
   'data-customer-voice-booking-transcript="true"',
 ]) {
   assertIncludes(bookPage, fragment, `local voice helper fragment ${fragment}`);
+}
+
+for (const fragment of [
+  "getCustomerBookingSpeechRecognitionConstructor",
+  "browserWindow.SpeechRecognition ?? browserWindow.webkitSpeechRecognition ?? null",
+  "transcriptFromCustomerBookingSpeechEvent",
+]) {
+  assertIncludes(customerBookingLocalVoiceDraft, fragment, `shared local voice helper fragment ${fragment}`);
 }
 
 for (const forbidden of [
@@ -187,6 +197,10 @@ for (const forbidden of [
 
 const unsafeBackendPathPattern = /(?:customer[-/]voice|voice[-/]booking|speech|stt|audio|recording)/i;
 for (const filePath of [...apiFiles, ...libFiles]) {
+  if (filePath === customerBookingLocalVoiceDraftPath) {
+    continue;
+  }
+
   assert.equal(
     unsafeBackendPathPattern.test(filePath),
     false,

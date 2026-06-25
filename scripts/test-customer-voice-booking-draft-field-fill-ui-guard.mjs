@@ -3,6 +3,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
 const bookPagePath = "app/book/page.tsx";
+const customerBookingLocalVoiceDraftPath = "lib/customer-booking-local-voice-draft.ts";
 const customerRequestAdapterPath = "lib/customer-booking-request-adapter.ts";
 const customerRequestRoutePath = "app/api/customer-booking-requests/route.ts";
 const adminBookingPersistencePath = "lib/admin-booking-persistence.ts";
@@ -103,6 +104,7 @@ async function listFiles(root) {
 
 const [
   bookPage,
+  customerBookingLocalVoiceDraft,
   customerRequestAdapter,
   customerRequestRoute,
   adminBookingPersistence,
@@ -111,6 +113,7 @@ const [
   libFiles,
 ] = await Promise.all([
   readFile(bookPagePath, "utf8"),
+  readFile(customerBookingLocalVoiceDraftPath, "utf8"),
   readFile(customerRequestAdapterPath, "utf8"),
   readFile(customerRequestRoutePath, "utf8"),
   readFile(adminBookingPersistencePath, "utf8"),
@@ -161,17 +164,17 @@ for (const fragment of [
 }
 
 assertSameList(
-  extractConstArrayItems(bookPage, "localVoiceDraftSupportedFields"),
+  extractConstArrayItems(customerBookingLocalVoiceDraft, "customerBookingLocalVoiceDraftSupportedFields"),
   approvedFieldFillTargets,
   "local voice draft field-fill target list",
 );
 assertSameList(
-  extractConstArrayItems(bookPage, "localVoiceDraftApprovedFields"),
+  extractConstArrayItems(customerBookingLocalVoiceDraft, "localVoiceDraftApprovedFields"),
   approvedSubmittedFields,
   "local voice draft approved customer field list",
 );
 assertSameList(
-  extractObjectKeys(bookPage, "localVoiceDraftFieldExtractors"),
+  extractObjectKeys(customerBookingLocalVoiceDraft, "localVoiceDraftFieldExtractors"),
   approvedFieldFillTargets,
   "local voice draft extractor keys",
 );
@@ -180,19 +183,24 @@ for (const fragment of [
   "voiceTranscriptRef",
   "voiceTranscriptRef.current = transcript",
   "applyLocalVoiceDraftFieldFill(voiceTranscriptRef.current)",
-  "applyLocalVoiceDraftFieldFillToForm",
-  "currentForm[field].trim()",
-  "setVoiceDraftFilledFields(result.filledFields)",
-  "setForm(result.nextForm)",
+  "applyCustomerBookingLocalVoiceDraftFieldFillToForm",
   'data-customer-voice-booking-draft-fill="local-only"',
   "data-customer-voice-booking-draft-fill-fields={voiceDraftFilledFields.join(\",\")}",
 ]) {
   assertIncludes(bookPage, fragment, `local field-fill runtime fragment ${fragment}`);
 }
 
+for (const fragment of [
+  "export function applyCustomerBookingLocalVoiceDraftFieldFillToForm",
+  "currentForm[field].trim()",
+  "localVoiceDraftFieldExtractors[field](transcript)",
+]) {
+  assertIncludes(customerBookingLocalVoiceDraft, fragment, `local helper field-fill runtime fragment ${fragment}`);
+}
+
 const fieldFillToFormBlock = firstBlock(
-  bookPage,
-  /function applyLocalVoiceDraftFieldFillToForm[\s\S]*?\n}\n\nexport default function/,
+  customerBookingLocalVoiceDraft,
+  /export function applyCustomerBookingLocalVoiceDraftFieldFillToForm[\s\S]*?\n}/,
   "local field-fill form transformer",
 );
 const fieldFillHandlerBlock = firstBlock(
@@ -294,6 +302,10 @@ assertSameList(
 
 const unsafeBackendPathPattern = /(?:customer[-/]voice|voice[-/]booking|speech|stt|audio|recording)/i;
 for (const filePath of [...apiFiles, ...libFiles]) {
+  if (filePath === customerBookingLocalVoiceDraftPath) {
+    continue;
+  }
+
   assert.equal(
     unsafeBackendPathPattern.test(filePath),
     false,

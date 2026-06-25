@@ -9,6 +9,7 @@ const contractGuardScript = "scripts/test-customer-voice-booking-draft-field-fil
 const uiGuardScript = "scripts/test-customer-voice-booking-draft-field-fill-ui-guard.mjs";
 
 const bookPagePath = "app/book/page.tsx";
+const customerBookingLocalVoiceDraftPath = "lib/customer-booking-local-voice-draft.ts";
 const customerRequestAdapterPath = "lib/customer-booking-request-adapter.ts";
 const adminBookingPersistencePath = "lib/admin-booking-persistence.ts";
 const aiParseRoutePath = "app/api/ai-parse/route.ts";
@@ -115,6 +116,7 @@ const [
   ledger,
   preactivationSuite,
   bookPage,
+  customerBookingLocalVoiceDraft,
   customerRequestAdapter,
   adminBookingPersistence,
   aiParseRoute,
@@ -127,6 +129,7 @@ const [
     ledgerPath,
     preactivationSuitePath,
     bookPagePath,
+    customerBookingLocalVoiceDraftPath,
     customerRequestAdapterPath,
     adminBookingPersistencePath,
     aiParseRoutePath,
@@ -279,14 +282,14 @@ assertIncludes(
 );
 
 assertSameList(
-  extractConstArrayItems(bookPage, "localVoiceDraftSupportedFields"),
+  extractConstArrayItems(customerBookingLocalVoiceDraft, "customerBookingLocalVoiceDraftSupportedFields"),
   approvedFieldFillTargets,
-  "/book local field-fill targets",
+  "local voice helper field-fill targets",
 );
 assertSameList(
-  extractConstArrayItems(bookPage, "localVoiceDraftApprovedFields"),
+  extractConstArrayItems(customerBookingLocalVoiceDraft, "localVoiceDraftApprovedFields"),
   safeSubmittedFieldFillTargets,
-  "/book local field-fill approved submitted fields",
+  "local voice helper approved submitted fields",
 );
 assertSameList(
   extractNewSetItems(adminBookingPersistence, "customerBookingRequestFields"),
@@ -301,10 +304,21 @@ for (const fragment of [
   'data-customer-voice-booking-transcript="true"',
   'data-customer-voice-booking-draft-fill="local-only"',
   "voiceTranscriptRef",
-  "applyLocalVoiceDraftFieldFillToForm",
+  "applyCustomerBookingLocalVoiceDraftFieldFillToForm",
   "submitCustomerBookingRequest(form)",
 ]) {
   assertIncludes(bookPage, fragment, `/book field-fill evidence ${fragment}`);
+}
+
+for (const fragment of [
+  "function localVoiceDraftPickupDate",
+  "function localVoiceDraftPickupTime",
+  "function localVoiceDraftKnownPickupAddress",
+  "function localVoiceDraftPickupLocation",
+  "function localVoiceDraftDropoffLocation",
+  "export function applyCustomerBookingLocalVoiceDraftFieldFillToForm",
+]) {
+  assertIncludes(customerBookingLocalVoiceDraft, fragment, `local voice helper field-fill evidence ${fragment}`);
 }
 
 for (const forbidden of [

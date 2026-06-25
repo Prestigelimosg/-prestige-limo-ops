@@ -787,6 +787,10 @@ const guardChecks = [
     script: "scripts/test-customer-live-location-map-runtime-guard.mjs",
   },
   {
+    label: "Customer Live Location app-side gate readiness guard",
+    script: "scripts/test-customer-live-location-app-side-gate-readiness-guard.mjs",
+  },
+  {
     label: "Google Maps admin map evidence contract guard",
     script: "scripts/test-google-maps-admin-map-evidence-contract-guard.mjs",
   },

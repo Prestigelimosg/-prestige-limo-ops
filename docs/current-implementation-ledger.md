@@ -5896,6 +5896,20 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No Google Maps, OneMap, FlightAware, Telegram, WhatsApp, SMS, Email, Resend, billing/payment/PDF, payout, parser, Save Booking, `/api/admin-saved-bookings`, OTS/photo/storage, calendar, shim, production activation, or broad/all-customer activation occurred.
 - Customer-visible evidence output stayed limited to the single safe fake marker context and did not expose pricing, payout, PayNow, payout preferences, `driver_payout_rules`, `customer_rates`, billing/payment/PDF/invoice, internal/admin notes, parser/debug fields, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, OTS/photo/storage, calendar data, or mock QA/dev archive.
 
+### Customer Live Location App-Side Gate Readiness Guard Lock
+- This is a docs/test-only readiness lock for reducing Customer Live Location map runtime dependence on deploy-time Vercel gate flips after the completed staging evidence record.
+- Customer Live Location remains disabled/not active by default; this lock does not activate customer live location, real GPS, customer-wide live map, provider sends, Vercel env changes, deploy, DB reads/writes, route/helper runtime changes, browser/dashboard automation, or production.
+- Normal customer live-location evidence and future activation readiness should prefer app-side/admin-controlled gates where already supported instead of Vercel CLI, repeated redeploys, unclear dashboard env flips, or locally injected evidence env values as the only control path.
+- Vercel CLI is not required for normal customer live-location evidence.
+- Any future Vercel env or dashboard gate work must be separately approved, explicitly scoped by exact gate names, intended values, target environment, cleanup/rollback window, and post-rollback proof.
+- App-side/admin-controlled runtime gates, once implemented for customer live location, must be disabled by default, admin/dispatcher-only for writes, same-origin protected, audited, scoped to explicit customer/account and booking references or a small approved allowlist, and rollbackable without a redeploy.
+- No customer live map exposure may occur without same-origin customer headers, customer session token, account scope, booking scope, eligible service type, stale/offline handling, POB/completed stop behavior, no-forbidden-field proof, and explicit activation/evidence approval.
+- MNG/Arrival remains blocked for customer live-location links/maps.
+- Future eligible service families remain DEP/DEPARTURE, TRF/TRANSFER, DSP, and HOURLY only after separate approval.
+- Customer-visible output must not expose raw driver tokens, raw provider payloads, pricing, payout, PayNow, payout preferences, `driver_payout_rules`, `customer_rates`, billing/payment/PDF/invoice, internal/admin notes, parser/debug fields, secrets/tokens/cookies/JWTs, admin internals, raw booking IDs, customer contact data, Save Booking internals, `/api/admin-saved-bookings` internals, OTS/photo/storage, calendar data, or mock QA/dev archive.
+- Future evidence must prove closed-by-default behavior, no Vercel CLI dependence, app-side/admin-controlled gate open/close where supported, blocked anonymous/wrong-customer/cross-origin access, single scoped customer map marker, stale/offline behavior, POB/completed rollback/stop behavior, cleanup zero rows, and no provider sends.
+- This guard adds `scripts/test-customer-live-location-app-side-gate-readiness-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Blocked OneMap Admin Map Staging Evidence Safe Failure Record
 
 - Evidence reference: `ONEMAP-ADMIN-MAP-STAGING-BLOCKED-20260621222308`.

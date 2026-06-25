@@ -12,6 +12,15 @@ Latest remote staging branch head:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Admin Dashboard Browser Read Boundary Fix
+
+- Live admin troubleshooting on 2026-06-25 found that customer `/book` request intake and admin CRM API proof passed, but the browser admin dashboard `Load Bookings` path still returned the safe `Admin booking persistence is available only from the internal admin dashboard.` boundary error.
+- Root cause: the admin browser was correctly sending the same-origin dashboard request and `x-prestige-admin-purpose`, but browser code must not expose `x-prestige-admin-session-token`; the shared admin dispatcher boundary therefore rejected safe dashboard `GET` reads in live browser operation.
+- The boundary now allows same-origin root-dashboard `GET` reads to resolve the configured server-side admin/dispatcher role without exposing the private session token to the browser.
+- Mutating admin booking persistence paths such as `POST` and `PATCH` still require the private `x-prestige-admin-session-token`; customer/driver referers and public origins remain blocked.
+- This does not open broad public writes, provider sends/calls, parser changes, DB schema changes, Vercel env changes, deploys, live GPS/customer-wide live map, billing/payment/PDF/invoice/payout, calendar sync, or shims.
+- Guard coverage lives in `scripts/test-admin-booking-persistence-enable-readiness.mjs` and locks the browser dashboard read/write split.
+
 ### Customer Booking Request Persistence Actor Fix
 
 - The public `/book` customer booking request path now keeps its existing same-origin `/book`, `x-prestige-customer-purpose`, and safe payload parser boundary, while allowing only the exact `Customer booking request` system actor to pass the admin booking persistence write gate.

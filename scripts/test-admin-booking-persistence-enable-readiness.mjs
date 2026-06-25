@@ -323,6 +323,13 @@ function requestWithJson(url, body, headers, method = "POST") {
   });
 }
 
+function requestWithoutBody(url, headers, method = "GET") {
+  return new Request(url, {
+    headers,
+    method,
+  });
+}
+
 async function readResponse(response) {
   return {
     body: await response.json(),
@@ -514,6 +521,84 @@ try {
     assertDisabledAdminResponse(sessionOnlyWrite, `valid ${role} session without enabled persistence`);
     assertNoSupabaseTouched(sessionOnlyWriteMock, `valid ${role} session without enabled persistence`);
   }
+
+  setEnv(fullReadyEnv());
+
+  const dashboardReadActor = actorFromAdminRequest(
+    authBoundary,
+    adapter,
+    requestWithoutBody("http://localhost/api/admin-bookings", adminHeaders(), "GET"),
+  );
+
+  assert.ok(
+    dashboardReadActor,
+    "same-origin admin dashboard GET should resolve without exposing the server session token",
+  );
+  assert.equal(
+    dashboardReadActor.boundary_mode,
+    "server-session-role-surface",
+    "dashboard GET should still use the verified server-session role surface",
+  );
+  assert.equal(dashboardReadActor.actor_role, "admin", "dashboard GET should use the configured admin role");
+  assert.equal(dashboardReadActor.source_surface, "admin_api", "dashboard GET should stay admin API scoped");
+
+  const dashboardWriteActor = actorFromAdminRequest(
+    authBoundary,
+    adapter,
+    requestWithJson("http://localhost/api/admin-bookings", adminPayload(), adminHeaders(), "POST"),
+  );
+
+  assert.equal(
+    dashboardWriteActor,
+    null,
+    "same-origin admin dashboard POST must still require the private server session token",
+  );
+
+  const customerRefererReadActor = actorFromAdminRequest(
+    authBoundary,
+    adapter,
+    requestWithoutBody(
+      "http://localhost/api/admin-bookings",
+      adminHeaders({ referer: "http://localhost/book" }),
+      "GET",
+    ),
+  );
+
+  assert.equal(
+    customerRefererReadActor,
+    null,
+    "customer referer must not unlock admin dashboard GET reads",
+  );
+
+  const publicOriginReadActor = actorFromAdminRequest(
+    authBoundary,
+    adapter,
+    requestWithoutBody(
+      "http://localhost/api/admin-bookings",
+      adminHeaders({ origin: "https://public.example.invalid" }),
+      "GET",
+    ),
+  );
+
+  assert.equal(
+    publicOriginReadActor,
+    null,
+    "public origin must not unlock admin dashboard GET reads",
+  );
+
+  setEnv(fullReadyEnv({ PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN: undefined }));
+
+  const missingServerTokenReadActor = actorFromAdminRequest(
+    authBoundary,
+    adapter,
+    requestWithoutBody("http://localhost/api/admin-bookings", adminHeaders(), "GET"),
+  );
+
+  assert.equal(
+    missingServerTokenReadActor,
+    null,
+    "dashboard GET must still require the server-side session token to be configured",
+  );
 
   setEnv(blankEnv());
 

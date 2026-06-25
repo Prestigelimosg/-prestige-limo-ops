@@ -69,6 +69,19 @@ function resolveServerSessionRole(request: Request): AdminDispatcherBoundaryResu
   const requestToken = cleanServerValue(request.headers.get("x-prestige-admin-session-token") || undefined);
   const role = readServerSessionRole();
 
+  if (request.method === "GET" && expectedToken && role) {
+    return {
+      ok: true,
+      context: {
+        actorLabel:
+          cleanServerValue(process.env.PRESTIGE_ADMIN_DISPATCHER_ACTOR_LABEL) ||
+          "Admin dashboard read session",
+        mode: "server-session-role-surface",
+        role,
+      },
+    };
+  }
+
   if (!expectedToken || requestToken !== expectedToken || !role) {
     return {
       ok: false,

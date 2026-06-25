@@ -7,7 +7,9 @@ import ts from "typescript";
 
 const routePath = "app/api/customer-booking-requests/route.ts";
 const pagePath = "app/book/page.tsx";
+const bookingPersistencePath = "lib/admin-booking-persistence.ts";
 const requestAdapterPath = "lib/customer-booking-request-adapter.ts";
+const supabaseAdapterPath = "lib/admin-booking-supabase-adapter.ts";
 const smokePath = "scripts/test-app-smoke-browser.mjs";
 const unsafeCustomerRequestLeakPattern =
   /admin_internal_status|short_notice_review_status|internal_admin_note|internal_finance_note|driver_payout|paynow|pay_now|invoice|payment|billing|finance|parser_debug|raw_ai|mock_archive|mock_qa|dev_workbench|session_token|service_role|secret|sql|stack/i;
@@ -133,11 +135,12 @@ function assertSafeCustomerBody(value, label) {
   );
 }
 
-const [routeSource, pageSource, requestAdapterSource, smokeSource] = await Promise.all(
-  [routePath, pagePath, requestAdapterPath, smokePath].map((relativePath) =>
-    readFile(path.join(process.cwd(), relativePath), "utf8"),
-  ),
-);
+const [routeSource, pageSource, bookingPersistenceSource, requestAdapterSource, supabaseAdapterSource, smokeSource] =
+  await Promise.all(
+    [routePath, pagePath, bookingPersistencePath, requestAdapterPath, supabaseAdapterPath, smokePath].map(
+      (relativePath) => readFile(path.join(process.cwd(), relativePath), "utf8"),
+    ),
+  );
 const requestAdapterAllowedResponseFields =
   requestAdapterSource.match(/const allowedApiRequestFields = new Set\(\[[\s\S]+?\]\);/)?.[0] || "";
 
@@ -161,6 +164,22 @@ assert.equal(
     !/request:\s*\{[\s\S]+?admin_internal_status|request:\s*\{[\s\S]+?short_notice_review_status/.test(smokeSource),
   true,
   "Browser smoke mock should use customer-safe booking request response fields.",
+);
+assert.equal(
+  supabaseAdapterSource.includes("verifiedCustomerBookingRequestActor") &&
+    supabaseAdapterSource.includes('actor?.actor_label === "Customer booking request"') &&
+    supabaseAdapterSource.includes('actor.actor_role === "system"') &&
+    supabaseAdapterSource.includes('actor.boundary_mode === "customer-booking-request-surface"') &&
+    supabaseAdapterSource.includes('actor.source_surface === "customer_booking_request"') &&
+    supabaseAdapterSource.includes("!verifiedAdminDispatcherActor") &&
+    supabaseAdapterSource.includes("!verifiedCustomerBookingRequestActor"),
+  true,
+  "Customer booking request persistence must allow only the exact /book request actor in addition to admin/dispatcher actors.",
+);
+assert.equal(
+  bookingPersistenceSource.includes("passenger_name: passengerName"),
+  true,
+  "Customer booking request persistence must map passengerName into the safe passenger_name booking field.",
 );
 
 const harness = await loadRouteHarness();

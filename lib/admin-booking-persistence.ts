@@ -892,6 +892,7 @@ export function parseCustomerBookingRequestPayload(
       customer_display_name: companyName || passengerName,
       contact_phone: contactNo,
       contact_email: emailAddress,
+      passenger_name: passengerName,
       pax_count: integerOrNull(body.passengerCount),
       luggage_count: integerOrNull(body.luggage),
       vehicle_type_or_category: textOrNull(body.vehicleType),

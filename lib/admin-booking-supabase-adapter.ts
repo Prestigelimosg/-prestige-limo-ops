@@ -980,6 +980,16 @@ function safeAuditSnapshot(record: AdminBookingPersistenceRecord | AdminBookingP
 }
 
 function validateActor(actor: AdminBookingPersistenceAdapterActor): AdminBookingResult<null> {
+  const verifiedAdminDispatcherActor =
+    actor?.boundary_mode === "server-session-role-surface" &&
+    ["admin", "dispatcher"].includes(actor.actor_role) &&
+    actor.source_surface === "admin_api";
+  const verifiedCustomerBookingRequestActor =
+    actor?.actor_label === "Customer booking request" &&
+    actor.actor_role === "system" &&
+    actor.boundary_mode === "customer-booking-request-surface" &&
+    actor.source_surface === "customer_booking_request";
+
   if (
     !actor ||
     !allowedAdapterRoles.has(actor.actor_role) ||
@@ -995,9 +1005,8 @@ function validateActor(actor: AdminBookingPersistenceAdapterActor): AdminBooking
 
   if (
     process.env.PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED === "true" &&
-    (actor.boundary_mode !== "server-session-role-surface" ||
-      !["admin", "dispatcher"].includes(actor.actor_role) ||
-      actor.source_surface !== "admin_api")
+    !verifiedAdminDispatcherActor &&
+    !verifiedCustomerBookingRequestActor
   ) {
     return {
       ok: false,

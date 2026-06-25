@@ -1527,14 +1527,14 @@ try {
     ),
   );
 
-  assert.equal(customerCreateRoute.status, 403);
+  assert.equal(customerCreateRoute.status, 503);
   assert.deepEqual(customerCreateRoute.body, {
-    error: "Booking request could not be saved safely.",
+    error: "Booking request intake is not enabled or configured on this server.",
     ok: false,
   });
   assert.equal(customerCreateMock.createdClients.length, 0);
   assert.equal(customerCreateMock.client.operations.length, 0);
-  assertNoApiLeak(customerCreateRoute, "blocked customer enabled-write response should hide server internals");
+  assertNoApiLeak(customerCreateRoute, "customer missing-config enabled-write response should hide server internals");
 } finally {
   restoreEnv();
   delete globalThis.__prestigeSupabaseAdapterMock;

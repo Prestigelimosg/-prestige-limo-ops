@@ -12,6 +12,13 @@ Latest remote staging branch head:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Customer Booking Request Persistence Actor Fix
+
+- The public `/book` customer booking request path now keeps its existing same-origin `/book`, `x-prestige-customer-purpose`, and safe payload parser boundary, while allowing only the exact `Customer booking request` system actor to pass the admin booking persistence write gate.
+- Admin/dispatcher persistence remains limited to the existing `server-session-role-surface` admin/dispatcher actor path.
+- This fix does not open broad public writes, provider sends, parser changes, billing/payment/PDF/payout, live location/GPS, Vercel env changes, deploys, or `/api/admin-saved-bookings` behavior.
+- Guard coverage lives in `scripts/test-customer-booking-request-api-contract.mjs` and locks the exact customer-request actor in `lib/admin-booking-supabase-adapter.ts`.
+
 ## Next GPT Lock / Uncompleted Backlog
 
 - Last verified repo checkpoint before this Load Bookings typed primary display source staging smoke record: `a682e97 Implement Load Bookings typed primary display source`.

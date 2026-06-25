@@ -662,13 +662,23 @@ try {
     ),
   );
 
-  assert.equal(customerRouteResult.status, 403);
+  assert.equal(customerRouteResult.status, 500);
   assert.deepEqual(customerRouteResult.body, {
-    error: "Booking request could not be saved safely.",
+    error: "Booking request failed safely.",
     ok: false,
   });
   assertNoLeaks(customerRouteResult, "customer route under admin-only enablement should stay safe");
-  assertNoSupabaseTouched(customerRouteMock, "customer route under admin-only enablement");
+  assert.equal(
+    customerRouteMock.createdClients.length,
+    1,
+    "customer route should reach the mocked DB only after the exact /book boundary and customer actor pass",
+  );
+  assert.deepEqual(customerRouteMock.client.operations, [
+    {
+      action: "from",
+      table: "customers",
+    },
+  ]);
 
   const customerBoundaryMock = installMockClient();
   const customerBoundaryResult = await readResponse(

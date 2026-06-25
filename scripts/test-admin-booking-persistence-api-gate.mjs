@@ -493,7 +493,7 @@ function customerPayload(overrides = {}) {
     luggage: "1",
     passengerCount: "2",
     passengerName: "Gate Customer Passenger",
-    pickupDate: "2026-06-08",
+    pickupDate: "2026-07-08",
     pickupLocation: "Gate Customer Pickup",
     pickupTime: "10:30",
     serviceType: "Airport Arrival",
@@ -606,6 +606,52 @@ function assertSafeCreateOperations(mock, expectedActorRole) {
   assert.equal(insertedOperation(mock, "audit_logs").payload.actor_role, expectedActorRole);
   assert.equal(insertedOperation(mock, "audit_logs").payload.action_type, "booking_created");
   assertNoLeaks(mock.client.operations, "safe mocked persistence operations should not include unsafe fields");
+}
+
+function assertSafeCustomerBookingRequestOperations(mock) {
+  const insertedTables = mock.client.operations
+    .filter((operation) => operation.action === "insert")
+    .map((operation) => operation.table);
+
+  assert.deepEqual([...new Set(insertedTables)].sort(), [
+    "audit_logs",
+    "booking_route_points",
+    "bookings",
+    "customer_contacts",
+    "customers",
+  ]);
+  assert.equal(insertedOperation(mock, "customers").payload.display_name, "Gate Customer Company");
+
+  const bookingRow = insertedOperation(mock, "bookings").payload;
+
+  assert.match(bookingRow.booking_reference, /^CUST-\d{14}-[A-Z0-9]+$/);
+  assert.equal(bookingRow.customer_display_name, "Gate Customer Company");
+  assert.equal(bookingRow.contact_phone, "+65 9000 0202");
+  assert.equal(bookingRow.contact_email, "gate-customer@example.com");
+  assert.equal(bookingRow.passenger_name, "Gate Customer Passenger");
+  assert.equal(bookingRow.pickup_at, "2026-07-08T10:30:00+08:00");
+  assert.equal(bookingRow.pickup_location, "Gate Customer Pickup");
+  assert.equal(bookingRow.dropoff_location, "Gate Customer Dropoff");
+  assert.equal(bookingRow.route_summary, "Gate Customer Pickup > Gate Customer Dropoff");
+  assert.equal(bookingRow.service_type, "arrival");
+  assert.equal(bookingRow.customer_facing_status, "received");
+  assert.equal(bookingRow.admin_internal_status, "admin_review_required");
+  assert.equal(bookingRow.source_surface, "customer_booking_request");
+
+  const routeRows = insertedOperation(mock, "booking_route_points").payload;
+
+  assert.equal(routeRows.length, 2);
+  assert.equal(routeRows[0].location, "Gate Customer Pickup");
+  assert.equal(routeRows[1].location, "Gate Customer Dropoff");
+
+  const auditRow = insertedOperation(mock, "audit_logs").payload;
+
+  assert.equal(auditRow.actor_role, "system");
+  assert.equal(auditRow.action_type, "booking_created");
+  assert.equal(auditRow.source_surface, "system");
+  assert.match(auditRow.reason, /Source: \/book/);
+  assert.match(auditRow.reason, /Actor: Customer booking request/);
+  assertNoLeaks(mock.client.operations, "customer booking request mocked persistence operations should stay safe");
 }
 
 function enabledWriteEnv(overrides = {}) {
@@ -846,12 +892,18 @@ try {
     ),
   );
 
-  assert.equal(customerResult.status, 403);
-  assert.deepEqual(customerResult.body, {
-    error: "Booking request could not be saved safely.",
-    ok: false,
-  });
-  assertNoSupabaseTouched(customerMock, "customer request with enabled writes");
+  assert.equal(customerResult.status, 200);
+  assert.equal(customerResult.body.ok, true);
+  assert.match(customerResult.body.request.booking_reference, /^CUST-\d{14}-[A-Z0-9]+$/);
+  assert.equal(customerResult.body.request.customer_facing_status, "Request Received");
+  assert.equal(customerResult.body.request.short_notice_review_required, false);
+  assert.deepEqual(Object.keys(customerResult.body.request).sort(), [
+    "booking_reference",
+    "customer_facing_status",
+    "short_notice_review_required",
+  ]);
+  assert.equal(customerMock.createdClients.length, 1);
+  assertSafeCustomerBookingRequestOperations(customerMock);
   assertNoLeaks(customerResult, "customer request enabled-write response should stay safe");
 
   const shortNotice = singaporeDateTimeParts(new Date(Date.now() + 2 * 60 * 60 * 1000));

@@ -32165,28 +32165,6 @@ async function runChromeTest() {
 
     const setCustomerBookingField = async (field, value) => {
       const actualValue = await evaluate(`(() => {
-        if (${JSON.stringify(field)} === "pickupTime") {
-          const [hour, minute] = ${JSON.stringify(value)}.split(":");
-          const hourSelect = document.querySelector("[data-customer-booking-time-part='hour']");
-          const minuteSelect = document.querySelector("[data-customer-booking-time-part='minute']");
-
-          if (!hourSelect || !minuteSelect || !hour || !minute) {
-            return null;
-          }
-
-          const setControlValue = (control, nextValue) => {
-            const descriptor = Object.getOwnPropertyDescriptor(control.constructor.prototype, "value");
-            descriptor?.set?.call(control, nextValue);
-            control.dispatchEvent(new Event("input", { bubbles: true }));
-            control.dispatchEvent(new Event("change", { bubbles: true }));
-          };
-
-          setControlValue(hourSelect, hour);
-          setControlValue(minuteSelect, minute);
-
-          return \`\${hourSelect.value}:\${minuteSelect.value}\`;
-        }
-
         const input = document.querySelector(${JSON.stringify(`[data-customer-booking-field="${field}"]`)});
 
         if (!input) {
@@ -32278,16 +32256,15 @@ async function runChromeTest() {
           ].map((field) => {
             if (field === "pickupTime") {
               const control = document.querySelector("[data-customer-booking-field='pickupTime']");
-              const valueInput = document.querySelector("[data-customer-booking-time-value]");
               const rect = control?.getBoundingClientRect();
               return [
                 field,
                 {
                   control: control?.getAttribute("data-customer-booking-time-control") || "",
-                  label: control?.querySelector("legend")?.innerText.trim() || "",
-                  required: control?.getAttribute("data-required") === "true",
-                  step: control?.getAttribute("data-step") || "",
-                  value: control?.getAttribute("data-value") || valueInput?.value || "",
+                  label: control?.closest("label")?.innerText.trim() || "",
+                  required: Boolean(control?.required),
+                  step: control?.getAttribute("step") || "",
+                  value: control?.value || "",
                   visible: Boolean(rect && rect.width > 0 && rect.height >= 40),
                 },
               ];
@@ -32916,6 +32893,16 @@ async function runChromeTest() {
         true,
         "Expected /book to show mobile-web request guidance",
       );
+      assert.equal(
+        initialState.text.includes("Prestige Limo will review and confirm your booking shortly."),
+        true,
+        "Expected /book to show clear Prestige review notice",
+      );
+      assert.equal(
+        initialState.text.includes("This is a booking request only. It is not confirmed until Prestige confirms it."),
+        true,
+        "Expected /book to clarify the request is not confirmed yet",
+      );
       assertNoNativeAppOnlyLanguage(initialState.text, "/book desktop");
       for (const expectedField of [
         "Customer / company name",
@@ -32927,8 +32914,8 @@ async function runChromeTest() {
         "Flight number if any",
         "Pickup location",
         "Drop-off location",
-        "Type of Service",
-        "Vehicle type",
+        "Trip type",
+        "Preferred vehicle",
         "Number of passengers",
         "Luggage",
         "Extra stops",
@@ -32972,27 +32959,16 @@ async function runChromeTest() {
       assert.equal(initialState.fieldState.dropoffLocation.required, true, "Expected drop-off location to be required");
       assert.equal(
         initialState.fieldState.pickupTime.control,
-        "selects",
-        "Expected pickup time to use visible hour/minute selects",
+        "native-time",
+        "Expected pickup time to use compact native time input",
       );
       assert.equal(initialState.fieldState.pickupTime.step, "300", "Expected pickup time to use 5-minute steps");
       assert.equal(
         initialState.nativePickupTimeInputCount,
-        0,
-        "Expected /book pickup time not to use a native unrestricted minute picker",
+        1,
+        "Expected /book pickup time to use one compact native time input",
       );
-      assert.deepEqual(
-        initialState.pickupMinuteOptions,
-        ["00", "05", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55"],
-        "Expected /book pickup minute choices to be visible 5-minute options only",
-      );
-      assert.deepEqual(
-        initialState.pickupMinuteOptions.filter((minute) =>
-          ["01", "02", "03", "04", "06", "07", "08", "09"].includes(minute),
-        ),
-        [],
-        "Expected /book pickup minute choices not to include one-minute options",
-      );
+      assert.deepEqual(initialState.pickupMinuteOptions, [], "Expected /book old minute dropdown to be removed");
       assert.equal(
         initialState.text.includes(
           "Pickup time is selected in 5-minute intervals. Booking is not confirmed until staff replies.",
@@ -33017,26 +32993,28 @@ async function runChromeTest() {
       assert.deepEqual(
         initialState.serviceOptionLabels,
         [
+          "Please select trip type",
           "Airport Arrival",
           "Airport Departure",
           "Point-to-Point Transfer",
           "Hourly / Disposal",
           "Event / VIP Movement",
-          "Other / To Confirm",
+          "Other / Need advice",
         ],
-        "Expected customer-facing Type of Service labels on /book",
+        "Expected customer-facing trip type labels on /book",
       );
       assert.deepEqual(
         initialState.serviceOptionValues,
         [
+          "",
           "Airport Arrival",
           "Airport Departure",
           "Point-to-Point Transfer",
           "Hourly / Disposal",
           "Event / VIP Movement",
-          "Other / To Confirm",
+          "Other / Need advice",
         ],
-        "Expected customer-facing Type of Service values on /book",
+        "Expected customer-facing trip type values on /book",
       );
       assert.deepEqual(
         initialState.serviceOptionLabels.filter((label) => ["DEP", "MNG", "TRF", "DSP"].includes(label)),
@@ -33187,7 +33165,7 @@ async function runChromeTest() {
       await setCustomerBookingField("luggage", "2");
       await setCustomerBookingField("extraStops", "Customer Test Stop");
       const requiredOnlyState = await readCustomerBookingPageState();
-      assert.equal(requiredOnlyState.fieldState.pickupTime.value, "09:30", "Expected hour/minute selects to set pickupTime");
+      assert.equal(requiredOnlyState.fieldState.pickupTime.value, "09:30", "Expected compact time input to set pickupTime");
       assert.equal(
         requiredOnlyState.fieldState.pickupLocation.value,
         "Customer Test Pickup",
@@ -33750,8 +33728,7 @@ async function runChromeTest() {
         const guidanceRect = guidance?.getBoundingClientRect();
         const requestForm = document.querySelector("[data-customer-portal-request-form]");
         const requestFeedback = document.querySelector("[data-customer-portal-request-feedback]");
-        const pickupHour = document.querySelector("[data-customer-portal-pickup-hour]");
-        const pickupMinute = document.querySelector("[data-customer-portal-pickup-minute]");
+        const pickupTime = document.querySelector("[data-customer-portal-request-field='pickupTime']");
         const previousPageButton = document.querySelector("[data-customer-portal-prev]");
         const nextPageButton = document.querySelector("[data-customer-portal-next]");
         const monthButtons = [...document.querySelectorAll("[data-customer-portal-month-button]")];
@@ -34126,13 +34103,11 @@ async function runChromeTest() {
               passengerName: requestFieldState("passengerName"),
               pickupDate: requestFieldState("pickupDate"),
               pickupTime: {
-                control: pickupHour && pickupMinute ? "selects" : "missing",
-                required: Boolean(pickupHour?.required && pickupMinute?.required),
-                value: pickupHour?.value ? \`\${pickupHour.value}:\${pickupMinute?.value || "00"}\` : "",
-                visible: Boolean(
-                  pickupHour?.getBoundingClientRect().height >= 40 &&
-                    pickupMinute?.getBoundingClientRect().height >= 40,
-                ),
+                control: pickupTime?.getAttribute("data-customer-portal-pickup-time") || "",
+                required: Boolean(pickupTime?.required),
+                step: pickupTime?.getAttribute("step") || "",
+                value: pickupTime?.value || "",
+                visible: Boolean(pickupTime?.getBoundingClientRect().height >= 40),
               },
               flightNumber: requestFieldState("flightNumber"),
               pickupLocation: requestFieldState("pickupLocation"),
@@ -34145,15 +34120,13 @@ async function runChromeTest() {
               specialRequest: requestFieldState("specialRequest"),
             },
             nativePickupTimeInputCount: document.querySelectorAll("[data-customer-portal-request-form] input[type='time']").length,
-            pickupMinuteOptions: pickupMinute
-              ? [...pickupMinute.options].filter((option) => option.value).map((option) => option.textContent.trim())
-              : [],
+            pickupMinuteOptions: [],
             serviceOptionLabels: [...document.querySelectorAll("[data-customer-portal-request-field='serviceType'] option")]
               .map((option) => option.textContent.trim()),
             submitVisible: Boolean(document.querySelector("[data-customer-portal-submit-request]")),
             vehicleOptionLabels: [...document.querySelectorAll("[data-customer-portal-request-field='vehicleType'] option")]
               .map((option) => option.textContent.trim())
-              .filter((label) => label !== "To confirm"),
+              .filter((label) => label !== "No preference / Prestige to advise"),
             visible: Boolean(requestForm),
           },
           guidance: {
@@ -34378,23 +34351,20 @@ async function runChromeTest() {
 
     const setCustomerPortalPickupTime = async (hour, minute) => {
       const actualValue = await evaluate(`(() => {
-        const hourSelect = document.querySelector("[data-customer-portal-pickup-hour]");
-        const minuteSelect = document.querySelector("[data-customer-portal-pickup-minute]");
+        const input = document.querySelector("[data-customer-portal-request-field='pickupTime']");
 
-        if (!hourSelect || !minuteSelect) {
+        if (!input) {
           return null;
         }
 
-        hourSelect.value = ${JSON.stringify(hour)};
-        hourSelect.dispatchEvent(new Event("input", { bubbles: true }));
-        hourSelect.dispatchEvent(new Event("change", { bubbles: true }));
-        minuteSelect.value = ${JSON.stringify(minute)};
-        minuteSelect.dispatchEvent(new Event("input", { bubbles: true }));
-        minuteSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        const descriptor = Object.getOwnPropertyDescriptor(input.constructor.prototype, "value");
+        descriptor?.set?.call(input, ${JSON.stringify(`${hour}:${minute}`)});
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
 
-        return \`\${hourSelect.value}:\${minuteSelect.value}\`;
+        return input.value;
       })()`);
-      assert.equal(actualValue, `${hour}:${minute}`, "Expected customer portal pickup time selects to accept test value");
+      assert.equal(actualValue, `${hour}:${minute}`, "Expected customer portal compact pickup time input to accept test value");
     };
 
     const submitCustomerPortalBookingRequest = async () => {
@@ -34991,20 +34961,20 @@ async function runChromeTest() {
       );
       assert.equal(requestFormState.activeSection, "New Booking Request", "Expected /my-bookings request form tab");
       assert.equal(requestFormState.form.submitVisible, true, "Expected customer portal request submit button");
-      assert.equal(requestFormState.form.nativePickupTimeInputCount, 0, "Expected /my-bookings pickup time not to use native type=time");
-      assert.equal(requestFormState.form.fieldState.pickupTime.control, "selects", "Expected visible pickup hour/minute selects");
-      assert.deepEqual(
-        requestFormState.form.pickupMinuteOptions,
-        ["00", "05", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55"],
-        "Expected /my-bookings pickup minute options to be five-minute choices",
+      assert.equal(
+        requestFormState.text.includes("Prestige Limo will review and confirm your booking shortly."),
+        true,
+        "Expected /my-bookings request form to show clear Prestige review notice",
       );
-      for (const unavailableMinute of ["01", "02", "03", "04", "06", "07", "08", "09"]) {
-        assert.equal(
-          requestFormState.form.pickupMinuteOptions.includes(unavailableMinute),
-          false,
-          `Expected /my-bookings minute option ${unavailableMinute} not to be selectable`,
-        );
-      }
+      assert.equal(
+        requestFormState.text.includes("This is a booking request only. It is not confirmed until Prestige confirms it."),
+        true,
+        "Expected /my-bookings request form to clarify the request is not confirmed yet",
+      );
+      assert.equal(requestFormState.form.nativePickupTimeInputCount, 1, "Expected /my-bookings pickup time to use one compact native time input");
+      assert.equal(requestFormState.form.fieldState.pickupTime.control, "native-time", "Expected visible compact pickup time input");
+      assert.equal(requestFormState.form.fieldState.pickupTime.step, "300", "Expected /my-bookings pickup time to use 5-minute steps");
+      assert.deepEqual(requestFormState.form.pickupMinuteOptions, [], "Expected /my-bookings old minute dropdown to be removed");
       assert.deepEqual(
         Object.fromEntries(
           Object.entries(requestFormState.form.fieldState).map(([field, state]) => [field, state.required]),
@@ -35031,14 +35001,15 @@ async function runChromeTest() {
       assert.deepEqual(
         requestFormState.form.serviceOptionLabels,
         [
+          "Please select trip type",
           "Airport Arrival",
           "Airport Departure",
           "Point-to-Point Transfer",
           "Hourly / Disposal",
           "Event / VIP Movement",
-          "Other / To Confirm",
+          "Other / Need advice",
         ],
-        "Expected /my-bookings customer-facing service options",
+        "Expected /my-bookings customer-facing trip type options",
       );
       assert.deepEqual(
         requestFormState.form.vehicleOptionLabels,

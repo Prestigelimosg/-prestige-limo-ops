@@ -41,7 +41,7 @@ const serviceOptions = [
   "Point-to-Point Transfer",
   "Hourly / Disposal",
   "Event / VIP Movement",
-  "Other / To Confirm",
+  "Other / Need advice",
 ];
 
 const vehicleOptions = [
@@ -50,23 +50,6 @@ const vehicleOptions = [
   "Hi-roof Minibus",
   "Mercedes E-Class",
   "Mercedes S-Class",
-];
-
-const pickupHourOptions = Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, "0"));
-
-const pickupMinuteOptions = [
-  "00",
-  "05",
-  "10",
-  "15",
-  "20",
-  "25",
-  "30",
-  "35",
-  "40",
-  "45",
-  "50",
-  "55",
 ];
 
 const visibleBookingLimit = 10;
@@ -111,7 +94,7 @@ const initialBookingRequestForm: BookingRequestForm = {
   flightNumber: "",
   pickupLocation: "",
   dropoffLocation: "",
-  serviceType: "Other / To Confirm",
+  serviceType: "",
   vehicleType: "",
   passengerCount: "",
   luggage: "",
@@ -192,15 +175,6 @@ function feedbackClass(tone: BookingRequestFeedback["tone"]) {
   }
 
   return "border-sky-200 bg-sky-50 text-sky-950";
-}
-
-function splitPickupTime(value: string) {
-  const [hour = "", minute = ""] = value.split(":");
-
-  return {
-    hour: pickupHourOptions.includes(hour) ? hour : "",
-    minute: pickupMinuteOptions.includes(minute) ? minute : "",
-  };
 }
 
 function canRequestBookingReview(booking: CustomerPortalBooking) {
@@ -333,7 +307,6 @@ export default function CustomerPortalPage() {
     return currentPortalMonth.label;
   })();
   const expandedBooking = visibleBookings.find((booking) => booking.id === expandedBookingId);
-  const pickupTimeParts = splitPickupTime(bookingRequestForm.pickupTime);
   const emptyBookingsMessage =
     portalBookingsLoadState === "loading"
       ? "Loading bookings."
@@ -400,20 +373,6 @@ export default function CustomerPortalPage() {
   function updateBookingRequestField(field: keyof BookingRequestForm, value: string) {
     setBookingRequestForm((current) => ({ ...current, [field]: value }));
     setMissingBookingRequestFields((current) => current.filter((item) => item !== field));
-  }
-
-  function updatePickupTimePart(part: "hour" | "minute", value: string) {
-    setBookingRequestForm((currentForm) => {
-      const current = splitPickupTime(currentForm.pickupTime);
-      const nextHour = part === "hour" ? value : current.hour;
-      const nextMinute = part === "minute" ? value : current.minute || "00";
-
-      return {
-        ...currentForm,
-        pickupTime: nextHour ? `${nextHour}:${nextMinute || "00"}` : "",
-      };
-    });
-    setMissingBookingRequestFields((current) => current.filter((item) => item !== "pickupTime"));
   }
 
   function handleBookingRequestSubmit(event: FormEvent<HTMLFormElement>) {
@@ -522,6 +481,15 @@ export default function CustomerPortalPage() {
                     New Booking Request
                   </h2>
                   <p className="text-sm text-slate-600">Required fields are marked with *.</p>
+                  <div
+                    className="mt-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm leading-6 text-sky-950"
+                    data-customer-portal-request-notice="true"
+                  >
+                    <p className="font-semibold">
+                      Prestige Limo will review and confirm your booking shortly.
+                    </p>
+                    <p>This is a booking request only. It is not confirmed until Prestige confirms it.</p>
+                  </div>
                 </div>
                 <div className="mt-3 grid gap-3 md:grid-cols-2">
                   <label className="text-sm font-semibold text-slate-800">
@@ -614,51 +582,22 @@ export default function CustomerPortalPage() {
                     />
                   </label>
 
-                  <fieldset className="text-sm font-semibold text-slate-800" data-customer-portal-pickup-time="true">
-                    <legend>Pickup time *</legend>
-                    <div className="mt-2 grid grid-cols-2 gap-3">
-                      <label className="sr-only" htmlFor="portal-pickup-hour">
-                        Pickup hour
-                      </label>
-                      <select
-                        aria-invalid={isBookingRequestMissing("pickupTime")}
-                        className={fieldClass(isBookingRequestMissing("pickupTime")).replace("mt-2 ", "")}
-                        data-customer-portal-pickup-hour="true"
-                        id="portal-pickup-hour"
-                        name="pickupHour"
-                        onChange={(event) => updatePickupTimePart("hour", event.target.value)}
-                        required
-                        value={pickupTimeParts.hour}
-                      >
-                        <option value="">HH</option>
-                        {pickupHourOptions.map((hour) => (
-                          <option key={hour} value={hour}>
-                            {hour}
-                          </option>
-                        ))}
-                      </select>
-                      <label className="sr-only" htmlFor="portal-pickup-minute">
-                        Pickup minute
-                      </label>
-                      <select
-                        aria-invalid={isBookingRequestMissing("pickupTime")}
-                        className={fieldClass(isBookingRequestMissing("pickupTime")).replace("mt-2 ", "")}
-                        data-customer-portal-pickup-minute="true"
-                        id="portal-pickup-minute"
-                        name="pickupMinute"
-                        onChange={(event) => updatePickupTimePart("minute", event.target.value)}
-                        required
-                        value={pickupTimeParts.minute}
-                      >
-                        <option value="">MM</option>
-                        {pickupMinuteOptions.map((minute) => (
-                          <option key={minute} value={minute}>
-                            {minute}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </fieldset>
+                  <label className="text-sm font-semibold text-slate-800">
+                    Pickup time *
+                    <input
+                      aria-invalid={isBookingRequestMissing("pickupTime")}
+                      className={`${fieldClass(isBookingRequestMissing("pickupTime"))} max-w-48`}
+                      data-customer-portal-pickup-time="native-time"
+                      data-customer-portal-request-field="pickupTime"
+                      data-step="300"
+                      name="pickupTime"
+                      onChange={(event) => updateBookingRequestField("pickupTime", event.target.value)}
+                      required
+                      step="300"
+                      type="time"
+                      value={bookingRequestForm.pickupTime}
+                    />
+                  </label>
 
                   <label className="text-sm font-semibold text-slate-800">
                     Pickup location
@@ -667,7 +606,7 @@ export default function CustomerPortalPage() {
                       data-customer-portal-request-field="pickupLocation"
                       name="pickupLocation"
                       onChange={(event) => updateBookingRequestField("pickupLocation", event.target.value)}
-                      placeholder="Hotel, airport, or address"
+                      placeholder="Hotel, airport terminal, lobby, home, or office"
                       type="text"
                       value={bookingRequestForm.pickupLocation}
                     />
@@ -680,14 +619,14 @@ export default function CustomerPortalPage() {
                       data-customer-portal-request-field="dropoffLocation"
                       name="dropoffLocation"
                       onChange={(event) => updateBookingRequestField("dropoffLocation", event.target.value)}
-                      placeholder="Hotel, airport, or address"
+                      placeholder="Destination hotel, airport terminal, home, or office"
                       type="text"
                       value={bookingRequestForm.dropoffLocation}
                     />
                   </label>
 
                   <label className="text-sm font-semibold text-slate-800">
-                    Type of Service
+                    Trip type
                     <select
                       className={fieldClass()}
                       data-customer-portal-request-field="serviceType"
@@ -695,6 +634,7 @@ export default function CustomerPortalPage() {
                       onChange={(event) => updateBookingRequestField("serviceType", event.target.value)}
                       value={bookingRequestForm.serviceType}
                     >
+                      <option value="">Please select trip type</option>
                       {serviceOptions.map((option) => (
                         <option key={option} value={option}>
                           {option}
@@ -704,7 +644,7 @@ export default function CustomerPortalPage() {
                   </label>
 
                   <label className="text-sm font-semibold text-slate-800">
-                    Vehicle type
+                    Preferred vehicle
                     <select
                       className={fieldClass()}
                       data-customer-portal-request-field="vehicleType"
@@ -712,7 +652,7 @@ export default function CustomerPortalPage() {
                       onChange={(event) => updateBookingRequestField("vehicleType", event.target.value)}
                       value={bookingRequestForm.vehicleType}
                     >
-                      <option value="">To confirm</option>
+                      <option value="">No preference / Prestige to advise</option>
                       {vehicleOptions.map((option) => (
                         <option key={option} value={option}>
                           {option}
@@ -755,7 +695,7 @@ export default function CustomerPortalPage() {
                       data-customer-portal-request-field="extraStops"
                       name="extraStops"
                       onChange={(event) => updateBookingRequestField("extraStops", event.target.value)}
-                      placeholder="Any extra stop details"
+                      placeholder="Extra stop name or address if needed"
                       type="text"
                       value={bookingRequestForm.extraStops}
                     />

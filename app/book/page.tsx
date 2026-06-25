@@ -19,7 +19,7 @@ const serviceOptions = [
   "Point-to-Point Transfer",
   "Hourly / Disposal",
   "Event / VIP Movement",
-  "Other / To Confirm",
+  "Other / Need advice",
 ];
 
 const vehicleOptions = [
@@ -28,23 +28,6 @@ const vehicleOptions = [
   "Hi-roof Minibus",
   "Mercedes E-Class",
   "Mercedes S-Class",
-];
-
-const pickupHourOptions = Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, "0"));
-
-const pickupMinuteOptions = [
-  "00",
-  "05",
-  "10",
-  "15",
-  "20",
-  "25",
-  "30",
-  "35",
-  "40",
-  "45",
-  "50",
-  "55",
 ];
 
 const bookingMemoryPassengerListId = "customer-booking-memory-passengers";
@@ -126,7 +109,7 @@ const initialForm: BookingRequestForm = {
   flightNumber: "",
   pickupLocation: "",
   dropoffLocation: "",
-  serviceType: "Other / To Confirm",
+  serviceType: "",
   vehicleType: "",
   passengerCount: "",
   luggage: "",
@@ -144,8 +127,8 @@ const requiredFieldLabels: Record<keyof BookingRequestForm, string> = {
   flightNumber: "Flight number if any",
   pickupLocation: "Pickup location",
   dropoffLocation: "Drop-off location",
-  serviceType: "Type of Service",
-  vehicleType: "Vehicle type",
+  serviceType: "Trip type",
+  vehicleType: "Preferred vehicle",
   passengerCount: "Number of passengers",
   luggage: "Luggage",
   extraStops: "Extra stops",
@@ -179,15 +162,6 @@ function feedbackClass(tone: Feedback["tone"]) {
   }
 
   return "border-sky-200 bg-sky-50 text-sky-950";
-}
-
-function splitPickupTime(value: string) {
-  const [hour = "", minute = ""] = value.split(":");
-
-  return {
-    hour: pickupHourOptions.includes(hour) ? hour : "",
-    minute: pickupMinuteOptions.includes(minute) ? minute : "",
-  };
 }
 
 function applyBookingMemoryToForm(
@@ -519,21 +493,6 @@ export default function CustomerBookingPage() {
     setConfirmationStatus(null);
   }
 
-  function updatePickupTimePart(part: "hour" | "minute", value: string) {
-    updateForm((currentForm) => {
-      const current = splitPickupTime(currentForm.pickupTime);
-      const nextHour = part === "hour" ? value : current.hour;
-      const nextMinute = part === "minute" ? value : current.minute || "00";
-
-      return {
-        ...currentForm,
-        pickupTime: nextHour ? `${nextHour}:${nextMinute || "00"}` : "",
-      };
-    });
-    setMissingFields((current) => current.filter((item) => item !== "pickupTime"));
-    setConfirmationStatus(null);
-  }
-
   function applyLocalVoiceDraftFieldFill(transcript: string) {
     const result = applyLocalVoiceDraftFieldFillToForm(formRef.current, transcript);
     setVoiceDraftFilledFields(result.filledFields);
@@ -674,8 +633,6 @@ export default function CustomerBookingPage() {
     return missingFields.includes(field);
   }
 
-  const pickupTimeParts = splitPickupTime(form.pickupTime);
-
   return (
     <main
       className="min-h-screen overflow-x-hidden bg-stone-50 px-4 py-6 text-slate-950 sm:px-6 lg:px-8"
@@ -778,6 +735,15 @@ export default function CustomerBookingPage() {
                   Contact Details
                 </h2>
                 <p className="text-sm text-slate-600">Required fields are marked with *.</p>
+                <div
+                  className="mt-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm leading-6 text-sky-950"
+                  data-customer-booking-request-notice="true"
+                >
+                  <p className="font-semibold">
+                    Prestige Limo will review and confirm your booking shortly.
+                  </p>
+                  <p>This is a booking request only. It is not confirmed until Prestige confirms it.</p>
+                </div>
               </div>
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <label className="text-sm font-semibold text-slate-800">
@@ -889,61 +855,21 @@ export default function CustomerBookingPage() {
                   />
                 </label>
 
-                <fieldset
-                  aria-invalid={isMissing("pickupTime")}
-                  className="min-w-0 text-sm font-semibold text-slate-800"
-                  data-customer-booking-field="pickupTime"
-                  data-customer-booking-time-control="selects"
-                  data-required="true"
-                  data-step="300"
-                  data-value={form.pickupTime}
-                >
-                  <legend>Pickup time *</legend>
-                  <div className="mt-2 grid grid-cols-2 gap-3">
-                    <label className="min-w-0 text-xs font-semibold text-slate-700">
-                      Hour
-                      <select
-                        aria-label="Pickup hour"
-                        aria-invalid={isMissing("pickupTime")}
-                        className={fieldClass(isMissing("pickupTime"))}
-                        data-customer-booking-time-part="hour"
-                        onChange={(event) => updatePickupTimePart("hour", event.target.value)}
-                        required
-                        value={pickupTimeParts.hour}
-                      >
-                        <option value="">HH</option>
-                        {pickupHourOptions.map((hour) => (
-                          <option key={hour} value={hour}>
-                            {hour}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="min-w-0 text-xs font-semibold text-slate-700">
-                      Minute
-                      <select
-                        aria-label="Pickup minute"
-                        className={fieldClass(isMissing("pickupTime"))}
-                        data-customer-booking-time-part="minute"
-                        onChange={(event) => updatePickupTimePart("minute", event.target.value)}
-                        value={pickupTimeParts.minute || "00"}
-                      >
-                        {pickupMinuteOptions.map((minute) => (
-                          <option key={minute} value={minute}>
-                            {minute}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
+                <label className="text-sm font-semibold text-slate-800">
+                  Pickup time *
                   <input
-                    data-customer-booking-time-value="true"
+                    aria-invalid={isMissing("pickupTime")}
+                    className={`${fieldClass(isMissing("pickupTime"))} max-w-48`}
+                    data-customer-booking-field="pickupTime"
+                    data-customer-booking-time-control="native-time"
                     name="pickupTime"
-                    readOnly
-                    type="hidden"
+                    onChange={(event) => updateField("pickupTime", event.target.value)}
+                    required
+                    step="300"
+                    type="time"
                     value={form.pickupTime}
                   />
-                </fieldset>
+                </label>
 
                 <label className="text-sm font-semibold text-slate-800">
                   Pickup location *
@@ -968,7 +894,7 @@ export default function CustomerBookingPage() {
                     data-customer-booking-field="dropoffLocation"
                     name="dropoffLocation"
                     onChange={(event) => updateField("dropoffLocation", event.target.value)}
-                    placeholder="Destination or area"
+                    placeholder="Destination hotel, airport terminal, home, or office"
                     required
                     type="text"
                     value={form.dropoffLocation}
@@ -976,7 +902,7 @@ export default function CustomerBookingPage() {
                 </label>
 
                 <label className="text-sm font-semibold text-slate-800">
-                  Type of Service
+                  Trip type
                   <select
                     className={fieldClass()}
                     data-customer-booking-field="serviceType"
@@ -984,6 +910,7 @@ export default function CustomerBookingPage() {
                     onChange={(event) => updateField("serviceType", event.target.value)}
                     value={form.serviceType}
                   >
+                    <option value="">Please select trip type</option>
                     {serviceOptions.map((option) => (
                       <option key={option} value={option}>
                         {option}
@@ -993,7 +920,7 @@ export default function CustomerBookingPage() {
                 </label>
 
                 <label className="text-sm font-semibold text-slate-800">
-                  Vehicle type
+                  Preferred vehicle
                   <select
                     className={fieldClass()}
                     data-customer-booking-field="vehicleType"
@@ -1001,7 +928,7 @@ export default function CustomerBookingPage() {
                     onChange={(event) => updateField("vehicleType", event.target.value)}
                     value={form.vehicleType}
                   >
-                    <option value="">Choose if known</option>
+                    <option value="">No preference / Prestige to advise</option>
                     {vehicleOptions.map((option) => (
                       <option key={option} value={option}>
                         {option}
@@ -1044,7 +971,7 @@ export default function CustomerBookingPage() {
                     data-customer-booking-field="extraStops"
                     name="extraStops"
                     onChange={(event) => updateField("extraStops", event.target.value)}
-                    placeholder="Add stop details if needed"
+                    placeholder="Extra stop name or address if needed"
                     type="text"
                     value={form.extraStops}
                   />

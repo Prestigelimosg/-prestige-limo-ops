@@ -61,9 +61,7 @@ const portalRequiredFields = [
   "pickupTime",
 ];
 
-const portalRequestFieldAttributes = publicCustomerFormFields.filter((field) => field !== "pickupTime");
-
-const safeTimeControlNames = ["pickupHour", "pickupMinute"];
+const portalRequestFieldAttributes = publicCustomerFormFields;
 
 const forbiddenFormFieldFragments = [
   "admin_finance",
@@ -343,19 +341,21 @@ assertSafeFormFieldNames(
 );
 assertIncludes(
   portalPage,
-  'data-customer-portal-pickup-time="true"',
+  'data-customer-portal-pickup-time="native-time"',
   "/my-bookings pickup time request control",
 );
 assertSafeFormFieldNames(
   extractStaticNameValues(portalPage),
-  [...publicCustomerFormFields, ...safeTimeControlNames],
+  publicCustomerFormFields,
   "/my-bookings static form control names",
 );
 
 for (const fragment of [
   "submitCustomerBookingRequest(form)",
   "data-customer-booking-form=\"true\"",
+  "Prestige Limo will review and confirm your booking shortly.",
   "This is a booking request only, not a confirmed booking yet.",
+  "This is a booking request only. It is not confirmed until Prestige confirms it.",
   "No price, payment, invoice, PDF, or billing file is created here.",
   "Booking request received. Our team will review and confirm availability.",
 ]) {
@@ -374,6 +374,8 @@ for (const forbiddenPattern of [
 
 for (const fragment of [
   "data-customer-portal-request-form=\"true\"",
+  "Prestige Limo will review and confirm your booking shortly.",
+  "This is a booking request only. It is not confirmed until Prestige confirms it.",
   "Booking request received for review. This is not confirmed yet. Our staff will reply to confirm availability.",
 ]) {
   assertIncludes(portalPage, fragment, `/my-bookings form surface ${fragment}`);

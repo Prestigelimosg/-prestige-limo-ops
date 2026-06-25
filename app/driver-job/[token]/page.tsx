@@ -1311,7 +1311,7 @@ export default function DriverJobPage() {
                   </label>
                   <div className="space-y-2">
                     <button
-                      className="h-10 w-full rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition active:bg-slate-700"
+                      className="h-11 w-full rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition active:bg-slate-700"
                       data-driver-job-parse-details="true"
                       onClick={parsePastedDriverDetails}
                       type="button"
@@ -1333,7 +1333,7 @@ export default function DriverJobPage() {
                   <label className="block space-y-1 text-sm font-semibold text-slate-700">
                     <span>Driver name</span>
                     <input
-                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                      className="h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
                       data-driver-job-detail-name="true"
                       onChange={(event) => updateDriverDetail("name", event.target.value)}
                       type="text"
@@ -1343,7 +1343,7 @@ export default function DriverJobPage() {
                   <label className="block space-y-1 text-sm font-semibold text-slate-700">
                     <span>Contact / Mobile number</span>
                     <input
-                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                      className="h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
                       data-driver-job-detail-contact="true"
                       inputMode="tel"
                       onChange={(event) => updateDriverDetail("contact", event.target.value)}
@@ -1355,7 +1355,7 @@ export default function DriverJobPage() {
                     <span>Car plate</span>
                     <input
                       autoCapitalize="characters"
-                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                      className="h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
                       data-driver-job-detail-plate="true"
                       onChange={(event) => updateDriverDetail("plate", event.target.value)}
                       type="text"
@@ -1365,7 +1365,7 @@ export default function DriverJobPage() {
                   <label className="block space-y-1 text-sm font-semibold text-slate-700">
                     <span>Vehicle model</span>
                     <input
-                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                      className="h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
                       data-driver-job-detail-vehicle-model="true"
                       onChange={(event) => updateDriverDetail("vehicleModel", event.target.value)}
                       type="text"
@@ -1450,7 +1450,7 @@ export default function DriverJobPage() {
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   <button
-                    className="h-10 w-full rounded-md border border-slate-300 bg-slate-50 px-3 text-sm font-semibold text-slate-500 disabled:cursor-not-allowed disabled:opacity-70"
+                    className="h-11 w-full rounded-md border border-slate-300 bg-slate-50 px-3 text-sm font-semibold text-slate-500 disabled:cursor-not-allowed disabled:opacity-70"
                     data-driver-live-location-share-button={driverLiveLocationUiState}
                     disabled={driverLiveLocationControlsDisabled}
                     onClick={shareDriverLiveLocation}
@@ -1459,7 +1459,7 @@ export default function DriverJobPage() {
                     {driverLiveLocation.action === "sharing" ? "Sharing..." : "Share Location"}
                   </button>
                   <button
-                    className="h-10 w-full rounded-md border border-slate-300 bg-slate-50 px-3 text-sm font-semibold text-slate-500 disabled:cursor-not-allowed disabled:opacity-70"
+                    className="h-11 w-full rounded-md border border-slate-300 bg-slate-50 px-3 text-sm font-semibold text-slate-500 disabled:cursor-not-allowed disabled:opacity-70"
                     data-driver-live-location-stop-button={driverLiveLocationUiState}
                     disabled={driverLiveLocationControlsDisabled}
                     onClick={stopDriverLiveLocation}
@@ -1652,7 +1652,7 @@ export default function DriverJobPage() {
                 </label>
                 <div className="space-y-2">
                   <button
-                    className="h-10 w-full rounded-md bg-amber-700 px-3 text-sm font-semibold text-white transition active:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="h-11 w-full rounded-md bg-amber-700 px-3 text-sm font-semibold text-white transition active:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-60"
                     data-driver-job-report-issue-submit="true"
                     disabled={reportingDriverIssue}
                     onClick={reportDriverIssue}

@@ -112,7 +112,7 @@ for (const fragment of [
 for (const fragment of [
   "buildCustomerLiveLocationMapScaffoldResponse",
   "isCustomerLiveLocationMapRequestBoundaryPresent",
-  "isCustomerLiveLocationMapRuntimeGateOpen",
+  "isCustomerLiveLocationMapRuntimeCandidateOpen",
   "handleCustomerLiveLocationMapRuntimeRequest",
   "customer_live_location_map_boundary_blocked",
   "customer_live_location_map_method_blocked",

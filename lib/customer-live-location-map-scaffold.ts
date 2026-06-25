@@ -69,6 +69,19 @@ export function isCustomerLiveLocationMapRuntimeGateOpen(
   );
 }
 
+export function isCustomerLiveLocationMapRuntimeCandidateOpen(
+  env: CustomerLiveLocationEnv = process.env,
+) {
+  const driverLiveLocationMode = cleanMode(
+    env.PRESTIGE_DRIVER_LIVE_LOCATION_MODE,
+  );
+
+  return (
+    isCustomerLiveLocationMapRuntimeGateOpen(env) ||
+    driverLiveLocationMode === "runtime"
+  );
+}
+
 function closedBase(env?: CustomerLiveLocationEnv) {
   return {
     customerVisible: false,

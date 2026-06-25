@@ -91,7 +91,7 @@ assertIncludes(
 
 for (const fragment of [
   "isCustomerLiveLocationMapRequestBoundaryPresent(request)",
-  "isCustomerLiveLocationMapRuntimeGateOpen()",
+  "isCustomerLiveLocationMapRuntimeCandidateOpen()",
   "customer_live_location_map_boundary_blocked",
   "customer_live_location_map_method_blocked",
 ]) {
@@ -112,12 +112,21 @@ for (const fragment of [
 
 for (const fragment of [
   "customer-live-location-map-runtime:v1",
+  "driver_live_location_runtime_settings",
+  "customer_access_accounts",
+  "bookings",
+  "readAppSideRuntimePolicy",
+  "verifyCustomerBookingScope",
+  "PRESTIGE_DRIVER_LIVE_LOCATION_MODE",
   "PRESTIGE_CUSTOMER_LIVE_LOCATION_MAP_ACCOUNT_ALLOWLIST",
   "PRESTIGE_CUSTOMER_LIVE_LOCATION_MAP_ALLOWED_BOOKING_REFERENCES",
   "PRESTIGE_CUSTOMER_LIVE_LOCATION_MAP_STALE_AFTER_SECONDS",
   "x-prestige-customer-account-reference",
   "x-prestige-customer-session-token",
   "customer_live_location_map_scope_blocked",
+  "customer_live_location_map_admin_runtime_gate_closed",
+  "customer_live_location_map_customer_auth_blocked",
+  "customer_live_location_map_service_blocked",
   "booking_reference_label: \"scoped\"",
   "external_send: false",
   "gpsCaptureEnabled: false",

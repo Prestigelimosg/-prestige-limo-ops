@@ -6,6 +6,7 @@ import {
   customerLiveLocationMapScaffoldVersion,
   readCustomerLiveLocationMapGateState,
 } from "./customer-live-location-map-scaffold";
+import { resolveExactTwoCustomerRuntimeSessionMap } from "./customer-runtime-session-map";
 
 export const customerLiveLocationMapRuntimeVersion =
   "customer-live-location-map-runtime:v1";
@@ -22,10 +23,22 @@ type CustomerLiveLocationMapBoundary = {
 };
 
 const latestPositionsTable = "driver_live_location_latest_positions";
+const runtimeSettingsTable = "driver_live_location_runtime_settings";
+const runtimeSettingName = "driver_live_location_runtime";
+const customerAccessAccountsTable = "customer_access_accounts";
+const bookingsTable = "bookings";
 const allowedRuntimeModes = new Set(["evidence", "runtime"]);
+const eligibleServiceFamilies = new Set(["dep", "departure", "trf", "transfer", "dsp", "hourly"]);
 const safeReferencePattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/;
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const maxRuntimeAllowedReferences = 50;
+const maxControlledCustomerRuntimeAllowlistEntries = 5;
+const supportedCustomerRuntimeSessionMapEntryCounts = new Set([2, 3, 5]);
 const forbiddenSafeTextPattern =
   /api[_ -]?key|billing|cookie|customer[_ -]?email|customer[_ -]?phone|customer[_ -]?price|debug|driver[_ -]?payout|finance|internal|invoice|jwt|parser|password|payment|paynow|payout|pdf|raw[_ -]?token|secret|service[_ -]?role|token[_ -]?hash/i;
+const placeholderConfigPattern =
+  /^(?:todo|tbd|n\/a|none|null|undefined|placeholder|change[-_\s]?me|changeme|replace[-_\s]?me|your[-_\s]?.*|example)$/i;
 
 let customerLiveLocationMapClientForTests: CustomerLiveLocationMapClient | null =
   null;
@@ -38,6 +51,12 @@ export function setCustomerLiveLocationMapRuntimeClientForTests(
 
 function envValue(env: CustomerLiveLocationMapEnv, key: string) {
   return env[key]?.trim() || "";
+}
+
+function configValueOrNull(value: string | undefined) {
+  const trimmed = value?.trim();
+
+  return trimmed && !placeholderConfigPattern.test(trimmed) ? trimmed : null;
 }
 
 function asRecord(value: unknown): UnknownRecord {
@@ -66,6 +85,30 @@ function safeReference(value: unknown) {
   return safeReferencePattern.test(cleaned) ? cleaned : "";
 }
 
+function safeUuid(value: unknown) {
+  const cleaned = cleanText(value, 80);
+
+  return uuidPattern.test(cleaned) ? cleaned : "";
+}
+
+function validServerCredential(value: string | null) {
+  if (!value || placeholderConfigPattern.test(value) || value.includes("|") || value.includes(";")) {
+    return false;
+  }
+
+  const normalized = value.trim().toLowerCase();
+
+  return (
+    value.trim().length >= 24 &&
+    normalized !== "anon" &&
+    normalized !== "public" &&
+    !normalized.includes("anon_key") &&
+    !normalized.includes("public_key") &&
+    !normalized.includes("next_public") &&
+    !forbiddenSafeTextPattern.test(normalized)
+  );
+}
+
 function allowedReferencesFromEnv(env: CustomerLiveLocationMapEnv, key: string) {
   return [
     ...new Set(
@@ -75,6 +118,44 @@ function allowedReferencesFromEnv(env: CustomerLiveLocationMapEnv, key: string) 
         .filter(Boolean),
     ),
   ];
+}
+
+function uniqueSafeReferences(values: unknown[]) {
+  return [...new Set(values.map(safeReference).filter(Boolean))].slice(
+    0,
+    maxRuntimeAllowedReferences,
+  );
+}
+
+function allowedReferencesFromUnknown(value: unknown) {
+  if (Array.isArray(value)) {
+    return uniqueSafeReferences(value);
+  }
+
+  if (typeof value === "string") {
+    return uniqueSafeReferences(value.split(/[,\n\s]+/));
+  }
+
+  return [];
+}
+
+function controlledCustomerRuntimeAccountAllowlist(env: CustomerLiveLocationMapEnv) {
+  const raw = configValueOrNull(
+    env.PRESTIGE_CUSTOMER_PORTAL_RUNTIME_ACCOUNT_ALLOWLIST,
+  );
+
+  if (!raw) {
+    return [];
+  }
+
+  return [
+    ...new Set(
+      raw
+        .split(/[\s,]+/)
+        .map((entry) => safeReference(entry))
+        .filter(Boolean),
+    ),
+  ].slice(0, maxControlledCustomerRuntimeAllowlistEntries);
 }
 
 function asFiniteNumber(value: unknown) {
@@ -111,6 +192,20 @@ function positiveIntegerEnv(
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function booleanSettingOpen(value: unknown) {
+  return value === true || value === "true";
+}
+
+function runtimeSettingNumber(value: unknown, min: number, max: number) {
+  const parsed = asFiniteNumber(value);
+
+  if (parsed === null || !Number.isInteger(parsed)) {
+    return null;
+  }
+
+  return parsed >= min && parsed <= max ? parsed : null;
+}
+
 function blockedResult(reason: string, status: number) {
   return {
     body: {
@@ -132,9 +227,11 @@ function blockedResult(reason: string, status: number) {
 
 function runtimeGateOpen(env: CustomerLiveLocationMapEnv) {
   const gateState = readCustomerLiveLocationMapGateState(env);
+  const driverRuntimeMode = envValue(env, "PRESTIGE_DRIVER_LIVE_LOCATION_MODE").toLowerCase();
 
   return (
-    gateState.live_map_gate_configured && allowedRuntimeModes.has(gateState.mode)
+    (gateState.live_map_gate_configured && allowedRuntimeModes.has(gateState.mode)) ||
+    driverRuntimeMode === "runtime"
   );
 }
 
@@ -185,7 +282,29 @@ function customerHeaders(request: Request) {
     sessionPresent: Boolean(
       request.headers.get("x-prestige-customer-session-token")?.trim(),
     ),
+    sessionToken: request.headers.get("x-prestige-customer-session-token")?.trim() || "",
   };
+}
+
+function customerRuntimeGateMode(env: CustomerLiveLocationMapEnv) {
+  const gateState = readCustomerLiveLocationMapGateState(env);
+
+  if (gateState.live_map_gate_configured && allowedRuntimeModes.has(gateState.mode)) {
+    return gateState.mode;
+  }
+
+  if (envValue(env, "PRESTIGE_DRIVER_LIVE_LOCATION_MODE").toLowerCase() === "runtime") {
+    return "runtime";
+  }
+
+  return "closed";
+}
+
+function customerSavedBookingsAuthEnabled(env: CustomerLiveLocationMapEnv) {
+  return (
+    env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_ENABLED === "true" &&
+    envValue(env, "PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_MODE") === "server-session-token"
+  );
 }
 
 function normalizeLatestPosition(row: UnknownRecord) {
@@ -280,6 +399,370 @@ function assertRuntimeScope({
   } as const;
 }
 
+type CustomerLiveLocationRuntimePolicy = {
+  accountReference: string;
+  allowedBookingReferences: string[];
+  source: "app_side_runtime_setting" | "env_evidence";
+  staleAfterSeconds: number;
+};
+
+type CustomerLiveLocationRuntimePolicyResult =
+  | {
+      ok: true;
+      policy: CustomerLiveLocationRuntimePolicy;
+    }
+  | {
+      ok: false;
+      reason: string;
+      status: number;
+    };
+
+function envEvidenceRuntimePolicy({
+  accountReference,
+  bookingReference,
+  env,
+}: {
+  accountReference: string;
+  bookingReference: string;
+  env: CustomerLiveLocationMapEnv;
+}): CustomerLiveLocationRuntimePolicyResult {
+  const scoped = assertRuntimeScope({
+    accountReference,
+    bookingReference,
+    env,
+  });
+
+  if (!scoped.ok) {
+    return scoped;
+  }
+
+  return {
+    ok: true,
+    policy: {
+      accountReference,
+      allowedBookingReferences: allowedReferencesFromEnv(
+        env,
+        "PRESTIGE_CUSTOMER_LIVE_LOCATION_MAP_ALLOWED_BOOKING_REFERENCES",
+      ),
+      source: "env_evidence",
+      staleAfterSeconds: positiveIntegerEnv(
+        env,
+        "PRESTIGE_CUSTOMER_LIVE_LOCATION_MAP_STALE_AFTER_SECONDS",
+        300,
+      ),
+    },
+  };
+}
+
+async function resolveCustomerRuntimeAccountReference({
+  client,
+  env,
+  request,
+}: {
+  client: CustomerLiveLocationMapClient;
+  env: CustomerLiveLocationMapEnv;
+  request: Request;
+}): Promise<
+  | {
+      accountReference: string;
+      ok: true;
+    }
+  | {
+      ok: false;
+      reason: string;
+      status: number;
+    }
+> {
+  if (!customerSavedBookingsAuthEnabled(env)) {
+    return {
+      ok: false,
+      reason: "customer_live_location_map_customer_auth_not_ready",
+      status: 403,
+    };
+  }
+
+  const { sessionToken } = customerHeaders(request);
+  const accountAllowlist = controlledCustomerRuntimeAccountAllowlist(env);
+  const expectedEntryCount = supportedCustomerRuntimeSessionMapEntryCounts.has(
+    accountAllowlist.length,
+  )
+    ? accountAllowlist.length
+    : 2;
+  const mappedSession = resolveExactTwoCustomerRuntimeSessionMap({
+    expectedEntryCount,
+    mapValue: env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_MAP,
+    providedToken: sessionToken,
+  });
+
+  if (mappedSession.configured) {
+    if (!mappedSession.ok) {
+      return {
+        ok: false,
+        reason:
+          mappedSession.reason === "invalid_config"
+            ? "customer_live_location_map_customer_auth_config_not_ready"
+            : "customer_live_location_map_customer_auth_blocked",
+        status: mappedSession.reason === "invalid_config" ? 503 : 403,
+      };
+    }
+
+    if (
+      accountAllowlist.length > 0 &&
+      !accountAllowlist.includes(mappedSession.customer_account_reference)
+    ) {
+      return {
+        ok: false,
+        reason: "customer_live_location_map_customer_auth_blocked",
+        status: 403,
+      };
+    }
+
+    return {
+      accountReference: mappedSession.customer_account_reference,
+      ok: true,
+    };
+  }
+
+  const expectedToken = configValueOrNull(
+    env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_TOKEN,
+  );
+  const authUserId = safeUuid(env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_USER_ID);
+
+  if (
+    !validServerCredential(expectedToken) ||
+    !sessionToken ||
+    sessionToken !== expectedToken ||
+    !authUserId
+  ) {
+    return {
+      ok: false,
+      reason: "customer_live_location_map_customer_auth_blocked",
+      status: 403,
+    };
+  }
+
+  const { data, error } = await client
+    .from(customerAccessAccountsTable)
+    .select("customer_account_reference, account_status")
+    .eq("auth_user_id", authUserId)
+    .eq("account_status", "active")
+    .limit(1);
+
+  if (error) {
+    return {
+      ok: false,
+      reason: "customer_live_location_map_customer_auth_config_not_ready",
+      status: 503,
+    };
+  }
+
+  const accountReference = safeReference(
+    asRecord(Array.isArray(data) ? data[0] : null).customer_account_reference,
+  );
+
+  if (
+    !accountReference ||
+    (accountAllowlist.length > 0 && !accountAllowlist.includes(accountReference))
+  ) {
+    return {
+      ok: false,
+      reason: "customer_live_location_map_customer_auth_blocked",
+      status: 403,
+    };
+  }
+
+  return {
+    accountReference,
+    ok: true,
+  };
+}
+
+async function readAppSideRuntimePolicy({
+  client,
+  env,
+  request,
+}: {
+  client: CustomerLiveLocationMapClient;
+  env: CustomerLiveLocationMapEnv;
+  request: Request;
+}): Promise<CustomerLiveLocationRuntimePolicyResult> {
+  const { bookingReference } = customerHeaders(request);
+
+  if (!bookingReference) {
+    return {
+      ok: false,
+      reason: "customer_live_location_map_scope_blocked",
+      status: 403,
+    };
+  }
+
+  const { data, error } = await client
+    .from(runtimeSettingsTable)
+    .select(
+      "setting_name, setting_status, driver_live_location_capture_enabled, admin_active_jobs_map_enabled, driver_live_location_mode, driver_live_location_allowed_job_references, driver_live_location_stale_after_seconds",
+    )
+    .eq("setting_name", runtimeSettingName)
+    .maybeSingle();
+
+  if (error) {
+    return {
+      ok: false,
+      reason: "customer_live_location_map_admin_runtime_config_not_ready",
+      status: 503,
+    };
+  }
+
+  const setting = asRecord(data);
+  const settingStatus = cleanText(setting.setting_status, 40);
+  const settingMode = cleanText(setting.driver_live_location_mode, 40);
+  const captureOpen = booleanSettingOpen(
+    setting.driver_live_location_capture_enabled,
+  );
+  const adminMapOpen = booleanSettingOpen(setting.admin_active_jobs_map_enabled);
+  const allowedBookingReferences = allowedReferencesFromUnknown(
+    setting.driver_live_location_allowed_job_references,
+  );
+
+  if (
+    settingStatus !== "active" ||
+    settingMode !== "runtime" ||
+    !captureOpen ||
+    !adminMapOpen
+  ) {
+    return {
+      ok: false,
+      reason: "customer_live_location_map_admin_runtime_gate_closed",
+      status: 503,
+    };
+  }
+
+  if (
+    allowedBookingReferences.length === 0 ||
+    !allowedBookingReferences.includes(bookingReference)
+  ) {
+    return {
+      ok: false,
+      reason: "customer_live_location_map_scope_blocked",
+      status: 403,
+    };
+  }
+
+  const customerAccount = await resolveCustomerRuntimeAccountReference({
+    client,
+    env,
+    request,
+  });
+
+  if (!customerAccount.ok) {
+    return customerAccount;
+  }
+
+  const bookingScope = await verifyCustomerBookingScope({
+    accountReference: customerAccount.accountReference,
+    bookingReference,
+    client,
+  });
+
+  if (!bookingScope.ok) {
+    return bookingScope;
+  }
+
+  return {
+    ok: true,
+    policy: {
+      accountReference: customerAccount.accountReference,
+      allowedBookingReferences,
+      source: "app_side_runtime_setting",
+      staleAfterSeconds:
+        runtimeSettingNumber(
+          setting.driver_live_location_stale_after_seconds,
+          30,
+          3600,
+        ) ??
+        positiveIntegerEnv(
+          env,
+          "PRESTIGE_CUSTOMER_LIVE_LOCATION_MAP_STALE_AFTER_SECONDS",
+          300,
+        ),
+    },
+  };
+}
+
+function serviceFamily(value: unknown) {
+  const cleaned = cleanText(value, 80).toLowerCase();
+
+  return cleaned.replace(/[^a-z0-9]+/g, " ").trim().split(/\s+/)[0] || "";
+}
+
+function serviceEligible(row: UnknownRecord) {
+  const family =
+    serviceFamily(row.route_type) ||
+    serviceFamily(row.service_type);
+
+  return eligibleServiceFamilies.has(family);
+}
+
+async function verifyCustomerBookingScope({
+  accountReference,
+  bookingReference,
+  client,
+}: {
+  accountReference: string;
+  bookingReference: string;
+  client: CustomerLiveLocationMapClient;
+}): Promise<
+  | {
+      ok: true;
+    }
+  | {
+      ok: false;
+      reason: string;
+      status: number;
+    }
+> {
+  const { data, error } = await client
+    .from(bookingsTable)
+    .select("booking_reference, customer_id, route_type, service_type")
+    .eq("booking_reference", bookingReference)
+    .eq("customer_id", accountReference)
+    .limit(1);
+
+  if (error) {
+    return {
+      ok: false,
+      reason: "customer_live_location_map_customer_booking_scope_not_ready",
+      status: 503,
+    };
+  }
+
+  const booking = asRecord(Array.isArray(data) ? data[0] : null);
+  const matchedBookingReference = safeReference(booking.booking_reference);
+  const matchedAccountReference = safeReference(booking.customer_id);
+
+  if (
+    matchedBookingReference !== bookingReference ||
+    matchedAccountReference !== accountReference
+  ) {
+    return {
+      ok: false,
+      reason: "customer_live_location_map_scope_blocked",
+      status: 403,
+    };
+  }
+
+  if (!serviceEligible(booking)) {
+    return {
+      ok: false,
+      reason: "customer_live_location_map_service_blocked",
+      status: 403,
+    };
+  }
+
+  return {
+    ok: true,
+  };
+}
+
 export async function handleCustomerLiveLocationMapRuntimeRequest({
   boundary,
   env = process.env,
@@ -298,15 +781,6 @@ export async function handleCustomerLiveLocationMapRuntimeRequest({
   }
 
   const { accountReference, bookingReference } = customerHeaders(request);
-  const scoped = assertRuntimeScope({
-    accountReference,
-    bookingReference,
-    env,
-  });
-
-  if (!scoped.ok) {
-    return blockedResult(scoped.reason, scoped.status);
-  }
 
   const clientResult = runtimeClient(env);
 
@@ -314,11 +788,25 @@ export async function handleCustomerLiveLocationMapRuntimeRequest({
     return blockedResult(clientResult.reason, 503);
   }
 
-  const staleAfterSeconds = positiveIntegerEnv(
-    env,
-    "PRESTIGE_CUSTOMER_LIVE_LOCATION_MAP_STALE_AFTER_SECONDS",
-    300,
-  );
+  const runtimeMode = customerRuntimeGateMode(env);
+  const policy =
+    runtimeMode === "evidence"
+      ? envEvidenceRuntimePolicy({
+          accountReference,
+          bookingReference,
+          env,
+        })
+      : await readAppSideRuntimePolicy({
+          client: clientResult.client,
+          env,
+          request,
+        });
+
+  if (!policy.ok) {
+    return blockedResult(policy.reason, policy.status);
+  }
+
+  const staleAfterSeconds = policy.policy.staleAfterSeconds;
   const { data, error } = await clientResult.client
     .from(latestPositionsTable)
     .select(
@@ -382,7 +870,10 @@ export async function handleCustomerLiveLocationMapRuntimeRequest({
 }
 
 export const customerLiveLocationMapRuntimeContract = {
+  bookingsTable,
+  customerAccessAccountsTable,
   latestPositionsTable,
   runtimeVersion: customerLiveLocationMapRuntimeVersion,
+  runtimeSettingsTable,
   scaffoldVersion: customerLiveLocationMapScaffoldVersion,
 };

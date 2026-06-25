@@ -2,7 +2,7 @@ import {
   buildCustomerLiveLocationMapScaffoldResponse,
   customerLiveLocationMapScaffoldVersion,
   isCustomerLiveLocationMapRequestBoundaryPresent,
-  isCustomerLiveLocationMapRuntimeGateOpen,
+  isCustomerLiveLocationMapRuntimeCandidateOpen,
 } from "../../../lib/customer-live-location-map-scaffold";
 
 export const dynamic = "force-dynamic";
@@ -60,7 +60,7 @@ export async function GET(request: Request) {
       return blockedResponse("customer_live_location_map_boundary_blocked", boundary);
     }
 
-    if (isCustomerLiveLocationMapRuntimeGateOpen()) {
+    if (isCustomerLiveLocationMapRuntimeCandidateOpen()) {
       const { handleCustomerLiveLocationMapRuntimeRequest } = await import(
         "../../../lib/customer-live-location-map-runtime"
       );

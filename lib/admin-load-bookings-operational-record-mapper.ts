@@ -238,7 +238,7 @@ function collectQuarantinedFieldNames(source: Record<string, unknown>, prefix = 
 }
 
 function routePoints(source: Record<string, unknown>) {
-  const route = cleanText(source.route);
+  const route = cleanText(source.route_summary) || cleanText(source.route);
 
   if (route) {
     const points = route
@@ -289,12 +289,32 @@ function sourceToSafeFields(input: unknown): Record<(typeof safeOperationalField
   const source = asRecord(input);
   const points = routePoints(source);
   const bookingReference = cleanText(source.booking_reference) || cleanText(source.reference) || cleanText(source.id);
-  const pickupAddress = cleanText(source.pickup_address) || points[0] || null;
-  const dropoffAddress = cleanText(source.dropoff_address) || points[points.length - 1] || null;
+  const pickupAddress = cleanText(source.pickup_location) || cleanText(source.pickup_address) || points[0] || null;
+  const dropoffAddress =
+    cleanText(source.dropoff_location) || cleanText(source.dropoff_address) || points[points.length - 1] || null;
   const routePointsSummary =
     points.length >= 2
       ? points.join(" > ")
       : [pickupAddress, dropoffAddress].filter(Boolean).join(" > ");
+  const serviceType =
+    cleanText(source.service_type) || cleanText(source.route_type) || cleanText(source.booking_type);
+  const passengerName =
+    cleanText(source.passenger_name) || nestedText(source, "travelers", "traveler_name");
+  const contactName =
+    cleanText(source.contact_display_name) || nestedText(source, "bookers", "booker_name");
+  const customerName =
+    cleanText(source.customer_display_name) ||
+    nestedText(source, "companies", "company_name") ||
+    contactName;
+  const vehicleDisplay =
+    cleanText(source.vehicle_type_or_category) ||
+    cleanText(source.vehicle_type) ||
+    cleanText(source.vehicle);
+  const pickupDatetime =
+    cleanText(source.pickup_at) || cleanText(source.pickup_datetime) || cleanText(source.pickup_time);
+  const flightNumber =
+    cleanText(source.flight_no) ||
+    cleanText(source.customer_facing_flight_number);
 
   return {
     assigned_driver_display_name: cleanText(source.driver_name),
@@ -306,27 +326,27 @@ function sourceToSafeFields(input: unknown): Record<(typeof safeOperationalField
     booking_id: cleanText(source.id),
     booking_reference: bookingReference,
     booking_status: cleanText(source.status),
-    booking_type: cleanText(source.booking_type),
-    booker_display_name: nestedText(source, "bookers", "booker_name"),
-    booker_email: nestedText(source, "bookers", "email"),
-    booker_phone: nestedText(source, "bookers", "phone"),
+    booking_type: serviceType,
+    booker_display_name: contactName,
+    booker_email: cleanText(source.contact_email) || nestedText(source, "bookers", "email"),
+    booker_phone: cleanText(source.contact_phone) || nestedText(source, "bookers", "phone"),
     child_seat_display: childSeatDisplay(source),
-    company_display_name: nestedText(source, "companies", "company_name"),
+    company_display_name: customerName,
     created_at: cleanText(source.created_at),
-    customer_display_name: nestedText(source, "travelers", "traveler_name") || nestedText(source, "bookers", "booker_name"),
+    customer_display_name: customerName || passengerName,
     dropoff_address: dropoffAddress,
     dropoff_datetime: null,
     extra_stop_display: extraStopDisplay(source, points),
-    job_card_display: cleanText(source.flight_no) ? `Flight ${cleanText(source.flight_no)}` : null,
-    pax_display: cleanText(source.pax) || "1",
+    job_card_display: flightNumber ? `Flight ${flightNumber}` : null,
+    pax_display: cleanText(source.pax_count) || cleanText(source.pax) || "1",
     pickup_address: pickupAddress,
-    pickup_datetime: cleanText(source.pickup_time),
+    pickup_datetime: pickupDatetime,
     route_points_summary: routePointsSummary || null,
-    route_summary: routePointsSummary || null,
-    service_display: cleanText(source.booking_type),
-    traveler_display_name: nestedText(source, "travelers", "traveler_name") || nestedText(source, "bookers", "booker_name"),
+    route_summary: cleanText(source.route_summary) || routePointsSummary || null,
+    service_display: serviceType,
+    traveler_display_name: passengerName || customerName,
     updated_at: cleanText(source.updated_at),
-    vehicle_display: cleanText(source.vehicle),
+    vehicle_display: vehicleDisplay,
   };
 }
 

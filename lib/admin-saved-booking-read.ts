@@ -15,6 +15,9 @@ export type AdminSavedBookingListReadParams = {
 };
 
 export type AdminSavedBookingRecord = {
+  booking_reference: string | null;
+  source_channel: string | null;
+  source_surface: string | null;
   booker_id: number | null;
   bookers: {
     booker_name: string | null;
@@ -33,6 +36,10 @@ export type AdminSavedBookingRecord = {
   } | null;
   company_id: number | null;
   created_at: string | null;
+  contact_display_name: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  customer_display_name: string | null;
   customer_price_amount: number | null;
   customer_price_override_reason: string | null;
   customer_rate: number | null;
@@ -51,6 +58,7 @@ export type AdminSavedBookingRecord = {
   driver_payout_unit: string | null;
   driver_plate_number: string | null;
   dropoff_address: string | null;
+  dropoff_location: string | null;
   extra_stop_count: number | null;
   extra_stop_payout: number | null;
   extra_stop_surcharge: number | null;
@@ -60,10 +68,19 @@ export type AdminSavedBookingRecord = {
   midnight_payout: number | null;
   midnight_surcharge: number | null;
   pax: number | null;
+  passenger_name: string | null;
+  passenger_phone: string | null;
+  pax_count: number | null;
   pickup_address: string | null;
+  pickup_at: string | null;
+  pickup_datetime: string | null;
+  pickup_location: string | null;
   pickup_time: string | null;
   pricing_source: string | null;
   route: string | null;
+  route_summary: string | null;
+  route_type: string | null;
+  service_type: string | null;
   status: string | null;
   traveler_id: number | null;
   travelers: {
@@ -71,6 +88,8 @@ export type AdminSavedBookingRecord = {
   } | null;
   updated_at: string | null;
   vehicle: string | null;
+  vehicle_type: string | null;
+  vehicle_type_or_category: string | null;
 };
 
 export type AdminSavedBookingReadData = {
@@ -110,7 +129,7 @@ const allowedAdapterActorRoles = new Set(["admin", "dispatcher", "system"]);
 const allowedSingleReadQueryParams = new Set(["booking_id", "id"]);
 const allowedListReadQueryParams = new Set(["limit"]);
 const adminSavedBookingReadSelect =
-  "id, company_id, booker_id, traveler_id, booking_type, vehicle, pickup_time, pickup_address, dropoff_address, flight_no, route, pax, job_card, status, driver_id, driver_name, driver_contact, driver_plate_number, customer_rate, customer_rate_unit, customer_price_amount, customer_rate_override, customer_price_override_reason, driver_payout_min, driver_payout_max, driver_payout_amount, driver_payout_override, driver_payout_reason, driver_payout_unit, driver_notes, driver_dispatch_include_payout, midnight_surcharge, midnight_payout, extra_stop_count, extra_stop_surcharge, extra_stop_payout, child_seat_required, child_seat_count, child_seat_type, child_seat_customer_surcharge, child_seat_driver_payout, pricing_source, created_at, updated_at, companies(company_name, domain), bookers(booker_name, email, phone), travelers(traveler_name)";
+  "id, booking_reference, source_channel, source_surface, company_id, booker_id, traveler_id, booking_type, service_type, route_type, vehicle, vehicle_type, vehicle_type_or_category, pickup_time, pickup_at, pickup_datetime, pickup_address, pickup_location, dropoff_address, dropoff_location, flight_no, route, route_summary, pax, pax_count, passenger_name, passenger_phone, customer_display_name, contact_display_name, contact_phone, contact_email, job_card, status, driver_id, driver_name, driver_contact, driver_plate_number, customer_rate, customer_rate_unit, customer_price_amount, customer_rate_override, customer_price_override_reason, driver_payout_min, driver_payout_max, driver_payout_amount, driver_payout_override, driver_payout_reason, driver_payout_unit, driver_notes, driver_dispatch_include_payout, midnight_surcharge, midnight_payout, extra_stop_count, extra_stop_surcharge, extra_stop_payout, child_seat_required, child_seat_count, child_seat_type, child_seat_customer_surcharge, child_seat_driver_payout, pricing_source, created_at, updated_at, companies(company_name, domain), bookers(booker_name, email, phone), travelers(traveler_name)";
 const defaultListLimit = 25;
 const maxListLimit = 100;
 const malformedParamsError =
@@ -449,6 +468,9 @@ function toSavedBookingRecord(value: unknown): AdminSavedBookingRecord | null {
   }
 
   return {
+    booking_reference: textOrNull(row.booking_reference, 160),
+    source_channel: textOrNull(row.source_channel, 120),
+    source_surface: textOrNull(row.source_surface, 120),
     booker_id: integerOrNull(row.booker_id),
     bookers: nestedBooker(row.bookers),
     booking_type: textOrNull(row.booking_type, 80),
@@ -459,7 +481,11 @@ function toSavedBookingRecord(value: unknown): AdminSavedBookingRecord | null {
     child_seat_type: textOrNull(row.child_seat_type, 160),
     companies: nestedCompany(row.companies),
     company_id: integerOrNull(row.company_id),
+    contact_display_name: textOrNull(row.contact_display_name, 220),
+    contact_email: textOrNull(row.contact_email, 220),
+    contact_phone: textOrNull(row.contact_phone, 120),
     created_at: textOrNull(row.created_at, 80),
+    customer_display_name: textOrNull(row.customer_display_name, 220),
     customer_price_amount: numberOrNull(row.customer_price_amount),
     customer_price_override_reason: textOrNull(row.customer_price_override_reason, 500),
     customer_rate: numberOrNull(row.customer_rate),
@@ -478,6 +504,7 @@ function toSavedBookingRecord(value: unknown): AdminSavedBookingRecord | null {
     driver_payout_unit: textOrNull(row.driver_payout_unit, 80),
     driver_plate_number: textOrNull(row.driver_plate_number, 120),
     dropoff_address: textOrNull(row.dropoff_address, 1000),
+    dropoff_location: textOrNull(row.dropoff_location, 1000),
     extra_stop_count: integerOrNull(row.extra_stop_count),
     extra_stop_payout: numberOrNull(row.extra_stop_payout),
     extra_stop_surcharge: numberOrNull(row.extra_stop_surcharge),
@@ -487,15 +514,26 @@ function toSavedBookingRecord(value: unknown): AdminSavedBookingRecord | null {
     midnight_payout: numberOrNull(row.midnight_payout),
     midnight_surcharge: numberOrNull(row.midnight_surcharge),
     pax: integerOrNull(row.pax),
+    passenger_name: textOrNull(row.passenger_name, 220),
+    passenger_phone: textOrNull(row.passenger_phone, 120),
+    pax_count: integerOrNull(row.pax_count),
+    pickup_at: textOrNull(row.pickup_at, 120),
     pickup_address: textOrNull(row.pickup_address, 1000),
+    pickup_datetime: textOrNull(row.pickup_datetime, 120),
+    pickup_location: textOrNull(row.pickup_location, 1000),
     pickup_time: textOrNull(row.pickup_time, 80),
     pricing_source: textOrNull(row.pricing_source, 220),
     route: textOrNull(row.route, 1000),
+    route_summary: textOrNull(row.route_summary, 1000),
+    route_type: textOrNull(row.route_type, 120),
+    service_type: textOrNull(row.service_type, 120),
     status: textOrNull(row.status, 80),
     traveler_id: integerOrNull(row.traveler_id),
     travelers: nestedTraveler(row.travelers),
     updated_at: textOrNull(row.updated_at, 80),
     vehicle: textOrNull(row.vehicle, 120),
+    vehicle_type: textOrNull(row.vehicle_type, 120),
+    vehicle_type_or_category: textOrNull(row.vehicle_type_or_category, 120),
   };
 }
 

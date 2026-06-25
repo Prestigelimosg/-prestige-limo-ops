@@ -607,17 +607,36 @@ type AdminTravelerCrmIdentityApiResponse = {
 
 type BookingRecord = {
   id: string | number;
+  booking_reference?: string | null;
+  source_channel?: string | null;
+  source_surface?: string | null;
   company_id: number | null;
   booker_id: number | null;
   traveler_id: number | null;
   booking_type: string | null;
+  service_type?: string | null;
+  route_type?: string | null;
   vehicle: string | null;
+  vehicle_type?: string | null;
+  vehicle_type_or_category?: string | null;
   pickup_time: string | null;
+  pickup_at?: string | null;
+  pickup_datetime?: string | null;
   pickup_address: string | null;
+  pickup_location?: string | null;
   dropoff_address: string | null;
+  dropoff_location?: string | null;
   flight_no: string | null;
   route: string | null;
+  route_summary?: string | null;
   pax: number | null;
+  pax_count?: number | null;
+  passenger_name?: string | null;
+  passenger_phone?: string | null;
+  customer_display_name?: string | null;
+  contact_display_name?: string | null;
+  contact_phone?: string | null;
+  contact_email?: string | null;
   job_card: string | null;
   status: string | null;
   driver_id?: number | null;
@@ -1808,14 +1827,21 @@ type MonthlyBillingMonthGroupingReviewStatus =
 type AdminBookingPersistenceRecord = {
   booking_reference: string;
   source_channel?: string | null;
-  customer_id?: number | null;
+  source_surface?: string | null;
+  customer_id?: number | string | null;
   pickup_datetime?: string | null;
+  pickup_at?: string | null;
   pickup_location?: string | null;
   dropoff_location?: string | null;
   route_type?: string | null;
+  service_type?: string | null;
+  route_summary?: string | null;
   customer_display_name?: string | null;
+  contact_display_name?: string | null;
   contact_phone?: string | null;
   contact_email?: string | null;
+  passenger_name?: string | null;
+  passenger_phone?: string | null;
   pax_count?: number | null;
   luggage_count?: number | null;
   vehicle_type_or_category?: string | null;
@@ -1823,19 +1849,26 @@ type AdminBookingPersistenceRecord = {
   admin_internal_status?: string | null;
   short_notice_review_status?: string | null;
   request_review_status?: string | null;
+  change_review_status?: string | null;
+  cancellation_review_status?: string | null;
   parser_source_reference?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
   route_points?: Array<{
     point_type?: "pickup" | "dropoff" | "stop" | "waypoint";
     sequence_number?: number | null;
+    sequence?: number | null;
     location_text?: string | null;
+    location?: string | null;
     timing_note?: string | null;
+    notes?: string | null;
   }>;
   service_items?: Array<{
-    service_item_type?: "child_seat" | "extra_stop" | "waiting_time" | "midnight_charge";
+    service_item_type?: "child_seat" | "extra_stop" | "waiting_time" | "midnight_charge" | string;
+    item_type?: string | null;
     quantity?: number | null;
     blocks_count?: number | null;
+    notes?: string | null;
   }>;
 };
 
@@ -1843,7 +1876,7 @@ type AdminBookingPersistenceRequestBody = {
   booking: {
     booking_reference: string;
     source_channel: string;
-    customer_id: number | null;
+    customer_id: number | string | null;
     pickup_datetime: string | null;
     pickup_location: string | null;
     dropoff_location: string | null;
@@ -2561,8 +2594,8 @@ const tripRouteFieldOrder: Array<keyof BookingForm> = [
   "dropoff",
 ];
 
-function clean(value: string | null | undefined) {
-  return (value ?? "").trim();
+function clean(value: string | number | null | undefined) {
+  return (value ?? "").toString().trim();
 }
 
 function isInactiveDriver(
@@ -4645,7 +4678,50 @@ function formatPickupDateTime(dateValue: string, timeValue: string | null | unde
   return `${formatDate(dateValue)}, ${formatPickupTime(timeValue)}`;
 }
 
+function formatPickupTimeFromTimestamp(value: string | null | undefined) {
+  const text = clean(value);
+
+  if (!text) {
+    return "";
+  }
+
+  const parsed = new Date(text);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  const parts = new Intl.DateTimeFormat("en-SG", {
+    hour: "2-digit",
+    hour12: false,
+    minute: "2-digit",
+    timeZone: "Asia/Singapore",
+  }).formatToParts(parsed);
+  const hour = parts.find((part) => part.type === "hour")?.value || "";
+  const minute = parts.find((part) => part.type === "minute")?.value || "";
+
+  return hour && minute ? `${hour}${minute}hrs` : "";
+}
+
+function formatPickupTimeFromRecord(bookingRecord: BookingRecord) {
+  return (
+    formatPickupTimeFromTimestamp(bookingRecord.pickup_at) ||
+    formatPickupTimeFromTimestamp(bookingRecord.pickup_datetime) ||
+    formatPickupTime(bookingRecord.pickup_time)
+  );
+}
+
 function getBookingDate(bookingRecord: BookingRecord) {
+  const canonicalPickupAt = clean(bookingRecord.pickup_at) || clean(bookingRecord.pickup_datetime);
+
+  if (canonicalPickupAt) {
+    const pickupAt = new Date(canonicalPickupAt);
+
+    if (!Number.isNaN(pickupAt.getTime())) {
+      return pickupAt;
+    }
+  }
+
   const jobCardDate = parseJobCardDate(bookingRecord.job_card);
 
   if (jobCardDate) {
@@ -4768,13 +4844,21 @@ function getBookingName(bookingRecord: BookingRecord) {
     return legacyBrowserTestBookingName;
   }
 
-  return clean(bookingRecord.travelers?.traveler_name) || getJobCardName(bookingRecord.job_card);
+  return (
+    clean(bookingRecord.passenger_name) ||
+    clean(bookingRecord.travelers?.traveler_name) ||
+    getJobCardName(bookingRecord.job_card)
+  );
 }
 
 function getBookerName(bookingRecord: BookingRecord) {
   const jobCardBooker = clean(bookingRecord.job_card).match(/^\s*booker\s*:\s*(.+)$/im);
 
-  return clean(bookingRecord.bookers?.booker_name) || clean(jobCardBooker?.[1]);
+  return (
+    clean(bookingRecord.contact_display_name) ||
+    clean(bookingRecord.bookers?.booker_name) ||
+    clean(jobCardBooker?.[1])
+  );
 }
 
 function bookingMatchesLocalSearch(bookingRecord: BookingRecord, searchValue: string) {
@@ -4785,14 +4869,23 @@ function bookingMatchesLocalSearch(bookingRecord: BookingRecord, searchValue: st
   }
 
   const searchableText = [
+    bookingRecord.booking_reference,
     getBookingName(bookingRecord),
     getBookerName(bookingRecord),
     getBookingCompany(bookingRecord),
+    bookingRecord.customer_display_name,
+    bookingRecord.contact_display_name,
+    bookingRecord.passenger_name,
     bookingRecord.flight_no,
+    bookingRecord.pickup_location,
     bookingRecord.pickup_address,
+    bookingRecord.dropoff_location,
     bookingRecord.dropoff_address,
+    bookingRecord.route_summary,
     bookingRecord.route,
     bookingRecord.driver_name,
+    bookingRecord.service_type,
+    bookingRecord.route_type,
     bookingRecord.booking_type,
   ]
     .filter(Boolean)
@@ -4941,7 +5034,11 @@ function formatCreatedAt(value: string | null | undefined) {
 }
 
 function getRoutePoints(bookingRecord: BookingRecord) {
-  const routePoints = (clean(bookingRecord.route) || getJobCardRouteLine(bookingRecord.job_card))
+  const routePoints = (
+    clean(bookingRecord.route_summary) ||
+    clean(bookingRecord.route) ||
+    getJobCardRouteLine(bookingRecord.job_card)
+  )
     .split(/\s*>\s*/)
     .map((point) => clean(point))
     .filter(Boolean);
@@ -4951,8 +5048,8 @@ function getRoutePoints(bookingRecord: BookingRecord) {
   }
 
   return [
-    clean(bookingRecord.pickup_address),
-    clean(bookingRecord.dropoff_address),
+    clean(bookingRecord.pickup_location) || clean(bookingRecord.pickup_address),
+    clean(bookingRecord.dropoff_location) || clean(bookingRecord.dropoff_address),
   ].filter(Boolean);
 }
 
@@ -5013,14 +5110,35 @@ function buildLoadBookingsOperationalDisplayCard(
   bookingRecord: BookingRecord,
 ): LoadBookingsOperationalDisplayCard {
   const routePoints = getRoutePoints(bookingRecord);
-  const pickupAddress = clean(bookingRecord.pickup_address) || routePoints[0] || "";
+  const pickupAddress =
+    clean(bookingRecord.pickup_location) ||
+    clean(bookingRecord.pickup_address) ||
+    routePoints[0] ||
+    "";
   const dropoffAddress =
+    clean(bookingRecord.dropoff_location) ||
     clean(bookingRecord.dropoff_address) || routePoints[routePoints.length - 1] || "";
   const routePointsSummary =
     routePoints.length >= 2
       ? routePoints.join(" > ")
       : [pickupAddress, dropoffAddress].filter(Boolean).join(" > ");
   const flightNumber = clean(bookingRecord.flight_no);
+  const pickupDateTime =
+    formatPickupDateTime(getBookingDateKey(bookingRecord), formatPickupTimeFromRecord(bookingRecord));
+  const serviceType =
+    clean(bookingRecord.service_type) ||
+    clean(bookingRecord.route_type) ||
+    clean(bookingRecord.booking_type);
+  const vehicleDisplay =
+    clean(bookingRecord.vehicle_type_or_category) ||
+    clean(bookingRecord.vehicle_type) ||
+    clean(bookingRecord.vehicle);
+  const passengerDisplay = clean(bookingRecord.passenger_name) || getBookingName(bookingRecord);
+  const bookerDisplay = clean(bookingRecord.contact_display_name) || getBookerName(bookingRecord);
+  const companyDisplay =
+    clean(bookingRecord.customer_display_name) ||
+    clean(bookingRecord.contact_display_name) ||
+    getBookingCompanyName(bookingRecord);
   const extraStopCount = normalizeExtraStopCount(bookingRecord.extra_stop_count);
   const createdAt = formatCreatedAt(bookingRecord.created_at);
   const updatedAt = formatCreatedAt(bookingRecord.updated_at);
@@ -5037,21 +5155,21 @@ function buildLoadBookingsOperationalDisplayCard(
       500,
     ),
     booking_id: loadBookingsOperationalDisplayText(bookingRecord.id, 160),
-    booking_reference: loadBookingsOperationalDisplayText(bookingRecord.id, 160),
+    booking_reference: loadBookingsOperationalDisplayText(bookingRecord.booking_reference || bookingRecord.id, 160),
     booking_status: loadBookingsOperationalDisplayText(bookingRecord.status, 120),
-    booking_type: loadBookingsOperationalDisplayText(bookingRecord.booking_type, 120),
-    booker_display_name: loadBookingsOperationalDisplayText(getBookerName(bookingRecord), 220),
-    booker_email: loadBookingsOperationalDisplayText(bookingRecord.bookers?.email, 220),
-    booker_phone: loadBookingsOperationalDisplayText(bookingRecord.bookers?.phone, 120),
+    booking_type: loadBookingsOperationalDisplayText(serviceType, 120),
+    booker_display_name: loadBookingsOperationalDisplayText(bookerDisplay, 220),
+    booker_email: loadBookingsOperationalDisplayText(bookingRecord.contact_email || bookingRecord.bookers?.email, 220),
+    booker_phone: loadBookingsOperationalDisplayText(bookingRecord.contact_phone || bookingRecord.bookers?.phone, 120),
     child_seat_display: loadBookingsOperationalDisplayText(
       bookingRecord.child_seat_required
         ? formatChildSeatNote(bookingRecord.child_seat_count, bookingRecord.child_seat_type)
         : null,
       220,
     ),
-    company_display_name: loadBookingsOperationalDisplayText(getBookingCompanyName(bookingRecord), 220),
+    company_display_name: loadBookingsOperationalDisplayText(companyDisplay, 220),
     created_at: loadBookingsOperationalDisplayText(createdAt || bookingRecord.created_at, 120),
-    customer_display_name: loadBookingsOperationalDisplayText(getBookingName(bookingRecord), 220),
+    customer_display_name: loadBookingsOperationalDisplayText(companyDisplay || passengerDisplay, 220),
     dropoff_address: loadBookingsOperationalDisplayText(dropoffAddress, 500),
     dropoff_datetime: null,
     extra_stop_display: loadBookingsOperationalDisplayText(
@@ -5062,18 +5180,18 @@ function buildLoadBookingsOperationalDisplayCard(
       flightNumber ? `Flight ${flightNumber}` : null,
       500,
     ),
-    pax_display: loadBookingsOperationalDisplayText(bookingRecord.pax || 1, 120),
+    pax_display: loadBookingsOperationalDisplayText(bookingRecord.pax_count || bookingRecord.pax || 1, 120),
     pickup_address: loadBookingsOperationalDisplayText(pickupAddress, 500),
-    pickup_datetime: loadBookingsOperationalDisplayText(
-      formatPickupDateTime(getBookingDateKey(bookingRecord), bookingRecord.pickup_time),
-      120,
-    ),
+    pickup_datetime: loadBookingsOperationalDisplayText(pickupDateTime, 120),
     route_points_summary: loadBookingsOperationalDisplayText(routePointsSummary, 1000),
-    route_summary: loadBookingsOperationalDisplayText(formatDashboardRoute(bookingRecord), 1000),
-    service_display: loadBookingsOperationalDisplayText(bookingRecord.booking_type, 220),
-    traveler_display_name: loadBookingsOperationalDisplayText(getBookingName(bookingRecord), 220),
+    route_summary: loadBookingsOperationalDisplayText(
+      clean(bookingRecord.route_summary) || routePointsSummary || formatDashboardRoute(bookingRecord),
+      1000,
+    ),
+    service_display: loadBookingsOperationalDisplayText(serviceType, 220),
+    traveler_display_name: loadBookingsOperationalDisplayText(passengerDisplay, 220),
     updated_at: loadBookingsOperationalDisplayText(updatedAt || bookingRecord.updated_at, 120),
-    vehicle_display: loadBookingsOperationalDisplayText(bookingRecord.vehicle, 220),
+    vehicle_display: loadBookingsOperationalDisplayText(vehicleDisplay, 220),
   };
 }
 
@@ -5188,27 +5306,50 @@ function bookingRecordToForm(bookingRecord: BookingRecord): BookingForm {
 
 function bookingRecordToOperationalFormFields(bookingRecord: BookingRecord): LoadBookingsOperationalFormFields {
   const routePoints = getRoutePoints(bookingRecord);
-  const pickup = clean(bookingRecord.pickup_address) || routePoints[0] || "";
-  const dropoff = clean(bookingRecord.dropoff_address) || routePoints[routePoints.length - 1] || "";
+  const pickup =
+    clean(bookingRecord.pickup_location) ||
+    clean(bookingRecord.pickup_address) ||
+    routePoints[0] ||
+    "";
+  const dropoff =
+    clean(bookingRecord.dropoff_location) ||
+    clean(bookingRecord.dropoff_address) ||
+    routePoints[routePoints.length - 1] ||
+    "";
   const extraStopLocations = routePoints.slice(1, -1);
   const extraStopCount = normalizeExtraStopCount(bookingRecord.extra_stop_count) || extraStopLocations.length;
   const childSeatRequired = Boolean(bookingRecord.child_seat_required);
+  const serviceType =
+    clean(bookingRecord.service_type) ||
+    clean(bookingRecord.route_type) ||
+    clean(bookingRecord.booking_type) ||
+    "MNG";
+  const pickupTime =
+    normalizePickupTimeForStorage(formatPickupTimeFromRecord(bookingRecord));
+  const vehicleDisplay =
+    clean(bookingRecord.vehicle_type_or_category) ||
+    clean(bookingRecord.vehicle_type) ||
+    clean(bookingRecord.vehicle) ||
+    "AVF";
 
   return {
-    company: getBookingCompanyName(bookingRecord),
-    bookingType: clean(bookingRecord.booking_type) || "MNG",
-    vehicle: clean(bookingRecord.vehicle) || "AVF",
+    company:
+      clean(bookingRecord.customer_display_name) ||
+      clean(bookingRecord.contact_display_name) ||
+      getBookingCompanyName(bookingRecord),
+    bookingType: serviceType,
+    vehicle: vehicleDisplay,
     date: getBookingDateKey(bookingRecord),
-    time: formatPickupTime(bookingRecord.pickup_time),
+    time: pickupTime,
     flight: clean(bookingRecord.flight_no),
     pickup,
     extraStopLocation: extraStopLocations.join(" > "),
     dropoff,
     booker: getBookerName(bookingRecord),
-    bookerContact: clean(bookingRecord.bookers?.phone),
-    bookerEmail: clean(bookingRecord.bookers?.email),
+    bookerContact: clean(bookingRecord.contact_phone) || clean(bookingRecord.bookers?.phone),
+    bookerEmail: clean(bookingRecord.contact_email) || clean(bookingRecord.bookers?.email),
     name: getBookingName(bookingRecord),
-    pax: String(bookingRecord.pax || 1),
+    pax: String(bookingRecord.pax_count || bookingRecord.pax || 1),
     driverId: bookingRecord.driver_id ? String(bookingRecord.driver_id) : "",
     driverName: clean(bookingRecord.driver_name),
     driverContact: clean(bookingRecord.driver_contact),
@@ -5470,15 +5611,69 @@ function safeAdminBookingPersistenceCount(value: number | null | undefined) {
   return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null;
 }
 
+function safeAdminBookingPersistenceIdentifier(value: number | string | null | undefined) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? String(value) : null;
+  }
+
+  return clean(value) || null;
+}
+
+function adminBookingPersistencePickupDateTime(record: AdminBookingPersistenceRecord) {
+  return clean(record.pickup_at) || clean(record.pickup_datetime);
+}
+
+function adminBookingPersistenceServiceType(record: AdminBookingPersistenceRecord) {
+  return clean(record.service_type) || clean(record.route_type);
+}
+
+function adminBookingPersistenceCustomerDisplayName(record: AdminBookingPersistenceRecord) {
+  return clean(record.customer_display_name) || clean(record.contact_display_name);
+}
+
+function adminBookingPersistencePassengerDisplayName(record: AdminBookingPersistenceRecord) {
+  return clean(record.passenger_name) || adminBookingPersistenceCustomerDisplayName(record);
+}
+
+function adminBookingPersistenceRoutePointSequence(
+  routePoint: NonNullable<AdminBookingPersistenceRecord["route_points"]>[number],
+) {
+  return (
+    safeAdminBookingPersistenceCount(routePoint.sequence_number) ??
+    safeAdminBookingPersistenceCount(routePoint.sequence)
+  );
+}
+
+function adminBookingPersistenceRoutePointLocation(
+  routePoint: NonNullable<AdminBookingPersistenceRecord["route_points"]>[number] | undefined,
+) {
+  return clean(routePoint?.location_text) || clean(routePoint?.location);
+}
+
+function adminBookingPersistenceRoutePointNote(
+  routePoint: NonNullable<AdminBookingPersistenceRecord["route_points"]>[number],
+) {
+  return clean(routePoint.timing_note) || clean(routePoint.notes);
+}
+
+function adminBookingPersistenceServiceItemType(
+  serviceItem: NonNullable<AdminBookingPersistenceRecord["service_items"]>[number],
+) {
+  return clean(serviceItem.service_item_type) || clean(serviceItem.item_type);
+}
+
 function adminBookingPersistenceRecordIsCustomerRequest(record: AdminBookingPersistenceRecord) {
-  return clean(record.source_channel) === "customer-booking-request";
+  return (
+    clean(record.source_channel) === "customer-booking-request" ||
+    clean(record.source_surface) === "customer_booking_request"
+  );
 }
 
 function adminBookingPersistenceRecordIsShortNotice(
   record: AdminBookingPersistenceRecord,
   currentTimeMs: number,
 ) {
-  const pickupDateTime = clean(record.pickup_datetime);
+  const pickupDateTime = adminBookingPersistencePickupDateTime(record);
   const pickupMs = pickupDateTime ? new Date(pickupDateTime).getTime() : Number.NaN;
 
   return (
@@ -5514,16 +5709,16 @@ function buildAdminCustomerRequestDecisionPayload(
   currentTimeMs: number,
 ): AdminBookingPersistenceRequestBody | null {
   const bookingReference = clean(record.booking_reference);
-  const pickupDateTime = clean(record.pickup_datetime);
+  const pickupDateTime = adminBookingPersistencePickupDateTime(record);
   const pickupLocation = clean(record.pickup_location);
   const dropoffLocation = clean(record.dropoff_location);
-  const routeType = clean(record.route_type);
-  const customerDisplayName = clean(record.customer_display_name);
+  const routeType = adminBookingPersistenceServiceType(record);
+  const customerDisplayName = adminBookingPersistenceCustomerDisplayName(record);
   const contactPhone = clean(record.contact_phone);
   const routePoints: AdminBookingPersistenceRequestBody["route_points"] = [];
 
   for (const [index, routePoint] of (record.route_points || []).entries()) {
-    const locationText = clean(routePoint.location_text);
+    const locationText = adminBookingPersistenceRoutePointLocation(routePoint);
 
     if (!routePoint.point_type || !locationText) {
       continue;
@@ -5531,20 +5726,24 @@ function buildAdminCustomerRequestDecisionPayload(
 
     routePoints.push({
       point_type: routePoint.point_type,
-      sequence_number: safeAdminBookingPersistenceCount(routePoint.sequence_number) || index + 1,
+      sequence_number: adminBookingPersistenceRoutePointSequence(routePoint) || index + 1,
       location_text: locationText,
-      timing_note: clean(routePoint.timing_note) || null,
+      timing_note: adminBookingPersistenceRoutePointNote(routePoint) || null,
     });
   }
 
   const hasPickupRoutePoint = routePoints.some((routePoint) => routePoint.point_type === "pickup");
   const hasDropoffRoutePoint = routePoints.some((routePoint) => routePoint.point_type === "dropoff");
+  const resolvedPickupLocation =
+    pickupLocation || routePoints.find((routePoint) => routePoint.point_type === "pickup")?.location_text || "";
+  const resolvedDropoffLocation =
+    dropoffLocation || routePoints.find((routePoint) => routePoint.point_type === "dropoff")?.location_text || "";
 
   if (
     !bookingReference ||
     !pickupDateTime ||
-    !pickupLocation ||
-    !dropoffLocation ||
+    !resolvedPickupLocation ||
+    !resolvedDropoffLocation ||
     !routeType ||
     !customerDisplayName ||
     !contactPhone ||
@@ -5557,15 +5756,16 @@ function buildAdminCustomerRequestDecisionPayload(
   const serviceItems: AdminBookingPersistenceRequestBody["service_items"] = [];
 
   for (const serviceItem of record.service_items || []) {
+    const serviceItemType = adminBookingPersistenceServiceItemType(serviceItem);
     const quantity = safeAdminBookingPersistenceCount(serviceItem.quantity);
     const blocksCount = safeAdminBookingPersistenceCount(serviceItem.blocks_count);
 
-    if (!serviceItem.service_item_type || ((quantity ?? 0) < 1 && (blocksCount ?? 0) < 1)) {
+    if (!serviceItemType || ((quantity ?? 0) < 1 && (blocksCount ?? 0) < 1)) {
       continue;
     }
 
     serviceItems.push({
-      service_item_type: serviceItem.service_item_type,
+      service_item_type: serviceItemType,
       quantity,
       blocks_count: blocksCount,
     });
@@ -5577,10 +5777,10 @@ function buildAdminCustomerRequestDecisionPayload(
     booking: {
       booking_reference: bookingReference,
       source_channel: "customer-booking-request",
-      customer_id: safeAdminBookingPersistenceCount(record.customer_id),
+      customer_id: safeAdminBookingPersistenceIdentifier(record.customer_id),
       pickup_datetime: pickupDateTime,
-      pickup_location: pickupLocation,
-      dropoff_location: dropoffLocation,
+      pickup_location: resolvedPickupLocation,
+      dropoff_location: resolvedDropoffLocation,
       route_type: routeType,
       customer_display_name: customerDisplayName,
       contact_phone: contactPhone,
@@ -5613,12 +5813,14 @@ function adminBookingPersistenceStatusValues(record: AdminBookingPersistenceReco
     clean(record.admin_internal_status),
     clean(record.short_notice_review_status),
     clean(record.request_review_status),
+    clean(record.change_review_status),
+    clean(record.cancellation_review_status),
     clean(record.customer_facing_status),
   ].filter(Boolean);
 }
 
 function adminBookingPersistencePickupSearchValues(record: AdminBookingPersistenceRecord) {
-  const rawPickupDateTime = clean(record.pickup_datetime);
+  const rawPickupDateTime = adminBookingPersistencePickupDateTime(record);
 
   if (!rawPickupDateTime) {
     return [];
@@ -5679,7 +5881,7 @@ function adminCustomerRequestWaitTimeLabel(
 }
 
 function adminBookingPersistencePickupTimeMs(record: AdminBookingPersistenceRecord) {
-  const pickupDateTime = clean(record.pickup_datetime);
+  const pickupDateTime = adminBookingPersistencePickupDateTime(record);
 
   if (!pickupDateTime) {
     return Number.POSITIVE_INFINITY;
@@ -5756,9 +5958,23 @@ function orderAdminBookingPersistenceRecordsForCustomerRequestPriority(
 }
 
 function adminBookingPersistenceRouteSummary(record: AdminBookingPersistenceRecord) {
+  const routeSummary = clean(record.route_summary);
+
+  if (routeSummary) {
+    return routeSummary;
+  }
+
+  const routePointLocations = adminSnapshotSortedRoutePoints(record)
+    .map((routePoint) => adminBookingPersistenceRoutePointLocation(routePoint))
+    .filter(Boolean);
+
+  if (routePointLocations.length >= 2) {
+    return routePointLocations.join(" > ");
+  }
+
   return [
-    clean(record.pickup_location) || "Pickup TBC",
-    clean(record.dropoff_location) || "Drop-off TBC",
+    clean(record.pickup_location) || routePointLocations[0] || "Pickup TBC",
+    clean(record.dropoff_location) || routePointLocations[routePointLocations.length - 1] || "Drop-off TBC",
   ].join(" > ");
 }
 
@@ -5771,27 +5987,33 @@ function adminBookingPersistencePrimaryStatus(record: AdminBookingPersistenceRec
 
 function adminBookingPersistenceSourceLabel(record: AdminBookingPersistenceRecord) {
   const sourceChannel = clean(record.source_channel);
+  const sourceSurface = clean(record.source_surface);
 
-  if (sourceChannel === "customer-booking-request") {
+  if (sourceChannel === "customer-booking-request" || sourceSurface === "customer_booking_request") {
     return "Customer request intake";
   }
 
-  if (sourceChannel === "admin-dashboard") {
+  if (sourceChannel === "admin-dashboard" || sourceSurface === "admin_api") {
     return "Admin dashboard snapshot";
   }
 
-  return sourceChannel || "Operational snapshot";
+  return sourceChannel || sourceSurface || "Operational snapshot";
 }
 
 function adminBookingPersistenceSearchValues(record: AdminBookingPersistenceRecord) {
   return [
     clean(record.booking_reference),
-    clean(record.customer_display_name),
+    adminBookingPersistenceCustomerDisplayName(record),
+    adminBookingPersistencePassengerDisplayName(record),
+    clean(record.contact_display_name),
     clean(record.contact_phone),
     clean(record.contact_email),
+    clean(record.passenger_phone),
     clean(record.pickup_location),
     clean(record.dropoff_location),
-    clean(record.route_type),
+    adminBookingPersistenceServiceType(record),
+    clean(record.route_summary),
+    adminBookingPersistenceRouteSummary(record),
     clean(record.vehicle_type_or_category),
     ...adminBookingPersistenceStatusValues(record),
     ...adminBookingPersistencePickupSearchValues(record),
@@ -5800,7 +6022,7 @@ function adminBookingPersistenceSearchValues(record: AdminBookingPersistenceReco
 
 function adminCustomerRequestServiceItemSearchValues(record: AdminBookingPersistenceRecord) {
   return (record.service_items || []).flatMap((serviceItem) => {
-    const serviceItemType = clean(serviceItem.service_item_type);
+    const serviceItemType = adminBookingPersistenceServiceItemType(serviceItem);
     const friendlyServiceItemType = serviceItemType.replaceAll("_", " ");
 
     return [
@@ -5816,12 +6038,13 @@ function adminCustomerRequestSearchValues(record: AdminBookingPersistenceRecord)
   return [
     ...adminBookingPersistenceSearchValues(record),
     clean(record.source_channel),
+    clean(record.source_surface),
     adminBookingPersistenceSourceLabel(record),
     ...(record.route_points || []).flatMap((routePoint) => [
       clean(routePoint.point_type),
-      safeAdminBookingPersistenceCount(routePoint.sequence_number)?.toString() || "",
-      clean(routePoint.location_text),
-      clean(routePoint.timing_note),
+      adminBookingPersistenceRoutePointSequence(routePoint)?.toString() || "",
+      adminBookingPersistenceRoutePointLocation(routePoint),
+      adminBookingPersistenceRoutePointNote(routePoint),
     ]),
     ...adminCustomerRequestServiceItemSearchValues(record),
   ].filter(Boolean);
@@ -8541,8 +8764,8 @@ function adminSnapshotSortedRoutePoints(record: AdminBookingPersistenceRecord) {
   return Array.isArray(record.route_points)
     ? [...record.route_points].sort(
         (left, right) =>
-          (left.sequence_number ?? Number.MAX_SAFE_INTEGER) -
-          (right.sequence_number ?? Number.MAX_SAFE_INTEGER),
+          (adminBookingPersistenceRoutePointSequence(left) ?? Number.MAX_SAFE_INTEGER) -
+          (adminBookingPersistenceRoutePointSequence(right) ?? Number.MAX_SAFE_INTEGER),
       )
     : [];
 }
@@ -8553,7 +8776,7 @@ function adminSnapshotServiceItemQuantity(record: AdminBookingPersistenceRecord,
   }
 
   return record.service_items
-    .filter((item) => item.service_item_type === serviceItemType)
+    .filter((item) => adminBookingPersistenceServiceItemType(item) === serviceItemType)
     .reduce((total, item) => {
       const quantity = Number(item.quantity);
 
@@ -8572,20 +8795,27 @@ function adminOperationalSnapshotToBookingForm(
   record: AdminBookingPersistenceRecord,
 ): AdminBookingSnapshotApplyResult {
   const bookingReference = clean(record.booking_reference);
-  const dateTimeParts = adminSnapshotPickupDateTimeParts(record.pickup_datetime);
+  const dateTimeParts = adminSnapshotPickupDateTimeParts(
+    adminBookingPersistencePickupDateTime(record),
+  );
   const routePoints = adminSnapshotSortedRoutePoints(record);
   const pickupLocation =
-    clean(routePoints.find((point) => point.point_type === "pickup")?.location_text) ||
+    adminBookingPersistenceRoutePointLocation(
+      routePoints.find((point) => point.point_type === "pickup"),
+    ) ||
     clean(record.pickup_location);
   const dropoffLocation =
-    clean(routePoints.find((point) => point.point_type === "dropoff")?.location_text) ||
+    adminBookingPersistenceRoutePointLocation(
+      routePoints.find((point) => point.point_type === "dropoff"),
+    ) ||
     clean(record.dropoff_location);
   const stopLocations = routePoints
     .filter((point) => point.point_type === "stop" || point.point_type === "waypoint")
-    .map((point) => clean(point.location_text))
+    .map((point) => adminBookingPersistenceRoutePointLocation(point))
     .filter(Boolean);
-  const routeType = clean(record.route_type);
-  const customerDisplayName = clean(record.customer_display_name);
+  const routeType = adminBookingPersistenceServiceType(record);
+  const customerDisplayName = adminBookingPersistenceCustomerDisplayName(record);
+  const passengerDisplayName = adminBookingPersistencePassengerDisplayName(record);
   const contactPhone = clean(record.contact_phone);
 
   if (!bookingReference || !dateTimeParts || !pickupLocation || !dropoffLocation || !routeType) {
@@ -8622,7 +8852,7 @@ function adminOperationalSnapshotToBookingForm(
       extraStopCount: extraStopCount > 0 ? String(extraStopCount) : "",
       extraStopLocation: stopLocations.join(" > "),
       flight: adminSnapshotFlightReference(record),
-      name: customerDisplayName,
+      name: passengerDisplayName,
       pax: Number.isInteger(paxCount) && paxCount > 0 ? String(paxCount) : "1",
       pickup: pickupLocation,
       time: dateTimeParts.time,
@@ -15829,6 +16059,9 @@ export default function Home() {
                   </div>
                   <div className="mt-3 grid gap-3" data-recent-operational-body={bookingId}>
                     <OperationalCardSection section="booking" title="Booking">
+                      {operationalCard.booking_reference ? (
+                        <p>Ref: {operationalCard.booking_reference}</p>
+                      ) : null}
                       {operationalCard.job_card_display ? <p>{operationalCard.job_card_display}</p> : null}
                       <p>Booker: {operationalCard.booker_display_name || "Unknown"}</p>
                       <p>
@@ -28486,8 +28719,11 @@ export default function Home() {
                       </p>
                       <p className="break-words">
                         {[
-                          appliedAdminBookingSnapshot?.customer_display_name,
-                          appliedAdminBookingSnapshot?.pickup_datetime
+                          appliedAdminBookingSnapshot
+                            ? adminBookingPersistenceCustomerDisplayName(appliedAdminBookingSnapshot)
+                            : "",
+                          appliedAdminBookingSnapshot &&
+                          adminBookingPersistencePickupDateTime(appliedAdminBookingSnapshot)
                             ? adminBookingPersistencePickupDisplay(appliedAdminBookingSnapshot)
                             : "",
                         ]
@@ -28707,7 +28943,12 @@ export default function Home() {
                         </p>
                       </div>
                       <p className="mt-1 break-words">
-                        {[record.customer_display_name, record.vehicle_type_or_category, record.route_type]
+                        {[
+                          adminBookingPersistenceCustomerDisplayName(record),
+                          adminBookingPersistencePassengerDisplayName(record),
+                          record.vehicle_type_or_category,
+                          adminBookingPersistenceServiceType(record),
+                        ]
                           .filter(Boolean)
                           .join(" · ") || "Operational booking"}
                       </p>
@@ -28715,14 +28956,21 @@ export default function Home() {
                         className="mt-1 break-words text-slate-500"
                         data-admin-booking-persistence-record-contact={record.booking_reference}
                       >
-                        Contact: {[record.contact_phone, record.contact_email].filter(Boolean).join(" · ") || "TBC"}
+                        Contact:{" "}
+                        {[
+                          record.contact_display_name,
+                          record.contact_phone,
+                          record.contact_email,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ") || "TBC"}
                       </p>
                       <p
                         className="mt-1 font-semibold text-emerald-900"
                         data-admin-booking-persistence-record-source={record.booking_reference}
                       >
                         {adminBookingPersistenceSourceLabel(record)}
-                        {record.source_channel === "customer-booking-request"
+                        {adminBookingPersistenceRecordIsCustomerRequest(record)
                           ? " · Admin review required before confirmation"
                           : ""}
                       </p>
@@ -28735,17 +28983,10 @@ export default function Home() {
                         </p>
                       ) : null}
                       <p className="mt-1 break-words">
-                        {[record.pickup_location || "Pickup TBC", record.dropoff_location || "Drop-off TBC"].join(
-                          " > ",
-                        )}
+                        {adminBookingPersistenceRouteSummary(record)}
                       </p>
                       <p className="mt-1 text-slate-500">
-                        {record.pickup_datetime
-                          ? new Date(record.pickup_datetime).toLocaleString("en-SG", {
-                              dateStyle: "medium",
-                              timeStyle: "short",
-                            })
-                          : "Pickup time TBC"}
+                        {adminBookingPersistencePickupDisplay(record)}
                       </p>
                       {adminBookingPersistenceRecordIsCustomerRequest(record) ? (
                         <div

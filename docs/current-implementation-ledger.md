@@ -20,6 +20,21 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This fix does not open broad public writes, provider sends, parser changes, billing/payment/PDF/payout, live location/GPS, Vercel env changes, deploys, or `/api/admin-saved-bookings` behavior.
 - Guard coverage lives in `scripts/test-customer-booking-request-api-contract.mjs` and locks the exact customer-request actor in `lib/admin-booking-supabase-adapter.ts`.
 
+### Live Customer Booking Request CRM Proof
+
+- Evidence marker: `WILLIAM-LIVE-BOOK-PROOF-20260625152450`.
+- Source-of-truth code during evidence: `5b7f07f Fix customer booking request live readiness`.
+- Live app target: `https://app.prestigelimo.sg`.
+- The live app was first verified to serve `/` and `/book` with HTTP 200 and the current customer booking wording.
+- Vercel production runtime drift was found without printing env values: `PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED` was present but not true, so `/api/customer-booking-requests` returned the safe intake-disabled `503`.
+- Vercel CLI was re-authorized on the Mac, `PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED` was set to `true`, and production was redeployed so the live customer booking request route could read the corrected gate.
+- After customer submit began working, admin CRM verification returned HTTP 403 until the production admin dispatcher auth env names were synced from the known local evidence values and production was redeployed again.
+- Secret values, API keys, DB URLs, tokens, raw env values, booking row IDs, and private customer data were not printed or recorded.
+- Final bounded live proof passed: `/book` customer request submit returned HTTP 200 with a booking reference, Supabase verification found exactly one matching booking row, admin CRM load returned HTTP 200, and CRM output contained the expected passenger marker.
+- Cleanup deleted the exact temporary evidence rows only: booking route points, booking row, customer contact, customer row, and audit row.
+- Zero matching rows remained afterward for bookings by marker/reference, customer contacts/customers by marker, `customer_driver_app_notification_outbox`, `driver_job_links`, and audit logs.
+- No provider sends/calls, Email/Telegram/WhatsApp/SMS, real GPS, broad customer live map, billing/payment/PDF/invoice/payout, calendar sync, parser change, shim, Google/OneMap/FlightAware call, or production finance/live-location activation occurred.
+
 ### Local Production-Mode CRM E2E Evidence Record
 
 - Evidence marker: `E2E-CUSTOMER-JC-CRM-20260625113956`.

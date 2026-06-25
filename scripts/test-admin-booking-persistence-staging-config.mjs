@@ -507,21 +507,6 @@ try {
         ok: false,
       },
     ],
-    [
-      "customer booking route",
-      () =>
-        customerRoute.POST(
-          postJson(
-            "http://localhost/api/customer-booking-requests",
-            customerPayload(),
-            customerHeaders(),
-          ),
-        ),
-      {
-        error: "Booking request could not be saved safely.",
-        ok: false,
-      },
-    ],
   ]) {
     setEnv(validStagingEnv());
 
@@ -535,6 +520,59 @@ try {
     assertNoPersistenceTouched(mock, label);
     assertNoLeaks(result, `${label}: blocked response should stay safe`);
   }
+
+  setEnv(
+    validStagingEnv({
+      PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE: undefined,
+      PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE: undefined,
+      PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN: undefined,
+    }),
+  );
+
+  const customerRequestMock = installMockClient();
+  const adminReadinessWithMissingAdminEnv = adapter.checkAdminBookingPersistenceStagingConfigReadiness();
+  const customerRequestReadiness = adapter.checkCustomerBookingRequestPersistenceConfigReadiness();
+  const customerRouteResult = await readResponse(
+    await customerRoute.POST(
+      postJson(
+        "http://localhost/api/customer-booking-requests",
+        customerPayload(),
+        customerHeaders(),
+      ),
+    ),
+  );
+
+  assert.equal(
+    adminReadinessWithMissingAdminEnv.ok,
+    false,
+    "Expected admin persistence readiness to keep requiring admin dispatcher envs.",
+  );
+  assert.equal(
+    customerRequestReadiness.ok,
+    true,
+    "Expected customer booking request DB readiness to ignore admin dispatcher envs.",
+  );
+  assert.deepEqual(customerRouteResult.body, {
+    error: "Booking request failed safely.",
+    ok: false,
+  });
+  assert.equal(
+    customerRouteResult.status,
+    500,
+    "Expected customer booking route to reach the safe DB path instead of failing admin readiness.",
+  );
+  assert.equal(
+    customerRequestMock.createdClients.length,
+    1,
+    "Expected customer booking request to create a server-only client after customer-specific readiness passes.",
+  );
+  assert.equal(
+    customerRequestMock.client.operations.length > 0,
+    true,
+    "Expected customer booking request to reach the mocked persistence path.",
+  );
+  assertNoLeaks(customerRequestReadiness, "customer booking request readiness should stay safe");
+  assertNoLeaks(customerRouteResult, "customer booking route safe DB failure should stay safe");
 
   setEnv(validStagingEnv());
 

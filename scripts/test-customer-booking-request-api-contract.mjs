@@ -166,15 +166,22 @@ assert.equal(
   "Browser smoke mock should use customer-safe booking request response fields.",
 );
 assert.equal(
-  supabaseAdapterSource.includes("verifiedCustomerBookingRequestActor") &&
+  supabaseAdapterSource.includes("isVerifiedCustomerBookingRequestActor") &&
     supabaseAdapterSource.includes('actor?.actor_label === "Customer booking request"') &&
     supabaseAdapterSource.includes('actor.actor_role === "system"') &&
     supabaseAdapterSource.includes('actor.boundary_mode === "customer-booking-request-surface"') &&
     supabaseAdapterSource.includes('actor.source_surface === "customer_booking_request"') &&
-    supabaseAdapterSource.includes("!verifiedAdminDispatcherActor") &&
-    supabaseAdapterSource.includes("!verifiedCustomerBookingRequestActor"),
+    supabaseAdapterSource.includes("!isVerifiedAdminDispatcherActor(actor)") &&
+    supabaseAdapterSource.includes("!isVerifiedCustomerBookingRequestActor(actor)"),
   true,
   "Customer booking request persistence must allow only the exact /book request actor in addition to admin/dispatcher actors.",
+);
+assert.equal(
+  supabaseAdapterSource.includes("checkCustomerBookingRequestPersistenceConfigReadiness") &&
+    supabaseAdapterSource.includes("? checkCustomerBookingRequestPersistenceConfigReadiness()") &&
+    supabaseAdapterSource.includes(": checkAdminBookingPersistenceStagingConfigReadiness()"),
+  true,
+  "Customer booking request persistence must use a customer-specific DB readiness path instead of admin dispatcher readiness.",
 );
 assert.equal(
   bookingPersistenceSource.includes("passenger_name: passengerName"),

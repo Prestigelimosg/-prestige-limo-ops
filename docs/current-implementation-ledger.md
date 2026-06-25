@@ -16,6 +16,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 - The public `/book` customer booking request path now keeps its existing same-origin `/book`, `x-prestige-customer-purpose`, and safe payload parser boundary, while allowing only the exact `Customer booking request` system actor to pass the admin booking persistence write gate.
 - Admin/dispatcher persistence remains limited to the existing `server-session-role-surface` admin/dispatcher actor path.
+- Live `/book` intake diagnostics on 2026-06-25 showed the deployed customer request route was reachable but returned safe `503` when the shared persistence readiness required admin dispatcher envs. The customer-request actor now uses a separate server-only DB readiness path that still requires `PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED`, `SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY`, but does not require admin dispatcher session envs. Admin/dispatcher routes still require the full admin dispatcher readiness check.
 - This fix does not open broad public writes, provider sends, parser changes, billing/payment/PDF/payout, live location/GPS, Vercel env changes, deploys, or `/api/admin-saved-bookings` behavior.
 - Guard coverage lives in `scripts/test-customer-booking-request-api-contract.mjs` and locks the exact customer-request actor in `lib/admin-booking-supabase-adapter.ts`.
 

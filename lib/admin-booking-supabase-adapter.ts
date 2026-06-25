@@ -388,6 +388,24 @@ export function checkAdminBookingPersistenceStagingConfigReadiness(): AdminBooki
   };
 }
 
+export function checkCustomerBookingRequestPersistenceConfigReadiness(): AdminBookingResult<null> {
+  const databaseUrl = configValueOrNull(process.env.SUPABASE_URL);
+  const serviceRoleKey = configValueOrNull(process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+  if (!validServerDatabaseUrl(databaseUrl) || !validServerCredential(serviceRoleKey)) {
+    return {
+      ok: false,
+      status: 503,
+      error: safeStagingReadinessError,
+    };
+  }
+
+  return {
+    ok: true,
+    data: null,
+  };
+}
+
 export function checkAdminBookingPersistenceEnableReadiness(
   payloadResult: AdminBookingResult<AdminBookingPersistenceInput> | null | undefined,
   actor: AdminBookingPersistenceAdapterActor | null | undefined,
@@ -979,17 +997,24 @@ function safeAuditSnapshot(record: AdminBookingPersistenceRecord | AdminBookingP
   return JSON.parse(JSON.stringify(record));
 }
 
-function validateActor(actor: AdminBookingPersistenceAdapterActor): AdminBookingResult<null> {
-  const verifiedAdminDispatcherActor =
+function isVerifiedAdminDispatcherActor(actor: AdminBookingPersistenceAdapterActor | null | undefined) {
+  return (
     actor?.boundary_mode === "server-session-role-surface" &&
     ["admin", "dispatcher"].includes(actor.actor_role) &&
-    actor.source_surface === "admin_api";
-  const verifiedCustomerBookingRequestActor =
+    actor.source_surface === "admin_api"
+  );
+}
+
+function isVerifiedCustomerBookingRequestActor(actor: AdminBookingPersistenceAdapterActor | null | undefined) {
+  return (
     actor?.actor_label === "Customer booking request" &&
     actor.actor_role === "system" &&
     actor.boundary_mode === "customer-booking-request-surface" &&
-    actor.source_surface === "customer_booking_request";
+    actor.source_surface === "customer_booking_request"
+  );
+}
 
+function validateActor(actor: AdminBookingPersistenceAdapterActor): AdminBookingResult<null> {
   if (
     !actor ||
     !allowedAdapterRoles.has(actor.actor_role) ||
@@ -1005,8 +1030,8 @@ function validateActor(actor: AdminBookingPersistenceAdapterActor): AdminBooking
 
   if (
     process.env.PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED === "true" &&
-    !verifiedAdminDispatcherActor &&
-    !verifiedCustomerBookingRequestActor
+    !isVerifiedAdminDispatcherActor(actor) &&
+    !isVerifiedCustomerBookingRequestActor(actor)
   ) {
     return {
       ok: false,
@@ -1038,7 +1063,9 @@ function getServerOnlySupabaseClient(actor: AdminBookingPersistenceAdapterActor)
     };
   }
 
-  const stagingReadiness = checkAdminBookingPersistenceStagingConfigReadiness();
+  const stagingReadiness = isVerifiedCustomerBookingRequestActor(actor)
+    ? checkCustomerBookingRequestPersistenceConfigReadiness()
+    : checkAdminBookingPersistenceStagingConfigReadiness();
 
   if (!stagingReadiness.ok) {
     return {

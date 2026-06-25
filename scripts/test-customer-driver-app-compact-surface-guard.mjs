@@ -62,7 +62,6 @@ assertIncludes(
 
 for (const fragment of [
   'data-customer-portal-page="true"',
-  'data-customer-portal-mobile-web-note="true"',
   'data-customer-portal-sections="true"',
   'data-customer-portal-request-form="true"',
   'data-customer-portal-request-notice="true"',

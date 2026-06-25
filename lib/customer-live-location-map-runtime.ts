@@ -66,11 +66,11 @@ function asRecord(value: unknown): UnknownRecord {
 }
 
 function cleanText(value: unknown, maxLength = 160) {
-  if (typeof value !== "string") {
+  if (typeof value !== "string" && typeof value !== "number") {
     return "";
   }
 
-  const cleaned = value.replace(/\s+/g, " ").trim();
+  const cleaned = String(value).replace(/\s+/g, " ").trim();
 
   if (!cleaned || cleaned.length > maxLength || forbiddenSafeTextPattern.test(cleaned)) {
     return "";
@@ -642,7 +642,7 @@ async function readAppSideRuntimePolicy({
   ) {
     return {
       ok: false,
-      reason: "customer_live_location_map_scope_blocked",
+      reason: "customer_live_location_map_allowed_booking_blocked",
       status: 403,
     };
   }
@@ -724,8 +724,7 @@ async function verifyCustomerBookingScope({
     .from(bookingsTable)
     .select("booking_reference, customer_id, route_type, service_type")
     .eq("booking_reference", bookingReference)
-    .eq("customer_id", accountReference)
-    .limit(1);
+    .limit(5);
 
   if (error) {
     return {
@@ -735,7 +734,18 @@ async function verifyCustomerBookingScope({
     };
   }
 
-  const booking = asRecord(Array.isArray(data) ? data[0] : null);
+  const booking =
+    (Array.isArray(data) ? data : [])
+      .map(asRecord)
+      .find((row) => {
+        const matchedBookingReference = safeReference(row.booking_reference);
+        const matchedAccountReference = safeReference(row.customer_id);
+
+        return (
+          matchedBookingReference === bookingReference &&
+          matchedAccountReference === accountReference
+        );
+      }) || {};
   const matchedBookingReference = safeReference(booking.booking_reference);
   const matchedAccountReference = safeReference(booking.customer_id);
 
@@ -745,7 +755,7 @@ async function verifyCustomerBookingScope({
   ) {
     return {
       ok: false,
-      reason: "customer_live_location_map_scope_blocked",
+      reason: "customer_live_location_map_booking_account_scope_blocked",
       status: 403,
     };
   }

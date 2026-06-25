@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -16,6 +16,10 @@ const bookingReferenceEnvName =
   "PRESTIGE_ONE_REAL_BOOKING_LIVE_LOCATION_BOOKING_REFERENCE";
 const evidenceReferenceEnvName =
   "PRESTIGE_ONE_REAL_BOOKING_LIVE_LOCATION_EVIDENCE_REFERENCE";
+const temporaryDriverLinkApprovalEnvName =
+  "PRESTIGE_ONE_REAL_BOOKING_LIVE_LOCATION_TEMP_DRIVER_LINK_APPROVED";
+const expectedTemporaryDriverLinkApproval =
+  "temporary-driver-job-link-approved";
 
 const runtimeSettingsTable = "driver_live_location_runtime_settings";
 const runtimeSettingName = "driver_live_location_runtime";
@@ -33,9 +37,11 @@ const localEnvFiles = [
   ".env.stage4a388.local",
 ];
 
-const requiredEnvNames = [
+const requiredBaseEnvNames = [
   "SUPABASE_URL",
   "SUPABASE_SERVICE_ROLE_KEY",
+];
+const requiredExistingDriverLinkEnvNames = [
   driverTokenEnvName,
   bookingReferenceEnvName,
 ];
@@ -121,12 +127,20 @@ function requireApproval() {
   }
 }
 
-function requireRequiredEnvNames() {
+function temporaryDriverLinkApproved() {
+  return envValue(temporaryDriverLinkApprovalEnvName) === expectedTemporaryDriverLinkApproval;
+}
+
+function requireRequiredEnvNames({ temporaryDriverLink }) {
+  const requiredEnvNames = temporaryDriverLink
+    ? requiredBaseEnvNames
+    : [...requiredBaseEnvNames, ...requiredExistingDriverLinkEnvNames];
   const missing = requiredEnvNames.filter((name) => !envValue(name));
 
   if (missing.length > 0) {
     throw new EvidenceFailure("missing_required_one_real_booking_live_location_env_names", {
       missing_env_names_only: missing,
+      temporary_driver_link_approved: temporaryDriverLink,
     });
   }
 }
@@ -175,6 +189,134 @@ function serviceFamily(value) {
     .split(/\s+/)[0];
 }
 
+function safePayloadText(value, maxLength = 220) {
+  if (typeof value !== "string" && typeof value !== "number") {
+    return "";
+  }
+
+  const cleaned = String(value).replace(/\s+/g, " ").trim();
+
+  if (!cleaned || cleaned.length > maxLength || forbiddenSerializedPattern.test(cleaned)) {
+    return "";
+  }
+
+  return cleaned;
+}
+
+function safeDateTimeText(...values) {
+  for (const value of values) {
+    const cleaned = safePayloadText(value, 80);
+
+    if (cleaned) {
+      return cleaned;
+    }
+  }
+
+  return "";
+}
+
+function safeRouteText(...values) {
+  for (const value of values) {
+    const cleaned = safePayloadText(value, 1000);
+
+    if (cleaned) {
+      return cleaned;
+    }
+  }
+
+  return "";
+}
+
+function looksLikeEvidenceOrMock(value) {
+  return /demo|dummy|evidence|fake|mock|sample|test/i.test(String(value || ""));
+}
+
+function activeBookingStatus(row) {
+  const statusText = [
+    row?.admin_internal_status,
+    row?.booking_status,
+    row?.customer_facing_status,
+    row?.status,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return !/cancel|closed|complete|declin|deleted|void/.test(statusText);
+}
+
+function controlCustomerAccountReference(accountReference) {
+  const hash = createHash("sha256")
+    .update(accountReference, "utf8")
+    .digest("hex")
+    .slice(0, 16);
+
+  return `control-${hash}`;
+}
+
+function bookingSortTime(row) {
+  for (const key of ["pickup_at", "pickup_datetime", "updated_at", "created_at"]) {
+    const timestamp = new Date(String(row?.[key] || "")).getTime();
+
+    if (Number.isFinite(timestamp)) {
+      return timestamp;
+    }
+  }
+
+  return 0;
+}
+
+function safeDriverJobPayloadFromBooking(row) {
+  const pickupLocation = safePayloadText(row.pickup_location);
+  const dropoffLocation = safePayloadText(row.dropoff_location);
+  const pickupDateTime = safeDateTimeText(
+    row.pickup_datetime,
+    row.pickup_at,
+    row.pickup_date_time,
+    row.pickup_date,
+  );
+  const bookingType = safePayloadText(row.route_type || row.service_type, 80);
+  const route = safeRouteText(
+    row.route_summary,
+    pickupLocation && dropoffLocation ? `${pickupLocation} to ${dropoffLocation}` : "",
+  );
+
+  if (!pickupLocation || !dropoffLocation || !pickupDateTime || !bookingType) {
+    return null;
+  }
+
+  const payload = {
+    booking_type: bookingType,
+    dropoff_location: dropoffLocation,
+    pickup_datetime: pickupDateTime,
+    pickup_location: pickupLocation,
+    route: route || `${pickupLocation} to ${dropoffLocation}`,
+    status: safePayloadText(row.customer_facing_status || row.status, 80) || "Confirmed",
+  };
+  const flightNumber = safePayloadText(row.flight_no || row.flight_number, 80);
+  const passengerName = safePayloadText(row.passenger_name, 120);
+  const pickupDate = safePayloadText(row.pickup_date, 80);
+  const pickupTime = safePayloadText(row.pickup_time, 80);
+
+  if (flightNumber) {
+    payload.flight_no = flightNumber;
+  }
+
+  if (passengerName) {
+    payload.passenger_name = passengerName;
+  }
+
+  if (pickupDate) {
+    payload.pickup_date = pickupDate;
+  }
+
+  if (pickupTime) {
+    payload.pickup_time = pickupTime;
+  }
+
+  return payload;
+}
+
 function createSupabaseClient() {
   return createClient(envValue("SUPABASE_URL"), envValue("SUPABASE_SERVICE_ROLE_KEY"), {
     auth: {
@@ -190,6 +332,7 @@ function assertStatus(result, expectedStatus, label) {
       actual_status: result.status,
       expected_status: expectedStatus,
       label,
+      safe_reason: safeReference(result.body?.reason),
     });
   }
 }
@@ -340,6 +483,43 @@ async function countEvidenceRows(client, tableName, reference) {
   return count ?? 0;
 }
 
+async function countDriverJobLinkById(client, driverJobLinkId) {
+  const { count, error } = await client
+    .from(driverJobLinkTable)
+    .select("id", { count: "exact", head: true })
+    .eq("id", driverJobLinkId);
+
+  if (error) {
+    throw new EvidenceFailure("one_real_booking_live_location_temp_driver_link_count_failed");
+  }
+
+  return count ?? 0;
+}
+
+async function cleanupTemporaryDriverLink(client, driverJobLinkId) {
+  if (!driverJobLinkId) {
+    return;
+  }
+
+  await client
+    .from(driverJobLinkTable)
+    .update({
+      link_status: "revoked",
+      revoked_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", driverJobLinkId);
+
+  const { error } = await client
+    .from(driverJobLinkTable)
+    .delete()
+    .eq("id", driverJobLinkId);
+
+  if (error) {
+    throw new EvidenceFailure("one_real_booking_live_location_temp_driver_link_cleanup_failed");
+  }
+}
+
 async function resolveExistingDriverLink(client, rawToken, expectedBookingReference) {
   const { data, error } = await client
     .from(driverJobLinkTable)
@@ -433,6 +613,153 @@ async function resolveBookingAndCustomer(client, bookingReference) {
   return {
     accountReference,
     authUserId,
+  };
+}
+
+async function customerBookingScopeExists(client, bookingReference, accountReference) {
+  const { count, error } = await client
+    .from(bookingsTable)
+    .select("booking_reference", { count: "exact", head: true })
+    .eq("booking_reference", bookingReference)
+    .eq("customer_id", accountReference);
+
+  if (error) {
+    throw new EvidenceFailure("one_real_booking_live_location_temp_booking_scope_check_failed");
+  }
+
+  return (count ?? 0) > 0;
+}
+
+async function findApprovedTemporaryDriverLinkTarget(client) {
+  const requestedBookingReference = safeReference(envValue(bookingReferenceEnvName));
+  const { data: latestRows, error: latestError } = await client
+    .from(latestPositionsTable)
+    .select("booking_reference")
+    .limit(500);
+
+  if (latestError) {
+    throw new EvidenceFailure("one_real_booking_live_location_temp_latest_position_scan_failed");
+  }
+
+  const bookingReferencesWithLivePositions = new Set(
+    (Array.isArray(latestRows) ? latestRows : [])
+      .map((row) => safeReference(row?.booking_reference))
+      .filter(Boolean),
+  );
+  const { data: bookingRows, error: bookingError } = await client
+    .from(bookingsTable)
+    .select("*")
+    .limit(500);
+
+  if (bookingError) {
+    throw new EvidenceFailure("one_real_booking_live_location_temp_booking_scan_failed");
+  }
+
+  const eligibleRows = [];
+
+  for (const row of Array.isArray(bookingRows) ? bookingRows : []) {
+    const bookingReference = safeReference(row?.booking_reference);
+    const accountReference = safeReference(row?.customer_id);
+    const family = serviceFamily(row?.route_type) || serviceFamily(row?.service_type);
+
+    if (
+      !bookingReference ||
+      (requestedBookingReference && bookingReference !== requestedBookingReference) ||
+      looksLikeEvidenceOrMock(bookingReference) ||
+      !accountReference ||
+      looksLikeEvidenceOrMock(accountReference) ||
+      !eligibleServiceFamilies.has(family) ||
+      !activeBookingStatus(row) ||
+      bookingReferencesWithLivePositions.has(bookingReference) ||
+      !safeDriverJobPayloadFromBooking(row)
+    ) {
+      continue;
+    }
+
+    if (!(await customerBookingScopeExists(client, bookingReference, accountReference))) {
+      continue;
+    }
+
+    eligibleRows.push(row);
+  }
+
+  eligibleRows.sort((left, right) => bookingSortTime(right) - bookingSortTime(left));
+
+  const target = eligibleRows[0];
+
+  if (!target) {
+    throw new EvidenceFailure("one_real_booking_live_location_temp_target_not_found", {
+      requested_booking_reference_present: Boolean(requestedBookingReference),
+    });
+  }
+
+  const bookingReference = safeReference(target.booking_reference);
+  const accountReference = safeReference(target.customer_id);
+  const driverJobPayload = safeDriverJobPayloadFromBooking(target);
+
+  if (!bookingReference || !accountReference || !driverJobPayload) {
+    throw new EvidenceFailure("one_real_booking_live_location_temp_target_invalid");
+  }
+
+  return {
+    accountReference,
+    authUserId: randomUUID(),
+    bookingReference,
+    driverJobPayload,
+  };
+}
+
+async function createTemporaryDriverJobLink(client, reference) {
+  const target = await findApprovedTemporaryDriverLinkTarget(client);
+  const rawToken = randomBytes(32).toString("base64url");
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + 60 * 60 * 1000);
+  const tempDriverJobLinkPayload = {
+    actor_label: "one-real-booking-live-location-evidence",
+    actor_role: "system",
+    booking_reference: target.bookingReference,
+    expires_at: expiresAt.toISOString(),
+    issued_at: now.toISOString(),
+    link_status: "active",
+    revoked_at: null,
+    safe_link_context: {
+      driver_job_payload: target.driverJobPayload,
+      evidence_reference: reference,
+      link_purpose: "temporary_one_real_booking_live_location_evidence",
+    },
+    source_surface: "system",
+    token_hash: tokenHash(rawToken),
+    updated_at: now.toISOString(),
+  };
+  const { data, error } = await client
+    .from(driverJobLinkTable)
+    .insert(tempDriverJobLinkPayload)
+    .select("id, booking_reference")
+    .single();
+
+  if (error) {
+    throw new EvidenceFailure("one_real_booking_live_location_temp_driver_link_create_failed");
+  }
+
+  const driverJobLinkId = safeReference(data?.id);
+  const bookingReference = safeReference(data?.booking_reference);
+
+  if (!driverJobLinkId || bookingReference !== target.bookingReference) {
+    throw new EvidenceFailure("one_real_booking_live_location_temp_driver_link_create_invalid");
+  }
+
+  return {
+    bookingAndCustomer: {
+      accountReference: target.accountReference,
+      authUserId: target.authUserId,
+    },
+    bookingReference: target.bookingReference,
+    driverLink: {
+      bookingReference: target.bookingReference,
+      driverJobLinkId,
+    },
+    rawToken,
+    temporaryDriverLinkCreated: true,
   };
 }
 
@@ -537,13 +864,20 @@ function runtimeEnv({
   authUserId,
   customerSessionToken,
   reference,
+  wrongCustomerSessionToken,
 }) {
+  const controlAuthUserId = randomUUID();
+  const controlAccountReference = controlCustomerAccountReference(accountReference);
+
   return {
     PRESTIGE_ADMIN_ACTIVE_JOBS_MAP_ENABLED: "true",
     PRESTIGE_CUSTOMER_PORTAL_RUNTIME_ACCOUNT_ALLOWLIST: accountReference,
     PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_ENABLED: "true",
     PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_MODE: "server-session-token",
     PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_USER_ID: authUserId,
+    PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_MAP:
+      `${authUserId}|${customerSessionToken}|${accountReference};` +
+      `${controlAuthUserId}|${wrongCustomerSessionToken}|${controlAccountReference}`,
     PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_TOKEN: customerSessionToken,
     PRESTIGE_DRIVER_LIVE_LOCATION_CAPTURE_ENABLED: "true",
     PRESTIGE_DRIVER_LIVE_LOCATION_MODE: "runtime",
@@ -563,21 +897,28 @@ function customerBoundary() {
 }
 
 function customerRequest({
+  accountReference,
   bookingReference,
   origin,
   sessionToken,
 }) {
+  const headers = {
+    origin,
+    referer: `${origin}/my-bookings`,
+    "x-prestige-customer-purpose": "customer-live-location-map-read",
+    "x-prestige-customer-session-token": sessionToken,
+  };
+
+  if (accountReference) {
+    headers["x-prestige-customer-account-reference"] = accountReference;
+  }
+
   return new Request(
     `${origin}/api/customer-live-location-map?booking_reference=${encodeURIComponent(
       bookingReference,
     )}`,
     {
-      headers: {
-        origin,
-        referer: `${origin}/my-bookings`,
-        "x-prestige-customer-purpose": "customer-live-location-map-read",
-        "x-prestige-customer-session-token": sessionToken,
-      },
+      headers,
     },
   );
 }
@@ -654,8 +995,10 @@ async function runClosedProof({
 }
 
 async function runRuntimeProof({
+  accountReference,
   bookingReference,
   customerModule,
+  customerSessionMapModule,
   driverModule,
   env,
   rawToken,
@@ -695,10 +1038,28 @@ async function runRuntimeProof({
     throw new EvidenceFailure("one_real_booking_live_location_admin_map_payload_unsafe");
   }
 
+  const sessionMapResolution =
+    customerSessionMapModule.resolveExactTwoCustomerRuntimeSessionMap({
+      expectedEntryCount: 2,
+      mapValue: env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_MAP,
+      providedToken: env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_TOKEN,
+    });
+
+  if (!sessionMapResolution.ok) {
+    throw new EvidenceFailure("one_real_booking_live_location_customer_session_map_not_ready", {
+      safe_reason: sessionMapResolution.reason,
+    });
+  }
+
+  if (sessionMapResolution.customer_account_reference !== accountReference) {
+    throw new EvidenceFailure("one_real_booking_live_location_customer_session_scope_mismatch");
+  }
+
   const customerMap = await customerModule.handleCustomerLiveLocationMapRuntimeRequest({
     boundary: customerBoundary(),
     env,
     request: customerRequest({
+      accountReference,
       bookingReference,
       origin: "https://app.prestigelimo.sg",
       sessionToken: env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_TOKEN,
@@ -722,6 +1083,7 @@ async function runRuntimeProof({
     boundary: customerBoundary(),
     env,
     request: customerRequest({
+      accountReference: controlCustomerAccountReference(accountReference),
       bookingReference,
       origin: "https://app.prestigelimo.sg",
       sessionToken: wrongCustomerSessionToken,
@@ -778,6 +1140,7 @@ async function runRuntimeProof({
     boundary: customerBoundary(),
     env,
     request: customerRequest({
+      accountReference,
       bookingReference,
       origin: "https://app.prestigelimo.sg",
       sessionToken: env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_TOKEN,
@@ -805,13 +1168,14 @@ async function runRuntimeProof({
 async function runEvidence() {
   await loadLocalEnvFiles();
   requireApproval();
-  requireRequiredEnvNames();
+  const useTemporaryDriverLink = temporaryDriverLinkApproved();
+  requireRequiredEnvNames({ temporaryDriverLink: useTemporaryDriverLink });
 
   const reference = evidenceReference();
-  const rawToken = envValue(driverTokenEnvName);
-  const bookingReference = safeReference(envValue(bookingReferenceEnvName));
+  let rawToken = envValue(driverTokenEnvName);
+  let bookingReference = safeReference(envValue(bookingReferenceEnvName));
 
-  if (!bookingReference) {
+  if (!useTemporaryDriverLink && !bookingReference) {
     throw new EvidenceFailure("one_real_booking_live_location_booking_reference_invalid", {
       env_name: bookingReferenceEnvName,
     });
@@ -820,6 +1184,10 @@ async function runEvidence() {
   const client = createSupabaseClient();
   const tempDir = await writeRuntimeHarness();
   const previousSetting = await readCurrentRuntimeSetting(client);
+  let driverLink = null;
+  let bookingAndCustomer = null;
+  let previousLatestPosition = null;
+  let temporaryDriverJobLinkId = "";
 
   if (isRuntimeSettingActive(previousSetting)) {
     await rm(tempDir, { force: true, recursive: true });
@@ -827,13 +1195,23 @@ async function runEvidence() {
   }
 
   try {
-    const driverLink = await resolveExistingDriverLink(
-      client,
-      rawToken,
-      bookingReference,
-    );
-    const bookingAndCustomer = await resolveBookingAndCustomer(client, bookingReference);
-    const previousLatestPosition = await readLatestPosition(
+    if (useTemporaryDriverLink) {
+      const temporaryDriverLink = await createTemporaryDriverJobLink(client, reference);
+      rawToken = temporaryDriverLink.rawToken;
+      bookingReference = temporaryDriverLink.bookingReference;
+      driverLink = temporaryDriverLink.driverLink;
+      bookingAndCustomer = temporaryDriverLink.bookingAndCustomer;
+      temporaryDriverJobLinkId = driverLink.driverJobLinkId;
+    } else {
+      driverLink = await resolveExistingDriverLink(
+        client,
+        rawToken,
+        bookingReference,
+      );
+      bookingAndCustomer = await resolveBookingAndCustomer(client, bookingReference);
+    }
+
+    previousLatestPosition = await readLatestPosition(
       client,
       driverLink.driverJobLinkId,
     );
@@ -844,9 +1222,10 @@ async function runEvidence() {
 
     await cleanupEvidenceRows(client, reference, driverLink.driverJobLinkId);
 
-    const [driverModule, customerModule] = await Promise.all([
+    const [driverModule, customerModule, customerSessionMapModule] = await Promise.all([
       import(join(tempDir, "driver-live-location-runtime.mjs")),
       import(join(tempDir, "customer-live-location-map-runtime.mjs")),
+      import(join(tempDir, "customer-runtime-session-map.mjs")),
     ]);
 
     driverModule.setDriverLiveLocationRuntimeClientForTests(client);
@@ -866,14 +1245,17 @@ async function runEvidence() {
     await openRuntimeSetting(client, bookingReference);
 
     const proof = await runRuntimeProof({
+      accountReference: bookingAndCustomer.accountReference,
       bookingReference,
       customerModule,
+      customerSessionMapModule,
       driverModule,
       env: runtimeEnv({
         accountReference: bookingAndCustomer.accountReference,
         authUserId: bookingAndCustomer.authUserId,
         customerSessionToken,
         reference,
+        wrongCustomerSessionToken,
       }),
       rawToken,
       wrongCustomerSessionToken,
@@ -881,15 +1263,20 @@ async function runEvidence() {
 
     await cleanupEvidenceRows(client, reference, driverLink.driverJobLinkId);
     await restoreLatestPosition(client, driverLink.driverJobLinkId, previousLatestPosition);
+    await cleanupTemporaryDriverLink(client, temporaryDriverJobLinkId);
     await restoreRuntimeSetting(client, previousSetting);
 
     const latestCount = await countEvidenceRows(client, latestPositionsTable, reference);
     const auditCount = await countEvidenceRows(client, auditEventsTable, reference);
+    const temporaryDriverJobLinkRemaining = temporaryDriverJobLinkId
+      ? await countDriverJobLinkById(client, temporaryDriverJobLinkId)
+      : 0;
 
-    if (latestCount !== 0 || auditCount !== 0) {
+    if (latestCount !== 0 || auditCount !== 0 || temporaryDriverJobLinkRemaining !== 0) {
       throw new EvidenceFailure("one_real_booking_live_location_cleanup_zero_row_proof_failed", {
         audit_count: auditCount,
         latest_count: latestCount,
+        temporary_driver_job_link_count: temporaryDriverJobLinkRemaining,
       });
     }
 
@@ -904,7 +1291,9 @@ async function runEvidence() {
     return {
       app_side_gates_only: true,
       db_write_scope:
-        "runtime_setting_latest_position_audit_rows_cleanup_rollback_only",
+        temporaryDriverJobLinkId
+          ? "temporary_driver_job_link_runtime_setting_latest_position_audit_rows_cleanup_rollback_only"
+          : "runtime_setting_latest_position_audit_rows_cleanup_rollback_only",
       evidence_reference: reference,
       no_private_data_printed: true,
       no_provider_sends: true,
@@ -913,8 +1302,10 @@ async function runEvidence() {
       proof,
       post_rollback: postRollback,
       real_booking_count: 1,
+      temporary_driver_job_link_created: Boolean(temporaryDriverJobLinkId),
       temporary_rows_remaining: {
         audit_events: auditCount,
+        driver_job_links: temporaryDriverJobLinkRemaining,
         latest_positions: latestCount,
       },
       vercel_cli_used: false,
@@ -922,12 +1313,11 @@ async function runEvidence() {
     };
   } catch (error) {
     try {
-      const driverLink = await resolveExistingDriverLink(
-        client,
-        rawToken,
-        bookingReference,
-      );
-      await cleanupEvidenceRows(client, reference, driverLink.driverJobLinkId);
+      if (driverLink?.driverJobLinkId) {
+        await cleanupEvidenceRows(client, reference, driverLink.driverJobLinkId);
+        await restoreLatestPosition(client, driverLink.driverJobLinkId, previousLatestPosition);
+      }
+      await cleanupTemporaryDriverLink(client, temporaryDriverJobLinkId);
       await restoreRuntimeSetting(client, previousSetting);
     } catch {
       // Keep the surfaced error as the source of truth; cleanup failures are not printed with secrets.

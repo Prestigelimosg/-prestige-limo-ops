@@ -21,6 +21,19 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This does not open broad public writes, provider sends/calls, parser changes, DB schema changes, Vercel env changes, deploys, live GPS/customer-wide live map, billing/payment/PDF/invoice/payout, calendar sync, or shims.
 - Guard coverage lives in `scripts/test-admin-booking-persistence-enable-readiness.mjs` and locks the browser dashboard read/write split.
 
+### Live Admin Dashboard Load Bookings Proof
+
+- Evidence marker: `ADMIN-DASHBOARD-LOAD-BOOKINGS-LIVE-202606251552`.
+- Source-of-truth runtime commit deployed for proof: `9127387 Fix admin dashboard booking read boundary`.
+- Live app target: `https://app.prestigelimo.sg`.
+- Vercel production deployment completed successfully and aliased the deployment to `https://app.prestigelimo.sg`.
+- No Vercel env values were changed for this proof; the deployment used the already-corrected project env.
+- Browser-style same-origin admin dashboard `GET /api/admin-saved-bookings?limit=25` returned HTTP 200 with `ok: true`.
+- Browser-style same-origin admin dashboard `GET /api/admin-bookings` returned HTTP 200 with `ok: true`.
+- The proof recorded counts only and did not print booking rows, customer private data, IDs, tokens, DB URLs, env values, or secrets.
+- Browser-style `POST /api/admin-bookings` without `x-prestige-admin-session-token` still returned HTTP 403, proving write paths remain private-token gated.
+- No DB writes, E2E rerun, provider sends/calls, Email/Telegram/WhatsApp/SMS, parser changes, live GPS, broad customer live map, billing/payment/PDF/invoice/payout, calendar sync, or shim occurred.
+
 ### Customer Booking Request Persistence Actor Fix
 
 - The public `/book` customer booking request path now keeps its existing same-origin `/book`, `x-prestige-customer-purpose`, and safe payload parser boundary, while allowing only the exact `Customer booking request` system actor to pass the admin booking persistence write gate.

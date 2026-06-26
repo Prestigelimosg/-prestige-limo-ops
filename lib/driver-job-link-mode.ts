@@ -5,6 +5,7 @@ export type DriverJobLinkModeEnv = {
   DRIVER_JOB_LINK_MODE?: string;
   NEXT_PUBLIC_DRIVER_JOB_LINK_MODE?: string;
   PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED?: string;
+  VERCEL_ENV?: string;
 };
 
 export type DriverJobLinkDisabledResult = {
@@ -17,12 +18,23 @@ function clean(value: unknown) {
   return String(value ?? "").trim().toLowerCase();
 }
 
+function productionRuntimePrefersEnabledGate(env: DriverJobLinkModeEnv) {
+  return productionDriverJobLinksConfigured(env) && clean(env.VERCEL_ENV) === "production";
+}
+
 export function resolveDriverJobLinkMode(env?: DriverJobLinkModeEnv): DriverJobLinkMode {
   const sourceEnv = env ?? {
     DRIVER_JOB_LINK_MODE: process.env.DRIVER_JOB_LINK_MODE,
     NEXT_PUBLIC_DRIVER_JOB_LINK_MODE: process.env.NEXT_PUBLIC_DRIVER_JOB_LINK_MODE,
+    PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED:
+      process.env.PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED,
+    VERCEL_ENV: process.env.VERCEL_ENV,
   };
   const requestedMode = clean(sourceEnv.DRIVER_JOB_LINK_MODE) || clean(sourceEnv.NEXT_PUBLIC_DRIVER_JOB_LINK_MODE);
+
+  if (productionRuntimePrefersEnabledGate(sourceEnv)) {
+    return "production";
+  }
 
   return requestedMode === "production" ? "production" : "mock";
 }
@@ -33,8 +45,13 @@ export function isProductionDriverJobLinkMode(env?: DriverJobLinkModeEnv) {
     NEXT_PUBLIC_DRIVER_JOB_LINK_MODE: process.env.NEXT_PUBLIC_DRIVER_JOB_LINK_MODE,
     PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED:
       process.env.PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED,
+    VERCEL_ENV: process.env.VERCEL_ENV,
   };
   const requestedMode = clean(sourceEnv.DRIVER_JOB_LINK_MODE) || clean(sourceEnv.NEXT_PUBLIC_DRIVER_JOB_LINK_MODE);
+
+  if (productionRuntimePrefersEnabledGate(sourceEnv)) {
+    return true;
+  }
 
   if (requestedMode === "production") {
     return true;
@@ -53,6 +70,7 @@ export function productionDriverJobLinksConfigured(env?: DriverJobLinkModeEnv) {
     NEXT_PUBLIC_DRIVER_JOB_LINK_MODE: process.env.NEXT_PUBLIC_DRIVER_JOB_LINK_MODE,
     PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED:
       process.env.PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED,
+    VERCEL_ENV: process.env.VERCEL_ENV,
   };
 
   return clean(sourceEnv.PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED) === "true";

@@ -872,9 +872,9 @@ async function runChromeTest() {
     assert.deepEqual(
       validState.statusTiming.rows,
       [
-        { key: "otw", label: "On the way", state: "pending", time: "Not recorded" },
-        { key: "ots", label: "Arrived", state: "pending", time: "Not recorded" },
-        { key: "pob", label: "On-boarded", state: "pending", time: "Not recorded" },
+        { key: "otw", label: "I'm on the way", state: "pending", time: "Not recorded" },
+        { key: "ots", label: "I've arrived", state: "pending", time: "Not recorded" },
+        { key: "pob", label: "Passenger on board", state: "pending", time: "Not recorded" },
         { key: "jc", label: "Completed", state: "pending", time: "Not recorded" },
       ],
       "Expected timing evidence to start empty until statuses are accepted.",
@@ -932,19 +932,19 @@ async function runChromeTest() {
     assert.equal(validState.visibleText.includes("Status History"), true);
     assert.deepEqual(
       validState.visualButtonLabels.filter((buttonLabel) =>
-        ["Save & Acknowledge Job", "On the way", "Arrived", "On-boarded", "Completed", "Alert Admin"].includes(buttonLabel),
+        ["Save & Acknowledge Job", "OTW", "OTS", "POB", "Job Completed", "Alert Admin"].includes(buttonLabel),
       ),
-      ["Save & Acknowledge Job", "On the way", "Arrived", "On-boarded", "Completed", "Alert Admin"],
+      ["Save & Acknowledge Job", "OTW", "OTS", "POB", "Job Completed", "Alert Admin"],
       "Expected public driver job page to show one save/acknowledge action, status, and issue controls in order.",
     );
     assert.deepEqual(
       validState.visualButtonLabels.filter((buttonLabel) =>
         [
           "Save & Acknowledge Job",
-          "On the way",
-          "Arrived",
-          "On-boarded",
-          "Completed",
+          "OTW",
+          "OTS",
+          "POB",
+          "Job Completed",
           "Alert Admin",
         ].includes(
           buttonLabel,
@@ -952,10 +952,10 @@ async function runChromeTest() {
       ),
       [
         "Save & Acknowledge Job",
-        "On the way",
-        "Arrived",
-        "On-boarded",
-        "Completed",
+        "OTW",
+        "OTS",
+        "POB",
+        "Job Completed",
         "Alert Admin",
       ],
       "Expected public driver job page to show the human primary workflow order.",
@@ -964,12 +964,12 @@ async function runChromeTest() {
 
     await clickBlockedStatus("OTW", "Save & Acknowledge Job before updating status.", startingStatusText);
     await saveAndAcknowledgeJob();
-    await clickBlockedStatus("OTS", "Update OTW before Arrived.", startingStatusText);
-    await clickBlockedStatus("POB", "Update OTW before On-boarded.", startingStatusText);
-    await clickBlockedStatus("Job Completed", "Update OTW before Completed.", startingStatusText);
-    await clickStatus("OTW", "On the way", "Status updated to On the way.");
-    await clickBlockedStatus("POB", "Update OTS before On-boarded.", "On the way");
-    await clickStatus("OTS", "Arrived", "Status updated to Arrived.");
+    await clickBlockedStatus("OTS", "Update OTW before OTS.", startingStatusText);
+    await clickBlockedStatus("POB", "Update OTW before POB.", startingStatusText);
+    await clickBlockedStatus("Job Completed", "Update OTW before Job Completed.", startingStatusText);
+    await clickStatus("OTW", "I'm on the way", "Status updated to I'm on the way.");
+    await clickBlockedStatus("POB", "Update OTS before POB.", "I'm on the way");
+    await clickStatus("OTS", "I've arrived", "Status updated to I've arrived.");
     const depOtsState = await pageState();
     assert.equal(
       depOtsState.visibleText.includes("Add Mock OTS Photo Proof"),
@@ -981,8 +981,8 @@ async function runChromeTest() {
       false,
       "DEP public mock job should not require latest ETA acknowledgement after OTS.",
     );
-    await clickBlockedStatus("Job Completed", "Update POB before Completed.", "Arrived");
-    await clickStatus("POB", "On-boarded", "Status updated to On-boarded.");
+    await clickBlockedStatus("Job Completed", "Update POB before Job Completed.", "I've arrived");
+    await clickStatus("POB", "Passenger on board", "Status updated to Passenger on board.");
     await clickStatus("Job Completed", "Completed", "Status updated to Completed.");
     await clickReportIssue();
     const completedState = await pageState();
@@ -993,9 +993,9 @@ async function runChromeTest() {
         state: row.state,
       })),
       [
-        { key: "otw", label: "On the way", state: "recorded" },
-        { key: "ots", label: "Arrived", state: "recorded" },
-        { key: "pob", label: "On-boarded", state: "recorded" },
+        { key: "otw", label: "I'm on the way", state: "recorded" },
+        { key: "ots", label: "I've arrived", state: "recorded" },
+        { key: "pob", label: "Passenger on board", state: "recorded" },
         { key: "jc", label: "Completed", state: "recorded" },
       ],
       "Expected each accepted driver status to record timing evidence.",
@@ -1010,9 +1010,9 @@ async function runChromeTest() {
       completedState.activityLogLabels,
       [
         "Job acknowledged",
-        "On the way marked",
-        "Arrived marked",
-        "On-boarded marked",
+        "I'm on the way marked",
+        "I've arrived marked",
+        "Passenger on board marked",
         "Completed marked",
         "Admin alert prepared",
       ],
@@ -1066,8 +1066,8 @@ async function runChromeTest() {
     assertNoSensitiveText(arrivalState);
 
     await saveAndAcknowledgeJob();
-    await clickStatus("OTW", "On the way", "Status updated to On the way.");
-    await clickStatus("OTS", "Arrived", "Status updated to Arrived.");
+    await clickStatus("OTW", "I'm on the way", "Status updated to I'm on the way.");
+    await clickStatus("OTS", "I've arrived", "Status updated to I've arrived.");
     const arrivalOtsState = await pageState();
     assert.equal(arrivalOtsState.visibleText.includes("Mock OTS Photo Proof"), false);
     assert.equal(arrivalOtsState.visibleText.includes("Add Mock OTS Photo Proof"), false);
@@ -1078,16 +1078,16 @@ async function runChromeTest() {
       "Arrival public driver page must keep dispatcher exception workflow absent and future/staff-controlled.",
     );
     assertNoSensitiveText(arrivalOtsState);
-    await clickStatus("POB", "On-boarded", "Status updated to On-boarded.");
+    await clickStatus("POB", "Passenger on board", "Status updated to Passenger on board.");
     await clickStatus("Job Completed", "Completed", "Status updated to Completed.");
     const arrivalCompletedState = await pageState();
     assert.deepEqual(
       arrivalCompletedState.activityLogLabels,
       [
         "Job acknowledged",
-        "On the way marked",
-        "Arrived marked",
-        "On-boarded marked",
+        "I'm on the way marked",
+        "I've arrived marked",
+        "Passenger on board marked",
         "Completed marked",
       ],
       "Expected Arrival public driver activity log to keep the simple acknowledgement and status order.",

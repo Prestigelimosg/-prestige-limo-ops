@@ -167,16 +167,16 @@ type DriverStatusTimingRow = {
 };
 
 const statusActions = [
-  { displayLabel: "On the way", label: "OTW", value: "OTW" },
-  { displayLabel: "Arrived", label: "OTS", value: "OTS" },
-  { displayLabel: "On-boarded", label: "POB", value: "POB" },
+  { displayLabel: "I'm on the way", label: "OTW", value: "OTW" },
+  { displayLabel: "I've arrived", label: "OTS", value: "OTS" },
+  { displayLabel: "Passenger on board", label: "POB", value: "POB" },
   { displayLabel: "Completed", label: "Job Completed", value: "Job Completed" },
 ] as const;
 
 const statusTimingSteps: DriverStatusTimingStep[] = [
-  { aliases: ["driver_otw", "otw"], key: "otw", label: "On the way" },
-  { aliases: ["ots"], key: "ots", label: "Arrived" },
-  { aliases: ["pob"], key: "pob", label: "On-boarded" },
+  { aliases: ["driver_otw", "otw"], key: "otw", label: "I'm on the way" },
+  { aliases: ["ots"], key: "ots", label: "I've arrived" },
+  { aliases: ["pob"], key: "pob", label: "Passenger on board" },
   { aliases: ["completed", "job_completed"], key: "jc", label: "Completed" },
 ];
 
@@ -1559,7 +1559,7 @@ export default function DriverJobPage() {
                       onClick={() => updateStatus(statusAction.value, statusAction.label, statusAction.displayLabel)}
                       type="button"
                     >
-                      {updatingStatus === statusAction.label ? "Updating..." : statusAction.displayLabel}
+                      {updatingStatus === statusAction.label ? "Updating..." : statusAction.label}
                     </button>
                     {statusFeedback?.target === statusAction.label ? (
                       <p

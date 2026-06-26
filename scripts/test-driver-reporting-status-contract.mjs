@@ -16,9 +16,9 @@ const driverStatusRoutePath = "app/api/driver-job/[token]/status/route.ts";
 const driverStatusPersistencePath = "lib/driver-job-status-persistence.ts";
 
 const allowedStatusActions = [
-  { displayLabel: "On the way", label: "OTW", value: "OTW" },
-  { displayLabel: "Arrived", label: "OTS", value: "OTS" },
-  { displayLabel: "On-boarded", label: "POB", value: "POB" },
+  { displayLabel: "I'm on the way", label: "OTW", value: "OTW" },
+  { displayLabel: "I've arrived", label: "OTS", value: "OTS" },
+  { displayLabel: "Passenger on board", label: "POB", value: "POB" },
   { displayLabel: "Completed", label: "Job Completed", value: "Job Completed" },
 ];
 

@@ -6285,15 +6285,15 @@ function adminDriverJobStatusDisplayLabel(statusValue: string | null | undefined
   }
 
   if (normalized === "driver_otw") {
-    return "On the way";
+    return "I'm on the way";
   }
 
   if (normalized === "ots") {
-    return "Arrived";
+    return "I've arrived";
   }
 
   if (normalized === "pob") {
-    return "On-boarded";
+    return "Passenger on board";
   }
 
   if (normalized === "completed") {
@@ -11313,7 +11313,7 @@ export default function Home() {
     const sections = [
       [
         "Driver Job Link",
-        "Greeting boss, thanks for taking the job. Please keep the car interior clean and fresh.",
+        "Greeting boss, thank you for taking the job. Please keep the car interior clean and fresh.",
         oneTimeUrl
           ? "Open this driver job link and update your status:"
           : "Create a fresh driver job link to display the one-time URL for copying.",
@@ -11341,7 +11341,7 @@ export default function Home() {
       ],
       [
         "Status buttons:",
-        "On the way / Arrived / On-boarded / Completed",
+        "OTW / OTS / POB / Job Completed",
       ],
     ];
 

@@ -8974,7 +8974,7 @@ async function runChromeTest() {
     assert.match(driverJobLinkCopyState.copiedText, /^Driver Job Link/);
     assert.match(
       driverJobLinkCopyState.copiedText,
-      /Greeting boss, thanks for taking the job\. Please keep the car interior clean and fresh\./,
+      /Greeting boss, thank you for taking the job\. Please keep the car interior clean and fresh\./,
     );
     assert.match(driverJobLinkCopyState.copiedText, /https?:\/\/\S+\/driver-job\/browser-created-driver-token/);
     assert.doesNotMatch(
@@ -8998,7 +8998,7 @@ async function runChromeTest() {
       /Route:\s*Changi Airport\s*>\s*Marina Bay Sands\s*>\s*The Fullerton Hotel Singapore/,
       "Expected Driver Job Link copy to include full route and waypoint",
     );
-    assert.match(driverJobLinkCopyState.copiedText, /Status buttons:\s*On the way \/ Arrived \/ On-boarded \/ Completed/);
+    assert.match(driverJobLinkCopyState.copiedText, /Status buttons:\s*OTW \/ OTS \/ POB \/ Job Completed/);
     assert.doesNotMatch(
       driverJobLinkCopyState.copiedText,
       /Thank you for choosing Prestige Limo SG\.|Customer note:|driver payout|internal payout|override reason/i,
@@ -15289,7 +15289,7 @@ async function runChromeTest() {
               request.booking_reference === "ui-cleanup-load-fixture" &&
               request.limit === "4",
           ) &&
-          candidateState?.savedDriverStatusReadout?.latest === "Arrived" &&
+          candidateState?.savedDriverStatusReadout?.latest === "I've arrived" &&
           candidateState?.savedDriverStatusReadout?.time === "2026-06-07 09:25 UTC" &&
           candidateState?.monthlyBillingGroupingRequests?.some(
             (request) =>
@@ -15543,8 +15543,8 @@ async function runChromeTest() {
     assert.deepEqual(
       loadedBookingState.savedDriverStatusReadout,
       {
-        history: "Arrived at 2026-06-07 09:25 UTC",
-        latest: "Arrived",
+        history: "I've arrived at 2026-06-07 09:25 UTC",
+        latest: "I've arrived",
         message: "Loaded 1 saved driver status event for ui-cleanup-load-fixture.",
         refreshButton: {
           disabled: false,
@@ -15590,7 +15590,7 @@ async function runChromeTest() {
               ?.textContent.replace(/\\s+/g, " ")
               .trim() || "";
 
-          return matchingRequests.length >= 2 && latest === "Arrived"
+          return matchingRequests.length >= 2 && latest === "I've arrived"
             ? {
                 latest,
                 message,
@@ -15601,7 +15601,7 @@ async function runChromeTest() {
       10000,
       "saved driver status manual refresh",
     );
-    assert.equal(refreshedDriverStatusState.latest, "Arrived");
+    assert.equal(refreshedDriverStatusState.latest, "I've arrived");
     assert.equal(
       refreshedDriverStatusState.message,
       "Loaded 1 saved driver status event for ui-cleanup-load-fixture.",

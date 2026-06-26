@@ -13,9 +13,16 @@ export type DriverJobStatusTransitionGuardResult =
 
 export const driverJobStatusDisplayLabels: Record<DriverJobStatusUpdate, string> = {
   completed: "Completed",
-  driver_otw: "On the way",
-  ots: "Arrived",
-  pob: "On-boarded",
+  driver_otw: "I'm on the way",
+  ots: "I've arrived",
+  pob: "Passenger on board",
+};
+
+export const driverJobStatusActionLabels: Record<DriverJobStatusUpdate, string> = {
+  completed: "Job Completed",
+  driver_otw: "OTW",
+  ots: "OTS",
+  pob: "POB",
 };
 
 const driverJobStatusWorkflow = [
@@ -92,7 +99,7 @@ export function guardDriverJobStatusTransition({
   if (nextStatusIndex !== currentStatusIndex + 1) {
     return {
       ok: false,
-      message: `Update ${expectedNextStatus.label} before ${driverJobStatusDisplayLabels[normalizedNextStatus]}.`,
+      message: `Update ${expectedNextStatus.label} before ${driverJobStatusActionLabels[normalizedNextStatus]}.`,
       reason: "out_of_order",
     };
   }

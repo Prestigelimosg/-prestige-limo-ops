@@ -2842,6 +2842,16 @@ async function runChromeTest() {
         return calls.filter((call) => call.method === "PATCH").length;
       })()`);
 
+      await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const button = document.querySelector("[data-admin-booking-persistence-apply='LOADED-OPS-001']");
+            return Boolean(button && !button.disabled);
+          })()`),
+        10000,
+        "admin booking persistence apply snapshot button enabled",
+      );
+
       const applyClicked = await evaluate(`(() => {
         const button = document.querySelector("[data-admin-booking-persistence-apply='LOADED-OPS-001']");
         button?.click();
@@ -2955,7 +2965,7 @@ async function runChromeTest() {
               fields.pickup === "Loaded Ops Pickup" &&
               dispatchReleaseFeedback.includes("Loaded dispatch release workflow status for LOADED-OPS-001") &&
               driverAcknowledgementFeedback.includes("Loaded driver acknowledgement workflow status for LOADED-OPS-001") &&
-              savedDriverStatusReadout.latest === "POB" &&
+              savedDriverStatusReadout.latest === "Passenger on board" &&
               savedDriverStatusReadout.time === "2026-06-07 10:45 UTC" &&
               monthlyBillingGroupingFeedback.includes("Loaded 1 saved monthly billing group for June 2026") &&
               monthlyBillingDraftPlanFeedback.includes("Loaded 1 saved monthly billing draft plan for June 2026") &&
@@ -3061,8 +3071,8 @@ async function runChromeTest() {
       assert.deepEqual(
         appliedSnapshotState.savedDriverStatusReadout,
         {
-          history: "POB at 2026-06-07 10:45 UTC",
-          latest: "POB",
+          history: "Passenger on board at 2026-06-07 10:45 UTC",
+          latest: "Passenger on board",
           message: "Loaded 1 saved driver status event for LOADED-OPS-001.",
           state: "Saved status",
           time: "2026-06-07 10:45 UTC",
@@ -36545,10 +36555,10 @@ async function runChromeTest() {
           time: row.time,
         })),
         [
-          { key: "otw", label: "OTW", state: "pending", time: "Not recorded" },
-          { key: "ots", label: "OTS", state: "pending", time: "Not recorded" },
-          { key: "pob", label: "POB", state: "pending", time: "Not recorded" },
-          { key: "jc", label: "JC", state: "pending", time: "Not recorded" },
+          { key: "otw", label: "I'm on the way", state: "pending", time: "Not recorded" },
+          { key: "ots", label: "I've arrived", state: "pending", time: "Not recorded" },
+          { key: "pob", label: "Passenger on board", state: "pending", time: "Not recorded" },
+          { key: "jc", label: "Completed", state: "pending", time: "Not recorded" },
         ],
         `${viewport.label}: expected status timing evidence to start unrecorded`,
       );
@@ -36569,7 +36579,6 @@ async function runChromeTest() {
           "Job Status",
           "Status Timing",
           "Report Issue",
-          "Status History",
         ].filter((value) => !initialState.text.includes(value)),
         [],
         `${viewport.label}: expected readable driver job card details and workflow sections`,
@@ -36592,6 +36601,8 @@ async function runChromeTest() {
           "Status Boundary",
           "Current flow: OTW, OTS, POB, then Job Completed.",
           "Feedback appears under the status button you tap.",
+          "Status History",
+          "Driver Activity Log",
         ].filter((value) => initialState.text.includes(value)),
         [],
         `${viewport.label}: expected no separate acknowledgement or mock-only driver-token sections`,
@@ -36767,12 +36778,12 @@ async function runChromeTest() {
         `${viewport.label}: expected driver details save and acknowledgement to stay local`,
       );
 
-      await clickValidDriverJobStatus("OTW", "OTW", "Status updated to OTW.");
-      await clickBlockedDriverJobStatus("POB", "Update OTS before POB.", "OTW");
-      await clickValidDriverJobStatus("OTS", "OTS", "Status updated to OTS.");
-      await clickBlockedDriverJobStatus("Job Completed", "Update POB before Job Completed.", "OTS");
-      await clickValidDriverJobStatus("POB", "POB", "Status updated to POB.");
-      await clickValidDriverJobStatus("Job Completed", "Job Completed", "Status updated to Job Completed.");
+      await clickValidDriverJobStatus("OTW", "I'm on the way", "Status updated to I'm on the way.");
+      await clickBlockedDriverJobStatus("POB", "Update OTS before POB.", "I'm on the way");
+      await clickValidDriverJobStatus("OTS", "I've arrived", "Status updated to I've arrived.");
+      await clickBlockedDriverJobStatus("Job Completed", "Update POB before Job Completed.", "I've arrived");
+      await clickValidDriverJobStatus("POB", "Passenger on board", "Status updated to Passenger on board.");
+      await clickValidDriverJobStatus("Job Completed", "Completed", "Status updated to Completed.");
 
       const finalNetwork = await readDriverJobNetworkState();
       assertNoForbiddenDriverJobNetwork(finalNetwork, `${viewport.label} completed driver job link workflow`);
@@ -36789,10 +36800,10 @@ async function runChromeTest() {
           state: row.state,
         })),
         [
-          { key: "otw", label: "OTW", state: "recorded" },
-          { key: "ots", label: "OTS", state: "recorded" },
-          { key: "pob", label: "POB", state: "recorded" },
-          { key: "jc", label: "JC", state: "recorded" },
+          { key: "otw", label: "I'm on the way", state: "recorded" },
+          { key: "ots", label: "I've arrived", state: "recorded" },
+          { key: "pob", label: "Passenger on board", state: "recorded" },
+          { key: "jc", label: "Completed", state: "recorded" },
         ],
         `${viewport.label}: expected completed driver workflow to show all status timing evidence`,
       );

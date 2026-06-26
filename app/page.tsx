@@ -28862,7 +28862,7 @@ export default function Home() {
             ) : null}
 
             <section
-              className="order-[100] rounded-md border border-emerald-200 bg-emerald-50/60 p-2.5"
+              className="order-[78] rounded-md border border-emerald-200 bg-emerald-50/60 p-2.5"
               data-dispatch-workflow-step="admin-lower-persistence"
               data-admin-booking-persistence-panel="true"
             >
@@ -32219,7 +32219,7 @@ export default function Home() {
             </div>
 
             <div
-              className="order-[70] min-w-0 rounded-md border border-stone-200 bg-white p-3"
+              className="order-[56] min-w-0 rounded-md border border-stone-200 bg-white p-3"
               data-dispatch-workflow-step="driver-dispatch-copy"
             >
               <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -32331,7 +32331,7 @@ export default function Home() {
 
             {showDriverJobLinkCopy ? (
               <div
-                className="order-[75] min-w-0 rounded-md border border-stone-200 bg-white p-3"
+                className="order-[55] min-w-0 rounded-md border border-stone-200 bg-white p-3"
                 data-dispatch-workflow-step="driver-job-link"
               >
                 <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

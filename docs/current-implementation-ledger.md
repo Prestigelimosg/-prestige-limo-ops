@@ -67,6 +67,14 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No route, API, parser, DB, env, Vercel, provider-send, GPS/live-location, billing/payment/PDF/payout, calendar, or shim behavior is changed.
 - This polish is guarded by `scripts/test-customer-folder-compact-index-guard.mjs` and registered in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Customers Page Scaled Queue Pagination UI Lock
+
+- The Customers & Payments follow-up queue and monthly statement preview now render through compact paginated row lists instead of mapping every visible customer row at once.
+- Default page size is 10 rows with a 25-row option, keeping desktop scanning practical for larger customer lists while mobile remains stacked and touch-friendly.
+- This is UI-only pagination on existing local/admin sections; it does not add routes, APIs, DB reads/writes, env changes, Vercel changes, provider sends, GPS/live-location, billing/payment/PDF/payout activation, calendar sync, or shims.
+- Existing admin-only boundaries remain unchanged and customer/driver forbidden finance/internal/mock-archive data remains blocked from public surfaces.
+- This polish is guarded by `scripts/test-customers-page-scaled-queues-guard.mjs` and registered in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Customer Booking Request Persistence Actor Fix
 
 - The public `/book` customer booking request path now keeps its existing same-origin `/book`, `x-prestige-customer-purpose`, and safe payload parser boundary, while allowing only the exact `Customer booking request` system actor to pass the admin booking persistence write gate.

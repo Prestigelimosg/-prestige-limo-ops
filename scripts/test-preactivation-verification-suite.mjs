@@ -603,6 +603,10 @@ const guardChecks = [
     script: "scripts/test-customer-folder-compact-index-guard.mjs",
   },
   {
+    label: "Customers page scaled queues guard",
+    script: "scripts/test-customers-page-scaled-queues-guard.mjs",
+  },
+  {
     label: "Driver In-App Notification staging evidence contract guard",
     script: "scripts/test-driver-in-app-notification-staging-evidence-contract-guard.mjs",
   },

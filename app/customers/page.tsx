@@ -112,6 +112,7 @@ const outstandingReviewSortOptions: Array<{ label: string; value: OutstandingRev
 ];
 
 const outstandingReviewPageSizeOptions = [10, 25];
+const customerQueuePageSizeOptions = [10, 25];
 
 const mockTodayDateValue = Date.UTC(2026, 4, 25);
 
@@ -698,6 +699,10 @@ export default function MockCustomerDashboardPage() {
     useState<OutstandingReviewSort>("highest-amount");
   const [outstandingReviewPageSize, setOutstandingReviewPageSize] = useState(10);
   const [outstandingReviewPage, setOutstandingReviewPage] = useState(1);
+  const [collectionFollowUpPageSize, setCollectionFollowUpPageSize] = useState(10);
+  const [collectionFollowUpPage, setCollectionFollowUpPage] = useState(1);
+  const [monthlyStatementPageSize, setMonthlyStatementPageSize] = useState(10);
+  const [monthlyStatementPage, setMonthlyStatementPage] = useState(1);
   const [expandedOutstandingPaymentKey, setExpandedOutstandingPaymentKey] = useState("");
   const [mockFollowUpSectionFeedback, setMockFollowUpSectionFeedback] = useState(
     "Mock follow-up controls only. Use the buttons to simulate collection follow-up without sending messages.",
@@ -898,6 +903,25 @@ export default function MockCustomerDashboardPage() {
       }),
     [mockFollowUpLocalUpdates, visibleOutstandingPaymentReviewItems],
   );
+  const collectionFollowUpTotalPages = Math.max(
+    1,
+    Math.ceil(visibleCollectionFollowUpItems.length / collectionFollowUpPageSize),
+  );
+  const currentCollectionFollowUpPage = Math.min(collectionFollowUpPage, collectionFollowUpTotalPages);
+  const collectionFollowUpStartIndex =
+    visibleCollectionFollowUpItems.length === 0
+      ? 0
+      : (currentCollectionFollowUpPage - 1) * collectionFollowUpPageSize;
+  const paginatedCollectionFollowUpItems = visibleCollectionFollowUpItems.slice(
+    collectionFollowUpStartIndex,
+    collectionFollowUpStartIndex + collectionFollowUpPageSize,
+  );
+  const collectionFollowUpShowingStart =
+    visibleCollectionFollowUpItems.length === 0 ? 0 : collectionFollowUpStartIndex + 1;
+  const collectionFollowUpShowingEnd = Math.min(
+    collectionFollowUpStartIndex + collectionFollowUpPageSize,
+    visibleCollectionFollowUpItems.length,
+  );
   const mockStatementPreviewGroups = useMemo(
     () =>
       getMockStatementPreviewGroups(visibleOutstandingPaymentReviewItems).map((group) => ({
@@ -905,6 +929,22 @@ export default function MockCustomerDashboardPage() {
         feedback: mockStatementPreviewFeedback[group.key],
       })),
     [mockStatementPreviewFeedback, visibleOutstandingPaymentReviewItems],
+  );
+  const monthlyStatementTotalPages = Math.max(
+    1,
+    Math.ceil(mockStatementPreviewGroups.length / monthlyStatementPageSize),
+  );
+  const currentMonthlyStatementPage = Math.min(monthlyStatementPage, monthlyStatementTotalPages);
+  const monthlyStatementStartIndex =
+    mockStatementPreviewGroups.length === 0 ? 0 : (currentMonthlyStatementPage - 1) * monthlyStatementPageSize;
+  const paginatedMonthlyStatementGroups = mockStatementPreviewGroups.slice(
+    monthlyStatementStartIndex,
+    monthlyStatementStartIndex + monthlyStatementPageSize,
+  );
+  const monthlyStatementShowingStart = mockStatementPreviewGroups.length === 0 ? 0 : monthlyStatementStartIndex + 1;
+  const monthlyStatementShowingEnd = Math.min(
+    monthlyStatementStartIndex + monthlyStatementPageSize,
+    mockStatementPreviewGroups.length,
   );
   const regularCustomerBillingQuickFilterOptions = useMemo(() => {
     const billingMonths = Array.from(
@@ -3733,7 +3773,8 @@ export default function MockCustomerDashboardPage() {
                 </p>
               </div>
               <p className="text-sm font-semibold text-slate-600">
-                {visibleCollectionFollowUpItems.length} mock follow-ups need collection attention.
+                Showing {collectionFollowUpShowingStart}-{collectionFollowUpShowingEnd} of{" "}
+                {visibleCollectionFollowUpItems.length} follow-ups
               </p>
             </div>
             <p
@@ -3743,11 +3784,58 @@ export default function MockCustomerDashboardPage() {
             >
               {mockFollowUpSectionFeedback}
             </p>
+            <div
+              className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+              data-collection-follow-up-pagination="true"
+            >
+              <label className="text-sm font-semibold text-slate-700 sm:max-w-48">
+                Page size
+                <select
+                  className="mt-1 min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950"
+                  data-collection-follow-up-page-size="true"
+                  onChange={(event) => {
+                    setCollectionFollowUpPageSize(Number(event.target.value));
+                    setCollectionFollowUpPage(1);
+                  }}
+                  value={collectionFollowUpPageSize}
+                >
+                  {customerQueuePageSizeOptions.map((pageSize) => (
+                    <option key={pageSize} value={pageSize}>
+                      {pageSize} rows
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex gap-2">
+                <button
+                  className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  data-collection-follow-up-previous="true"
+                  disabled={currentCollectionFollowUpPage <= 1}
+                  onClick={() => setCollectionFollowUpPage((currentPage) => Math.max(1, currentPage - 1))}
+                  type="button"
+                >
+                  Previous
+                </button>
+                <button
+                  className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  data-collection-follow-up-next="true"
+                  disabled={currentCollectionFollowUpPage >= collectionFollowUpTotalPages}
+                  onClick={() =>
+                    setCollectionFollowUpPage((currentPage) =>
+                      Math.min(collectionFollowUpTotalPages, currentPage + 1),
+                    )
+                  }
+                  type="button"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
           </div>
 
           <div className="divide-y divide-slate-200">
             {visibleCollectionFollowUpItems.length > 0 ? (
-              visibleCollectionFollowUpItems.map((item) => (
+              paginatedCollectionFollowUpItems.map((item) => (
                 <article
                   className="grid gap-4 p-4 sm:p-5 xl:grid-cols-[1fr_0.7fr_0.7fr_0.8fr_1fr_1.25fr] xl:items-start"
                   data-collection-follow-up-row={item.key}
@@ -3849,14 +3937,60 @@ export default function MockCustomerDashboardPage() {
                 </p>
               </div>
               <p className="text-sm font-semibold text-slate-600">
-                {mockStatementPreviewGroups.length} mock monthly account preview.
+                Showing {monthlyStatementShowingStart}-{monthlyStatementShowingEnd} of{" "}
+                {mockStatementPreviewGroups.length} statement previews
               </p>
+            </div>
+            <div
+              className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+              data-monthly-statement-pagination="true"
+            >
+              <label className="text-sm font-semibold text-slate-700 sm:max-w-48">
+                Page size
+                <select
+                  className="mt-1 min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950"
+                  data-monthly-statement-page-size="true"
+                  onChange={(event) => {
+                    setMonthlyStatementPageSize(Number(event.target.value));
+                    setMonthlyStatementPage(1);
+                  }}
+                  value={monthlyStatementPageSize}
+                >
+                  {customerQueuePageSizeOptions.map((pageSize) => (
+                    <option key={pageSize} value={pageSize}>
+                      {pageSize} rows
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex gap-2">
+                <button
+                  className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  data-monthly-statement-previous="true"
+                  disabled={currentMonthlyStatementPage <= 1}
+                  onClick={() => setMonthlyStatementPage((currentPage) => Math.max(1, currentPage - 1))}
+                  type="button"
+                >
+                  Previous
+                </button>
+                <button
+                  className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  data-monthly-statement-next="true"
+                  disabled={currentMonthlyStatementPage >= monthlyStatementTotalPages}
+                  onClick={() =>
+                    setMonthlyStatementPage((currentPage) => Math.min(monthlyStatementTotalPages, currentPage + 1))
+                  }
+                  type="button"
+                >
+                  Next
+                </button>
+              </div>
             </div>
           </div>
 
           <div className="divide-y divide-slate-200">
             {mockStatementPreviewGroups.length > 0 ? (
-              mockStatementPreviewGroups.map((group) => (
+              paginatedMonthlyStatementGroups.map((group) => (
                 <article
                   className="grid gap-4 p-4 sm:p-5 xl:grid-cols-[1fr_1.2fr_0.8fr_1fr] xl:items-start"
                   data-monthly-statement-group={group.key}

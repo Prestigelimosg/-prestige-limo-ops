@@ -19,6 +19,10 @@ export type AdminDispatcherBoundaryResult =
 
 export const adminBookingPersistencePurpose = "admin-booking-persistence";
 
+type AdminDispatcherBoundaryOptions = {
+  allowServerSessionRoleMethodsWithoutRequestToken?: readonly string[];
+};
+
 const safeBlockedMessage =
   "Admin booking persistence is available only from the internal admin dashboard.";
 const serverSessionAuthMode = "server-session-token";
@@ -64,12 +68,30 @@ function readServerSessionRole() {
     : null;
 }
 
-function resolveServerSessionRole(request: Request): AdminDispatcherBoundaryResult {
+function methodIsAllowedWithoutRequestToken(
+  method: string,
+  allowedMethods: readonly string[] | undefined,
+) {
+  return !!allowedMethods?.some((allowedMethod) => allowedMethod.toUpperCase() === method.toUpperCase());
+}
+
+function resolveServerSessionRole(
+  request: Request,
+  options: AdminDispatcherBoundaryOptions = {},
+): AdminDispatcherBoundaryResult {
   const expectedToken = cleanServerValue(process.env.PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN);
   const requestToken = cleanServerValue(request.headers.get("x-prestige-admin-session-token") || undefined);
   const role = readServerSessionRole();
 
-  if (request.method === "GET" && expectedToken && role) {
+  if (
+    expectedToken &&
+    role &&
+    (request.method === "GET" ||
+      methodIsAllowedWithoutRequestToken(
+        request.method,
+        options.allowServerSessionRoleMethodsWithoutRequestToken,
+      ))
+  ) {
     return {
       ok: true,
       context: {
@@ -103,6 +125,7 @@ function resolveServerSessionRole(request: Request): AdminDispatcherBoundaryResu
 export function resolveAdminDispatcherBoundary(
   request: Request,
   expectedPurpose = adminBookingPersistencePurpose,
+  options: AdminDispatcherBoundaryOptions = {},
 ): AdminDispatcherBoundaryResult {
   const purpose = request.headers.get("x-prestige-admin-purpose");
 
@@ -115,7 +138,7 @@ export function resolveAdminDispatcherBoundary(
   }
 
   if (process.env.PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE === serverSessionAuthMode) {
-    return resolveServerSessionRole(request);
+    return resolveServerSessionRole(request, options);
   }
 
   if (adminBookingPersistenceWritesEnabled()) {

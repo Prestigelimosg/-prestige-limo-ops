@@ -131,6 +131,17 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This is an app-side drift hardening fix; it does not require Vercel CLI, Vercel env changes, dashboard automation, DB schema changes, provider sends/calls, real GPS, broad customer live map, parser changes, billing/payment/PDF/invoice/payout, calendar sync, or shims.
 - Guard coverage lives in `scripts/test-driver-job-link-mode.mjs` and `scripts/test-driver-job-link-production-guard.mjs`.
 
+### Driver Job Link Browser Dashboard Create/Revoke Boundary Fix
+
+- Live manual walkthrough on 2026-06-26 found that the Driver Job Link panel could now build a safe booking reference without driver details, but `Create Link` still returned the safe admin persistence boundary error from the browser dashboard.
+- Root cause: `/api/admin-driver-job-links` reused the generic admin persistence boundary where browser `GET` reads may resolve the server-side configured admin/dispatcher role, but browser `POST` and `PATCH` writes remained private-token-only; the dashboard button cannot expose `x-prestige-admin-session-token`.
+- The admin dispatcher boundary now supports an explicit route-level allowlist for resolving the configured server-side admin/dispatcher role without a browser-exposed token.
+- Only `/api/admin-driver-job-links` opts into that allowlist for `POST` create and `PATCH` revoke, after the existing same-origin root-dashboard referer and `x-prestige-admin-purpose` checks pass.
+- Generic admin booking writes such as `POST /api/admin-bookings` remain private-session-token gated and are not opened by this fix.
+- Customer/driver/public referers, wrong origins, missing purpose headers, unsafe payloads, human-style read references on create, and unsafe driver/customer/finance/internal fields remain blocked.
+- This does not change Vercel env, deploy behavior, DB schema, provider sends/calls, real GPS, broad customer live map, parser behavior, billing/payment/PDF/invoice/payout, calendar sync, or shims.
+- Guard coverage lives in `scripts/test-admin-driver-job-link-api-contract.mjs`.
+
 ### Live William Walkthrough CRM And Driver Job Proof
 
 - Evidence marker: `WILLIAM-WALKTHROUGH-20260626074259`.

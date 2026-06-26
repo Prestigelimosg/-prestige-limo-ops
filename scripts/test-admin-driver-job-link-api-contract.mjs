@@ -346,6 +346,14 @@ function adminHeaders(overrides = {}) {
   };
 }
 
+function dashboardBrowserHeaders(overrides = {}) {
+  const headers = adminHeaders(overrides);
+
+  delete headers["x-prestige-admin-session-token"];
+
+  return headers;
+}
+
 function safeEnv(enabled = true) {
   setEnv({
     PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED: enabled ? "true" : "false",
@@ -565,6 +573,41 @@ try {
   assertNoApiLeak(optionalDriverDetailsCreate, "optional driver details create response");
   assertNoUnsafeDriverJobLinkLeak(optionalDriverDetailsCreate.body.link, "optional driver details link payload");
 
+  const dashboardBrowserCreate = await readResponse(
+    await harness.route.POST(
+      requestWithJson(
+        "POST",
+        "http://localhost/api/admin-driver-job-links",
+        safeCreatePayload({
+          booking_reference: "JOB-LINK-CONTRACT-BROWSER-DASHBOARD",
+          driver_job_payload: {
+            ...safeCreatePayload().driver_job_payload,
+            assigned_driver_name: undefined,
+            assigned_driver_contact: undefined,
+            assigned_driver_plate: undefined,
+            assigned_driver_vehicle_model: "Vehicle TBC",
+          },
+        }),
+        dashboardBrowserHeaders(),
+      ),
+    ),
+  );
+
+  assert.equal(dashboardBrowserCreate.status, 200);
+  assert.equal(dashboardBrowserCreate.body.ok, true);
+  assert.equal(dashboardBrowserCreate.body.token_display_once, true);
+  assert.match(dashboardBrowserCreate.body.driver_job_url, /^http:\/\/localhost\/driver-job\/[A-Za-z0-9_-]+$/);
+  assert.equal(dashboardBrowserCreate.body.link.booking_reference, "JOB-LINK-CONTRACT-BROWSER-DASHBOARD");
+  assert.equal(dashboardBrowserCreate.body.link.actor_role, "admin");
+  assert.equal(dashboardBrowserCreate.body.link.safe_summary.assigned_driver, null);
+  assertNoApiLeak(dashboardBrowserCreate, "dashboard browser create response");
+  assertNoUnsafeDriverJobLinkLeak(
+    dashboardBrowserCreate.body.link,
+    "dashboard browser create link payload",
+  );
+  assert.doesNotMatch(JSON.stringify(dashboardBrowserCreate.body), /token_hash|raw_token|driver_job_token/i);
+  assert.equal(client.tables.driver_job_links.length, 3);
+
   const listed = await readResponse(
     await harness.route.GET(
       new Request("http://localhost/api/admin-driver-job-links?booking_reference=JOB-LINK-CONTRACT-001&limit=10&page=1", {
@@ -649,6 +692,26 @@ try {
   assert.equal(humanReferenceCreate.body.ok, false);
   assertNoApiLeak(humanReferenceCreate, "human-style create reference rejection");
 
+  const dashboardBrowserRevoked = await readResponse(
+    await harness.route.PATCH(
+      requestWithJson(
+        "PATCH",
+        "http://localhost/api/admin-driver-job-links",
+        {
+          driver_job_link_id: dashboardBrowserCreate.body.link.id,
+        },
+        dashboardBrowserHeaders(),
+      ),
+    ),
+  );
+
+  assert.equal(dashboardBrowserRevoked.status, 200);
+  assert.equal(dashboardBrowserRevoked.body.ok, true);
+  assert.equal(dashboardBrowserRevoked.body.link.link_status, "revoked");
+  assert.equal(client.tables.driver_job_links[2].link_status, "revoked");
+  assertNoApiLeak(dashboardBrowserRevoked, "dashboard browser revoked response");
+  assertNoUnsafeDriverJobLinkLeak(dashboardBrowserRevoked, "dashboard browser revoked response");
+
   const revoked = await readResponse(
     await harness.route.PATCH(
       requestWithJson("PATCH", "http://localhost/api/admin-driver-job-links", {
@@ -667,7 +730,7 @@ try {
 
   assert.deepEqual(
     client.operations.map((operation) => operation.type),
-    ["insert", "insert", "update"],
+    ["insert", "insert", "insert", "update", "update"],
   );
   assert.equal(
     client.operations.some((operation) => operation.table !== "driver_job_links"),

@@ -16111,7 +16111,7 @@ export default function Home() {
         ) : null}
       </span>
       <input
-        className="h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-base outline-none transition placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+        className="h-9 w-full rounded-md border border-stone-300 bg-white px-2.5 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
         inputMode={
           field === "pax"
             ? "numeric"
@@ -27795,10 +27795,10 @@ export default function Home() {
         </section>
 
         {activeTab === "dispatch" ? (
-        <section className="flex min-w-0 flex-col gap-3" data-dispatch-workflow="true">
+        <section className="flex min-w-0 flex-col gap-2.5" data-dispatch-workflow="true">
           <div className="contents">
             <section
-              className="order-10 min-w-0 rounded-md border border-stone-200 bg-white p-3"
+              className="order-10 min-w-0 rounded-md border border-stone-200 bg-white p-2.5"
               data-dispatch-workflow-step="booking-input-parser"
             >
             <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -27807,7 +27807,7 @@ export default function Home() {
                 <p className="text-xs text-slate-500">Paste, parse, assign, dispatch, then save.</p>
               </div>
               <button
-                className="min-h-9 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                className="min-h-11 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 md:min-h-9"
                 type="button"
                 onClick={() => {
                   setBooking(() => createInitialBooking());
@@ -27819,14 +27819,14 @@ export default function Home() {
               </button>
             </div>
 
-            <div className="mb-3 rounded-md border border-stone-200 bg-stone-50 p-2.5">
+            <div className="mb-2.5 rounded-md border border-stone-200 bg-stone-50 p-2">
               <label>
                 <span className="mb-1 block text-sm font-medium text-slate-700">
                   Paste Booking Message
                 </span>
                 <textarea
                   key={bookingMessageResetKey}
-                  className="min-h-32 w-full resize-y rounded-md border border-stone-300 bg-white px-3 py-2 text-base outline-none transition placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                  className="min-h-24 w-full resize-y rounded-md border border-stone-300 bg-white px-2.5 py-1.5 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
                   ref={bookingMessageRef}
                   onChange={(event) => {
                     setBookingMessage(event.target.value);
@@ -27845,7 +27845,7 @@ export default function Home() {
                 >
                   <div className="flex w-full min-w-0 flex-col gap-2" data-ai-assist-gate="true">
                     <button
-                      className={`min-h-11 w-full rounded-md border px-3 py-1.5 text-xs font-semibold transition ${
+                      className={`min-h-11 w-full rounded-md border px-2.5 py-1.5 text-xs font-semibold transition md:min-h-9 ${
                         aiAssistSafetyAccepted
                           ? "border-indigo-200 bg-white text-indigo-800 hover:bg-indigo-50"
                           : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
@@ -27857,7 +27857,7 @@ export default function Home() {
                       AI Assist Parse (Mock)
                     </button>
                     <label
-                      className="flex min-h-11 w-full items-center gap-2 rounded-md border border-indigo-200 bg-white px-2.5 py-1.5 text-[11px] font-medium leading-tight text-indigo-950"
+                      className="flex min-h-11 w-full items-center gap-2 rounded-md border border-indigo-200 bg-white px-2.5 py-1.5 text-[11px] font-medium leading-tight text-indigo-950 md:min-h-9"
                     >
                       <input
                         checked={aiAssistSafetyAccepted}
@@ -27886,14 +27886,14 @@ export default function Home() {
                     ) : null}
                   </div>
                   <button
-                    className="min-h-11 w-full rounded-md bg-slate-950 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-800"
+                    className="min-h-11 w-full rounded-md bg-slate-950 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-800 md:min-h-9"
                     onClick={handleParseBookingMessage}
                     type="button"
                   >
                     Create Job Card
                   </button>
                   <button
-                    className="min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold whitespace-nowrap text-slate-800 transition hover:bg-slate-50 md:min-w-32"
+                    className="min-h-11 w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold whitespace-nowrap text-slate-800 transition hover:bg-slate-50 md:min-h-9 md:min-w-32"
                     data-dispatcher-clear-message-button="true"
                     onClick={clearBookingMessageInput}
                     style={{ minHeight: 44 }}
@@ -28060,27 +28060,27 @@ export default function Home() {
             </section>
 
             <section
-              className="order-20 min-w-0 rounded-md border border-stone-200 bg-white p-3"
+              className="order-20 min-w-0 rounded-md border border-stone-200 bg-white p-2.5"
               data-dispatch-workflow-step="booking-details"
             >
-              <div className="mb-3">
+              <div className="mb-2">
                 <h3 className="text-base font-semibold text-slate-900">Booking Details</h3>
                 <p className="text-xs text-slate-500">Account, passenger, booker, and contact details.</p>
               </div>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-2.5 sm:grid-cols-2">
                 {bookingDetailFieldOrder.map(renderDispatchBookingField)}
               </div>
             </section>
 
             <section
-              className="order-30 min-w-0 rounded-md border border-stone-200 bg-white p-3"
+              className="order-30 min-w-0 rounded-md border border-stone-200 bg-white p-2.5"
               data-dispatch-workflow-step="pickup-dropoff-vehicle"
             >
-              <div className="mb-3">
+              <div className="mb-2">
                 <h3 className="text-base font-semibold text-slate-900">Pickup / Drop-off / Vehicle</h3>
                 <p className="text-xs text-slate-500">Trip timing, route, flight, and vehicle details.</p>
               </div>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-2.5 sm:grid-cols-2">
                 {tripRouteFieldOrder.map(renderDispatchBookingField)}
               </div>
             </section>
@@ -28455,10 +28455,10 @@ export default function Home() {
             </div>
 
             <section
-              className="order-[60] rounded-md border border-sky-200 bg-sky-50 p-3"
+              className="order-[60] rounded-md border border-sky-200 bg-sky-50 p-2.5"
               data-dispatch-workflow-step="driver-assignment"
             >
-              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h3 className="text-base font-semibold text-sky-950">Assigned Driver</h3>
                   <p className="text-sm text-slate-600">Manual assignment with payout control.</p>
@@ -28477,7 +28477,7 @@ export default function Home() {
                   {loadingDriverAssignmentDisplay ? "Loading Drivers..." : "Load Drivers for Assignment"}
                 </button>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-2.5 sm:grid-cols-2">
                 <label>
                   <span className="mb-1 block text-sm font-medium text-slate-700">Driver</span>
                   <select
@@ -28571,14 +28571,14 @@ export default function Home() {
                   Apply Driver to Draft
                 </button>
               </div>
-              <div
-                className="mt-4 border-t border-sky-200 pt-4"
+              <details
+                className="mt-3 border-t border-sky-200 pt-3"
                 data-admin-replacement-placeholder="true"
               >
-                <div className="mb-3 flex flex-col gap-1">
-                  <h4 className="text-sm font-semibold text-sky-950">
-                    Replacement Car / Driver — Mock Only
-                  </h4>
+                <summary className="cursor-pointer list-none text-sm font-semibold text-sky-950">
+                  Replacement Car / Driver — Mock Only
+                </summary>
+                <div className="mt-2 mb-3 flex flex-col gap-1">
                   <p
                     className="rounded-md border border-sky-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
                     data-admin-replacement-boundary="true"
@@ -28683,18 +28683,18 @@ export default function Home() {
                     </div>
                   ))}
                 </div>
-              </div>
-              <div
-                className="mt-4 border-t border-sky-200 pt-4"
+              </details>
+              <details
+                className="mt-3 border-t border-sky-200 pt-3"
                 data-telegram-alert-preview="true"
               >
-                <div className="mb-3 flex flex-col gap-1">
-                  <h4
-                    className="text-sm font-semibold text-sky-950"
-                    data-telegram-alert-title="true"
-                  >
-                    Telegram Alert Preview — Mock Only
-                  </h4>
+                <summary
+                  className="cursor-pointer list-none text-sm font-semibold text-sky-950"
+                  data-telegram-alert-title="true"
+                >
+                  Telegram Alert Preview — Mock Only
+                </summary>
+                <div className="mt-2 mb-3 flex flex-col gap-1">
                   <p
                     className="rounded-md border border-sky-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
                     data-telegram-alert-boundary="true"
@@ -28756,7 +28756,7 @@ export default function Home() {
                     </pre>
                   </div>
                 </div>
-              </div>
+              </details>
             </section>
 
             {shouldShowParserDebugPanel && parsedDebugBooking ? (
@@ -31918,14 +31918,14 @@ export default function Home() {
               {jobCardCopyEditState.isEditing ? (
                 <textarea
                   aria-label="Edit Job Card Copy"
-                  className="min-h-44 w-full rounded-md border border-slate-300 bg-white p-3 text-sm leading-6 text-slate-900 outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                  className="min-h-40 w-full rounded-md border border-slate-300 bg-white p-2.5 text-xs leading-5 text-slate-900 outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
                   data-copy-edit-textarea="jobCard"
                   onChange={(event) => updateCopyEditDraft("jobCard", event.target.value)}
                   value={jobCardCopyEditState.draftText}
                 />
               ) : (
                 <pre
-                  className="whitespace-pre-wrap break-words rounded-md bg-[#dcf8c6] p-3 text-sm leading-6 text-slate-900"
+                  className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-md bg-[#dcf8c6] p-2.5 text-xs leading-5 text-slate-900"
                   data-copy-preview="jobCard"
                 >
                   {jobCardCopyText}
@@ -32203,14 +32203,14 @@ export default function Home() {
               {customerCopyEditState.isEditing ? (
                 <textarea
                   aria-label="Edit Customer Copy"
-                  className="min-h-44 w-full rounded-md border border-emerald-300 bg-white p-3 text-sm leading-6 text-slate-900 outline-none transition focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/10"
+                  className="min-h-40 w-full rounded-md border border-emerald-300 bg-white p-2.5 text-xs leading-5 text-slate-900 outline-none transition focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/10"
                   data-copy-edit-textarea="customerCopy"
                   onChange={(event) => updateCopyEditDraft("customerCopy", event.target.value)}
                   value={customerCopyEditState.draftText}
                 />
               ) : (
                 <pre
-                  className="whitespace-pre-wrap break-words rounded-md bg-emerald-50 p-3 text-sm leading-6 text-slate-900"
+                  className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-md bg-emerald-50 p-2.5 text-xs leading-5 text-slate-900"
                   data-copy-preview="customerCopy"
                 >
                   {customerCopyText}
@@ -32314,14 +32314,14 @@ export default function Home() {
               {driverDispatchCopyEditState.isEditing ? (
                 <textarea
                   aria-label="Edit Driver Dispatch"
-                  className="min-h-44 w-full rounded-md border border-sky-300 bg-white p-3 text-sm leading-6 text-slate-900 outline-none transition focus:border-sky-700 focus:ring-2 focus:ring-sky-700/10"
+                  className="min-h-40 w-full rounded-md border border-sky-300 bg-white p-2.5 text-xs leading-5 text-slate-900 outline-none transition focus:border-sky-700 focus:ring-2 focus:ring-sky-700/10"
                   data-copy-edit-textarea="driverDispatch"
                   onChange={(event) => updateCopyEditDraft("driverDispatch", event.target.value)}
                   value={driverDispatchCopyEditState.draftText}
                 />
               ) : (
                 <pre
-                  className="whitespace-pre-wrap break-words rounded-md bg-sky-50 p-3 text-sm leading-6 text-slate-900"
+                  className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-md bg-sky-50 p-2.5 text-xs leading-5 text-slate-900"
                   data-copy-preview="driverDispatch"
                 >
                   {driverDispatchCopyText}
@@ -32400,7 +32400,7 @@ export default function Home() {
                   </div>
                 </div>
                 <pre
-                  className="whitespace-pre-wrap break-words rounded-md bg-indigo-50 p-3 text-sm leading-6 text-slate-900"
+                  className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-md bg-indigo-50 p-2.5 text-xs leading-5 text-slate-900"
                   data-copy-preview="driverJobLink"
                 >
                   {driverJobLinkMessage}

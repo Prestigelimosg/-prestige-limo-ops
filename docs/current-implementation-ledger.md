@@ -45,6 +45,19 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer/driver-visible forbidden data remains blocked from this list path: driver payout, PayNow payout, customer price, billing, invoice, payment, internal admin notes, parser/debug, secrets, raw provider payloads, and mock QA/dev archive data.
 - Guard coverage lives in `scripts/test-admin-load-bookings-crm-fallback-compact-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Live Admin Load Bookings Fallback Compact UI Verification
+
+- Evidence marker: `ADMIN-LOAD-BOOKINGS-FALLBACK-COMPACT-LIVE-20260626`.
+- Source-of-truth commit during proof: `e027bc7 Fix admin load bookings fallback and compact list`.
+- Live app target: `https://app.prestigelimo.sg`.
+- Safe live root GET returned HTTP 200 with title `Prestige Limo Ops`.
+- Browser-style same-origin admin `GET /api/admin-saved-bookings?limit=25` still returned the safe HTTP 500 `Admin saved booking read failed safely.` response.
+- Browser-style same-origin admin `GET /api/admin-bookings` returned HTTP 200 with a bookings array.
+- Headless live UI smoke clicked only the admin `Bookings` tab and `Load Bookings` button, observed no `Load bookings failed` message, and observed the `CRM list fallback used` operator note.
+- Compact expandable CRM rows rendered successfully: 14 recent rows, 14 recent detail bodies, and 14 recent action rows; rows were closed by default.
+- No form submit, save, edit, calendar, provider send, Email/Telegram/WhatsApp/SMS, DB write, Vercel env change, Vercel CLI, dashboard automation, deploy, parser change, live GPS/customer-wide live map, billing/payment/PDF/invoice/payout, or calendar sync occurred.
+- Customer/driver-visible forbidden data remains blocked from this verification path: driver payout, PayNow payout, customer price, billing, invoice, payment, internal admin notes, parser/debug, secrets, raw provider payloads, and mock QA/dev archive data.
+
 ### Customer Booking Request Persistence Actor Fix
 
 - The public `/book` customer booking request path now keeps its existing same-origin `/book`, `x-prestige-customer-purpose`, and safe payload parser boundary, while allowing only the exact `Customer booking request` system actor to pass the admin booking persistence write gate.

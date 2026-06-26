@@ -58,6 +58,15 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No form submit, save, edit, calendar, provider send, Email/Telegram/WhatsApp/SMS, DB write, Vercel env change, Vercel CLI, dashboard automation, deploy, parser change, live GPS/customer-wide live map, billing/payment/PDF/invoice/payout, or calendar sync occurred.
 - Customer/driver-visible forbidden data remains blocked from this verification path: driver payout, PayNow payout, customer price, billing, invoice, payment, internal admin notes, parser/debug, secrets, raw provider payloads, and mock QA/dev archive data.
 
+### Customer Folder Compact Index UI Lock
+
+- The Customer Folder / Job History Handoff area now renders as a compact responsive list instead of three giant cards.
+- Desktop/tablet uses dense rows so the three existing customer folders fit on one Mac screen without repeated scrolling.
+- Mobile remains responsive with stacked compact rows; this is not a desktop-only layout and does not change customer or driver runtime behavior.
+- The visible `Visible mock folders` wording is removed from the handoff; the count now uses the customer-facing admin label `Customers`.
+- No route, API, parser, DB, env, Vercel, provider-send, GPS/live-location, billing/payment/PDF/payout, calendar, or shim behavior is changed.
+- This polish is guarded by `scripts/test-customer-folder-compact-index-guard.mjs` and registered in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Customer Booking Request Persistence Actor Fix
 
 - The public `/book` customer booking request path now keeps its existing same-origin `/book`, `x-prestige-customer-purpose`, and safe payload parser boundary, while allowing only the exact `Customer booking request` system actor to pass the admin booking persistence write gate.

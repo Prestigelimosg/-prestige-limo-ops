@@ -25851,9 +25851,11 @@ async function runChromeTest() {
             helper:
               indexHandoff?.querySelector("[data-customer-folder-index-handoff-helper]")?.textContent.trim() || "",
             inputCount: indexHandoff?.querySelectorAll("input, select, textarea").length || 0,
+            layout: indexHandoff?.getAttribute("data-customer-folder-index-handoff-layout") || "",
             links: [...(indexHandoff?.querySelectorAll("[data-customer-folder-index-handoff-link]") || [])].map(
               (link) => link.getAttribute("href") || "",
             ),
+            listVisible: Boolean(indexHandoff?.querySelector("[data-customer-folder-index-compact-list]")),
             rows: [...(indexHandoff?.querySelectorAll("[data-customer-folder-index-handoff-row]") || [])].map(
               (row) => ({
                 id: row.getAttribute("data-customer-folder-index-handoff-row") || "",
@@ -26509,13 +26511,23 @@ async function runChromeTest() {
       );
       assert.equal(
         dashboardState.customerFolderIndexHandoff.count,
-        "Visible mock folders: 3",
-        "Expected customer folder index handoff to show visible mock folder count",
+        "Customers: 3",
+        "Expected customer folder index handoff to show compact customer count",
       );
       assert.equal(
         dashboardState.customerFolderIndexHandoff.helper,
-        "Search the index, open the existing customer folder, then review job history context there. This handoff is staff-facing and not customer-facing.",
+        "Open the customer folder and review job history there. Staff-facing only.",
         "Expected customer folder index handoff helper",
+      );
+      assert.equal(
+        dashboardState.customerFolderIndexHandoff.layout,
+        "compact-list",
+        "Expected customer folder index handoff to use compact responsive list layout",
+      );
+      assert.equal(
+        dashboardState.customerFolderIndexHandoff.listVisible,
+        true,
+        "Expected customer folder index handoff compact list to render",
       );
       assert.equal(
         dashboardState.customerFolderIndexHandoff.boundary,

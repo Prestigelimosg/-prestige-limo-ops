@@ -1661,36 +1661,36 @@ export default function MockCustomerDashboardPage() {
         </section>
 
         <section
-          className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
+          className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4"
           data-customer-folder-index-handoff="true"
+          data-customer-folder-index-handoff-layout="compact-list"
         >
-          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">
                 Staff folder handoff
               </p>
-              <h2 className="mt-2 text-lg font-bold text-slate-950">
+              <h2 className="mt-1 text-base font-bold text-slate-950">
                 Customer Folder / Job History Handoff
               </h2>
               <p
-                className="mt-1 max-w-4xl text-sm leading-6 text-slate-600"
+                className="mt-1 max-w-3xl text-xs leading-5 text-slate-600"
                 data-customer-folder-index-handoff-helper="true"
               >
-                Search the index, open the existing customer folder, then review job history context there. This
-                handoff is staff-facing and not customer-facing.
+                Open the customer folder and review job history there. Staff-facing only.
               </p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <p
-                className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700"
+                className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-700"
                 data-customer-folder-index-handoff-count="true"
               >
                 {regularCustomerAccountReadState.status === "loaded"
                   ? `Saved accounts: ${customerFolderIndexRows.length}`
-                  : `Visible mock folders: ${customerFolderIndexHandoffRows.length}`}
+                  : `Customers: ${customerFolderIndexHandoffRows.length}`}
               </p>
               <button
-                className="min-h-10 rounded-md border border-slate-900 bg-slate-900 px-3 py-2 text-sm font-bold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                className="min-h-9 rounded-md border border-slate-900 bg-slate-900 px-3 py-1.5 text-sm font-bold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
                 data-customer-folder-index-load-accounts="true"
                 disabled={regularCustomerAccountReadState.status === "loading"}
                 onClick={loadRegularCustomerAccounts}
@@ -1703,7 +1703,7 @@ export default function MockCustomerDashboardPage() {
 
           <p
             aria-live="polite"
-            className={`mt-4 rounded-md border px-3 py-2 text-sm font-semibold leading-6 ${regularCustomerBookingFeedbackClass(
+            className={`mt-3 rounded-md border px-3 py-2 text-sm font-semibold leading-5 ${regularCustomerBookingFeedbackClass(
               regularCustomerAccountReadState.tone,
             )}`}
             data-customer-folder-index-account-read-feedback="true"
@@ -1712,47 +1712,57 @@ export default function MockCustomerDashboardPage() {
             {regularCustomerAccountReadState.message}
           </p>
 
-          <div className="mt-4 grid gap-3 lg:grid-cols-3">
+          <div
+            className="mt-3 overflow-hidden rounded-md border border-slate-200"
+            data-customer-folder-index-compact-list="true"
+          >
+            <div
+              aria-hidden="true"
+              className="hidden grid-cols-[minmax(10rem,1.3fr)_6rem_8rem_minmax(8rem,1fr)_8rem] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 md:grid"
+            >
+              <span>Customer</span>
+              <span>Jobs</span>
+              <span>Status</span>
+              <span>Latest</span>
+              <span className="text-right">Action</span>
+            </div>
             {customerFolderIndexRows.map((row) => (
               <article
-                className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6"
+                className="grid gap-2 border-b border-slate-200 bg-white px-3 py-2 text-sm leading-5 last:border-b-0 md:grid-cols-[minmax(10rem,1.3fr)_6rem_8rem_minmax(8rem,1fr)_8rem] md:items-center md:gap-3"
                 data-customer-folder-index-handoff-row={row.customerId}
                 key={row.customerId}
               >
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between lg:flex-col xl:flex-row">
-                  <div>
-                    <p className="font-bold text-slate-950">{row.customerName}</p>
-                    <p className="mt-1 text-slate-600">
-                      {row.historyRows} job-history row{row.historyRows === 1 ? "" : "s"}.
-                    </p>
-                    <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-                      {row.upcomingJobs} upcoming / {row.completedJobs} completed
-                    </p>
-                    {row.source === "saved-account-read" ? (
-                      <p className="mt-1 text-xs font-semibold text-slate-500">
-                        {[row.latestPickupAt, row.latestServiceType, row.latestBookingReference]
-                          .filter(Boolean)
-                          .join(" | ") || "Latest saved service not available"}
-                      </p>
-                    ) : null}
-                  </div>
-                  {row.folderHref ? (
-                    <Link
-                      className="inline-flex min-h-10 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-center text-xs font-bold text-white transition hover:bg-slate-700"
-                      data-customer-folder-index-handoff-link={row.customerId}
-                      href={row.folderHref}
-                    >
-                      Review folder
-                    </Link>
-                  ) : (
-                    <span
-                      className="inline-flex min-h-10 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-center text-xs font-bold text-slate-600"
-                      data-customer-folder-index-handoff-no-folder={row.customerId}
-                    >
-                      Folder route pending
-                    </span>
-                  )}
-                </div>
+                <p className="font-bold text-slate-950">{row.customerName}</p>
+                <p className="text-slate-600">
+                  {row.historyRows} job{row.historyRows === 1 ? "" : "s"}
+                </p>
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  {row.upcomingJobs} up / {row.completedJobs} done
+                </p>
+                {row.source === "saved-account-read" ? (
+                  <p className="truncate text-xs font-semibold text-slate-500">
+                    {[row.latestPickupAt, row.latestServiceType, row.latestBookingReference].filter(Boolean).join(" | ") ||
+                      "Latest saved service not available"}
+                  </p>
+                ) : (
+                  <p className="text-xs font-semibold text-slate-500">Folder ready</p>
+                )}
+                {row.folderHref ? (
+                  <Link
+                    className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-center text-xs font-bold text-white transition hover:bg-slate-700 md:justify-self-end"
+                    data-customer-folder-index-handoff-link={row.customerId}
+                    href={row.folderHref}
+                  >
+                    Review folder
+                  </Link>
+                ) : (
+                  <span
+                    className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-center text-xs font-bold text-slate-600 md:justify-self-end"
+                    data-customer-folder-index-handoff-no-folder={row.customerId}
+                  >
+                    Folder route pending
+                  </span>
+                )}
               </article>
             ))}
           </div>
@@ -1767,7 +1777,7 @@ export default function MockCustomerDashboardPage() {
           ) : null}
 
           <p
-            className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-700"
+            className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-700"
             data-customer-folder-index-handoff-boundary="true"
           >
             Read-only local guide. It does not create, save, send, assign work, or change customer records.

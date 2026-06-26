@@ -599,6 +599,10 @@ const guardChecks = [
     script: "scripts/test-customer-driver-app-compact-surface-guard.mjs",
   },
   {
+    label: "Customer folder compact index guard",
+    script: "scripts/test-customer-folder-compact-index-guard.mjs",
+  },
+  {
     label: "Driver In-App Notification staging evidence contract guard",
     script: "scripts/test-driver-in-app-notification-staging-evidence-contract-guard.mjs",
   },

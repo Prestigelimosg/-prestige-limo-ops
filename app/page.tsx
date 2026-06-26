@@ -6285,15 +6285,15 @@ function adminDriverJobStatusDisplayLabel(statusValue: string | null | undefined
   }
 
   if (normalized === "driver_otw") {
-    return "OTW";
+    return "On the way";
   }
 
   if (normalized === "ots") {
-    return "OTS";
+    return "Arrived";
   }
 
   if (normalized === "pob") {
-    return "POB";
+    return "On-boarded";
   }
 
   if (normalized === "completed") {
@@ -11288,10 +11288,10 @@ export default function Home() {
   const activeAdminDriverJobLink =
     adminDriverJobLinkState.link?.link_status === "active" ? adminDriverJobLinkState.link : null;
   const driverJobLinkMessage = useMemo(() => {
-    const driverName = clean(booking.driverName) || "Driver";
     const bookingReference =
       cleanReferenceText(dispatchReleaseWorkflowBookingReference) ||
       cleanReferenceText(activeAdminDriverJobLink?.booking_reference);
+    const passengerLine = clean(booking.name) ? `Passenger: ${clean(booking.name)}` : "";
     const flightLine = clean(booking.flight) ? `Flight: ${clean(booking.flight)}` : "";
     const routeText = isDspItinerary
       ? [
@@ -11313,9 +11313,9 @@ export default function Home() {
     const sections = [
       [
         "Driver Job Link",
-        `Hi ${driverName},`,
+        "Greeting boss, thanks for taking the job. Please keep the car interior clean and fresh.",
         oneTimeUrl
-          ? "Please open this driver job link and update your job status:"
+          ? "Open this driver job link and update your status:"
           : "Create a fresh driver job link to display the one-time URL for copying.",
         oneTimeUrl,
         ...linkSummary,
@@ -11323,6 +11323,7 @@ export default function Home() {
       [
         "Job:",
         bookingReference ? `Reference: ${bookingReference}` : "",
+        passengerLine,
         formatPickupDateTime(booking.date, booking.time),
         flightLine,
       ],
@@ -11339,8 +11340,8 @@ export default function Home() {
         routeText,
       ],
       [
-        "Status to update:",
-        "OTW / OTS / POB / Job Completed",
+        "Status buttons:",
+        "On the way / Arrived / On-boarded / Completed",
       ],
     ];
 

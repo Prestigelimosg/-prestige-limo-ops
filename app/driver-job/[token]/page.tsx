@@ -167,17 +167,17 @@ type DriverStatusTimingRow = {
 };
 
 const statusActions = [
-  { label: "OTW", value: "OTW" },
-  { label: "OTS", value: "OTS" },
-  { label: "POB", value: "POB" },
-  { label: "Job Completed", value: "Job Completed" },
+  { displayLabel: "On the way", label: "OTW", value: "OTW" },
+  { displayLabel: "Arrived", label: "OTS", value: "OTS" },
+  { displayLabel: "On-boarded", label: "POB", value: "POB" },
+  { displayLabel: "Completed", label: "Job Completed", value: "Job Completed" },
 ] as const;
 
 const statusTimingSteps: DriverStatusTimingStep[] = [
-  { aliases: ["driver_otw", "otw"], key: "otw", label: "OTW" },
-  { aliases: ["ots"], key: "ots", label: "OTS" },
-  { aliases: ["pob"], key: "pob", label: "POB" },
-  { aliases: ["completed", "job_completed"], key: "jc", label: "JC" },
+  { aliases: ["driver_otw", "otw"], key: "otw", label: "On the way" },
+  { aliases: ["ots"], key: "ots", label: "Arrived" },
+  { aliases: ["pob"], key: "pob", label: "On-boarded" },
+  { aliases: ["completed", "job_completed"], key: "jc", label: "Completed" },
 ];
 
 const emptyDriverDetails: DriverDetails = {
@@ -1013,7 +1013,7 @@ export default function DriverJobPage() {
     }
   }
 
-  async function updateStatus(nextStatus: string, label: string) {
+  async function updateStatus(nextStatus: string, label: string, displayLabel = label) {
     if (!token || pageState.kind !== "ready") {
       return;
     }
@@ -1081,7 +1081,7 @@ export default function DriverJobPage() {
 
       setWorkflowStatus(result.payload.status);
       setPageState({ kind: "ready", job: result.payload });
-      addActivity(`${label} marked`, `Driver status updated to ${nextStatusText}.`);
+      addActivity(`${displayLabel} marked`, `Driver status updated to ${nextStatusText}.`);
       setStatusFeedback({
         target: label,
         tone: "success",
@@ -1556,10 +1556,10 @@ export default function DriverJobPage() {
                       className="h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-900 transition active:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
                       data-driver-job-status={statusAction.label}
                       disabled={Boolean(updatingStatus)}
-                      onClick={() => updateStatus(statusAction.value, statusAction.label)}
+                      onClick={() => updateStatus(statusAction.value, statusAction.label, statusAction.displayLabel)}
                       type="button"
                     >
-                      {updatingStatus === statusAction.label ? "Updating..." : statusAction.label}
+                      {updatingStatus === statusAction.label ? "Updating..." : statusAction.displayLabel}
                     </button>
                     {statusFeedback?.target === statusAction.label ? (
                       <p

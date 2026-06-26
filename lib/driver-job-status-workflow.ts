@@ -12,10 +12,10 @@ export type DriverJobStatusTransitionGuardResult =
     };
 
 export const driverJobStatusDisplayLabels: Record<DriverJobStatusUpdate, string> = {
-  completed: "Job Completed",
-  driver_otw: "OTW",
-  ots: "OTS",
-  pob: "POB",
+  completed: "Completed",
+  driver_otw: "On the way",
+  ots: "Arrived",
+  pob: "On-boarded",
 };
 
 const driverJobStatusWorkflow = [
@@ -35,11 +35,11 @@ export function validateDriverJobStatusUpdate(value: string): DriverJobStatusUpd
     return "driver_otw";
   }
 
-  if (normalized === "ots" || normalized === "on_the_spot") {
+  if (normalized === "ots" || normalized === "on_the_spot" || normalized === "arrived") {
     return "ots";
   }
 
-  if (normalized === "pob" || normalized === "passenger_on_board") {
+  if (normalized === "pob" || normalized === "passenger_on_board" || normalized === "on_boarded") {
     return "pob";
   }
 

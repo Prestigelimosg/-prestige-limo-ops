@@ -16,10 +16,10 @@ const driverStatusRoutePath = "app/api/driver-job/[token]/status/route.ts";
 const driverStatusPersistencePath = "lib/driver-job-status-persistence.ts";
 
 const allowedStatusActions = [
-  { label: "OTW", value: "OTW" },
-  { label: "OTS", value: "OTS" },
-  { label: "POB", value: "POB" },
-  { label: "Job Completed", value: "Job Completed" },
+  { displayLabel: "On the way", label: "OTW", value: "OTW" },
+  { displayLabel: "Arrived", label: "OTS", value: "OTS" },
+  { displayLabel: "On-boarded", label: "POB", value: "POB" },
+  { displayLabel: "Completed", label: "Job Completed", value: "Job Completed" },
 ];
 
 const allowedWorkflowStatuses = ["driver_otw", "ots", "pob", "completed"];
@@ -93,8 +93,10 @@ function extractObjectList(source, constName) {
   const match = source.match(new RegExp(`const\\s+${constName}\\s*=\\s*\\[([\\s\\S]*?)\\]\\s*(?:as const|;)`));
   assert.ok(match, `Expected ${constName} object list.`);
 
-  return [...match[1].matchAll(/\{\s*label:\s*"([^"]+)",\s*value:\s*"([^"]+)"\s*\}/g)].map(
-    ([, label, value]) => ({ label, value }),
+  return [
+    ...match[1].matchAll(/\{\s*(?:displayLabel:\s*"([^"]+)",\s*)?label:\s*"([^"]+)",\s*value:\s*"([^"]+)"\s*\}/g),
+  ].map(([, displayLabel, label, value]) =>
+    displayLabel ? { displayLabel, label, value } : { label, value },
   );
 }
 
@@ -226,7 +228,7 @@ for (const fragment of [
   "guardDriverJobStatusTransition({",
   "currentStatus: workflowStatus,",
   "status: transitionGuard.status",
-  "addActivity(`${label} marked`, `Driver status updated to ${nextStatusText}.`)",
+  "addActivity(`${displayLabel} marked`, `Driver status updated to ${nextStatusText}.`)",
 ]) {
   assertIncludes(driverPage, fragment, `driver page reporting flow fragment ${fragment}`);
 }

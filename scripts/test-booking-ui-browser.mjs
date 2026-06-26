@@ -8972,7 +8972,10 @@ async function runChromeTest() {
     assert.match(driverJobLinkCopyState.previewText, /Driver Job Link/);
     assert.match(driverJobLinkCopyState.previewText, /Saved link status: active/);
     assert.match(driverJobLinkCopyState.copiedText, /^Driver Job Link/);
-    assert.match(driverJobLinkCopyState.copiedText, /Hi DASHBOARD TEST DRIVER,/);
+    assert.match(
+      driverJobLinkCopyState.copiedText,
+      /Greeting boss, thanks for taking the job\. Please keep the car interior clean and fresh\./,
+    );
     assert.match(driverJobLinkCopyState.copiedText, /https?:\/\/\S+\/driver-job\/browser-created-driver-token/);
     assert.doesNotMatch(
       driverJobLinkCopyState.copiedText,
@@ -8985,6 +8988,7 @@ async function runChromeTest() {
       "Expected Driver Job Link copy not to point to the demo token or include mock/demo wording",
     );
     assert.match(driverJobLinkCopyState.copiedText, /Reference: ui-dashboard-driver-assignment-fixture/);
+    assert.match(driverJobLinkCopyState.copiedText, /Passenger: DASHBOARD DRIVER TEST TRAVELER/);
     assert.match(driverJobLinkCopyState.copiedText, /29 May 2026, 1115hrs/);
     assert.match(driverJobLinkCopyState.copiedText, /Flight: SQ777/);
     assert.match(driverJobLinkCopyState.copiedText, /Pickup:\s*Changi Airport/);
@@ -8994,7 +8998,7 @@ async function runChromeTest() {
       /Route:\s*Changi Airport\s*>\s*Marina Bay Sands\s*>\s*The Fullerton Hotel Singapore/,
       "Expected Driver Job Link copy to include full route and waypoint",
     );
-    assert.match(driverJobLinkCopyState.copiedText, /Status to update:\s*OTW \/ OTS \/ POB \/ Job Completed/);
+    assert.match(driverJobLinkCopyState.copiedText, /Status buttons:\s*On the way \/ Arrived \/ On-boarded \/ Completed/);
     assert.doesNotMatch(
       driverJobLinkCopyState.copiedText,
       /Thank you for choosing Prestige Limo SG\.|Customer note:|driver payout|internal payout|override reason/i,
@@ -15277,7 +15281,7 @@ async function runChromeTest() {
               request.booking_reference === "ui-cleanup-load-fixture" &&
               request.limit === "4",
           ) &&
-          candidateState?.savedDriverStatusReadout?.latest === "OTS" &&
+          candidateState?.savedDriverStatusReadout?.latest === "Arrived" &&
           candidateState?.savedDriverStatusReadout?.time === "2026-06-07 09:25 UTC" &&
           candidateState?.monthlyBillingGroupingRequests?.some(
             (request) =>
@@ -15531,8 +15535,8 @@ async function runChromeTest() {
     assert.deepEqual(
       loadedBookingState.savedDriverStatusReadout,
       {
-        history: "OTS at 2026-06-07 09:25 UTC",
-        latest: "OTS",
+        history: "Arrived at 2026-06-07 09:25 UTC",
+        latest: "Arrived",
         message: "Loaded 1 saved driver status event for ui-cleanup-load-fixture.",
         state: "Saved status",
         time: "2026-06-07 09:25 UTC",

@@ -245,7 +245,7 @@ for (const phrase of [
   "The driver page action surface must stay limited to safe job GET, saved app-update GET, issue-alert POST with `issue_type`, and status PATCH with the guarded status value.",
   "Driver status controls must stay limited to OTW, OTS, POB, and Job Completed, coordinated with `guardDriverJobStatusTransition`.",
   "Driver issue choices must stay limited to operational/safety issue values and must not include finance, billing, payment, PayNow, payout, invoice, PDF, parser/debug, internal admin, or mock QA/archive issue types.",
-  "Driver app updates and saved status history must render only safe fields: `safe_title`, `safe_message`, notification metadata, status labels/times, and `safeNote`.",
+  "Driver app updates and status timing must render only safe fields: `safe_title`, `safe_message`, notification metadata, and status labels/times; visible activity-log and saved-status-history panels stay hidden from the driver page.",
   "Driver job detail display must stay limited to date/time, service, pickup, drop-off, route, waypoints, flight, and passenger display fields.",
   "Pasted driver details remain local-only and filtered so bank/account/PayNow/payment/payout lines are not parsed into driver-visible details.",
   "The driver page must not attach manual Cookie, Authorization, admin purpose, session-token, service-role, Supabase env, local/session storage, credential, geolocation, media, file, FormData, or object URL plumbing.",
@@ -456,11 +456,19 @@ for (const forbiddenPayloadPattern of [
   assertExcludes(safeDriverJobPayloadBlock, forbiddenPayloadPattern, "SafeDriverJobPayload public shape");
 }
 for (const fragment of [
-  "event.safeNote",
-  "data-driver-job-saved-status-history-note",
-  'safeDisplayText(event.occurredAt, "Time not provided")',
+  "data-driver-job-status-timing-evidence",
+  "data-driver-job-status-timing-time",
+  "data-driver-job-app-updates",
 ]) {
-  assertIncludes(driverPage, fragment, `driver status history safe render ${fragment}`);
+  assertIncludes(driverPage, fragment, `driver compact safe render ${fragment}`);
+}
+for (const fragment of [
+  "data-driver-job-activity-log",
+  "data-driver-job-saved-status-history",
+  "Status History",
+  "Driver Activity Log",
+]) {
+  assertExcludes(driverPage, fragment, `driver noisy history/activity render ${fragment}`);
 }
 
 for (const check of contractChecks) {

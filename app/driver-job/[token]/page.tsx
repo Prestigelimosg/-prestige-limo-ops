@@ -528,7 +528,7 @@ export default function DriverJobPage() {
   const [detailsFeedback, setDetailsFeedback] = useState<ControlFeedback | null>(null);
   const [parseDetailsFeedback, setParseDetailsFeedback] = useState<ControlFeedback | null>(null);
   const [savedDriverDetails, setSavedDriverDetails] = useState<DriverDetails | null>(null);
-  const [activityLog, setActivityLog] = useState<ActivityLogEvent[]>([]);
+  const [, setActivityLog] = useState<ActivityLogEvent[]>([]);
   const [driverIssueFeedback, setDriverIssueFeedback] = useState<ControlFeedback | null>(null);
   const [reportingDriverIssue, setReportingDriverIssue] = useState(false);
   const [selectedDriverIssue, setSelectedDriverIssue] = useState("");
@@ -1509,38 +1509,6 @@ export default function DriverJobPage() {
               </div>
             </section>
 
-            <section className="order-[84] space-y-2" aria-labelledby="driver-activity-log-heading">
-              <h2 id="driver-activity-log-heading" className="text-base font-semibold text-slate-900">
-                Driver Activity Log
-              </h2>
-              <div
-                className="space-y-2 rounded-md border border-stone-200 bg-white p-2.5"
-                data-driver-job-activity-log="true"
-              >
-                {activityLog.length > 0 ? (
-                  <ol className="space-y-1.5">
-                    {activityLog.map((event) => (
-                      <li
-                        className="rounded-md bg-slate-50 px-2.5 py-1.5 text-sm text-slate-700 ring-1 ring-slate-200"
-                        data-driver-job-activity-log-item="true"
-                        key={event.id}
-                      >
-                        <div className="flex flex-wrap items-baseline justify-between gap-2">
-                          <span className="font-semibold" data-driver-job-activity-log-label="true">
-                            {event.label}
-                          </span>
-                          <span className="text-xs font-semibold text-slate-500">{event.time}</span>
-                        </div>
-                        <p className="mt-1 break-words text-slate-600">{event.detail}</p>
-                      </li>
-                    ))}
-                  </ol>
-                ) : (
-                  <p className="text-sm font-medium text-slate-600">No driver activity recorded yet.</p>
-                )}
-              </div>
-            </section>
-
             <section
               className="order-3 flex flex-col gap-2 pb-4"
               aria-labelledby="driver-status-heading"
@@ -1620,109 +1588,61 @@ export default function DriverJobPage() {
                   Times are recorded automatically after accepted status updates.
                 </p>
               </div>
-              <div
-                className="order-3 space-y-2 rounded-md border border-amber-200 bg-amber-50/70 p-2.5"
-                data-driver-job-report-issue="true"
-                data-driver-primary-step="report-issue"
-              >
-                <div className="space-y-1">
-                  <p className="text-base font-semibold text-amber-950">Report Issue</p>
-                  <p className="text-sm font-medium leading-6 text-amber-900">
-                    Choose the issue and alert admin inside the app.
-                  </p>
-                </div>
-                <label className="block space-y-1 text-sm font-semibold text-amber-950">
-                  <span>Issue type</span>
-                  <select
-                    className="h-10 w-full rounded-md border border-amber-300 bg-white px-3 text-sm font-semibold text-slate-950 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
-                    data-driver-job-report-issue-select="true"
-                    onChange={(event) => {
-                      setSelectedDriverIssue(event.target.value);
-                      setDriverIssueFeedback(null);
-                    }}
-                    value={selectedDriverIssue}
-                  >
-                    <option value="">Choose issue</option>
-                    {driverJobIssueChoices.map((choice) => (
-                      <option data-driver-job-report-issue-choice={choice.value} key={choice.value} value={choice.value}>
-                        {choice.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div className="space-y-2">
-                  <button
-                    className="h-11 w-full rounded-md bg-amber-700 px-3 text-sm font-semibold text-white transition active:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-60"
-                    data-driver-job-report-issue-submit="true"
-                    disabled={reportingDriverIssue}
-                    onClick={reportDriverIssue}
-                    type="button"
-                  >
-                    {reportingDriverIssue ? "Alerting..." : "Alert Admin"}
-                  </button>
-                  {driverIssueFeedback ? (
-                    <p
-                      aria-live="polite"
-                      className={`rounded-md border px-2.5 py-1.5 text-sm font-semibold ${feedbackClassName(driverIssueFeedback.tone)}`}
-                      data-driver-job-report-issue-message="true"
-                    >
-                      {driverIssueFeedback.text}
-                    </p>
-                  ) : null}
-                </div>
-                <p className="text-xs font-semibold leading-5 text-amber-900" data-driver-job-report-issue-boundary="true">
-                  Internal app alert only. No external messages, live location, or photo upload.
+            </section>
+
+            <section
+              className="order-[92] space-y-2 rounded-md border border-amber-200 bg-amber-50/70 p-2.5"
+              data-driver-job-report-issue="true"
+              data-driver-primary-step="report-issue"
+            >
+              <div className="space-y-1">
+                <h2 className="text-base font-semibold text-amber-950">Report Issue</h2>
+                <p className="text-sm font-medium leading-6 text-amber-900">
+                  Choose the issue and alert admin inside the app.
                 </p>
               </div>
-              <div
-                className="order-4 space-y-2 rounded-md border border-slate-200 bg-white p-2.5"
-                data-driver-job-saved-status-history="true"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-slate-900">Status History</p>
-                  <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
-                    {savedStatusHistory.length} saved
-                  </span>
-                </div>
-                {savedStatusHistory.length > 0 ? (
-                  <ol className="space-y-1.5" data-driver-job-saved-status-history-list="true">
-                    {savedStatusHistory.map((event, index) => (
-                      <li
-                        className="rounded-md bg-slate-50 px-2.5 py-1.5 text-sm text-slate-700 ring-1 ring-slate-200"
-                        data-driver-job-saved-status-history-row="true"
-                        key={`${event.status}-${event.occurredAt}-${index}`}
-                      >
-                        <div className="flex flex-wrap items-baseline justify-between gap-2">
-                          <span className="font-semibold" data-driver-job-saved-status-history-label="true">
-                            {statusDisplay(event.status, event.statusLabel)}
-                          </span>
-                          <span
-                            className="text-xs font-semibold text-slate-500"
-                            data-driver-job-saved-status-history-time="true"
-                          >
-                            {safeDisplayText(event.occurredAt, "Time not provided")}
-                          </span>
-                        </div>
-                        {event.safeNote ? (
-                          <p
-                            className="mt-1 break-words text-slate-600"
-                            data-driver-job-saved-status-history-note="true"
-                          >
-                            {event.safeNote}
-                          </p>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ol>
-                ) : (
+              <label className="block space-y-1 text-sm font-semibold text-amber-950">
+                <span>Issue type</span>
+                <select
+                  className="h-10 w-full rounded-md border border-amber-300 bg-white px-3 text-sm font-semibold text-slate-950 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
+                  data-driver-job-report-issue-select="true"
+                  onChange={(event) => {
+                    setSelectedDriverIssue(event.target.value);
+                    setDriverIssueFeedback(null);
+                  }}
+                  value={selectedDriverIssue}
+                >
+                  <option value="">Choose issue</option>
+                  {driverJobIssueChoices.map((choice) => (
+                    <option data-driver-job-report-issue-choice={choice.value} key={choice.value} value={choice.value}>
+                      {choice.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="space-y-2">
+                <button
+                  className="h-11 w-full rounded-md bg-amber-700 px-3 text-sm font-semibold text-white transition active:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-60"
+                  data-driver-job-report-issue-submit="true"
+                  disabled={reportingDriverIssue}
+                  onClick={reportDriverIssue}
+                  type="button"
+                >
+                  {reportingDriverIssue ? "Alerting..." : "Alert Admin"}
+                </button>
+                {driverIssueFeedback ? (
                   <p
-                    className="rounded-md bg-slate-50 px-2.5 py-1.5 text-sm font-medium text-slate-600 ring-1 ring-slate-200"
-                    data-driver-job-saved-status-history-empty="true"
+                    aria-live="polite"
+                    className={`rounded-md border px-2.5 py-1.5 text-sm font-semibold ${feedbackClassName(driverIssueFeedback.tone)}`}
+                    data-driver-job-report-issue-message="true"
                   >
-                    No saved status history for this link yet.
+                    {driverIssueFeedback.text}
                   </p>
-                )}
+                ) : null}
               </div>
+              <p className="text-xs font-semibold leading-5 text-amber-900" data-driver-job-report-issue-boundary="true">
+                Internal app alert only. No external messages, live location, or photo upload.
+              </p>
             </section>
           </>
         ) : null}

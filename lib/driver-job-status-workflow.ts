@@ -96,6 +96,14 @@ export function guardDriverJobStatusTransition({
     };
   }
 
+  if (nextStatusIndex <= currentStatusIndex) {
+    return {
+      ok: false,
+      message: `${driverJobStatusActionLabels[normalizedNextStatus]} is already recorded. Continue with ${expectedNextStatus.label}.`,
+      reason: "out_of_order",
+    };
+  }
+
   if (nextStatusIndex !== currentStatusIndex + 1) {
     return {
       ok: false,

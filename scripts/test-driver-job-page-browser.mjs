@@ -274,6 +274,7 @@ async function runChromeTest() {
           vehicleModel: document.querySelector("[data-driver-job-detail-vehicle-model]")?.value || "",
         },
         layoutPositions: {
+          liveLocation: Math.round(document.querySelector("[data-driver-primary-step='live-location-consent']")?.getBoundingClientRect().top ?? -1),
           reportIssue: Math.round(document.querySelector("[data-driver-job-report-issue]")?.getBoundingClientRect().top ?? -1),
           saveAcknowledge: Math.round(document.querySelector("[data-driver-job-save-acknowledge]")?.getBoundingClientRect().top ?? -1),
           statusButtons: Math.round(document.querySelector("[data-driver-primary-step='status-buttons']")?.getBoundingClientRect().top ?? -1),
@@ -443,13 +444,11 @@ async function runChromeTest() {
           evaluate(`(() => {
             const button = document.querySelector("[data-driver-job-report-issue-submit]");
             const message = document.querySelector("[data-driver-job-report-issue-message]");
-            const activityLogText = document.querySelector("[data-driver-job-activity-log]")?.innerText || "";
             const buttonRect = button?.getBoundingClientRect();
             const messageRect = message?.getBoundingClientRect();
 
             return message?.textContent.trim() === "Admin alerted in-app: Vehicle issue. No external message was sent." &&
-              activityLogText.includes("Admin alert prepared") &&
-              activityLogText.includes("Driver reported: Vehicle issue.")
+              document.querySelector("[data-driver-job-activity-log]") === null
               ? {
                   distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
                   messageText: message.textContent.trim(),
@@ -606,9 +605,9 @@ async function runChromeTest() {
         "Public driver details Save & Acknowledge should stay local and avoid network requests.",
       );
       assert.deepEqual(
-        afterSaveState.activityLogLabels.slice(-1),
-        ["Job acknowledged"],
-        "Expected Save & Acknowledge to create one acknowledgement activity.",
+        afterSaveState.activityLogLabels,
+        [],
+        "Expected Save & Acknowledge to keep driver activity log hidden.",
       );
       assertNoSensitiveText(afterSaveState);
       return afterSaveState;
@@ -781,9 +780,17 @@ async function runChromeTest() {
       "Expected report issue boundary to block external sending and future-only features.",
     );
     assert.deepEqual(
-      validState.primaryStepOrder.slice(0, 6),
-      ["job-summary", "confirm-details", "save-acknowledge", "status-workflow", "status-buttons", "report-issue"],
-      "Expected job card, confirm-details, save acknowledgement, status, and issue controls to lead the driver page.",
+      validState.primaryStepOrder.slice(0, 7),
+      [
+        "job-summary",
+        "confirm-details",
+        "save-acknowledge",
+        "status-workflow",
+        "status-buttons",
+        "live-location-consent",
+        "report-issue",
+      ],
+      "Expected job card, confirm-details, save acknowledgement, status controls, live location, and issue controls in order.",
     );
     assert.equal(validState.confirmDetails.visible, true, "Expected confirm driver and vehicle details card.");
     assert.equal(validState.confirmDetails.title, "Driver Details");
@@ -811,9 +818,9 @@ async function runChromeTest() {
       "Expected Report Issue below the frequent status buttons.",
     );
     assert.equal(
-      validState.layoutPositions.statusHistory > validState.layoutPositions.statusButtons,
-      true,
-      "Expected status history below the frequent status buttons.",
+      validState.layoutPositions.statusHistory,
+      -1,
+      "Expected saved status history panel to stay hidden from the driver page.",
     );
     assert.equal(validState.appUpdates.visible, true, "Expected driver app updates feed on tokenized driver page.");
     assert.equal(validState.appUpdates.state, "loaded", "Expected driver app updates to load through the token route.");
@@ -918,8 +925,8 @@ async function runChromeTest() {
       [],
       "Public driver job page must keep dispatcher cancel/replacement workflow absent and future/staff-controlled.",
     );
-    assert.ok(validState.visibleText.includes("Driver Activity Log"));
-    assert.ok(validState.visibleText.includes("No driver activity recorded yet."));
+    assert.equal(validState.visibleText.includes("Driver Activity Log"), false);
+    assert.equal(validState.visibleText.includes("No driver activity recorded yet."), false);
     assert.ok(validState.visibleText.includes("Driver name"));
     assert.ok(validState.visibleText.includes("Contact / Mobile number"));
     assert.ok(validState.visibleText.includes("Car plate"));
@@ -929,7 +936,12 @@ async function runChromeTest() {
     assert.equal(validState.visibleText.includes("Completion / Exception Notes"), false);
     assert.equal(validState.visibleText.includes("Completion note"), false);
     assert.equal(validState.visibleText.includes("Exception reason"), false);
-    assert.equal(validState.visibleText.includes("Status History"), true);
+    assert.equal(validState.visibleText.includes("Status History"), false);
+    assert.equal(validState.layoutPositions.statusHistory, -1);
+    assert.ok(
+      validState.layoutPositions.reportIssue > validState.layoutPositions.liveLocation,
+      "Expected Report Issue to sit below the Live Location section near the bottom of the driver page.",
+    );
     assert.deepEqual(
       validState.visualButtonLabels.filter((buttonLabel) =>
         ["Save & Acknowledge Job", "OTW", "OTS", "POB", "Job Completed", "Alert Admin"].includes(buttonLabel),
@@ -970,6 +982,7 @@ async function runChromeTest() {
     await clickStatus("OTW", "I'm on the way", "Status updated to I'm on the way.");
     await clickBlockedStatus("POB", "Update OTS before POB.", "I'm on the way");
     await clickStatus("OTS", "I've arrived", "Status updated to I've arrived.");
+    await clickBlockedStatus("OTW", "OTW is already recorded. Continue with POB.", "I've arrived");
     const depOtsState = await pageState();
     assert.equal(
       depOtsState.visibleText.includes("Add Mock OTS Photo Proof"),
@@ -1006,18 +1019,7 @@ async function runChromeTest() {
       "Expected recorded status timing evidence to show OTW, OTS, POB, and JC times.",
     );
     assert.deepEqual(completedState.statusTiming.controls, [], "Recorded timing evidence must remain read-only.");
-    assert.deepEqual(
-      completedState.activityLogLabels,
-      [
-        "Job acknowledged",
-        "I'm on the way marked",
-        "I've arrived marked",
-        "Passenger on board marked",
-        "Completed marked",
-        "Admin alert prepared",
-      ],
-      "Expected public driver activity log to preserve the single acknowledgement and status workflow order.",
-    );
+    assert.deepEqual(completedState.activityLogLabels, [], "Expected public driver activity log to stay hidden.");
     await resetMockDriverJobData();
 
     const arrivalState = await navigateToDriverJob(mockDriverJobTokens.arrivalWorkflow, "Mock Arrival Pickup");
@@ -1081,17 +1083,7 @@ async function runChromeTest() {
     await clickStatus("POB", "Passenger on board", "Status updated to Passenger on board.");
     await clickStatus("Job Completed", "Completed", "Status updated to Completed.");
     const arrivalCompletedState = await pageState();
-    assert.deepEqual(
-      arrivalCompletedState.activityLogLabels,
-      [
-        "Job acknowledged",
-        "I'm on the way marked",
-        "I've arrived marked",
-        "Passenger on board marked",
-        "Completed marked",
-      ],
-      "Expected Arrival public driver activity log to keep the simple acknowledgement and status order.",
-    );
+    assert.deepEqual(arrivalCompletedState.activityLogLabels, [], "Expected Arrival public driver activity log to stay hidden.");
     assertNoSensitiveText(arrivalCompletedState);
     await resetMockDriverJobData();
 

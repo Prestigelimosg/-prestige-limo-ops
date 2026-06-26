@@ -1721,7 +1721,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The driver page action surface must stay limited to safe job GET, saved app-update GET, issue-alert POST with `issue_type`, and status PATCH with the guarded status value.
 - Driver status controls must stay limited to OTW, OTS, POB, and Job Completed, coordinated with `guardDriverJobStatusTransition`.
 - Driver issue choices must stay limited to operational/safety issue values and must not include finance, billing, payment, PayNow, payout, invoice, PDF, parser/debug, internal admin, or mock QA/archive issue types.
-- Driver app updates and saved status history must render only safe fields: `safe_title`, `safe_message`, notification metadata, status labels/times, and `safeNote`.
+- Driver app updates and status timing must render only safe fields: `safe_title`, `safe_message`, notification metadata, and status labels/times; visible activity-log and saved-status-history panels stay hidden from the driver page.
 - Driver job detail display must stay limited to date/time, service, pickup, drop-off, route, waypoints, flight, and passenger display fields.
 - Pasted driver details remain local-only and filtered so bank/account/PayNow/payment/payout lines are not parsed into driver-visible details.
 - The driver page must not attach manual Cookie, Authorization, admin purpose, session-token, service-role, Supabase env, local/session storage, credential, geolocation, media, file, FormData, or object URL plumbing.
@@ -3527,7 +3527,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - `/driver-job/[token]` single-job driver flow.
 - Save & Acknowledge Job.
 - OTW / OTS / POB / Completed.
-- Status History.
+- Status Timing.
 - Driver notifications GET/PATCH foundation.
 - Driver issue alert foundation.
 
@@ -4859,7 +4859,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This lane compacts the existing Customer Portal and Driver Job app surfaces only.
 - No runtime route, helper, DB, env, provider-send, GPS/location, billing/payment/PDF/payout, or production activation behavior is changed.
 - Customer Portal keeps the same `/my-bookings` request, search, pagination, detail expansion, and local review controls.
-- Driver Job keeps the same job summary, driver detail acknowledgement, App Updates, Live Location disabled controls, activity log, status workflow, Report Issue, and status history controls.
+- Driver Job keeps the same job summary, driver detail acknowledgement, App Updates, Live Location disabled controls, status workflow, Report Issue, and status timing controls while hiding noisy activity-log and saved-status-history panels from drivers.
 - The customer header/guidance and section tabs are compact bands/rows rather than giant cards.
 - The driver status, live-location, updates, and detail sections use compact spacing and shorter controls.
 - No new sector, feature card, free-form chat surface, provider-send panel, map activation, or notification runtime is introduced.

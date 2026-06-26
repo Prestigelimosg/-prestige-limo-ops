@@ -177,7 +177,10 @@ assertIncludes(
   'safeDisplayText(update.safe_message, "Contact dispatch for the latest job update.")',
   "driver app update safe message render",
 );
-assertIncludes(driverJobPage, "event.safeNote", "driver status history safe note render");
+assertIncludes(driverJobPage, "data-driver-job-status-timing-evidence", "driver status timing safe render");
+assertExcludes(driverJobPage, "event.safeNote", "driver saved status history hidden from public page");
+assertExcludes(driverJobPage, "data-driver-job-saved-status-history", "driver saved status history panel hidden");
+assertExcludes(driverJobPage, "data-driver-job-activity-log", "driver activity log panel hidden");
 
 const safeDriverJobPayloadBlock = blockBetween(
   driverJobLink,

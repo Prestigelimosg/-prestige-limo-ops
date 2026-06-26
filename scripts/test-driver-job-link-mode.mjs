@@ -65,6 +65,19 @@ try {
   assert.equal(resolveDriverJobLinkMode({ DRIVER_JOB_LINK_MODE: "production" }), "production");
   assert.equal(resolveDriverJobLinkMode({ NEXT_PUBLIC_DRIVER_JOB_LINK_MODE: "production" }), "production");
   assert.equal(isProductionDriverJobLinkMode({ DRIVER_JOB_LINK_MODE: "production" }), true);
+  assert.equal(
+    isProductionDriverJobLinkMode({ PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED: "true" }),
+    true,
+    "Driver job route should use production reads when production links are enabled and no explicit mock mode is set.",
+  );
+  assert.equal(
+    isProductionDriverJobLinkMode({
+      DRIVER_JOB_LINK_MODE: "mock",
+      PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED: "true",
+    }),
+    false,
+    "Explicit mock mode must still keep demo/test routes mock-backed.",
+  );
   assert.equal(productionDriverJobLinksConfigured(), false);
   assert.deepEqual(productionDriverJobLinksDisabledResult(), {
     ok: false,

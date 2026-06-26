@@ -28,7 +28,23 @@ export function resolveDriverJobLinkMode(env?: DriverJobLinkModeEnv): DriverJobL
 }
 
 export function isProductionDriverJobLinkMode(env?: DriverJobLinkModeEnv) {
-  return resolveDriverJobLinkMode(env) === "production";
+  const sourceEnv = env ?? {
+    DRIVER_JOB_LINK_MODE: process.env.DRIVER_JOB_LINK_MODE,
+    NEXT_PUBLIC_DRIVER_JOB_LINK_MODE: process.env.NEXT_PUBLIC_DRIVER_JOB_LINK_MODE,
+    PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED:
+      process.env.PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED,
+  };
+  const requestedMode = clean(sourceEnv.DRIVER_JOB_LINK_MODE) || clean(sourceEnv.NEXT_PUBLIC_DRIVER_JOB_LINK_MODE);
+
+  if (requestedMode === "production") {
+    return true;
+  }
+
+  if (requestedMode) {
+    return false;
+  }
+
+  return productionDriverJobLinksConfigured(sourceEnv);
 }
 
 export function productionDriverJobLinksConfigured(env?: DriverJobLinkModeEnv) {

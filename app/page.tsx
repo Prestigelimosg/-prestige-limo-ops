@@ -2610,6 +2610,12 @@ function clean(value: string | number | null | undefined) {
   return (value ?? "").toString().trim();
 }
 
+function cleanReferenceText(value: string | number | null | undefined) {
+  const cleaned = clean(value);
+
+  return /^(?:undefined|null)$/i.test(cleaned) ? "" : cleaned;
+}
+
 function isInactiveDriver(
   driver: Pick<DriverRecord, "availability_status"> | DriverAssignmentDisplayRecord | null | undefined,
 ) {
@@ -9514,7 +9520,7 @@ export default function Home() {
   };
 
   const dispatchReleaseWorkflowBookingReference =
-    clean(appliedAdminBookingSnapshotReference) || clean(loadedBookingId);
+    cleanReferenceText(appliedAdminBookingSnapshotReference) || cleanReferenceText(loadedBookingId);
   const adminMonthlyBillingGroupingBillingMonthFilter =
     adminMonthlyBillingGroupingBillingMonthFromDate(booking.date);
 
@@ -11283,6 +11289,9 @@ export default function Home() {
     adminDriverJobLinkState.link?.link_status === "active" ? adminDriverJobLinkState.link : null;
   const driverJobLinkMessage = useMemo(() => {
     const driverName = clean(booking.driverName) || "Driver";
+    const bookingReference =
+      cleanReferenceText(dispatchReleaseWorkflowBookingReference) ||
+      cleanReferenceText(activeAdminDriverJobLink?.booking_reference);
     const flightLine = clean(booking.flight) ? `Flight: ${clean(booking.flight)}` : "";
     const routeText = isDspItinerary
       ? [
@@ -11313,7 +11322,7 @@ export default function Home() {
       ],
       [
         "Job:",
-        loadedBookingId ? `Reference: ${loadedBookingId}` : "",
+        bookingReference ? `Reference: ${bookingReference}` : "",
         formatPickupDateTime(booking.date, booking.time),
         flightLine,
       ],
@@ -11343,9 +11352,9 @@ export default function Home() {
     activeAdminDriverJobLink,
     adminDriverJobLinkState.oneTimeUrl,
     booking,
+    dispatchReleaseWorkflowBookingReference,
     isDspItinerary,
     itineraryDisplayStops,
-    loadedBookingId,
     route,
   ]);
 
@@ -13706,14 +13715,20 @@ export default function Home() {
   }
 
   function loadSelectedBooking(bookingRecord: BookingRecord) {
+    const bookingReference =
+      cleanReferenceText(bookingRecord.booking_reference) ||
+      cleanReferenceText(bookingRecord.id) ||
+      cleanReferenceText(bookingRecord.flight_no) ||
+      getBookingDateKey(bookingRecord);
+
     setBooking(() => bookingRecordToForm(bookingRecord));
-    setLoadedBookingId(String(bookingRecord.id));
+    setLoadedBookingId(bookingReference);
     setDispatchReleaseWorkflowLoadRevision((currentRevision) => currentRevision + 1);
     setActiveTab("dispatch");
     clearBookingMessageInput();
     setMessage({
       tone: "success",
-      text: `Booking ${bookingRecord.id || clean(bookingRecord.flight_no) || getBookingDateKey(bookingRecord)} loaded.`,
+      text: `Booking ${bookingReference || "selected booking"} loaded.`,
     });
   }
 
@@ -14481,13 +14496,6 @@ export default function Home() {
       };
     }
 
-    if (!driverName || !driverContact || !driverPlate) {
-      return {
-        error: "Driver name, contact, and car plate are required before creating a driver job link.",
-        ok: false as const,
-      };
-    }
-
     if (!pickupLocation || !dropoffLocation || !clean(booking.date) || !clean(booking.time)) {
       return {
         error: "Pickup, drop-off, pickup date, and pickup time are required before creating a driver job link.",
@@ -14495,28 +14503,55 @@ export default function Home() {
       };
     }
 
+    const driverJobPayload: {
+      assigned_driver_contact?: string;
+      assigned_driver_name?: string;
+      assigned_driver_plate?: string;
+      assigned_driver_vehicle_model?: string;
+      booking_type: string;
+      dropoff_location: string;
+      flight_no: string;
+      passenger_name: string;
+      pickup_date: string;
+      pickup_datetime: string;
+      pickup_location: string;
+      pickup_time: string;
+      route: string;
+      status: string;
+      waypoints: string[];
+    } = {
+      assigned_driver_vehicle_model: vehicleModel || "Vehicle TBC",
+      booking_type: clean(booking.bookingType),
+      dropoff_location: dropoffLocation,
+      flight_no: clean(booking.flight),
+      passenger_name: passengerName,
+      pickup_date: clean(booking.date),
+      pickup_datetime: pickupDateTime,
+      pickup_location: pickupLocation,
+      pickup_time: formatPickupTime(booking.time),
+      route: route,
+      status: clean(dispatchReleaseAppliedStatus) || "assigned",
+      waypoints: isDspItinerary
+        ? itineraryDisplayStops.map((stop) => clean(stop.location)).filter(Boolean)
+        : [],
+    };
+
+    if (driverName) {
+      driverJobPayload.assigned_driver_name = driverName;
+    }
+
+    if (driverContact) {
+      driverJobPayload.assigned_driver_contact = driverContact;
+    }
+
+    if (driverPlate) {
+      driverJobPayload.assigned_driver_plate = driverPlate;
+    }
+
     return {
       data: {
         booking_reference: bookingReference,
-        driver_job_payload: {
-          assigned_driver_contact: driverContact,
-          assigned_driver_name: driverName,
-          assigned_driver_plate: driverPlate,
-          assigned_driver_vehicle_model: vehicleModel || "Vehicle",
-          booking_type: clean(booking.bookingType),
-          dropoff_location: dropoffLocation,
-          flight_no: clean(booking.flight),
-          passenger_name: passengerName,
-          pickup_date: clean(booking.date),
-          pickup_datetime: pickupDateTime,
-          pickup_location: pickupLocation,
-          pickup_time: clean(booking.time),
-          route: route,
-          status: clean(dispatchReleaseAppliedStatus) || "assigned",
-          waypoints: isDspItinerary
-            ? itineraryDisplayStops.map((stop) => clean(stop.location)).filter(Boolean)
-            : [],
-        },
+        driver_job_payload: driverJobPayload,
         ttl_hours: 48,
       },
       ok: true as const,
@@ -16112,6 +16147,11 @@ export default function Home() {
             operationalCard.vehicle_display || "Vehicle TBC",
             `Pax ${operationalCard.pax_display || "1"}`,
           ].join(" · ");
+          const pickupMetaText = [
+            operationalCard.pickup_datetime ||
+              formatPickupDateTime(getBookingDateKey(savedBooking), savedBooking.pickup_time),
+            operationalCard.job_card_display,
+          ].filter(Boolean).join(" · ");
 
           return (
             <article
@@ -16127,8 +16167,7 @@ export default function Home() {
                         {getLoadBookingsOperationalDisplayTitle(operationalCard)}
                       </span>
                       <span className="block truncate text-xs text-slate-500">
-                        {operationalCard.pickup_datetime ||
-                          formatPickupDateTime(getBookingDateKey(savedBooking), savedBooking.pickup_time)}
+                        {pickupMetaText}
                       </span>
                     </span>
                     <span className="min-w-0">
@@ -16354,6 +16393,11 @@ export default function Home() {
                 operationalCard.vehicle_display || "Vehicle TBC",
                 `Pax ${operationalCard.pax_display || "1"}`,
               ].join(" · ");
+              const pickupMetaText = [
+                operationalCard.pickup_datetime ||
+                  formatPickupDateTime(getBookingDateKey(savedBooking), savedBooking.pickup_time),
+                operationalCard.job_card_display,
+              ].filter(Boolean).join(" · ");
               return (
                 <article
                   className="rounded-md border border-stone-200 bg-white p-2 text-sm shadow-sm"
@@ -16368,8 +16412,7 @@ export default function Home() {
                             {getLoadBookingsOperationalDisplayTitle(operationalCard)}
                           </span>
                           <span className="block truncate text-xs text-slate-500">
-                            {operationalCard.pickup_datetime ||
-                              formatPickupDateTime(getBookingDateKey(savedBooking), savedBooking.pickup_time)}
+                            {pickupMetaText}
                           </span>
                         </span>
                         <span className="min-w-0">
@@ -16490,7 +16533,7 @@ export default function Home() {
   const jobCardCopyText = getDispatchCopyText("jobCard");
   const customerCopyText = getDispatchCopyText("customerCopy");
   const driverDispatchCopyText = getDispatchCopyText("driverDispatch");
-  const showDriverJobLinkCopy = Boolean(clean(loadedBookingId));
+  const showDriverJobLinkCopy = Boolean(cleanReferenceText(dispatchReleaseWorkflowBookingReference));
   const dispatchReleaseLoadedBookingRecord = loadedBookingId
     ? bookings.find((bookingRecord) => String(bookingRecord.id) === loadedBookingId) ?? null
     : null;

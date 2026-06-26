@@ -520,6 +520,51 @@ try {
   assert.equal(client.tables.driver_job_links[0].safe_link_context.driver_job_payload.pickup_location, "Raffles Hotel Singapore");
   assert.doesNotMatch(JSON.stringify(client.tables.driver_job_links[0].safe_link_context), /paynow|payout|invoice|payment|pdf|token/i);
 
+  const optionalDriverDetailsPayload = safeCreatePayload({
+    booking_reference: "JOB-LINK-CONTRACT-OPTIONAL-DRIVER",
+    driver_job_payload: {
+      assigned_driver_vehicle_model: "Vehicle TBC",
+      booking_type: "DEP",
+      dropoff_location: "Changi Airport Terminal 3",
+      flight_no: "SQ321",
+      passenger_name: "Guest Tan",
+      pickup_datetime: "2026-06-12T10:30:00.000+08:00",
+      pickup_location: "Raffles Hotel Singapore",
+      route: "Raffles Hotel Singapore > Changi Airport Terminal 3",
+      status: "assigned",
+    },
+  });
+  const optionalDriverDetailsCreate = await readResponse(
+    await harness.route.POST(
+      requestWithJson(
+        "POST",
+        "http://localhost/api/admin-driver-job-links",
+        optionalDriverDetailsPayload,
+      ),
+    ),
+  );
+
+  assert.equal(optionalDriverDetailsCreate.status, 200);
+  assert.equal(optionalDriverDetailsCreate.body.ok, true);
+  assert.equal(optionalDriverDetailsCreate.body.link.booking_reference, "JOB-LINK-CONTRACT-OPTIONAL-DRIVER");
+  assert.equal(optionalDriverDetailsCreate.body.link.safe_summary.assigned_driver, null);
+  assert.equal(optionalDriverDetailsCreate.body.link.safe_summary.vehicle, "Vehicle TBC");
+  assert.equal(client.tables.driver_job_links.length, 2);
+  assert.equal(
+    client.tables.driver_job_links[1].safe_link_context.driver_job_payload.assigned_driver_name,
+    undefined,
+  );
+  assert.equal(
+    client.tables.driver_job_links[1].safe_link_context.driver_job_payload.assigned_driver_contact,
+    undefined,
+  );
+  assert.equal(
+    client.tables.driver_job_links[1].safe_link_context.driver_job_payload.assigned_driver_plate,
+    undefined,
+  );
+  assertNoApiLeak(optionalDriverDetailsCreate, "optional driver details create response");
+  assertNoUnsafeDriverJobLinkLeak(optionalDriverDetailsCreate.body.link, "optional driver details link payload");
+
   const listed = await readResponse(
     await harness.route.GET(
       new Request("http://localhost/api/admin-driver-job-links?booking_reference=JOB-LINK-CONTRACT-001&limit=10&page=1", {
@@ -622,7 +667,7 @@ try {
 
   assert.deepEqual(
     client.operations.map((operation) => operation.type),
-    ["insert", "update"],
+    ["insert", "insert", "update"],
   );
   assert.equal(
     client.operations.some((operation) => operation.table !== "driver_job_links"),

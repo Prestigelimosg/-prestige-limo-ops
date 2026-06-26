@@ -357,7 +357,14 @@ const driverJobLinkMessageBlock = sliceBetween(
   "const generatedDispatchCopyMessages = useMemo",
 );
 assertNoTypedReadExposure(driverJobLinkMessageBlock, "Driver Job Link copy");
-assertIncludes(driverJobLinkMessageBlock, "loadedBookingId ? `Reference: ${loadedBookingId}`", "Driver Job Link legacy reference");
+for (const fragment of [
+  "const bookingReference =",
+  "cleanReferenceText(dispatchReleaseWorkflowBookingReference)",
+  "cleanReferenceText(activeAdminDriverJobLink?.booking_reference)",
+  "bookingReference ? `Reference: ${bookingReference}`",
+]) {
+  assertIncludes(driverJobLinkMessageBlock, fragment, `Driver Job Link legacy reference ${fragment}`);
+}
 
 const driverJobLinkPayloadBlock = sliceBetween(
   appPage,
@@ -374,7 +381,14 @@ const loadSelectedBookingBlock = sliceBetween(
   "async function saveAdminBookingOperationalSnapshot",
 );
 assertIncludes(loadSelectedBookingBlock, "bookingRecordToForm(bookingRecord)", "selected booking form source");
-assertIncludes(loadSelectedBookingBlock, "setLoadedBookingId(String(bookingRecord.id))", "selected booking legacy id source");
+for (const fragment of [
+  "const bookingReference =",
+  "cleanReferenceText(bookingRecord.booking_reference)",
+  "cleanReferenceText(bookingRecord.id)",
+  "setLoadedBookingId(bookingReference)",
+]) {
+  assertIncludes(loadSelectedBookingBlock, fragment, `selected booking legacy id source ${fragment}`);
+}
 assertNoTypedReadExposure(loadSelectedBookingBlock, "selected booking form load");
 
 const saveBookingBlock = sliceBetween(appPage, "async function saveBooking", "async function loadBookings");

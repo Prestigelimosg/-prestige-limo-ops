@@ -254,7 +254,14 @@ assertExcludes(
 );
 
 assertIncludes(loadSelectedBookingBlock, "bookingRecordToForm(bookingRecord)", "selected booking legacy form source");
-assertIncludes(loadSelectedBookingBlock, "setLoadedBookingId(String(bookingRecord.id))", "selected booking legacy id source");
+for (const fragment of [
+  "const bookingReference =",
+  "cleanReferenceText(bookingRecord.booking_reference)",
+  "cleanReferenceText(bookingRecord.id)",
+  "setLoadedBookingId(bookingReference)",
+]) {
+  assertIncludes(loadSelectedBookingBlock, fragment, `selected booking legacy id source ${fragment}`);
+}
 assertExcludes(loadSelectedBookingBlock, "safe_card", "safe-card selected booking separation");
 assertExcludes(loadSelectedBookingBlock, "safe_dto", "safe-DTO selected booking separation");
 assertExcludes(loadSelectedBookingBlock, "loadBookingsTypedOperational", "typed display selected booking separation");

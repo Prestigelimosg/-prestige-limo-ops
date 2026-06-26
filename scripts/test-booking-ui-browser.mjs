@@ -9682,7 +9682,10 @@ async function runChromeTest() {
       "Expected completed Dashboard card not to offer WhatsApp Job Card copy",
     );
     assert.match(dashboardCompletionState.articleText, /Driver:\s*COMPLETION ACTION DRIVER/);
-    assert.match(dashboardCompletionState.articleText, /Route:\s*Changi Airport T3\s+\S\s+Capella Singapore/);
+    assert.match(
+      dashboardCompletionState.articleText,
+      /Route:\s*Changi Airport T3\s*>\s*Marina Bay Sands\s*>\s*Capella Singapore/,
+    );
     assert.doesNotMatch(
       dashboardCompletionState.articleText,
       /Customer \$|Driver \$/,
@@ -9705,8 +9708,17 @@ async function runChromeTest() {
               candidate.innerText.includes("SQ779"),
           );
 
-          return completedArticle
-            ? {
+          if (!completedArticle) {
+            return false;
+          }
+
+          const completedDetails = completedArticle.querySelector("details");
+
+          if (completedDetails) {
+            completedDetails.open = true;
+          }
+
+          return {
                 articleText: completedArticle.innerText,
                 hasMarkCompletedSuccessMessage: Boolean(
                   completedArticle.querySelector("[data-booking-completion-message='${dashboardCompletionActionFixture.id}']"),
@@ -9717,8 +9729,7 @@ async function runChromeTest() {
                 hasDeleteButton: Boolean(
                   completedArticle.querySelector("[data-completed-delete-booking='${dashboardCompletionActionFixture.id}']"),
                 ),
-              }
-            : false;
+              };
         })()`),
       10000,
       "marked completed booking in Completed tab",

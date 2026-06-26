@@ -216,7 +216,14 @@ const loadSelectedBookingBlock = sliceBetween(
   "async function saveAdminBookingOperationalSnapshot",
 );
 assertIncludes(loadSelectedBookingBlock, "bookingRecordToForm(bookingRecord)", "selected booking uses BookingRecord");
-assertIncludes(loadSelectedBookingBlock, "setLoadedBookingId(String(bookingRecord.id))", "selected booking legacy id source");
+for (const fragment of [
+  "const bookingReference =",
+  "cleanReferenceText(bookingRecord.booking_reference)",
+  "cleanReferenceText(bookingRecord.id)",
+  "setLoadedBookingId(bookingReference)",
+]) {
+  assertIncludes(loadSelectedBookingBlock, fragment, `selected booking legacy id source ${fragment}`);
+}
 for (const forbiddenSelectedFragment of [
   "AdminLoadBookingsTypedReadSafeBooking",
   "LoadBookingsOperationalDisplayCard",

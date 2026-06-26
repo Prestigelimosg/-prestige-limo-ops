@@ -131,6 +131,31 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This is an app-side drift hardening fix; it does not require Vercel CLI, Vercel env changes, dashboard automation, DB schema changes, provider sends/calls, real GPS, broad customer live map, parser changes, billing/payment/PDF/invoice/payout, calendar sync, or shims.
 - Guard coverage lives in `scripts/test-driver-job-link-mode.mjs` and `scripts/test-driver-job-link-production-guard.mjs`.
 
+### Live William Walkthrough CRM And Driver Job Proof
+
+- Evidence marker: `WILLIAM-WALKTHROUGH-20260626074259`.
+- Live app target: `https://app.prestigelimo.sg`.
+- Source-of-truth code during evidence: `0632c84 Use server persistence for driver job production mode`.
+- The evidence used one clearly marked temporary live test booking only.
+- `/`, `/book`, and `/my-bookings` returned HTTP 200.
+- `/book` customer booking request submit returned HTTP 200.
+- Supabase verification found exactly one matching marked booking row before cleanup.
+- Admin CRM load through `/api/admin-bookings` returned HTTP 200 and found the marked booking.
+- Admin confirm/edit through `/api/admin-bookings` returned HTTP 200.
+- Admin driver job link create returned HTTP 200.
+- Admin driver job link load returned HTTP 200 and returned one matching safe link summary.
+- Driver job API load returned HTTP 200 in production mode.
+- Driver job page returned HTTP 200.
+- Driver status progression returned HTTP 200 for `driver_otw`, `ots`, `pob`, and `completed`.
+- Driver job link revoke returned HTTP 200.
+- Anonymous customer saved-bookings read stayed blocked with HTTP 403.
+- Cleanup deleted the exact temporary evidence rows only: driver status events, driver job link, customer app notification rows if any, audit rows, route points, service items, booking row, customer contact, and customer row.
+- Zero matching rows remained afterward for the marked booking, `driver_job_links`, `driver_job_status_events`, and `customer_driver_app_notification_outbox`.
+- Earlier same-day failed walkthrough attempts were test-payload issues only (`audit` object on admin booking update, unsupported `luggage` service item, and wrong revoke payload shape); each attempt cleaned its marked rows to zero before rerun.
+- No private customer data, booking references, tokens, row IDs, DB URLs, env values, API keys, raw provider payloads, or secrets were printed or recorded.
+- No Vercel CLI, Vercel env change, browser/dashboard automation, or redeploy occurred.
+- No provider sends/calls, Email/Telegram/WhatsApp/SMS, real GPS, broad customer live map, billing/payment/PDF/invoice/payout, calendar sync, parser change, shim, Google/OneMap/FlightAware call, or production finance/live-location activation occurred.
+
 ## Next GPT Lock / Uncompleted Backlog
 
 - Last verified repo checkpoint before this Load Bookings typed primary display source staging smoke record: `a682e97 Implement Load Bookings typed primary display source`.

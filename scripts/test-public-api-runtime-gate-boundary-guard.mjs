@@ -102,7 +102,10 @@ const helperEnvAllowlist = new Map([
     [
       "DRIVER_JOB_LINK_MODE",
       "NEXT_PUBLIC_DRIVER_JOB_LINK_MODE",
+      "PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED",
       "PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED",
+      "SUPABASE_SERVICE_ROLE_KEY",
+      "SUPABASE_URL",
     ],
   ],
   [
@@ -264,7 +267,7 @@ for (const phrase of [
   "Public API route files must not directly read env, create Supabase clients, import Supabase, or execute direct database query/write methods; runtime dependencies must stay mediated through existing helpers and gates.",
   "Customer portal session issue must remain default-off and token/purpose/origin/referer gated before issuing a secure cookie.",
   "Customer saved-bookings, booking-memory, and booking-status reads must remain auth-gated by explicit env-name gates, same-origin/purpose checks, server session token or allowed cookie boundaries, and mocked contract tests.",
-  "Driver job production mode must remain mock by default and production reads/status writes must remain blocked unless `PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED` is explicitly true and the production persistence client is configured.",
+  "Driver job production mode must remain mock by default and production reads/status writes must remain blocked unless the driver-job production gate is explicitly true or the same server-side admin booking persistence/Supabase config that creates real driver links is available.",
   "Driver bidding and customer/driver app notification runtime persistence must remain mediated by the existing admin persistence gate and auth-required boundaries.",
   "Public helper env-name usage must stay in the bounded allowlist documented by this guard; env values, secrets, tokens, and connection strings must not be printed, committed, or surfaced.",
   "No Save Booking + CRM change.",
@@ -389,8 +392,10 @@ for (const fragment of [
 const driverJobMode = files["lib/driver-job-link-mode.ts"];
 for (const fragment of [
   "return requestedMode === \"production\" ? \"production\" : \"mock\";",
+  "PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED",
   "PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED",
-  "return clean(sourceEnv.PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED) === \"true\";",
+  "SUPABASE_SERVICE_ROLE_KEY",
+  "SUPABASE_URL",
   "reason: \"not_configured\"",
   "payload: null",
 ]) {

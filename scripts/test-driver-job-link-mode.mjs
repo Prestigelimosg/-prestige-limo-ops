@@ -104,6 +104,26 @@ try {
     "production",
     "Resolved mode should be production whenever the production gate is approved.",
   );
+  assert.equal(
+    isProductionDriverJobLinkMode({
+      DRIVER_JOB_LINK_MODE: "mock",
+      PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED: "true",
+      SUPABASE_SERVICE_ROLE_KEY: "test-service-role-key",
+      SUPABASE_URL: "https://example.supabase.co",
+    }),
+    true,
+    "Real admin-created driver job links must use production reads when server persistence is configured.",
+  );
+  assert.equal(
+    resolveDriverJobLinkMode({
+      DRIVER_JOB_LINK_MODE: "mock",
+      PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED: "true",
+      SUPABASE_SERVICE_ROLE_KEY: "test-service-role-key",
+      SUPABASE_URL: "https://example.supabase.co",
+    }),
+    "production",
+    "Server persistence readiness should resolve driver job links to production mode.",
+  );
   assert.equal(productionDriverJobLinksConfigured(), false);
   assert.deepEqual(productionDriverJobLinksDisabledResult(), {
     ok: false,

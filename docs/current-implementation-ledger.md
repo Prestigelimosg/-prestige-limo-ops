@@ -127,7 +127,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 - Live walkthrough retry on 2026-06-26 proved customer `/book` request, admin CRM load, passenger mapping, admin confirm, driver job link creation, and driver job link listing all worked, but the driver job token API still returned HTTP 401.
 - Root cause: production driver job links were enabled, but a stale explicit mock mode env could still keep the live Vercel production driver job route mock-backed.
-- The driver job link mode resolver now keeps local/demo mock mode intact when the production gate is off, but `PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED=true` always prefers the approved production path over stale `DRIVER_JOB_LINK_MODE=mock` or `NEXT_PUBLIC_DRIVER_JOB_LINK_MODE=mock` drift.
+- The driver job link mode resolver now keeps local/demo mock mode intact when no production persistence path is configured, but `PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED=true` or the same server-side admin booking persistence/Supabase config that creates real driver links now prefers the production path over stale `DRIVER_JOB_LINK_MODE=mock` or `NEXT_PUBLIC_DRIVER_JOB_LINK_MODE=mock` drift.
 - This is an app-side drift hardening fix; it does not require Vercel CLI, Vercel env changes, dashboard automation, DB schema changes, provider sends/calls, real GPS, broad customer live map, parser changes, billing/payment/PDF/invoice/payout, calendar sync, or shims.
 - Guard coverage lives in `scripts/test-driver-job-link-mode.mjs` and `scripts/test-driver-job-link-production-guard.mjs`.
 
@@ -463,7 +463,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Driver job link creation uses `/api/admin-driver-job-links` and creates `/driver-job/{token}`.
 - Customer driver-details send buttons remain disabled/setup-only.
 - Provider/live sending, payment/PDF/payout, auth, location, photo, calendar activation, and risky shim writes remain blocked.
-- Expected 503 gated families remain documented: admin booking persistence when `PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED` is closed or Supabase config is missing; legacy admin data when Supabase config is missing; driver job production mode when `PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED` is not open/configured; customer booking intake when persistence is not enabled/configured; monthly billing/invoice/closeout/notification persistence when server gates are closed.
+- Expected 503 gated families remain documented: admin booking persistence when `PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED` is closed or Supabase config is missing; legacy admin data when Supabase config is missing; driver job production mode when neither the driver-job production gate nor the server-side admin booking persistence/Supabase config is available; customer booking intake when persistence is not enabled/configured; monthly billing/invoice/closeout/notification persistence when server gates are closed.
 - `/api/admin-driver-job-links` GET/read accepts safe dashboard-style booking refs without noisy 400s; unsafe/malformed read refs still reject safely.
 - `/api/admin-driver-job-links` current safe 400 reasons remain documented: malformed create payload, unsafe/malformed read booking reference/status/limit/page, malformed revoke payload, and unsupported unsafe link fields.
 
@@ -1316,7 +1316,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Public API route files must not directly read env, create Supabase clients, import Supabase, or execute direct database query/write methods; runtime dependencies must stay mediated through existing helpers and gates.
 - Customer portal session issue must remain default-off and token/purpose/origin/referer gated before issuing a secure cookie.
 - Customer saved-bookings, booking-memory, and booking-status reads must remain auth-gated by explicit env-name gates, same-origin/purpose checks, server session token or allowed cookie boundaries, and mocked contract tests.
-- Driver job production mode must remain mock by default and production reads/status writes must remain blocked unless `PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED` is explicitly true and the production persistence client is configured.
+- Driver job production mode must remain mock by default and production reads/status writes must remain blocked unless the driver-job production gate is explicitly true or the same server-side admin booking persistence/Supabase config that creates real driver links is available.
 - Driver bidding and customer/driver app notification runtime persistence must remain mediated by the existing admin persistence gate and auth-required boundaries.
 - Public helper env-name usage must stay in the bounded allowlist documented by this guard; env values, secrets, tokens, and connection strings must not be printed, committed, or surfaced.
 - No Save Booking + CRM change.

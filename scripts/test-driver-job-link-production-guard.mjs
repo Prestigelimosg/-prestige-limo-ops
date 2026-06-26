@@ -90,6 +90,16 @@ try {
     "production",
     "The production driver-job gate must not stay mock-backed when approved.",
   );
+  assert.equal(
+    resolveDriverJobLinkMode({
+      DRIVER_JOB_LINK_MODE: "mock",
+      PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED: "true",
+      SUPABASE_SERVICE_ROLE_KEY: "test-service-role-key",
+      SUPABASE_URL: "https://example.supabase.co",
+    }),
+    "production",
+    "Server persistence readiness must not leave real admin-created driver links mock-backed.",
+  );
   assert.equal(productionDriverJobLinksConfigured(), false);
   assert.deepEqual(productionDriverJobLinksDisabledResult(), {
     ok: false,

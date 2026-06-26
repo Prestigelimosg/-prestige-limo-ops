@@ -1232,7 +1232,10 @@ try {
     setEnv({
       ...validEnv(),
       DRIVER_JOB_LINK_MODE: "mock",
+      PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED: "false",
       PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED: "false",
+      SUPABASE_SERVICE_ROLE_KEY: undefined,
+      SUPABASE_URL: undefined,
     });
     const disabledDriverMock = installMockClient();
     const disabledDriverGet = await responseJson(

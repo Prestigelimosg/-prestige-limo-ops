@@ -206,6 +206,10 @@ const guardChecks = [
     script: "scripts/test-load-bookings-typed-read-admin-display-exposure-guard.mjs",
   },
   {
+    label: "admin Load Bookings CRM fallback and compact list guard",
+    script: "scripts/test-admin-load-bookings-crm-fallback-compact-guard.mjs",
+  },
+  {
     label: "public customer/driver visibility boundary guard",
     script: "scripts/test-public-customer-driver-visibility-boundary-guard.mjs",
   },

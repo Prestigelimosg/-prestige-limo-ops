@@ -83,6 +83,7 @@ const adminDriverPayoutRulesRuntimeWriteActionApiPath =
 const adminFullDriverProfileRuntimeWriteActionApiPath =
   "/api/admin-full-driver-profile-runtime-write-action";
 const adminSavedBookingsApiPath = "/api/admin-saved-bookings";
+const adminBookingsApiPath = "/api/admin-bookings";
 const adminLoadBookingsTypedReadApiPath = "/api/admin-load-bookings-typed-read";
 const adminSavedBookingStatusesApiPath = "/api/admin-saved-booking-statuses";
 const adminSavedBookingDriverAssignmentsApiPath =
@@ -477,6 +478,17 @@ type AdminSavedBookingReadResponse = {
   ok?: boolean;
   version?: string;
 };
+
+type AdminBookingsListReadResult =
+  | {
+      bookings: BookingRecord[];
+      ok: true;
+      source: "admin-bookings" | "admin-saved-bookings";
+    }
+  | {
+      error: string;
+      ok: false;
+    };
 
 type AdminSavedBookingStatusResponse = {
   booking?: {
@@ -13602,22 +13614,70 @@ export default function Home() {
       const searchParams = new URLSearchParams({ limit: "25" });
       const typedOperationalDisplay =
         await fetchLoadBookingsTypedOperationalDisplayResult(searchParams).catch(() => null);
-      const response = await fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`, {
-        headers: {
-          "x-prestige-admin-purpose": adminLegacyDataPurpose,
-        },
-        method: "GET",
-      });
-      const responseBody = (await response.json().catch(() => null)) as AdminSavedBookingReadResponse | null;
 
-      if (!response.ok || responseBody?.ok !== true || !Array.isArray(responseBody.bookings)) {
+      async function fetchAdminBookingsList(): Promise<AdminBookingsListReadResult> {
+        const requestInit = {
+          headers: {
+            "x-prestige-admin-purpose": adminLegacyDataPurpose,
+          },
+          method: "GET",
+        } satisfies RequestInit;
+
+        const savedBookingsResponse = await fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`, requestInit);
+        const savedBookingsBody = (await savedBookingsResponse.json().catch(() => null)) as
+          | AdminSavedBookingReadResponse
+          | null;
+
+        if (
+          savedBookingsResponse.ok &&
+          savedBookingsBody?.ok === true &&
+          Array.isArray(savedBookingsBody.bookings)
+        ) {
+          return {
+            bookings: savedBookingsBody.bookings,
+            ok: true,
+            source: "admin-saved-bookings",
+          };
+        }
+
+        const savedBookingsError = readAdminLegacyDataError(
+          savedBookingsBody,
+          "Admin saved booking list read request failed.",
+        ).message;
+        const adminBookingsResponse = await fetch(adminBookingsApiPath, requestInit);
+        const adminBookingsBody = (await adminBookingsResponse.json().catch(() => null)) as
+          | AdminSavedBookingReadResponse
+          | null;
+
+        if (
+          adminBookingsResponse.ok &&
+          adminBookingsBody?.ok === true &&
+          Array.isArray(adminBookingsBody.bookings)
+        ) {
+          return {
+            bookings: adminBookingsBody.bookings,
+            ok: true,
+            source: "admin-bookings",
+          };
+        }
+
+        return {
+          error: readAdminLegacyDataError(adminBookingsBody, savedBookingsError).message,
+          ok: false,
+        };
+      }
+
+      const bookingsListResult = await fetchAdminBookingsList();
+
+      if (!bookingsListResult.ok) {
         if (!options?.silent) {
-          const error = readAdminLegacyDataError(responseBody, "Admin saved booking list read request failed.");
-
-          setMessage({ tone: "error", text: `Load bookings failed: ${formatSupabaseError(error)}` });
+          setMessage({
+            tone: "error",
+            text: `Load bookings failed: ${formatSupabaseError(bookingsListResult.error)}`,
+          });
         }
       } else {
-        const loadedBookings = sortBookingsNewestFirst(responseBody.bookings);
+        const loadedBookings = sortBookingsNewestFirst(bookingsListResult.bookings);
 
         setBookings(loadedBookings);
         setLoadBookingsTypedOperationalCardsById(typedOperationalDisplay?.cardsById ?? {});
@@ -13626,7 +13686,12 @@ export default function Home() {
           if (loadedBookings.length === 0) {
             setMessage({ tone: "info", text: "No bookings found." });
           } else {
-            setMessage({ tone: "success", text: `${successText} Choose a booking below.` });
+            const fallbackNote =
+              bookingsListResult.source === "admin-bookings"
+                ? " CRM list fallback used."
+                : "";
+
+            setMessage({ tone: "success", text: `${successText} Choose a booking below.${fallbackNote}` });
           }
         }
       }
@@ -16016,7 +16081,7 @@ export default function Home() {
         </p>
       ) : null}
       {filteredRecentBookings.length > 0 ? (
-      <div className="mt-3 max-h-80 space-y-2 overflow-auto">
+      <div className="mt-3 max-h-[34rem] space-y-2 overflow-auto">
         {filteredRecentBookingDisplayItems.map(({ bookingRecord: savedBooking, operationalCard }) => {
           const routePoints = getRoutePoints(savedBooking);
           const pickup = operationalCard.pickup_address || routePoints[0] || "Pickup";
@@ -16034,46 +16099,72 @@ export default function Home() {
           const bookingCompletionMessage = isMarkCompletionMessage(rawBookingCompletionMessage)
             ? rawBookingCompletionMessage
             : null;
+          const passengerText =
+            operationalCard.traveler_display_name ||
+            operationalCard.customer_display_name ||
+            "Unknown";
+          const bookerText = operationalCard.booker_display_name || "Unknown";
+          const driverText =
+            operationalCard.assigned_driver_display_name ||
+            clean(savedBooking.driver_name) ||
+            "Driver TBC";
+          const vehiclePaxText = [
+            operationalCard.vehicle_display || "Vehicle TBC",
+            `Pax ${operationalCard.pax_display || "1"}`,
+          ].join(" · ");
 
           return (
             <article
-              className="rounded-md border border-stone-200 bg-white p-3 text-sm shadow-sm"
+              className="rounded-md border border-stone-200 bg-white p-2 text-sm shadow-sm"
               data-recent-operational-card={bookingId}
               key={`recent-${savedBooking.id}`}
             >
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-semibold text-slate-950">
-                      {getLoadBookingsOperationalDisplayTitle(operationalCard)} ·{" "}
-                      {operationalCard.pickup_datetime ||
-                        formatPickupDateTime(getBookingDateKey(savedBooking), savedBooking.pickup_time)}
-                    </p>
-                    <span
-                      className={`rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${bookingStatusClass(
-                        savedBooking.status,
-                      )}`}
-                    >
-                      {bookingStatusLabel(savedBooking.status)}
+              <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
+                <details className="min-w-0 rounded-md bg-white" data-recent-operational-details={bookingId}>
+                  <summary className="grid cursor-pointer list-none gap-2 rounded-md px-2 py-1.5 outline-none transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900/20 md:grid-cols-[minmax(13rem,1.1fr)_minmax(10rem,0.8fr)_minmax(14rem,1.4fr)_minmax(9rem,0.7fr)_auto] md:items-center">
+                    <span className="min-w-0">
+                      <span className="block truncate font-semibold text-slate-950">
+                        {getLoadBookingsOperationalDisplayTitle(operationalCard)}
+                      </span>
+                      <span className="block truncate text-xs text-slate-500">
+                        {operationalCard.pickup_datetime ||
+                          formatPickupDateTime(getBookingDateKey(savedBooking), savedBooking.pickup_time)}
+                      </span>
                     </span>
-                  </div>
-                  <div className="mt-3 grid gap-3" data-recent-operational-body={bookingId}>
-                    <OperationalCardSection section="booking" title="Booking">
-                      {operationalCard.booking_reference ? (
-                        <p>Ref: {operationalCard.booking_reference}</p>
-                      ) : null}
-                      {operationalCard.job_card_display ? <p>{operationalCard.job_card_display}</p> : null}
-                      <p>Booker: {operationalCard.booker_display_name || "Unknown"}</p>
-                      <p>
-                        Name:{" "}
-                        {operationalCard.traveler_display_name ||
-                          operationalCard.customer_display_name ||
-                          "Unknown"}
-                      </p>
-                    </OperationalCardSection>
-                    <OperationalCardSection section="route" title="Route">
-                      <p className="break-words">Route: {routeText}</p>
-                    </OperationalCardSection>
+                    <span className="min-w-0">
+                      <span className="block truncate text-slate-800">{passengerText}</span>
+                      <span className="block truncate text-xs text-slate-500">Booker: {bookerText}</span>
+                    </span>
+                    <span className="min-w-0 truncate text-slate-700">{routeText}</span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-slate-800">{driverText}</span>
+                      <span className="block truncate text-xs text-slate-500">{vehiclePaxText}</span>
+                    </span>
+                    <span className="flex items-center gap-2">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${bookingStatusClass(
+                          savedBooking.status,
+                        )}`}
+                      >
+                        {bookingStatusLabel(savedBooking.status)}
+                      </span>
+                      <span className="text-xs font-medium text-slate-500">Details</span>
+                    </span>
+                  </summary>
+                  <div className="mt-2 grid gap-3 border-t border-stone-100 px-2 pt-3" data-recent-operational-body={bookingId}>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <OperationalCardSection section="booking" title="Booking">
+                        {operationalCard.booking_reference ? (
+                          <p>Ref: {operationalCard.booking_reference}</p>
+                        ) : null}
+                        {operationalCard.job_card_display ? <p>{operationalCard.job_card_display}</p> : null}
+                        <p>Booker: {bookerText}</p>
+                        <p>Name: {passengerText}</p>
+                      </OperationalCardSection>
+                      <OperationalCardSection section="route" title="Route">
+                        <p className="break-words">Route: {routeText}</p>
+                      </OperationalCardSection>
+                    </div>
                     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" data-operational-card-summary-grid={bookingId}>
                       <DispatcherStatusSummaryBlock
                         bookingRecord={savedBooking}
@@ -16101,8 +16192,8 @@ export default function Home() {
                       {createdAt ? <p className="text-xs text-slate-500">Created {createdAt}</p> : null}
                     </OperationalCardSection>
                   </div>
-                </div>
-                <div className="flex flex-col gap-2" data-recent-operational-actions={bookingId}>
+                </details>
+                <div className="grid gap-2 sm:grid-cols-3 xl:w-44 xl:grid-cols-1" data-recent-operational-actions={bookingId}>
                   <button
                     className="h-10 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800"
                     onClick={() => loadSelectedBooking(savedBooking)}
@@ -16250,42 +16341,68 @@ export default function Home() {
                 isDeleteCompletedJobMessage(rawBookingCompletionMessage)
                 ? rawBookingCompletionMessage
                 : null;
+              const passengerText =
+                operationalCard.traveler_display_name ||
+                operationalCard.customer_display_name ||
+                "Unknown";
+              const bookerText = operationalCard.booker_display_name || "Unknown";
+              const driverText =
+                operationalCard.assigned_driver_display_name ||
+                clean(savedBooking.driver_name) ||
+                "Driver TBC";
+              const vehiclePaxText = [
+                operationalCard.vehicle_display || "Vehicle TBC",
+                `Pax ${operationalCard.pax_display || "1"}`,
+              ].join(" · ");
               return (
                 <article
-                  className="rounded-md border border-stone-200 bg-white p-3 text-sm shadow-sm"
+                  className="rounded-md border border-stone-200 bg-white p-2 text-sm shadow-sm"
                   data-completed-operational-card={bookingId}
                   key={`completed-${savedBooking.id}`}
                 >
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-semibold text-slate-950">
-                          {getLoadBookingsOperationalDisplayTitle(operationalCard)} ·{" "}
-                          {operationalCard.pickup_datetime ||
-                            formatPickupDateTime(getBookingDateKey(savedBooking), savedBooking.pickup_time)}
-                        </p>
-                        <span
-                          className={`rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${bookingStatusClass(
-                            savedBooking.status,
-                          )}`}
-                        >
-                          {bookingStatusLabel(savedBooking.status)}
+                  <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
+                    <details className="min-w-0 rounded-md bg-white" data-completed-operational-details={bookingId}>
+                      <summary className="grid cursor-pointer list-none gap-2 rounded-md px-2 py-1.5 outline-none transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900/20 md:grid-cols-[minmax(13rem,1.1fr)_minmax(10rem,0.8fr)_minmax(14rem,1.4fr)_minmax(9rem,0.7fr)_auto] md:items-center">
+                        <span className="min-w-0">
+                          <span className="block truncate font-semibold text-slate-950">
+                            {getLoadBookingsOperationalDisplayTitle(operationalCard)}
+                          </span>
+                          <span className="block truncate text-xs text-slate-500">
+                            {operationalCard.pickup_datetime ||
+                              formatPickupDateTime(getBookingDateKey(savedBooking), savedBooking.pickup_time)}
+                          </span>
                         </span>
-                      </div>
-                      <div className="mt-3 grid gap-3" data-completed-operational-body={bookingId}>
-                        <OperationalCardSection section="booking" title="Booking">
-                          {operationalCard.job_card_display ? <p>{operationalCard.job_card_display}</p> : null}
-                          <p>Booker: {operationalCard.booker_display_name || "Unknown"}</p>
-                          <p>
-                            Name:{" "}
-                            {operationalCard.traveler_display_name ||
-                              operationalCard.customer_display_name ||
-                              "Unknown"}
-                          </p>
-                        </OperationalCardSection>
-                        <OperationalCardSection section="route" title="Route">
-                          <p className="break-words">Route: {routeText}</p>
-                        </OperationalCardSection>
+                        <span className="min-w-0">
+                          <span className="block truncate text-slate-800">{passengerText}</span>
+                          <span className="block truncate text-xs text-slate-500">Booker: {bookerText}</span>
+                        </span>
+                        <span className="min-w-0 truncate text-slate-700">{routeText}</span>
+                        <span className="min-w-0">
+                          <span className="block truncate text-slate-800">{driverText}</span>
+                          <span className="block truncate text-xs text-slate-500">{vehiclePaxText}</span>
+                        </span>
+                        <span className="flex items-center gap-2">
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${bookingStatusClass(
+                              savedBooking.status,
+                            )}`}
+                          >
+                            {bookingStatusLabel(savedBooking.status)}
+                          </span>
+                          <span className="text-xs font-medium text-slate-500">Details</span>
+                        </span>
+                      </summary>
+                      <div className="mt-2 grid gap-3 border-t border-stone-100 px-2 pt-3" data-completed-operational-body={bookingId}>
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <OperationalCardSection section="booking" title="Booking">
+                            {operationalCard.job_card_display ? <p>{operationalCard.job_card_display}</p> : null}
+                            <p>Booker: {bookerText}</p>
+                            <p>Name: {passengerText}</p>
+                          </OperationalCardSection>
+                          <OperationalCardSection section="route" title="Route">
+                            <p className="break-words">Route: {routeText}</p>
+                          </OperationalCardSection>
+                        </div>
                         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" data-operational-card-summary-grid={bookingId}>
                           <DispatcherStatusSummaryBlock
                             bookingRecord={savedBooking}
@@ -16315,8 +16432,8 @@ export default function Home() {
                           {createdAt ? <p className="text-xs text-slate-500">Created {createdAt}</p> : null}
                         </OperationalCardSection>
                       </div>
-                    </div>
-                    <div className="flex flex-col gap-2" data-completed-operational-actions={bookingId}>
+                    </details>
+                    <div className="grid gap-2 sm:grid-cols-4 xl:w-44 xl:grid-cols-1" data-completed-operational-actions={bookingId}>
                       <button
                         className="h-10 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800"
                         data-completed-load-booking="true"

@@ -3034,7 +3034,7 @@ async function runChromeTest() {
         "Expected applied snapshot identity to show the safe customer display name",
       );
       assert.equal(
-        appliedSnapshotState.identityText.includes("Loaded Ops Pickup > Loaded Ops Dropoff"),
+        appliedSnapshotState.identityText.includes("Loaded Ops Pickup > Loaded Ops Stop > Loaded Ops Dropoff"),
         true,
         "Expected applied snapshot identity to show the safe pickup/drop-off summary",
       );
@@ -4885,7 +4885,10 @@ async function runChromeTest() {
         width: viewport.width,
       });
 
-      await navigateWithLoadEvent(client, appUrl);
+      const isAlreadyOnAdminHome = await evaluate(`location.pathname === "/"`).catch(() => false);
+      if (!openInternalQaMockArchiveAfterReload || !isAlreadyOnAdminHome) {
+        await navigateWithLoadEvent(client, appUrl);
+      }
       await waitForTabs();
       if (openInternalQaMockArchiveAfterReload) {
         await openInternalQaMockArchive();
@@ -39028,6 +39031,8 @@ async function runChromeTest() {
       reporter.step("internal QA archive: placement guards");
       state.mockWorkflowReviewBottomPlacement = await checkMockWorkflowReviewBottomPlacement();
     });
+    await navigateWithLoadEvent(client, appUrl);
+    await waitForTabs();
     reporter.step("checking admin persistence and replacement sections");
     state.adminBookingPersistence = await checkAdminBookingPersistencePrototype();
     state.adminReplacement = await checkAdminReplacementPlaceholder();

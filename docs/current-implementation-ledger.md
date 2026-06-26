@@ -34,6 +34,17 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Browser-style `POST /api/admin-bookings` without `x-prestige-admin-session-token` still returned HTTP 403, proving write paths remain private-token gated.
 - No DB writes, E2E rerun, provider sends/calls, Email/Telegram/WhatsApp/SMS, parser changes, live GPS, broad customer live map, billing/payment/PDF/invoice/payout, calendar sync, or shim occurred.
 
+### Admin Load Bookings CRM Fallback And Compact List Fix
+
+- Live manual walkthrough on 2026-06-26 found that the visible admin `Load Bookings` button could still fail with the safe `Admin saved booking read failed safely.` message when `GET /api/admin-saved-bookings?limit=25` failed, even though same-origin admin `GET /api/admin-bookings` returned `ok: true`.
+- Admin `Load Bookings` now tries same-origin admin `GET /api/admin-saved-bookings?limit=25` first and falls back to same-origin admin `GET /api/admin-bookings` when the saved-bookings read fails or returns a malformed list.
+- Both reads use the existing `x-prestige-admin-purpose` browser-admin header and remain GET-only.
+- The fallback is an admin dashboard read fallback only; it does not add public reads, broad writes, DB writes, provider sends, env changes, deploys, parser changes, live GPS/customer-wide live map, billing/payment/PDF/invoice/payout, or shims.
+- Save Booking + CRM remains on `POST /api/admin-bookings` and is not changed by this fallback.
+- Recent and Completed booking lists now render compact expandable rows by default so dispatch can scan more bookings at once while keeping existing details and action buttons available.
+- Customer/driver-visible forbidden data remains blocked from this list path: driver payout, PayNow payout, customer price, billing, invoice, payment, internal admin notes, parser/debug, secrets, raw provider payloads, and mock QA/dev archive data.
+- Guard coverage lives in `scripts/test-admin-load-bookings-crm-fallback-compact-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Customer Booking Request Persistence Actor Fix
 
 - The public `/book` customer booking request path now keeps its existing same-origin `/book`, `x-prestige-customer-purpose`, and safe payload parser boundary, while allowing only the exact `Customer booking request` system actor to pass the admin booking persistence write gate.

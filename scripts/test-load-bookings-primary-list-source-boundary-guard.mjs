@@ -177,9 +177,11 @@ assertExcludes(typedDisplayBridgeBlock, legacySavedBookingsPath, "typed display 
 
 const typedDisplayFetchFragment = "fetchLoadBookingsTypedOperationalDisplayResult(searchParams)";
 const legacySavedBookingsFetchFragment = "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`";
+const adminBookingsFallbackFetchFragment = "const adminBookingsResponse = await fetch(adminBookingsApiPath, requestInit);";
 assertIncludes(loadBookingsBlock, `${typedDisplayFetchFragment}.catch(() => null)`, "typed display best-effort fetch");
 assertIncludes(loadBookingsBlock, legacySavedBookingsFetchFragment, "legacy saved-bookings fetch");
-assertIncludes(loadBookingsBlock, "const loadedBookings = sortBookingsNewestFirst(responseBody.bookings);", "legacy list source");
+assertIncludes(loadBookingsBlock, adminBookingsFallbackFetchFragment, "admin bookings fallback fetch");
+assertIncludes(loadBookingsBlock, "const loadedBookings = sortBookingsNewestFirst(bookingsListResult.bookings);", "admin list result source");
 assertIncludes(loadBookingsBlock, "setBookings(loadedBookings);", "legacy BookingRecord state source");
 assertIncludes(
   loadBookingsBlock,
@@ -194,15 +196,19 @@ assertIncludes(
 
 const typedDisplayFetchIndex = loadBookingsBlock.indexOf(typedDisplayFetchFragment);
 const legacySavedBookingsFetchIndex = loadBookingsBlock.indexOf(legacySavedBookingsFetchFragment);
+const adminBookingsFallbackFetchIndex = loadBookingsBlock.indexOf(adminBookingsFallbackFetchFragment);
 assert.equal(
-  typedDisplayFetchIndex > -1 && legacySavedBookingsFetchIndex > -1,
+  typedDisplayFetchIndex > -1 &&
+    legacySavedBookingsFetchIndex > -1 &&
+    adminBookingsFallbackFetchIndex > -1,
   true,
-  "Load Bookings must keep both typed display and legacy source fetches.",
+  "Load Bookings must keep typed display, saved-bookings source, and admin-bookings fallback fetches.",
 );
 assert.equal(
-  typedDisplayFetchIndex < legacySavedBookingsFetchIndex,
+  typedDisplayFetchIndex < legacySavedBookingsFetchIndex &&
+    legacySavedBookingsFetchIndex < adminBookingsFallbackFetchIndex,
   true,
-  "Typed display hydration must happen before legacy booking/form fallback read.",
+  "Typed display hydration must happen before saved-bookings read and admin-bookings fallback.",
 );
 
 for (const forbiddenLoadFragment of [

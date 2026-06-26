@@ -12844,6 +12844,28 @@ async function runChromeTest() {
       await clickTab("Bookings");
       await clickButtonByText("Load Bookings");
       await waitForBodyText(evaluate, "MOBILE USABILITY TRAVELER", "mock loaded booking");
+      await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const recentArticle = [...document.querySelectorAll("article")].find((article) =>
+              article.innerText.includes("MOBILE USABILITY TRAVELER")
+            );
+            const details = recentArticle?.querySelector("[data-recent-operational-details]");
+            const summary = details?.querySelector("summary");
+
+            if (!details || !summary) {
+              return false;
+            }
+
+            if (!details.open) {
+              summary.click();
+            }
+
+            return details.open;
+          })()`),
+        10000,
+        "open compact Recent Bookings details",
+      );
       const recentAssignedDriverState = await waitForCondition(
         () =>
           evaluate(`(() => {

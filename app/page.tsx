@@ -13946,6 +13946,66 @@ export default function Home() {
     });
   }
 
+  async function refreshAdminDriverJobStatusRead() {
+    const bookingReference = clean(dispatchReleaseWorkflowBookingReference);
+
+    if (!bookingReference) {
+      setAdminDriverJobStatusReadState({
+        bookingReference: "",
+        latestStatus: null,
+        message: {
+          tone: "info",
+          text: "Load saved booking before reading saved driver status.",
+        },
+        status: "idle",
+        statuses: [],
+      });
+      return;
+    }
+
+    setAdminDriverJobStatusReadState({
+      bookingReference,
+      latestStatus: null,
+      message: {
+        tone: "info",
+        text: `Refreshing saved driver status for ${bookingReference}...`,
+      },
+      status: "loading",
+      statuses: [],
+    });
+
+    try {
+      const loadedDriverStatuses = await loadAdminDriverJobStatusRead(bookingReference);
+
+      setAdminDriverJobStatusReadState({
+        bookingReference,
+        latestStatus: loadedDriverStatuses.latestStatus,
+        message: {
+          tone: loadedDriverStatuses.statuses.length > 0 ? "success" : "info",
+          text:
+            loadedDriverStatuses.statuses.length > 0
+              ? `Loaded ${loadedDriverStatuses.statuses.length} saved driver status event${
+                  loadedDriverStatuses.statuses.length === 1 ? "" : "s"
+                } for ${bookingReference}.`
+              : `No saved driver status history for ${bookingReference}.`,
+        },
+        status: "loaded",
+        statuses: loadedDriverStatuses.statuses,
+      });
+    } catch (error) {
+      setAdminDriverJobStatusReadState({
+        bookingReference,
+        latestStatus: null,
+        message: {
+          tone: "error",
+          text: adminDriverJobStatusFailureMessage(error),
+        },
+        status: "error",
+        statuses: [],
+      });
+    }
+  }
+
   async function saveDispatchReleaseWorkflowStatus() {
     const bookingReference = clean(dispatchReleaseWorkflowBookingReference);
 
@@ -29770,24 +29830,38 @@ export default function Home() {
                         "Load saved booking before reading saved driver status."}
                     </p>
                   </div>
-                  <span
-                    className={`w-fit shrink-0 rounded-full px-1.5 py-0.5 text-[8px] font-semibold uppercase sm:px-2 sm:text-[9px] ${
-                      adminDriverJobStatusReadState.status === "loaded" && adminDriverJobStatusLatest
-                        ? "bg-emerald-100 text-emerald-900"
+                  <div className="flex shrink-0 flex-wrap justify-end gap-1">
+                    <button
+                      className="rounded border border-lime-300 bg-white px-2 py-0.5 text-[9px] font-semibold text-lime-950 transition hover:bg-lime-50 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[10px]"
+                      data-admin-driver-job-status-refresh="true"
+                      disabled={
+                        !clean(dispatchReleaseWorkflowBookingReference) ||
+                        adminDriverJobStatusReadState.status === "loading"
+                      }
+                      onClick={refreshAdminDriverJobStatusRead}
+                      type="button"
+                    >
+                      Refresh
+                    </button>
+                    <span
+                      className={`w-fit rounded-full px-1.5 py-0.5 text-[8px] font-semibold uppercase sm:px-2 sm:text-[9px] ${
+                        adminDriverJobStatusReadState.status === "loaded" && adminDriverJobStatusLatest
+                          ? "bg-emerald-100 text-emerald-900"
+                          : adminDriverJobStatusReadState.status === "error"
+                            ? "bg-rose-100 text-rose-900"
+                            : "bg-amber-100 text-amber-900"
+                      }`}
+                      data-admin-driver-job-status-readout-state="true"
+                    >
+                      {adminDriverJobStatusReadState.status === "loading"
+                        ? "Loading"
                         : adminDriverJobStatusReadState.status === "error"
-                          ? "bg-rose-100 text-rose-900"
-                          : "bg-amber-100 text-amber-900"
-                    }`}
-                    data-admin-driver-job-status-readout-state="true"
-                  >
-                    {adminDriverJobStatusReadState.status === "loading"
-                      ? "Loading"
-                      : adminDriverJobStatusReadState.status === "error"
-                        ? "Read error"
-                        : adminDriverJobStatusLatest
-                          ? "Saved status"
-                          : "No saved status"}
-                  </span>
+                          ? "Read error"
+                          : adminDriverJobStatusLatest
+                            ? "Saved status"
+                            : "No saved status"}
+                    </span>
+                  </div>
                 </div>
                 <div className="mt-1 grid grid-cols-3 gap-x-1 gap-y-0.5 border-t border-lime-100 pt-1">
                   <div

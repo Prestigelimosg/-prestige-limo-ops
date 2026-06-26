@@ -15204,6 +15204,7 @@ async function runChromeTest() {
             })(),
             savedDriverStatusReadout: (() => {
               const section = document.querySelector("[data-admin-day-of-trip-dispatch-monitor='true']");
+              const refreshButton = section?.querySelector("[data-admin-driver-job-status-refresh='true']");
 
               return {
                 history:
@@ -15226,6 +15227,13 @@ async function runChromeTest() {
                   section?.querySelector("[data-admin-driver-job-status-readout-detail='status-time']")
                     ?.textContent.replace(/\\s+/g, " ")
                     .trim() || "",
+                refreshButton: {
+                  disabled: refreshButton?.disabled ?? true,
+                  text:
+                    refreshButton
+                      ?.textContent.replace(/\\s+/g, " ")
+                      .trim() || "",
+                },
               };
             })(),
             workflowStatusRequests: window.__prestigeWorkflowStatusRequests || [],
@@ -15538,10 +15546,69 @@ async function runChromeTest() {
         history: "Arrived at 2026-06-07 09:25 UTC",
         latest: "Arrived",
         message: "Loaded 1 saved driver status event for ui-cleanup-load-fixture.",
+        refreshButton: {
+          disabled: false,
+          text: "Refresh",
+        },
         state: "Saved status",
         time: "2026-06-07 09:25 UTC",
       },
       "Expected saved driver status readout in the existing Day-of-Trip Dispatch Monitor",
+    );
+    const clickedDriverStatusRefresh = await evaluate(`(() => {
+      const button = document.querySelector("[data-admin-driver-job-status-refresh='true']");
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedDriverStatusRefresh,
+      true,
+      "Expected saved driver status Refresh button to be clickable after loading a saved booking",
+    );
+    const refreshedDriverStatusState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const section = document.querySelector("[data-admin-day-of-trip-dispatch-monitor='true']");
+          const requests = window.__prestigeDriverJobStatusRequests || [];
+          const matchingRequests = requests.filter(
+            (request) =>
+              request.method === "GET" &&
+              request.booking_reference === "ui-cleanup-load-fixture" &&
+              request.limit === "4",
+          );
+          const latest =
+            section?.querySelector("[data-admin-driver-job-status-readout-detail='latest-status']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "";
+          const message =
+            section?.querySelector("[data-admin-driver-job-status-readout-message='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "";
+
+          return matchingRequests.length >= 2 && latest === "Arrived"
+            ? {
+                latest,
+                message,
+                requestCount: matchingRequests.length,
+              }
+            : false;
+        })()`),
+      10000,
+      "saved driver status manual refresh",
+    );
+    assert.equal(refreshedDriverStatusState.latest, "Arrived");
+    assert.equal(
+      refreshedDriverStatusState.message,
+      "Loaded 1 saved driver status event for ui-cleanup-load-fixture.",
+    );
+    assert.ok(
+      refreshedDriverStatusState.requestCount >= 2,
+      `Expected saved driver status refresh to call the guarded GET read path again, got ${refreshedDriverStatusState.requestCount}`,
     );
     assert.equal(
       /customer_price|billing|invoice|payment|paynow|driver_payout|payout|notification|parser|service_role|secret|token_hash|raw_token|driver_job_link_id/i.test(

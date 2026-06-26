@@ -86,10 +86,9 @@ try {
     resolveDriverJobLinkMode({
       DRIVER_JOB_LINK_MODE: "mock",
       PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED: "true",
-      VERCEL_ENV: "production",
     }),
     "production",
-    "Vercel production must not stay mock-backed when the production driver-job gate is approved.",
+    "The production driver-job gate must not stay mock-backed when approved.",
   );
   assert.equal(productionDriverJobLinksConfigured(), false);
   assert.deepEqual(productionDriverJobLinksDisabledResult(), {

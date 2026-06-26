@@ -75,8 +75,8 @@ try {
       DRIVER_JOB_LINK_MODE: "mock",
       PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED: "true",
     }),
-    false,
-    "Explicit mock mode must still keep local demo/test routes mock-backed.",
+    true,
+    "The approved production gate must override stale mock env drift.",
   );
   assert.equal(
     isProductionDriverJobLinkMode({
@@ -94,16 +94,15 @@ try {
       VERCEL_ENV: "production",
     }),
     true,
-    "Vercel production must ignore stale public mock mode when the production gate is approved.",
+    "The production gate must ignore stale public mock mode when approved.",
   );
   assert.equal(
     resolveDriverJobLinkMode({
       DRIVER_JOB_LINK_MODE: "mock",
       PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED: "true",
-      VERCEL_ENV: "production",
     }),
     "production",
-    "Resolved mode should be production for approved Vercel production runtime.",
+    "Resolved mode should be production whenever the production gate is approved.",
   );
   assert.equal(productionDriverJobLinksConfigured(), false);
   assert.deepEqual(productionDriverJobLinksDisabledResult(), {

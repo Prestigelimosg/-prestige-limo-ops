@@ -127,7 +127,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 - Live walkthrough retry on 2026-06-26 proved customer `/book` request, admin CRM load, passenger mapping, admin confirm, driver job link creation, and driver job link listing all worked, but the driver job token API still returned HTTP 401.
 - Root cause: production driver job links were enabled, but a stale explicit mock mode env could still keep the live Vercel production driver job route mock-backed.
-- The driver job link mode resolver now keeps local/demo mock mode intact, but Vercel production with `PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED=true` prefers the approved production gate over stale `DRIVER_JOB_LINK_MODE=mock` or `NEXT_PUBLIC_DRIVER_JOB_LINK_MODE=mock` drift.
+- The driver job link mode resolver now keeps local/demo mock mode intact when the production gate is off, but `PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED=true` always prefers the approved production path over stale `DRIVER_JOB_LINK_MODE=mock` or `NEXT_PUBLIC_DRIVER_JOB_LINK_MODE=mock` drift.
 - This is an app-side drift hardening fix; it does not require Vercel CLI, Vercel env changes, dashboard automation, DB schema changes, provider sends/calls, real GPS, broad customer live map, parser changes, billing/payment/PDF/invoice/payout, calendar sync, or shims.
 - Guard coverage lives in `scripts/test-driver-job-link-mode.mjs` and `scripts/test-driver-job-link-production-guard.mjs`.
 

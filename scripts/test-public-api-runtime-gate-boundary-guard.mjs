@@ -103,7 +103,6 @@ const helperEnvAllowlist = new Map([
       "DRIVER_JOB_LINK_MODE",
       "NEXT_PUBLIC_DRIVER_JOB_LINK_MODE",
       "PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED",
-      "VERCEL_ENV",
     ],
   ],
   [

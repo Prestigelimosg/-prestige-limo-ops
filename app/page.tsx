@@ -4867,6 +4867,24 @@ function isOperationalBooking(bookingRecord: BookingRecord) {
   return !isLegacyMrLeeBrowserTestBooking(bookingRecord) && !isPersistedBrowserTestBooking(bookingRecord);
 }
 
+function bookingRecordIsCustomerBookingRequest(bookingRecord: BookingRecord) {
+  return (
+    clean(bookingRecord.source_channel) === "customer-booking-request" ||
+    clean(bookingRecord.source_surface) === "customer_booking_request" ||
+    clean(bookingRecord.source_surface) === "customer-booking-request"
+  );
+}
+
+function bookingRecordIsOpenCustomerBookingRequest(bookingRecord: BookingRecord) {
+  if (!bookingRecordIsCustomerBookingRequest(bookingRecord)) {
+    return false;
+  }
+
+  const status = clean(bookingRecord.status).toLowerCase();
+
+  return !["cancelled", "canceled", "completed", "declined", "rejected"].includes(status);
+}
+
 function getBookingName(bookingRecord: BookingRecord) {
   if (isLegacyMrLeeBrowserTestBooking(bookingRecord)) {
     return legacyBrowserTestBookingName;
@@ -11431,6 +11449,10 @@ export default function Home() {
       ),
     [operationalBookings],
   );
+  const customerBookingRequestBookings = useMemo(
+    () => operationalBookings.filter(bookingRecordIsOpenCustomerBookingRequest).slice(0, 5),
+    [operationalBookings],
+  );
   const filteredRecentBookings = useMemo(
     () =>
       operationalBookings.filter((bookingRecord) =>
@@ -11561,6 +11583,10 @@ export default function Home() {
   const todayBookingDisplayItems = buildLoadBookingsOperationalDisplayItems(todayBookings);
   const upcomingBookingDisplayItems = buildLoadBookingsOperationalDisplayItems(upcomingBookings);
   const otherBookingDisplayItems = buildLoadBookingsOperationalDisplayItems(otherBookings);
+  const customerBookingRequestDisplayItems =
+    buildLoadBookingsOperationalDisplayItems(customerBookingRequestBookings, {
+      useTypedOperationalOrder: true,
+    });
   const filteredRecentBookingDisplayItems =
     buildLoadBookingsOperationalDisplayItems(filteredRecentBookings, { useTypedOperationalOrder: true });
   const filteredCompletedBookingDisplayItems =
@@ -13741,6 +13767,14 @@ export default function Home() {
       tone: "success",
       text: `Booking ${bookingReference || "selected booking"} loaded.`,
     });
+  }
+
+  function selectAppTab(nextTab: AppTab) {
+    setActiveTab(nextTab);
+
+    if (nextTab === "bookings" && bookings.length === 0 && !loading) {
+      void loadBookings("Bookings loaded.");
+    }
   }
 
   async function saveAdminBookingOperationalSnapshot() {
@@ -16147,6 +16181,78 @@ export default function Home() {
       />
     </label>
   );
+
+  const customerBookingRequestsPanel = customerBookingRequestDisplayItems.length > 0 ? (
+    <div
+      className="mt-4 rounded-md border border-emerald-200 bg-emerald-50/60 p-3"
+      data-new-customer-booking-requests-panel="true"
+    >
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-emerald-950">New Booking Requests</h3>
+          <p className="text-xs text-emerald-800">
+            Choose a request to load it straight into Dispatch.
+          </p>
+        </div>
+        <span className="inline-flex w-fit rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-emerald-900 ring-1 ring-emerald-200">
+          {customerBookingRequestDisplayItems.length} open
+        </span>
+      </div>
+      <div className="mt-3 space-y-2">
+        {customerBookingRequestDisplayItems.map(({ bookingRecord: requestBooking, operationalCard }) => {
+          const routePoints = getRoutePoints(requestBooking);
+          const pickup = operationalCard.pickup_address || routePoints[0] || "Pickup";
+          const dropoff =
+            operationalCard.dropoff_address ||
+            routePoints[routePoints.length - 1] ||
+            "Drop-off";
+          const routeText =
+            operationalCard.route_points_summary ||
+            (routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`);
+          const bookingId = String(requestBooking.id);
+          const passengerText =
+            operationalCard.traveler_display_name ||
+            operationalCard.customer_display_name ||
+            "Unknown";
+          const pickupMetaText = [
+            operationalCard.pickup_datetime ||
+              formatPickupDateTime(getBookingDateKey(requestBooking), requestBooking.pickup_time),
+            operationalCard.job_card_display,
+          ].filter(Boolean).join(" · ");
+
+          return (
+            <article
+              className="grid gap-2 rounded-md border border-emerald-200 bg-white p-2 text-sm shadow-sm md:grid-cols-[minmax(12rem,0.8fr)_minmax(10rem,0.8fr)_minmax(14rem,1.2fr)_auto] md:items-center"
+              data-new-customer-booking-request-row={bookingId}
+              key={`customer-request-${requestBooking.id}`}
+            >
+              <div className="min-w-0">
+                <p className="truncate font-semibold text-slate-950">
+                  {getLoadBookingsOperationalDisplayTitle(operationalCard)}
+                </p>
+                <p className="truncate text-xs text-slate-500">{pickupMetaText}</p>
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-slate-800">{passengerText}</p>
+                <p className="truncate text-xs text-slate-500">
+                  {bookingStatusLabel(requestBooking.status)}
+                </p>
+              </div>
+              <p className="min-w-0 truncate text-slate-700">{routeText}</p>
+              <button
+                className="min-h-9 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                data-new-customer-booking-request-load={bookingId}
+                onClick={() => loadSelectedBooking(requestBooking)}
+                type="button"
+              >
+                Review in Dispatch
+              </button>
+            </article>
+          );
+        })}
+      </div>
+    </div>
+  ) : null;
 
   const recentBookingsPanel = operationalBookings.length > 0 ? (
     <div className="mt-4 rounded-md border border-stone-200 bg-stone-50 p-3">
@@ -21011,7 +21117,8 @@ export default function Home() {
                     : "border border-stone-200 bg-white text-slate-700 hover:bg-stone-50"
                 }`}
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                data-bookings-tab-autoload={tab.id === "bookings" ? "true" : undefined}
+                onClick={() => selectAppTab(tab.id)}
                 role="tab"
                 style={{ minHeight: 44 }}
                 type="button"
@@ -32717,6 +32824,7 @@ export default function Home() {
             </button>
           </div>
           {statusPanel}
+          {customerBookingRequestsPanel}
           {recentBookingsPanel}
         </section>
         ) : null}

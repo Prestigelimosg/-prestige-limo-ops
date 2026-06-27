@@ -198,13 +198,13 @@ async function main() {
       bookingsTab?.click();
       return Boolean(bookingsTab);
     })()`);
-    const loadClicked = await evaluate(`(() => {
+    const loadVisible = await evaluate(`(() => {
       const button = [...document.querySelectorAll("button")]
         .find((candidate) => candidate.textContent.trim() === "Load Bookings");
-      button?.click();
-      return Boolean(button);
+      const autoLoadTab = document.querySelector("[data-bookings-tab-autoload='true']");
+      return Boolean(button && autoLoadTab);
     })()`);
-    assert.equal(loadClicked, true, "Expected visible Load Bookings control");
+    assert.equal(loadVisible, true, "Expected visible Load Bookings control and auto-load tab marker");
 
     const cardState = await waitForCondition(
       () =>
@@ -247,7 +247,7 @@ async function main() {
         evaluate(`(() => {
           const statusFeedback = [...document.querySelectorAll("p, div")]
             .map((node) => node.textContent || "")
-            .find((text) => text.includes("Booking canonical-row-37 loaded.")) || "";
+            .find((text) => text.includes("Booking CANONICAL-REQ-001 loaded.")) || "";
           const getField = (labelText) => {
             const label = [...document.querySelectorAll("label")].find(
               (candidate) => candidate.querySelector("span")?.textContent.trim() === labelText,

@@ -50,6 +50,9 @@ for (const phrase of [
   "The fallback is an admin dashboard read fallback only; it does not add public reads, broad writes, DB writes, provider sends, env changes, deploys, parser changes, live GPS/customer-wide live map, billing/payment/PDF/invoice/payout, or shims.",
   "Save Booking + CRM remains on `POST /api/admin-bookings` and is not changed by this fallback.",
   "Recent and Completed booking lists now render compact expandable rows by default so dispatch can scan more bookings at once while keeping existing details and action buttons available.",
+  "The Bookings tab now triggers the same safe Load Bookings read automatically the first time it is opened with an empty loaded list.",
+  "Open customer booking requests are surfaced above Recent Bookings and use the existing customer request source markers only.",
+  "The request row reuses `loadSelectedBooking`, so `Review in Dispatch` loads the selected request into the existing Dispatch form without adding a duplicate write path.",
 ]) {
   assertIncludes(ledgerSection, phrase, `Load Bookings fallback ledger phrase ${phrase}`);
 }
@@ -91,6 +94,43 @@ assertIncludes(
   "fetchLoadBookingsTypedOperationalDisplayResult(searchParams)",
   "Typed operational display still hydrates before list read",
 );
+
+assertIncludes(appPage, "function bookingRecordIsCustomerBookingRequest", "Customer request classifier");
+assertIncludes(
+  appPage,
+  'clean(bookingRecord.source_channel) === "customer-booking-request"',
+  "Customer request source_channel marker",
+);
+assertIncludes(
+  appPage,
+  'clean(bookingRecord.source_surface) === "customer_booking_request"',
+  "Customer request source_surface marker",
+);
+assertIncludes(appPage, "function bookingRecordIsOpenCustomerBookingRequest", "Open customer request classifier");
+assertIncludes(appPage, "function selectAppTab(nextTab: AppTab)", "Admin tab selection helper");
+assertIncludes(
+  appPage,
+  'data-bookings-tab-autoload={tab.id === "bookings" ? "true" : undefined}',
+  "Bookings tab auto-load marker",
+);
+assertIncludes(
+  appPage,
+  'nextTab === "bookings" && bookings.length === 0 && !loading',
+  "Bookings tab auto-load empty-list guard",
+);
+assertIncludes(appPage, 'void loadBookings("Bookings loaded.");', "Bookings tab visible auto-load");
+
+for (const customerRequestFragment of [
+  "customerBookingRequestDisplayItems",
+  "data-new-customer-booking-requests-panel",
+  "data-new-customer-booking-request-row",
+  "data-new-customer-booking-request-load",
+  "Review in Dispatch",
+  "onClick={() => loadSelectedBooking(requestBooking)}",
+  "{customerBookingRequestsPanel}",
+]) {
+  assertIncludes(appPage, customerRequestFragment, `Customer request auto-load fragment ${customerRequestFragment}`);
+}
 
 const typedOperationalFetchIndex = loadBookingsBlock.indexOf(
   "fetchLoadBookingsTypedOperationalDisplayResult(searchParams)",

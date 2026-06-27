@@ -3004,7 +3004,7 @@ async function runChromeTest() {
               dispatchReleaseFeedback.includes("Loaded dispatch release workflow status for LOADED-OPS-001") &&
               driverAcknowledgementFeedback.includes("Loaded driver acknowledgement workflow status for LOADED-OPS-001") &&
               savedDriverStatusReadout.latest === "Passenger on board" &&
-              savedDriverStatusReadout.time === "2026-06-07 10:45 UTC" &&
+              savedDriverStatusReadout.time === "2026-06-07 18:45 SGT" &&
               monthlyBillingGroupingFeedback.includes("Loaded 1 saved monthly billing group for June 2026") &&
               monthlyBillingDraftPlanFeedback.includes("Loaded 1 saved monthly billing draft plan for June 2026") &&
               monthlyInvoiceDraftFeedback.includes("Loaded 1 saved monthly invoice draft for June 2026") &&
@@ -3109,11 +3109,11 @@ async function runChromeTest() {
       assert.deepEqual(
         appliedSnapshotState.savedDriverStatusReadout,
         {
-          history: "Passenger on board at 2026-06-07 10:45 UTC",
+          history: "Passenger on board at 2026-06-07 18:45 SGT",
           latest: "Passenger on board",
           message: "Loaded 1 saved driver status event for LOADED-OPS-001.",
           state: "Saved status",
-          time: "2026-06-07 10:45 UTC",
+          time: "2026-06-07 18:45 SGT",
         },
         "Expected applied snapshot load to show saved driver status through the existing Day-of-Trip Dispatch Monitor",
       );

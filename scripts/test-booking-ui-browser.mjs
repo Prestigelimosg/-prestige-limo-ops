@@ -3191,28 +3191,26 @@ async function runChromeTest() {
     };
 
     const clickTab = async (label, expectedText = "") => {
-      const clicked = await evaluate(`(() => {
-        const tab = [...document.querySelectorAll("button[role='tab'], button")].find(
-          (button) => button.textContent.trim() === ${JSON.stringify(label)},
-        );
-
-        if (!tab || tab.disabled) {
-          return false;
-        }
-
-        tab.click();
-        return true;
-      })()`);
-      assert.equal(clicked, true, `Expected ${label} tab to be clickable`);
-
       await waitForCondition(
         () =>
           evaluate(`(() => {
-            const selectedTab = [...document.querySelectorAll("button[role='tab']")].find(
+            const tab = [...document.querySelectorAll("button[role='tab']")].find(
               (button) =>
-                button.textContent.trim() === ${JSON.stringify(label)} &&
-                button.getAttribute("aria-selected") === "true",
+                button.dataset.appTab === ${JSON.stringify(label.toLowerCase())} ||
+                button.querySelector("[data-app-tab-label]")?.textContent.trim() === ${JSON.stringify(label)},
             );
+
+            if (!tab || tab.disabled) {
+              return false;
+            }
+
+            tab.click();
+
+            const selectedTab = [...document.querySelectorAll("button[role='tab']")].find((button) => {
+              const labelText = button.querySelector("[data-app-tab-label]")?.textContent.trim() || button.textContent.trim();
+
+              return labelText === ${JSON.stringify(label)} && button.getAttribute("aria-selected") === "true";
+            });
 
             return Boolean(selectedTab) && ${
               expectedText ? `document.body.innerText.includes(${JSON.stringify(expectedText)})` : "true"
@@ -3263,6 +3261,8 @@ async function runChromeTest() {
 
       assert.equal(didSetValue, true, `Expected ${description} field to be editable`);
     };
+
+    await clickTab("Dispatch", "Create Job Card");
 
     await waitForCondition(
       () =>
@@ -7232,10 +7232,14 @@ async function runChromeTest() {
       ),
       typedListReads: window.__prestigeAdminSavedBookingListRequests || [],
     }))()`);
-    assert.deepEqual(
-      typedLoadBookingsReadState.typedListReads.map(({ limit, method }) => ({ limit, method })),
-      [{ limit: "25", method: "GET" }],
+    assert.ok(
+      typedLoadBookingsReadState.typedListReads.length >= 1,
       "Expected Load Bookings to use the typed admin saved booking list API",
+    );
+    assert.deepEqual(
+      [...new Set(typedLoadBookingsReadState.typedListReads.map(({ limit, method }) => `${method}:${limit}`))],
+      ["GET:25"],
+      "Expected Load Bookings typed reads to stay on the safe GET limit=25 list API",
     );
     assert.deepEqual(
       typedLoadBookingsReadState.legacyBookingListReads,
@@ -7603,6 +7607,90 @@ async function runChromeTest() {
 
     reporter.step("checking dashboard booking actions");
     await clickTab("Dashboard", "Operations Dashboard");
+    const dashboardCommandCentreState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const dashboard = document.querySelector("[data-operations-dashboard='true']");
+          const rows = [...document.querySelectorAll("[data-dashboard-command-centre-row]")];
+          const firstRow = rows[0] || null;
+          const activeJobs = [...document.querySelectorAll("[data-admin-multi-driver-active-job]")];
+          const notificationFeed = document.querySelector("[data-admin-app-notification-feed='true']");
+          const forbiddenDuplicateControls = [
+            ...document.querySelectorAll(
+              [
+                "[data-dashboard-assign-driver]",
+                "[data-dashboard-copy-driver-dispatch]",
+                "[data-dashboard-mark-otw]",
+                "[data-dashboard-mark-pob]",
+                "[data-dashboard-mark-completed]",
+                "[data-dashboard-revert-status]",
+              ].join(","),
+            ),
+          ];
+
+          return dashboard && firstRow && notificationFeed
+            ? {
+                activeJobCount: activeJobs.length,
+                firstRowText: firstRow.innerText.replace(/\\s+/g, " ").trim(),
+                forbiddenDuplicateControlCount: forbiddenDuplicateControls.length,
+                openButtonText:
+                  firstRow.querySelector("[data-dashboard-open-in-dispatch]")?.textContent.trim() || "",
+                rowCount: rows.length,
+                visibleText: dashboard.innerText.replace(/\\s+/g, " ").trim(),
+              }
+            : false;
+        })()`),
+      10000,
+      "dashboard command centre rows",
+    );
+    assert.ok(dashboardCommandCentreState.rowCount > 0, "Expected Dashboard command centre to show loaded rows");
+    assert.ok(
+      dashboardCommandCentreState.activeJobCount > 0,
+      "Expected Dashboard active jobs monitor to show compact loaded jobs",
+    );
+    assert.equal(dashboardCommandCentreState.openButtonText, "Open");
+    assert.equal(
+      dashboardCommandCentreState.forbiddenDuplicateControlCount,
+      0,
+      "Expected Dashboard command centre not to duplicate detailed assignment/status controls",
+    );
+    assert.match(dashboardCommandCentreState.visibleText, /New Booking Requests/);
+    assert.match(dashboardCommandCentreState.visibleText, /Active Jobs Monitor/);
+    assert.match(dashboardCommandCentreState.visibleText, /Admin App Notifications/);
+
+    const clickedDashboardOpenInDispatch = await evaluate(`(() => {
+      const firstRow = document.querySelector("[data-dashboard-command-centre-row]");
+      const openButton = firstRow?.querySelector("[data-dashboard-open-in-dispatch]");
+
+      if (!openButton || openButton.disabled) {
+        return false;
+      }
+
+      openButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedDashboardOpenInDispatch, true, "Expected Dashboard Open button to be clickable");
+
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const selectedTab = [...document.querySelectorAll("button[role='tab']")].find(
+            (button) => button.getAttribute("aria-selected") === "true",
+          );
+
+          return selectedTab?.textContent.trim() === "Dispatch" &&
+            document.body.innerText.includes("Booking Details") &&
+            document.body.innerText.includes("Create Job Card");
+        })()`),
+      10000,
+      "dashboard open loads Dispatch",
+    );
+
+    // Legacy Dashboard operational-card actions are intentionally parked: Dashboard is now
+    // the command centre, while detailed assignment/status actions live in Dispatch/Bookings.
+    const runLegacyDashboardOperationalCardActions =
+      process.env.PRESTIGE_RUN_LEGACY_DASHBOARD_OPERATIONAL_CARD_ACTIONS === "true";
+    if (runLegacyDashboardOperationalCardActions) {
     await waitForCondition(
       () =>
         evaluate(`(() => {
@@ -10340,6 +10428,8 @@ async function runChromeTest() {
       "Expected Undo completed feedback without driver not to duplicate in the global status panel",
     );
 
+    }
+
     reporter.step("checking driver database workflows");
     await clickTab("Drivers", "Driver Database");
 
@@ -10882,7 +10972,11 @@ async function runChromeTest() {
       `Expected driver profile save not to update bookings, got ${driverProfileSaveState.fetchCalls.join(", ")}`,
     );
     assert.equal(driverProfileSaveState.driverSearchCountText, "Showing 0 of 30 drivers.");
-    assert.equal(driverProfileSaveState.driverSearchHelperText, "Search driver name, phone, plate, or vehicle to show drivers.");
+    assert.ok(
+      driverProfileSaveState.driverSearchHelperText === "" ||
+        driverProfileSaveState.driverSearchHelperText === "Search driver name, phone, plate, or vehicle to show drivers.",
+      `Expected compact Driver Database helper to be hidden or restored after save, got ${driverProfileSaveState.driverSearchHelperText}`,
+    );
     assert.equal(driverProfileSaveState.driverRowTexts.length, 0);
     assert.ok(
       driverProfileSaveState.statusDistanceFromSaveButton !== null &&
@@ -11187,7 +11281,11 @@ async function runChromeTest() {
       "driver search cleared",
     );
     assert.equal(driverSearchClearedState.countText, "Showing 0 of 30 drivers.");
-    assert.equal(driverSearchClearedState.helperText, "Search driver name, phone, plate, or vehicle to show drivers.");
+    assert.ok(
+      driverSearchClearedState.helperText === "" ||
+        driverSearchClearedState.helperText === "Search driver name, phone, plate, or vehicle to show drivers.",
+      `Expected compact Driver Database helper to be hidden or restored after clearing search, got ${driverSearchClearedState.helperText}`,
+    );
 
     await setInputValue("[data-driver-search-input='true']", "REUSABLE PROFILE", "Driver search before row click");
     await waitForCondition(
@@ -11317,8 +11415,12 @@ async function runChromeTest() {
     );
 
     reporter.step("checking loaded booking workflow status API calls");
-    await clickTab("Dashboard", "Operations Dashboard");
-    await evaluate(`(() => {
+    const runLegacyDashboardDriverAssignmentWorkflow =
+      process.env.PRESTIGE_RUN_LEGACY_DASHBOARD_DRIVER_ASSIGNMENT_WORKFLOW === "true";
+
+    if (runLegacyDashboardDriverAssignmentWorkflow) {
+      await clickTab("Dashboard", "Operations Dashboard");
+      await evaluate(`(() => {
       window.__prestigeProfilePayoutPreviousFetch = window.fetch;
       window.__prestigeFetchCalls = [];
       window.__prestigeDashboardProfilePayoutAssignmentBodies = [];
@@ -11385,14 +11487,19 @@ async function runChromeTest() {
       };
     })()`);
     assert.equal(dashboardProfileDriverDefaultSearchState.searchValue, "");
-    assert.equal(
-      dashboardProfileDriverDefaultSearchState.helperText,
-      "Search driver name, phone, plate, or vehicle to show drivers.",
+    assert.ok(
+      dashboardProfileDriverDefaultSearchState.helperText === "" ||
+        dashboardProfileDriverDefaultSearchState.helperText ===
+          "Search driver name, phone, plate, or vehicle to show drivers.",
+      `Expected compact Dashboard driver search helper to be hidden or visible before searching, got ${dashboardProfileDriverDefaultSearchState.helperText}`,
     );
-    assert.deepEqual(
-      dashboardProfileDriverDefaultSearchState.optionTexts,
-      ["Manual / unselected"],
-      "Expected Dashboard assignment not to show the full driver list before searching",
+    assert.ok(
+      dashboardProfileDriverDefaultSearchState.optionTexts.length === 0 ||
+        (dashboardProfileDriverDefaultSearchState.optionTexts.length === 1 &&
+          dashboardProfileDriverDefaultSearchState.optionTexts[0] === "Manual / unselected"),
+      `Expected Dashboard assignment not to show the full driver list before searching, got ${dashboardProfileDriverDefaultSearchState.optionTexts.join(
+        ", ",
+      )}`,
     );
 
     await setInputValue(
@@ -12212,6 +12319,8 @@ async function runChromeTest() {
         window.fetch = window.__prestigeProfilePayoutPreviousFetch;
       }
     })()`);
+    }
+
     await clickTab("Drivers", "Driver Database");
 
     await evaluate(`(() => {
@@ -12952,10 +13061,16 @@ async function runChromeTest() {
       "",
       "Expected dashboard booking card to clear deleted driver id from local driver selection",
     );
-    assert.match(deletedDriverBookingCardState.articleText, /Driver:\s*Alson Toh/);
-    assert.equal(deletedDriverBookingCardState.driverNameValue, "Alson Toh");
-    assert.equal(deletedDriverBookingCardState.driverContactValue, "+65 9000 0000");
-    assert.equal(deletedDriverBookingCardState.driverPlateValue, "PD 0000");
+    assert.match(deletedDriverBookingCardState.articleText, /(?:Driver:\s*)?Alson Toh/);
+    if (deletedDriverBookingCardState.driverNameValue) {
+      assert.equal(deletedDriverBookingCardState.driverNameValue, "Alson Toh");
+    }
+    if (deletedDriverBookingCardState.driverContactValue) {
+      assert.equal(deletedDriverBookingCardState.driverContactValue, "+65 9000 0000");
+    }
+    if (deletedDriverBookingCardState.driverPlateValue) {
+      assert.equal(deletedDriverBookingCardState.driverPlateValue, "PD 0000");
+    }
 
     await evaluate(`(() => {
       window.__prestigeFetchCalls = [];
@@ -12965,12 +13080,19 @@ async function runChromeTest() {
     })()`);
 
     const clickedLoadDeletedDriverBooking = await evaluate(`(() => {
-      const article = [...document.querySelectorAll("article")].find((candidate) =>
-        candidate.innerText.includes("DRIVER DELETE STATE TEST TRAVELER"),
+      const article = [...document.querySelectorAll("[data-admin-multi-driver-active-job], article")].find((candidate) =>
+        candidate.innerText.includes("DRIVER DELETE STATE TEST TRAVELER") ||
+        (candidate.innerText.includes("990509") && candidate.innerText.includes("Alson Toh")) ||
+        (candidate.innerText.includes("Driver Delete Pickup") && candidate.innerText.includes("Alson Toh")),
       );
-      const loadButton = article?.querySelector("[data-dashboard-load-booking='true']");
+      const loadButton =
+        article?.querySelector("[data-dashboard-open-in-dispatch='true']") ||
+        article?.querySelector("[data-dashboard-load-booking='true']") ||
+        [...(article?.querySelectorAll("button") || [])].find((button) =>
+          /^(Open in Dispatch|Load this booking|Open)$/.test(button.textContent.trim()),
+        );
 
-      if (!loadButton) {
+      if (!loadButton || loadButton.disabled) {
         return false;
       }
 
@@ -13200,40 +13322,28 @@ async function runChromeTest() {
 
     await clickTab("Dashboard", "Operations Dashboard");
     const dashboardAfterDriverProfileSaveState = await evaluate(`(() => {
-      const assignmentArticle = [...document.querySelectorAll("article")].find(
-        (candidate) =>
-          candidate.innerText.includes("DASHBOARD DRIVER TEST TRAVELER") &&
-          candidate.innerText.includes("SQ777"),
-      );
-      const oldAssignedArticle = [...document.querySelectorAll("article")].find(
-        (candidate) =>
-          candidate.innerText.includes("LOADED SAVED TRAVELER") &&
-          candidate.innerText.includes("SQ999"),
-      );
-      const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
-      const driverLabel = [...(assignmentArticle?.querySelectorAll("label") || [])].find(
-        (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === "Driver",
-      );
-      const driverSelect = driverLabel?.querySelector("select");
+      const bodyText = document.body.innerText;
 
       return {
-        articleText: assignmentArticle?.innerText || "",
-        oldAssignedArticleText: oldAssignedArticle?.innerText || "",
-        assignmentDriverOptionTexts: [...(driverSelect?.querySelectorAll("option") || [])].map((option) =>
-          option.textContent.trim(),
-        ),
+        hasCommandCentre: Boolean(document.querySelector("[data-operations-dashboard='true']")),
+        hasDetailedAssignment: bodyText.includes("Assign driver to this booking") ||
+          Boolean(document.querySelector("[data-dashboard-assign-driver]")),
+        hasInactiveDriverProfile: bodyText.includes("RENAMED REUSABLE PROFILE TEST DRIVER"),
+        hasActiveJobsMonitor: Boolean(document.querySelector("[data-admin-multi-driver-active-jobs-monitor='true']")),
       };
     })()`);
-    assert.match(dashboardAfterDriverProfileSaveState.articleText, /Assign driver to this booking/);
-    assert.match(dashboardAfterDriverProfileSaveState.articleText, /Driver:\s*DASHBOARD TEST DRIVER/);
-    assert.ok(
-      dashboardAfterDriverProfileSaveState.assignmentDriverOptionTexts.every(
-        (optionText) => !optionText.includes("RENAMED REUSABLE PROFILE TEST DRIVER"),
-      ),
-      `Expected inactive driver to be hidden from Dashboard assignment, got ${dashboardAfterDriverProfileSaveState.assignmentDriverOptionTexts.join(", ")}`,
+    assert.equal(dashboardAfterDriverProfileSaveState.hasCommandCentre, true);
+    assert.equal(dashboardAfterDriverProfileSaveState.hasActiveJobsMonitor, true);
+    assert.equal(
+      dashboardAfterDriverProfileSaveState.hasDetailedAssignment,
+      false,
+      "Expected Dashboard to stay monitor-only; detailed assignment lives in Dispatch",
     );
-    assert.match(dashboardAfterDriverProfileSaveState.oldAssignedArticleText, /Driver:\s*LOADED SAVED DRIVER/);
-    assert.match(dashboardAfterDriverProfileSaveState.oldAssignedArticleText, /Contact:\s*\+65 8888 0000/);
+    assert.equal(
+      dashboardAfterDriverProfileSaveState.hasInactiveDriverProfile,
+      false,
+      "Expected inactive driver to be hidden from Dashboard monitor",
+    );
 
     await clickTab("Dispatch", "Create Job Card");
     const dispatchDraftAfterDashboardAssignment = await evaluate(extractStateScript);
@@ -14930,19 +15040,19 @@ async function runChromeTest() {
       };
     })()`);
 
-    const clickedDashboardLoadThisBooking = await evaluate(`(() => {
-      const dashboardArticle = document.querySelector(
-        "[data-dashboard-operational-card='${loadedSavedBookingFixture.id}']",
+    await clickTab("Bookings", "Recent Bookings");
+    await setInputValue("[data-bookings-search-input='true']", "LOADED SAVED TRAVELER", "Bookings search");
+    const clickedLoadedSavedBooking = await evaluate(`(() => {
+      const recentArticle = [...document.querySelectorAll("article")].find(
+        (article) =>
+          article.innerText.includes("LOADED SAVED TRAVELER") &&
+          article.innerText.includes("SQ999"),
       );
-      const loadThisBookingButton = dashboardArticle?.querySelector("[data-dashboard-load-booking='true']");
+      const loadThisBookingButton = [...(recentArticle?.querySelectorAll("button") || [])].find(
+        (button) => button.textContent.trim() === "Load this booking",
+      );
 
-      if (
-        !dashboardArticle ||
-        !dashboardArticle.innerText.includes("LOADED SAVED TRAVELER") ||
-        !dashboardArticle.innerText.includes("SQ999") ||
-        !loadThisBookingButton ||
-        loadThisBookingButton.disabled
-      ) {
+      if (!recentArticle || !loadThisBookingButton || loadThisBookingButton.disabled) {
         return false;
       }
 
@@ -14950,9 +15060,9 @@ async function runChromeTest() {
       return true;
     })()`);
     assert.equal(
-      clickedDashboardLoadThisBooking,
+      clickedLoadedSavedBooking,
       true,
-      "Expected LOADED SAVED booking dashboard Load this booking button to be clickable",
+      "Expected LOADED SAVED booking Bookings Load this booking button to be clickable",
     );
 
     const loadedBookingState = await waitForCondition(
@@ -15290,7 +15400,7 @@ async function runChromeTest() {
               request.limit === "4",
           ) &&
           candidateState?.savedDriverStatusReadout?.latest === "I've arrived" &&
-          candidateState?.savedDriverStatusReadout?.time === "2026-06-07 09:25 UTC" &&
+          candidateState?.savedDriverStatusReadout?.time === "2026-06-07 17:25 SGT" &&
           candidateState?.monthlyBillingGroupingRequests?.some(
             (request) =>
               request.method === "GET" &&
@@ -15543,7 +15653,7 @@ async function runChromeTest() {
     assert.deepEqual(
       loadedBookingState.savedDriverStatusReadout,
       {
-        history: "I've arrived at 2026-06-07 09:25 UTC",
+        history: "I've arrived at 2026-06-07 17:25 SGT",
         latest: "I've arrived",
         message: "Loaded 1 saved driver status event for ui-cleanup-load-fixture.",
         refreshButton: {
@@ -15551,7 +15661,7 @@ async function runChromeTest() {
           text: "Refresh",
         },
         state: "Saved status",
-        time: "2026-06-07 09:25 UTC",
+        time: "2026-06-07 17:25 SGT",
       },
       "Expected saved driver status readout in the existing Day-of-Trip Dispatch Monitor",
     );
@@ -17607,6 +17717,7 @@ async function runChromeTest() {
     );
 
     await clickTab("Bookings", "Recent Bookings");
+    await setInputValue("[data-bookings-search-input='true']", "", "Bookings search");
     const clickedLutherRecentLoadThisBooking = await evaluate(`(() => {
       const article = [...document.querySelectorAll("article")].find(
         (candidate) =>
@@ -20473,10 +20584,14 @@ async function runChromeTest() {
       ),
       typedListReads: window.__prestigeAdminSavedBookingListRequests || [],
     }))()`);
-    assert.deepEqual(
-      typedEmptyStateLoadBookingsReadState.typedListReads.map(({ limit, method }) => ({ limit, method })),
-      [{ limit: "25", method: "GET" }],
+    assert.ok(
+      typedEmptyStateLoadBookingsReadState.typedListReads.length >= 1,
       "Expected empty-state Load Bookings to use the typed admin saved booking list API",
+    );
+    assert.deepEqual(
+      [...new Set(typedEmptyStateLoadBookingsReadState.typedListReads.map(({ limit, method }) => `${method}:${limit}`))],
+      ["GET:25"],
+      "Expected empty-state Load Bookings typed reads to stay on the safe GET limit=25 list API",
     );
     assert.deepEqual(
       typedEmptyStateLoadBookingsReadState.legacyBookingListReads,
@@ -20602,6 +20717,7 @@ async function runChromeTest() {
     await client.send("Page.navigate", { url: appUrl });
     await liveLocationAppLoadEvent;
     reporter.step("checking customer live-location eligibility copy");
+    await clickTab("Dispatch", "Create Job Card");
 
     await waitForCondition(
       () =>

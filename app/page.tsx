@@ -6171,11 +6171,13 @@ function adminDriverJobStatusTimeLabel(value: string | null | undefined) {
     return cleaned.slice(0, 80);
   }
 
-  return `${parsedDate.getUTCFullYear()}-${String(parsedDate.getUTCMonth() + 1).padStart(2, "0")}-${String(
-    parsedDate.getUTCDate(),
-  ).padStart(2, "0")} ${String(parsedDate.getUTCHours()).padStart(2, "0")}:${String(
-    parsedDate.getUTCMinutes(),
-  ).padStart(2, "0")} UTC`;
+  const singaporeDate = new Date(parsedDate.getTime() + 8 * 60 * 60 * 1000);
+
+  return `${singaporeDate.getUTCFullYear()}-${String(singaporeDate.getUTCMonth() + 1).padStart(2, "0")}-${String(
+    singaporeDate.getUTCDate(),
+  ).padStart(2, "0")} ${String(singaporeDate.getUTCHours()).padStart(2, "0")}:${String(
+    singaporeDate.getUTCMinutes(),
+  ).padStart(2, "0")} SGT`;
 }
 
 function adminAppNotificationFailureMessage(rawError: unknown) {

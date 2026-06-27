@@ -58,6 +58,8 @@ for (const phrase of [
   "The Dashboard now uses compact read-only booking summaries plus `Open` handoff buttons; single-booking driver assignment, status, copy, job-card, and completion work stays in Dispatch/Bookings so page purposes do not duplicate.",
   "The loaded active jobs monitor is shown on the Dashboard command centre for multi-driver scanning; the Dispatch day-of-trip monitor remains the selected single-booking workbench.",
   "The loaded active jobs monitor keeps the first four active jobs visible by default and provides a compact `Show all active jobs` / `Show less` toggle when more loaded active jobs exist, so dispatch can inspect all running jobs from Dashboard without leaving the command centre.",
+  "The Dashboard active jobs monitor now shows a compact saved driver report readout per visible active job, using the existing guarded admin `GET /api/admin-driver-job-statuses` path only, with monitor-wide and per-card refresh controls.",
+  "The Dashboard driver report readout is read-only and does not create driver status events, notification rows, provider sends, GPS/live-location records, billing/payment/PDF/invoice/payout records, or a duplicate single-booking Dispatch workflow.",
   "The Bookings tab shows a compact new-request badge/highlight after open customer requests are detected; no sound, browser notification, polling loop, provider send, or new route is added.",
 ]) {
   assertIncludes(ledgerSection, phrase, `Load Bookings fallback ledger phrase ${phrase}`);
@@ -264,6 +266,42 @@ assertIncludes(appPage, "showAllActiveJobs\n    ? dayOfTripActiveJobBookings", "
 assertIncludes(appPage, 'data-admin-multi-driver-active-jobs-toggle="true"', "Active jobs monitor expand toggle");
 assertIncludes(appPage, '"Show all active jobs"', "Active jobs monitor show-all label");
 assertIncludes(appPage, '"Show less"', "Active jobs monitor show-less label");
+assertIncludes(appPage, "dashboardDriverJobStatusReadStates", "Dashboard driver report status map");
+assertIncludes(
+  appPage,
+  "dashboardDriverJobStatusAutoRequestedRef",
+  "Dashboard driver report auto-read guard",
+);
+assertIncludes(
+  appPage,
+  "refreshDashboardDriverJobStatusRead",
+  "Dashboard driver report refresh helper",
+);
+assertIncludes(
+  appPage,
+  "loadAdminDriverJobStatusRead(bookingReference)",
+  "Dashboard driver report uses existing guarded status read path",
+);
+assertIncludes(
+  appPage,
+  'data-admin-multi-driver-active-jobs-refresh-statuses="true"',
+  "Dashboard monitor-wide driver report refresh button",
+);
+assertIncludes(
+  appPage,
+  'data-admin-multi-driver-active-job-driver-report="true"',
+  "Dashboard active job driver report readout",
+);
+assertIncludes(
+  appPage,
+  'data-admin-multi-driver-active-job-driver-report-refresh="true"',
+  "Dashboard active job driver report refresh button",
+);
+assertIncludes(
+  appPage,
+  'data-admin-multi-driver-active-job-driver-report-time="true"',
+  "Dashboard active job driver report time",
+);
 assertIncludes(
   appPage,
   "bookingMatchesLocalSearch(bookingRecord, activeJobDashboardSearchTerm)",

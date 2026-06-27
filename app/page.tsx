@@ -8903,6 +8903,9 @@ export default function Home() {
   const [completingBookingId, setCompletingBookingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [showAllActiveJobs, setShowAllActiveJobs] = useState(false);
+  const [dashboardDriverJobStatusReadStates, setDashboardDriverJobStatusReadStates] =
+    useState<Record<string, AdminDriverJobStatusReadState>>({});
+  const dashboardDriverJobStatusAutoRequestedRef = useRef<Set<string>>(new Set());
   const [bookingsSearchTerm, setBookingsSearchTerm] = useState("");
   const [completedSearchTerm, setCompletedSearchTerm] = useState("");
   const [driverSearchTerm, setDriverSearchTerm] = useState("");
@@ -13687,6 +13690,63 @@ export default function Home() {
     }
   }
 
+  async function refreshDashboardDriverJobStatusRead(bookingReferenceValue: string) {
+    const bookingReference = cleanReferenceText(bookingReferenceValue);
+
+    if (!bookingReference) {
+      return;
+    }
+
+    setDashboardDriverJobStatusReadStates((currentStates) => ({
+      ...currentStates,
+      [bookingReference]: {
+        bookingReference,
+        latestStatus: null,
+        message: {
+          tone: "info",
+          text: `Loading driver report for ${compactBookingReference(bookingReference)}...`,
+        },
+        status: "loading",
+        statuses: [],
+      },
+    }));
+
+    try {
+      const loadedDriverStatuses = await loadAdminDriverJobStatusRead(bookingReference);
+
+      setDashboardDriverJobStatusReadStates((currentStates) => ({
+        ...currentStates,
+        [bookingReference]: {
+          bookingReference,
+          latestStatus: loadedDriverStatuses.latestStatus,
+          message: {
+            tone: loadedDriverStatuses.statuses.length > 0 ? "success" : "info",
+            text:
+              loadedDriverStatuses.statuses.length > 0
+                ? `Loaded driver report for ${compactBookingReference(bookingReference)}.`
+                : `No driver report for ${compactBookingReference(bookingReference)} yet.`,
+          },
+          status: "loaded",
+          statuses: loadedDriverStatuses.statuses,
+        },
+      }));
+    } catch (error) {
+      setDashboardDriverJobStatusReadStates((currentStates) => ({
+        ...currentStates,
+        [bookingReference]: {
+          bookingReference,
+          latestStatus: null,
+          message: {
+            tone: "error",
+            text: adminDriverJobStatusFailureMessage(error),
+          },
+          status: "error",
+          statuses: [],
+        },
+      }));
+    }
+  }
+
   async function saveDispatchReleaseWorkflowStatus() {
     const bookingReference = clean(dispatchReleaseWorkflowBookingReference);
 
@@ -16930,6 +16990,39 @@ export default function Home() {
         : dayOfTripActiveJobVisibleBookings.length === 2
           ? "grid-cols-1 sm:grid-cols-2"
           : "grid-cols-1";
+  const activeJobDriverStatusReferenceList = dayOfTripActiveJobVisibleBookings
+    .map(
+      (activeJobBooking) =>
+        cleanReferenceText(activeJobBooking.booking_reference) ||
+        cleanReferenceText(activeJobBooking.id),
+    )
+    .filter(Boolean);
+  const activeJobDriverStatusReferenceKey = activeJobDriverStatusReferenceList.join("|");
+
+  useEffect(() => {
+    const bookingReferences = activeJobDriverStatusReferenceKey.split("|").filter(Boolean);
+
+    if (activeTab !== "dashboard" || bookingReferences.length === 0) {
+      return;
+    }
+
+    for (const bookingReference of bookingReferences) {
+      if (dashboardDriverJobStatusAutoRequestedRef.current.has(bookingReference)) {
+        continue;
+      }
+
+      dashboardDriverJobStatusAutoRequestedRef.current.add(bookingReference);
+      void refreshDashboardDriverJobStatusRead(bookingReference);
+    }
+  }, [activeTab, activeJobDriverStatusReferenceKey]);
+
+  function refreshVisibleDashboardDriverReports() {
+    for (const bookingReference of activeJobDriverStatusReferenceList) {
+      dashboardDriverJobStatusAutoRequestedRef.current.add(bookingReference);
+      void refreshDashboardDriverJobStatusRead(bookingReference);
+    }
+  }
+
   const activeJobsMonitorPanel = (
     <section
       aria-label="Loaded Active Jobs Monitor"
@@ -16944,6 +17037,16 @@ export default function Home() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {activeJobDriverStatusReferenceList.length > 0 ? (
+            <button
+              className="h-8 rounded-md border border-lime-300 bg-white px-3 text-xs font-semibold text-lime-950 transition hover:bg-lime-50"
+              data-admin-multi-driver-active-jobs-refresh-statuses="true"
+              onClick={refreshVisibleDashboardDriverReports}
+              type="button"
+            >
+              Refresh reports
+            </button>
+          ) : null}
           <span
             className="w-fit rounded-full bg-lime-100 px-2.5 py-1 text-xs font-semibold uppercase text-lime-900 ring-1 ring-lime-200"
             data-admin-multi-driver-active-jobs-count={String(dayOfTripActiveJobBookings.length)}
@@ -16979,9 +17082,32 @@ export default function Home() {
               clean(activeJobBooking.dropoff_address) ||
               "Drop-off";
             const activeJobDriver = clean(activeJobBooking.driver_name) || "Driver TBC";
+            const activeJobDriverStatusReadState =
+              activeJobBookingReference &&
+              isSelectedActiveJob &&
+              adminDriverJobStatusReadState.bookingReference === activeJobBookingReference
+                ? adminDriverJobStatusReadState
+                : activeJobBookingReference
+                  ? dashboardDriverJobStatusReadStates[activeJobBookingReference] || null
+                  : null;
+            const activeJobDriverStatusLatest =
+              activeJobDriverStatusReadState?.latestStatus || null;
+            const activeJobDriverStatusLabel = activeJobDriverStatusLatest
+              ? adminDriverJobStatusDisplayLabel(activeJobDriverStatusLatest.status_value)
+              : activeJobDriverStatusReadState?.status === "loading"
+                ? "Loading report"
+                : activeJobDriverStatusReadState?.status === "error"
+                  ? "Read error"
+                  : "No driver report";
+            const activeJobDriverStatusTime = activeJobDriverStatusLatest
+              ? adminDriverJobStatusTimeLabel(
+                  activeJobDriverStatusLatest.occurred_at ||
+                    activeJobDriverStatusLatest.created_at,
+                )
+              : "";
             const activeJobStatus =
-              isSelectedActiveJob && adminDriverJobStatusLatest
-                ? adminDriverJobStatusLatestLabel
+              activeJobDriverStatusLatest
+                ? activeJobDriverStatusLabel
                 : bookingStatusLabel(activeJobBooking.status);
 
             return (
@@ -17019,6 +17145,44 @@ export default function Home() {
                 <p className="mt-0.5 truncate text-xs text-lime-800">
                   {activeJobPickup} &gt; {activeJobDropoff}
                 </p>
+                <div
+                  className={`mt-2 rounded-md border px-2 py-1 text-xs ${
+                    activeJobDriverStatusLatest
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-950"
+                      : activeJobDriverStatusReadState?.status === "error"
+                        ? "border-rose-200 bg-rose-50 text-rose-950"
+                        : "border-lime-100 bg-lime-50/70 text-lime-950"
+                  }`}
+                  data-admin-multi-driver-active-job-driver-report="true"
+                >
+                  <div className="flex min-w-0 items-center justify-between gap-2">
+                    <p className="min-w-0 truncate font-semibold">
+                      Driver report: {activeJobDriverStatusLabel}
+                    </p>
+                    <button
+                      className="shrink-0 rounded border border-current bg-white/70 px-1.5 py-0.5 text-[10px] font-semibold transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                      data-admin-multi-driver-active-job-driver-report-refresh="true"
+                      disabled={
+                        !activeJobBookingReference ||
+                        activeJobDriverStatusReadState?.status === "loading"
+                      }
+                      onClick={() => {
+                        if (activeJobBookingReference) {
+                          void refreshDashboardDriverJobStatusRead(activeJobBookingReference);
+                        }
+                      }}
+                      type="button"
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                  <p
+                    className="mt-0.5 truncate text-[11px]"
+                    data-admin-multi-driver-active-job-driver-report-time="true"
+                  >
+                    {activeJobDriverStatusTime || "Latest driver update will show here."}
+                  </p>
+                </div>
                 {!isSelectedActiveJob ? (
                   <button
                     className="mt-2 h-8 w-full rounded-md border border-lime-300 bg-white px-2 text-xs font-semibold text-lime-950 transition hover:bg-lime-50"

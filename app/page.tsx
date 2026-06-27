@@ -2616,6 +2616,16 @@ function cleanReferenceText(value: string | number | null | undefined) {
   return /^(?:undefined|null)$/i.test(cleaned) ? "" : cleaned;
 }
 
+function compactBookingReference(value: string | number | null | undefined) {
+  const reference = cleanReferenceText(value);
+
+  if (reference.length <= 16) {
+    return reference || "No ref";
+  }
+
+  return `${reference.slice(0, 6)}...${reference.slice(-6)}`;
+}
+
 function isInactiveDriver(
   driver: Pick<DriverRecord, "availability_status"> | DriverAssignmentDisplayRecord | null | undefined,
 ) {
@@ -17864,6 +17874,34 @@ export default function Home() {
       state: dayOfTripDispatchMonitorStatus === "completed" ? "ready" : "needs-action",
     },
   ];
+  const dayOfTripActiveJobBookings = operationalBookings
+    .filter((bookingRecord) => {
+      const normalizedStatus = clean(bookingRecord.status).toLowerCase();
+
+      return normalizedStatus !== "completed" && normalizedStatus !== "cancelled";
+    })
+    .sort((firstBooking, secondBooking) => {
+      const firstDate = getBookingDateKey(firstBooking);
+      const secondDate = getBookingDateKey(secondBooking);
+
+      if (firstDate !== secondDate) {
+        return firstDate.localeCompare(secondDate);
+      }
+
+      return (
+        normaliseTimeForSort(firstBooking.pickup_time) -
+        normaliseTimeForSort(secondBooking.pickup_time)
+      );
+    });
+  const dayOfTripActiveJobVisibleBookings = dayOfTripActiveJobBookings.slice(0, 4);
+  const dayOfTripActiveJobGridClass =
+    dayOfTripActiveJobVisibleBookings.length >= 4
+      ? "grid-cols-1 sm:grid-cols-2 xl:grid-cols-4"
+      : dayOfTripActiveJobVisibleBookings.length === 3
+        ? "grid-cols-1 sm:grid-cols-2 xl:grid-cols-3"
+        : dayOfTripActiveJobVisibleBookings.length === 2
+          ? "grid-cols-1 sm:grid-cols-2"
+          : "grid-cols-1";
   const dayOfTripExceptionEscalationClosed =
     dayOfTripExceptionEscalationStatus === "closed-locally";
   const dayOfTripExceptionDriverNoResponse =
@@ -29773,7 +29811,118 @@ export default function Home() {
                   })}
                 </div>
               </div>
-              <div className="mt-2 grid grid-cols-1 gap-1 min-[300px]:grid-cols-2 sm:mt-3 md:grid-cols-3">
+              <div
+                className="mt-2 hidden rounded-md border border-lime-200 bg-white/80 p-1.5 text-[10px] leading-3 text-lime-950 xl:block xl:text-[11px] xl:leading-4"
+                data-admin-multi-driver-active-jobs-monitor="true"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-1">
+                  <p className="font-semibold leading-3 sm:leading-4">Loaded jobs monitor</p>
+                  <span
+                    className="rounded-full bg-lime-100 px-1.5 py-0.5 text-[8px] font-semibold uppercase text-lime-900 sm:px-2 sm:text-[9px]"
+                    data-admin-multi-driver-active-jobs-count={String(dayOfTripActiveJobBookings.length)}
+                  >
+                    {dayOfTripActiveJobBookings.length} active
+                  </span>
+                </div>
+                {dayOfTripActiveJobVisibleBookings.length > 0 ? (
+                  <div className={`mt-1 grid gap-1 ${dayOfTripActiveJobGridClass}`}>
+                    {dayOfTripActiveJobVisibleBookings.map((activeJobBooking) => {
+                      const activeJobBookingReference =
+                        cleanReferenceText(activeJobBooking.booking_reference) ||
+                        cleanReferenceText(activeJobBooking.id);
+                      const isSelectedActiveJob =
+                        Boolean(activeJobBookingReference) &&
+                        activeJobBookingReference === cleanReferenceText(loadedBookingId);
+                      const activeJobRoutePoints = getRoutePoints(activeJobBooking);
+                      const activeJobPickup =
+                        activeJobRoutePoints[0] || clean(activeJobBooking.pickup_address) || "Pickup";
+                      const activeJobDropoff =
+                        activeJobRoutePoints[activeJobRoutePoints.length - 1] ||
+                        clean(activeJobBooking.dropoff_address) ||
+                        "Drop-off";
+                      const activeJobDriver = clean(activeJobBooking.driver_name) || "Driver TBC";
+                      const activeJobStatus =
+                        isSelectedActiveJob && adminDriverJobStatusLatest
+                          ? adminDriverJobStatusLatestLabel
+                          : bookingStatusLabel(activeJobBooking.status);
+
+                      return (
+                        <div
+                          className={`min-w-0 rounded border px-1.5 py-1 ${
+                            isSelectedActiveJob
+                              ? "border-lime-400 bg-lime-50"
+                              : "border-lime-100 bg-white"
+                          }`}
+                          data-admin-multi-driver-active-job={
+                            activeJobBookingReference || String(activeJobBooking.id)
+                          }
+                          key={`active-job-${activeJobBooking.id}`}
+                          title={activeJobBookingReference || undefined}
+                        >
+                          <div className="flex min-w-0 items-start justify-between gap-1">
+                            <div className="min-w-0">
+                              <p className="truncate font-semibold leading-3 sm:leading-4">
+                                {compactBookingReference(activeJobBookingReference)}
+                              </p>
+                              <p className="truncate text-[9px] leading-3 text-lime-800 sm:text-[10px]">
+                                {formatPickupDateTime(
+                                  getBookingDateKey(activeJobBooking),
+                                  activeJobBooking.pickup_time,
+                                )}
+                              </p>
+                            </div>
+                            <span
+                              className={`max-w-[7rem] shrink-0 truncate rounded-full px-1.5 py-0.5 text-[8px] font-semibold uppercase ${
+                                isSelectedActiveJob
+                                  ? "bg-lime-700 text-white"
+                                  : "bg-slate-100 text-slate-700"
+                              }`}
+                            >
+                              {isSelectedActiveJob ? "Open" : activeJobStatus}
+                            </span>
+                          </div>
+                          <p className="mt-0.5 truncate leading-3 sm:leading-4">{activeJobDriver}</p>
+                          <p className="mt-0.5 truncate text-[9px] leading-3 text-lime-800 sm:text-[10px]">
+                            {activeJobPickup} &gt; {activeJobDropoff}
+                          </p>
+                          {!isSelectedActiveJob ? (
+                            <button
+                              className="mt-1 h-7 w-full rounded border border-lime-300 bg-white px-2 text-[10px] font-semibold text-lime-950 transition hover:bg-lime-50"
+                              onClick={() => loadSelectedBooking(activeJobBooking)}
+                              type="button"
+                            >
+                              Open
+                            </button>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="mt-1 rounded bg-lime-50 px-1 py-0.5 font-semibold">
+                    Load bookings to monitor active driver jobs.
+                  </p>
+                )}
+                {dayOfTripActiveJobBookings.length > dayOfTripActiveJobVisibleBookings.length ? (
+                  <p className="mt-1 text-[9px] leading-3 text-lime-800 sm:text-[10px]">
+                    {dayOfTripActiveJobBookings.length - dayOfTripActiveJobVisibleBookings.length} more
+                    loaded active job
+                    {dayOfTripActiveJobBookings.length - dayOfTripActiveJobVisibleBookings.length === 1
+                      ? ""
+                      : "s"}{" "}
+                    in the bookings list.
+                  </p>
+                ) : null}
+              </div>
+              <details
+                className="mt-1 rounded-md border-0 border-lime-200 bg-white/40 p-0 sm:mt-2 sm:border sm:p-1"
+                data-admin-day-of-trip-selected-detail="true"
+                open
+              >
+                <summary className="hidden cursor-pointer list-inside text-[11px] font-semibold text-lime-950 xl:list-item">
+                  Selected booking detail
+                </summary>
+                <div className="mt-1 grid grid-cols-1 gap-1 min-[300px]:grid-cols-2 sm:mt-2 md:grid-cols-3">
                 {dayOfTripDispatchMonitorItems.map((item) => (
                   <div
                     className={`min-h-[52px] min-w-0 rounded-md border px-1 py-1.5 text-[11px] sm:px-2 md:min-h-12 ${
@@ -29952,6 +30101,7 @@ export default function Home() {
                   separately approved.
                 </p>
               </div>
+              </details>
               <p
                 className="mt-2 border-t border-lime-200 pt-2 text-[11px] leading-4 text-lime-900 md:text-[10px] md:leading-3"
                 data-admin-day-of-trip-dispatch-monitor-boundary="true"

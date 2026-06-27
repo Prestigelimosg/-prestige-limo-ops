@@ -3288,11 +3288,11 @@ async function runChromeTest() {
         "trip-extras",
         "job-card-preview",
         "customer-whatsapp-copy",
-        "driver-assignment",
         "driver-dispatch-copy",
+        "driver-assignment",
+        "admin-lower-persistence",
         "map-route-assist",
         "driver-status-day-of-trip",
-        "admin-lower-persistence",
       ];
 
       return expectedSteps.map((step) => {
@@ -3315,11 +3315,11 @@ async function runChromeTest() {
         "trip-extras",
         "job-card-preview",
         "customer-whatsapp-copy",
-        "driver-assignment",
         "driver-dispatch-copy",
+        "driver-assignment",
+        "admin-lower-persistence",
         "map-route-assist",
         "driver-status-day-of-trip",
-        "admin-lower-persistence",
       ],
       "Expected dispatch workflow test fixture to check every ordered step",
     );

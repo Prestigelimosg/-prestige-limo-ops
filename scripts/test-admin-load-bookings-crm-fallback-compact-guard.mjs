@@ -57,6 +57,7 @@ for (const phrase of [
   "Loading a customer request into Dispatch now records a bounded browser-local handled-request key so that request leaves the Dashboard/Bookings `New Booking Requests` queue and badge on that admin browser while remaining available in Recent/Active booking lists.",
   "The Dashboard now uses compact read-only booking summaries plus `Open` handoff buttons; single-booking driver assignment, status, copy, job-card, and completion work stays in Dispatch/Bookings so page purposes do not duplicate.",
   "The loaded active jobs monitor is shown on the Dashboard command centre for multi-driver scanning; the Dispatch day-of-trip monitor remains the selected single-booking workbench.",
+  "The loaded active jobs monitor keeps the first four active jobs visible by default and provides a compact `Show all active jobs` / `Show less` toggle when more loaded active jobs exist, so dispatch can inspect all running jobs from Dashboard without leaving the command centre.",
   "The Bookings tab shows a compact new-request badge/highlight after open customer requests are detected; no sound, browser notification, polling loop, provider send, or new route is added.",
 ]) {
   assertIncludes(ledgerSection, phrase, `Load Bookings fallback ledger phrase ${phrase}`);
@@ -257,6 +258,12 @@ assert.equal(
   "Active jobs monitor should be rendered in one place only.",
 );
 assertIncludes(appPage, "const activeJobDashboardSearchTerm = clean(searchTerm);", "Active jobs monitor search term");
+assertIncludes(appPage, "const [showAllActiveJobs, setShowAllActiveJobs] = useState(false);", "Active jobs monitor expanded state");
+assertIncludes(appPage, "const activeJobsMonitorCollapsedCount = Math.max", "Active jobs monitor hidden count");
+assertIncludes(appPage, "showAllActiveJobs\n    ? dayOfTripActiveJobBookings", "Active jobs monitor expands to all loaded jobs");
+assertIncludes(appPage, 'data-admin-multi-driver-active-jobs-toggle="true"', "Active jobs monitor expand toggle");
+assertIncludes(appPage, '"Show all active jobs"', "Active jobs monitor show-all label");
+assertIncludes(appPage, '"Show less"', "Active jobs monitor show-less label");
 assertIncludes(
   appPage,
   "bookingMatchesLocalSearch(bookingRecord, activeJobDashboardSearchTerm)",

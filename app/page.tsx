@@ -8902,6 +8902,7 @@ export default function Home() {
   const [driverDeleteMessage, setDriverDeleteMessage] = useState<DriverDeleteMessage | null>(null);
   const [completingBookingId, setCompletingBookingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [showAllActiveJobs, setShowAllActiveJobs] = useState(false);
   const [bookingsSearchTerm, setBookingsSearchTerm] = useState("");
   const [completedSearchTerm, setCompletedSearchTerm] = useState("");
   const [driverSearchTerm, setDriverSearchTerm] = useState("");
@@ -16917,7 +16918,10 @@ export default function Home() {
         normaliseTimeForSort(secondBooking.pickup_time)
       );
     });
-  const dayOfTripActiveJobVisibleBookings = dayOfTripActiveJobBookings.slice(0, 4);
+  const activeJobsMonitorCollapsedCount = Math.max(dayOfTripActiveJobBookings.length - 4, 0);
+  const dayOfTripActiveJobVisibleBookings = showAllActiveJobs
+    ? dayOfTripActiveJobBookings
+    : dayOfTripActiveJobBookings.slice(0, 4);
   const dayOfTripActiveJobGridClass =
     dayOfTripActiveJobVisibleBookings.length >= 4
       ? "grid-cols-1 sm:grid-cols-2 xl:grid-cols-4"
@@ -16939,12 +16943,24 @@ export default function Home() {
             Watch loaded running jobs here. Open one booking in Dispatch for detailed work.
           </p>
         </div>
-        <span
-          className="w-fit rounded-full bg-lime-100 px-2.5 py-1 text-xs font-semibold uppercase text-lime-900 ring-1 ring-lime-200"
-          data-admin-multi-driver-active-jobs-count={String(dayOfTripActiveJobBookings.length)}
-        >
-          {dayOfTripActiveJobBookings.length} active
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            className="w-fit rounded-full bg-lime-100 px-2.5 py-1 text-xs font-semibold uppercase text-lime-900 ring-1 ring-lime-200"
+            data-admin-multi-driver-active-jobs-count={String(dayOfTripActiveJobBookings.length)}
+          >
+            {dayOfTripActiveJobBookings.length} active
+          </span>
+          {dayOfTripActiveJobBookings.length > 4 ? (
+            <button
+              className="h-8 rounded-md border border-lime-300 bg-white px-3 text-xs font-semibold text-lime-950 transition hover:bg-lime-50"
+              data-admin-multi-driver-active-jobs-toggle="true"
+              onClick={() => setShowAllActiveJobs((currentValue) => !currentValue)}
+              type="button"
+            >
+              {showAllActiveJobs ? "Show less" : "Show all active jobs"}
+            </button>
+          ) : null}
+        </div>
       </div>
       {dayOfTripActiveJobVisibleBookings.length > 0 ? (
         <div className={`mt-3 grid gap-2 ${dayOfTripActiveJobGridClass}`}>
@@ -17021,14 +17037,11 @@ export default function Home() {
           Load bookings to monitor active driver jobs.
         </p>
       )}
-      {dayOfTripActiveJobBookings.length > dayOfTripActiveJobVisibleBookings.length ? (
+      {!showAllActiveJobs && activeJobsMonitorCollapsedCount > 0 ? (
         <p className="mt-2 text-xs text-lime-800">
-          {dayOfTripActiveJobBookings.length - dayOfTripActiveJobVisibleBookings.length} more loaded
-          active job
-          {dayOfTripActiveJobBookings.length - dayOfTripActiveJobVisibleBookings.length === 1
-            ? ""
-            : "s"}{" "}
-          in the Bookings list.
+          {activeJobsMonitorCollapsedCount} more loaded active job
+          {activeJobsMonitorCollapsedCount === 1 ? "" : "s"}. Use Show all active jobs to view
+          them here.
         </p>
       ) : null}
     </section>

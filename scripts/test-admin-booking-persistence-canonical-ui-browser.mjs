@@ -193,8 +193,9 @@ async function main() {
     })()`);
 
     await evaluate(`(() => {
-      const bookingsTab = [...document.querySelectorAll("button[role='tab']")]
-        .find((button) => button.textContent.trim() === "Bookings");
+      const bookingsTab = document.querySelector("button[data-app-tab='bookings']")
+        || [...document.querySelectorAll("button[role='tab']")]
+          .find((button) => button.querySelector("[data-app-tab-label='true']")?.textContent.trim() === "Bookings");
       bookingsTab?.click();
       return Boolean(bookingsTab);
     })()`);

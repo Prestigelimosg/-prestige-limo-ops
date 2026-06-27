@@ -43,8 +43,9 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Save Booking + CRM remains on `POST /api/admin-bookings` and is not changed by this fallback.
 - Recent and Completed booking lists now render compact expandable rows by default so dispatch can scan more bookings at once while keeping existing details and action buttons available.
 - The Bookings tab now triggers the same safe Load Bookings read automatically the first time it is opened with an empty loaded list.
-- Open customer booking requests are surfaced above Recent Bookings and use the existing customer request source markers only.
+- Open customer booking requests are surfaced above Recent Bookings and use the existing customer request source markers, with a bounded fallback for open `CUST-` request references when live rows do not carry those markers.
 - The request row reuses `loadSelectedBooking`, so `Review in Dispatch` loads the selected request into the existing Dispatch form without adding a duplicate write path.
+- The Bookings tab shows a compact new-request badge/highlight after open customer requests are detected; no sound, browser notification, polling loop, provider send, or new route is added.
 - Customer/driver-visible forbidden data remains blocked from this list path: driver payout, PayNow payout, customer price, billing, invoice, payment, internal admin notes, parser/debug, secrets, raw provider payloads, and mock QA/dev archive data.
 - Guard coverage lives in `scripts/test-admin-load-bookings-crm-fallback-compact-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 

@@ -115,7 +115,7 @@ export async function waitForTabLabels(evaluate, labels, description) {
       evaluate(`(() => {
         const expectedLabels = ${JSON.stringify(labels)};
         const visibleLabels = [...document.querySelectorAll("button[role='tab']")].map(
-          (button) => button.textContent.trim(),
+          (button) => (button.querySelector("[data-app-tab-label='true']")?.textContent || button.textContent).trim(),
         );
 
         return expectedLabels.every((label) => visibleLabels.includes(label));

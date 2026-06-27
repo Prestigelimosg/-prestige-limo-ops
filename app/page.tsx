@@ -4868,10 +4868,18 @@ function isOperationalBooking(bookingRecord: BookingRecord) {
 }
 
 function bookingRecordIsCustomerBookingRequest(bookingRecord: BookingRecord) {
+  const referenceCandidates = [
+    bookingRecord.booking_reference,
+    bookingRecord.id === null || bookingRecord.id === undefined ? "" : String(bookingRecord.id),
+  ]
+    .map((value) => clean(value).toUpperCase())
+    .filter(Boolean);
+
   return (
     clean(bookingRecord.source_channel) === "customer-booking-request" ||
     clean(bookingRecord.source_surface) === "customer_booking_request" ||
-    clean(bookingRecord.source_surface) === "customer-booking-request"
+    clean(bookingRecord.source_surface) === "customer-booking-request" ||
+    referenceCandidates.some((referenceCandidate) => referenceCandidate.startsWith("CUST-"))
   );
 }
 
@@ -4882,7 +4890,19 @@ function bookingRecordIsOpenCustomerBookingRequest(bookingRecord: BookingRecord)
 
   const status = clean(bookingRecord.status).toLowerCase();
 
-  return !["cancelled", "canceled", "completed", "declined", "rejected"].includes(status);
+  return ![
+    "cancelled",
+    "canceled",
+    "completed",
+    "complete",
+    "declined",
+    "rejected",
+    "confirmed",
+    "released",
+    "closed",
+    "job completed",
+    "job_completed",
+  ].includes(status);
 }
 
 function getBookingName(bookingRecord: BookingRecord) {
@@ -11450,8 +11470,12 @@ export default function Home() {
     [operationalBookings],
   );
   const customerBookingRequestBookings = useMemo(
-    () => operationalBookings.filter(bookingRecordIsOpenCustomerBookingRequest).slice(0, 5),
+    () => operationalBookings.filter(bookingRecordIsOpenCustomerBookingRequest),
     [operationalBookings],
+  );
+  const visibleCustomerBookingRequestBookings = useMemo(
+    () => customerBookingRequestBookings.slice(0, 5),
+    [customerBookingRequestBookings],
   );
   const filteredRecentBookings = useMemo(
     () =>
@@ -11584,9 +11608,10 @@ export default function Home() {
   const upcomingBookingDisplayItems = buildLoadBookingsOperationalDisplayItems(upcomingBookings);
   const otherBookingDisplayItems = buildLoadBookingsOperationalDisplayItems(otherBookings);
   const customerBookingRequestDisplayItems =
-    buildLoadBookingsOperationalDisplayItems(customerBookingRequestBookings, {
+    buildLoadBookingsOperationalDisplayItems(visibleCustomerBookingRequestBookings, {
       useTypedOperationalOrder: true,
     });
+  const customerBookingRequestCount = customerBookingRequestBookings.length;
   const filteredRecentBookingDisplayItems =
     buildLoadBookingsOperationalDisplayItems(filteredRecentBookings, { useTypedOperationalOrder: true });
   const filteredCompletedBookingDisplayItems =
@@ -21107,23 +21132,40 @@ export default function Home() {
         >
           {appTabs.map((tab) => {
             const selected = activeTab === tab.id;
+            const isBookingsTab = tab.id === "bookings";
+            const showBookingsRequestBadge = isBookingsTab && customerBookingRequestCount > 0;
+            const highlightBookingsTab = showBookingsRequestBadge && !selected;
 
             return (
               <button
                 aria-selected={selected}
-                className={`min-h-11 w-full rounded px-2 py-1 text-xs font-semibold transition ${
+                className={`flex min-h-11 w-full items-center justify-center gap-1.5 rounded px-2 py-1 text-xs font-semibold transition ${
                   selected
                     ? "bg-slate-950 text-white"
+                    : highlightBookingsTab
+                      ? "border border-emerald-300 bg-emerald-50 text-emerald-950 shadow-[0_0_0_2px_rgba(16,185,129,0.18)] hover:bg-emerald-100"
                     : "border border-stone-200 bg-white text-slate-700 hover:bg-stone-50"
                 }`}
                 key={tab.id}
+                data-app-tab={tab.id}
                 data-bookings-tab-autoload={tab.id === "bookings" ? "true" : undefined}
+                data-bookings-tab-new-requests={showBookingsRequestBadge ? "true" : undefined}
                 onClick={() => selectAppTab(tab.id)}
                 role="tab"
                 style={{ minHeight: 44 }}
                 type="button"
               >
-                {tab.label}
+                <span data-app-tab-label="true">{tab.label}</span>
+                {showBookingsRequestBadge ? (
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-bold leading-none ${
+                      selected ? "bg-white text-slate-950" : "bg-emerald-600 text-white"
+                    }`}
+                    data-bookings-new-request-badge="true"
+                  >
+                    {customerBookingRequestCount} new
+                  </span>
+                ) : null}
               </button>
             );
           })}

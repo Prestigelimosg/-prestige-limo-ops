@@ -51,8 +51,9 @@ for (const phrase of [
   "Save Booking + CRM remains on `POST /api/admin-bookings` and is not changed by this fallback.",
   "Recent and Completed booking lists now render compact expandable rows by default so dispatch can scan more bookings at once while keeping existing details and action buttons available.",
   "The Bookings tab now triggers the same safe Load Bookings read automatically the first time it is opened with an empty loaded list.",
-  "Open customer booking requests are surfaced above Recent Bookings and use the existing customer request source markers only.",
+  "Open customer booking requests are surfaced above Recent Bookings and use the existing customer request source markers, with a bounded fallback for open `CUST-` request references when live rows do not carry those markers.",
   "The request row reuses `loadSelectedBooking`, so `Review in Dispatch` loads the selected request into the existing Dispatch form without adding a duplicate write path.",
+  "The Bookings tab shows a compact new-request badge/highlight after open customer requests are detected; no sound, browser notification, polling loop, provider send, or new route is added.",
 ]) {
   assertIncludes(ledgerSection, phrase, `Load Bookings fallback ledger phrase ${phrase}`);
 }
@@ -106,6 +107,13 @@ assertIncludes(
   'clean(bookingRecord.source_surface) === "customer_booking_request"',
   "Customer request source_surface marker",
 );
+assertIncludes(
+  appPage,
+  'referenceCandidates.some((referenceCandidate) => referenceCandidate.startsWith("CUST-"))',
+  "Customer request CUST reference fallback",
+);
+assertIncludes(appPage, '"confirmed"', "Confirmed customer request exclusion");
+assertIncludes(appPage, '"released"', "Released customer request exclusion");
 assertIncludes(appPage, "function bookingRecordIsOpenCustomerBookingRequest", "Open customer request classifier");
 assertIncludes(appPage, "function selectAppTab(nextTab: AppTab)", "Admin tab selection helper");
 assertIncludes(
@@ -113,6 +121,14 @@ assertIncludes(
   'data-bookings-tab-autoload={tab.id === "bookings" ? "true" : undefined}',
   "Bookings tab auto-load marker",
 );
+assertIncludes(
+  appPage,
+  'data-bookings-tab-new-requests={showBookingsRequestBadge ? "true" : undefined}',
+  "Bookings tab new request highlight marker",
+);
+assertIncludes(appPage, 'data-bookings-new-request-badge="true"', "Bookings tab new request badge");
+assertIncludes(appPage, "const customerBookingRequestCount = customerBookingRequestBookings.length;", "Bookings badge count");
+assertIncludes(appPage, "visibleCustomerBookingRequestBookings", "Customer request visible list cap");
 assertIncludes(
   appPage,
   'nextTab === "bookings" && bookings.length === 0 && !loading',
@@ -131,6 +147,9 @@ for (const customerRequestFragment of [
 ]) {
   assertIncludes(appPage, customerRequestFragment, `Customer request auto-load fragment ${customerRequestFragment}`);
 }
+
+assertExcludes(appPage, "new Audio(", "Bookings badge sound");
+assertExcludes(appPage, "Notification.requestPermission", "Bookings browser notification");
 
 const typedOperationalFetchIndex = loadBookingsBlock.indexOf(
   "fetchLoadBookingsTypedOperationalDisplayResult(searchParams)",

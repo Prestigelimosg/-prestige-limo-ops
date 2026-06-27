@@ -256,6 +256,18 @@ assert.equal(
   1,
   "Active jobs monitor should be rendered in one place only.",
 );
+assertIncludes(appPage, "const activeJobDashboardSearchTerm = clean(searchTerm);", "Active jobs monitor search term");
+assertIncludes(
+  appPage,
+  "bookingMatchesLocalSearch(bookingRecord, activeJobDashboardSearchTerm)",
+  "Active jobs monitor follows dashboard search",
+);
+assertIncludes(appPage, "function activeJobDateBucket", "Active jobs monitor date priority helper");
+assertIncludes(
+  appPage,
+  "return dateKey >= todayKey ? 0 : 1;",
+  "Active jobs monitor prioritizes current and upcoming jobs before older pending rows",
+);
 assertExcludes(appPage, "new Audio(", "Bookings badge sound");
 assertExcludes(appPage, "Notification.requestPermission", "Bookings browser notification");
 

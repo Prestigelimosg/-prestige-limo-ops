@@ -16872,17 +16872,43 @@ export default function Home() {
       state: dayOfTripDispatchMonitorStatus === "completed" ? "ready" : "needs-action",
     },
   ];
+  const activeJobDashboardSearchTerm = clean(searchTerm);
+  function activeJobDateBucket(bookingRecord: BookingRecord) {
+    const dateKey = getBookingDateKey(bookingRecord);
+
+    if (!dateKey || dateKey === "1970-01-01") {
+      return 2;
+    }
+
+    return dateKey >= todayKey ? 0 : 1;
+  }
   const dayOfTripActiveJobBookings = operationalBookings
     .filter((bookingRecord) => {
       const normalizedStatus = clean(bookingRecord.status).toLowerCase();
 
       return normalizedStatus !== "completed" && normalizedStatus !== "cancelled";
     })
+    .filter((bookingRecord) =>
+      activeJobDashboardSearchTerm
+        ? bookingMatchesLocalSearch(bookingRecord, activeJobDashboardSearchTerm)
+        : true,
+    )
     .sort((firstBooking, secondBooking) => {
+      const firstDateBucket = activeJobDateBucket(firstBooking);
+      const secondDateBucket = activeJobDateBucket(secondBooking);
+
+      if (firstDateBucket !== secondDateBucket) {
+        return firstDateBucket - secondDateBucket;
+      }
+
       const firstDate = getBookingDateKey(firstBooking);
       const secondDate = getBookingDateKey(secondBooking);
 
       if (firstDate !== secondDate) {
+        if (firstDateBucket === 1 && secondDateBucket === 1) {
+          return secondDate.localeCompare(firstDate);
+        }
+
         return firstDate.localeCompare(secondDate);
       }
 

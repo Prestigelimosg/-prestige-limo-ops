@@ -51,8 +51,11 @@ for (const phrase of [
   "Save Booking + CRM remains on `POST /api/admin-bookings` and is not changed by this fallback.",
   "Recent and Completed booking lists now render compact expandable rows by default so dispatch can scan more bookings at once while keeping existing details and action buttons available.",
   "The Bookings tab now triggers the same safe Load Bookings read automatically the first time it is opened with an empty loaded list.",
-  "Open customer booking requests are surfaced above Recent Bookings and use the existing customer request source markers, with a bounded fallback for open `CUST-` request references when live rows do not carry those markers.",
-  "The request row reuses `loadSelectedBooking`, so `Review in Dispatch` loads the selected request into the existing Dispatch form without adding a duplicate write path.",
+  "Open customer booking requests are surfaced on the Dashboard command centre and above Recent Bookings, using the existing customer request source markers with a bounded fallback for open `CUST-` request references when live rows do not carry those markers.",
+  "The Dashboard is the default admin landing tab, shows a compact `New Booking Requests` alert, and routes request clicks to the existing Bookings review area instead of loading Dispatch directly.",
+  "The Bookings request row is the review handoff point and can load the selected request into the existing Dispatch form only when the operator chooses `Load in Dispatch`, without adding a duplicate write path.",
+  "The Dashboard now uses compact read-only booking summaries plus `Open` handoff buttons; single-booking driver assignment, status, copy, job-card, and completion work stays in Dispatch/Bookings so page purposes do not duplicate.",
+  "The loaded active jobs monitor is shown on the Dashboard command centre for multi-driver scanning; the Dispatch day-of-trip monitor remains the selected single-booking workbench.",
   "The Bookings tab shows a compact new-request badge/highlight after open customer requests are detected; no sound, browser notification, polling loop, provider send, or new route is added.",
 ]) {
   assertIncludes(ledgerSection, phrase, `Load Bookings fallback ledger phrase ${phrase}`);
@@ -75,6 +78,16 @@ for (const forbidden of [
 
 const loadBookingsBlock = sliceBetween(appPage, "async function loadBookings", "function loadSelectedBooking");
 const saveBookingBlock = sliceBetween(appPage, "async function saveBooking", "async function loadBookings");
+const dashboardBlock = sliceBetween(
+  appPage,
+  '{activeTab === "dashboard" ? (',
+  "      </div>\n    </main>",
+);
+const dispatchBlock = sliceBetween(
+  appPage,
+  '{activeTab === "dispatch" ? (',
+  '{activeTab === "bookings" ? (',
+);
 
 assertIncludes(appPage, 'const adminBookingsApiPath = "/api/admin-bookings";', "Admin bookings fallback path");
 assertIncludes(loadBookingsBlock, "function fetchAdminBookingsList", "Admin bookings list fallback helper");
@@ -115,7 +128,15 @@ assertIncludes(
 assertIncludes(appPage, '"confirmed"', "Confirmed customer request exclusion");
 assertIncludes(appPage, '"released"', "Released customer request exclusion");
 assertIncludes(appPage, "function bookingRecordIsOpenCustomerBookingRequest", "Open customer request classifier");
+assertIncludes(appPage, 'useState<AppTab>("dashboard")', "Dashboard default tab");
 assertIncludes(appPage, "function selectAppTab(nextTab: AppTab)", "Admin tab selection helper");
+assertIncludes(appPage, "function openCustomerBookingRequestsReview()", "Dashboard request review handoff helper");
+assertIncludes(appPage, 'selectAppTab("bookings");', "Dashboard request handoff opens Bookings");
+assertIncludes(
+  appPage,
+  'querySelector(\'[data-new-customer-booking-requests-panel="true"]\')',
+  "Dashboard request handoff scrolls to request panel",
+);
 assertIncludes(
   appPage,
   'data-bookings-tab-autoload={tab.id === "bookings" ? "true" : undefined}',
@@ -138,16 +159,72 @@ assertIncludes(appPage, 'void loadBookings("Bookings loaded.");', "Bookings tab 
 
 for (const customerRequestFragment of [
   "customerBookingRequestDisplayItems",
+  "data-dashboard-new-booking-requests-panel",
+  "data-dashboard-review-new-booking-requests",
+  "data-dashboard-new-booking-request-row",
   "data-new-customer-booking-requests-panel",
   "data-new-customer-booking-request-row",
   "data-new-customer-booking-request-load",
-  "Review in Dispatch",
+  "Load in Dispatch",
   "onClick={() => loadSelectedBooking(requestBooking)}",
   "{customerBookingRequestsPanel}",
 ]) {
   assertIncludes(appPage, customerRequestFragment, `Customer request auto-load fragment ${customerRequestFragment}`);
 }
 
+for (const dashboardCommandCentreHelperFragment of [
+  "data-dashboard-command-centre-bookings",
+  "data-dashboard-command-centre-row",
+  "data-dashboard-open-in-dispatch",
+]) {
+  assertIncludes(
+    appPage,
+    dashboardCommandCentreHelperFragment,
+    `Dashboard command-centre helper fragment ${dashboardCommandCentreHelperFragment}`,
+  );
+}
+
+for (const dashboardCommandCentreFragment of [
+  "renderDashboardBookingSummaries(todayBookingDisplayItems",
+  "renderDashboardBookingSummaries(upcomingBookingDisplayItems",
+  "renderDashboardBookingSummaries(otherBookingDisplayItems",
+  "{activeJobsMonitorPanel}",
+]) {
+  assertIncludes(
+    dashboardBlock,
+    dashboardCommandCentreFragment,
+    `Dashboard command-centre fragment ${dashboardCommandCentreFragment}`,
+  );
+}
+
+for (const duplicateDashboardWorkflowFragment of [
+  "renderBookingCards(",
+  "data-dashboard-action-group",
+  "data-dashboard-mark-otw",
+  "data-dashboard-mark-pob",
+  "data-dashboard-mark-completed",
+  "data-dashboard-driver-search-input",
+  "data-dashboard-assign-driver",
+  "data-dashboard-copy-driver-dispatch",
+  "data-dashboard-copy-job-card",
+]) {
+  assertExcludes(
+    dashboardBlock,
+    duplicateDashboardWorkflowFragment,
+    `Dashboard duplicate workflow fragment ${duplicateDashboardWorkflowFragment}`,
+  );
+}
+
+assertExcludes(
+  dispatchBlock,
+  'data-admin-multi-driver-active-jobs-monitor="true"',
+  "Dispatch duplicate multi-driver active jobs monitor",
+);
+assert.equal(
+  (appPage.match(/data-admin-multi-driver-active-jobs-monitor="true"/g) || []).length,
+  1,
+  "Active jobs monitor should be rendered in one place only.",
+);
 assertExcludes(appPage, "new Audio(", "Bookings badge sound");
 assertExcludes(appPage, "Notification.requestPermission", "Bookings browser notification");
 

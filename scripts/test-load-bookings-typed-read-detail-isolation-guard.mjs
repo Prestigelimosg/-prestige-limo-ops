@@ -240,7 +240,11 @@ for (const forbiddenSelectedFragment of [
   );
 }
 
-const bookingRecordToFormBlock = sliceBetween(appPage, "function bookingRecordToForm", "function stripBookerFromJobCard");
+const bookingRecordToFormBlock = sliceBetween(
+  appPage,
+  "function bookingRecordToForm",
+  "function bookingRecordToOperationalFormFields",
+);
 assertIncludes(bookingRecordToFormBlock, "bookingRecordToOperationalFormFields(bookingRecord)", "form operational source");
 assertIncludes(
   bookingRecordToFormBlock,

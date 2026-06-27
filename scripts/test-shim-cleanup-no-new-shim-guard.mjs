@@ -219,7 +219,7 @@ assertExcludes(
 );
 const driverProfileDisplaySearchSource = appPage.slice(
   appPage.indexOf("function driverDisplayMatchesSearch"),
-  appPage.indexOf("function driverDraftMatchesSearch"),
+  appPage.indexOf("function isRatesSetupErrorMessage"),
 );
 assertIncludes(
   driverProfileDisplaySearchSource,

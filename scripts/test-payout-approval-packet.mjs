@@ -164,26 +164,22 @@ for (const [label, source] of [
   assertIncludes(source, "driver_payout_rules", label);
 }
 
-const assignDriver = sliceBetween(appPage, "async function assignDriver", "async function copyDriverDispatch");
-for (const fragment of [
-  "selectedDriver?.driver_payout_rules?.[bookingType]",
-  "calculateSavedDriverPayout",
-  "driver_payout_amount",
-  "driver_payout_override",
-  "driver_payout_reason",
-  "driver_notes",
-  "driver_dispatch_include_payout",
+for (const removedDashboardControl of [
+  "function getDriverDispatchCard",
+  "function bookingRecordToDriverDraft",
+  "function getDriverDraft",
+  "async function assignDriver",
+  "async function copyDriverDispatch",
+  "data-dashboard-action-group",
+  "data-dashboard-assign-driver",
+  "data-dashboard-copy-driver-dispatch",
+  "data-dashboard-copy-job-card",
 ]) {
-  assertIncludes(assignDriver, fragment, `Parked assignDriver payout fragment: ${fragment}`);
-}
-
-const driverDispatchCard = sliceBetween(appPage, "function getDriverDispatchCard", "function parseMockChargeTimeToMinutes");
-for (const fragment of [
-  "bookingCardPriceAmounts(bookingRecord).driverPrice",
-  "driver_dispatch_include_payout",
-  'includePayout && payoutAmount ? `Payout: $${payoutAmount}` : ""',
-]) {
-  assertIncludes(driverDispatchCard, fragment, `Parked driver dispatch payout fragment: ${fragment}`);
+  assertExcludes(
+    appPage,
+    removedDashboardControl,
+    `Dashboard payout-aware direct action control removed ${removedDashboardControl}`,
+  );
 }
 
 for (const fragment of [

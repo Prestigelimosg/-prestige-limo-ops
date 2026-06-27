@@ -118,7 +118,11 @@ const typedDisplayBridgeBlock = sliceBetween(
   "async function fetchLoadBookingsTypedOperationalDisplayResult",
   "function getLoadBookingsOperationalDisplayTitle",
 );
-const bookingRecordToFormBlock = sliceBetween(appPage, "function bookingRecordToForm", "function stripBookerFromJobCard");
+const bookingRecordToFormBlock = sliceBetween(
+  appPage,
+  "function bookingRecordToForm",
+  "function bookingRecordToOperationalFormFields",
+);
 const bookingCardPriceLineBlock = sliceBetween(appPage, "function bookingCardPriceLine", "function positiveRateOrDefault");
 const saveBookingBlock = sliceBetween(appPage, "async function saveBooking", "async function loadBookings");
 

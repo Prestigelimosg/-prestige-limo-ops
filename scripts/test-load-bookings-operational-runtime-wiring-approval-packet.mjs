@@ -176,12 +176,30 @@ assertExcludes(appPage, safeUiAdapterHelperFragment, "app/page.tsx safe UI adapt
 for (const riskyPath of [
   "bookingCardPriceLine",
   "bookingRecordToForm",
-  "getDriverDispatchCard",
-  "bookingRecordToDriverDraft",
-  "assignDriver",
   "buildCompletedBookingBillingReadinessAuditPayload",
 ]) {
   assertIncludes(appPage, riskyPath, `Existing parked finance/internal UI path ${riskyPath}`);
+}
+
+for (const removedDashboardControl of [
+  "function getDriverDispatchCard",
+  "function bookingRecordToDriverDraft",
+  "function getDriverDraft",
+  "async function assignDriver",
+  "async function copyDriverDispatch",
+  "data-dashboard-action-group",
+  "data-dashboard-assign-driver",
+  "data-dashboard-copy-driver-dispatch",
+  "data-dashboard-copy-job-card",
+  "data-dashboard-mark-otw",
+  "data-dashboard-mark-pob",
+  "data-dashboard-mark-completed",
+]) {
+  assertExcludes(
+    appPage,
+    removedDashboardControl,
+    `Dashboard direct action control removed from operational Load Bookings list ${removedDashboardControl}`,
+  );
 }
 
 assertIncludes(safeDtoHelper, "loadBookingsRuntimeWiringEnabled: false", "Safe DTO helper runtime gate");

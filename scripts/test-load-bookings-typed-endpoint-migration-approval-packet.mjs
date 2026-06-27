@@ -167,11 +167,30 @@ assertExcludes(appPage, safeUiAdapterHelperFragment, "app/page.tsx safe UI adapt
 for (const parkedPath of [
   "bookingCardPriceLine",
   "bookingRecordToForm",
-  "getDriverDispatchCard",
-  "assignDriver",
   "buildCompletedBookingBillingReadinessAuditPayload",
 ]) {
   assertIncludes(appPage, parkedPath, `Parked finance/internal path ${parkedPath}`);
+}
+
+for (const removedDashboardControl of [
+  "function getDriverDispatchCard",
+  "function bookingRecordToDriverDraft",
+  "function getDriverDraft",
+  "async function assignDriver",
+  "async function copyDriverDispatch",
+  "data-dashboard-action-group",
+  "data-dashboard-assign-driver",
+  "data-dashboard-copy-driver-dispatch",
+  "data-dashboard-copy-job-card",
+  "data-dashboard-mark-otw",
+  "data-dashboard-mark-pob",
+  "data-dashboard-mark-completed",
+]) {
+  assertExcludes(
+    appPage,
+    removedDashboardControl,
+    `Dashboard direct action control removed from typed endpoint migration ${removedDashboardControl}`,
+  );
 }
 
 assertIncludes(adminBookingReadSetupRoute, "export async function GET", "Typed read setup route GET-only surface");

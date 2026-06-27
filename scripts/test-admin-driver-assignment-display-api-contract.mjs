@@ -447,7 +447,7 @@ try {
   );
   const profileDisplaySearchSource = appPageSource.slice(
     appPageSource.indexOf("function driverDisplayMatchesSearch"),
-    appPageSource.indexOf("function driverDraftMatchesSearch"),
+    appPageSource.indexOf("function isRatesSetupErrorMessage"),
   );
   assert.equal(
     profileDisplaySearchSource.includes("DriverAssignmentDisplayRecord"),

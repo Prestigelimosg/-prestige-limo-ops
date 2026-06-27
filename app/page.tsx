@@ -86,8 +86,6 @@ const adminSavedBookingsApiPath = "/api/admin-saved-bookings";
 const adminBookingsApiPath = "/api/admin-bookings";
 const adminLoadBookingsTypedReadApiPath = "/api/admin-load-bookings-typed-read";
 const adminSavedBookingStatusesApiPath = "/api/admin-saved-booking-statuses";
-const adminSavedBookingDriverAssignmentsApiPath =
-  "/api/admin-saved-booking-driver-assignments";
 const adminBookingCalendarEventsApiPath = "/api/admin-booking-calendar-events";
 const adminBookingCalendarSyncStatusesApiPath =
   "/api/admin-booking-calendar-sync-statuses";
@@ -501,17 +499,6 @@ type AdminSavedBookingStatusResponse = {
   version?: string;
 };
 
-type AdminSavedBookingDriverAssignmentResponse = {
-  booking?: {
-    id?: string | number;
-    status?: BookingStatusValue | string | null;
-    updated_at?: string | null;
-  } | null;
-  error?: string;
-  ok?: boolean;
-  version?: string;
-};
-
 type TravelerRecord = {
   id: number;
   company_id: number;
@@ -555,20 +542,6 @@ type DriverAvailabilityRecord = {
   availability_status: string | null;
   id: number;
   updated_at?: string | null;
-};
-
-type DashboardDriverCandidate = {
-  optionValue: string;
-  driverId: number | null;
-  driverName: string;
-  contactNumber: string;
-  vehicleType: string;
-  plateNumber: string;
-  availabilityStatus: string;
-  notes: string;
-  preferredAreas: string;
-  sourceDriver: DriverRecord | null;
-  searchValues: Array<string | null | undefined>;
 };
 
 type NameMemory = {
@@ -867,8 +840,6 @@ type CopyEditState = {
   isEditing: boolean;
   sourceKey: string;
 };
-
-type BookingCopyTarget = "driverDispatch" | "jobCard";
 
 type DispatchReleaseReadinessState = "needs-action" | "ready";
 
@@ -2058,18 +2029,6 @@ type CustomerMatchFeedback = Message & {
   action: "create" | "leave" | "link";
 };
 
-type DriverDraft = {
-  driverId: string;
-  driverSearch: string;
-  driverName: string;
-  driverContact: string;
-  driverPlate: string;
-  payoutOverride: string;
-  payoutReason: string;
-  notes: string;
-  includePayout: boolean;
-};
-
 type RateOverrideDraft = {
   companyName: string;
   bossName: string;
@@ -2107,23 +2066,19 @@ type ReplacementDriverFeedback = Message & {
 
 function getAssignedDriverSummary(
   bookingRecord: BookingRecord,
-  driverDraft?: DriverDraft,
   operationalCard?: LoadBookingsOperationalDisplayCard,
 ) {
   return {
     contact:
       operationalCard?.assigned_driver_phone ||
-      clean(bookingRecord.driver_contact) ||
-      clean(driverDraft?.driverContact),
+      clean(bookingRecord.driver_contact),
     name:
       operationalCard?.assigned_driver_display_name ||
       clean(bookingRecord.driver_name) ||
-      clean(driverDraft?.driverName) ||
       "—",
     plate:
       operationalCard?.assigned_driver_plate ||
-      clean(bookingRecord.driver_plate_number) ||
-      clean(driverDraft?.driverPlate),
+      clean(bookingRecord.driver_plate_number),
     vehicle:
       operationalCard?.assigned_driver_vehicle_type ||
       operationalCard?.vehicle_display ||
@@ -2133,16 +2088,14 @@ function getAssignedDriverSummary(
 
 function AssignedDriverSummaryBlock({
   bookingRecord,
-  driverDraft,
   flush = false,
   operationalCard,
 }: {
   bookingRecord: BookingRecord;
-  driverDraft?: DriverDraft;
   flush?: boolean;
   operationalCard?: LoadBookingsOperationalDisplayCard;
 }) {
-  const driverSummary = getAssignedDriverSummary(bookingRecord, driverDraft, operationalCard);
+  const driverSummary = getAssignedDriverSummary(bookingRecord, operationalCard);
 
   return (
     <div
@@ -2646,16 +2599,6 @@ function undoCompletedStatus(
   return hasBookingDriver(bookingRecord) ? "assigned" : "confirmed";
 }
 
-function revertOtwStatus(
-  bookingRecord: Pick<BookingRecord, "driver_id" | "driver_name">,
-): BookingStatusValue {
-  return hasBookingDriver(bookingRecord) ? "assigned" : "confirmed";
-}
-
-function statusAfterClearingAssignedDriver(status: string | null) {
-  return clean(status).toLowerCase() === "completed" ? "completed" : "confirmed";
-}
-
 function bookingStatusLabel(status: string | null) {
   const normalizedStatus = clean(status).toLowerCase();
 
@@ -2711,25 +2654,6 @@ function isDeleteCompletedJobMessage(message: Message | null | undefined) {
         message.text === "Deleting completed job..." ||
         message.text === "Completed job deleted." ||
         message.text.startsWith("Delete completed job failed")),
-  );
-}
-
-function isDashboardStatusMessage(message: Message | null | undefined) {
-  if (!message) {
-    return false;
-  }
-
-  return (
-    isMarkCompletionMessage(message) ||
-    message.text === "Marking driver OTW..." ||
-    message.text === "Driver marked OTW." ||
-    message.text.startsWith("Mark OTW failed") ||
-    message.text === "Marking passenger on board..." ||
-    message.text === "Passenger on board." ||
-    message.text.startsWith("Mark POB failed") ||
-    message.text === "Reverting status..." ||
-    message.text === "Status reverted." ||
-    message.text.startsWith("Revert status failed")
   );
 }
 
@@ -3292,38 +3216,6 @@ function driverDisplayMatchesSearch(driver: DriverAssignmentDisplayRecord, query
     ],
     query,
   );
-}
-
-function driverDraftMatchesSearch(driverDraft: DriverDraft, query: string) {
-  return driverSearchValuesMatch(
-    [
-      driverDraft.driverName,
-      driverDraft.driverContact,
-      driverDraft.driverPlate,
-      driverDraft.notes,
-    ],
-    query,
-  );
-}
-
-function dashboardDriverCandidateMatchesSearch(
-  candidate: DashboardDriverCandidate,
-  query: string,
-) {
-  return driverSearchValuesMatch(candidate.searchValues, query);
-}
-
-function isInactiveDashboardDriverCandidate(candidate: DashboardDriverCandidate | null | undefined) {
-  return clean(candidate?.availabilityStatus).toLowerCase() === "inactive";
-}
-
-function dashboardDriverCandidateLabel(candidate: DashboardDriverCandidate) {
-  const driverName =
-    clean(candidate.driverName) ||
-    (candidate.driverId !== null ? `Driver ${candidate.driverId}` : "Saved driver");
-  const availability = clean(candidate.availabilityStatus);
-
-  return availability ? `${driverName} (${availability})` : driverName;
 }
 
 function isRatesSetupErrorMessage(value: string) {
@@ -4626,67 +4518,6 @@ function blankCompanyRecord(companyName: string, customerRates: RateRules = {}, 
   };
 }
 
-function calculateSavedDriverPayout(
-  bookingRecord: BookingRecord,
-  selectedDriver: DriverRecord | undefined,
-  settings: RateSettings,
-  manualPayoutOverride = "",
-) {
-  const manualPayout = clean(manualPayoutOverride) ? numericRate(manualPayoutOverride) : null;
-
-  if (manualPayout !== null) {
-    return manualPayout;
-  }
-
-  const bookingType = normalizeBookingType(bookingRecord.booking_type);
-  const midnightPayout = numericRate(bookingRecord.midnight_payout);
-  const extraStopCount = normalizeExtraStopCount(bookingRecord.extra_stop_count);
-  const extraStopPayout =
-    bookingType === "DSP" ? 0 : numericRate(bookingRecord.extra_stop_payout ?? settings.extraStopPayout);
-  const extraStopDriverAmount =
-    extraStopCount * extraStopPayout;
-  const childSeatDriverAmount = numericRate(bookingRecord.child_seat_driver_payout);
-  const storedBasePayout =
-    numericRate(bookingRecord.driver_payout_min) ||
-    Math.max(
-      0,
-      numericRate(bookingRecord.driver_payout_amount) -
-        midnightPayout -
-        extraStopDriverAmount -
-        childSeatDriverAmount,
-    );
-  const selectedDriverPayoutSnapshot = driverPayoutSnapshotFromRule(
-    bookingType,
-    selectedDriver?.driver_payout_rules?.[bookingType],
-  );
-  const basePayout = selectedDriverPayoutSnapshot
-    ? selectedDriverPayoutSnapshot.basePayout
-    : storedBasePayout;
-
-  return basePayout + midnightPayout + extraStopDriverAmount + childSeatDriverAmount;
-}
-
-function driverPayoutSnapshotFromRule(
-  bookingType: ReturnType<typeof normalizeBookingType>,
-  payoutRule: DriverPayoutRule | null | undefined,
-) {
-  if (!payoutRule) {
-    return null;
-  }
-
-  const amount = finiteNumber(payoutRule.amount);
-  const min = finiteNumber(payoutRule.min);
-  const max = finiteNumber(payoutRule.max);
-  const basePayout = amount ?? min ?? 0;
-
-  return {
-    basePayout,
-    driverPayoutMin: min ?? basePayout,
-    driverPayoutMax: max ?? basePayout,
-    driverPayoutUnit: bookingType === "DSP" || payoutRule.perHour ? "hour" : "job",
-  };
-}
-
 function formatChildSeatNote(countValue: string | number | null | undefined, typeValue: string | null | undefined) {
   const count = normalizeChildSeatCount(true, countValue);
   const seatType = clean(typeValue);
@@ -5450,52 +5281,6 @@ function bookingRecordToFinancePayoutInternalFormFields(
     driverNotes: clean(bookingRecord.driver_notes),
     driverIncludePayout: bookingRecord.driver_dispatch_include_payout ? "yes" : "",
   };
-}
-
-function stripBookerFromJobCard(jobCard: string) {
-  return jobCard
-    .split("\n")
-    .filter((line) => !/^\s*booker\s*:/i.test(line))
-    .join("\n")
-    .trim();
-}
-
-function markLegacyBrowserTestJobCard(bookingRecord: BookingRecord, jobCard: string) {
-  if (!isLegacyMrLeeBrowserTestBooking(bookingRecord)) {
-    return jobCard;
-  }
-
-  const markedJobCard = jobCard.replace(
-    /^(\s*(?:name|passenger)\s*:\s*)Mr Lee\s*$/im,
-    `$1${legacyBrowserTestBookingName}`,
-  );
-
-  return markedJobCard === jobCard ? `${jobCard}\nName: ${legacyBrowserTestBookingName}` : markedJobCard;
-}
-
-function getBookingJobCard(bookingRecord: BookingRecord) {
-  if (bookingRecord.job_card) {
-    return markLegacyBrowserTestJobCard(bookingRecord, stripBookerFromJobCard(bookingRecord.job_card));
-  }
-
-  const childSeatLine = bookingRecord.child_seat_required
-    ? formatChildSeatNote(bookingRecord.child_seat_count, bookingRecord.child_seat_type)
-    : "";
-
-  return [
-    `${bookingRecord.vehicle || "Vehicle"} ${bookingRecord.booking_type || "Booking"}`,
-    formatPickupDateTime(getBookingDateKey(bookingRecord), bookingRecord.pickup_time),
-    "",
-    bookingRecord.flight_no
-      ? `Flight: ${bookingRecord.flight_no}\n${bookingRecord.route || "Route TBC"}`
-      : bookingRecord.route || "Route TBC",
-    "",
-    getBookingName(bookingRecord) ? `Name: ${getBookingName(bookingRecord)}` : "",
-    `Pax: ${bookingRecord.pax || 1}`,
-    childSeatLine,
-  ]
-    .filter(Boolean)
-    .join("\n");
 }
 
 function customerBookingTypeLabel(value: string | null | undefined) {
@@ -8992,48 +8777,6 @@ function getJobCardRouteLine(jobCard: string | null | undefined) {
     .find((line) => line.includes(">")) || "";
 }
 
-function getDriverDispatchCard(bookingRecord: BookingRecord, driverDraft: DriverDraft) {
-  const driverName = clean(driverDraft.driverName) || clean(bookingRecord.driver_name) || "Driver TBC";
-  const driverContact = clean(driverDraft.driverContact) || clean(bookingRecord.driver_contact);
-  const driverPlate = clean(driverDraft.driverPlate) || clean(bookingRecord.driver_plate_number);
-  const routeText =
-    clean(bookingRecord.route) ||
-    getJobCardRouteLine(bookingRecord.job_card) ||
-    `${clean(bookingRecord.pickup_address) || "Pickup"} > ${
-      clean(bookingRecord.dropoff_address) || "Drop-off"
-    }`;
-  const payoutAmount =
-    numericRate(driverDraft.payoutOverride) ||
-    numericRate(bookingRecord.driver_payout_override) ||
-    bookingCardPriceAmounts(bookingRecord).driverPrice ||
-    numericRate(bookingRecord.driver_payout_amount);
-  const includePayout = driverDraft.includePayout || Boolean(bookingRecord.driver_dispatch_include_payout);
-  const childSeatLine = bookingRecord.child_seat_required
-    ? formatChildSeatNote(bookingRecord.child_seat_count, bookingRecord.child_seat_type)
-    : "";
-
-  return [
-    "DRIVER DISPATCH",
-    "",
-    `Driver: ${driverName}`,
-    driverContact ? `Contact: ${driverContact}` : "",
-    driverPlate ? `Plate: ${driverPlate}` : "",
-    "",
-    `${bookingRecord.vehicle || "Vehicle"} ${bookingRecord.booking_type || "Booking"}`,
-    formatPickupDateTime(getBookingDateKey(bookingRecord), bookingRecord.pickup_time),
-    "",
-    bookingRecord.flight_no ? `Flight: ${bookingRecord.flight_no}` : "",
-    routeText,
-    "",
-    getBookingName(bookingRecord) ? `Passenger: ${getBookingName(bookingRecord)}` : "",
-    `Pax: ${bookingRecord.pax || 1}`,
-    childSeatLine,
-    includePayout && payoutAmount ? `Payout: $${payoutAmount}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
 function parseMockChargeTimeToMinutes(value: string) {
   const match = value.trim().match(/^(\d{1,2}):(\d{2})$/);
   if (!match) {
@@ -9060,7 +8803,7 @@ function isMockMidnightChargeDetected(value: string) {
 
 export default function Home() {
   const [booking, setBooking] = useState<BookingForm>(() => createInitialBooking());
-  const [activeTab, setActiveTab] = useState<AppTab>("dispatch");
+  const [activeTab, setActiveTab] = useState<AppTab>("dashboard");
   const [isInternalQaMockArchiveOpen, setIsInternalQaMockArchiveOpen] = useState(false);
   const [bookingMessage, setBookingMessage] = useState("");
   const [bookingMessageResetKey, setBookingMessageResetKey] = useState(0);
@@ -9089,12 +8832,7 @@ export default function Home() {
   const [driverAssignmentDisplayDrivers, setDriverAssignmentDisplayDrivers] = useState<
     DriverAssignmentDisplayRecord[]
   >([]);
-  const [driverDrafts, setDriverDrafts] = useState<Record<string, DriverDraft>>({});
-  const [driverAssignmentMessages, setDriverAssignmentMessages] =
-    useState<Record<string, Message>>({});
   const [bookingCompletionMessages, setBookingCompletionMessages] =
-    useState<Record<string, Message>>({});
-  const [bookingCopyMessages, setBookingCopyMessages] =
     useState<Record<string, Message>>({});
   const [bookingCalendarMessages, setBookingCalendarMessages] =
     useState<Record<string, Message>>({});
@@ -9122,7 +8860,6 @@ export default function Home() {
   const [deactivatingDriverProfile, setDeactivatingDriverProfile] = useState(false);
   const [deletingDriverId, setDeletingDriverId] = useState<string | null>(null);
   const [driverDeleteMessage, setDriverDeleteMessage] = useState<DriverDeleteMessage | null>(null);
-  const [assigningBookingId, setAssigningBookingId] = useState<string | null>(null);
   const [completingBookingId, setCompletingBookingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [bookingsSearchTerm, setBookingsSearchTerm] = useState("");
@@ -11051,7 +10788,6 @@ export default function Home() {
       ),
     [rateTravelers, rateOverrideListMessages.boss?.recordId],
   );
-  const assignableDrivers = useMemo(() => drivers.filter(isAssignableDriver), [drivers]);
   const assignableDriverAssignmentDisplayDrivers = useMemo(
     () => driverAssignmentDisplayDrivers.filter(isAssignableDriver),
     [driverAssignmentDisplayDrivers],
@@ -11131,92 +10867,6 @@ export default function Home() {
       })
       .map(({ displayItem }) => displayItem);
   }
-  const dashboardDriverCandidates = useMemo(() => {
-    const candidateMap = new Map<string, DashboardDriverCandidate>();
-    const driversById = new Map(drivers.map((driver) => [driver.id, driver]));
-
-    for (const driver of assignableDrivers) {
-      candidateMap.set(`driver:${driver.id}`, {
-        optionValue: String(driver.id),
-        driverId: driver.id,
-        driverName: clean(driver.driver_name),
-        contactNumber: clean(driver.contact_number),
-        vehicleType: clean(driver.vehicle_type),
-        plateNumber: clean(driver.plate_number),
-        availabilityStatus: clean(driver.availability_status),
-        notes: clean(driver.notes),
-        preferredAreas: clean(driver.preferred_areas),
-        sourceDriver: driver,
-        searchValues: [
-          driver.driver_name,
-          driver.contact_number,
-          driver.plate_number,
-          driver.vehicle_type,
-          driver.availability_status,
-          driver.preferred_areas,
-          driver.notes,
-        ],
-      });
-    }
-
-    for (const bookingRecord of operationalBookings) {
-      const bookingDriverId = bookingRecord.driver_id ?? null;
-      const bookingDriverName = clean(bookingRecord.driver_name);
-      const bookingDriverContact = clean(bookingRecord.driver_contact);
-      const bookingDriverPlate = clean(bookingRecord.driver_plate_number);
-
-      if (!bookingDriverId && !bookingDriverName && !bookingDriverContact && !bookingDriverPlate) {
-        continue;
-      }
-
-      const linkedDriver = bookingDriverId !== null ? driversById.get(bookingDriverId) : null;
-
-      if (linkedDriver && isInactiveDriver(linkedDriver)) {
-        continue;
-      }
-
-      const candidateKey = bookingDriverId !== null
-        ? `driver:${bookingDriverId}`
-        : `booking:${bookingRecord.id}:${normalizeCompactSearch(
-            [bookingDriverName, bookingDriverContact, bookingDriverPlate].join(" "),
-          )}`;
-      const existingCandidate = candidateMap.get(candidateKey);
-      const bookingSearchValues = [
-        bookingDriverName,
-        bookingDriverContact,
-        bookingDriverPlate,
-        bookingRecord.vehicle,
-        bookingRecord.driver_notes,
-      ];
-
-      if (existingCandidate) {
-        existingCandidate.searchValues.push(...bookingSearchValues);
-        existingCandidate.driverName ||= bookingDriverName;
-        existingCandidate.contactNumber ||= bookingDriverContact;
-        existingCandidate.plateNumber ||= bookingDriverPlate;
-        existingCandidate.vehicleType ||= clean(bookingRecord.vehicle);
-        existingCandidate.notes ||= clean(bookingRecord.driver_notes);
-        continue;
-      }
-
-      candidateMap.set(candidateKey, {
-        optionValue: bookingDriverId !== null ? String(bookingDriverId) : `booking:${bookingRecord.id}`,
-        driverId: bookingDriverId,
-        driverName: bookingDriverName,
-        contactNumber: bookingDriverContact,
-        vehicleType: clean(bookingRecord.vehicle),
-        plateNumber: bookingDriverPlate,
-        availabilityStatus: "",
-        notes: clean(bookingRecord.driver_notes),
-        preferredAreas: "",
-        sourceDriver: linkedDriver ?? null,
-        searchValues: bookingSearchValues,
-      });
-    }
-
-    return [...candidateMap.values()];
-  }, [assignableDrivers, drivers, operationalBookings]);
-
   const assignedDriverId = clean(booking.driverId);
   const assignedDriverName = clean(booking.driverName).toLowerCase();
   const assignedDriverRecord = driverAssignmentDisplayDrivers.find(
@@ -11727,21 +11377,6 @@ export default function Home() {
     }
   }
 
-  function setDriverAssignmentMessage(bookingId: string, nextMessage: Message | null) {
-    setDriverAssignmentMessages((current) => {
-      if (!nextMessage) {
-        const next = { ...current };
-        delete next[bookingId];
-        return next;
-      }
-
-      return {
-        ...current,
-        [bookingId]: nextMessage,
-      };
-    });
-  }
-
   function clearReviewAndSaveState() {
     setAcceptedReviewWarningKey("");
     setBookingSaveMessage(null);
@@ -11900,40 +11535,6 @@ export default function Home() {
     }));
   }
 
-  function bookingRecordToDriverDraft(bookingRecord: BookingRecord): DriverDraft {
-    return {
-      driverId: clean(bookingRecord.driver_id ? String(bookingRecord.driver_id) : ""),
-      driverSearch: "",
-      driverName: clean(bookingRecord.driver_name),
-      driverContact: clean(bookingRecord.driver_contact),
-      driverPlate: clean(bookingRecord.driver_plate_number),
-      payoutOverride: clean(bookingRecord.driver_payout_override ? String(bookingRecord.driver_payout_override) : ""),
-      payoutReason: clean(bookingRecord.driver_payout_reason),
-      notes: clean(bookingRecord.driver_notes),
-      includePayout: Boolean(bookingRecord.driver_dispatch_include_payout),
-    };
-  }
-
-  function getDriverDraft(bookingRecord: BookingRecord) {
-    return driverDrafts[String(bookingRecord.id)] ?? bookingRecordToDriverDraft(bookingRecord);
-  }
-
-  function findDashboardDriverCandidate(value: string | boolean) {
-    const selectedValue = typeof value === "string" ? clean(value) : "";
-
-    if (!selectedValue) {
-      return null;
-    }
-
-    return (
-      dashboardDriverCandidates.find(
-        (candidate) =>
-          candidate.optionValue === selectedValue ||
-          (candidate.driverId !== null && String(candidate.driverId) === selectedValue),
-      ) ?? null
-    );
-  }
-
   function loadDriverProfileDraft(driver: DriverRecord) {
     setDriverProfileDraft({
       driverId: String(driver.id),
@@ -11993,80 +11594,6 @@ export default function Home() {
             : { min: numericRate(value), max: numericRate(value) },
       },
     }));
-  }
-
-  function updateDriverDraft(
-    bookingRecord: BookingRecord,
-    field: keyof DriverDraft,
-    value: string | boolean,
-  ) {
-    const bookingId = String(bookingRecord.id);
-    const selectedDashboardDriver =
-      field === "driverId" ? findDashboardDriverCandidate(value) : null;
-    const clearedDriverSelection =
-      field === "driverId" && typeof value === "string" && !clean(value)
-        ? {
-            driverSearch: "",
-            driverName: "",
-            driverContact: "",
-            driverPlate: "",
-            payoutOverride: "",
-            payoutReason: "",
-            notes: "",
-            includePayout: false,
-          }
-        : {};
-
-    setDriverDrafts((current) => {
-      const currentDriverDraft = current[bookingId] ?? bookingRecordToDriverDraft(bookingRecord);
-      const selectedDriverForSearch = currentDriverDraft.driverId
-        ? findDashboardDriverCandidate(currentDriverDraft.driverId)
-        : null;
-      const selectedDriverMatchesNewSearch = selectedDriverForSearch
-        ? dashboardDriverCandidateMatchesSearch(selectedDriverForSearch, value.toString())
-        : false;
-      const currentDraftMatchesNewSearch = driverDraftMatchesSearch(currentDriverDraft, value.toString());
-      const searchChangedAwayFromSelectedDriver =
-        field === "driverSearch" &&
-        typeof value === "string" &&
-        Boolean(clean(value)) &&
-        Boolean(currentDriverDraft.driverId) &&
-        !selectedDriverMatchesNewSearch &&
-        !currentDraftMatchesNewSearch;
-      const clearedStaleDriverSelection = searchChangedAwayFromSelectedDriver
-        ? {
-            driverId: "",
-            driverName: "",
-            driverContact: "",
-            driverPlate: "",
-            payoutOverride: "",
-            payoutReason: "",
-            notes: "",
-            includePayout: false,
-          }
-        : {};
-
-      return {
-        ...current,
-        [bookingId]: {
-          ...currentDriverDraft,
-          [field]: value,
-          ...clearedDriverSelection,
-          ...clearedStaleDriverSelection,
-          ...(selectedDashboardDriver
-            ? {
-                driverName: clean(selectedDashboardDriver.driverName),
-                driverSearch: clean(selectedDashboardDriver.driverName),
-                driverContact: clean(selectedDashboardDriver.contactNumber),
-                driverPlate: clean(selectedDashboardDriver.plateNumber),
-                payoutOverride: "",
-                payoutReason: "",
-                notes: clean(selectedDashboardDriver.notes),
-              }
-            : {}),
-        },
-      };
-    });
   }
 
   function validateBooking() {
@@ -13416,27 +12943,6 @@ export default function Home() {
           : currentBooking,
       ),
     );
-    setDriverDrafts((current) => {
-      let changed = false;
-      const nextDrafts = Object.fromEntries(
-        Object.entries(current).map(([bookingId, driverDraft]) => {
-          if (!matchesDeletedDriver(driverDraft.driverId)) {
-            return [bookingId, driverDraft];
-          }
-
-          changed = true;
-          return [
-            bookingId,
-            {
-              ...driverDraft,
-              driverId: "",
-            },
-          ];
-        }),
-      );
-
-      return changed ? nextDrafts : current;
-    });
   }
 
   async function deleteDriverProfile(driver: DriverRecord, assignedJobCount: number) {
@@ -13800,6 +13306,16 @@ export default function Home() {
     if (nextTab === "bookings" && bookings.length === 0 && !loading) {
       void loadBookings("Bookings loaded.");
     }
+  }
+
+  function openCustomerBookingRequestsReview() {
+    selectAppTab("bookings");
+
+    window.setTimeout(() => {
+      document
+        .querySelector('[data-new-customer-booking-requests-panel="true"]')
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
   }
 
   async function saveAdminBookingOperationalSnapshot() {
@@ -14887,38 +14403,6 @@ export default function Home() {
     await copyDispatchCopy("driverDispatch");
   }
 
-  async function copySavedJobCard(bookingRecord: BookingRecord) {
-    const bookingId = String(bookingRecord.id);
-
-    try {
-      await navigator.clipboard.writeText(getBookingJobCard(bookingRecord));
-      setBookingCopyMessage(bookingId, "jobCard", {
-        tone: "success",
-        text: "Booking job card copied.",
-      });
-    } catch {
-      setBookingCopyMessage(bookingId, "jobCard", {
-        tone: "error",
-        text: "Copy failed. Select the booking details manually.",
-      });
-    }
-  }
-
-  function bookingCopyMessageKey(bookingId: string, target: BookingCopyTarget) {
-    return `${bookingId}:${target}`;
-  }
-
-  function setBookingCopyMessage(
-    bookingId: string,
-    target: BookingCopyTarget,
-    nextMessage: Message,
-  ) {
-    setBookingCopyMessages((current) => ({
-      ...current,
-      [bookingCopyMessageKey(bookingId, target)]: nextMessage,
-    }));
-  }
-
   function setBookingCalendarMessage(bookingId: string, nextMessage: Message) {
     setBookingCalendarMessages((current) => ({
       ...current,
@@ -15156,39 +14640,6 @@ export default function Home() {
     );
   }
 
-  async function markBookingOtw(bookingRecord: BookingRecord) {
-    await updateBookingStatusOnly(
-      bookingRecord,
-      "driver_otw",
-      "Marking driver OTW...",
-      "Driver marked OTW.",
-      "Mark OTW failed",
-    );
-  }
-
-  async function markBookingPob(bookingRecord: BookingRecord) {
-    await updateBookingStatusOnly(
-      bookingRecord,
-      "pob",
-      "Marking passenger on board...",
-      "Passenger on board.",
-      "Mark POB failed",
-    );
-  }
-
-  async function revertBookingStatus(bookingRecord: BookingRecord) {
-    const currentStatus = clean(bookingRecord.status).toLowerCase();
-    const nextStatus = currentStatus === "pob" ? "driver_otw" : revertOtwStatus(bookingRecord);
-
-    await updateBookingStatusOnly(
-      bookingRecord,
-      nextStatus,
-      "Reverting status...",
-      "Status reverted.",
-      "Revert status failed",
-    );
-  }
-
   async function undoBookingCompleted(bookingRecord: BookingRecord) {
     await updateBookingStatusOnly(
       bookingRecord,
@@ -15271,286 +14722,6 @@ export default function Home() {
     }
   }
 
-  async function clearAssignedDriver(bookingRecord: BookingRecord) {
-    const bookingId = String(bookingRecord.id);
-    const nextStatus = statusAfterClearingAssignedDriver(bookingRecord.status);
-
-    if (typeof fetch !== "function") {
-      const errorMessage = {
-        tone: "error",
-        text: "Clear assigned driver failed: Admin saved booking driver assignment API is not available.",
-      } satisfies Message;
-      setMessage(errorMessage);
-      setDriverAssignmentMessage(bookingId, errorMessage);
-      return;
-    }
-
-    const loadingMessage = { tone: "info", text: "Clearing assigned driver..." } satisfies Message;
-    setAssigningBookingId(bookingId);
-    setMessage(loadingMessage);
-    setDriverAssignmentMessage(bookingId, loadingMessage);
-
-    try {
-      const response = await fetch(adminSavedBookingDriverAssignmentsApiPath, {
-        body: JSON.stringify({
-          action: "clear",
-          booking_id: bookingId,
-          status: nextStatus,
-        }),
-        headers: {
-          "Content-Type": "application/json",
-          "x-prestige-admin-purpose": adminLegacyDataPurpose,
-        },
-        method: "PATCH",
-      });
-      const responseBody =
-        (await response.json().catch(() => null)) as AdminSavedBookingDriverAssignmentResponse | null;
-
-      if (
-        !response.ok ||
-        responseBody?.ok !== true ||
-        !responseBody.booking ||
-        String(responseBody.booking.id) !== bookingId ||
-        responseBody.booking.status !== nextStatus ||
-        !responseBody.booking.updated_at
-      ) {
-        const error = readAdminLegacyDataError(
-          responseBody,
-          "Admin saved booking driver assignment clear request failed.",
-        );
-
-        throw new Error(formatSupabaseError(error));
-      }
-
-      setBookings((current) =>
-        current.map((currentBooking) =>
-          currentBooking.id === bookingRecord.id
-            ? {
-                ...currentBooking,
-                driver_id: null,
-                driver_name: null,
-                driver_contact: null,
-                driver_plate_number: null,
-                driver_payout_override: null,
-                driver_payout_reason: null,
-                driver_notes: null,
-                driver_dispatch_include_payout: false,
-                status: nextStatus,
-                updated_at: responseBody.booking?.updated_at || currentBooking.updated_at,
-              }
-            : currentBooking,
-        ),
-      );
-      setDriverDrafts((current) => {
-        const next = { ...current };
-        delete next[bookingId];
-        return next;
-      });
-
-      if (loadedBookingId === bookingId) {
-        setBooking((current) => ({
-          ...current,
-          driverId: "",
-          driverName: "",
-          driverContact: "",
-          driverPlate: "",
-          driverPayoutOverride: "",
-          savedDriverPayoutAmount: "",
-          driverPayoutReason: "",
-          driverNotes: "",
-          driverIncludePayout: "",
-        }));
-      }
-
-      const successMessage = { tone: "success", text: "Assigned driver cleared." } satisfies Message;
-      setMessage(successMessage);
-      setDriverAssignmentMessage(bookingId, successMessage);
-    } catch (error) {
-      const errorText = error instanceof Error ? error.message : "Unknown driver clear error.";
-      const errorMessage = {
-        tone: "error",
-        text: `Clear assigned driver failed: ${errorText}`,
-      } satisfies Message;
-      setMessage(errorMessage);
-      setDriverAssignmentMessage(bookingId, errorMessage);
-    } finally {
-      setAssigningBookingId(null);
-    }
-  }
-
-  async function assignDriver(bookingRecord: BookingRecord) {
-    const bookingId = String(bookingRecord.id);
-    const driverDraft = getDriverDraft(bookingRecord);
-    const selectedDashboardDriver = findDashboardDriverCandidate(driverDraft.driverId);
-    const selectedDriver =
-      selectedDashboardDriver?.sourceDriver ??
-      drivers.find((driver) => String(driver.id) === driverDraft.driverId);
-    const selectedDriverId = selectedDriver?.id ?? selectedDashboardDriver?.driverId ?? null;
-    const driverName =
-      clean(driverDraft.driverName) ||
-      clean(selectedDashboardDriver?.driverName) ||
-      clean(selectedDriver?.driver_name);
-    const manualPayoutText = clean(driverDraft.payoutOverride);
-    const manualPayout = manualPayoutText ? finiteNumber(manualPayoutText) : null;
-    const bookingType = normalizeBookingType(bookingRecord.booking_type);
-    const selectedDriverPayoutSnapshot = driverPayoutSnapshotFromRule(
-      bookingType,
-      selectedDriver?.driver_payout_rules?.[bookingType],
-    );
-    const selectedDriverPayoutFields = selectedDriverPayoutSnapshot
-      ? {
-          driver_payout_min: selectedDriverPayoutSnapshot.driverPayoutMin,
-          driver_payout_max: selectedDriverPayoutSnapshot.driverPayoutMax,
-          driver_payout_unit: selectedDriverPayoutSnapshot.driverPayoutUnit,
-        }
-      : {};
-    const calculatedPayout = calculateSavedDriverPayout(
-      bookingRecord,
-      selectedDriver,
-      rateSettings,
-      driverDraft.payoutOverride,
-    );
-    const driverContact =
-      clean(driverDraft.driverContact) ||
-      clean(selectedDashboardDriver?.contactNumber) ||
-      clean(selectedDriver?.contact_number) ||
-      null;
-    const driverPlateNumber =
-      clean(driverDraft.driverPlate) ||
-      clean(selectedDashboardDriver?.plateNumber) ||
-      clean(selectedDriver?.plate_number) ||
-      null;
-
-    if (!driverName) {
-      const errorMessage = {
-        tone: "error",
-        text: "Driver name is required before assignment.",
-      } satisfies Message;
-      setMessage(errorMessage);
-      setDriverAssignmentMessage(bookingId, errorMessage);
-      return;
-    }
-
-    if (manualPayoutText && (manualPayout === null || manualPayout <= 0)) {
-      const errorMessage = {
-        tone: "error",
-        text: "Override payout must be greater than $0.",
-      } satisfies Message;
-      setMessage(errorMessage);
-      setDriverAssignmentMessage(bookingId, errorMessage);
-      return;
-    }
-
-    if (typeof fetch !== "function") {
-      const errorMessage = {
-        tone: "error",
-        text: "Assign driver failed: Admin saved booking driver assignment API is not available.",
-      } satisfies Message;
-      setMessage(errorMessage);
-      setDriverAssignmentMessage(bookingId, errorMessage);
-      return;
-    }
-
-    const loadingMessage = { tone: "info", text: "Assigning driver..." } satisfies Message;
-    setAssigningBookingId(bookingId);
-    setMessage(loadingMessage);
-    setDriverAssignmentMessage(bookingId, loadingMessage);
-
-    try {
-      const response = await fetch(adminSavedBookingDriverAssignmentsApiPath, {
-        body: JSON.stringify({
-          action: "assign",
-          booking_id: bookingId,
-          driver_id: selectedDriverId,
-          driver_name: driverName,
-          driver_contact: driverContact,
-          driver_plate_number: driverPlateNumber,
-          driver_payout_amount: calculatedPayout || null,
-          ...selectedDriverPayoutFields,
-          driver_payout_override: manualPayout,
-          driver_payout_reason: clean(driverDraft.payoutReason) || null,
-          driver_notes: clean(driverDraft.notes) || null,
-          driver_dispatch_include_payout: driverDraft.includePayout,
-        }),
-        headers: {
-          "Content-Type": "application/json",
-          "x-prestige-admin-purpose": adminLegacyDataPurpose,
-        },
-        method: "PATCH",
-      });
-      const responseBody =
-        (await response.json().catch(() => null)) as AdminSavedBookingDriverAssignmentResponse | null;
-
-      if (
-        !response.ok ||
-        responseBody?.ok !== true ||
-        !responseBody.booking ||
-        String(responseBody.booking.id) !== bookingId ||
-        responseBody.booking.status !== "assigned" ||
-        !responseBody.booking.updated_at
-      ) {
-        const error = readAdminLegacyDataError(
-          responseBody,
-          "Admin saved booking driver assignment request failed.",
-        );
-
-        throw new Error(formatSupabaseError(error));
-      }
-
-      setBookings((current) =>
-        current.map((currentBooking) =>
-          currentBooking.id === bookingRecord.id
-            ? {
-                ...currentBooking,
-                driver_id: selectedDriverId,
-                driver_name: driverName,
-                driver_contact: driverContact,
-                driver_plate_number: driverPlateNumber,
-                driver_payout_amount: calculatedPayout,
-                ...selectedDriverPayoutFields,
-                driver_payout_override: manualPayout,
-                driver_payout_reason: clean(driverDraft.payoutReason),
-                driver_notes: clean(driverDraft.notes),
-                driver_dispatch_include_payout: driverDraft.includePayout,
-                status: "assigned",
-                updated_at: responseBody.booking?.updated_at || currentBooking.updated_at,
-              }
-            : currentBooking,
-        ),
-      );
-      const successMessage = { tone: "success", text: "Assigned driver updated." } satisfies Message;
-      setMessage(successMessage);
-      setDriverAssignmentMessage(bookingId, successMessage);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown driver assignment error.";
-      const assignmentErrorMessage = {
-        tone: "error",
-        text: `Assign driver failed: ${errorMessage}`,
-      } satisfies Message;
-      setMessage(assignmentErrorMessage);
-      setDriverAssignmentMessage(bookingId, assignmentErrorMessage);
-    } finally {
-      setAssigningBookingId(null);
-    }
-  }
-
-  async function copyDriverDispatch(bookingRecord: BookingRecord) {
-    const bookingId = String(bookingRecord.id);
-
-    try {
-      await navigator.clipboard.writeText(getDriverDispatchCard(bookingRecord, getDriverDraft(bookingRecord)));
-      setBookingCopyMessage(bookingId, "driverDispatch", {
-        tone: "success",
-        text: "Driver dispatch copied.",
-      });
-    } catch {
-      setBookingCopyMessage(bookingId, "driverDispatch", {
-        tone: "error",
-        text: "Copy failed. Select the dispatch details manually.",
-      });
-    }
-  }
-
   function renderBookingCalendarDownloadAction(
     bookingRecord: BookingRecord,
     surface: "completed" | "dashboard" | "recent",
@@ -15590,483 +14761,84 @@ export default function Home() {
     );
   }
 
-  function renderBookingCards(sectionItems: LoadBookingsOperationalDisplayItem[], emptyText: string) {
+  function renderDashboardBookingSummaries(
+    sectionItems: LoadBookingsOperationalDisplayItem[],
+    emptyText: string,
+  ) {
     if (sectionItems.length === 0) {
       return (
-        <div className="rounded-md border border-dashed border-stone-300 p-6 text-center text-sm text-slate-500">
+        <div className="rounded-md border border-dashed border-stone-300 p-4 text-center text-sm text-slate-500">
           {emptyText}
         </div>
       );
     }
 
     return (
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {sectionItems.map(({ bookingRecord: savedBooking, operationalCard }) => {
-          const driverDraft = getDriverDraft(savedBooking);
+      <div className="grid gap-2" data-dashboard-command-centre-bookings="true">
+        {sectionItems.slice(0, 8).map(({ bookingRecord: savedBooking, operationalCard }) => {
           const bookingId = String(savedBooking.id);
-          const normalizedBookingStatus = clean(savedBooking.status).toLowerCase();
-          const isAssigned = normalizedBookingStatus === "assigned";
-          const isCompleted = normalizedBookingStatus === "completed";
-          const isDriverOtw = normalizedBookingStatus === "driver_otw";
-          const isPob = normalizedBookingStatus === "pob";
-          const canMarkOtw = normalizedBookingStatus === "confirmed" || normalizedBookingStatus === "assigned";
-          const canMarkPob = isDriverOtw;
-          const bookingType = operationalCard.booking_type || "Booking";
-          const vehicle = operationalCard.vehicle_display || "Vehicle";
-          const bookerName = operationalCard.booker_display_name;
-          const travelerName =
-            operationalCard.traveler_display_name || operationalCard.customer_display_name;
-          const driverName =
-            operationalCard.assigned_driver_display_name || clean(driverDraft.driverName);
-          const priceAmounts = bookingCardPriceAmounts(savedBooking);
-          const hasDriver = Boolean(driverName);
-          const hasSavedDriver = Boolean(clean(savedBooking.driver_name) || savedBooking.driver_id);
-          const driverAssignmentMessage = driverAssignmentMessages[bookingId] ?? null;
-          const rawBookingCompletionMessage = bookingCompletionMessages[bookingId] ?? null;
-          const bookingCompletionMessage = isDashboardStatusMessage(rawBookingCompletionMessage)
-            ? rawBookingCompletionMessage
-            : null;
-          const driverDispatchCopyMessage =
-            bookingCopyMessages[bookingCopyMessageKey(bookingId, "driverDispatch")] ?? null;
-          const jobCardCopyMessage =
-            bookingCopyMessages[bookingCopyMessageKey(bookingId, "jobCard")] ?? null;
-          const revertStatusLabel = isPob
-            ? "Revert to OTW"
-            : `Revert to ${hasSavedDriver ? "assigned" : "confirmed"}`;
-          const selectedDashboardDriver = findDashboardDriverCandidate(driverDraft.driverId);
-          const selectedDraftDriver =
-            selectedDashboardDriver?.sourceDriver ??
-            drivers.find((driver) => String(driver.id) === driverDraft.driverId);
-          const selectedDraftDriverPayout = selectedDraftDriver
-            ? calculateSavedDriverPayout(savedBooking, selectedDraftDriver, rateSettings)
-            : null;
-          const assignmentPayoutPlaceholder =
-            selectedDraftDriverPayout && selectedDraftDriverPayout > 0
-              ? selectedDraftDriverPayout
-              : priceAmounts.driverPrice;
-          const selectedDraftDriverIsInactive = Boolean(
-            selectedDashboardDriver
-              ? isInactiveDashboardDriverCandidate(selectedDashboardDriver)
-              : selectedDraftDriver && isInactiveDriver(selectedDraftDriver),
-          );
-          const dashboardDriverSearchQuery = clean(driverDraft.driverSearch);
-          const matchingDashboardDrivers = dashboardDriverSearchQuery
-            ? dashboardDriverCandidates.filter((candidate) =>
-                dashboardDriverCandidateMatchesSearch(candidate, dashboardDriverSearchQuery),
-              )
-            : [];
-          const selectedDriverInDashboardMatches = matchingDashboardDrivers.some(
-            (candidate) =>
-              candidate.optionValue === driverDraft.driverId ||
-              (candidate.driverId !== null && String(candidate.driverId) === driverDraft.driverId),
-          );
-          const showSavedDashboardDriverOption = Boolean(
-            driverDraft.driverId &&
-              (!selectedDashboardDriver || selectedDraftDriverIsInactive || !selectedDriverInDashboardMatches),
-          );
-          const dashboardDriverSearchCount = matchingDashboardDrivers.length;
+          const routePoints = getRoutePoints(savedBooking);
+          const pickup = operationalCard.pickup_address || routePoints[0] || "Pickup";
+          const dropoff =
+            operationalCard.dropoff_address ||
+            routePoints[routePoints.length - 1] ||
+            "Drop-off";
+          const routeText =
+            operationalCard.route_points_summary ||
+            (routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`);
+          const passengerText =
+            operationalCard.traveler_display_name ||
+            operationalCard.customer_display_name ||
+            "Unknown";
+          const driverText =
+            operationalCard.assigned_driver_display_name ||
+            clean(savedBooking.driver_name) ||
+            "Driver TBC";
 
           return (
             <article
-              className="rounded-md border border-stone-200 bg-white p-3"
-              data-dashboard-operational-card={bookingId}
-              key={savedBooking.id}
+              className="grid gap-2 rounded-md border border-stone-200 bg-white px-3 py-2 text-sm shadow-sm md:grid-cols-[minmax(10rem,0.9fr)_minmax(9rem,0.8fr)_minmax(12rem,1.2fr)_minmax(8rem,0.7fr)_auto] md:items-center"
+              data-dashboard-command-centre-row={bookingId}
+              key={`dashboard-summary-${savedBooking.id}`}
             >
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <h3 className="text-base font-semibold text-slate-950">
-                    {bookingType} / {vehicle}
-                  </h3>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {operationalCard.pickup_datetime ||
-                      formatPickupDateTime(getBookingDateKey(savedBooking), savedBooking.pickup_time)}
-                  </p>
-                </div>
-                <span
-                  className={`rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${bookingStatusClass(
-                    savedBooking.status,
-                  )}`}
-                >
-                  {bookingStatusLabel(savedBooking.status)}
-                </span>
-              </div>
-
-              <div className="mt-3 grid gap-3" data-dashboard-operational-body={bookingId}>
-                <OperationalCardSection section="booking" title="Booking">
-                  {operationalCard.job_card_display ? <p>{operationalCard.job_card_display}</p> : null}
-                  <p>Booker: {bookerName || "—"}</p>
-                  <p>Traveler: {travelerName || "—"}</p>
-                </OperationalCardSection>
-                <OperationalCardSection section="route" title="Route">
-                  <p className="break-words">
-                    Route: {operationalCard.route_summary || formatDashboardRoute(savedBooking)}
-                  </p>
-                </OperationalCardSection>
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" data-operational-card-summary-grid={bookingId}>
-                  <DispatcherStatusSummaryBlock
-                    bookingRecord={savedBooking}
-                    flush
-                    operationalCard={operationalCard}
-                  />
-                  <AssignedDriverSummaryBlock
-                    bookingRecord={savedBooking}
-                    driverDraft={driverDraft}
-                    flush
-                    operationalCard={operationalCard}
-                  />
-                  <OperationalReadinessSummaryBlock
-                    bookingRecord={savedBooking}
-                    flush
-                    operationalCard={operationalCard}
-                  />
-                </div>
-                <OperationalCardSection section="vehicle-pax-price" title="Vehicle / pax">
-                  <p>Vehicle: {vehicle}</p>
-                  <p>Pax: {operationalCard.pax_display || "1"}</p>
-                  {operationalCard.child_seat_display ? (
-                    <p>{operationalCard.child_seat_display}</p>
-                  ) : null}
-                  {operationalCard.extra_stop_display ? <p>{operationalCard.extra_stop_display}</p> : null}
-                </OperationalCardSection>
-              </div>
-
-              <div className="mt-4 border-t border-stone-200 pt-3" data-dashboard-action-group={bookingId}>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
-                  Internal actions
+              <div className="min-w-0">
+                <p className="truncate font-semibold text-slate-950">
+                  {getLoadBookingsOperationalDisplayTitle(operationalCard)}
                 </p>
-                <button
-                  className="mt-2 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
-                  data-dashboard-load-booking="true"
-                  onClick={() => loadSelectedBooking(savedBooking)}
-                  type="button"
-                >
-                  Load this booking
-                </button>
-                {renderBookingCalendarDownloadAction(savedBooking, "dashboard")}
-
-                {!isCompleted || bookingCompletionMessage ? (
-                  <div className="mt-2 flex flex-col gap-2" data-dashboard-status-controls={bookingId}>
-                    {canMarkOtw ? (
-                      <button
-                        className="h-10 w-full rounded-md border border-amber-300 bg-white px-3 text-sm font-semibold text-amber-800 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                        data-dashboard-mark-otw={bookingId}
-                        disabled={completingBookingId === bookingId}
-                        onClick={() => markBookingOtw(savedBooking)}
-                        type="button"
-                      >
-                        {completingBookingId === bookingId ? "Marking..." : "Mark OTW"}
-                      </button>
-                    ) : null}
-                    {canMarkPob ? (
-                      <button
-                        className="h-10 w-full rounded-md border border-indigo-300 bg-white px-3 text-sm font-semibold text-indigo-800 transition hover:bg-indigo-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                        data-dashboard-mark-pob={bookingId}
-                        disabled={completingBookingId === bookingId}
-                        onClick={() => markBookingPob(savedBooking)}
-                        type="button"
-                      >
-                        {completingBookingId === bookingId ? "Marking..." : "Mark POB"}
-                      </button>
-                    ) : null}
-                    {isDriverOtw ? (
-                      <button
-                        className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                        data-dashboard-revert-status={bookingId}
-                        disabled={completingBookingId === bookingId}
-                        onClick={() => revertBookingStatus(savedBooking)}
-                        type="button"
-                      >
-                        {completingBookingId === bookingId ? "Reverting..." : revertStatusLabel}
-                      </button>
-                    ) : null}
-                    {!isCompleted ? (
-                      <button
-                        className="h-10 w-full rounded-md border border-emerald-300 bg-white px-3 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                        data-dashboard-mark-completed={bookingId}
-                        disabled={completingBookingId === bookingId}
-                        onClick={() => markBookingCompleted(savedBooking)}
-                        type="button"
-                      >
-                        {completingBookingId === bookingId ? "Marking..." : "Mark completed"}
-                      </button>
-                    ) : null}
-                    {isPob ? (
-                      <button
-                        className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                        data-dashboard-revert-status={bookingId}
-                        disabled={completingBookingId === bookingId}
-                        onClick={() => revertBookingStatus(savedBooking)}
-                        type="button"
-                      >
-                        {completingBookingId === bookingId ? "Reverting..." : revertStatusLabel}
-                      </button>
-                    ) : null}
-                    {bookingCompletionMessage ? (
-                      <p
-                        className={`rounded-md border px-3 py-2 text-xs ${statusClass(
-                          bookingCompletionMessage.tone,
-                        )}`}
-                        data-booking-completion-message={bookingId}
-                      >
-                        {bookingCompletionMessage.text}
-                      </p>
-                    ) : null}
-                  </div>
-                ) : null}
+                <p className="truncate text-xs text-slate-500">
+                  {operationalCard.pickup_datetime ||
+                    formatPickupDateTime(getBookingDateKey(savedBooking), savedBooking.pickup_time)}
+                </p>
               </div>
-
-              {!isCompleted ? (
-                <div className="mt-4 rounded-md border border-stone-200 bg-white p-3">
-                  <div className="mb-3">
-                    <h4 className="text-sm font-semibold text-slate-900">Assign driver to this booking</h4>
-                    <p className="mt-1 text-xs text-slate-500">This updates the selected booking only.</p>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="sm:col-span-2">
-                      <span className="mb-1 block text-xs font-medium text-slate-600">
-                        Search drivers
-                      </span>
-                      <input
-                        className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-                        data-dashboard-driver-search-input={bookingId}
-                        onChange={(event) =>
-                          updateDriverDraft(savedBooking, "driverSearch", event.target.value)
-                        }
-                        placeholder="Name, phone, plate, vehicle, status"
-                        value={driverDraft.driverSearch}
-                      />
-                      {dashboardDriverSearchQuery ? (
-                        <p
-                          className="mt-1 text-xs text-slate-500"
-                          data-dashboard-driver-search-count={bookingId}
-                        >
-                          Showing {dashboardDriverSearchCount} matching{" "}
-                          {dashboardDriverSearchCount === 1 ? "driver" : "drivers"}.
-                        </p>
-                      ) : (
-                        <p
-                          className="mt-1 text-xs text-slate-500"
-                          data-dashboard-driver-search-helper={bookingId}
-                        >
-                          Search driver name, phone, plate, or vehicle to show drivers.
-                        </p>
-                      )}
-                      {dashboardDriverSearchQuery && dashboardDriverSearchCount === 0 ? (
-                        <p
-                          className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"
-                          data-dashboard-driver-search-empty={bookingId}
-                        >
-                          No matching drivers found.
-                        </p>
-                      ) : null}
-                    </label>
-                    <label className="sm:col-span-2">
-                      <span className="mb-1 block text-xs font-medium text-slate-600">
-                        Driver
-                      </span>
-                      <select
-                        className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-                        data-dashboard-driver-select={bookingId}
-                        onChange={(event) =>
-                          updateDriverDraft(savedBooking, "driverId", event.target.value)
-                        }
-                        value={driverDraft.driverId}
-                      >
-                        <option value="">Manual / unselected</option>
-                        {showSavedDashboardDriverOption ? (
-                          <option disabled={selectedDraftDriverIsInactive} value={driverDraft.driverId}>
-                            Saved:{" "}
-                            {clean(driverDraft.driverName) ||
-                              clean(selectedDashboardDriver?.driverName) ||
-                              clean(selectedDraftDriver?.driver_name) ||
-                              `Driver ${driverDraft.driverId}`}
-                            {selectedDraftDriverIsInactive ? " (inactive)" : ""}
-                          </option>
-                        ) : null}
-                        {matchingDashboardDrivers.map((candidate) => (
-                          <option key={candidate.optionValue} value={candidate.optionValue}>
-                            {dashboardDriverCandidateLabel(candidate)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      <span className="mb-1 block text-xs font-medium text-slate-600">
-                        Driver Name
-                      </span>
-                      <input
-                        className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-                        onChange={(event) =>
-                          updateDriverDraft(savedBooking, "driverName", event.target.value)
-                        }
-                        placeholder="Driver name"
-                        value={driverDraft.driverName}
-                      />
-                    </label>
-                    <label>
-                      <span className="mb-1 block text-xs font-medium text-slate-600">
-                        Driver Contact
-                      </span>
-                      <input
-                        className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-                        onChange={(event) =>
-                          updateDriverDraft(savedBooking, "driverContact", event.target.value)
-                        }
-                        placeholder="Phone / WhatsApp"
-                        value={driverDraft.driverContact}
-                      />
-                    </label>
-                    <label>
-                      <span className="mb-1 block text-xs font-medium text-slate-600">
-                        Driver Car Plate
-                      </span>
-                      <input
-                        className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-                        onChange={(event) =>
-                          updateDriverDraft(savedBooking, "driverPlate", event.target.value)
-                        }
-                        placeholder="Plate: —"
-                        value={driverDraft.driverPlate}
-                      />
-                    </label>
-                    <label>
-                      <span className="mb-1 block text-xs font-medium text-slate-600">
-                        Override Payout
-                      </span>
-                      <input
-                        className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-                        min={0}
-                        onChange={(event) =>
-                          updateDriverDraft(savedBooking, "payoutOverride", event.target.value)
-                        }
-                        placeholder={`${assignmentPayoutPlaceholder ?? ""}`}
-                        type="number"
-                        value={driverDraft.payoutOverride}
-                      />
-                    </label>
-                    <label>
-                      <span className="mb-1 block text-xs font-medium text-slate-600">
-                        Override Reason
-                      </span>
-                      <input
-                        className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-                        onChange={(event) =>
-                          updateDriverDraft(savedBooking, "payoutReason", event.target.value)
-                        }
-                        value={driverDraft.payoutReason}
-                      />
-                    </label>
-                    <label className="sm:col-span-2">
-                      <span className="mb-1 block text-xs font-medium text-slate-600">
-                        Driver Notes
-                      </span>
-                      <input
-                        className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-                        onChange={(event) =>
-                          updateDriverDraft(savedBooking, "notes", event.target.value)
-                        }
-                        placeholder="Assignment notes"
-                        value={driverDraft.notes}
-                      />
-                    </label>
-                    <label className="flex items-center gap-2 text-sm text-slate-700">
-                      <input
-                        checked={driverDraft.includePayout}
-                        onChange={(event) =>
-                          updateDriverDraft(savedBooking, "includePayout", event.target.checked)
-                        }
-                        type="checkbox"
-                      />
-                      Include payout
-                    </label>
-                  </div>
-                  <button
-                    className="mt-3 h-10 w-full rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
-                    data-dashboard-assign-driver={bookingId}
-                    disabled={assigningBookingId === bookingId}
-                    onClick={() => assignDriver(savedBooking)}
-                    type="button"
-                  >
-                    {assigningBookingId === bookingId ? "Assigning..." : "Assign to this booking"}
-                  </button>
-                  {hasSavedDriver ? (
-                    <button
-                      className="mt-2 h-10 w-full rounded-md border border-rose-300 bg-white px-3 text-sm font-semibold text-rose-800 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                      data-dashboard-clear-driver={bookingId}
-                      disabled={assigningBookingId === bookingId}
-                      onClick={() => clearAssignedDriver(savedBooking)}
-                      type="button"
-                    >
-                      {assigningBookingId === bookingId ? "Clearing..." : "Clear assigned driver"}
-                    </button>
-                  ) : null}
-                  {driverAssignmentMessage ? (
-                    <p
-                      className={`mt-2 rounded-md border px-3 py-2 text-xs ${statusClass(
-                        driverAssignmentMessage.tone,
-                      )}`}
-                      data-driver-assignment-message={bookingId}
-                    >
-                      {driverAssignmentMessage.text}
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {!isCompleted && (isAssigned || hasDriver) ? (
-                <div className="mt-4 rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-slate-800">
-                  <p className="font-semibold text-sky-900">Dispatch</p>
-                  <p className="mt-1">Driver: {clean(savedBooking.driver_name) || driverDraft.driverName}</p>
-                  {driverDraft.driverContact ? <p>Contact: {driverDraft.driverContact}</p> : null}
-                  {getBookingName(savedBooking) ? (
-                    <p>Passenger: {getBookingName(savedBooking)}</p>
-                  ) : null}
-                  <button
-                    className="mt-3 h-10 w-full rounded-md border border-sky-300 bg-white px-3 text-sm font-semibold text-sky-900 transition hover:bg-sky-50"
-                    data-dashboard-copy-driver-dispatch={bookingId}
-                    onClick={() => copyDriverDispatch(savedBooking)}
-                    type="button"
-                  >
-                    Copy Driver Dispatch
-                  </button>
-                  {driverDispatchCopyMessage ? (
-                    <p
-                      className={`mt-2 rounded-md border px-3 py-2 text-xs ${statusClass(
-                        driverDispatchCopyMessage.tone,
-                      )}`}
-                      data-dashboard-copy-feedback={`${bookingId}:driverDispatch`}
-                    >
-                      {driverDispatchCopyMessage.text}
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {!isCompleted ? (
-                <>
-                  <button
-                    className="mt-4 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
-                    data-dashboard-copy-job-card={bookingId}
-                    onClick={() => copySavedJobCard(savedBooking)}
-                    type="button"
-                  >
-                    Copy WhatsApp Job Card
-                  </button>
-                  {jobCardCopyMessage ? (
-                    <p
-                      className={`mt-2 rounded-md border px-3 py-2 text-xs ${statusClass(
-                        jobCardCopyMessage.tone,
-                      )}`}
-                      data-dashboard-copy-feedback={`${bookingId}:jobCard`}
-                    >
-                      {jobCardCopyMessage.text}
-                    </p>
-                  ) : null}
-                </>
-              ) : null}
+              <div className="min-w-0">
+                <p className="truncate text-slate-800">{passengerText}</p>
+                <p className="truncate text-xs text-slate-500">{driverText}</p>
+              </div>
+              <p className="min-w-0 truncate text-slate-700">{routeText}</p>
+              <span
+                className={`w-fit rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${bookingStatusClass(
+                  savedBooking.status,
+                )}`}
+              >
+                {bookingStatusLabel(savedBooking.status)}
+              </span>
+              <button
+                className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+                data-dashboard-open-in-dispatch={bookingId}
+                onClick={() => loadSelectedBooking(savedBooking)}
+                type="button"
+              >
+                Open
+              </button>
             </article>
           );
         })}
+        {sectionItems.length > 8 ? (
+          <p className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-slate-600">
+            {sectionItems.length - 8} more loaded booking
+            {sectionItems.length - 8 === 1 ? "" : "s"} in the Bookings list.
+          </p>
+        ) : null}
       </div>
     );
   }
@@ -16216,7 +14988,7 @@ export default function Home() {
         <div>
           <h3 className="text-sm font-semibold text-emerald-950">New Booking Requests</h3>
           <p className="text-xs text-emerald-800">
-            Choose a request to load it straight into Dispatch.
+            Review the request first, then load it into Dispatch when ready.
           </p>
         </div>
         <span className="inline-flex w-fit rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-emerald-900 ring-1 ring-emerald-200">
@@ -16270,7 +15042,7 @@ export default function Home() {
                 onClick={() => loadSelectedBooking(requestBooking)}
                 type="button"
               >
-                Review in Dispatch
+                Load in Dispatch
               </button>
             </article>
           );
@@ -18033,6 +16805,113 @@ export default function Home() {
         : dayOfTripActiveJobVisibleBookings.length === 2
           ? "grid-cols-1 sm:grid-cols-2"
           : "grid-cols-1";
+  const activeJobsMonitorPanel = (
+    <section
+      aria-label="Loaded Active Jobs Monitor"
+      className="rounded-md border border-lime-200 bg-lime-50/70 p-2 sm:p-3"
+      data-admin-multi-driver-active-jobs-monitor="true"
+    >
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h3 className="text-base font-semibold text-lime-950">Active Jobs Monitor</h3>
+          <p className="text-xs text-lime-900 sm:text-sm">
+            Watch loaded running jobs here. Open one booking in Dispatch for detailed work.
+          </p>
+        </div>
+        <span
+          className="w-fit rounded-full bg-lime-100 px-2.5 py-1 text-xs font-semibold uppercase text-lime-900 ring-1 ring-lime-200"
+          data-admin-multi-driver-active-jobs-count={String(dayOfTripActiveJobBookings.length)}
+        >
+          {dayOfTripActiveJobBookings.length} active
+        </span>
+      </div>
+      {dayOfTripActiveJobVisibleBookings.length > 0 ? (
+        <div className={`mt-3 grid gap-2 ${dayOfTripActiveJobGridClass}`}>
+          {dayOfTripActiveJobVisibleBookings.map((activeJobBooking) => {
+            const activeJobBookingReference =
+              cleanReferenceText(activeJobBooking.booking_reference) ||
+              cleanReferenceText(activeJobBooking.id);
+            const isSelectedActiveJob =
+              Boolean(activeJobBookingReference) &&
+              activeJobBookingReference === cleanReferenceText(loadedBookingId);
+            const activeJobRoutePoints = getRoutePoints(activeJobBooking);
+            const activeJobPickup =
+              activeJobRoutePoints[0] || clean(activeJobBooking.pickup_address) || "Pickup";
+            const activeJobDropoff =
+              activeJobRoutePoints[activeJobRoutePoints.length - 1] ||
+              clean(activeJobBooking.dropoff_address) ||
+              "Drop-off";
+            const activeJobDriver = clean(activeJobBooking.driver_name) || "Driver TBC";
+            const activeJobStatus =
+              isSelectedActiveJob && adminDriverJobStatusLatest
+                ? adminDriverJobStatusLatestLabel
+                : bookingStatusLabel(activeJobBooking.status);
+
+            return (
+              <article
+                className={`min-w-0 rounded-md border px-2.5 py-2 text-sm ${
+                  isSelectedActiveJob ? "border-lime-400 bg-white" : "border-lime-100 bg-white"
+                }`}
+                data-admin-multi-driver-active-job={
+                  activeJobBookingReference || String(activeJobBooking.id)
+                }
+                key={`active-job-${activeJobBooking.id}`}
+                title={activeJobBookingReference || undefined}
+              >
+                <div className="flex min-w-0 items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-lime-950">
+                      {compactBookingReference(activeJobBookingReference)}
+                    </p>
+                    <p className="truncate text-xs text-lime-800">
+                      {formatPickupDateTime(
+                        getBookingDateKey(activeJobBooking),
+                        activeJobBooking.pickup_time,
+                      )}
+                    </p>
+                  </div>
+                  <span
+                    className={`max-w-[7rem] shrink-0 truncate rounded-full px-2 py-0.5 text-xs font-semibold ${
+                      isSelectedActiveJob ? "bg-lime-700 text-white" : "bg-slate-100 text-slate-700"
+                    }`}
+                  >
+                    {isSelectedActiveJob ? "Open" : activeJobStatus}
+                  </span>
+                </div>
+                <p className="mt-1 truncate text-slate-800">{activeJobDriver}</p>
+                <p className="mt-0.5 truncate text-xs text-lime-800">
+                  {activeJobPickup} &gt; {activeJobDropoff}
+                </p>
+                {!isSelectedActiveJob ? (
+                  <button
+                    className="mt-2 h-8 w-full rounded-md border border-lime-300 bg-white px-2 text-xs font-semibold text-lime-950 transition hover:bg-lime-50"
+                    onClick={() => loadSelectedBooking(activeJobBooking)}
+                    type="button"
+                  >
+                    Open in Dispatch
+                  </button>
+                ) : null}
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="mt-3 rounded-md border border-lime-100 bg-white px-3 py-2 text-sm font-semibold text-lime-900">
+          Load bookings to monitor active driver jobs.
+        </p>
+      )}
+      {dayOfTripActiveJobBookings.length > dayOfTripActiveJobVisibleBookings.length ? (
+        <p className="mt-2 text-xs text-lime-800">
+          {dayOfTripActiveJobBookings.length - dayOfTripActiveJobVisibleBookings.length} more loaded
+          active job
+          {dayOfTripActiveJobBookings.length - dayOfTripActiveJobVisibleBookings.length === 1
+            ? ""
+            : "s"}{" "}
+          in the Bookings list.
+        </p>
+      ) : null}
+    </section>
+  );
   const dayOfTripExceptionEscalationClosed =
     dayOfTripExceptionEscalationStatus === "closed-locally";
   const dayOfTripExceptionDriverNoResponse =
@@ -29996,109 +28875,6 @@ export default function Home() {
                   })}
                 </div>
               </div>
-              <div
-                className="mt-2 hidden rounded-md border border-lime-200 bg-white/80 p-1.5 text-[10px] leading-3 text-lime-950 xl:block xl:text-[11px] xl:leading-4"
-                data-admin-multi-driver-active-jobs-monitor="true"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-1">
-                  <p className="font-semibold leading-3 sm:leading-4">Loaded jobs monitor</p>
-                  <span
-                    className="rounded-full bg-lime-100 px-1.5 py-0.5 text-[8px] font-semibold uppercase text-lime-900 sm:px-2 sm:text-[9px]"
-                    data-admin-multi-driver-active-jobs-count={String(dayOfTripActiveJobBookings.length)}
-                  >
-                    {dayOfTripActiveJobBookings.length} active
-                  </span>
-                </div>
-                {dayOfTripActiveJobVisibleBookings.length > 0 ? (
-                  <div className={`mt-1 grid gap-1 ${dayOfTripActiveJobGridClass}`}>
-                    {dayOfTripActiveJobVisibleBookings.map((activeJobBooking) => {
-                      const activeJobBookingReference =
-                        cleanReferenceText(activeJobBooking.booking_reference) ||
-                        cleanReferenceText(activeJobBooking.id);
-                      const isSelectedActiveJob =
-                        Boolean(activeJobBookingReference) &&
-                        activeJobBookingReference === cleanReferenceText(loadedBookingId);
-                      const activeJobRoutePoints = getRoutePoints(activeJobBooking);
-                      const activeJobPickup =
-                        activeJobRoutePoints[0] || clean(activeJobBooking.pickup_address) || "Pickup";
-                      const activeJobDropoff =
-                        activeJobRoutePoints[activeJobRoutePoints.length - 1] ||
-                        clean(activeJobBooking.dropoff_address) ||
-                        "Drop-off";
-                      const activeJobDriver = clean(activeJobBooking.driver_name) || "Driver TBC";
-                      const activeJobStatus =
-                        isSelectedActiveJob && adminDriverJobStatusLatest
-                          ? adminDriverJobStatusLatestLabel
-                          : bookingStatusLabel(activeJobBooking.status);
-
-                      return (
-                        <div
-                          className={`min-w-0 rounded border px-1.5 py-1 ${
-                            isSelectedActiveJob
-                              ? "border-lime-400 bg-lime-50"
-                              : "border-lime-100 bg-white"
-                          }`}
-                          data-admin-multi-driver-active-job={
-                            activeJobBookingReference || String(activeJobBooking.id)
-                          }
-                          key={`active-job-${activeJobBooking.id}`}
-                          title={activeJobBookingReference || undefined}
-                        >
-                          <div className="flex min-w-0 items-start justify-between gap-1">
-                            <div className="min-w-0">
-                              <p className="truncate font-semibold leading-3 sm:leading-4">
-                                {compactBookingReference(activeJobBookingReference)}
-                              </p>
-                              <p className="truncate text-[9px] leading-3 text-lime-800 sm:text-[10px]">
-                                {formatPickupDateTime(
-                                  getBookingDateKey(activeJobBooking),
-                                  activeJobBooking.pickup_time,
-                                )}
-                              </p>
-                            </div>
-                            <span
-                              className={`max-w-[7rem] shrink-0 truncate rounded-full px-1.5 py-0.5 text-[8px] font-semibold uppercase ${
-                                isSelectedActiveJob
-                                  ? "bg-lime-700 text-white"
-                                  : "bg-slate-100 text-slate-700"
-                              }`}
-                            >
-                              {isSelectedActiveJob ? "Open" : activeJobStatus}
-                            </span>
-                          </div>
-                          <p className="mt-0.5 truncate leading-3 sm:leading-4">{activeJobDriver}</p>
-                          <p className="mt-0.5 truncate text-[9px] leading-3 text-lime-800 sm:text-[10px]">
-                            {activeJobPickup} &gt; {activeJobDropoff}
-                          </p>
-                          {!isSelectedActiveJob ? (
-                            <button
-                              className="mt-1 h-7 w-full rounded border border-lime-300 bg-white px-2 text-[10px] font-semibold text-lime-950 transition hover:bg-lime-50"
-                              onClick={() => loadSelectedBooking(activeJobBooking)}
-                              type="button"
-                            >
-                              Open
-                            </button>
-                          ) : null}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="mt-1 rounded bg-lime-50 px-1 py-0.5 font-semibold">
-                    Load bookings to monitor active driver jobs.
-                  </p>
-                )}
-                {dayOfTripActiveJobBookings.length > dayOfTripActiveJobVisibleBookings.length ? (
-                  <p className="mt-1 text-[9px] leading-3 text-lime-800 sm:text-[10px]">
-                    {dayOfTripActiveJobBookings.length - dayOfTripActiveJobVisibleBookings.length} more
-                    loaded active job
-                    {dayOfTripActiveJobBookings.length - dayOfTripActiveJobVisibleBookings.length === 1
-                      ? ""
-                      : "s"}{" "}
-                    in the bookings list.
-                  </p>
-                ) : null}
-              </div>
               <details
                 className="mt-1 rounded-md border-0 border-lime-200 bg-white/40 p-0 sm:mt-2 sm:border sm:p-1"
                 data-admin-day-of-trip-selected-detail="true"
@@ -33628,7 +32404,7 @@ export default function Home() {
             <div>
               <h2 className="text-lg font-semibold">Operations Dashboard</h2>
               <p className="text-xs text-slate-500">
-                Based on currently loaded bookings. Click Load Bookings or Refresh Loaded Bookings to update.
+                Command centre for new requests and loaded active jobs. Open one booking in Dispatch for work.
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row lg:min-w-[520px]">
@@ -33655,6 +32431,94 @@ export default function Home() {
           {statusPanel}
 
           <section
+            aria-label="New Booking Requests"
+            className={`mb-4 rounded-md border p-2 sm:p-3 ${
+              customerBookingRequestCount > 0
+                ? "border-emerald-300 bg-emerald-50"
+                : "border-stone-200 bg-stone-50"
+            }`}
+            data-dashboard-new-booking-requests-panel="true"
+          >
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-base font-semibold text-slate-950">New Booking Requests</h3>
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-xs font-semibold uppercase ring-1 ${
+                      customerBookingRequestCount > 0
+                        ? "bg-emerald-100 text-emerald-900 ring-emerald-200"
+                        : "bg-white text-slate-600 ring-stone-200"
+                    }`}
+                    data-dashboard-new-booking-requests-count={String(customerBookingRequestCount)}
+                  >
+                    {customerBookingRequestCount} open
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-slate-600 sm:text-sm">
+                  Customer requests land here first. Review them in Bookings before loading Dispatch.
+                </p>
+              </div>
+              <button
+                className="h-9 rounded-md border border-emerald-300 bg-white px-3 text-sm font-semibold text-emerald-900 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:border-stone-200 disabled:text-slate-400"
+                data-dashboard-review-new-booking-requests="true"
+                disabled={customerBookingRequestCount === 0}
+                onClick={openCustomerBookingRequestsReview}
+                type="button"
+              >
+                Review Requests
+              </button>
+            </div>
+            {customerBookingRequestDisplayItems.length > 0 ? (
+              <div className="mt-3 grid gap-2" data-dashboard-new-booking-request-rows="true">
+                {customerBookingRequestDisplayItems.slice(0, 3).map(({ bookingRecord, operationalCard }) => {
+                  const routePoints = getRoutePoints(bookingRecord);
+                  const pickup = operationalCard.pickup_address || routePoints[0] || "Pickup";
+                  const dropoff =
+                    operationalCard.dropoff_address ||
+                    routePoints[routePoints.length - 1] ||
+                    "Drop-off";
+                  const routeText =
+                    operationalCard.route_points_summary ||
+                    (routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`);
+                  const bookingId = String(bookingRecord.id);
+
+                  return (
+                    <button
+                      className="grid min-h-10 gap-1 rounded-md border border-emerald-200 bg-white px-3 py-2 text-left text-sm transition hover:bg-emerald-50 md:grid-cols-[minmax(9rem,0.8fr)_minmax(10rem,0.8fr)_minmax(12rem,1.2fr)] md:items-center"
+                      data-dashboard-new-booking-request-row={bookingId}
+                      key={`dashboard-request-${bookingRecord.id}`}
+                      onClick={openCustomerBookingRequestsReview}
+                      type="button"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate font-semibold text-slate-950">
+                          {getLoadBookingsOperationalDisplayTitle(operationalCard)}
+                        </span>
+                        <span className="block truncate text-xs text-slate-500">
+                          {operationalCard.pickup_datetime ||
+                            formatPickupDateTime(getBookingDateKey(bookingRecord), bookingRecord.pickup_time)}
+                        </span>
+                      </span>
+                      <span className="truncate text-slate-800">
+                        {operationalCard.traveler_display_name ||
+                          operationalCard.customer_display_name ||
+                          "Unknown"}
+                      </span>
+                      <span className="truncate text-slate-700">{routeText}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="mt-3 rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-slate-600">
+                No new customer booking requests loaded.
+              </p>
+            )}
+          </section>
+
+          <div className="mb-4">{activeJobsMonitorPanel}</div>
+
+          <section
             aria-label="Admin App Notifications"
             className="mb-4 rounded-md border border-sky-200 bg-sky-50/70 p-2 sm:p-3"
             data-admin-app-notification-feed="true"
@@ -33663,7 +32527,7 @@ export default function Home() {
               <div className="min-w-0">
                 <h3 className="text-base font-semibold text-slate-950">Admin App Notifications</h3>
                 <p className="hidden text-xs text-slate-600 sm:block sm:text-sm">
-                  Saved internal app alerts from the guarded admin API.
+                  Internal admin inbox only. External messages are not sent from here.
                 </p>
               </div>
               <div className="flex flex-col gap-2 sm:items-end">
@@ -33820,18 +32684,18 @@ export default function Home() {
           <div className="mt-5 space-y-6">
             <div>
               <h3 className="mb-3 text-base font-semibold">Today Bookings</h3>
-              {renderBookingCards(todayBookingDisplayItems, "No bookings for today.")}
+              {renderDashboardBookingSummaries(todayBookingDisplayItems, "No bookings for today.")}
             </div>
 
             <div>
               <h3 className="mb-3 text-base font-semibold">Upcoming Bookings</h3>
-              {renderBookingCards(upcomingBookingDisplayItems, "No upcoming bookings.")}
+              {renderDashboardBookingSummaries(upcomingBookingDisplayItems, "No upcoming bookings.")}
             </div>
 
             {otherBookings.length > 0 ? (
               <div>
                 <h3 className="mb-3 text-base font-semibold">Earlier Bookings</h3>
-                {renderBookingCards(otherBookingDisplayItems, "No earlier bookings.")}
+                {renderDashboardBookingSummaries(otherBookingDisplayItems, "No earlier bookings.")}
               </div>
             ) : null}
           </div>

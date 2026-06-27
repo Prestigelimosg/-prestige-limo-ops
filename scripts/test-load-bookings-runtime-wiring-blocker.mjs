@@ -212,7 +212,22 @@ assertIncludes(
   "Stage 1 operational display field list",
 );
 
-const bookingRecordToFormBlock = sliceBetween(appPage, "function bookingRecordToForm", "function stripBookerFromJobCard");
+const bookingRecordToFormBlock = sliceBetween(
+  appPage,
+  "function bookingRecordToForm",
+  "function bookingRecordToOperationalFormFields",
+);
+assertIncludes(
+  bookingRecordToFormBlock,
+  "...bookingRecordToFinancePayoutInternalFormFields(bookingRecord)",
+  "bookingRecordToForm keeps finance/payout mapping isolated in the explicit internal form mapper",
+);
+
+const bookingRecordToFinancePayoutBlock = sliceBetween(
+  appPage,
+  "function bookingRecordToFinancePayoutInternalFormFields",
+  "function customerBookingTypeLabel",
+);
 for (const riskyField of [
   "customer_rate_override",
   "customer_price_override_reason",
@@ -221,40 +236,32 @@ for (const riskyField of [
   "driver_notes",
   "driver_dispatch_include_payout",
 ]) {
-  assertIncludes(bookingRecordToFormBlock, riskyField, `bookingRecordToForm dependency ${riskyField}`);
+  assertIncludes(
+    bookingRecordToFinancePayoutBlock,
+    riskyField,
+    `bookingRecordToFinancePayoutInternalFormFields dependency ${riskyField}`,
+  );
 }
 
-const driverDispatchBlock = sliceBetween(appPage, "function getDriverDispatchCard", "function parseMockChargeTimeToMinutes");
-for (const riskyField of [
-  "driver_payout_override",
-  "driver_payout_amount",
-  "driver_dispatch_include_payout",
-  "bookingCardPriceAmounts",
-  "Payout:",
+for (const removedDashboardControl of [
+  "function getDriverDispatchCard",
+  "function bookingRecordToDriverDraft",
+  "function getDriverDraft",
+  "async function assignDriver",
+  "async function copyDriverDispatch",
+  "data-dashboard-action-group",
+  "data-dashboard-assign-driver",
+  "data-dashboard-copy-driver-dispatch",
+  "data-dashboard-copy-job-card",
+  "data-dashboard-mark-otw",
+  "data-dashboard-mark-pob",
+  "data-dashboard-mark-completed",
 ]) {
-  assertIncludes(driverDispatchBlock, riskyField, `Driver dispatch copy dependency ${riskyField}`);
-}
-
-const driverDraftBlock = sliceBetween(appPage, "function bookingRecordToDriverDraft", "function getDriverDraft");
-for (const riskyField of [
-  "driver_payout_override",
-  "driver_payout_reason",
-  "driver_notes",
-  "driver_dispatch_include_payout",
-]) {
-  assertIncludes(driverDraftBlock, riskyField, `Driver assignment controls dependency ${riskyField}`);
-}
-
-const assignDriverBlock = sliceBetween(appPage, "async function assignDriver", "async function copyDriverDispatch");
-for (const riskyField of [
-  "driver_payout_rules",
-  "driver_payout_amount",
-  "driver_payout_override",
-  "driver_payout_reason",
-  "driver_notes",
-  "driver_dispatch_include_payout",
-]) {
-  assertIncludes(assignDriverBlock, riskyField, `Driver assignment write dependency ${riskyField}`);
+  assertExcludes(
+    appPage,
+    removedDashboardControl,
+    `Dashboard direct action control removed from Load Bookings list ${removedDashboardControl}`,
+  );
 }
 
 for (const billingDependency of [

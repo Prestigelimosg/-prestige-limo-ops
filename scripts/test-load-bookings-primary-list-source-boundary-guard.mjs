@@ -151,11 +151,15 @@ const loadSelectedBookingBlock = sliceBetween(
   "function loadSelectedBooking",
   "async function saveAdminBookingOperationalSnapshot",
 );
-const bookingRecordToFormBlock = sliceBetween(appPage, "function bookingRecordToForm", "function stripBookerFromJobCard");
+const bookingRecordToFormBlock = sliceBetween(
+  appPage,
+  "function bookingRecordToForm",
+  "function bookingRecordToOperationalFormFields",
+);
 const operationalDisplayItemBlock = sliceBetween(
   appPage,
   "function buildLoadBookingsOperationalDisplayItems",
-  "const dashboardDriverCandidates",
+  "const assignedDriverId",
 );
 const operationalDisplayItemSourceBlock = sliceBetween(
   appPage,

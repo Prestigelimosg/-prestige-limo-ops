@@ -378,7 +378,7 @@ for (const riskyField of [
 const financePayoutInternalFormFieldsBlock = sliceBetween(
   appPage,
   "function bookingRecordToFinancePayoutInternalFormFields",
-  "function stripBookerFromJobCard",
+  "function customerBookingTypeLabel",
 );
 for (const parkedField of [
   "customer_rate_override",
@@ -442,37 +442,12 @@ for (const [label, start, end, expectedFragments] of [
     ],
   ],
   [
-    "bookingRecordToForm finance/payout path",
-    "function bookingRecordToForm",
-    "function stripBookerFromJobCard",
+    "bookingRecordToFinancePayoutInternalFormFields finance/payout path",
+    "function bookingRecordToFinancePayoutInternalFormFields",
+    "function customerBookingTypeLabel",
     [
       "customer_rate_override",
       "customer_price_override_reason",
-      "driver_payout_override",
-      "driver_payout_reason",
-      "driver_notes",
-      "driver_dispatch_include_payout",
-    ],
-  ],
-  [
-    "driver dispatch payout copy path",
-    "function getDriverDispatchCard",
-    "function parseMockChargeTimeToMinutes",
-    ["driver_payout_override", "driver_payout_amount", "driver_dispatch_include_payout", "Payout:"],
-  ],
-  [
-    "driver assignment payout controls path",
-    "function bookingRecordToDriverDraft",
-    "function getDriverDraft",
-    ["driver_payout_override", "driver_payout_reason", "driver_notes", "driver_dispatch_include_payout"],
-  ],
-  [
-    "driver assignment payout write path",
-    "async function assignDriver",
-    "async function copyDriverDispatch",
-    [
-      "driver_payout_rules",
-      "driver_payout_amount",
       "driver_payout_override",
       "driver_payout_reason",
       "driver_notes",
@@ -490,6 +465,27 @@ for (const [label, start, end, expectedFragments] of [
   assertExcludes(source, safeUiAdapterHelperExport, `${label} safe UI adapter mapping`);
 }
 
+for (const removedDashboardControl of [
+  "function getDriverDispatchCard",
+  "function bookingRecordToDriverDraft",
+  "function getDriverDraft",
+  "async function assignDriver",
+  "async function copyDriverDispatch",
+  "data-dashboard-action-group",
+  "data-dashboard-assign-driver",
+  "data-dashboard-copy-driver-dispatch",
+  "data-dashboard-copy-job-card",
+  "data-dashboard-mark-otw",
+  "data-dashboard-mark-pob",
+  "data-dashboard-mark-completed",
+]) {
+  assertExcludes(
+    appPage,
+    removedDashboardControl,
+    `Dashboard direct action control removed from operational mapping ${removedDashboardControl}`,
+  );
+}
+
 const priceLineUsages = appPage.match(/bookingCardPriceLine\(savedBooking\)/g) ?? [];
 assert.equal(
   priceLineUsages.length,
@@ -497,24 +493,27 @@ assert.equal(
   "Dashboard, recent, and completed operational display cards must not call bookingCardPriceLine(savedBooking).",
 );
 
-for (const [label, start, end, expectedDisplayItemMap] of [
+for (const [label, start, end, expectedDisplayItemMap, requiresVehiclePax] of [
   [
-    "dashboard operational cards",
-    "function renderBookingCards",
+    "dashboard command-centre booking summaries",
+    "function renderDashboardBookingSummaries",
     "const pricingPanel",
-    "sectionItems.map(({ bookingRecord: savedBooking, operationalCard })",
+    "sectionItems.slice(0, 8).map(({ bookingRecord: savedBooking, operationalCard })",
+    false,
   ],
   [
     "recent operational cards",
     "const recentBookingsPanel",
     "const completedEmptyState",
     "filteredRecentBookingDisplayItems.map(({ bookingRecord: savedBooking, operationalCard })",
+    true,
   ],
   [
     "completed operational cards",
     "const completedBookingsPanel",
     "const jobCardCopyEditState",
     "filteredCompletedBookingDisplayItems.map(({ bookingRecord: savedBooking, operationalCard })",
+    true,
   ],
 ]) {
   const source = sliceBetween(appPage, start, end);
@@ -523,7 +522,9 @@ for (const [label, start, end, expectedDisplayItemMap] of [
   assertExcludes(source, "bookingCardPriceLine(savedBooking)", label);
   assertExcludes(source, "Customer override:", label);
   assertExcludes(source, "Vehicle / pax / price", label);
-  assertIncludes(source, "Vehicle / pax", label);
+  if (requiresVehiclePax) {
+    assertIncludes(source, "Vehicle / pax", label);
+  }
 }
 
 for (const billingDependency of [

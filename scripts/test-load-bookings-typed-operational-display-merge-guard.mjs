@@ -132,7 +132,11 @@ assertIncludes(
 assertExcludes(loadBookingsBlock, "setBookings(typedOperationalDisplay", "typed display must not replace BookingRecord source");
 assertExcludes(loadBookingsBlock, "setBookings(typedOperational", "typed display must not replace BookingRecord source");
 
-const formBlock = sliceBetween(appPage, "function bookingRecordToForm", "function stripBookerFromJobCard");
+const formBlock = sliceBetween(
+  appPage,
+  "function bookingRecordToForm",
+  "function bookingRecordToOperationalFormFields",
+);
 assertExcludes(formBlock, "LoadBookingsOperationalDisplayCard", "safe card must not feed form mapping");
 assertExcludes(formBlock, "loadBookingsTypedOperational", "typed display state must not feed form mapping");
 

@@ -8817,6 +8817,7 @@ export default function Home() {
   const [aiAssistResponseNote, setAiAssistResponseNote] = useState("");
   const bookingMessageRef = useRef<HTMLTextAreaElement | null>(null);
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
+  const dashboardBookingsInitialLoadAttemptedRef = useRef(false);
   const [
     loadBookingsTypedOperationalCardsById,
     setLoadBookingsTypedOperationalCardsById,
@@ -9160,6 +9161,20 @@ export default function Home() {
 
     return () => window.clearInterval(intervalId);
   }, []);
+
+  useEffect(() => {
+    if (
+      activeTab !== "dashboard" ||
+      dashboardBookingsInitialLoadAttemptedRef.current ||
+      bookings.length > 0 ||
+      loading
+    ) {
+      return;
+    }
+
+    dashboardBookingsInitialLoadAttemptedRef.current = true;
+    void loadBookings("Bookings loaded.");
+  }, [activeTab, bookings.length, loading]);
 
   useEffect(() => {
     let cancelled = false;
@@ -13303,7 +13318,7 @@ export default function Home() {
   function selectAppTab(nextTab: AppTab) {
     setActiveTab(nextTab);
 
-    if (nextTab === "bookings" && bookings.length === 0 && !loading) {
+    if ((nextTab === "bookings" || nextTab === "dashboard") && bookings.length === 0 && !loading) {
       void loadBookings("Bookings loaded.");
     }
   }

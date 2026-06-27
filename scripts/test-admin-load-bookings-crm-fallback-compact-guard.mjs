@@ -129,6 +129,21 @@ assertIncludes(appPage, '"confirmed"', "Confirmed customer request exclusion");
 assertIncludes(appPage, '"released"', "Released customer request exclusion");
 assertIncludes(appPage, "function bookingRecordIsOpenCustomerBookingRequest", "Open customer request classifier");
 assertIncludes(appPage, 'useState<AppTab>("dashboard")', "Dashboard default tab");
+assertIncludes(
+  appPage,
+  "dashboardBookingsInitialLoadAttemptedRef",
+  "Dashboard initial booking request auto-load guard",
+);
+assertIncludes(
+  appPage,
+  'activeTab !== "dashboard"',
+  "Dashboard initial auto-load tab boundary",
+);
+assertIncludes(
+  appPage,
+  "bookings.length > 0 ||\n      loading",
+  "Dashboard initial auto-load empty-list boundary",
+);
 assertIncludes(appPage, "function selectAppTab(nextTab: AppTab)", "Admin tab selection helper");
 assertIncludes(appPage, "function openCustomerBookingRequestsReview()", "Dashboard request review handoff helper");
 assertIncludes(appPage, 'selectAppTab("bookings");', "Dashboard request handoff opens Bookings");
@@ -152,8 +167,8 @@ assertIncludes(appPage, "const customerBookingRequestCount = customerBookingRequ
 assertIncludes(appPage, "visibleCustomerBookingRequestBookings", "Customer request visible list cap");
 assertIncludes(
   appPage,
-  'nextTab === "bookings" && bookings.length === 0 && !loading',
-  "Bookings tab auto-load empty-list guard",
+  '(nextTab === "bookings" || nextTab === "dashboard") && bookings.length === 0 && !loading',
+  "Bookings/Dashboard tab auto-load empty-list guard",
 );
 assertIncludes(appPage, 'void loadBookings("Bookings loaded.");', "Bookings tab visible auto-load");
 

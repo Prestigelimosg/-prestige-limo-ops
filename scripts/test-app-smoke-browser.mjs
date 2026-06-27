@@ -2304,7 +2304,11 @@ async function runChromeTest() {
       );
 
       assert.equal(loadState.postCalls, 1, "Expected one mocked admin booking POST call");
-      assert.equal(loadState.getCalls, 1, "Expected one mocked admin booking GET call");
+      assert.equal(
+        loadState.getCalls,
+        2,
+        "Expected dashboard auto-load plus one mocked admin booking GET call",
+      );
       assert.equal(loadState.filterControlsVisible, true, "Expected loaded operational snapshot filters");
       assert.equal(
         loadState.requestFilterControlsVisible,
@@ -2508,6 +2512,7 @@ async function runChromeTest() {
           };
         })()`);
 
+      const requestSearchBaseline = await collectAdminSnapshotFilterState();
       assert.equal(
         await setAdminCustomerRequestSearch("Loaded Ops Stop"),
         true,
@@ -2526,9 +2531,21 @@ async function runChromeTest() {
         true,
         "Expected request route-point search summary",
       );
-      assert.equal(requestRouteSearchState.getCalls, 1, "Expected request search to stay local");
-      assert.equal(requestRouteSearchState.postCalls, 1, "Expected request search not to save");
-      assert.equal(requestRouteSearchState.patchCalls, 0, "Expected request search not to update");
+      assert.equal(
+        requestRouteSearchState.getCalls,
+        requestSearchBaseline.getCalls,
+        "Expected request search to stay local",
+      );
+      assert.equal(
+        requestRouteSearchState.postCalls,
+        requestSearchBaseline.postCalls,
+        "Expected request search not to save",
+      );
+      assert.equal(
+        requestRouteSearchState.patchCalls,
+        requestSearchBaseline.patchCalls,
+        "Expected request search not to update",
+      );
 
       assert.equal(await setAdminCustomerRequestSearch("Second Ops Customer"), true);
       const requestOnlySearchState = await waitForCondition(
@@ -2579,6 +2596,7 @@ async function runChromeTest() {
         "Expected request clear filters to give safe admin feedback",
       );
 
+      const requestStatusBaseline = await collectAdminSnapshotFilterState();
       assert.equal(
         await setAdminCustomerRequestStatus("short-notice-review-required"),
         true,
@@ -2597,7 +2615,11 @@ async function runChromeTest() {
         true,
         "Expected short-notice request filter summary",
       );
-      assert.equal(shortNoticeRequestState.getCalls, 1, "Expected request status filter to stay local");
+      assert.equal(
+        shortNoticeRequestState.getCalls,
+        requestStatusBaseline.getCalls,
+        "Expected request status filter to stay local",
+      );
 
       assert.equal(await setAdminCustomerRequestStatus("approved-internally"), true);
       const approvedRequestState = await waitForCondition(
@@ -2629,6 +2651,7 @@ async function runChromeTest() {
       );
       assert.equal(requestStatusClearedState.summary.includes("Showing 3 of 3"), true);
 
+      const snapshotStatusBaseline = await collectAdminSnapshotFilterState();
       assert.equal(await setAdminSnapshotStatus("Confirmed"), true, "Expected status filter control");
       const confirmedFilterState = await waitForCondition(
         async () => {
@@ -2639,9 +2662,21 @@ async function runChromeTest() {
         "admin booking persistence status filter",
       );
       assert.equal(confirmedFilterState.summary.includes("Showing 1 of 3"), true);
-      assert.equal(confirmedFilterState.getCalls, 1, "Expected status filter to stay local");
-      assert.equal(confirmedFilterState.postCalls, 1, "Expected status filter not to save");
-      assert.equal(confirmedFilterState.patchCalls, 0, "Expected status filter not to update");
+      assert.equal(
+        confirmedFilterState.getCalls,
+        snapshotStatusBaseline.getCalls,
+        "Expected status filter to stay local",
+      );
+      assert.equal(
+        confirmedFilterState.postCalls,
+        snapshotStatusBaseline.postCalls,
+        "Expected status filter not to save",
+      );
+      assert.equal(
+        confirmedFilterState.patchCalls,
+        snapshotStatusBaseline.patchCalls,
+        "Expected status filter not to update",
+      );
 
       assert.equal(await clearAdminSnapshotFilters(), true, "Expected clear snapshot filters control");
       const restoredAfterStatusFilter = await waitForCondition(
@@ -2661,6 +2696,7 @@ async function runChromeTest() {
         "Expected clear filters to give safe admin feedback",
       );
 
+      const referenceSearchBaseline = await collectAdminSnapshotFilterState();
       assert.equal(await setAdminSnapshotSearch("SECOND-OPS-002"), true, "Expected snapshot search control");
       const referenceFilterState = await waitForCondition(
         async () => {
@@ -2671,8 +2707,9 @@ async function runChromeTest() {
         "admin booking persistence reference search",
       );
       assert.equal(referenceFilterState.summary.includes("Showing 1 of 3"), true);
-      assert.equal(referenceFilterState.getCalls, 1, "Expected reference search to stay local");
+      assert.equal(referenceFilterState.getCalls, referenceSearchBaseline.getCalls, "Expected reference search to stay local");
 
+      const forbiddenSearchBaseline = await collectAdminSnapshotFilterState();
       assert.equal(await setAdminSnapshotSearch("9999-SHOULD-NOT-APPLY"), true);
       const forbiddenSearchState = await waitForCondition(
         async () => {
@@ -2688,7 +2725,7 @@ async function runChromeTest() {
         "Expected forbidden mocked fields not to be searchable",
       );
       assert.equal(forbiddenSearchState.textBaitLeaked, false, "Expected forbidden mocked fields not to become visible");
-      assert.equal(forbiddenSearchState.getCalls, 1, "Expected forbidden search to stay local");
+      assert.equal(forbiddenSearchState.getCalls, forbiddenSearchBaseline.getCalls, "Expected forbidden search to stay local");
 
       assert.equal(await setAdminSnapshotSearch("NO-MATCH-OPS"), true);
       const noMatchFilterState = await waitForCondition(
@@ -2721,6 +2758,7 @@ async function runChromeTest() {
         "Expected no-match clear filters to give safe admin feedback",
       );
 
+      const phoneSearchBaseline = await collectAdminSnapshotFilterState();
       assert.equal(await setAdminSnapshotSearch("+65 8000 1000"), true, "Expected phone search control");
       const phoneFilterState = await waitForCondition(
         async () => {
@@ -2731,7 +2769,7 @@ async function runChromeTest() {
         "admin booking persistence phone search",
       );
       assert.equal(phoneFilterState.summary.includes("Showing 1 of 3"), true);
-      assert.equal(phoneFilterState.getCalls, 1, "Expected phone search to stay local");
+      assert.equal(phoneFilterState.getCalls, phoneSearchBaseline.getCalls, "Expected phone search to stay local");
 
       const decisionClicked = await evaluate(`(() => {
         const button = document.querySelector(
@@ -3214,6 +3252,7 @@ async function runChromeTest() {
         "Expected forbidden mocked snapshot fields not to populate form fields, identity summary, or visible UI",
       );
 
+      const appliedHiddenByFilterBaseline = await collectAdminSnapshotFilterState();
       assert.equal(await setAdminSnapshotSearch("SECOND-OPS-002"), true);
       const appliedHiddenByFilterState = await waitForCondition(
         async () => {
@@ -3229,7 +3268,7 @@ async function runChromeTest() {
       );
       assert.equal(
         appliedHiddenByFilterState.getCalls,
-        1,
+        appliedHiddenByFilterBaseline.getCalls,
         "Expected applied hidden-by-filter note to stay local",
       );
       assert.equal(
@@ -4905,6 +4944,11 @@ async function runChromeTest() {
       }
     };
 
+    const setViewportAndReloadDispatch = async (viewport) => {
+      await setViewportAndReload(viewport);
+      await clickTab("Dispatch");
+    };
+
     const checkResponsiveTabs = async (viewport) => {
       await setViewportAndReload(viewport);
 
@@ -5704,7 +5748,7 @@ async function runChromeTest() {
       const states = [];
 
       for (const viewport of checklistViewports) {
-        await setViewportAndReload(viewport);
+        await setViewportAndReloadDispatch(viewport);
         const state = await waitForCondition(
           () =>
             evaluate(`(() => {
@@ -5867,7 +5911,7 @@ async function runChromeTest() {
       const states = [];
 
       for (const viewport of packetViewports) {
-        await setViewportAndReload(viewport);
+        await setViewportAndReloadDispatch(viewport);
         const state = await waitForCondition(
           () =>
             evaluate(`(() => {
@@ -6037,7 +6081,7 @@ async function runChromeTest() {
       const states = [];
 
       for (const viewport of readinessViewports) {
-        await setViewportAndReload(viewport);
+        await setViewportAndReloadDispatch(viewport);
         const state = await waitForCondition(
           () =>
             evaluate(`(() => {
@@ -6254,7 +6298,7 @@ async function runChromeTest() {
       const states = [];
 
       for (const viewport of followUpViewports) {
-        await setViewportAndReload(viewport);
+        await setViewportAndReloadDispatch(viewport);
         const state = await waitForCondition(
           () =>
             evaluate(`(() => {
@@ -6454,7 +6498,7 @@ async function runChromeTest() {
       const states = [];
 
       for (const viewport of monitorViewports) {
-        await setViewportAndReload(viewport);
+        await setViewportAndReloadDispatch(viewport);
         const state = await waitForCondition(
           () =>
             evaluate(`(() => {
@@ -6696,7 +6740,7 @@ async function runChromeTest() {
       const states = [];
 
       for (const viewport of escalationViewports) {
-        await setViewportAndReload(viewport);
+        await setViewportAndReloadDispatch(viewport);
         const state = await waitForCondition(
           () =>
             evaluate(`(() => {
@@ -6901,7 +6945,7 @@ async function runChromeTest() {
       const states = [];
 
       for (const viewport of recoveryViewports) {
-        await setViewportAndReload(viewport);
+        await setViewportAndReloadDispatch(viewport);
         const state = await waitForCondition(
           () =>
             evaluate(`(() => {
@@ -7131,7 +7175,7 @@ async function runChromeTest() {
       const states = [];
 
       for (const viewport of updateViewports) {
-        await setViewportAndReload(viewport);
+        await setViewportAndReloadDispatch(viewport);
         const state = await waitForCondition(
           () =>
             evaluate(`(() => {
@@ -7370,7 +7414,7 @@ async function runChromeTest() {
       const states = [];
 
       for (const viewport of handoffViewports) {
-        await setViewportAndReload(viewport);
+        await setViewportAndReloadDispatch(viewport);
         const state = await waitForCondition(
           () =>
             evaluate(`(() => {
@@ -7605,7 +7649,7 @@ async function runChromeTest() {
       const states = [];
 
       for (const viewport of reviewViewports) {
-        await setViewportAndReload(viewport);
+        await setViewportAndReloadDispatch(viewport);
         const state = await waitForCondition(
           () =>
             evaluate(`(() => {
@@ -7851,7 +7895,7 @@ async function runChromeTest() {
       const states = [];
 
       for (const viewport of reviewViewports) {
-        await setViewportAndReload(viewport);
+        await setViewportAndReloadDispatch(viewport);
         const state = await waitForCondition(
           () =>
             evaluate(`(() => {
@@ -8097,7 +8141,7 @@ async function runChromeTest() {
       const states = [];
 
       for (const viewport of reviewViewports) {
-        await setViewportAndReload(viewport);
+        await setViewportAndReloadDispatch(viewport);
         const state = await waitForCondition(
           () =>
             evaluate(`(() => {
@@ -8343,7 +8387,7 @@ async function runChromeTest() {
       const states = [];
 
       for (const viewport of reviewViewports) {
-        await setViewportAndReload(viewport);
+        await setViewportAndReloadDispatch(viewport);
         const state = await waitForCondition(
           () =>
             evaluate(`(() => {
@@ -8601,7 +8645,7 @@ async function runChromeTest() {
       const states = [];
 
       for (const viewport of reviewViewports) {
-        await setViewportAndReload(viewport);
+        await setViewportAndReloadDispatch(viewport);
         const state = await waitForCondition(
           () =>
             evaluate(`(() => {
@@ -8866,7 +8910,7 @@ async function runChromeTest() {
       const states = [];
 
       for (const viewport of reviewViewports) {
-        await setViewportAndReload(viewport);
+        await setViewportAndReloadDispatch(viewport);
         const state = await waitForCondition(
           () =>
             evaluate(`(() => {
@@ -9142,7 +9186,7 @@ async function runChromeTest() {
       const states = [];
 
       for (const viewport of reviewViewports) {
-        await setViewportAndReload(viewport);
+        await setViewportAndReloadDispatch(viewport);
         const state = await waitForCondition(
           () =>
             evaluate(`(() => {
@@ -17727,6 +17771,10 @@ async function runChromeTest() {
           Object.setPrototypeOf(window.WebSocket, OriginalWebSocket);
         }
       })()`);
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      await evaluate(`(() => {
+        window.__mockExtraChargesControlCenterIntegrationCalls = [];
+      })()`);
 
       const readMockExtraChargesStorageLeaks = async (sentinels) =>
         evaluate(`(async () => {
@@ -24731,6 +24779,7 @@ async function runChromeTest() {
       const reloadEvent = client.once("Page.loadEventFired");
       await client.send("Page.reload", { ignoreCache: true });
       await reloadEvent;
+      await clickTab("Dispatch");
       await waitForBodyText(
         evaluate,
         "Replacement Car / Driver — Mock Only",
@@ -24751,6 +24800,7 @@ async function runChromeTest() {
       const backLoadEvent = client.once("Page.loadEventFired");
       await client.send("Page.navigate", { url: appUrl });
       await backLoadEvent;
+      await clickTab("Dispatch");
       await waitForBodyText(
         evaluate,
         "Replacement Car / Driver — Mock Only",

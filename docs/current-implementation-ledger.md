@@ -45,6 +45,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The Bookings tab now triggers the same safe Load Bookings read automatically the first time it is opened with an empty loaded list.
 - Open customer booking requests are surfaced on the Dashboard command centre and above Recent Bookings, using the existing customer request source markers with a bounded fallback for open `CUST-` request references when live rows do not carry those markers.
 - The Dashboard is the default admin landing tab, shows a compact `New Booking Requests` alert, and routes request clicks to the existing Bookings review area instead of loading Dispatch directly.
+- The Dashboard now runs the same existing safe Load Bookings read once on initial command-centre entry when the local booking list is empty, so newly submitted customer requests can appear without first opening the Bookings tab.
 - The Bookings request row is the review handoff point and can load the selected request into the existing Dispatch form only when the operator chooses `Load in Dispatch`, without adding a duplicate write path.
 - The Dashboard now uses compact read-only booking summaries plus `Open` handoff buttons; single-booking driver assignment, status, copy, job-card, and completion work stays in Dispatch/Bookings so page purposes do not duplicate.
 - The loaded active jobs monitor is shown on the Dashboard command centre for multi-driver scanning; the Dispatch day-of-trip monitor remains the selected single-booking workbench.

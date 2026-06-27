@@ -54,6 +54,7 @@ for (const phrase of [
   "Open customer booking requests are surfaced on the Dashboard command centre and above Recent Bookings, using the existing customer request source markers with a bounded fallback for open `CUST-` request references when live rows do not carry those markers.",
   "The Dashboard is the default admin landing tab, shows a compact `New Booking Requests` alert, and routes request clicks to the existing Bookings review area instead of loading Dispatch directly.",
   "The Bookings request row is the review handoff point and can load the selected request into the existing Dispatch form only when the operator chooses `Load in Dispatch`, without adding a duplicate write path.",
+  "Loading a customer request into Dispatch now records a bounded browser-local handled-request key so that request leaves the Dashboard/Bookings `New Booking Requests` queue and badge on that admin browser while remaining available in Recent/Active booking lists.",
   "The Dashboard now uses compact read-only booking summaries plus `Open` handoff buttons; single-booking driver assignment, status, copy, job-card, and completion work stays in Dispatch/Bookings so page purposes do not duplicate.",
   "The loaded active jobs monitor is shown on the Dashboard command centre for multi-driver scanning; the Dispatch day-of-trip monitor remains the selected single-booking workbench.",
   "The Bookings tab shows a compact new-request badge/highlight after open customer requests are detected; no sound, browser notification, polling loop, provider send, or new route is added.",
@@ -110,6 +111,8 @@ assertIncludes(
 );
 
 assertIncludes(appPage, "function bookingRecordIsCustomerBookingRequest", "Customer request classifier");
+assertIncludes(appPage, "adminHandledCustomerBookingRequestsStorageKey", "Handled customer request storage key");
+assertIncludes(appPage, "function getCustomerBookingRequestQueueKey", "Customer request queue key helper");
 assertIncludes(
   appPage,
   'clean(bookingRecord.source_channel) === "customer-booking-request"',
@@ -128,6 +131,19 @@ assertIncludes(
 assertIncludes(appPage, '"confirmed"', "Confirmed customer request exclusion");
 assertIncludes(appPage, '"released"', "Released customer request exclusion");
 assertIncludes(appPage, "function bookingRecordIsOpenCustomerBookingRequest", "Open customer request classifier");
+assertIncludes(appPage, "handledCustomerBookingRequestKeys", "Handled customer request state");
+assertIncludes(appPage, "handledCustomerBookingRequestKeySet", "Handled customer request filter set");
+assertIncludes(
+  appPage,
+  "!handledCustomerBookingRequestKeySet.has(getCustomerBookingRequestQueueKey(bookingRecord))",
+  "Handled customer request exclusion",
+);
+assertIncludes(appPage, "function rememberHandledCustomerBookingRequest", "Handled customer request marker");
+assertIncludes(
+  appPage,
+  "rememberHandledCustomerBookingRequest(bookingRecord);",
+  "Load in Dispatch marks customer request handled",
+);
 assertIncludes(appPage, 'useState<AppTab>("dashboard")', "Dashboard default tab");
 assertIncludes(
   appPage,

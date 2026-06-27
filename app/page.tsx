@@ -84,6 +84,8 @@ const adminFullDriverProfileRuntimeWriteActionApiPath =
   "/api/admin-full-driver-profile-runtime-write-action";
 const adminSavedBookingsApiPath = "/api/admin-saved-bookings";
 const adminBookingsApiPath = "/api/admin-bookings";
+const adminHandledCustomerBookingRequestsStorageKey =
+  "prestige-admin-handled-customer-booking-requests";
 const adminLoadBookingsTypedReadApiPath = "/api/admin-load-bookings-typed-read";
 const adminSavedBookingStatusesApiPath = "/api/admin-saved-booking-statuses";
 const adminBookingCalendarEventsApiPath = "/api/admin-booking-calendar-events";
@@ -4714,6 +4716,22 @@ function bookingRecordIsCustomerBookingRequest(bookingRecord: BookingRecord) {
   );
 }
 
+function getCustomerBookingRequestQueueKey(bookingRecord: BookingRecord) {
+  return (
+    cleanReferenceText(bookingRecord.booking_reference) ||
+    cleanReferenceText(bookingRecord.id) ||
+    [
+      getBookingDateKey(bookingRecord),
+      formatPickupTimeFromRecord(bookingRecord),
+      getBookingName(bookingRecord),
+      getBookingCompanyName(bookingRecord),
+    ]
+      .map(cleanReferenceText)
+      .filter(Boolean)
+      .join("|")
+  );
+}
+
 function bookingRecordIsOpenCustomerBookingRequest(bookingRecord: BookingRecord) {
   if (!bookingRecordIsCustomerBookingRequest(bookingRecord)) {
     return false;
@@ -8818,6 +8836,25 @@ export default function Home() {
   const bookingMessageRef = useRef<HTMLTextAreaElement | null>(null);
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const dashboardBookingsInitialLoadAttemptedRef = useRef(false);
+  const [handledCustomerBookingRequestKeys, setHandledCustomerBookingRequestKeys] = useState<
+    string[]
+  >(() => {
+    if (typeof window === "undefined") {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(
+        window.localStorage.getItem(adminHandledCustomerBookingRequestsStorageKey) || "[]",
+      );
+
+      return Array.isArray(parsed)
+        ? parsed.map(cleanReferenceText).filter(Boolean).slice(-200)
+        : [];
+    } catch {
+      return [];
+    }
+  });
   const [
     loadBookingsTypedOperationalCardsById,
     setLoadBookingsTypedOperationalCardsById,
@@ -11134,9 +11171,18 @@ export default function Home() {
       ),
     [operationalBookings],
   );
+  const handledCustomerBookingRequestKeySet = useMemo(
+    () => new Set(handledCustomerBookingRequestKeys),
+    [handledCustomerBookingRequestKeys],
+  );
   const customerBookingRequestBookings = useMemo(
-    () => operationalBookings.filter(bookingRecordIsOpenCustomerBookingRequest),
-    [operationalBookings],
+    () =>
+      operationalBookings.filter(
+        (bookingRecord) =>
+          bookingRecordIsOpenCustomerBookingRequest(bookingRecord) &&
+          !handledCustomerBookingRequestKeySet.has(getCustomerBookingRequestQueueKey(bookingRecord)),
+      ),
+    [handledCustomerBookingRequestKeySet, operationalBookings],
   );
   const visibleCustomerBookingRequestBookings = useMemo(
     () => customerBookingRequestBookings.slice(0, 5),
@@ -13297,6 +13343,37 @@ export default function Home() {
     }
   }
 
+  function rememberHandledCustomerBookingRequest(bookingRecord: BookingRecord) {
+    if (!bookingRecordIsOpenCustomerBookingRequest(bookingRecord)) {
+      return;
+    }
+
+    const queueKey = getCustomerBookingRequestQueueKey(bookingRecord);
+
+    if (!queueKey) {
+      return;
+    }
+
+    setHandledCustomerBookingRequestKeys((currentKeys) => {
+      if (currentKeys.includes(queueKey)) {
+        return currentKeys;
+      }
+
+      const nextKeys = [...currentKeys, queueKey].slice(-200);
+
+      try {
+        window.localStorage.setItem(
+          adminHandledCustomerBookingRequestsStorageKey,
+          JSON.stringify(nextKeys),
+        );
+      } catch {
+        // Dashboard queue memory is a convenience only; loading the booking still works.
+      }
+
+      return nextKeys;
+    });
+  }
+
   function loadSelectedBooking(bookingRecord: BookingRecord) {
     const bookingReference =
       cleanReferenceText(bookingRecord.booking_reference) ||
@@ -13304,6 +13381,7 @@ export default function Home() {
       cleanReferenceText(bookingRecord.flight_no) ||
       getBookingDateKey(bookingRecord);
 
+    rememberHandledCustomerBookingRequest(bookingRecord);
     setBooking(() => bookingRecordToForm(bookingRecord));
     setLoadedBookingId(bookingReference);
     setDispatchReleaseWorkflowLoadRevision((currentRevision) => currentRevision + 1);

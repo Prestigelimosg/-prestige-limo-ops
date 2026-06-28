@@ -220,6 +220,14 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This is UI-only polish on the existing local/mock customers page; it does not add routes, APIs, DB reads/writes, env changes, deploys, provider sends, GPS/live location, billing/payment/PDF/invoice/payout activation, calendar sync, or shims.
 - Guard coverage lives in `scripts/test-customers-outstanding-review-dropdown-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Customers Remaining Queues Compact Dropdowns
+
+- Collection Follow-up Queue now renders each account as a slim row with compact `Open` and `Actions` controls.
+- Monthly Account Statement Preview now uses the same compact row/dropdown pattern instead of large action cards.
+- Follow-up buttons, statement row details, preview controls, long helper text, and feedback stay inside native `Actions` dropdowns.
+- This is UI-only polish on the existing local/mock customers page; it does not add routes, APIs, DB reads/writes, env changes, provider sends, GPS/live location, billing/payment/PDF/invoice/payout activation, calendar sync, or shims.
+- Guard coverage lives in `scripts/test-customers-remaining-queues-compact-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Live William Walkthrough CRM And Driver Job Proof
 
 - Evidence marker: `WILLIAM-WALKTHROUGH-20260626074259`.

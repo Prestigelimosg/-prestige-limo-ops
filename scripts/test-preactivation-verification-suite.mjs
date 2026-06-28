@@ -310,6 +310,10 @@ const guardChecks = [
     script: "scripts/test-customers-outstanding-review-dropdown-guard.mjs",
   },
   {
+    label: "customers remaining queues compact guard",
+    script: "scripts/test-customers-remaining-queues-compact-guard.mjs",
+  },
+  {
     label: "driver reporting status contract guard",
     script: "scripts/test-driver-reporting-status-contract.mjs",
   },

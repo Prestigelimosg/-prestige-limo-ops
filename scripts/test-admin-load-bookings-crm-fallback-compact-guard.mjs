@@ -238,7 +238,9 @@ for (const dashboardCommandCentreHelperFragment of [
 for (const dashboardCommandCentreFragment of [
   "renderDashboardBookingSummaries(todayBookingDisplayItems",
   "renderDashboardBookingSummaries(upcomingBookingDisplayItems",
-  "renderDashboardBookingSummaries(otherBookingDisplayItems",
+  'data-dashboard-earlier-history-handoff="true"',
+  'data-dashboard-open-completed-history="true"',
+  'onClick={() => selectAppTab("completed")}',
   "{activeJobsMonitorPanel}",
 ]) {
   assertIncludes(

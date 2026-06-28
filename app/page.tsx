@@ -2134,18 +2134,14 @@ function AssignedDriverSummaryBlock({
 
   return (
     <div
-      className={`${flush ? "" : "mt-2 "}rounded-md border border-sky-100 bg-sky-50/70 px-3 py-2 text-sm text-slate-700`}
+      className={`${flush ? "" : "mt-2 "}rounded-md border border-sky-100 bg-sky-50/70 px-2 py-1.5 text-xs leading-5 text-slate-700`}
       data-assigned-driver-summary={String(bookingRecord.id)}
     >
-      <p className="font-semibold text-sky-950">Assigned Driver</p>
-      <div className="mt-1 space-y-1">
-        <p className="break-words">Driver: {driverSummary.name}</p>
-        {driverSummary.contact ? (
-          <p className="break-words">Driver contact: {driverSummary.contact}</p>
-        ) : null}
-        {driverSummary.vehicle ? <p className="break-words">Vehicle: {driverSummary.vehicle}</p> : null}
-        {driverSummary.plate ? <p className="break-words">Car plate: {driverSummary.plate}</p> : null}
-      </div>
+      <p className="font-semibold text-sky-950">Driver: {driverSummary.name}</p>
+      <p className="mt-0.5 truncate text-slate-600">
+        {[driverSummary.contact, driverSummary.vehicle, driverSummary.plate].filter(Boolean).join(" | ") ||
+          "No assigned driver details"}
+      </p>
     </div>
   );
 }
@@ -2163,11 +2159,10 @@ function DispatcherStatusSummaryBlock({
 
   return (
     <div
-      className={`${flush ? "" : "mt-2 "}rounded-md border border-emerald-100 bg-emerald-50/70 px-3 py-2 text-sm text-slate-700`}
+      className={`${flush ? "" : "mt-2 "}rounded-md border border-emerald-100 bg-emerald-50/70 px-2 py-1.5 text-xs leading-5 text-slate-700`}
       data-dispatcher-status-summary={String(bookingRecord.id)}
     >
-      <p className="font-semibold text-emerald-950">Dispatcher Status</p>
-      <p className="mt-1 break-words">Status: {bookingStatusLabel(status)}</p>
+      <p className="font-semibold text-emerald-950">Status: {bookingStatusLabel(status)}</p>
     </div>
   );
 }
@@ -2218,17 +2213,13 @@ function OperationalReadinessSummaryBlock({
 
   return (
     <div
-      className={`${flush ? "" : "mt-2 "}rounded-md border border-amber-100 bg-amber-50/70 px-3 py-2 text-sm text-slate-700`}
+      className={`${flush ? "" : "mt-2 "}rounded-md border border-amber-100 bg-amber-50/70 px-2 py-1.5 text-xs leading-5 text-slate-700`}
       data-operational-readiness-summary={String(bookingRecord.id)}
     >
-      <p className="font-semibold text-amber-950">Operational Readiness</p>
-      <div className="mt-1 space-y-1">
-        <p className="break-words">OTS Proof: {readinessSummary.otsProof}</p>
-        <p className="break-words">
-          Exception / Replacement: {readinessSummary.exceptionReplacement}
-        </p>
-        <p className="text-xs text-slate-500">Mock/local checklist only.</p>
-      </div>
+      <p className="font-semibold text-amber-950">Ops: {readinessSummary.otsProof}</p>
+      <p className="mt-0.5 truncate text-slate-600">
+        Replacement: {readinessSummary.exceptionReplacement}
+      </p>
     </div>
   );
 }
@@ -2246,11 +2237,11 @@ function OperationalCardSection({
 }) {
   return (
     <section
-      className={`border-t border-stone-200 pt-2 first:border-t-0 first:pt-0 ${className}`}
+      className={`border-t border-stone-200 pt-1.5 first:border-t-0 first:pt-0 ${className}`}
       data-operational-card-section={section}
     >
-      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">{title}</p>
-      <div className="mt-1 space-y-1 text-sm text-slate-700">{children}</div>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">{title}</p>
+      <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs leading-5 text-slate-700">{children}</div>
     </section>
   );
 }
@@ -4810,6 +4801,31 @@ function isOperationalBooking(bookingRecord: BookingRecord) {
   return !isLegacyMrLeeBrowserTestBooking(bookingRecord) && !isPersistedBrowserTestBooking(bookingRecord);
 }
 
+function bookingRecordIsCompletedStatus(bookingRecord: BookingRecord) {
+  return clean(bookingRecord.status).toLowerCase() === "completed";
+}
+
+function bookingRecordIsEarlierJob(bookingRecord: BookingRecord, todayKey: string) {
+  const dateKey = getBookingDateKey(bookingRecord);
+
+  return Boolean(dateKey && dateKey !== "1970-01-01" && dateKey < todayKey);
+}
+
+function bookingRecordBelongsInCompletedHistory(bookingRecord: BookingRecord, todayKey: string) {
+  return bookingRecordIsCompletedStatus(bookingRecord) || bookingRecordIsEarlierJob(bookingRecord, todayKey);
+}
+
+function sortBookingHistoryNewestFirst(firstBooking: BookingRecord, secondBooking: BookingRecord) {
+  const firstDate = getBookingDateKey(firstBooking);
+  const secondDate = getBookingDateKey(secondBooking);
+
+  if (firstDate !== secondDate) {
+    return secondDate.localeCompare(firstDate);
+  }
+
+  return normaliseTimeForSort(secondBooking.pickup_time) - normaliseTimeForSort(firstBooking.pickup_time);
+}
+
 function bookingRecordIsCustomerBookingRequest(bookingRecord: BookingRecord) {
   const referenceCandidates = [
     bookingRecord.booking_reference,
@@ -4909,6 +4925,7 @@ function bookingMatchesLocalSearch(bookingRecord: BookingRecord, searchValue: st
     bookingRecord.route_summary,
     bookingRecord.route,
     bookingRecord.driver_name,
+    bookingRecord.status,
     bookingRecord.service_type,
     bookingRecord.route_type,
     bookingRecord.booking_type,
@@ -11437,6 +11454,7 @@ export default function Home() {
   }, [driverSearchTerm, driverProfileDisplayDrivers]);
   const driverDatabaseSearchQuery = clean(driverSearchTerm);
   const operationalBookings = useMemo(() => bookings.filter(isOperationalBooking), [bookings]);
+  const todayKey = toDateKey(new Date());
   const loadBookingsTypedOperationalCardOrderIndex = useMemo(
     () =>
       new Map(
@@ -11787,12 +11805,26 @@ export default function Home() {
         );
       });
   }, [operationalBookings, searchTerm]);
+  const activeDashboardBookings = useMemo(
+    () =>
+      dashboardBookings.filter(
+        (bookingRecord) => !bookingRecordBelongsInCompletedHistory(bookingRecord, todayKey),
+      ),
+    [dashboardBookings, todayKey],
+  );
+  const earlierHistoryDashboardBookings = useMemo(
+    () =>
+      dashboardBookings.filter((bookingRecord) =>
+        bookingRecordBelongsInCompletedHistory(bookingRecord, todayKey),
+      ),
+    [dashboardBookings, todayKey],
+  );
   const completedBookings = useMemo(
     () =>
-      operationalBookings.filter(
-        (bookingRecord) => clean(bookingRecord.status).toLowerCase() === "completed",
-      ),
-    [operationalBookings],
+      operationalBookings
+        .filter((bookingRecord) => bookingRecordBelongsInCompletedHistory(bookingRecord, todayKey))
+        .sort(sortBookingHistoryNewestFirst),
+    [operationalBookings, todayKey],
   );
   const handledCustomerBookingRequestKeySet = useMemo(
     () => new Set(handledCustomerBookingRequestKeys),
@@ -11813,10 +11845,10 @@ export default function Home() {
   );
   const filteredRecentBookings = useMemo(
     () =>
-      operationalBookings.filter((bookingRecord) =>
-        bookingMatchesLocalSearch(bookingRecord, bookingsSearchTerm),
-      ),
-    [operationalBookings, bookingsSearchTerm],
+      operationalBookings
+        .filter((bookingRecord) => !bookingRecordBelongsInCompletedHistory(bookingRecord, todayKey))
+        .filter((bookingRecord) => bookingMatchesLocalSearch(bookingRecord, bookingsSearchTerm)),
+    [operationalBookings, bookingsSearchTerm, todayKey],
   );
   const filteredCompletedBookings = useMemo(
     () =>
@@ -11928,19 +11960,14 @@ export default function Home() {
         parsedDebugBooking.multipleBookingsDetected),
   );
 
-  const todayKey = toDateKey(new Date());
-  const todayBookings = dashboardBookings.filter(
+  const todayBookings = activeDashboardBookings.filter(
     (bookingRecord) => getBookingDateKey(bookingRecord) === todayKey,
   );
-  const upcomingBookings = dashboardBookings.filter(
+  const upcomingBookings = activeDashboardBookings.filter(
     (bookingRecord) => getBookingDateKey(bookingRecord) > todayKey,
-  );
-  const otherBookings = dashboardBookings.filter(
-    (bookingRecord) => getBookingDateKey(bookingRecord) < todayKey,
   );
   const todayBookingDisplayItems = buildLoadBookingsOperationalDisplayItems(todayBookings);
   const upcomingBookingDisplayItems = buildLoadBookingsOperationalDisplayItems(upcomingBookings);
-  const otherBookingDisplayItems = buildLoadBookingsOperationalDisplayItems(otherBookings);
   const customerBookingRequestDisplayItems =
     buildLoadBookingsOperationalDisplayItems(visibleCustomerBookingRequestBookings, {
       useTypedOperationalOrder: true,
@@ -16031,8 +16058,10 @@ export default function Home() {
     <div className="mt-4 rounded-md border border-stone-200 bg-stone-50 p-3">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-slate-800">Recent Bookings</h3>
-          <p className="text-xs text-slate-500">Search only the bookings currently loaded below.</p>
+          <h3 className="text-sm font-semibold text-slate-800">Current / Upcoming Bookings</h3>
+          <p className="text-xs text-slate-500">
+            Earlier pickup dates are moved to Completed / History.
+          </p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row lg:min-w-[460px]">
           <label className="flex-1">
@@ -16041,7 +16070,7 @@ export default function Home() {
               className="h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-base outline-none transition placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
               data-bookings-search-input="true"
               onChange={(event) => setBookingsSearchTerm(event.target.value)}
-              placeholder="Search passenger, company, flight, route, driver"
+              placeholder="Search current/upcoming passenger, company, flight, route, driver"
               type="search"
               value={bookingsSearchTerm}
             />
@@ -16062,11 +16091,11 @@ export default function Home() {
           className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
           data-bookings-search-empty="true"
         >
-          No matching bookings found.
+          No matching current/upcoming bookings found.
         </p>
       ) : null}
       {filteredRecentBookings.length > 0 ? (
-      <div className="mt-3 max-h-[34rem] space-y-2 overflow-auto">
+      <div className="mt-3 max-h-[34rem] space-y-2 overflow-auto" data-current-upcoming-bookings-list="true">
         {filteredRecentBookingDisplayItems.map(({ bookingRecord: savedBooking, operationalCard }) => {
           const routePoints = getRoutePoints(savedBooking);
           const pickup = operationalCard.pickup_address || routePoints[0] || "Pickup";
@@ -16140,8 +16169,8 @@ export default function Home() {
                       <span className="text-xs font-medium text-slate-500">Details</span>
                     </span>
                   </summary>
-                  <div className="mt-2 grid gap-3 border-t border-stone-100 px-2 pt-3" data-recent-operational-body={bookingId}>
-                    <div className="grid gap-3 md:grid-cols-2">
+                  <div className="mt-1.5 grid gap-2 border-t border-stone-100 px-2 pt-2" data-recent-operational-body={bookingId}>
+                    <div className="grid gap-2 md:grid-cols-2">
                       <OperationalCardSection section="booking" title="Booking">
                         {operationalCard.booking_reference ? (
                           <p>Ref: {operationalCard.booking_reference}</p>
@@ -16154,7 +16183,7 @@ export default function Home() {
                         <p className="break-words">Route: {routeText}</p>
                       </OperationalCardSection>
                     </div>
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" data-operational-card-summary-grid={bookingId}>
+                    <div className="grid gap-2 sm:grid-cols-3" data-operational-card-summary-grid={bookingId}>
                       <DispatcherStatusSummaryBlock
                         bookingRecord={savedBooking}
                         flush
@@ -16218,7 +16247,14 @@ export default function Home() {
           );
         })}
       </div>
-      ) : null}
+      ) : (
+        <div
+          className="mt-3 rounded-md border border-dashed border-stone-300 bg-white p-4 text-center text-sm text-slate-500"
+          data-current-upcoming-bookings-empty="true"
+        >
+          No current/upcoming bookings in this search. Earlier jobs are in Completed / History.
+        </div>
+      )}
     </div>
   ) : (
     <div className="mt-4 rounded-md border border-dashed border-stone-300 bg-stone-50 p-6 text-center text-sm text-slate-500">
@@ -16273,20 +16309,25 @@ export default function Home() {
         </div>
       ) : null}
       {completedBookings.length > 0 ? (
-        <div className="mt-4 rounded-md border border-stone-200 bg-stone-50 p-3">
+        <div
+          className="mt-4 rounded-md border border-stone-200 bg-stone-50 p-3"
+          data-completed-history-panel="true"
+        >
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <h3 className="text-sm font-semibold text-slate-800">Completed Bookings</h3>
-              <p className="text-xs text-slate-500">Search completed bookings already loaded in this browser.</p>
+              <h3 className="text-sm font-semibold text-slate-800">Completed / Earlier Jobs</h3>
+              <p className="text-xs text-slate-500">
+                Completed jobs and earlier pickup dates live here, newest first.
+              </p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row lg:min-w-[460px]">
               <label className="flex-1">
-                <span className="sr-only">Search completed bookings</span>
+                <span className="sr-only">Search completed and earlier jobs</span>
                 <input
                   className="h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-base outline-none transition placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
                   data-completed-search-input="true"
                   onChange={(event) => setCompletedSearchTerm(event.target.value)}
-                  placeholder="Search passenger, company, flight, route, driver"
+                  placeholder="Search completed/earlier passenger, company, flight, route, driver, status"
                   type="search"
                   value={completedSearchTerm}
                 />
@@ -16307,11 +16348,14 @@ export default function Home() {
               className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
               data-completed-search-empty="true"
             >
-              No matching completed bookings found.
+              No matching completed/earlier jobs found.
             </p>
           ) : null}
           {filteredCompletedBookings.length > 0 ? (
-          <div className="mt-3 max-h-[32rem] space-y-2 overflow-auto">
+          <div
+            className="mt-3 max-h-[32rem] space-y-2 overflow-auto"
+            data-completed-history-list="true"
+          >
             {filteredCompletedBookingDisplayItems.map(({ bookingRecord: savedBooking, operationalCard }) => {
               const routePoints = getRoutePoints(savedBooking);
               const pickup = operationalCard.pickup_address || routePoints[0] || "Pickup";
@@ -16348,10 +16392,15 @@ export default function Home() {
                   formatPickupDateTime(getBookingDateKey(savedBooking), savedBooking.pickup_time),
                 operationalCard.job_card_display,
               ].filter(Boolean).join(" · ");
+              const isCompletedStatus = bookingRecordIsCompletedStatus(savedBooking);
+              const isEarlierHistoryJob = bookingRecordIsEarlierJob(savedBooking, todayKey);
               return (
                 <article
                   className="rounded-md border border-stone-200 bg-white p-2 text-sm shadow-sm"
                   data-completed-operational-card={bookingId}
+                  data-completed-history-bucket={
+                    isCompletedStatus ? "completed" : isEarlierHistoryJob ? "earlier" : "history"
+                  }
                   key={`completed-${savedBooking.id}`}
                 >
                   <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
@@ -16382,11 +16431,16 @@ export default function Home() {
                           >
                             {bookingStatusLabel(savedBooking.status)}
                           </span>
+                          {!isCompletedStatus && isEarlierHistoryJob ? (
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-slate-200">
+                              Earlier
+                            </span>
+                          ) : null}
                           <span className="text-xs font-medium text-slate-500">Details</span>
                         </span>
                       </summary>
-                      <div className="mt-2 grid gap-3 border-t border-stone-100 px-2 pt-3" data-completed-operational-body={bookingId}>
-                        <div className="grid gap-3 md:grid-cols-2">
+                      <div className="mt-1.5 grid gap-2 border-t border-stone-100 px-2 pt-2" data-completed-operational-body={bookingId}>
+                        <div className="grid gap-2 md:grid-cols-2">
                           <OperationalCardSection section="booking" title="Booking">
                             {operationalCard.job_card_display ? <p>{operationalCard.job_card_display}</p> : null}
                             <p>Booker: {bookerText}</p>
@@ -16396,7 +16450,7 @@ export default function Home() {
                             <p className="break-words">Route: {routeText}</p>
                           </OperationalCardSection>
                         </div>
-                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" data-operational-card-summary-grid={bookingId}>
+                        <div className="grid gap-2 sm:grid-cols-3" data-operational-card-summary-grid={bookingId}>
                           <DispatcherStatusSummaryBlock
                             bookingRecord={savedBooking}
                             flush
@@ -16436,24 +16490,28 @@ export default function Home() {
                         Load this booking
                       </button>
                       {renderBookingCalendarDownloadAction(savedBooking, "completed")}
-                      <button
-                        className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                        data-completed-undo-booking={bookingId}
-                        disabled={completingBookingId === bookingId || deletingCompletedBookingId === bookingId}
-                        onClick={() => undoBookingCompleted(savedBooking)}
-                        type="button"
-                      >
-                        {completingBookingId === bookingId ? "Undoing..." : "Undo completed"}
-                      </button>
-                      <button
-                        className="h-10 rounded-md border border-rose-300 bg-white px-3 text-sm font-semibold text-rose-800 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                        data-completed-delete-booking={bookingId}
-                        disabled={deletingCompletedBookingId === bookingId || completingBookingId === bookingId}
-                        onClick={() => deleteCompletedBooking(savedBooking)}
-                        type="button"
-                      >
-                        {deletingCompletedBookingId === bookingId ? "Deleting..." : "Delete"}
-                      </button>
+                      {isCompletedStatus ? (
+                        <>
+                          <button
+                            className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                            data-completed-undo-booking={bookingId}
+                            disabled={completingBookingId === bookingId || deletingCompletedBookingId === bookingId}
+                            onClick={() => undoBookingCompleted(savedBooking)}
+                            type="button"
+                          >
+                            {completingBookingId === bookingId ? "Undoing..." : "Undo completed"}
+                          </button>
+                          <button
+                            className="h-10 rounded-md border border-rose-300 bg-white px-3 text-sm font-semibold text-rose-800 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                            data-completed-delete-booking={bookingId}
+                            disabled={deletingCompletedBookingId === bookingId || completingBookingId === bookingId}
+                            onClick={() => deleteCompletedBooking(savedBooking)}
+                            type="button"
+                          >
+                            {deletingCompletedBookingId === bookingId ? "Deleting..." : "Delete"}
+                          </button>
+                        </>
+                      ) : null}
                       {bookingCompletionMessage ? (
                         <p
                           className={`rounded-md border px-3 py-2 text-xs ${statusClass(
@@ -33102,9 +33160,9 @@ export default function Home() {
         {activeTab === "completed" ? (
         <section className="rounded-md border border-stone-200 bg-white p-3">
           <div className="mb-3">
-            <h2 className="text-lg font-semibold">Completed</h2>
+            <h2 className="text-lg font-semibold">Completed / History</h2>
             <p className="text-xs text-slate-500">
-              Review completed bookings and undo completion when needed.
+              Review completed jobs and earlier pickup dates in one compact searchable page.
             </p>
           </div>
           {statusPanel}
@@ -34182,8 +34240,8 @@ export default function Home() {
               <p className="text-2xl font-semibold">{upcomingBookings.length}</p>
             </div>
             <div>
-              <p className="text-xs uppercase tracking-wide text-slate-500">Matching</p>
-              <p className="text-2xl font-semibold">{dashboardBookings.length}</p>
+              <p className="text-xs uppercase tracking-wide text-slate-500">History</p>
+              <p className="text-2xl font-semibold">{earlierHistoryDashboardBookings.length}</p>
             </div>
           </div>
 
@@ -34198,10 +34256,28 @@ export default function Home() {
               {renderDashboardBookingSummaries(upcomingBookingDisplayItems, "No upcoming bookings.")}
             </div>
 
-            {otherBookings.length > 0 ? (
-              <div>
-                <h3 className="mb-3 text-base font-semibold">Earlier Bookings</h3>
-                {renderDashboardBookingSummaries(otherBookingDisplayItems, "No earlier bookings.")}
+            {earlierHistoryDashboardBookings.length > 0 ? (
+              <div
+                className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-slate-700"
+                data-dashboard-earlier-history-handoff="true"
+              >
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-900">Earlier Jobs</h3>
+                    <p className="text-xs text-slate-500">
+                      {earlierHistoryDashboardBookings.length} earlier/completed job
+                      {earlierHistoryDashboardBookings.length === 1 ? "" : "s"} moved to Completed / History.
+                    </p>
+                  </div>
+                  <button
+                    className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+                    data-dashboard-open-completed-history="true"
+                    onClick={() => selectAppTab("completed")}
+                    type="button"
+                  >
+                    Open Completed / History
+                  </button>
+                </div>
               </div>
             ) : null}
           </div>

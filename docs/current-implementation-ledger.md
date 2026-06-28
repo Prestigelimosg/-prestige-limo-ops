@@ -61,6 +61,16 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer/driver-visible forbidden data remains blocked from this list path: driver payout, PayNow payout, customer price, billing, invoice, payment, internal admin notes, parser/debug, secrets, raw provider payloads, and mock QA/dev archive data.
 - Guard coverage lives in `scripts/test-admin-load-bookings-crm-fallback-compact-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Bookings Earlier Jobs Completed History Compact
+
+- Past pickup-date jobs now leave Current / Upcoming and move into Completed / History alongside completed jobs.
+- Completed / History is searchable by passenger/company/flight/route/driver/status and sorted newest first.
+- The Dashboard no longer renders earlier booking cards; it shows a compact count plus an `Open Completed / History` handoff.
+- Expanded Current / Upcoming and Completed / History rows use compact detail strips instead of large mini-cards.
+- Earlier non-completed rows do not show `Undo completed` or `Delete` because they are history rows, not completed-status rows.
+- This is UI-only grouping/layout on existing loaded booking data; it does not add routes/APIs, DB writes, env changes, provider sends, GPS/live location, billing/payment/PDF/invoice/payout, calendar sync, parser changes, or shims.
+- Guard coverage lives in `scripts/test-bookings-earlier-history-compact-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Admin New Booking Email Alert Runtime Gate
 
 - A server-side admin Email alert can run after a customer `/book` request is saved, so the owner can receive new-booking alerts without depending on the admin Dashboard or Mac being open.

@@ -210,6 +210,10 @@ const guardChecks = [
     script: "scripts/test-admin-load-bookings-crm-fallback-compact-guard.mjs",
   },
   {
+    label: "bookings earlier jobs completed history compact guard",
+    script: "scripts/test-bookings-earlier-history-compact-guard.mjs",
+  },
+  {
     label: "admin new booking email alert guard",
     script: "scripts/test-admin-new-booking-email-alert-guard.mjs",
   },

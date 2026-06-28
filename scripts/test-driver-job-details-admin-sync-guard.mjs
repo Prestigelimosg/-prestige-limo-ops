@@ -162,13 +162,14 @@ for (const forbidden of [
 }
 
 for (const fragment of [
-  "driver_name, driver_contact, driver_plate_number",
+  "driver_name, driver_contact, driver_plate_number, vehicle_type_or_category",
   "driver_contact: textOrNull(booking.driver_contact)",
   "driver_name: textOrNull(booking.driver_name)",
   "driver_plate_number: textOrNull(booking.driver_plate_number)",
   "driver_contact: textOrNull(row.driver_contact)",
   "driver_name: textOrNull(row.driver_name)",
   "driver_plate_number: textOrNull(row.driver_plate_number)",
+  "vehicle_type_or_category: textOrNull(row.vehicle_type_or_category)",
 ]) {
   assertIncludes(adminBookingAdapter, fragment, `Admin booking adapter driver detail fragment ${fragment}`);
 }

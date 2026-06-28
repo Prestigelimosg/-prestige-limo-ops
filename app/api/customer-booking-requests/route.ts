@@ -4,6 +4,7 @@ import {
   type AdminBookingPersistenceRecord,
 } from "../../../lib/admin-booking-persistence";
 import { customerBookingRequestPersistenceAdapterActor } from "../../../lib/admin-booking-supabase-adapter";
+import { sendAdminNewBookingDevicePushAlert } from "../../../lib/admin-device-push-notification";
 import { sendAdminNewBookingEmailAlert } from "../../../lib/admin-new-booking-email-alert";
 
 export const dynamic = "force-dynamic";
@@ -96,6 +97,12 @@ async function notifyAdminNewBookingRequest(booking: AdminBookingPersistenceReco
     await sendAdminNewBookingEmailAlert(booking);
   } catch {
     // Customer booking intake must not fail because an admin alert channel is unavailable.
+  }
+
+  try {
+    await sendAdminNewBookingDevicePushAlert(booking);
+  } catch {
+    // Customer booking intake must not fail because admin device push is unavailable.
   }
 }
 

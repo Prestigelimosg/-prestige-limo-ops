@@ -64,9 +64,21 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The customer booking request response remains unchanged and customer-safe; an Email alert failure must not make customer booking submission fail.
 - The alert is one-message-per-saved-request, template-only, and includes only admin-safe booking summary fields: reference, customer/account, passenger, contact, pickup time, pickup, drop-off, trip type, and the admin Dashboard URL.
 - The alert must not expose driver payout, PayNow payout, customer price, billing/payment/PDF/invoice, internal admin notes, parser/debug, secrets/tokens, raw provider payloads, GPS/live location, calendar sync, or mock QA/dev archive data.
-- This does not add polling, scheduler, retry loop, batch/blast sending, DB writes beyond the already-approved booking save, Vercel env changes, deploys, provider SDKs, Telegram/WhatsApp/SMS, browser push notifications, GPS/live-location activation, billing/payment/PDF/invoice/payout, or calendar sync.
-- Browser/app push notifications for phone/Mac/admin devices remain a separate future lane requiring explicit device subscription, push-key/env, audit, rollback, and allowlist proof.
+- This does not add polling, scheduler, retry loop, batch/blast sending, DB writes beyond the already-approved booking save, Vercel env changes, deploys, Telegram/WhatsApp/SMS, GPS/live-location activation, billing/payment/PDF/invoice/payout, or calendar sync.
 - Guard coverage lives in `scripts/test-admin-new-booking-email-alert-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+
+### Admin Device Push Notification Runtime Gate
+
+- A browser/device push alert scaffold is now available for admin-owned phone/Mac browser devices so new customer `/book` requests can alert the owner without keeping the Dashboard open.
+- This lane is default-closed and does not activate push delivery until the exact future gate/config is provided and approved: `PRESTIGE_ADMIN_DEVICE_PUSH_ENABLED`, `PRESTIGE_ADMIN_DEVICE_PUSH_VAPID_PUBLIC_KEY`, `PRESTIGE_ADMIN_DEVICE_PUSH_VAPID_PRIVATE_KEY`, `PRESTIGE_ADMIN_DEVICE_PUSH_CONTACT_EMAIL`, `PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED`, `SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY`.
+- Admin device subscriptions are admin-dashboard-only through `GET/POST/PATCH /api/admin-device-push-subscriptions`, same-origin admin boundary checks, and the `admin_device_push_subscriptions` table migration scaffold. The migration is not applied by this commit.
+- The Dashboard `Admin App Notifications` area includes compact `Device Push` controls to enable/disable push for the current admin browser after explicit notification permission; it does not create a duplicate notification page.
+- The customer `/book` request path calls the Email alert helper and device-push helper as separate best-effort side channels after the booking request is saved. Alert failure must never fail customer booking submission.
+- The safe push payload is template-only and lock-screen safe: title `New booking request`, body `New booking request received. Open Dashboard to review.`, URL `/`, and tag `prestige-new-booking-request`.
+- No passenger name, phone, email, booking reference, pickup/drop-off location, raw driver token, provider payload, pricing, payout, billing/payment/PDF/invoice, internal note, parser/debug, secret, GPS, live location, or customer data is exposed in the push payload.
+- No WhatsApp, Telegram, SMS, provider fallback, billing, payment, payout, PDF, GPS, live location, or customer data is exposed by this scaffold. True live in-app screen sync is still a separate realtime lane.
+- No Vercel CLI, Vercel env change, redeploy, DB apply, DB write, provider send, GPS activation, billing/payment/PDF/invoice/payout, calendar sync, or production activation occurred in this scaffold lane.
+- Guard coverage lives in `scripts/test-admin-device-push-notification-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Live Admin Load Bookings Fallback Compact UI Verification
 

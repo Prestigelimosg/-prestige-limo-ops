@@ -313,8 +313,19 @@ assertIncludes(
   "return dateKey >= todayKey ? 0 : 1;",
   "Active jobs monitor prioritizes current and upcoming jobs before older pending rows",
 );
-assertExcludes(appPage, "new Audio(", "Bookings badge sound");
-assertExcludes(appPage, "Notification.requestPermission", "Bookings browser notification");
+const bookingsBadgeScope =
+  sliceBetween(appPage, "const showBookingsRequestBadge", "</nav>") +
+  sliceBetween(
+    appPage,
+    'data-dashboard-new-booking-requests-panel="true"',
+    '<div className="mb-4">{activeJobsMonitorPanel}</div>',
+  );
+assertExcludes(bookingsBadgeScope, "new Audio(", "Bookings badge sound");
+assertExcludes(
+  bookingsBadgeScope,
+  "Notification.requestPermission",
+  "Bookings browser notification",
+);
 
 const typedOperationalFetchIndex = loadBookingsBlock.indexOf(
   "fetchLoadBookingsTypedOperationalDisplayResult(searchParams)",

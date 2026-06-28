@@ -55,6 +55,7 @@ const adminMonthlyInvoiceIssueRecordPdfReadinessApiPath =
 const adminMonthlyInvoiceNumberReservationsApiPath =
   "/api/admin-monthly-invoice-number-reservations";
 const adminAppNotificationsApiPath = "/api/admin-app-notifications";
+const adminDevicePushSubscriptionsApiPath = "/api/admin-device-push-subscriptions";
 const adminCustomerDriverDetailsEmailReviewItemApiPath =
   "/api/admin-customer-driver-details-email-review-item-setup";
 const adminCustomerDriverDetailsEmailSendDisabledApiPath =
@@ -1193,6 +1194,33 @@ type AdminAppNotificationAction = {
   notificationId: string;
   status: AdminAppNotificationUpdateStatus;
 } | null;
+
+type AdminDevicePushStatus =
+  | "idle"
+  | "checking"
+  | "ready"
+  | "enabled"
+  | "disabled"
+  | "unsupported"
+  | "blocked"
+  | "saving"
+  | "error";
+
+type AdminDevicePushReadiness = {
+  enabled?: boolean;
+  public_key?: string | null;
+  ready?: boolean;
+  reason?: string | null;
+};
+
+type AdminDevicePushState = {
+  message: Message | null;
+  publicKey: string | null;
+  status: AdminDevicePushStatus;
+  supported: boolean;
+};
+
+type AdminDevicePushAction = "enable" | "disable" | null;
 
 type AdminMonthlyBillingGroupingReadinessStatus = "ready" | "blocked" | "mixed";
 type AdminMonthlyBillingGroupingReadinessFilter =
@@ -6199,6 +6227,51 @@ function adminAppNotificationFailureMessage(rawError: unknown) {
   return "Saved admin app notification read failed safely.";
 }
 
+function adminDevicePushFailureMessage(rawError: unknown) {
+  const normalizedError =
+    rawError instanceof Error ? clean(rawError.message).toLowerCase() : clean(String(rawError || "")).toLowerCase();
+
+  if (/unsupported|service worker|pushmanager|notification/.test(normalizedError)) {
+    return "This browser does not support admin device push alerts.";
+  }
+
+  if (/permission|denied|blocked/.test(normalizedError)) {
+    return "Device push permission is blocked. Enable notifications in the browser first.";
+  }
+
+  if (/not enabled|configuration|provider/.test(normalizedError)) {
+    return "Admin device push is not enabled or configured on this server yet.";
+  }
+
+  if (/forbidden|internal admin dashboard|verified admin|dispatcher/.test(normalizedError)) {
+    return "Admin device push requires the approved admin dashboard surface.";
+  }
+
+  return "Admin device push setup failed safely.";
+}
+
+function adminDevicePushIsSupported() {
+  return (
+    typeof window !== "undefined" &&
+    "serviceWorker" in navigator &&
+    "PushManager" in window &&
+    "Notification" in window
+  );
+}
+
+function adminDevicePushBase64ToUint8Array(base64String: string) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let index = 0; index < rawData.length; index += 1) {
+    outputArray[index] = rawData.charCodeAt(index);
+  }
+
+  return outputArray;
+}
+
 function adminAppNotificationDisplayLabel(value: string | null | undefined) {
   const cleaned = clean(value);
 
@@ -6493,6 +6566,63 @@ async function updateAdminAppNotificationStatus(
   }
 
   return result.notification as AdminAppNotificationRecord;
+}
+
+async function loadAdminDevicePushReadiness() {
+  const response = await fetch(adminDevicePushSubscriptionsApiPath, {
+    headers: {
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "GET",
+  });
+  const result = await response.json().catch(() => null);
+
+  if (!response.ok || !result?.ok) {
+    throw new Error(result?.error || "Admin device push readiness failed.");
+  }
+
+  return (result.readiness || {}) as AdminDevicePushReadiness;
+}
+
+async function registerAdminDevicePushSubscription(subscription: PushSubscription) {
+  const response = await fetch(adminDevicePushSubscriptionsApiPath, {
+    body: JSON.stringify({
+      device_label: "Admin dashboard device",
+      subscription: subscription.toJSON(),
+    }),
+    headers: {
+      "Content-Type": "application/json",
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "POST",
+  });
+  const result = await response.json().catch(() => null);
+
+  if (!response.ok || !result?.ok) {
+    throw new Error(result?.error || "Admin device push subscription failed.");
+  }
+
+  return result.subscription;
+}
+
+async function revokeAdminDevicePushSubscription(subscription: PushSubscription) {
+  const response = await fetch(adminDevicePushSubscriptionsApiPath, {
+    body: JSON.stringify({
+      subscription: subscription.toJSON(),
+    }),
+    headers: {
+      "Content-Type": "application/json",
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "PATCH",
+  });
+  const result = await response.json().catch(() => null);
+
+  if (!response.ok || !result?.ok) {
+    throw new Error(result?.error || "Admin device push revoke failed.");
+  }
+
+  return result.subscription;
 }
 
 async function loadAdminMapLocationSearchFirstMatch(query: string) {
@@ -8989,6 +9119,14 @@ export default function Home() {
   const [adminAppNotificationReadRevision, setAdminAppNotificationReadRevision] = useState(0);
   const [adminAppNotificationAction, setAdminAppNotificationAction] =
     useState<AdminAppNotificationAction>(null);
+  const [adminDevicePushState, setAdminDevicePushState] = useState<AdminDevicePushState>({
+    message: null,
+    publicKey: null,
+    status: "idle",
+    supported: false,
+  });
+  const [adminDevicePushAction, setAdminDevicePushAction] =
+    useState<AdminDevicePushAction>(null);
   const [completedTripCloseoutReviewMessage, setCompletedTripCloseoutReviewMessage] =
     useState<Message | null>(null);
   const [adminMonthlyBillingGroupingReadState, setAdminMonthlyBillingGroupingReadState] =
@@ -9288,6 +9426,227 @@ export default function Home() {
       cancelled = true;
     };
   }, [activeTab, adminAppNotificationReadRevision]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (activeTab !== "dashboard") {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (!adminDevicePushIsSupported()) {
+      setAdminDevicePushState({
+        message: {
+          tone: "info",
+          text: "This browser does not support admin device push alerts.",
+        },
+        publicKey: null,
+        status: "unsupported",
+        supported: false,
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setAdminDevicePushState((current) => ({
+      ...current,
+      message: {
+        tone: "info",
+        text: "Checking admin device push readiness...",
+      },
+      status: "checking",
+      supported: true,
+    }));
+
+    void (async () => {
+      try {
+        const readiness = await loadAdminDevicePushReadiness();
+
+        if (cancelled) {
+          return;
+        }
+
+        if (!readiness.ready || !clean(readiness.public_key)) {
+          setAdminDevicePushState({
+            message: {
+              tone: "info",
+              text: "Admin device push is not enabled on this server yet.",
+            },
+            publicKey: null,
+            status: readiness.enabled ? "blocked" : "disabled",
+            supported: true,
+          });
+          return;
+        }
+
+        const registration = await navigator.serviceWorker.getRegistration(
+          "/prestige-admin-push-sw.js",
+        );
+        const subscription = await registration?.pushManager.getSubscription();
+
+        if (cancelled) {
+          return;
+        }
+
+        setAdminDevicePushState({
+          message: {
+            tone: subscription ? "success" : "info",
+            text: subscription
+              ? "Device push is enabled for this browser."
+              : "Device push is ready. Enable it on this admin device for new booking alerts.",
+          },
+          publicKey: clean(readiness.public_key),
+          status: subscription ? "enabled" : "ready",
+          supported: true,
+        });
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setAdminDevicePushState({
+          message: {
+            tone: "error",
+            text: adminDevicePushFailureMessage(error),
+          },
+          publicKey: null,
+          status: "error",
+          supported: true,
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab]);
+
+  const handleAdminDevicePushEnable = async () => {
+    if (!adminDevicePushState.supported || !adminDevicePushState.publicKey) {
+      setAdminDevicePushState((current) => ({
+        ...current,
+        message: {
+          tone: "error",
+          text: "Admin device push is not ready on this browser.",
+        },
+      }));
+      return;
+    }
+
+    setAdminDevicePushAction("enable");
+    setAdminDevicePushState((current) => ({
+      ...current,
+      message: {
+        tone: "info",
+        text: "Requesting notification permission for this admin device...",
+      },
+      status: "saving",
+    }));
+
+    try {
+      const permission = await Notification.requestPermission();
+
+      if (permission !== "granted") {
+        throw new Error("Notification permission was blocked.");
+      }
+
+      const registration = await navigator.serviceWorker.register(
+        "/prestige-admin-push-sw.js",
+      );
+      const existingSubscription = await registration.pushManager.getSubscription();
+      const subscription =
+        existingSubscription ??
+        (await registration.pushManager.subscribe({
+          applicationServerKey: adminDevicePushBase64ToUint8Array(
+            adminDevicePushState.publicKey,
+          ),
+          userVisibleOnly: true,
+        }));
+
+      await registerAdminDevicePushSubscription(subscription);
+
+      setAdminDevicePushState((current) => ({
+        ...current,
+        message: {
+          tone: "success",
+          text: "Device push enabled for this admin browser.",
+        },
+        status: "enabled",
+      }));
+    } catch (error) {
+      setAdminDevicePushState((current) => ({
+        ...current,
+        message: {
+          tone: "error",
+          text: adminDevicePushFailureMessage(error),
+        },
+        status: "error",
+      }));
+    } finally {
+      setAdminDevicePushAction(null);
+    }
+  };
+
+  const handleAdminDevicePushDisable = async () => {
+    if (!adminDevicePushState.supported) {
+      return;
+    }
+
+    setAdminDevicePushAction("disable");
+    setAdminDevicePushState((current) => ({
+      ...current,
+      message: {
+        tone: "info",
+        text: "Disabling device push for this browser...",
+      },
+      status: "saving",
+    }));
+
+    try {
+      const registration = await navigator.serviceWorker.getRegistration(
+        "/prestige-admin-push-sw.js",
+      );
+      const subscription = await registration?.pushManager.getSubscription();
+
+      if (!subscription) {
+        setAdminDevicePushState((current) => ({
+          ...current,
+          message: {
+            tone: "info",
+            text: "No device push subscription is active in this browser.",
+          },
+          status: "ready",
+        }));
+        return;
+      }
+
+      await revokeAdminDevicePushSubscription(subscription);
+      await subscription.unsubscribe();
+
+      setAdminDevicePushState((current) => ({
+        ...current,
+        message: {
+          tone: "success",
+          text: "Device push disabled for this browser.",
+        },
+        status: "ready",
+      }));
+    } catch (error) {
+      setAdminDevicePushState((current) => ({
+        ...current,
+        message: {
+          tone: "error",
+          text: adminDevicePushFailureMessage(error),
+        },
+        status: "error",
+      }));
+    } finally {
+      setAdminDevicePushAction(null);
+    }
+  };
 
   const handleAdminAppNotificationStatusUpdate = async (
     notificationId: string,
@@ -32851,6 +33210,60 @@ export default function Home() {
                   Refresh
                 </button>
               </div>
+            </div>
+
+            <div
+              className="mt-2 rounded-md border border-sky-100 bg-white p-2"
+              data-admin-device-push-panel="true"
+              data-admin-device-push-state={adminDevicePushState.status}
+            >
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <h4 className="text-sm font-semibold text-slate-950">Device Push</h4>
+                  <p className="text-xs text-slate-600">
+                    Phone/Mac browser alert for new booking requests. No WhatsApp, SMS, GPS, or billing.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    className="h-8 rounded-md border border-sky-300 bg-white px-3 text-xs font-semibold text-sky-800 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                    data-admin-device-push-enable="true"
+                    disabled={
+                      adminDevicePushAction !== null ||
+                      !adminDevicePushState.supported ||
+                      !adminDevicePushState.publicKey ||
+                      adminDevicePushState.status === "enabled"
+                    }
+                    onClick={handleAdminDevicePushEnable}
+                    type="button"
+                  >
+                    {adminDevicePushAction === "enable" ? "Enabling..." : "Enable"}
+                  </button>
+                  <button
+                    className="h-8 rounded-md border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                    data-admin-device-push-disable="true"
+                    disabled={
+                      adminDevicePushAction !== null ||
+                      !adminDevicePushState.supported ||
+                      adminDevicePushState.status !== "enabled"
+                    }
+                    onClick={handleAdminDevicePushDisable}
+                    type="button"
+                  >
+                    {adminDevicePushAction === "disable" ? "Disabling..." : "Disable"}
+                  </button>
+                </div>
+              </div>
+              {adminDevicePushState.message ? (
+                <div
+                  className={`mt-2 rounded-md border px-2 py-1.5 text-xs ${statusClass(
+                    adminDevicePushState.message.tone,
+                  )}`}
+                  data-admin-device-push-feedback="true"
+                >
+                  {adminDevicePushState.message.text}
+                </div>
+              ) : null}
             </div>
 
             {adminAppNotificationReadState.message ? (

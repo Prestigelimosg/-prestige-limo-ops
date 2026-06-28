@@ -33,6 +33,7 @@ async function loadRouteHarness() {
   const persistencePath = path.join(tempDir, "lib/admin-booking-persistence.js");
   const adapterPath = path.join(tempDir, "lib/admin-booking-supabase-adapter.js");
   const emailAlertPath = path.join(tempDir, "lib/admin-new-booking-email-alert.js");
+  const devicePushAlertPath = path.join(tempDir, "lib/admin-device-push-notification.js");
 
   await mkdir(path.dirname(outputPath), { recursive: true });
   await mkdir(path.dirname(persistencePath), { recursive: true });
@@ -82,6 +83,21 @@ async function loadRouteHarness() {
       "module.exports = { sendAdminNewBookingEmailAlert };",
     ].join("\n"),
   );
+  await writeFile(
+    devicePushAlertPath,
+    [
+      "function mock() { return globalThis.__prestigeCustomerBookingRequestApiMock; }",
+      "async function sendAdminNewBookingDevicePushAlert(booking) {",
+      "  const state = mock();",
+      "  state.devicePushAlertCalls.push(booking);",
+      "  if (state.devicePushAlertThrows) {",
+      "    throw new Error('mock device push failure');",
+      "  }",
+      "  return { ok: false, reason: 'push_gate_closed', status: 'blocked' };",
+      "}",
+      "module.exports = { sendAdminNewBookingDevicePushAlert };",
+    ].join("\n"),
+  );
 
   return {
     cleanup: () => rm(tempDir, { force: true, recursive: true }),
@@ -103,6 +119,8 @@ function installMock(overrides = {}) {
       },
       ok: true,
     },
+    devicePushAlertCalls: [],
+    devicePushAlertThrows: false,
     parseCalls: [],
     parseResult: {
       data: {
@@ -233,6 +251,11 @@ try {
     globalThis.__prestigeCustomerBookingRequestApiMock.alertCalls[0].booking_reference,
     "CUST-SAFE-001",
   );
+  assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.devicePushAlertCalls.length, 1);
+  assert.equal(
+    globalThis.__prestigeCustomerBookingRequestApiMock.devicePushAlertCalls[0].booking_reference,
+    "CUST-SAFE-001",
+  );
   assertSafeCustomerBody(success.body, "short-notice success body");
 
   installMock({
@@ -261,7 +284,37 @@ try {
     },
   });
   assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.alertCalls.length, 1);
+  assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.devicePushAlertCalls.length, 1);
   assertSafeCustomerBody(alertFailureStillSucceeds.body, "alert-failure success body");
+
+  installMock({
+    createResult: {
+      data: {
+        admin_internal_status: "Admin Review Required",
+        booking_reference: "CUST-SAFE-PUSH-FAIL",
+        customer_facing_status: "Request Received",
+        short_notice_review_status: "Admin Review Required",
+      },
+      ok: true,
+    },
+    devicePushAlertThrows: true,
+  });
+  const devicePushFailureStillSucceeds = await readJson(
+    await harness.route.POST(postRequest({ passengerName: "Safe Passenger" })),
+  );
+
+  assert.equal(devicePushFailureStillSucceeds.status, 200);
+  assert.deepEqual(devicePushFailureStillSucceeds.body, {
+    ok: true,
+    request: {
+      booking_reference: "CUST-SAFE-PUSH-FAIL",
+      customer_facing_status: "Request Received",
+      short_notice_review_required: true,
+    },
+  });
+  assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.alertCalls.length, 1);
+  assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.devicePushAlertCalls.length, 1);
+  assertSafeCustomerBody(devicePushFailureStillSucceeds.body, "device-push-failure success body");
 
   installMock({
     createResult: {

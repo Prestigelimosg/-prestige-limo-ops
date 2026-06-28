@@ -2969,6 +2969,69 @@ function formatPrivacySafeRoute(
   return [pickup, ...extraStopParts, dropoff].filter(Boolean).join(" > ");
 }
 
+function bookingTypeIsDeparture(value: string | null | undefined) {
+  const cleaned = clean(value).toUpperCase();
+
+  return normalizeBookingType(value) === "DEP" || /\b(?:DEP|DEPARTURE)\b/.test(cleaned);
+}
+
+function bookingTypeIsArrival(value: string | null | undefined) {
+  const cleaned = clean(value).toUpperCase();
+
+  return /\b(?:MNG|ARR|ARRIVAL|ARRIVING|MEET\s*(?:AND|&)\s*GREET)\b/.test(cleaned);
+}
+
+function appendFlightDetailToLocation(location: string, flight: string) {
+  if (!location || !flight) {
+    return location;
+  }
+
+  if (new RegExp(`\\b${flight.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(location)) {
+    return location;
+  }
+
+  return `${location} (Flight: ${flight})`;
+}
+
+function dispatchCopyLocationFlightParts(
+  bookingValue: Pick<BookingForm, "bookingType" | "flight" | "pickup" | "dropoff">,
+) {
+  const flight = clean(bookingValue.flight);
+  const pickup = clean(bookingValue.pickup);
+  const dropoff = clean(bookingValue.dropoff);
+  const flightLine = flight ? `Flight: ${flight}` : "";
+
+  if (!flight) {
+    return {
+      dropoff,
+      pickup,
+      standaloneFlightLine: "",
+    };
+  }
+
+  if (bookingTypeIsDeparture(bookingValue.bookingType)) {
+    return {
+      dropoff: appendFlightDetailToLocation(dropoff, flight),
+      pickup,
+      standaloneFlightLine: "",
+    };
+  }
+
+  if (bookingTypeIsArrival(bookingValue.bookingType)) {
+    return {
+      dropoff,
+      pickup: appendFlightDetailToLocation(pickup, flight),
+      standaloneFlightLine: "",
+    };
+  }
+
+  return {
+    dropoff,
+    pickup,
+    standaloneFlightLine: flightLine,
+  };
+}
+
 function hasParsedValue(value: unknown) {
   if (Array.isArray(value)) {
     return value.length > 0;
@@ -11459,7 +11522,7 @@ export default function Home() {
   const customerCopyCard = useMemo(() => {
     const serviceType = customerBookingTypeLabel(booking.bookingType);
     const bookingReference = clean(dispatchReleaseWorkflowBookingReference);
-    const flightLine = clean(booking.flight) ? `Flight: ${clean(booking.flight)}` : "";
+    const flightLocationParts = dispatchCopyLocationFlightParts(booking);
     const bookingDriverName = clean(booking.driverName);
     const bookingDriverContact = clean(booking.driverContact);
     const bookingDriverPlate = clean(booking.driverPlate);
@@ -11493,10 +11556,10 @@ export default function Home() {
         serviceType ? `Service: ${serviceType}` : "",
         `Pickup date: ${formatDate(booking.date)}`,
         `Pickup time: ${formatPickupTime(booking.time)}`,
-        clean(booking.pickup) ? `Pickup location: ${clean(booking.pickup)}` : "",
-        clean(booking.dropoff) ? `Drop-off location: ${clean(booking.dropoff)}` : "",
+        flightLocationParts.pickup ? `Pickup location: ${flightLocationParts.pickup}` : "",
+        flightLocationParts.dropoff ? `Drop-off location: ${flightLocationParts.dropoff}` : "",
         `Pax: ${Number(clean(booking.pax)) || 1}`,
-        flightLine,
+        flightLocationParts.standaloneFlightLine,
       ],
       ["DRIVER DETAILS", ...driverLines],
     ];
@@ -11537,18 +11600,23 @@ export default function Home() {
       clean(booking.childSeatRequired) === "yes"
         ? formatChildSeatNote(booking.childSeatCount, booking.childSeatType)
         : "";
-    const flightLine = clean(booking.flight) ? `Flight: ${clean(booking.flight)}` : "";
+    const flightLocationParts = dispatchCopyLocationFlightParts(booking);
+    const driverDispatchRoute = [
+      flightLocationParts.pickup || "Pickup",
+      clean(booking.extraStopLocation),
+      flightLocationParts.dropoff || "Drop-off",
+    ].filter(Boolean).join(" > ");
     const routeLines = isDspItinerary
       ? [
-          flightLine,
-          `Pickup: ${clean(booking.pickup) || "Pickup"}`,
+          flightLocationParts.standaloneFlightLine,
+          `Pickup: ${flightLocationParts.pickup || "Pickup"}`,
           "",
           "Itinerary:",
           ...itineraryDisplayStops.map((stop) => `${stop.time || "Time TBC"} - ${stop.location}`),
         ]
       : [
-          flightLine,
-          route,
+          flightLocationParts.standaloneFlightLine,
+          driverDispatchRoute,
         ];
     const sections = [
       ["DRIVER DISPATCH"],
@@ -11584,7 +11652,6 @@ export default function Home() {
     driverAssignmentDisplayDrivers,
     isDspItinerary,
     itineraryDisplayStops,
-    route,
   ]);
 
   const driverJobLinkMessage = useMemo(() => {
@@ -11592,17 +11659,22 @@ export default function Home() {
       cleanReferenceText(dispatchReleaseWorkflowBookingReference) ||
       cleanReferenceText(activeAdminDriverJobLink?.booking_reference);
     const passengerLine = clean(booking.name) ? `Passenger: ${clean(booking.name)}` : "";
-    const flightLine = clean(booking.flight) ? `Flight: ${clean(booking.flight)}` : "";
+    const flightLocationParts = dispatchCopyLocationFlightParts(booking);
+    const driverJobLinkRoute = [
+      flightLocationParts.pickup || "Pickup",
+      clean(booking.extraStopLocation),
+      flightLocationParts.dropoff || "Drop-off",
+    ].filter(Boolean).join(" > ");
     const routeText = isDspItinerary
       ? [
-          clean(booking.pickup) ? `Pickup: ${clean(booking.pickup)}` : "",
-          clean(booking.dropoff) ? `Drop-off: ${clean(booking.dropoff)}` : "",
+          flightLocationParts.pickup ? `Pickup: ${flightLocationParts.pickup}` : "",
+          flightLocationParts.dropoff ? `Drop-off: ${flightLocationParts.dropoff}` : "",
           "Itinerary:",
           ...itineraryDisplayStops.map((stop) => `${stop.time || "Time TBC"} - ${stop.location}`),
         ]
           .filter(Boolean)
           .join("\n")
-      : route;
+      : driverJobLinkRoute;
     const linkSummary = activeAdminDriverJobLink
       ? [
           `Saved link status: ${activeAdminDriverJobLink.link_status}`,
@@ -11625,15 +11697,15 @@ export default function Home() {
         bookingReference ? `Reference: ${bookingReference}` : "",
         passengerLine,
         formatPickupDateTime(booking.date, booking.time),
-        flightLine,
+        flightLocationParts.standaloneFlightLine,
       ],
       [
         "Pickup:",
-        clean(booking.pickup) || "Pickup",
+        flightLocationParts.pickup || "Pickup",
       ],
       [
         "Drop-off:",
-        clean(booking.dropoff) || "Drop-off",
+        flightLocationParts.dropoff || "Drop-off",
       ],
       [
         "Route:",
@@ -11656,7 +11728,6 @@ export default function Home() {
     dispatchReleaseWorkflowBookingReference,
     isDspItinerary,
     itineraryDisplayStops,
-    route,
   ]);
 
   const generatedDispatchCopyMessages = useMemo(
@@ -32679,13 +32750,20 @@ export default function Home() {
                         {adminDriverJobLinkState.action === "create" ? "Creating..." : "Create Link"}
                       </button>
                       <button
-                        className="min-h-9 rounded-md border border-indigo-300 px-2.5 py-1.5 text-xs font-semibold text-indigo-900 transition hover:bg-indigo-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                        className={`min-h-9 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400 ${
+                          driverJobLinkCopyMessage?.tone === "success"
+                            ? "border-emerald-400 bg-emerald-100 text-emerald-950 shadow-inner ring-2 ring-emerald-200"
+                            : "border-indigo-300 text-indigo-900 hover:bg-indigo-50"
+                        }`}
                         data-copy-driver-job-link-button="true"
+                        data-copy-driver-job-link-copied={
+                          driverJobLinkCopyMessage?.tone === "success" ? "true" : "false"
+                        }
                         disabled={!clean(adminDriverJobLinkState.oneTimeUrl)}
                         onClick={copyDriverJobLink}
                         type="button"
                       >
-                        Copy Link
+                        {driverJobLinkCopyMessage?.tone === "success" ? "Copied" : "Copy Link"}
                       </button>
                       <button
                         className="min-h-9 rounded-md border border-rose-300 px-2.5 py-1.5 text-xs font-semibold text-rose-800 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"

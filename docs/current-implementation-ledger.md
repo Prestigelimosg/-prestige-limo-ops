@@ -212,6 +212,15 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No app smoke, provider send, external notification delivery, GPS/live location, billing/payment/PDF/invoice/payout, env, DB schema, parser, calendar, or duplicate workflow sector was added.
 - Guard coverage lives in `scripts/test-admin-dashboard-live-followup-fixes-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Dispatch Flight Location Copy And Link Feedback
+
+- Departure copies now attach the flight detail to the drop-off location line.
+- Arrival copies now attach the flight detail to the pickup location line.
+- Customer Copy, Driver Dispatch, and Driver Job Link copy reuse the same formatter so the airport-side location is consistent.
+- The Driver Job Link `Copy Link` button now shades green and changes to `Copied` after a successful copy.
+- This is copy/UI-only; it does not change parser behavior, booking saves, driver job link API payloads, DB writes, env values, provider sends, GPS/live location, billing/payment/PDF/invoice/payout, or deploy behavior.
+- Guard coverage lives in `scripts/test-dispatch-flight-location-copy-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Customers Outstanding Review Compact Dropdown
 
 - Outstanding Payments Review now renders each customer as a slim account row with only compact `Open` and `Actions` controls visible by default.

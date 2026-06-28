@@ -302,6 +302,10 @@ const guardChecks = [
     script: "scripts/test-driver-job-details-admin-sync-guard.mjs",
   },
   {
+    label: "dispatch flight-location copy guard",
+    script: "scripts/test-dispatch-flight-location-copy-guard.mjs",
+  },
+  {
     label: "admin dashboard live follow-up fixes guard",
     script: "scripts/test-admin-dashboard-live-followup-fixes-guard.mjs",
   },

@@ -6,11 +6,21 @@ import {
 import {
   getDriverJobStatusPersistenceClientForProduction,
   loadDriverJobPayloadThroughStatusPersistence,
+  saveDriverJobDetailsThroughStatusPersistence,
   saveDriverJobStatusThroughStatusPersistence,
+  type DriverJobProductionDetailsUpdateResult,
   type DriverJobProductionPayloadResult,
   type DriverJobProductionStatusUpdateResult,
   type DriverJobStatusPersistenceClient,
 } from "./driver-job-status-persistence.ts";
+
+export type ProductionDriverJobDetailsUpdateInput = {
+  driverContact?: unknown;
+  driverName?: unknown;
+  driverPlateNumber?: unknown;
+  driverVehicleModel?: unknown;
+  token: string;
+};
 
 export type ProductionDriverJobStatusUpdateInput = {
   completionNote?: unknown;
@@ -68,6 +78,34 @@ export async function getProductionDriverJobPayloadForToken(
 
   return loadDriverJobPayloadThroughStatusPersistence({
     client: clientResult.client,
+    token,
+  });
+}
+
+// Driver acknowledgement persists only safe assigned-driver fields for the
+// verified job token. It does not expose pricing, payout, provider, GPS, or
+// billing fields, and it does not send customer/provider messages.
+export async function applyProductionDriverJobDetailsUpdate({
+  driverContact,
+  driverName,
+  driverPlateNumber,
+  driverVehicleModel,
+  token,
+}: ProductionDriverJobDetailsUpdateInput): Promise<
+  DriverJobProductionDetailsUpdateResult | DriverJobLinkDisabledResult
+> {
+  const clientResult = resolveProductionClient();
+
+  if (!clientResult.ok) {
+    return clientResult;
+  }
+
+  return saveDriverJobDetailsThroughStatusPersistence({
+    client: clientResult.client,
+    driverContact,
+    driverName,
+    driverPlateNumber,
+    driverVehicleModel,
     token,
   });
 }

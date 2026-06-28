@@ -22,7 +22,7 @@ The current source-of-truth modules are:
 1. Driver opens the private `/driver-job/[token]` link for one assigned job.
 2. The page reads a `SafeDriverJobPayload` only.
 3. Driver reviews safe job details: date/time, service, pickup, drop-off, route, waypoints, flight, passenger display, assigned driver name/contact/plate/vehicle model, safe app updates, and safe status history.
-4. Driver enters or confirms driver and vehicle details locally, then uses Save & Acknowledge Job.
+4. Driver enters or confirms driver and vehicle details, then uses Save & Acknowledge Job to persist the safe details through the token-scoped driver details path.
 5. Acknowledgement is required before any status update can be accepted.
 6. Driver can then advance the job only in this order:
 
@@ -76,7 +76,7 @@ Issue reports must create internal app/admin handling only. They must not send T
 
 | Surface | Allowed reporting data |
 | --- | --- |
-| Driver public link | One-job safe payload, local driver/vehicle detail acknowledgement, guarded status buttons, enum-only issue alert, safe app updates, safe status history. |
+| Driver public link | One-job safe payload, token-scoped saved driver/vehicle detail acknowledgement, guarded status buttons, enum-only issue alert, safe app updates, safe status history. |
 | Admin/dispatcher | Saved driver status event summary, latest status, safe status history/timing, operational issue alert summary, source surface, safe actor label. |
 | Customer public surfaces | Only separately approved customer-safe status summaries. No raw driver issue detail or internal handling state without a future approved customer contract. |
 | Persistence/audit | Driver status event value, booking reference, verified driver job link id, driver actor role, source surface, status source, safe note/context only. |

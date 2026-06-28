@@ -18,6 +18,7 @@ import {
 type DriverJobApiBlockedReason =
   | "already_completed"
   | "expired"
+  | "invalid_details"
   | "invalid_status"
   | "out_of_order"
   | "revoked"
@@ -214,6 +215,7 @@ const driverLiveLocationBrowserGpsEnabled =
 const blockedMessages: Record<DriverJobApiBlockedReason, string> = {
   already_completed: "This job is already completed. Contact dispatch if this is incorrect.",
   expired: "This driver job link has expired. Please contact dispatch for a fresh link.",
+  invalid_details: "Driver details were not accepted. Check the name and contact dispatch if this continues.",
   invalid_status: "This status update was not accepted. Please try again or contact dispatch.",
   out_of_order: "Update the previous job status before this one.",
   revoked: "This driver job link is no longer active. Please contact dispatch.",
@@ -233,6 +235,7 @@ function normalizeBlockedReason(value: unknown): DriverJobApiBlockedReason {
     value === "expired" ||
     value === "revoked" ||
     value === "unauthorized" ||
+    value === "invalid_details" ||
     value === "invalid_status" ||
     value === "out_of_order"
     ? value
@@ -250,6 +253,10 @@ function cleanDriverDetails(details: DriverDetails): DriverDetails {
     plate: details.plate.trim().replace(/\s+/g, " "),
     vehicleModel: details.vehicleModel.trim().replace(/\s+/g, " "),
   };
+}
+
+function hasAnyDriverDetails(details: DriverDetails) {
+  return Boolean(details.name || details.contact || details.plate || details.vehicleModel);
 }
 
 function escapeRegExp(value: string) {
@@ -527,6 +534,7 @@ export default function DriverJobPage() {
   const [driverDetailsRaw, setDriverDetailsRaw] = useState("");
   const [detailsFeedback, setDetailsFeedback] = useState<ControlFeedback | null>(null);
   const [parseDetailsFeedback, setParseDetailsFeedback] = useState<ControlFeedback | null>(null);
+  const [savingDriverDetails, setSavingDriverDetails] = useState(false);
   const [savedDriverDetails, setSavedDriverDetails] = useState<DriverDetails | null>(null);
   const [, setActivityLog] = useState<ActivityLogEvent[]>([]);
   const [driverIssueFeedback, setDriverIssueFeedback] = useState<ControlFeedback | null>(null);
@@ -612,12 +620,16 @@ export default function DriverJobPage() {
           return;
         }
 
-        setDriverDetails({
+        const loadedDriverDetails = {
           contact: result.payload.assignedDriver.contact,
           name: result.payload.assignedDriver.name,
           plate: result.payload.assignedDriver.plate,
           vehicleModel: result.payload.assignedDriver.vehicleModel,
-        });
+        };
+
+        setDriverDetails(loadedDriverDetails);
+        setSavedDriverDetails(hasAnyDriverDetails(loadedDriverDetails) ? loadedDriverDetails : null);
+        setAcknowledged(hasAnyDriverDetails(loadedDriverDetails));
         setWorkflowStatus(result.payload.status || "assigned");
         setPageState({ kind: "ready", job: result.payload });
 
@@ -731,7 +743,7 @@ export default function DriverJobPage() {
     });
   }
 
-  function saveAndAcknowledgeJob() {
+  async function saveAndAcknowledgeJob() {
     const nextDetails = cleanDriverDetails(driverDetails);
 
     setDriverDetails(nextDetails);
@@ -754,14 +766,65 @@ export default function DriverJobPage() {
       return;
     }
 
-    setSavedDriverDetails(nextDetails);
-    setAcknowledged(true);
-    setStatusFeedback(null);
+    setSavingDriverDetails(true);
     setDetailsFeedback({
       tone: "success",
-      text: "Driver details saved and job acknowledged.",
+      text: "Saving driver details...",
     });
-    addActivity("Job acknowledged", "Driver and vehicle details were confirmed for this assigned job.");
+
+    try {
+      const response = await fetch(`/api/driver-job/${encodeURIComponent(token)}`, {
+        body: JSON.stringify({
+          driver_contact: nextDetails.contact,
+          driver_name: nextDetails.name,
+          driver_plate_number: nextDetails.plate,
+          driver_vehicle_model: nextDetails.vehicleModel,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "PATCH",
+      });
+      const result = await response.json() as DriverJobApiResponse;
+
+      if (!response.ok || !result.ok) {
+        const blockedReason = result.ok ? "unavailable" : normalizeBlockedReason(result.reason);
+
+        setSavedDriverDetails(null);
+        setDetailsFeedback({
+          tone: "error",
+          text: blockedMessages[blockedReason],
+        });
+        return;
+      }
+
+      const confirmedDetails = cleanDriverDetails({
+        contact: result.payload.assignedDriver.contact || nextDetails.contact,
+        name: result.payload.assignedDriver.name || nextDetails.name,
+        plate: result.payload.assignedDriver.plate || nextDetails.plate,
+        vehicleModel: result.payload.assignedDriver.vehicleModel || nextDetails.vehicleModel,
+      });
+
+      setDriverDetails(confirmedDetails);
+      setSavedDriverDetails(confirmedDetails);
+      setAcknowledged(true);
+      setStatusFeedback(null);
+      setWorkflowStatus(result.payload.status || "assigned");
+      setPageState({ kind: "ready", job: result.payload });
+      setDetailsFeedback({
+        tone: "success",
+        text: "Driver details saved and job acknowledged.",
+      });
+      addActivity("Job acknowledged", "Driver and vehicle details were confirmed for this assigned job.");
+    } catch {
+      setSavedDriverDetails(null);
+      setDetailsFeedback({
+        tone: "error",
+        text: "Driver details could not be saved. Please try again or contact dispatch.",
+      });
+    } finally {
+      setSavingDriverDetails(false);
+    }
   }
 
   async function reportDriverIssue() {
@@ -1060,10 +1123,12 @@ export default function DriverJobPage() {
       const result = await response.json() as DriverJobApiResponse;
 
       if (!result.ok) {
+        const blockedReason = normalizeBlockedReason(result.reason);
+
         setStatusFeedback({
           target: label,
           tone: "error",
-          text: blockedMessages[normalizeBlockedReason(result.reason)],
+          text: blockedMessages[blockedReason],
         });
         return;
       }
@@ -1375,13 +1440,14 @@ export default function DriverJobPage() {
                 </div>
                 <div className="space-y-2">
                   <button
-                    className="h-11 w-full rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition active:bg-slate-700"
+                    className="h-11 w-full rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition active:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                     data-driver-job-save-acknowledge="true"
                     data-driver-primary-step="save-acknowledge"
+                    disabled={savingDriverDetails}
                     onClick={saveAndAcknowledgeJob}
                     type="button"
                   >
-                    Save & Acknowledge Job
+                    {savingDriverDetails ? "Saving..." : "Save & Acknowledge Job"}
                   </button>
                   {detailsFeedback ? (
                     <p

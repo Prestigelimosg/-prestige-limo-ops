@@ -45,6 +45,18 @@ export type DriverJobLinkStatusUpdateResult =
       payload: null;
     };
 
+export type DriverJobLinkDetailsUpdateResult =
+  | {
+      ok: true;
+      reason: "updated";
+      payload: SafeDriverJobPayload;
+    }
+  | {
+      ok: false;
+      reason: DriverJobLinkBlockedReason | "invalid_details";
+      payload: null;
+    };
+
 type ResolveDriverJobLinkInput = {
   token: string;
   links: DriverJobLinkContractRecord[];
@@ -65,6 +77,13 @@ type DriverJobLinkRecordResult =
 
 type ApplyDriverJobStatusUpdateInput = ResolveDriverJobLinkInput & {
   status: string;
+};
+
+type ApplyDriverJobDetailsUpdateInput = ResolveDriverJobLinkInput & {
+  driverContact?: unknown;
+  driverName?: unknown;
+  driverPlateNumber?: unknown;
+  driverVehicleModel?: unknown;
 };
 
 export function getDriverJobPayloadForTokenContract(input: ResolveDriverJobLinkInput): DriverJobLinkPayloadResult {
@@ -136,6 +155,47 @@ export function applyDriverJobStatusUpdateContract(
   };
 }
 
+export function applyDriverJobDetailsUpdateContract(
+  input: ApplyDriverJobDetailsUpdateInput,
+): DriverJobLinkDetailsUpdateResult {
+  const resolvedLink = resolveDriverJobLinkRecord(input);
+
+  if (!resolvedLink.ok) {
+    return {
+      ok: false,
+      reason: resolvedLink.reason,
+      payload: null,
+    };
+  }
+
+  const nextDetails = safeDriverDetailsFromInput(input);
+
+  if (!nextDetails.name) {
+    return {
+      ok: false,
+      reason: "invalid_details",
+      payload: null,
+    };
+  }
+
+  const bookingKey = String(resolvedLink.link.bookingId);
+  const updatedBooking = {
+    ...resolvedLink.booking,
+    driver_contact: nextDetails.contact,
+    driver_name: nextDetails.name,
+    driver_plate_number: nextDetails.plate,
+    driver_vehicle_model: nextDetails.vehicleModel,
+  };
+
+  input.bookingsById[bookingKey] = updatedBooking;
+
+  return {
+    ok: true,
+    reason: "updated",
+    payload: mapBookingToSafeDriverJobPayload(updatedBooking),
+  };
+}
+
 function resolveDriverJobLinkRecord(input: ResolveDriverJobLinkInput): DriverJobLinkRecordResult {
   const tokenHash = safeHashToken(input.token);
 
@@ -199,6 +259,33 @@ function statusEventTime(value: Date | string | number | undefined) {
   const date = value === undefined ? new Date() : new Date(value);
 
   return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+}
+
+function safeDriverDetailsFromInput(input: ApplyDriverJobDetailsUpdateInput) {
+  return {
+    contact: safeDriverDetailText(input.driverContact, 120),
+    name: safeDriverDetailText(input.driverName, 120),
+    plate: safeDriverDetailText(input.driverPlateNumber, 80),
+    vehicleModel: safeDriverDetailText(input.driverVehicleModel, 120),
+  };
+}
+
+function safeDriverDetailText(value: unknown, maxLength: number) {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  const text = value.trim().replace(/\s+/g, " ").slice(0, maxLength);
+
+  if (
+    /\b(?:account|admin|bank|billing|debug|invoice|password|payment|payout|paynow|secret|service_role|token)\b/i.test(
+      text,
+    )
+  ) {
+    return "";
+  }
+
+  return text;
 }
 
 function isRevoked(link: DriverJobLinkContractRecord) {

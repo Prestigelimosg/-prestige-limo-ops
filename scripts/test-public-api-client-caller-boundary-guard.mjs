@@ -130,7 +130,7 @@ for (const phrase of [
   "This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.",
   "`/book` and `/my-bookings` must delegate public API calls to customer-safe adapters instead of owning raw fetch/session plumbing.",
   "Customer client adapters must use `cache: \"no-store\"`, `credentials: \"same-origin\"`, and purpose headers while never manually attaching Cookie, Authorization, customer session-token, admin purpose, or server env-token plumbing.",
-  "`/driver-job/[token]` must keep driver API calls no-store and limited to safe job GET, notification GET, issue-alert POST with `issue_type`, and status PATCH with `status` only.",
+  "`/driver-job/[token]` must keep driver API calls no-store and limited to safe job GET, token-scoped driver-details PATCH, notification GET, issue-alert POST with `issue_type`, and status PATCH with `status` only.",
   "Driver client code must not expose customer price, billing, invoice/payment, payout comparisons, PayNow payout details, internal finance/admin notes, parser/debug internals, token secrets, or mock QA/dev archive fields.",
   "Public client caller contracts must continue coordinating the existing customer booking page API audit, customer booking memory UI contract, and customer portal saved-bookings adapter contract in the preactivation suite.",
   "No Save Booking + CRM change.",
@@ -224,7 +224,7 @@ for (const [label, source] of [
 }
 
 const driverPage = files[driverPagePath];
-assert.equal(countOccurrences(driverPage, "fetch("), 6, "driver page fetch call count");
+assert.equal(countOccurrences(driverPage, "fetch("), 7, "driver page fetch call count");
 assert.equal(countOccurrences(driverPage, 'cache: "no-store"'), 6, "driver page no-store fetch count");
 for (const fragment of [
   "fetch(`/api/driver-job/${encodeURIComponent(token)}`",
@@ -232,6 +232,10 @@ for (const fragment of [
   "fetch(`/api/driver-job/${encodeURIComponent(token)}/issue-alert`",
   "fetch(driverLiveLocationRoute()",
   "fetch(`/api/driver-job/${encodeURIComponent(token)}/status`",
+  "driver_contact: nextDetails.contact",
+  "driver_name: nextDetails.name",
+  "driver_plate_number: nextDetails.plate",
+  "driver_vehicle_model: nextDetails.vehicleModel",
   "body: JSON.stringify({ issue_type: issueChoice.value })",
   "const requestBody: Record<string, unknown> = {\n        status: transitionGuard.status,\n      };",
   "customerVisible !== false",
@@ -245,7 +249,7 @@ for (const fragment of [
 }
 assert.equal(countOccurrences(driverPage, 'method: "POST"'), 2, "driver page POST count");
 assert.equal(countOccurrences(driverPage, 'method: "DELETE"'), 1, "driver page DELETE count");
-assert.equal(countOccurrences(driverPage, 'method: "PATCH"'), 1, "driver page PATCH count");
+assert.equal(countOccurrences(driverPage, 'method: "PATCH"'), 2, "driver page PATCH count");
 assertIncludes(driverPage, "const driverPaymentDetailLinePattern =", "driver page pasted payment-detail filter");
 assertExcludes(driverPage, /credentials\s*:/, "driver page manual credentials");
 assertExcludes(driverPage, forbiddenClientAuthPattern, "driver page manual auth/header/env-token plumbing");

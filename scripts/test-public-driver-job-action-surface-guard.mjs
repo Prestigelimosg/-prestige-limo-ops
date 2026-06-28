@@ -242,7 +242,7 @@ const ledgerSection = sectionBetween(ledger, "### Public Driver Job Action Surfa
 for (const phrase of [
   "Public driver job display/action surfaces are guarded across `/driver-job/[token]`, the driver job status workflow, issue choices, and driver job action routes.",
   "This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.",
-  "The driver page action surface must stay limited to safe job GET, saved app-update GET, issue-alert POST with `issue_type`, and status PATCH with the guarded status value.",
+  "The driver page action surface must stay limited to safe job GET, token-scoped driver-details PATCH, saved app-update GET, issue-alert POST with `issue_type`, and status PATCH with the guarded status value.",
   "Driver status controls must stay limited to OTW, OTS, POB, and Job Completed, coordinated with `guardDriverJobStatusTransition`.",
   "Driver issue choices must stay limited to operational/safety issue values and must not include finance, billing, payment, PayNow, payout, invoice, PDF, parser/debug, internal admin, or mock QA/archive issue types.",
   "Driver app updates and status timing must render only safe fields: `safe_title`, `safe_message`, notification metadata, and status labels/times; visible activity-log and saved-status-history panels stay hidden from the driver page.",
@@ -303,16 +303,20 @@ for (const forbiddenIssuePattern of [
   assertExcludes(issueChoices, forbiddenIssuePattern, "driver issue choices forbidden fields");
 }
 
-assert.equal(countOccurrences(driverPage, "fetch("), 6, "driver page fetch count");
+assert.equal(countOccurrences(driverPage, "fetch("), 7, "driver page fetch count");
 assert.equal(countOccurrences(driverPage, 'cache: "no-store"'), 6, "driver page no-store count");
 assert.equal(countOccurrences(driverPage, 'method: "POST"'), 2, "driver page POST count");
 assert.equal(countOccurrences(driverPage, 'method: "DELETE"'), 1, "driver page DELETE count");
-assert.equal(countOccurrences(driverPage, 'method: "PATCH"'), 1, "driver page PATCH count");
+assert.equal(countOccurrences(driverPage, 'method: "PATCH"'), 2, "driver page PATCH count");
 for (const fragment of [
   "fetch(`/api/driver-job/${encodeURIComponent(token)}`",
   "`/api/driver-job/${encodeURIComponent(token)}/notifications?limit=5&page=1`",
   "fetch(`/api/driver-job/${encodeURIComponent(token)}/issue-alert`",
   "body: JSON.stringify({ issue_type: issueChoice.value })",
+  "driver_contact: nextDetails.contact",
+  "driver_name: nextDetails.name",
+  "driver_plate_number: nextDetails.plate",
+  "driver_vehicle_model: nextDetails.vehicleModel",
   "fetch(driverLiveLocationRoute()",
   "customerVisible !== false",
   "external_send !== false",
@@ -397,7 +401,8 @@ for (const fragment of [
   ".filter((line) => !driverPaymentDetailLinePattern.test(line));",
   "parseDriverDetailsText(driverDetailsRaw)",
   "setDriverDetails((currentDetails) => ({",
-  "setSavedDriverDetails(nextDetails)",
+  "result.payload.assignedDriver",
+  "setSavedDriverDetails(confirmedDetails)",
 ]) {
   assertIncludes(driverPage, fragment, `driver pasted details safe local fragment ${fragment}`);
 }

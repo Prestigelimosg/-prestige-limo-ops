@@ -1,5 +1,11 @@
-import { getDriverJobPayloadForTokenContract } from "../../../../lib/driver-job-link-contract.ts";
-import { getProductionDriverJobPayloadForToken } from "../../../../lib/driver-job-link-production.ts";
+import {
+  applyDriverJobDetailsUpdateContract,
+  getDriverJobPayloadForTokenContract,
+} from "../../../../lib/driver-job-link-contract.ts";
+import {
+  applyProductionDriverJobDetailsUpdate,
+  getProductionDriverJobPayloadForToken,
+} from "../../../../lib/driver-job-link-production.ts";
 import {
   isProductionDriverJobLinkMode,
 } from "../../../../lib/driver-job-link-mode.ts";
@@ -16,11 +22,28 @@ type DriverJobRouteContext = {
 };
 
 const blockedStatusByReason = {
+  already_completed: 409,
   expired: 410,
+  invalid_details: 400,
+  invalid_status: 400,
   not_configured: 503,
+  out_of_order: 409,
   revoked: 403,
   unauthorized: 401,
 } as const;
+
+function readDriverDetailsBody(body: unknown) {
+  const record = body && typeof body === "object" && !Array.isArray(body)
+    ? body as Record<string, unknown>
+    : {};
+
+  return {
+    driverContact: record.driver_contact ?? record.driverContact,
+    driverName: record.driver_name ?? record.driverName,
+    driverPlateNumber: record.driver_plate_number ?? record.driverPlateNumber ?? record.driverPlate,
+    driverVehicleModel: record.driver_vehicle_model ?? record.driverVehicleModel,
+  };
+}
 
 export async function GET(request: Request, context: DriverJobRouteContext) {
   const { token } = await context.params;
@@ -62,6 +85,52 @@ export async function GET(request: Request, context: DriverJobRouteContext) {
   }
 
   // Mock-backed route skeleton only. No Supabase reads, no Driver Database reads, no production token table yet.
+  return Response.json({
+    ok: true,
+    mode: "mock",
+    payload: result.payload,
+  });
+}
+
+export async function PATCH(request: Request, context: DriverJobRouteContext) {
+  const { token } = await context.params;
+  const details = readDriverDetailsBody(await request.json().catch(() => null));
+
+  if (isProductionDriverJobLinkMode()) {
+    const result = await applyProductionDriverJobDetailsUpdate({
+      token,
+      ...details,
+    });
+
+    if (result.ok) {
+      return Response.json({
+        ok: true,
+        mode: "production",
+        payload: result.payload,
+      });
+    }
+
+    return Response.json(result, { status: blockedStatusByReason[result.reason] });
+  }
+
+  const result = applyDriverJobDetailsUpdateContract({
+    token,
+    links: mockDriverJobLinks,
+    bookingsById: mockDriverJobBookingsById,
+    ...details,
+  });
+
+  if (!result.ok) {
+    return Response.json(
+      {
+        ok: false,
+        reason: result.reason,
+        payload: null,
+      },
+      { status: blockedStatusByReason[result.reason] },
+    );
+  }
+
   return Response.json({
     ok: true,
     mode: "mock",

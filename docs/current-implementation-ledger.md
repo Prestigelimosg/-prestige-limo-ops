@@ -177,6 +177,18 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This does not change Vercel env, deploy behavior, DB schema, provider sends/calls, real GPS, broad customer live map, parser behavior, billing/payment/PDF/invoice/payout, calendar sync, or shims.
 - Guard coverage lives in `scripts/test-admin-driver-job-link-api-contract.mjs`.
 
+### Driver Save And Acknowledge Details Admin Sync
+
+- Driver job link `Save & Acknowledge Job` now persists safe driver name/contact/plate/vehicle details through the verified driver job token path.
+- The update is scoped to the resolved driver job token and matching booking reference only; the driver browser cannot choose another booking/customer.
+- The server updates only safe assigned-driver fields on `driver_job_links.safe_link_context` and safe driver detail fields on the matching booking record.
+- Admin Dashboard, Bookings, and Dispatch silently re-read the existing admin-safe booking list every 3 seconds while loaded and merge only driver name/contact/plate into the currently opened booking.
+- Customer Copy and Driver Dispatch can reflect driver-entered details without pressing Refresh or reloading the page.
+- This is not a customer send; admin still reviews Customer Copy before any customer-facing send.
+- The auto-sync uses existing admin-safe booking read paths only and does not add public reads, broad writes, provider sends, Email/Resend/Telegram/WhatsApp/SMS, push sends, live GPS/customer map, billing/payment/PDF/invoice/payout, parser, calendar, or shims.
+- Customer/driver-visible forbidden data remains blocked from this path: driver payout, PayNow payout, customer price, billing, invoice, payment, internal admin notes, parser/debug, secrets, raw provider payloads, and mock QA/dev archive data.
+- Guard coverage lives in `scripts/test-driver-job-details-admin-sync-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Live William Walkthrough CRM And Driver Job Proof
 
 - Evidence marker: `WILLIAM-WALKTHROUGH-20260626074259`.
@@ -1327,7 +1339,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.
 - Customer booking requests may keep the existing guarded `POST` submission path while `GET`, `PUT`, `PATCH`, `DELETE`, `HEAD`, and `OPTIONS` fail closed through `blockedResponse`.
 - Customer saved-booking, booking-memory, booking-status, portal-session, and app-notification methods must stay on their current safe read/auth-required or submit-only boundaries.
-- Driver job methods must stay limited to safe job `GET`, status `PATCH`, notification `GET`/`PATCH`, issue-alert `POST`, setup-only flight ETA `GET`, setup-only acknowledgement `GET`, and blocked driver bidding `GET`/`POST`/`PATCH`.
+- Driver job methods must stay limited to safe job `GET`, safe token-scoped driver-details `PATCH`, status `PATCH`, notification `GET`/`PATCH`, issue-alert `POST`, setup-only flight ETA `GET`, setup-only acknowledgement `GET`, and blocked driver bidding `GET`/`POST`/`PATCH`.
 - Public API method contracts must continue checking blocked or setup-only methods through mocked route harnesses; this guard coordinates those scripts in the preactivation suite.
 - No Save Booking + CRM change.
 - No `/api/admin-saved-bookings` change.
@@ -1429,7 +1441,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.
 - `/book` and `/my-bookings` must delegate public API calls to customer-safe adapters instead of owning raw fetch/session plumbing.
 - Customer client adapters must use `cache: "no-store"`, `credentials: "same-origin"`, and purpose headers while never manually attaching Cookie, Authorization, customer session-token, admin purpose, or server env-token plumbing.
-- `/driver-job/[token]` must keep driver API calls no-store and limited to safe job GET, notification GET, issue-alert POST with `issue_type`, and status PATCH with `status` only.
+- `/driver-job/[token]` must keep driver API calls no-store and limited to safe job GET, token-scoped driver-details PATCH, notification GET, issue-alert POST with `issue_type`, and status PATCH with `status` only.
 - Driver client code must not expose customer price, billing, invoice/payment, payout comparisons, PayNow payout details, internal finance/admin notes, parser/debug internals, token secrets, or mock QA/dev archive fields.
 - Public client caller contracts must continue coordinating the existing customer booking page API audit, customer booking memory UI contract, and customer portal saved-bookings adapter contract in the preactivation suite.
 - No Save Booking + CRM change.
@@ -1753,7 +1765,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Public Driver Job Action Surface Guard Lock
 - Public driver job display/action surfaces are guarded across `/driver-job/[token]`, the driver job status workflow, issue choices, and driver job action routes.
 - This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.
-- The driver page action surface must stay limited to safe job GET, saved app-update GET, issue-alert POST with `issue_type`, and status PATCH with the guarded status value.
+- The driver page action surface must stay limited to safe job GET, token-scoped driver-details PATCH, saved app-update GET, issue-alert POST with `issue_type`, and status PATCH with the guarded status value.
 - Driver status controls must stay limited to OTW, OTS, POB, and Job Completed, coordinated with `guardDriverJobStatusTransition`.
 - Driver issue choices must stay limited to operational/safety issue values and must not include finance, billing, payment, PayNow, payout, invoice, PDF, parser/debug, internal admin, or mock QA/archive issue types.
 - Driver app updates and status timing must render only safe fields: `safe_title`, `safe_message`, notification metadata, and status labels/times; visible activity-log and saved-status-history panels stay hidden from the driver page.
@@ -1799,14 +1811,14 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Driver reporting/status is defined in `docs/driver-reporting-status-contract.md` as the source-of-truth contract for the driver path from safe driver detail acknowledgement to JC.
 - This is a docs/test-only contract lock; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.
 - The driver public path remains one assigned job per secure `/driver-job/[token]` link.
-- Driver input remains local driver/vehicle detail confirmation followed by Save & Acknowledge Job before status updates are accepted.
+- Driver input remains driver/vehicle detail confirmation followed by token-scoped Save & Acknowledge Job before status updates are accepted.
 - Driver workflow status remains exactly `driver_otw -> ots -> pob -> completed`.
 - Driver-facing labels remain exactly OTW -> OTS -> POB -> Job Completed.
 - JC remains the terminal `completed` status; status updates after JC must be rejected.
 - `guardDriverJobStatusTransition` remains the transition gate for invalid, acknowledgement-required, out-of-order, already-completed, and exact-next-step acceptance behavior.
 - Driver issue reports remain enum-only and operational/safety-only: `cannot_find_passenger`, `passenger_no_show`, `passenger_late`, `flight_or_pickup_timing_changed`, `route_or_itinerary_changed`, `vehicle_issue`, `traffic_delay`, `accident_or_safety_concern`, and `other_issue`.
 - Driver issue reports remain internal app/admin handling only; they do not approve Telegram, WhatsApp, SMS, email, provider, or customer sends from the public driver surface.
-- Driver public link data remains limited to the safe one-job payload, local acknowledgement, guarded status buttons, enum-only issue alert, safe app updates, and safe status history.
+- Driver public link data remains limited to the safe one-job payload, token-scoped saved acknowledgement, guarded status buttons, enum-only issue alert, safe app updates, and safe status history.
 - Admin/dispatcher reporting remains limited to saved driver status event summary, latest status, safe status history/timing, operational issue alert summary, source surface, and safe actor label.
 - Customer public surfaces may receive only separately approved customer-safe status summaries; raw driver issue detail and internal handling states remain blocked until a future customer contract approves them.
 - Customers must never see driver payout, PayNow payout, internal admin notes, parser/debug internals, admin finance, or mock QA/dev archive.

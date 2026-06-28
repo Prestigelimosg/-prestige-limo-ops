@@ -23,6 +23,9 @@ export type AdminBookingRecordInput = {
   contact_email?: string | null;
   passenger_name?: string | null;
   passenger_phone?: string | null;
+  driver_contact?: string | null;
+  driver_name?: string | null;
+  driver_plate_number?: string | null;
   pax_count?: number | null;
   luggage_count?: number | null;
   vehicle_type_or_category?: string | null;
@@ -170,6 +173,9 @@ const bookingFields = new Set([
   "contact_email",
   "passenger_name",
   "passenger_phone",
+  "driver_contact",
+  "driver_name",
+  "driver_plate_number",
   "pax_count",
   "luggage_count",
   "vehicle_type_or_category",

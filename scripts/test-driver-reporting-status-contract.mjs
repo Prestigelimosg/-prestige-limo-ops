@@ -40,7 +40,7 @@ const requiredContractFragments = [
   "# Driver Reporting Status Contract",
   "Driver reporting must stay a narrow operational workflow for one assigned job.",
   "Driver opens the private `/driver-job/[token]` link for one assigned job.",
-  "Driver enters or confirms driver and vehicle details locally, then uses Save & Acknowledge Job.",
+  "Driver enters or confirms driver and vehicle details, then uses Save & Acknowledge Job to persist the safe details through the token-scoped driver details path.",
   "Acknowledgement is required before any status update can be accepted.",
   "driver_otw -> ots -> pob -> completed",
   "OTW -> OTS -> POB -> Job Completed",
@@ -222,7 +222,8 @@ for (const fragment of [
 }
 
 for (const fragment of [
-  "setSavedDriverDetails(nextDetails)",
+  "result.payload.assignedDriver",
+  "setSavedDriverDetails(confirmedDetails)",
   "setAcknowledged(true)",
   'text: "Driver details saved and job acknowledged."',
   "guardDriverJobStatusTransition({",

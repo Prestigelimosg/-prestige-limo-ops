@@ -8968,6 +8968,7 @@ export default function Home() {
   const bookingMessageRef = useRef<HTMLTextAreaElement | null>(null);
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const dashboardBookingsInitialLoadAttemptedRef = useRef(false);
+  const bookingAutoSyncInFlightRef = useRef(false);
   const [handledCustomerBookingRequestKeys, setHandledCustomerBookingRequestKeys] = useState<
     string[]
   >(() => {
@@ -9356,6 +9357,33 @@ export default function Home() {
     dashboardBookingsInitialLoadAttemptedRef.current = true;
     void loadBookings("Bookings loaded.");
   }, [activeTab, bookings.length, loading]);
+
+  useEffect(() => {
+    const shouldSyncBookings =
+      activeTab === "dashboard" || activeTab === "bookings" || activeTab === "dispatch";
+
+    if (!shouldSyncBookings || bookings.length === 0) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      if (bookingAutoSyncInFlightRef.current) {
+        return;
+      }
+
+      bookingAutoSyncInFlightRef.current = true;
+      void loadBookings("Bookings synced.", { silent: true }).finally(() => {
+        bookingAutoSyncInFlightRef.current = false;
+      });
+    }, 3 * 1000);
+
+    return () => window.clearInterval(intervalId);
+  }, [
+    activeTab,
+    appliedAdminBookingSnapshotReference,
+    bookings.length,
+    loadedBookingId,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -13595,9 +13623,72 @@ export default function Home() {
     }
   }
 
+  function bookingRecordReferenceCandidates(bookingRecord: BookingRecord) {
+    return [
+      bookingRecord.booking_reference,
+      bookingRecord.id,
+      bookingRecord.flight_no,
+      getBookingDateKey(bookingRecord),
+    ]
+      .map(cleanReferenceText)
+      .filter(Boolean);
+  }
+
+  function findLoadedBookingRecordByReference(
+    records: BookingRecord[],
+    reference: string | number | null | undefined,
+  ) {
+    const targetReference = cleanReferenceText(reference);
+
+    if (!targetReference) {
+      return null;
+    }
+
+    return (
+      records.find((record) =>
+        bookingRecordReferenceCandidates(record).includes(targetReference),
+      ) ?? null
+    );
+  }
+
+  function mergeCurrentBookingDriverDetailsFromRecord(record: BookingRecord | null | undefined) {
+    if (!record) {
+      return;
+    }
+
+    const driverName = clean(record.driver_name);
+    const driverContact = clean(record.driver_contact);
+    const driverPlate = clean(record.driver_plate_number);
+
+    if (!driverName && !driverContact && !driverPlate) {
+      return;
+    }
+
+    setBooking((currentBooking) => {
+      const nextBooking = {
+        ...currentBooking,
+        driverContact: driverContact || currentBooking.driverContact,
+        driverName: driverName || currentBooking.driverName,
+        driverPlate: driverPlate || currentBooking.driverPlate,
+      };
+
+      if (
+        nextBooking.driverContact === currentBooking.driverContact &&
+        nextBooking.driverName === currentBooking.driverName &&
+        nextBooking.driverPlate === currentBooking.driverPlate
+      ) {
+        return currentBooking;
+      }
+
+      return nextBooking;
+    });
+  }
+
   async function loadBookings(successText = "Bookings loaded.", options?: { silent?: boolean }) {
+    const silent = options?.silent === true;
+
     if (typeof fetch !== "function") {
-      if (!options?.silent) {
+      if (!silent) {
         setMessage({
           tone: "error",
           text: "Admin saved booking read API is not available.",
@@ -13606,12 +13697,12 @@ export default function Home() {
       return;
     }
 
-    setLoading(true);
-    if (!options?.silent) {
+    if (!silent) {
+      setLoading(true);
       setMessage({ tone: "info", text: "Loading bookings..." });
+      setLoadBookingsTypedOperationalCardsById({});
+      setLoadBookingsTypedOperationalCardOrder([]);
     }
-    setLoadBookingsTypedOperationalCardsById({});
-    setLoadBookingsTypedOperationalCardOrder([]);
 
     try {
       const searchParams = new URLSearchParams({ limit: "25" });
@@ -13681,11 +13772,17 @@ export default function Home() {
         }
       } else {
         const loadedBookings = sortBookingsNewestFirst(bookingsListResult.bookings);
+        const selectedBookingReference =
+          cleanReferenceText(appliedAdminBookingSnapshotReference) ||
+          cleanReferenceText(loadedBookingId);
 
         setBookings(loadedBookings);
+        mergeCurrentBookingDriverDetailsFromRecord(
+          findLoadedBookingRecordByReference(loadedBookings, selectedBookingReference),
+        );
         setLoadBookingsTypedOperationalCardsById(typedOperationalDisplay?.cardsById ?? {});
         setLoadBookingsTypedOperationalCardOrder(typedOperationalDisplay?.orderedCardIds ?? []);
-        if (!options?.silent) {
+        if (!silent) {
           if (loadedBookings.length === 0) {
             setMessage({ tone: "info", text: "No bookings found." });
           } else {
@@ -13699,12 +13796,14 @@ export default function Home() {
         }
       }
     } catch (error) {
-      if (!options?.silent) {
+      if (!silent) {
         const errorMessage = error instanceof Error ? error.message : "Unknown load error.";
         setMessage({ tone: "error", text: `Load bookings failed: ${errorMessage}` });
       }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }
 

@@ -109,7 +109,7 @@ const contractChecks = [
     label: "public API method surface boundary guard",
     requiredFragments: [
       "driver bidding method contract",
-      "Driver job methods must stay limited to safe job `GET`, status `PATCH`, notification `GET`/`PATCH`, issue-alert `POST`, setup-only flight ETA `GET`, setup-only acknowledgement `GET`, and blocked driver bidding `GET`/`POST`/`PATCH`.",
+      "Driver job methods must stay limited to safe job `GET`, safe token-scoped driver-details `PATCH`, status `PATCH`, notification `GET`/`PATCH`, issue-alert `POST`, setup-only flight ETA `GET`, setup-only acknowledgement `GET`, and blocked driver bidding `GET`/`POST`/`PATCH`.",
       "Public API method surface boundary guard passed",
     ],
     script: "scripts/test-public-api-method-surface-boundary-guard.mjs",
@@ -145,7 +145,7 @@ const contractChecks = [
     label: "public API client caller boundary guard",
     requiredFragments: [
       "driver page fetch call count",
-      "`/driver-job/[token]` must keep driver API calls no-store and limited to safe job GET, notification GET, issue-alert POST with `issue_type`, and status PATCH with `status` only.",
+      "`/driver-job/[token]` must keep driver API calls no-store and limited to safe job GET, token-scoped driver-details PATCH, notification GET, issue-alert POST with `issue_type`, and status PATCH with `status` only.",
       "Public API client caller boundary guard passed",
     ],
     script: "scripts/test-public-api-client-caller-boundary-guard.mjs",
@@ -456,11 +456,31 @@ for (const [label, source] of [
 ]) {
   assertExcludes(source, forbiddenPublicCallerPattern, `${label} bidding caller/secret exposure`);
 }
-assert.equal(countOccurrences(files[driverPagePath], "fetch("), 6, "driver job page fetch count must not grow for bidding");
+assert.equal(countOccurrences(files[driverPagePath], "fetch("), 7, "driver job page fetch count must not grow for bidding");
 assert.equal(
   countOccurrences(files[driverPagePath], 'cache: "no-store"'),
   6,
   "driver job page no-store fetch count must match existing safe callers",
+);
+assertIncludes(
+  files[driverPagePath],
+  "driver_contact: nextDetails.contact",
+  "driver job page approved token-scoped driver details caller",
+);
+assertIncludes(
+  files[driverPagePath],
+  "driver_name: nextDetails.name",
+  "driver job page approved token-scoped driver details caller",
+);
+assertIncludes(
+  files[driverPagePath],
+  "driver_plate_number: nextDetails.plate",
+  "driver job page approved token-scoped driver details caller",
+);
+assertIncludes(
+  files[driverPagePath],
+  "driver_vehicle_model: nextDetails.vehicleModel",
+  "driver job page approved token-scoped driver details caller",
 );
 assertIncludes(
   files[driverPagePath],

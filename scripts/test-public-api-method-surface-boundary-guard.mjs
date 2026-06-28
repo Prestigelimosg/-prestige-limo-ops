@@ -85,11 +85,16 @@ const methodSurfaceChecks = [
   },
   {
     path: "app/api/driver-job/[token]/route.ts",
-    allowedMethods: ["GET"],
+    allowedMethods: ["GET", "PATCH"],
     requiredFragments: [
       "export async function GET(request: Request, context: DriverJobRouteContext)",
+      "export async function PATCH(request: Request, context: DriverJobRouteContext)",
       "getDriverJobPayloadForTokenContract",
       "getProductionDriverJobPayloadForToken",
+      "applyDriverJobDetailsUpdateContract",
+      "applyProductionDriverJobDetailsUpdate",
+      "readDriverDetailsBody",
+      "invalid_details",
     ],
   },
   {
@@ -273,7 +278,7 @@ for (const phrase of [
   "This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.",
   "Customer booking requests may keep the existing guarded `POST` submission path while `GET`, `PUT`, `PATCH`, `DELETE`, `HEAD`, and `OPTIONS` fail closed through `blockedResponse`.",
   "Customer saved-booking, booking-memory, booking-status, portal-session, and app-notification methods must stay on their current safe read/auth-required or submit-only boundaries.",
-  "Driver job methods must stay limited to safe job `GET`, status `PATCH`, notification `GET`/`PATCH`, issue-alert `POST`, setup-only flight ETA `GET`, setup-only acknowledgement `GET`, and blocked driver bidding `GET`/`POST`/`PATCH`.",
+  "Driver job methods must stay limited to safe job `GET`, safe token-scoped driver-details `PATCH`, status `PATCH`, notification `GET`/`PATCH`, issue-alert `POST`, setup-only flight ETA `GET`, setup-only acknowledgement `GET`, and blocked driver bidding `GET`/`POST`/`PATCH`.",
   "Public API method contracts must continue checking blocked or setup-only methods through mocked route harnesses; this guard coordinates those scripts in the preactivation suite.",
   "No Save Booking + CRM change.",
   "No `/api/admin-saved-bookings` change.",

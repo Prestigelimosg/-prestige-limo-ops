@@ -17,6 +17,7 @@ type DriverJobStatusRouteContext = {
 const blockedStatusByReason = {
   already_completed: 409,
   expired: 410,
+  invalid_details: 400,
   invalid_status: 400,
   not_configured: 503,
   out_of_order: 409,

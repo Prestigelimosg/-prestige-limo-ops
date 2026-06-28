@@ -298,6 +298,10 @@ const guardChecks = [
     script: "scripts/test-public-driver-job-action-surface-guard.mjs",
   },
   {
+    label: "driver job details admin sync guard",
+    script: "scripts/test-driver-job-details-admin-sync-guard.mjs",
+  },
+  {
     label: "driver reporting status contract guard",
     script: "scripts/test-driver-reporting-status-contract.mjs",
   },

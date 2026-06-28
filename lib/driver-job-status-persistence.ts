@@ -21,6 +21,7 @@ export const driverJobStatusPersistenceVersion =
 export type DriverJobPersistenceBlockedReason =
   | "already_completed"
   | "expired"
+  | "invalid_details"
   | "invalid_status"
   | "not_configured"
   | "out_of_order"
@@ -38,7 +39,7 @@ export type DriverJobProductionPayloadResult =
       payload: null;
       reason: Exclude<
         DriverJobPersistenceBlockedReason,
-        "already_completed" | "invalid_status" | "out_of_order"
+        "already_completed" | "invalid_details" | "invalid_status" | "out_of_order"
       >;
     };
 
@@ -49,6 +50,18 @@ export type DriverJobProductionStatusUpdateResult =
       payload: SafeDriverJobPayload;
       reason: "updated";
       status: DriverJobStatusUpdate;
+    }
+  | {
+      ok: false;
+      payload: null;
+      reason: DriverJobPersistenceBlockedReason;
+    };
+
+export type DriverJobProductionDetailsUpdateResult =
+  | {
+      ok: true;
+      payload: SafeDriverJobPayload;
+      reason: "updated";
     }
   | {
       ok: false;
@@ -91,6 +104,13 @@ type SaveDriverJobStatusPersistenceInput = LoadDriverJobPersistenceInput & {
   status: string;
 };
 
+type SaveDriverJobDetailsPersistenceInput = LoadDriverJobPersistenceInput & {
+  driverContact?: unknown;
+  driverName?: unknown;
+  driverPlateNumber?: unknown;
+  driverVehicleModel?: unknown;
+};
+
 type LinkResolveResult =
   | {
       link: DriverJobLinkPersistenceRow;
@@ -98,11 +118,11 @@ type LinkResolveResult =
     }
   | {
       ok: false;
-      reason: Exclude<
-        DriverJobPersistenceBlockedReason,
-        "already_completed" | "invalid_status" | "out_of_order"
-      >;
-    };
+    reason: Exclude<
+      DriverJobPersistenceBlockedReason,
+      "already_completed" | "invalid_details" | "invalid_status" | "out_of_order"
+    >;
+  };
 
 type StatusHistoryResult =
   | {
@@ -372,6 +392,15 @@ function safeStatusNoteAndContextFromInput(input: SaveDriverJobStatusPersistence
   };
 }
 
+function safeDriverDetailsFromInput(input: SaveDriverJobDetailsPersistenceInput) {
+  return {
+    contact: safeTextFromDb(input.driverContact, 120),
+    name: safeTextFromDb(input.driverName, 120),
+    plate: safeTextFromDb(input.driverPlateNumber, 80),
+    vehicleModel: safeTextFromDb(input.driverVehicleModel, 120),
+  };
+}
+
 function safeDateTextFromDb(value: unknown) {
   const cleaned = cleanText(value);
 
@@ -414,9 +443,19 @@ function safeWaypointList(value: unknown) {
 function linkBlockedResult(
   reason: Exclude<
     DriverJobPersistenceBlockedReason,
-    "already_completed" | "invalid_status" | "out_of_order"
+    "already_completed" | "invalid_details" | "invalid_status" | "out_of_order"
   >,
 ): DriverJobProductionPayloadResult {
+  return {
+    ok: false,
+    payload: null,
+    reason,
+  };
+}
+
+function detailsBlockedResult(
+  reason: DriverJobPersistenceBlockedReason,
+): DriverJobProductionDetailsUpdateResult {
   return {
     ok: false,
     payload: null,
@@ -716,6 +755,107 @@ export async function loadDriverJobPayloadThroughStatusPersistence(
       statusHistory.statuses,
     ),
     reason: "ok",
+  };
+}
+
+export async function saveDriverJobDetailsThroughStatusPersistence(
+  input: SaveDriverJobDetailsPersistenceInput,
+): Promise<DriverJobProductionDetailsUpdateResult> {
+  const nextDetails = safeDriverDetailsFromInput(input);
+
+  if (!nextDetails.name) {
+    return detailsBlockedResult("invalid_details");
+  }
+
+  const resolvedLink = await resolveLinkForToken(input);
+
+  if (!resolvedLink.ok) {
+    return detailsBlockedResult(resolvedLink.reason);
+  }
+
+  const statusHistory = await loadStatusHistoryForLink(
+    input.client,
+    resolvedLink.link.booking_reference,
+  );
+
+  if (!statusHistory.ok) {
+    return detailsBlockedResult(statusHistory.reason);
+  }
+
+  const safeContext = asRecord(resolvedLink.link.safe_link_context);
+  const currentPayload = asRecord(safeContext.driver_job_payload);
+  const nextDriverJobPayload = {
+    ...currentPayload,
+    assigned_driver_contact: nextDetails.contact,
+    assigned_driver_name: nextDetails.name,
+    assigned_driver_plate: nextDetails.plate,
+    assigned_driver_vehicle_model: nextDetails.vehicleModel,
+    driver_contact: nextDetails.contact,
+    driver_name: nextDetails.name,
+    driver_plate_number: nextDetails.plate,
+    driver_vehicle_model: nextDetails.vehicleModel,
+  };
+  const nextSafeContext = {
+    ...safeContext,
+    driver_acknowledged_at: new Date().toISOString(),
+    driver_job_payload: nextDriverJobPayload,
+  };
+
+  let updatedLink: DriverJobLinkPersistenceRow | null = null;
+
+  if (resolvedLink.link.id) {
+    const { data, error } = await input.client
+      .from("driver_job_links")
+      .update({ safe_link_context: nextSafeContext })
+      .eq("id", resolvedLink.link.id)
+      .select(driverJobLinkSelect)
+      .single();
+
+    if (error) {
+      return detailsBlockedResult("not_configured");
+    }
+
+    updatedLink = toLinkPersistenceRow(asRecord(data));
+  } else {
+    const { data, error } = await input.client
+      .from("driver_job_links")
+      .update({ safe_link_context: nextSafeContext })
+      .eq("booking_reference", resolvedLink.link.booking_reference)
+      .select(driverJobLinkSelect)
+      .single();
+
+    if (error) {
+      return detailsBlockedResult("not_configured");
+    }
+
+    updatedLink = toLinkPersistenceRow(asRecord(data));
+  }
+
+  if (!updatedLink) {
+    return detailsBlockedResult("not_configured");
+  }
+
+  const { error: bookingUpdateError } = await input.client
+    .from("bookings")
+    .update({
+      driver_contact: nextDetails.contact || null,
+      driver_name: nextDetails.name,
+      driver_plate_number: nextDetails.plate || null,
+    })
+    .eq("booking_reference", resolvedLink.link.booking_reference);
+
+  if (bookingUpdateError) {
+    return detailsBlockedResult("not_configured");
+  }
+
+  return {
+    ok: true,
+    payload: payloadForLink(
+      updatedLink,
+      statusHistory.statuses[0]?.status_value || null,
+      statusHistory.statuses,
+    ),
+    reason: "updated",
   };
 }
 

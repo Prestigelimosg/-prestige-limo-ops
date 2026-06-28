@@ -4523,6 +4523,18 @@ function statusClass(tone: Message["tone"]) {
   return "border-slate-200 bg-slate-50 text-slate-700";
 }
 
+function actionFeedbackButtonClass(tone: Message["tone"] | null | undefined, idleClassName: string) {
+  if (tone === "success") {
+    return "border-emerald-400 bg-emerald-100 text-emerald-950 shadow-inner ring-2 ring-emerald-200 hover:bg-emerald-100";
+  }
+
+  if (tone === "error") {
+    return "border-red-300 bg-red-50 text-red-800 shadow-inner ring-2 ring-red-100 hover:bg-red-50";
+  }
+
+  return idleClassName;
+}
+
 function bookingStatusClass(status: string | null) {
   const normalizedStatus = clean(status).toLowerCase();
 
@@ -9974,17 +9986,7 @@ export default function Home() {
         action: silent ? current.action : null,
         link: activeLink,
         loadedReference: bookingReference,
-        message: silent
-          ? current.message
-          : activeLink
-            ? {
-                tone: "success",
-                text: `Loaded active driver job link for ${bookingReference}. Create a fresh link only if the current one should be replaced.`,
-              }
-            : {
-                tone: "info",
-                text: `No active driver job link loaded for ${bookingReference}.`,
-              },
+        message: silent ? current.message : null,
         oneTimeUrl: current.loadedReference === bookingReference ? current.oneTimeUrl : "",
       }));
     } catch (error) {
@@ -21152,6 +21154,162 @@ export default function Home() {
     ? "Midnight Charge shown under Extra Charges - Mock Only"
     : "No Midnight Charge shown - Mock Only";
   const showLegacyExtraChargeQaSections = false;
+  const currentBookingSaveGuardKey = getBookingSaveGuardKey();
+  const bookingSaveSucceededForCurrentDraft =
+    bookingSaveMessage?.tone === "success" &&
+    lastSuccessfulBookingSaveRef.current?.key === currentBookingSaveGuardKey;
+  const bookingSaveButtonTone: Message["tone"] | null = bookingSaveSucceededForCurrentDraft
+    ? "success"
+    : bookingSaveMessage?.tone === "error"
+      ? "error"
+      : null;
+  const bookingSaveButtonLabel = saving
+    ? "Saving..."
+    : bookingSaveSucceededForCurrentDraft
+      ? "Saved"
+      : "Save Booking + CRM";
+  const jobCardFeedback = copyFeedback?.target === "jobCard" ? copyFeedback : null;
+  const customerCopyFeedback = copyFeedback?.target === "customerCopy" ? copyFeedback : null;
+  const driverDispatchFeedback = copyFeedback?.target === "driverDispatch" ? copyFeedback : null;
+  const jobCardCopied = jobCardFeedback?.tone === "success" && /copied/i.test(jobCardFeedback.text);
+  const customerCopyCopied =
+    customerCopyFeedback?.tone === "success" && /copied/i.test(customerCopyFeedback.text);
+  const driverDispatchCopied =
+    driverDispatchFeedback?.tone === "success" && /copied/i.test(driverDispatchFeedback.text);
+  const jobCardEdited = jobCardFeedback?.tone === "success" && /edit saved/i.test(jobCardFeedback.text);
+  const customerCopyEdited =
+    customerCopyFeedback?.tone === "success" && /edit saved/i.test(customerCopyFeedback.text);
+  const driverDispatchEdited =
+    driverDispatchFeedback?.tone === "success" && /edit saved/i.test(driverDispatchFeedback.text);
+  const jobCardCalendarCreated = jobCardCalendarMessage?.tone === "success";
+  const jobCardCalendarButtonTone: Message["tone"] | null = jobCardCalendarCreated
+    ? "success"
+    : jobCardCalendarMessage?.tone === "error"
+      ? "error"
+      : null;
+  const adminCustomerDriverDetailsEmailLoaded =
+    adminCustomerDriverDetailsEmailDisabledSendDisplayState.actionStatus === "loaded";
+  const adminCustomerDriverDetailsEmailSent =
+    adminCustomerDriverDetailsEmailLoaded &&
+    adminCustomerDriverDetailsEmailDisabledSendDisplayState.sendingEnabled &&
+    adminCustomerDriverDetailsEmailDisabledSendDisplayState.external_send;
+  const adminCustomerDriverDetailsEmailButtonTone: Message["tone"] | null =
+    adminCustomerDriverDetailsEmailLoaded
+      ? "success"
+      : adminCustomerDriverDetailsEmailDisabledSendDisplayState.actionStatus === "error"
+        ? "error"
+        : null;
+  const adminCustomerDriverDetailsEmailButtonLabel =
+    adminCustomerDriverDetailsEmailDisabledSendDisplayState.actionStatus === "loading"
+      ? "Checking Email"
+      : adminCustomerDriverDetailsEmailSent
+        ? "Emailed"
+        : adminCustomerDriverDetailsEmailLoaded
+          ? "Email checked"
+          : "Email";
+  const adminCustomerDriverDetailsWhatsAppLoaded =
+    adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState.actionStatus === "loaded";
+  const adminCustomerDriverDetailsWhatsAppSent =
+    adminCustomerDriverDetailsWhatsAppLoaded &&
+    adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState.sendingEnabled &&
+    adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState.external_send;
+  const adminCustomerDriverDetailsWhatsAppButtonTone: Message["tone"] | null =
+    adminCustomerDriverDetailsWhatsAppLoaded
+      ? "success"
+      : adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState.actionStatus === "error"
+        ? "error"
+        : null;
+  const adminCustomerDriverDetailsWhatsAppButtonLabel =
+    adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState.actionStatus === "loading"
+      ? "Checking WhatsApp"
+      : adminCustomerDriverDetailsWhatsAppSent
+        ? "WhatsApp sent"
+        : adminCustomerDriverDetailsWhatsAppLoaded
+          ? "WhatsApp checked"
+          : "WhatsApp";
+  const adminCustomerDriverDetailsSmsLoaded =
+    adminCustomerDriverDetailsSmsDisabledSendDisplayState.actionStatus === "loaded";
+  const adminCustomerDriverDetailsSmsSent =
+    adminCustomerDriverDetailsSmsLoaded &&
+    adminCustomerDriverDetailsSmsDisabledSendDisplayState.sendingEnabled &&
+    adminCustomerDriverDetailsSmsDisabledSendDisplayState.external_send;
+  const adminCustomerDriverDetailsSmsButtonTone: Message["tone"] | null =
+    adminCustomerDriverDetailsSmsLoaded
+      ? "success"
+      : adminCustomerDriverDetailsSmsDisabledSendDisplayState.actionStatus === "error"
+        ? "error"
+        : null;
+  const adminCustomerDriverDetailsSmsButtonLabel =
+    adminCustomerDriverDetailsSmsDisabledSendDisplayState.actionStatus === "loading"
+      ? "Checking SMS"
+      : adminCustomerDriverDetailsSmsSent
+        ? "SMS sent"
+        : adminCustomerDriverDetailsSmsLoaded
+          ? "SMS checked"
+          : "SMS";
+  const adminCustomerDriverDetailsCustomerInAppSent =
+    adminCustomerDriverDetailsCustomerInAppDisplayState.actionStatus === "loaded";
+  const adminCustomerDriverDetailsCustomerInAppButtonTone: Message["tone"] | null =
+    adminCustomerDriverDetailsCustomerInAppSent
+      ? "success"
+      : adminCustomerDriverDetailsCustomerInAppDisplayState.actionStatus === "error"
+        ? "error"
+        : null;
+  const adminCustomerDriverDetailsCustomerInAppButtonLabel =
+    adminCustomerDriverDetailsCustomerInAppDisplayState.actionStatus === "loading"
+      ? "Sending In-App"
+      : adminCustomerDriverDetailsCustomerInAppSent
+        ? "Sent In-App"
+        : "Send In-App";
+  const adminCustomerDriverDetailsDriverInAppSent =
+    adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus === "loaded";
+  const adminCustomerDriverDetailsDriverInAppButtonTone: Message["tone"] | null =
+    adminCustomerDriverDetailsDriverInAppSent
+      ? "success"
+      : adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus === "error"
+        ? "error"
+        : null;
+  const adminCustomerDriverDetailsDriverInAppButtonLabel =
+    adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus === "loading"
+      ? "Sending In-App"
+      : adminCustomerDriverDetailsDriverInAppSent
+        ? "Driver In-App sent"
+        : "Send Driver In-App";
+  const driverJobLinkCreated =
+    adminDriverJobLinkState.message?.tone === "success" &&
+    /created/i.test(adminDriverJobLinkState.message.text);
+  const driverJobLinkRevoked =
+    adminDriverJobLinkState.message?.tone === "success" &&
+    /revoked/i.test(adminDriverJobLinkState.message.text);
+  const driverJobLinkCopied = driverJobLinkCopyMessage?.tone === "success";
+  const driverJobLinkCreateButtonTone: Message["tone"] | null = driverJobLinkCreated
+    ? "success"
+    : adminDriverJobLinkState.message?.tone === "error" &&
+        /create/i.test(adminDriverJobLinkState.message.text)
+      ? "error"
+      : null;
+  const driverJobLinkCopyButtonTone: Message["tone"] | null = driverJobLinkCopied
+    ? "success"
+    : driverJobLinkCopyMessage?.tone === "error"
+      ? "error"
+      : null;
+  const driverJobLinkRevokeButtonTone: Message["tone"] | null = driverJobLinkRevoked
+    ? "success"
+    : adminDriverJobLinkState.message?.tone === "error" &&
+        /revoke/i.test(adminDriverJobLinkState.message.text)
+      ? "error"
+      : null;
+  const driverJobLinkCreateButtonLabel = adminDriverJobLinkState.action === "create"
+    ? "Creating..."
+    : driverJobLinkCreated
+      ? "Created"
+      : "Create Link";
+  const driverJobLinkCopyButtonLabel = driverJobLinkCopied ? "Copied" : "Copy Link";
+  const driverJobLinkRevokeButtonLabel = adminDriverJobLinkState.action === "revoke"
+    ? "Revoking..."
+    : driverJobLinkRevoked
+      ? "Revoked"
+      : "Revoke";
 
   return (
     <main className="admin-ops-shell min-h-screen bg-stone-50 text-slate-950">
@@ -32199,15 +32357,25 @@ export default function Home() {
                       </button>
                     ) : null}
                     <button
-                      className="min-h-10 rounded-md bg-slate-950 px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                      className={`min-h-10 rounded-md px-4 py-1.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:bg-slate-400 ${
+                        actionFeedbackButtonClass(
+                          bookingSaveButtonTone,
+                          "bg-slate-950 text-white hover:bg-slate-800",
+                        )
+                      }`}
                       disabled={saving}
                       onClick={saveBooking}
                       type="button"
                     >
-                      {saving ? "Saving..." : "Save Booking + CRM"}
+                      {bookingSaveButtonLabel}
                     </button>
                     <button
-                      className="min-h-9 rounded-md border border-sky-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-sky-900 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                      className={`min-h-9 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${
+                        actionFeedbackButtonClass(
+                          jobCardCalendarButtonTone,
+                          "border-sky-300 bg-white text-sky-900 hover:bg-sky-50",
+                        )
+                      }`}
                       data-job-card-calendar-action="true"
                       disabled={
                         saving ||
@@ -32219,7 +32387,9 @@ export default function Home() {
                     >
                       {jobCardCalendarAction === "download-calendar"
                         ? "Calendar..."
-                        : "Create Calendar Event"}
+                        : jobCardCalendarCreated
+                          ? "Calendar Created"
+                          : "Create Calendar Event"}
                     </button>
                     {jobCardCopyEditState.isEditing ? (
                       <>
@@ -32242,32 +32412,42 @@ export default function Home() {
                       </>
                     ) : (
                       <button
-                        className="min-h-9 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                        className={`min-h-9 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition ${
+                          actionFeedbackButtonClass(
+                            jobCardEdited ? "success" : null,
+                            "border-slate-300 text-slate-700 hover:bg-slate-50",
+                          )
+                        }`}
                         data-copy-edit-button="jobCard"
                         onClick={() => startCopyEdit("jobCard")}
                         type="button"
                       >
-                        Edit
+                        {jobCardEdited ? "Edited" : "Edit"}
                       </button>
                     )}
                     <button
-                      className="min-h-9 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                      className={`min-h-9 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition ${
+                        actionFeedbackButtonClass(
+                          jobCardCopied ? "success" : jobCardFeedback?.tone === "error" ? "error" : null,
+                          "border-slate-300 text-slate-700 hover:bg-slate-50",
+                        )
+                      }`}
                       data-copy-copy-button="jobCard"
                       onClick={copyJobCard}
                       type="button"
                     >
-                      Copy
+                      {jobCardCopied ? "Copied" : "Copy"}
                     </button>
                   </div>
-                  {copyFeedback?.target === "jobCard" ? (
+                  {jobCardFeedback?.tone === "error" ? (
                     <div
-                      className={`rounded-md border px-2 py-1 text-xs font-medium ${statusClass(copyFeedback.tone)}`}
+                      className={`rounded-md border px-2 py-1 text-xs font-medium ${statusClass(jobCardFeedback.tone)}`}
                       data-copy-feedback="job-card"
                     >
-                      {copyFeedback.text}
+                      {jobCardFeedback.text}
                     </div>
                   ) : null}
-                  {jobCardCalendarMessage ? (
+                  {jobCardCalendarMessage?.tone === "error" ? (
                     <div
                       className={`rounded-md border px-2 py-1 text-xs font-medium ${statusClass(
                         jobCardCalendarMessage.tone,
@@ -32279,19 +32459,18 @@ export default function Home() {
                   ) : null}
                 </div>
               </div>
-              <div
-                className="mb-3 rounded-md border border-amber-200 bg-amber-50/80 px-3 py-2.5 text-sm text-amber-950"
+              <details
+                className="mb-2 rounded-md border border-amber-200 bg-amber-50/80 px-2 py-1 text-sm text-amber-950"
+                data-dispatch-compact-panel="manual-extra-charges"
                 data-manual-extra-charges-review-preview="true"
               >
-                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
-                    Manual Extra Charges Review
-                  </p>
+                <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 rounded px-1 py-1 text-xs font-semibold uppercase tracking-wide text-amber-800 [&::-webkit-details-marker]:hidden">
+                  <span>Manual Extra Charges Review</span>
                   <span className="rounded-full border border-amber-200 bg-white/70 px-2 py-0.5 text-[11px] font-semibold uppercase text-amber-800">
-                    Manual staff entry only
+                    Expand
                   </span>
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2">
+                </summary>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
                   <div className="rounded-md border border-amber-100 bg-white/65 px-2.5 py-2">
                     <p className="text-[11px] font-semibold uppercase text-amber-800">Manual Extra Charges</p>
                     <p className="mt-1 font-semibold text-slate-950" data-manual-extra-charges-review-amount="true">
@@ -32313,7 +32492,7 @@ export default function Home() {
                   statement, payment, PDF, payout, accounting, finance export, storage, API, Supabase,
                   or notification behavior.
                 </p>
-              </div>
+              </details>
               {jobCardCopyEditState.isEditing ? (
                 <textarea
                   aria-label="Edit Job Card Copy"
@@ -32323,12 +32502,20 @@ export default function Home() {
                   value={jobCardCopyEditState.draftText}
                 />
               ) : (
-                <pre
-                  className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-md bg-[#dcf8c6] p-2.5 text-xs leading-5 text-slate-900"
-                  data-copy-preview="jobCard"
+                <details
+                  className="rounded-md border border-slate-200 bg-white px-2 py-1.5"
+                  data-dispatch-compact-panel="job-card-copy-preview"
                 >
-                  {jobCardCopyText}
-                </pre>
+                  <summary className="cursor-pointer list-none text-xs font-semibold text-slate-800 [&::-webkit-details-marker]:hidden">
+                    Preview job card copy
+                  </summary>
+                  <pre
+                    className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-md bg-[#dcf8c6] p-2.5 text-xs leading-5 text-slate-900"
+                    data-copy-preview="jobCard"
+                  >
+                    {jobCardCopyText}
+                  </pre>
+                </details>
               )}
             </div>
 
@@ -32364,41 +32551,51 @@ export default function Home() {
                       </>
                     ) : (
                       <button
-                        className="min-h-9 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                        className={`min-h-9 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition ${
+                          actionFeedbackButtonClass(
+                            customerCopyEdited ? "success" : null,
+                            "border-slate-300 text-slate-700 hover:bg-slate-50",
+                          )
+                        }`}
                         data-copy-edit-button="customerCopy"
                         onClick={() => startCopyEdit("customerCopy")}
                         type="button"
                       >
-                        Edit
+                        {customerCopyEdited ? "Edited" : "Edit"}
                       </button>
                     )}
                     <button
-                      className="min-h-9 rounded-md border border-emerald-300 px-2.5 py-1.5 text-xs font-semibold text-emerald-900 transition hover:bg-emerald-50"
+                      className={`min-h-9 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition ${
+                        actionFeedbackButtonClass(
+                          customerCopyCopied ? "success" : customerCopyFeedback?.tone === "error" ? "error" : null,
+                          "border-emerald-300 text-emerald-900 hover:bg-emerald-50",
+                        )
+                      }`}
                       data-copy-copy-button="customerCopy"
                       onClick={copyCustomerCopy}
                       type="button"
                     >
-                      Copy
+                      {customerCopyCopied ? "Copied" : "Copy"}
                     </button>
                   </div>
-                  {copyFeedback?.target === "customerCopy" ? (
+                  {customerCopyFeedback?.tone === "error" ? (
                     <div
-                      className={`rounded-md border px-2 py-1 text-xs font-medium ${statusClass(copyFeedback.tone)}`}
+                      className={`rounded-md border px-2 py-1 text-xs font-medium ${statusClass(customerCopyFeedback.tone)}`}
                       data-copy-feedback="customer-copy"
                     >
-                      {copyFeedback.text}
+                      {customerCopyFeedback.text}
                     </div>
                   ) : null}
                 </div>
               </div>
               <div
-                className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+                className="mb-2 inline-flex max-w-full rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900"
                 data-customer-live-location-helper="true"
               >
                 {customerLiveLocation.helperText}
               </div>
               <div
-                className="mb-3 flex min-w-0 flex-col gap-1.5 rounded-md border border-emerald-200 bg-emerald-50/70 px-2 py-1.5 text-[11px] leading-4 text-emerald-950"
+                className="mb-2 flex min-w-0 flex-col gap-1.5 rounded-md border border-emerald-200 bg-white px-2 py-1.5 text-[11px] leading-4 text-emerald-950"
                 data-admin-customer-driver-details-email-review-item="true"
                 data-admin-customer-driver-details-email-review-loaded-reference={
                   adminCustomerDriverDetailsEmailReviewLoadedReference
@@ -32452,7 +32649,12 @@ export default function Home() {
                     <div className="mt-1 flex min-w-0 flex-row flex-wrap items-center gap-1.5">
                       <button
                         aria-label={adminCustomerDriverDetailsEmailDisabledSendActionLabel}
-                        className="inline-flex min-h-7 w-auto shrink-0 items-center whitespace-nowrap rounded-sm border border-emerald-200 bg-white px-2 py-1 text-left text-xs font-semibold text-emerald-800 transition hover:border-emerald-300 hover:text-emerald-950 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500"
+                        className={`inline-flex min-h-7 w-auto shrink-0 items-center whitespace-nowrap rounded-sm border px-2 py-1 text-left text-xs font-semibold transition disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500 ${
+                          actionFeedbackButtonClass(
+                            adminCustomerDriverDetailsEmailButtonTone,
+                            "border-emerald-200 bg-white text-emerald-800 hover:border-emerald-300 hover:text-emerald-950",
+                          )
+                        }`}
                         data-admin-customer-driver-details-email-disabled-send-action="true"
                         data-admin-customer-driver-details-email-review-action="true"
                         disabled={!adminCustomerDriverDetailsEmailDisabledSendCanCall}
@@ -32460,14 +32662,16 @@ export default function Home() {
                         title={adminCustomerDriverDetailsEmailDisabledSendActionLabel}
                         type="button"
                       >
-                        {adminCustomerDriverDetailsEmailDisabledSendDisplayState.actionStatus ===
-                        "loading"
-                          ? "Checking Email"
-                          : "Email"}
+                        {adminCustomerDriverDetailsEmailButtonLabel}
                       </button>
                       <button
                         aria-label="Customer driver details WhatsApp - Review WhatsApp to customer"
-                        className="inline-flex min-h-7 w-auto shrink-0 items-center whitespace-nowrap rounded-sm border border-emerald-200 bg-white px-2 py-1 text-left text-xs font-semibold text-emerald-800 transition hover:border-emerald-300 hover:text-emerald-950 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500"
+                        className={`inline-flex min-h-7 w-auto shrink-0 items-center whitespace-nowrap rounded-sm border px-2 py-1 text-left text-xs font-semibold transition disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500 ${
+                          actionFeedbackButtonClass(
+                            adminCustomerDriverDetailsWhatsAppButtonTone,
+                            "border-emerald-200 bg-white text-emerald-800 hover:border-emerald-300 hover:text-emerald-950",
+                          )
+                        }`}
                         data-admin-customer-driver-details-whatsapp-disabled-send-action="true"
                         data-admin-customer-driver-details-whatsapp-disabled-send-action-state={
                           adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState.actionStatus
@@ -32492,14 +32696,16 @@ export default function Home() {
                         title={adminCustomerDriverDetailsWhatsAppDisabledSendActionLabel}
                         type="button"
                       >
-                        {adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState.actionStatus ===
-                        "loading"
-                          ? "Checking WhatsApp"
-                          : "WhatsApp"}
+                        {adminCustomerDriverDetailsWhatsAppButtonLabel}
                       </button>
                       <button
                         aria-label="Customer driver details SMS - Review SMS to customer"
-                        className="inline-flex min-h-7 w-auto shrink-0 items-center whitespace-nowrap rounded-sm border border-emerald-200 bg-white px-2 py-1 text-left text-xs font-semibold text-emerald-800 transition hover:border-emerald-300 hover:text-emerald-950 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500"
+                        className={`inline-flex min-h-7 w-auto shrink-0 items-center whitespace-nowrap rounded-sm border px-2 py-1 text-left text-xs font-semibold transition disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500 ${
+                          actionFeedbackButtonClass(
+                            adminCustomerDriverDetailsSmsButtonTone,
+                            "border-emerald-200 bg-white text-emerald-800 hover:border-emerald-300 hover:text-emerald-950",
+                          )
+                        }`}
                         data-admin-customer-driver-details-sms-disabled-send-action="true"
                         data-admin-customer-driver-details-sms-disabled-send-action-state={
                           adminCustomerDriverDetailsSmsDisabledSendDisplayState.actionStatus
@@ -32524,14 +32730,16 @@ export default function Home() {
                         title={adminCustomerDriverDetailsSmsDisabledSendActionLabel}
                         type="button"
                       >
-                        {adminCustomerDriverDetailsSmsDisabledSendDisplayState.actionStatus ===
-                        "loading"
-                          ? "Checking SMS"
-                          : "SMS"}
+                        {adminCustomerDriverDetailsSmsButtonLabel}
                       </button>
                       <button
                         aria-label="Send Customer In-App update to the customer"
-                        className="inline-flex min-h-7 w-auto shrink-0 items-center whitespace-nowrap rounded-sm border border-emerald-200 bg-white px-2 py-1 text-left text-xs font-semibold text-emerald-800 transition hover:border-emerald-300 hover:text-emerald-950 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500"
+                        className={`inline-flex min-h-7 w-auto shrink-0 items-center whitespace-nowrap rounded-sm border px-2 py-1 text-left text-xs font-semibold transition disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500 ${
+                          actionFeedbackButtonClass(
+                            adminCustomerDriverDetailsCustomerInAppButtonTone,
+                            "border-emerald-200 bg-white text-emerald-800 hover:border-emerald-300 hover:text-emerald-950",
+                          )
+                        }`}
                         data-admin-customer-driver-details-customer-in-app-send-action="true"
                         data-admin-customer-driver-details-customer-in-app-send-action-state={
                           adminCustomerDriverDetailsCustomerInAppDisplayState.actionStatus
@@ -32552,14 +32760,18 @@ export default function Home() {
                         title={adminCustomerDriverDetailsCustomerInAppActionLabel}
                         type="button"
                       >
-                        {adminCustomerDriverDetailsCustomerInAppDisplayState.actionStatus ===
-                        "loading"
-                          ? "Sending In-App"
-                          : "Send In-App"}
+                        {adminCustomerDriverDetailsCustomerInAppButtonLabel}
                       </button>
                     </div>
                   </div>
-                  <div className="flex min-w-0 flex-wrap items-center gap-1.5 lg:max-w-sm lg:justify-end">
+                  <details
+                    className="min-w-0 rounded-md border border-emerald-100 bg-emerald-50/70 px-2 py-1 lg:max-w-sm"
+                    data-dispatch-compact-panel="customer-driver-admin-checks"
+                  >
+                    <summary className="cursor-pointer list-none text-[10px] font-semibold uppercase text-emerald-900 [&::-webkit-details-marker]:hidden">
+                      Admin checks
+                    </summary>
+                    <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 lg:justify-end">
                     <span
                       className={`max-w-full whitespace-nowrap rounded-full px-1.5 py-0.5 text-left text-[10px] font-semibold uppercase ${
                         adminCustomerDriverDetailsEmailReviewReady
@@ -32596,7 +32808,8 @@ export default function Home() {
                     >
                       {adminCustomerDriverDetailsCustomerInAppStatusText}
                     </span>
-                  </div>
+                    </div>
+                  </details>
                 </div>
               </div>
               {customerCopyEditState.isEditing ? (
@@ -32649,25 +32862,44 @@ export default function Home() {
                       </>
                     ) : (
                       <button
-                        className="min-h-9 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                        className={`min-h-9 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition ${
+                          actionFeedbackButtonClass(
+                            driverDispatchEdited ? "success" : null,
+                            "border-slate-300 text-slate-700 hover:bg-slate-50",
+                          )
+                        }`}
                         data-copy-edit-button="driverDispatch"
                         onClick={() => startCopyEdit("driverDispatch")}
                         type="button"
                       >
-                        Edit
+                        {driverDispatchEdited ? "Edited" : "Edit"}
                       </button>
                     )}
                     <button
-                      className="min-h-9 rounded-md border border-sky-300 px-2.5 py-1.5 text-xs font-semibold text-sky-900 transition hover:bg-sky-50"
+                      className={`min-h-9 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition ${
+                        actionFeedbackButtonClass(
+                          driverDispatchCopied
+                            ? "success"
+                            : driverDispatchFeedback?.tone === "error"
+                              ? "error"
+                              : null,
+                          "border-sky-300 text-sky-900 hover:bg-sky-50",
+                        )
+                      }`}
                       data-copy-copy-button="driverDispatch"
                       onClick={copyDraftDriverDispatch}
                       type="button"
                     >
-                      Copy
+                      {driverDispatchCopied ? "Copied" : "Copy"}
                     </button>
                     <button
                       aria-label="Send Driver In-App update to the assigned driver"
-                      className="min-h-9 rounded-md border border-sky-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-sky-900 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-500"
+                      className={`min-h-9 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-500 ${
+                        actionFeedbackButtonClass(
+                          adminCustomerDriverDetailsDriverInAppButtonTone,
+                          "border-sky-300 bg-white text-sky-900 hover:bg-sky-50",
+                        )
+                      }`}
                       data-admin-customer-driver-details-driver-in-app-send-action="true"
                       data-admin-customer-driver-details-driver-in-app-send-action-state={
                         adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus
@@ -32688,26 +32920,30 @@ export default function Home() {
                       title={adminCustomerDriverDetailsDriverInAppActionLabel}
                       type="button"
                     >
-                      {adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus === "loading"
-                        ? "Sending In-App"
-                        : "Send Driver In-App"}
+                      {adminCustomerDriverDetailsDriverInAppButtonLabel}
                     </button>
                   </div>
-                  {copyFeedback?.target === "driverDispatch" ? (
+                  {driverDispatchFeedback?.tone === "error" ? (
                     <div
-                      className={`rounded-md border px-2 py-1 text-xs font-medium ${statusClass(copyFeedback.tone)}`}
+                      className={`rounded-md border px-2 py-1 text-xs font-medium ${statusClass(driverDispatchFeedback.tone)}`}
                       data-copy-feedback="driver-dispatch"
                     >
-                      {copyFeedback.text}
+                      {driverDispatchFeedback.text}
                     </div>
                   ) : null}
-                  <div
-                    className="rounded-md border border-sky-200 bg-sky-50 px-2 py-1 text-xs font-medium text-sky-950"
+                  <details
+                    className="rounded-md border border-sky-100 bg-sky-50/70 px-2 py-1 text-xs font-medium text-sky-950"
+                    data-dispatch-compact-panel="driver-in-app-admin-checks"
                     data-admin-customer-driver-details-driver-in-app-send-status="true"
-                    title={adminCustomerDriverDetailsDriverInAppDisplayState.message}
                   >
-                    {adminCustomerDriverDetailsDriverInAppStatusText}
-                  </div>
+                    <summary
+                      className="cursor-pointer list-none [&::-webkit-details-marker]:hidden"
+                      title={adminCustomerDriverDetailsDriverInAppDisplayState.message}
+                    >
+                      Driver In-App status
+                    </summary>
+                    <p className="mt-1">{adminCustomerDriverDetailsDriverInAppStatusText}</p>
+                  </details>
                 </div>
               </div>
               {driverDispatchCopyEditState.isEditing ? (
@@ -32719,12 +32955,20 @@ export default function Home() {
                   value={driverDispatchCopyEditState.draftText}
                 />
               ) : (
-                <pre
-                  className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-md bg-sky-50 p-2.5 text-xs leading-5 text-slate-900"
-                  data-copy-preview="driverDispatch"
+                <details
+                  className="rounded-md border border-sky-100 bg-white px-2 py-1.5"
+                  data-dispatch-compact-panel="driver-dispatch-copy-preview"
                 >
-                  {driverDispatchCopyText}
-                </pre>
+                  <summary className="cursor-pointer list-none text-xs font-semibold text-sky-950 [&::-webkit-details-marker]:hidden">
+                    Preview assigned-driver copy
+                  </summary>
+                  <pre
+                    className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-md bg-sky-50 p-2.5 text-xs leading-5 text-slate-900"
+                    data-copy-preview="driverDispatch"
+                  >
+                    {driverDispatchCopyText}
+                  </pre>
+                </details>
               )}
             </div>
 
@@ -32741,49 +32985,52 @@ export default function Home() {
                   <div className="flex flex-col items-start gap-2 sm:items-end">
                     <div className="flex flex-wrap gap-2">
                       <button
-                        className="min-h-9 rounded-md bg-indigo-950 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-900 disabled:cursor-not-allowed disabled:bg-slate-300"
+                        className={`min-h-9 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:bg-slate-300 ${
+                          actionFeedbackButtonClass(
+                            driverJobLinkCreateButtonTone,
+                            "border-indigo-950 bg-indigo-950 text-white hover:bg-indigo-900",
+                          )
+                        }`}
                         data-create-driver-job-link-button="true"
                         disabled={adminDriverJobLinkState.action !== null}
                         onClick={createDriverJobLink}
                         type="button"
                       >
-                        {adminDriverJobLinkState.action === "create" ? "Creating..." : "Create Link"}
+                        {driverJobLinkCreateButtonLabel}
                       </button>
                       <button
                         className={`min-h-9 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400 ${
-                          driverJobLinkCopyMessage?.tone === "success"
-                            ? "border-emerald-400 bg-emerald-100 text-emerald-950 shadow-inner ring-2 ring-emerald-200"
-                            : "border-indigo-300 text-indigo-900 hover:bg-indigo-50"
+                          actionFeedbackButtonClass(
+                            driverJobLinkCopyButtonTone,
+                            "border-indigo-300 text-indigo-900 hover:bg-indigo-50",
+                          )
                         }`}
                         data-copy-driver-job-link-button="true"
                         data-copy-driver-job-link-copied={
-                          driverJobLinkCopyMessage?.tone === "success" ? "true" : "false"
+                          driverJobLinkCopied ? "true" : "false"
                         }
                         disabled={!clean(adminDriverJobLinkState.oneTimeUrl)}
                         onClick={copyDriverJobLink}
                         type="button"
                       >
-                        {driverJobLinkCopyMessage?.tone === "success" ? "Copied" : "Copy Link"}
+                        {driverJobLinkCopyButtonLabel}
                       </button>
                       <button
-                        className="min-h-9 rounded-md border border-rose-300 px-2.5 py-1.5 text-xs font-semibold text-rose-800 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                        className={`min-h-9 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 ${
+                          actionFeedbackButtonClass(
+                            driverJobLinkRevokeButtonTone,
+                            "border-rose-300 text-rose-800 hover:bg-rose-50",
+                          )
+                        }`}
                         data-revoke-driver-job-link-button="true"
                         disabled={!activeAdminDriverJobLink || adminDriverJobLinkState.action !== null}
                         onClick={revokeDriverJobLink}
                         type="button"
                       >
-                        {adminDriverJobLinkState.action === "revoke" ? "Revoking..." : "Revoke"}
+                        {driverJobLinkRevokeButtonLabel}
                       </button>
                     </div>
-                    <div
-                      className="rounded-md border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-950"
-                      data-driver-job-link-status="true"
-                    >
-                      {activeAdminDriverJobLink
-                        ? `Active saved link for ${activeAdminDriverJobLink.booking_reference}`
-                        : "No active saved link loaded"}
-                    </div>
-                    {driverJobLinkCopyMessage ? (
+                    {driverJobLinkCopyMessage?.tone === "error" ? (
                       <div
                         className={`rounded-md border px-2 py-1 text-xs font-medium ${statusClass(
                           driverJobLinkCopyMessage.tone,
@@ -32793,7 +33040,7 @@ export default function Home() {
                         {driverJobLinkCopyMessage.text}
                       </div>
                     ) : null}
-                    {adminDriverJobLinkState.message ? (
+                    {adminDriverJobLinkState.message?.tone === "error" ? (
                       <div
                         className={`rounded-md border px-2 py-1 text-xs font-medium ${statusClass(
                           adminDriverJobLinkState.message.tone,
@@ -32805,12 +33052,21 @@ export default function Home() {
                     ) : null}
                   </div>
                 </div>
-                <pre
-                  className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-md bg-indigo-50 p-2.5 text-xs leading-5 text-slate-900"
-                  data-copy-preview="driverJobLink"
+                <details
+                  className="rounded-md border border-indigo-100 bg-white px-2 py-1.5"
+                  data-dispatch-compact-panel="driver-job-link-preview"
+                  data-driver-job-link-preview-disclosure="true"
                 >
-                  {driverJobLinkMessage}
-                </pre>
+                  <summary className="cursor-pointer list-none text-xs font-semibold text-indigo-950 [&::-webkit-details-marker]:hidden">
+                    Preview driver job link copy
+                  </summary>
+                  <pre
+                    className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-md bg-indigo-50 p-2.5 text-xs leading-5 text-slate-900"
+                    data-copy-preview="driverJobLink"
+                  >
+                    {driverJobLinkMessage}
+                  </pre>
+                </details>
               </div>
             ) : null}
 

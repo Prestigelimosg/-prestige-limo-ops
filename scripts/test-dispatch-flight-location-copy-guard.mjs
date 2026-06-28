@@ -96,9 +96,10 @@ for (const fragment of [
 
 for (const fragment of [
   'data-copy-driver-job-link-copied=',
-  'driverJobLinkCopyMessage?.tone === "success"',
-  "border-emerald-400 bg-emerald-100 text-emerald-950",
-  '{driverJobLinkCopyMessage?.tone === "success" ? "Copied" : "Copy Link"}',
+  "driverJobLinkCopied",
+  "driverJobLinkCopyButtonTone",
+  "actionFeedbackButtonClass(",
+  "{driverJobLinkCopyButtonLabel}",
 ]) {
   assertIncludes(driverJobLinkButtonBlock, fragment, `Copy Link copied-state fragment ${fragment}`);
 }

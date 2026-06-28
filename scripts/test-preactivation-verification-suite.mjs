@@ -306,6 +306,10 @@ const guardChecks = [
     script: "scripts/test-dispatch-flight-location-copy-guard.mjs",
   },
   {
+    label: "dispatch action feedback compact guard",
+    script: "scripts/test-dispatch-action-feedback-compact-guard.mjs",
+  },
+  {
     label: "admin dashboard live follow-up fixes guard",
     script: "scripts/test-admin-dashboard-live-followup-fixes-guard.mjs",
   },

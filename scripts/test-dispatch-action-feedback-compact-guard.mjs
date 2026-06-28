@@ -1,0 +1,147 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+
+const appPagePath = "app/page.tsx";
+const ledgerPath = "docs/current-implementation-ledger.md";
+const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
+const guardScript = "scripts/test-dispatch-action-feedback-compact-guard.mjs";
+
+function assertIncludes(source, fragment, label = fragment) {
+  assert.equal(source.includes(fragment), true, `${label} must include ${fragment}.`);
+}
+
+function assertExcludes(source, fragmentOrPattern, label) {
+  const matches =
+    fragmentOrPattern instanceof RegExp
+      ? fragmentOrPattern.test(source)
+      : source.includes(fragmentOrPattern);
+
+  assert.equal(matches, false, `${label} must not include ${fragmentOrPattern}.`);
+}
+
+function sectionBetween(source, startFragment, endFragment) {
+  const start = source.indexOf(startFragment);
+  assert.notEqual(start, -1, `Missing section start: ${startFragment}`);
+  const end = source.indexOf(endFragment, start + startFragment.length);
+  assert.notEqual(end, -1, `Missing section end after ${startFragment}: ${endFragment}`);
+
+  return source.slice(start, end);
+}
+
+const [appPage, ledger, preactivationSuite] = await Promise.all([
+  readFile(appPagePath, "utf8"),
+  readFile(ledgerPath, "utf8"),
+  readFile(preactivationSuitePath, "utf8"),
+]);
+
+const actionFeedbackHelperBlock = sectionBetween(
+  appPage,
+  "function actionFeedbackButtonClass",
+  "function bookingStatusClass",
+);
+const actionFeedbackStateBlock = sectionBetween(
+  appPage,
+  "const currentBookingSaveGuardKey = getBookingSaveGuardKey();",
+  "return (",
+);
+const dispatchCopyUiBlock = sectionBetween(
+  appPage,
+  'data-dispatch-workflow-step="job-card-preview"',
+  'data-dispatch-workflow-step="admin-lower-status"',
+);
+const driverJobLinkLoadBlock = sectionBetween(
+  appPage,
+  "async function refreshAdminDriverJobLinkForReference",
+  "useEffect(() => {",
+);
+const ledgerSection = sectionBetween(ledger, "### Dispatch Action Feedback And Compact Review", "\n### ");
+
+for (const fragment of [
+  "function actionFeedbackButtonClass",
+  "border-emerald-400 bg-emerald-100 text-emerald-950",
+  "border-red-300 bg-red-50 text-red-800",
+]) {
+  assertIncludes(actionFeedbackHelperBlock, fragment, `action feedback helper fragment ${fragment}`);
+}
+
+for (const fragment of [
+  'bookingSaveButtonLabel',
+  '"Saved"',
+  'jobCardEdited ? "Edited" : "Edit"',
+  'customerCopyEdited ? "Edited" : "Edit"',
+  'driverDispatchEdited ? "Edited" : "Edit"',
+  'jobCardCopied ? "Copied" : "Copy"',
+  'customerCopyCopied ? "Copied" : "Copy"',
+  'driverDispatchCopied ? "Copied" : "Copy"',
+  'adminCustomerDriverDetailsEmailSent',
+  '"Emailed"',
+  '"Email checked"',
+  '"WhatsApp checked"',
+  '"SMS checked"',
+  '"Sent In-App"',
+  '"Driver In-App sent"',
+  '"Calendar Created"',
+  '"Created"',
+  '"Revoked"',
+]) {
+  assertIncludes(actionFeedbackStateBlock + dispatchCopyUiBlock, fragment, `button result fragment ${fragment}`);
+}
+
+for (const fragment of [
+  'data-dispatch-compact-panel="manual-extra-charges"',
+  'data-dispatch-compact-panel="job-card-copy-preview"',
+  'data-dispatch-compact-panel="customer-driver-admin-checks"',
+  'data-dispatch-compact-panel="driver-in-app-admin-checks"',
+  'data-dispatch-compact-panel="driver-dispatch-copy-preview"',
+  'data-dispatch-compact-panel="driver-job-link-preview"',
+  'data-driver-job-link-preview-disclosure="true"',
+  'className="mb-2 inline-flex max-w-full rounded-full',
+]) {
+  assertIncludes(dispatchCopyUiBlock, fragment, `compact dispatch fragment ${fragment}`);
+}
+
+for (const fragment of [
+  'driverJobLinkCopyMessage?.tone === "error"',
+  'adminDriverJobLinkState.message?.tone === "error"',
+]) {
+  assertIncludes(dispatchCopyUiBlock, fragment, `driver job link error-only feedback fragment ${fragment}`);
+}
+
+for (const [source, label] of [
+  [appPage, "whole app page"],
+  [driverJobLinkLoadBlock, "driver job link load block"],
+]) {
+  assertExcludes(source, 'data-driver-job-link-status="true"', label);
+  assertExcludes(source, "Loaded active driver job link for", label);
+  assertExcludes(source, "No active driver job link loaded for", label);
+}
+
+for (const [section, label] of [
+  [actionFeedbackHelperBlock, "action feedback helper"],
+  [actionFeedbackStateBlock, "action feedback state"],
+  [dispatchCopyUiBlock, "dispatch compact/action feedback UI"],
+]) {
+  for (const forbiddenPattern of [
+    /\/api\/admin-driver-job-links|\/api\/admin-bookings|fetch\(/i,
+    /process\.env|service_role|createClient/i,
+    /navigator\.geolocation|watchPosition|getCurrentPosition/i,
+    /driver payout|PayNow payout|customer price|internal admin notes|parser\/debug|mock QA|dev archive/i,
+  ]) {
+    assertExcludes(section, forbiddenPattern, `${label} UI-only/privacy boundary`);
+  }
+}
+
+for (const phrase of [
+  "Dispatch action buttons now reuse a common completed-state style so finished actions shade green and switch to result wording.",
+  "Customer Copy, Job Card, Driver Dispatch, Driver Job Link, Email/WhatsApp/SMS checks, and in-app send controls use result labels only when their existing local state confirms success.",
+  "The Driver Job Link card no longer renders the active-link status pill, copied success box, or loaded-active-link banner shown below the buttons; only errors remain as separate feedback.",
+  "Job Card extra charges, Job Card preview, Driver Dispatch preview, Driver Job Link preview, and admin readiness chips are collapsed behind compact disclosure rows.",
+  "This is Dispatch UI-only; it does not change booking saves, driver job link API payloads, provider sends, DB writes, env values, GPS/live location, billing/payment/PDF/invoice/payout, parser behavior, or deploy behavior.",
+  "Guard coverage lives in `scripts/test-dispatch-action-feedback-compact-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",
+]) {
+  assertIncludes(ledgerSection, phrase, `ledger phrase: ${phrase}`);
+}
+
+assertIncludes(preactivationSuite, guardScript, "preactivation dispatch action feedback compact guard registration");
+
+console.log("Dispatch action feedback compact guard passed");

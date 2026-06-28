@@ -221,6 +221,15 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This is copy/UI-only; it does not change parser behavior, booking saves, driver job link API payloads, DB writes, env values, provider sends, GPS/live location, billing/payment/PDF/invoice/payout, or deploy behavior.
 - Guard coverage lives in `scripts/test-dispatch-flight-location-copy-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Dispatch Action Feedback And Compact Review
+
+- Dispatch action buttons now reuse a common completed-state style so finished actions shade green and switch to result wording.
+- Customer Copy, Job Card, Driver Dispatch, Driver Job Link, Email/WhatsApp/SMS checks, and in-app send controls use result labels only when their existing local state confirms success.
+- The Driver Job Link card no longer renders the active-link status pill, copied success box, or loaded-active-link banner shown below the buttons; only errors remain as separate feedback.
+- Job Card extra charges, Job Card preview, Driver Dispatch preview, Driver Job Link preview, and admin readiness chips are collapsed behind compact disclosure rows.
+- This is Dispatch UI-only; it does not change booking saves, driver job link API payloads, provider sends, DB writes, env values, GPS/live location, billing/payment/PDF/invoice/payout, parser behavior, or deploy behavior.
+- Guard coverage lives in `scripts/test-dispatch-action-feedback-compact-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Customers Outstanding Review Compact Dropdown
 
 - Outstanding Payments Review now renders each customer as a slim account row with only compact `Open` and `Actions` controls visible by default.

@@ -182,7 +182,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Driver job link `Save & Acknowledge Job` now persists safe driver name/contact/plate/vehicle details through the verified driver job token path.
 - The update is scoped to the resolved driver job token and matching booking reference only; the driver browser cannot choose another booking/customer.
 - The server updates only safe assigned-driver fields on `driver_job_links.safe_link_context` and safe driver detail fields on the matching booking record.
-- Admin Dashboard, Bookings, and Dispatch silently re-read the existing admin-safe booking list every 3 seconds while loaded and merge only driver name/contact/plate into the currently opened booking.
+- Admin Dashboard, Bookings, and Dispatch silently re-read the existing admin-safe booking list every 3 seconds while loaded and merge only driver name/contact/plate/vehicle into the currently opened booking.
+- Driver-entered vehicle model uses the existing safe booking vehicle display field only after driver details are present; no new DB schema, customer-wide vehicle exposure, provider send, GPS, billing, payout, or env gate is added.
 - Customer Copy and Driver Dispatch can reflect driver-entered details without pressing Refresh or reloading the page.
 - This is not a customer send; admin still reviews Customer Copy before any customer-facing send.
 - The auto-sync uses existing admin-safe booking read paths only and does not add public reads, broad writes, provider sends, Email/Resend/Telegram/WhatsApp/SMS, push sends, live GPS/customer map, billing/payment/PDF/invoice/payout, parser, calendar, or shims.

@@ -390,6 +390,7 @@ type BookingForm = {
   driverName: string;
   driverContact: string;
   driverPlate: string;
+  driverVehicleModel: string;
   customerPriceOverride: string;
   customerPriceOverrideReason: string;
   driverPayoutOverride: string;
@@ -414,6 +415,7 @@ type LoadBookingsOperationalFormFields = Pick<
   | "driverId"
   | "driverName"
   | "driverPlate"
+  | "driverVehicleModel"
   | "dropoff"
   | "extraStopCount"
   | "extraStopLocation"
@@ -2526,6 +2528,7 @@ function createInitialBooking(): BookingForm {
     driverName: "",
     driverContact: "",
     driverPlate: "",
+    driverVehicleModel: "",
     customerPriceOverride: "",
     customerPriceOverrideReason: "",
     driverPayoutOverride: "",
@@ -2561,6 +2564,7 @@ const fieldLabels: Record<keyof BookingForm, string> = {
   driverName: "Driver Name",
   driverContact: "Driver Contact",
   driverPlate: "Driver Car Plate",
+  driverVehicleModel: "Driver Vehicle",
   customerPriceOverride: "Customer price override",
   customerPriceOverrideReason: "Customer override reason",
   driverPayoutOverride: "Driver payout override",
@@ -5043,6 +5047,36 @@ function loadBookingsOperationalDisplayText(value: unknown, maxLength = 500) {
   return text;
 }
 
+function safeDriverVehicleModelFromBookingRecord(
+  bookingRecord: BookingRecord,
+  preferredValue?: string | null,
+) {
+  const hasDriverDetails = Boolean(
+    clean(bookingRecord.driver_name) ||
+      clean(bookingRecord.driver_contact) ||
+      clean(bookingRecord.driver_plate_number),
+  );
+  const vehicleModel =
+    clean(preferredValue) ||
+    clean(bookingRecord.vehicle_type_or_category) ||
+    clean(bookingRecord.vehicle_type) ||
+    clean(bookingRecord.vehicle);
+  const normalized = vehicleModel.toLowerCase();
+
+  if (
+    !hasDriverDetails ||
+    !vehicleModel ||
+    normalized === "avf" ||
+    normalized === "vehicle tbc" ||
+    normalized === "no preference" ||
+    normalized.includes("prestige to advise")
+  ) {
+    return "";
+  }
+
+  return vehicleModel;
+}
+
 function createEmptyLoadBookingsOperationalDisplayCard(): LoadBookingsOperationalDisplayCard {
   return Object.fromEntries(
     loadBookingsOperationalDisplayFieldNames.map((fieldName) => [fieldName, null]),
@@ -5274,6 +5308,10 @@ function bookingRecordToOperationalFormFields(bookingRecord: BookingRecord): Loa
     clean(bookingRecord.vehicle_type) ||
     clean(bookingRecord.vehicle) ||
     "AVF";
+  const driverVehicleModel = safeDriverVehicleModelFromBookingRecord(
+    bookingRecord,
+    vehicleDisplay,
+  );
 
   return {
     company:
@@ -5297,6 +5335,7 @@ function bookingRecordToOperationalFormFields(bookingRecord: BookingRecord): Loa
     driverName: clean(bookingRecord.driver_name),
     driverContact: clean(bookingRecord.driver_contact),
     driverPlate: clean(bookingRecord.driver_plate_number),
+    driverVehicleModel,
     childSeatRequired: childSeatRequired ? "yes" : "",
     childSeatCount: childSeatRequired ? String(normalizeChildSeatCount(true, bookingRecord.child_seat_count)) : "",
     childSeatType: childSeatRequired ? clean(bookingRecord.child_seat_type) : "",
@@ -11334,7 +11373,7 @@ export default function Home() {
     const serviceType = customerBookingTypeLabel(booking.bookingType);
     const bookingReference = clean(dispatchReleaseWorkflowBookingReference);
     const flightLine = clean(booking.flight) ? `Flight: ${clean(booking.flight)}` : "";
-    const carType = clean(assignedDriverRecord?.vehicle_type);
+    const carType = clean(booking.driverVehicleModel) || clean(assignedDriverRecord?.vehicle_type);
     const driverLines = [
       clean(booking.driverName) ? `Driver: ${clean(booking.driverName)}` : "",
       clean(booking.driverContact) ? `Driver contact: ${clean(booking.driverContact)}` : "",
@@ -11377,6 +11416,7 @@ export default function Home() {
         (bookingDriverName && clean(driver.driver_name).toLowerCase() === bookingDriverName),
     );
     const driverPlate = clean(booking.driverPlate) || clean(selectedDriver?.plate_number);
+    const driverVehicleModel = clean(booking.driverVehicleModel) || clean(selectedDriver?.vehicle_type);
     const driverPayout = draftPricing.driverPayout;
     const childSeatLine =
       clean(booking.childSeatRequired) === "yes"
@@ -11401,6 +11441,7 @@ export default function Home() {
         `Driver: ${clean(booking.driverName) || "Driver TBC"}`,
         clean(booking.driverContact) ? `Contact: ${clean(booking.driverContact)}` : "",
         driverPlate ? `Plate: ${driverPlate}` : "",
+        driverVehicleModel ? `Vehicle: ${driverVehicleModel}` : "",
       ],
       [
         `${clean(booking.vehicle) || "Vehicle"} ${clean(booking.bookingType) || "Booking"}`,
@@ -12013,6 +12054,7 @@ export default function Home() {
         driverName: "",
         driverContact: "",
         driverPlate: "",
+        driverVehicleModel: "",
         driverNotes: "",
       }));
       return;
@@ -12034,6 +12076,7 @@ export default function Home() {
       driverName: clean(selectedDriver.driver_name),
       driverContact: clean(selectedDriver.contact_number),
       driverPlate: clean(selectedDriver.plate_number),
+      driverVehicleModel: clean(selectedDriver.vehicle_type),
     }));
   }
 
@@ -13659,8 +13702,9 @@ export default function Home() {
     const driverName = clean(record.driver_name);
     const driverContact = clean(record.driver_contact);
     const driverPlate = clean(record.driver_plate_number);
+    const driverVehicleModel = safeDriverVehicleModelFromBookingRecord(record);
 
-    if (!driverName && !driverContact && !driverPlate) {
+    if (!driverName && !driverContact && !driverPlate && !driverVehicleModel) {
       return;
     }
 
@@ -13670,12 +13714,14 @@ export default function Home() {
         driverContact: driverContact || currentBooking.driverContact,
         driverName: driverName || currentBooking.driverName,
         driverPlate: driverPlate || currentBooking.driverPlate,
+        driverVehicleModel: driverVehicleModel || currentBooking.driverVehicleModel,
       };
 
       if (
         nextBooking.driverContact === currentBooking.driverContact &&
         nextBooking.driverName === currentBooking.driverName &&
-        nextBooking.driverPlate === currentBooking.driverPlate
+        nextBooking.driverPlate === currentBooking.driverPlate &&
+        nextBooking.driverVehicleModel === currentBooking.driverVehicleModel
       ) {
         return currentBooking;
       }
@@ -14743,7 +14789,10 @@ export default function Home() {
     const driverName = clean(booking.driverName) || clean(assignedDriverRecord?.driver_name);
     const driverContact = clean(booking.driverContact) || clean(assignedDriverRecord?.contact_number);
     const driverPlate = assignedDriverPlate;
-    const vehicleModel = clean(assignedDriverRecord?.vehicle_type) || clean(booking.vehicle);
+    const vehicleModel =
+      clean(booking.driverVehicleModel) ||
+      clean(assignedDriverRecord?.vehicle_type) ||
+      clean(booking.vehicle);
     const pickupDateTime = formatPickupDateTime(booking.date, booking.time);
     const pickupLocation = clean(booking.pickup);
     const dropoffLocation = clean(booking.dropoff);

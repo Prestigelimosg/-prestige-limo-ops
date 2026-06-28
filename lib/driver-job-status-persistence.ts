@@ -835,13 +835,19 @@ export async function saveDriverJobDetailsThroughStatusPersistence(
     return detailsBlockedResult("not_configured");
   }
 
+  const bookingDriverDetailsUpdate: Record<string, string | null> = {
+    driver_contact: nextDetails.contact || null,
+    driver_name: nextDetails.name,
+    driver_plate_number: nextDetails.plate || null,
+  };
+
+  if (nextDetails.vehicleModel) {
+    bookingDriverDetailsUpdate.vehicle_type_or_category = nextDetails.vehicleModel;
+  }
+
   const { error: bookingUpdateError } = await input.client
     .from("bookings")
-    .update({
-      driver_contact: nextDetails.contact || null,
-      driver_name: nextDetails.name,
-      driver_plate_number: nextDetails.plate || null,
-    })
+    .update(bookingDriverDetailsUpdate)
     .eq("booking_reference", resolvedLink.link.booking_reference);
 
   if (bookingUpdateError) {

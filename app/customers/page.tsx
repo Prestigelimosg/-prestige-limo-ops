@@ -18,7 +18,6 @@ const summaryCards = [
   { label: "Follow-ups Today", value: mockPaymentSummary.followUpsToday },
 ];
 
-const maxCustomerSearchResults = 8;
 const adminCustomerAccountsApiPath = "/api/admin-customer-accounts";
 const adminCustomerSavedBookingsApiPath = "/api/admin-customer-saved-bookings";
 
@@ -113,6 +112,7 @@ const outstandingReviewSortOptions: Array<{ label: string; value: OutstandingRev
 
 const outstandingReviewPageSizeOptions = [10, 25];
 const customerQueuePageSizeOptions = [10, 25];
+const customerFolderFinderPageSizeOptions = [10, 25];
 const customerInvoiceWorkspaceTabs = [
   { label: "Statements", value: "statements" },
   { label: "Outstanding", value: "outstanding" },
@@ -207,6 +207,19 @@ type MockStatementPreviewEvent = {
   note: string;
   periodLabel: string;
   timestamp: string;
+};
+
+type UnbilledCustomerRow = {
+  amount: string;
+  customerFolderHref: string;
+  customerId: string;
+  customerName: string;
+  dateLabel: string;
+  key: string;
+  reference: string;
+  route: string;
+  service: string;
+  statusLabel: string;
 };
 
 type RegularCustomerBookingForm = typeof initialRegularCustomerBookingForm;
@@ -560,6 +573,35 @@ function getMockStatementPreviewGroups(items: VisibleOutstandingPaymentReviewIte
     .filter((group) => group.items.length > 0);
 }
 
+function getMockUnbilledCustomerRows() {
+  return mockCustomers.flatMap((customer) =>
+    customer.bookingHistory
+      .filter(
+        (booking) =>
+          hasMockBalanceDue(booking.balanceDue) &&
+          (booking.paymentStatus === "Unpaid" ||
+            (customer.accountType === "Monthly Account" &&
+              booking.jobStatus === "Completed" &&
+              booking.paymentStatus !== "Paid")),
+      )
+      .map((booking) => ({
+        amount: booking.balanceDue,
+        customerFolderHref: `/customers/${customer.id}`,
+        customerId: customer.id,
+        customerName: customer.companyName,
+        dateLabel: booking.date,
+        key: `mock-unbilled:${customer.id}:${booking.invoiceNumber}`,
+        reference: booking.invoiceNumber,
+        route: booking.route,
+        service: booking.service,
+        statusLabel:
+          booking.paymentStatus === "Unpaid"
+            ? "Unbilled / needs invoice"
+            : "Monthly statement needed",
+      })),
+  );
+}
+
 const outstandingPaymentReviewItems: OutstandingPaymentReviewItem[] = mockCustomers.flatMap((customer) =>
   customer.bookingHistory
     .filter(
@@ -611,6 +653,8 @@ const outstandingPaymentReviewItems: OutstandingPaymentReviewItem[] = mockCustom
 
 export default function MockCustomerDashboardPage() {
   const [searchTerm, setSearchTerm] = useState("");
+  const [customerFolderFinderPageSize, setCustomerFolderFinderPageSize] = useState(10);
+  const [customerFolderFinderPage, setCustomerFolderFinderPage] = useState(1);
   const [regularCustomerBookingForm, setRegularCustomerBookingForm] = useState<RegularCustomerBookingForm>(
     initialRegularCustomerBookingForm,
   );
@@ -710,6 +754,8 @@ export default function MockCustomerDashboardPage() {
   const [collectionFollowUpPage, setCollectionFollowUpPage] = useState(1);
   const [monthlyStatementPageSize, setMonthlyStatementPageSize] = useState(10);
   const [monthlyStatementPage, setMonthlyStatementPage] = useState(1);
+  const [unbilledCustomersPageSize, setUnbilledCustomersPageSize] = useState(10);
+  const [unbilledCustomersPage, setUnbilledCustomersPage] = useState(1);
   const [customerInvoiceWorkspaceTab, setCustomerInvoiceWorkspaceTab] =
     useState<CustomerInvoiceWorkspaceTab>("statements");
   const [mockFollowUpSectionFeedback, setMockFollowUpSectionFeedback] = useState(
@@ -720,19 +766,6 @@ export default function MockCustomerDashboardPage() {
     () => mockCustomers.find((customer) => customer.id === regularCustomerBookingForm.customerId),
     [regularCustomerBookingForm.customerId],
   );
-  const filteredCustomers = useMemo(() => {
-    if (!normalizedSearchTerm) {
-      return [];
-    }
-
-    return mockCustomers
-      .filter((customer) =>
-        `${customer.companyName} ${customer.invoicePrefix} ${customer.paymentStatusSummary}`
-          .toLowerCase()
-          .includes(normalizedSearchTerm),
-      )
-      .slice(0, maxCustomerSearchResults);
-  }, [normalizedSearchTerm]);
   const customerFolderIndexRows = useMemo(() => {
     if (regularCustomerAccountReadState.status !== "loaded") {
       return customerFolderIndexHandoffRows.map((row) => ({
@@ -763,6 +796,44 @@ export default function MockCustomerDashboardPage() {
       };
     });
   }, [regularCustomerAccountReadState.accounts, regularCustomerAccountReadState.status]);
+  const filteredCustomers = useMemo(() => {
+    return customerFolderIndexRows.filter((row) => {
+      if (!normalizedSearchTerm) {
+        return true;
+      }
+
+      return [
+        row.customerName,
+        row.customerId,
+        row.latestBookingReference ?? "",
+        row.latestPickupAt ?? "",
+        row.latestServiceType ?? "",
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedSearchTerm);
+    });
+  }, [customerFolderIndexRows, normalizedSearchTerm]);
+  const customerFolderFinderTotalPages = Math.max(
+    1,
+    Math.ceil(filteredCustomers.length / customerFolderFinderPageSize),
+  );
+  const currentCustomerFolderFinderPage = Math.min(
+    customerFolderFinderPage,
+    customerFolderFinderTotalPages,
+  );
+  const customerFolderFinderStartIndex =
+    filteredCustomers.length === 0 ? 0 : (currentCustomerFolderFinderPage - 1) * customerFolderFinderPageSize;
+  const paginatedCustomerFolderFinderRows = filteredCustomers.slice(
+    customerFolderFinderStartIndex,
+    customerFolderFinderStartIndex + customerFolderFinderPageSize,
+  );
+  const customerFolderFinderShowingStart =
+    filteredCustomers.length === 0 ? 0 : customerFolderFinderStartIndex + 1;
+  const customerFolderFinderShowingEnd = Math.min(
+    customerFolderFinderStartIndex + customerFolderFinderPageSize,
+    filteredCustomers.length,
+  );
   const visibleOutstandingPaymentReviewItems = useMemo(
     () =>
       outstandingPaymentReviewItems
@@ -953,6 +1024,45 @@ export default function MockCustomerDashboardPage() {
   const monthlyStatementShowingEnd = Math.min(
     monthlyStatementStartIndex + monthlyStatementPageSize,
     mockStatementPreviewGroups.length,
+  );
+  const unbilledCustomerRows = useMemo<UnbilledCustomerRow[]>(() => {
+    const localDraftRows = regularCustomerBookingListItems
+      .filter((item) => item.billingStatus.trim().toLowerCase().includes("unbilled"))
+      .map((item) => ({
+        amount: "Draft amount not set",
+        customerFolderHref: item.customerFolderHref,
+        customerId: item.customerId,
+        customerName: item.customerName,
+        dateLabel: item.pickupDate || "Date TBC",
+        key: `local-unbilled:${item.id}`,
+        reference: item.customerReference || item.id,
+        route: `${item.pickupLocation || "Pickup TBC"} > ${item.dropoffLocation || "Drop-off TBC"}`,
+        service: item.routeType,
+        statusLabel: "Unbilled / draft booking",
+      }));
+
+    return [...localDraftRows, ...getMockUnbilledCustomerRows()].sort(
+      (firstRow, secondRow) =>
+        parseMockDateValue(firstRow.dateLabel) - parseMockDateValue(secondRow.dateLabel) ||
+        firstRow.customerName.localeCompare(secondRow.customerName),
+    );
+  }, [regularCustomerBookingListItems]);
+  const unbilledCustomersTotalPages = Math.max(
+    1,
+    Math.ceil(unbilledCustomerRows.length / unbilledCustomersPageSize),
+  );
+  const currentUnbilledCustomersPage = Math.min(unbilledCustomersPage, unbilledCustomersTotalPages);
+  const unbilledCustomersStartIndex =
+    unbilledCustomerRows.length === 0 ? 0 : (currentUnbilledCustomersPage - 1) * unbilledCustomersPageSize;
+  const paginatedUnbilledCustomerRows = unbilledCustomerRows.slice(
+    unbilledCustomersStartIndex,
+    unbilledCustomersStartIndex + unbilledCustomersPageSize,
+  );
+  const unbilledCustomersShowingStart =
+    unbilledCustomerRows.length === 0 ? 0 : unbilledCustomersStartIndex + 1;
+  const unbilledCustomersShowingEnd = Math.min(
+    unbilledCustomersStartIndex + unbilledCustomersPageSize,
+    unbilledCustomerRows.length,
   );
   const regularCustomerBillingQuickFilterOptions = useMemo(() => {
     const billingMonths = Array.from(
@@ -1213,6 +1323,16 @@ export default function MockCustomerDashboardPage() {
         tone: "error",
       });
     }
+  }
+
+  function updateCustomerFolderFinderSearch(value: string) {
+    setSearchTerm(value);
+    setCustomerFolderFinderPage(1);
+  }
+
+  function updateCustomerFolderFinderPageSize(value: number) {
+    setCustomerFolderFinderPageSize(value);
+    setCustomerFolderFinderPage(1);
   }
 
   function updateOutstandingReviewSearch(value: string) {
@@ -3417,87 +3537,315 @@ export default function MockCustomerDashboardPage() {
         </section>
         </details>
 
-        <section className="rounded-lg border border-slate-200 bg-white shadow-sm" data-customer-dashboard="true">
+        <section
+          className="rounded-lg border border-slate-200 bg-white shadow-sm"
+          data-customer-dashboard="true"
+          data-customer-folder-finder="true"
+        >
           <div className="border-b border-slate-200 p-4 sm:p-5">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <h2 className="text-lg font-bold text-slate-950">Find Customer Folder</h2>
-                <p className="mt-1 text-sm text-slate-600">
-                  Zoho Invoice-style simplicity: search first, scan the payment state, then open the customer folder.
+                <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
+                  Search all customer folders, scan 10 at a time, then open the correct account before invoice work.
                 </p>
               </div>
-              <label className="flex w-full flex-col gap-1 text-sm font-semibold text-slate-700 lg:max-w-sm">
-                Search customer/company
-                <input
-                  className="h-11 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-950 outline-none focus:border-slate-700"
-                  data-customer-search="true"
-                  onChange={(event) => setSearchTerm(event.target.value)}
-                  placeholder="Type a customer, company, or invoice prefix"
-                  type="search"
-                  value={searchTerm}
-                />
-              </label>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center lg:justify-end">
+                <p
+                  className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700"
+                  data-customer-folder-finder-count="true"
+                >
+                  Showing {customerFolderFinderShowingStart}-{customerFolderFinderShowingEnd} of{" "}
+                  {filteredCustomers.length} customer folders
+                </p>
+                <button
+                  className="min-h-10 rounded-md border border-slate-900 bg-slate-900 px-3 py-2 text-sm font-bold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  data-customer-folder-finder-load-accounts="true"
+                  disabled={regularCustomerAccountReadState.status === "loading"}
+                  onClick={loadRegularCustomerAccounts}
+                  type="button"
+                >
+                  {regularCustomerAccountReadState.status === "loading" ? "Loading..." : "Load Saved Accounts"}
+                </button>
+              </div>
             </div>
           </div>
 
           <div className="p-4 sm:p-5">
-            {!normalizedSearchTerm ? (
-              <div
-                className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600"
-                data-customer-search-helper="true"
-              >
-                Type a customer or company name to search.
+            <div className="grid gap-3 lg:grid-cols-[1fr_12rem_auto] lg:items-end">
+              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
+                Search customer / company / latest booking
+                <input
+                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                  data-customer-folder-finder-search="true"
+                  data-customer-search="true"
+                  onChange={(event) => updateCustomerFolderFinderSearch(event.target.value)}
+                  placeholder="Type customer, company, account, booking reference"
+                  type="search"
+                  value={searchTerm}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
+                Per page
+                <select
+                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950 outline-none focus:border-slate-700"
+                  data-customer-folder-finder-page-size="true"
+                  onChange={(event) => updateCustomerFolderFinderPageSize(Number(event.target.value))}
+                  value={customerFolderFinderPageSize}
+                >
+                  {customerFolderFinderPageSizeOptions.map((pageSize) => (
+                    <option key={pageSize} value={pageSize}>
+                      {pageSize} per page
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex gap-2">
+                <button
+                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  data-customer-folder-finder-previous="true"
+                  disabled={currentCustomerFolderFinderPage <= 1}
+                  onClick={() => setCustomerFolderFinderPage((currentPage) => Math.max(1, currentPage - 1))}
+                  type="button"
+                >
+                  Previous
+                </button>
+                <button
+                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  data-customer-folder-finder-next="true"
+                  disabled={currentCustomerFolderFinderPage >= customerFolderFinderTotalPages}
+                  onClick={() =>
+                    setCustomerFolderFinderPage((currentPage) =>
+                      Math.min(customerFolderFinderTotalPages, currentPage + 1),
+                    )
+                  }
+                  type="button"
+                >
+                  Next
+                </button>
               </div>
-            ) : (
-              <div
-                aria-live="polite"
-                className="overflow-hidden rounded-md border border-slate-200"
-                data-customer-results-panel="true"
-              >
-                {filteredCustomers.length > 0 ? (
-                  <div className="divide-y divide-slate-200">
-                    {filteredCustomers.map((customer) => (
+            </div>
+
+            <p
+              aria-live="polite"
+              className={`mt-3 rounded-md border px-3 py-2 text-sm font-semibold leading-5 ${regularCustomerBookingFeedbackClass(
+                regularCustomerAccountReadState.tone,
+              )}`}
+              data-customer-folder-finder-feedback="true"
+              data-customer-search-helper="true"
+            >
+              {normalizedSearchTerm
+                ? `Search is filtering customer folders locally for "${searchTerm}".`
+                : regularCustomerAccountReadState.message}
+            </p>
+
+            <div
+              aria-live="polite"
+              className="mt-4 overflow-hidden rounded-md border border-slate-200"
+              data-customer-results-panel="true"
+            >
+              {paginatedCustomerFolderFinderRows.length > 0 ? (
+                <div>
+                  <div
+                    aria-hidden="true"
+                    className="hidden grid-cols-[minmax(12rem,1.4fr)_7rem_8rem_minmax(12rem,1fr)_7rem] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 md:grid"
+                  >
+                    <span>Customer</span>
+                    <span>Jobs</span>
+                    <span>Status</span>
+                    <span>Latest</span>
+                    <span className="text-right">Folder</span>
+                  </div>
+                  <div className="divide-y divide-slate-200" data-customer-folder-finder-list="true">
+                    {paginatedCustomerFolderFinderRows.map((customer) => (
                       <article
-                        className="grid gap-4 p-4 lg:grid-cols-[1.35fr_0.8fr_0.8fr_1fr_auto] lg:items-center"
-                        data-customer-row={customer.id}
-                        key={customer.id}
+                        className="grid gap-2 bg-white px-3 py-2 text-sm leading-5 transition hover:bg-slate-50 md:grid-cols-[minmax(12rem,1.4fr)_7rem_8rem_minmax(12rem,1fr)_7rem] md:items-center md:gap-3"
+                        data-customer-folder-finder-row={customer.customerId}
+                        data-customer-row={customer.customerId}
+                        key={customer.customerId}
                       >
-                        <div>
-                          <h3 className="text-base font-bold text-slate-950">{customer.companyName}</h3>
-                          <p className="mt-1 text-sm text-slate-600">Fixed invoice prefix: {customer.invoicePrefix}</p>
-                          <p className="mt-1 text-xs text-slate-500">Examples: {customer.invoiceExamples.join(", ")}</p>
+                        <div className="min-w-0">
+                          <h3 className="truncate text-sm font-bold text-slate-950 sm:text-base">
+                            {customer.customerName}
+                          </h3>
+                          <p className="mt-0.5 truncate text-xs text-slate-500">
+                            Account: {customer.customerId}
+                          </p>
                         </div>
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Outstanding</p>
-                          <p className="mt-1 text-base font-bold text-slate-950">{customer.outstandingAmount}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Overdue</p>
-                          <p className="mt-1 text-base font-bold text-rose-700">{customer.overdueAmount}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Payment Status</p>
-                          <p className="mt-1 text-sm font-semibold text-slate-800">{customer.paymentStatusSummary}</p>
-                          <p className="mt-1 text-xs text-slate-500">Follow-up: {customer.nextFollowUpDate}</p>
-                        </div>
-                        <Link
-                          className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-4 text-sm font-bold text-white transition hover:bg-slate-700"
-                          data-open-customer-folder={customer.id}
-                          href={`/customers/${customer.id}`}
-                        >
-                          Open Customer Folder
-                        </Link>
+                        <p className="font-semibold text-slate-800">
+                          {customer.historyRows} job{customer.historyRows === 1 ? "" : "s"}
+                        </p>
+                        <p className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">
+                          {customer.upcomingJobs} up / {customer.completedJobs} done
+                        </p>
+                        <p className="min-w-0 truncate text-xs font-semibold text-slate-600">
+                          {customer.source === "saved-account-read"
+                            ? [customer.latestPickupAt, customer.latestServiceType, customer.latestBookingReference]
+                                .filter(Boolean)
+                                .join(" | ") || "Latest saved service not available"
+                            : "Local folder ready"}
+                        </p>
+                        {customer.folderHref ? (
+                          <Link
+                            className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-center text-xs font-bold text-white transition hover:bg-slate-700 md:justify-self-end"
+                            data-customer-folder-finder-link={customer.customerId}
+                            data-open-customer-folder={customer.customerId}
+                            href={customer.folderHref}
+                          >
+                            Open
+                          </Link>
+                        ) : (
+                          <span
+                            className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-center text-xs font-bold text-slate-600 md:justify-self-end"
+                            data-customer-folder-finder-no-folder={customer.customerId}
+                          >
+                            Pending
+                          </span>
+                        )}
                       </article>
                     ))}
                   </div>
-                ) : (
-                  <div className="p-5 text-sm text-slate-600" data-customer-empty-state="true">
-                    No mock customers match this search.
+                </div>
+              ) : (
+                <div
+                  className="p-5 text-sm leading-6 text-slate-600"
+                  data-customer-empty-state="true"
+                  data-customer-folder-finder-empty="true"
+                >
+                  No customer folders match this search. Clear the search to show all folders again.
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
+        <section
+          className="rounded-lg border border-amber-200 bg-white shadow-sm"
+          data-unbilled-customers-sector="true"
+        >
+          <div className="border-b border-amber-200 bg-amber-50/60 p-4 sm:p-5">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-800">
+                  Billing checkpoint
+                </p>
+                <h2 className="mt-1 text-lg font-bold text-slate-950">Unbilled Customers</h2>
+                <p className="mt-1 max-w-3xl text-sm font-semibold leading-6 text-amber-950">
+                  Review these before sending invoices so unbilled or statement-needed accounts are not missed.
+                </p>
+              </div>
+              <p
+                className="rounded-md border border-amber-200 bg-white px-3 py-2 text-sm font-bold text-amber-950"
+                data-unbilled-customers-count="true"
+              >
+                Showing {unbilledCustomersShowingStart}-{unbilledCustomersShowingEnd} of{" "}
+                {unbilledCustomerRows.length} unbilled rows
+              </p>
+            </div>
+            <div
+              className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+              data-unbilled-customers-pagination="true"
+            >
+              <label className="text-sm font-semibold text-slate-700 sm:max-w-48">
+                Per page
+                <select
+                  className="mt-1 min-h-10 w-full rounded-md border border-amber-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950 outline-none focus:border-amber-700"
+                  data-unbilled-customers-page-size="true"
+                  onChange={(event) => {
+                    setUnbilledCustomersPageSize(Number(event.target.value));
+                    setUnbilledCustomersPage(1);
+                  }}
+                  value={unbilledCustomersPageSize}
+                >
+                  {customerFolderFinderPageSizeOptions.map((pageSize) => (
+                    <option key={pageSize} value={pageSize}>
+                      {pageSize} per page
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex gap-2">
+                <button
+                  className="min-h-10 rounded-md border border-amber-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  data-unbilled-customers-previous="true"
+                  disabled={currentUnbilledCustomersPage <= 1}
+                  onClick={() => setUnbilledCustomersPage((currentPage) => Math.max(1, currentPage - 1))}
+                  type="button"
+                >
+                  Previous
+                </button>
+                <button
+                  className="min-h-10 rounded-md border border-amber-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  data-unbilled-customers-next="true"
+                  disabled={currentUnbilledCustomersPage >= unbilledCustomersTotalPages}
+                  onClick={() =>
+                    setUnbilledCustomersPage((currentPage) =>
+                      Math.min(unbilledCustomersTotalPages, currentPage + 1),
+                    )
+                  }
+                  type="button"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="divide-y divide-slate-200" data-unbilled-customers-list="true">
+            {paginatedUnbilledCustomerRows.length > 0 ? (
+              paginatedUnbilledCustomerRows.map((row) => (
+                <article
+                  className="grid gap-2 px-3 py-2 text-sm leading-5 transition hover:bg-amber-50/50 sm:px-4 lg:grid-cols-[minmax(12rem,1.25fr)_minmax(8rem,0.7fr)_minmax(8rem,0.7fr)_minmax(14rem,1.35fr)_7rem] lg:items-center"
+                  data-unbilled-customer-row={row.key}
+                  key={row.key}
+                >
+                  <div className="min-w-0">
+                    <h3 className="truncate text-sm font-bold text-slate-950 sm:text-base">{row.customerName}</h3>
+                    <p className="mt-0.5 truncate text-xs text-slate-500">{row.reference}</p>
                   </div>
-                )}
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Status</p>
+                    <p className="mt-0.5 text-sm font-bold text-amber-950">{row.statusLabel}</p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Amount</p>
+                    <p className="mt-0.5 text-sm font-bold text-slate-950">{row.amount}</p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+                      Job / service
+                    </p>
+                    <p className="mt-0.5 truncate text-sm font-semibold text-slate-800">
+                      {row.dateLabel} · {row.service}
+                    </p>
+                    <p className="mt-0.5 truncate text-xs text-slate-500">{row.route}</p>
+                  </div>
+                  {row.customerFolderHref ? (
+                    <Link
+                      className="inline-flex min-h-9 items-center justify-center rounded-md border border-amber-900 bg-amber-900 px-3 text-center text-xs font-bold text-white transition hover:bg-amber-800 lg:justify-self-end"
+                      data-unbilled-customer-open-folder={row.key}
+                      href={row.customerFolderHref}
+                    >
+                      Open
+                    </Link>
+                  ) : (
+                    <span className="text-xs font-semibold text-slate-500 lg:text-right">Folder pending</span>
+                  )}
+                </article>
+              ))
+            ) : (
+              <div className="p-5 text-sm leading-6 text-slate-600" data-unbilled-customers-empty="true">
+                No unbilled customer rows are visible right now.
               </div>
             )}
           </div>
+          <p
+            className="border-t border-amber-100 bg-amber-50/60 px-4 py-3 text-xs font-semibold leading-5 text-amber-950 sm:px-5"
+            data-unbilled-customers-boundary="true"
+          >
+            Review-only checkpoint. Opening a folder does not create invoice numbers, generate invoices/PDFs, send
+            payment requests, write records, call providers, or change payment status.
+          </p>
         </section>
 
         <section

@@ -326,6 +326,10 @@ const guardChecks = [
     script: "scripts/test-customers-invoice-workspace-cleanup-guard.mjs",
   },
   {
+    label: "customers folder finder and unbilled queue guard",
+    script: "scripts/test-customers-folder-finder-unbilled-queue-guard.mjs",
+  },
+  {
     label: "driver reporting status contract guard",
     script: "scripts/test-driver-reporting-status-contract.mjs",
   },

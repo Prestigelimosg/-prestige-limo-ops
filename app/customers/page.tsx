@@ -3633,14 +3633,14 @@ export default function MockCustomerDashboardPage() {
 
                 return (
                   <article
-                    className="p-4 sm:p-5"
+                    className="p-3 sm:p-4"
                     data-outstanding-payment-row={item.key}
                     key={item.key}
                   >
-                    <div className="grid gap-3 xl:grid-cols-[1.1fr_0.85fr_0.75fr_0.75fr_0.85fr_1.1fr] xl:items-start">
-                      <div>
+                    <div className="grid gap-3 md:grid-cols-[1.15fr_0.75fr_0.7fr_0.95fr_auto] md:items-center">
+                      <div className="min-w-0">
                         <h3 className="text-base font-bold text-slate-950">{item.customerName}</h3>
-                        <p className="mt-1 text-sm text-slate-600">{item.invoiceNumber}</p>
+                        <p className="mt-1 truncate text-sm text-slate-600">{item.invoiceNumber}</p>
                         {item.isMonthlyAccount ? (
                           <p className="mt-1 text-xs font-semibold text-slate-500">Monthly Account</p>
                         ) : null}
@@ -3660,15 +3660,14 @@ export default function MockCustomerDashboardPage() {
                       <div>
                         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Due date</p>
                         <p className="mt-1 text-sm font-semibold text-slate-800">{item.dueOrFollowUpDate}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                          Last follow-up
+                        <p className="mt-1 text-xs text-slate-500">
+                          Last: {item.lastFollowUpDate}
                         </p>
-                        <p className="mt-1 text-sm font-semibold text-slate-800">{item.lastFollowUpDate}</p>
-                        <p className="mt-1 text-xs text-slate-500">Next action: {getOutstandingNextActionLabel(item)}</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Next: {getOutstandingNextActionLabel(item)}
+                        </p>
                       </div>
-                      <div className="flex flex-col gap-2">
+                      <div className="flex flex-col gap-2 md:w-44">
                         <Link
                           className="inline-flex min-h-10 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 py-2 text-sm font-bold text-white transition hover:bg-slate-700"
                           data-outstanding-open-customer-folder={item.key}
@@ -3691,64 +3690,65 @@ export default function MockCustomerDashboardPage() {
                       </div>
                     </div>
 
-                    <p className="mt-3 text-sm leading-6 text-slate-700">{item.reason}</p>
-
                     {isExpanded ? (
-                      <div
-                        className="mt-3 rounded-md border border-sky-200 bg-sky-50 p-3 text-sm leading-6 text-sky-950"
-                        data-outstanding-review-detail={item.key}
-                      >
-                        <p className="font-bold">Mock/local detail only for {item.invoiceNumber}</p>
-                        <ul className="mt-2 list-disc space-y-1 pl-5">
-                          <li>Customer folder reminder: open {item.customerName} before any real collection work.</li>
-                          <li>{item.outstandingBookingsCount} mock outstanding booking rows are visible for this account.</li>
-                          <li>Follow-up note placeholder only. No note, payment record, audit record, or customer record is created.</li>
-                          <li>No invoice, statement, PDF, invoice number, sending, Supabase call, payment API, bank API, notification, or calendar action.</li>
-                        </ul>
+                      <div className="mt-3 space-y-3" data-outstanding-review-expanded={item.key}>
+                        <p className="text-sm leading-6 text-slate-700">{item.reason}</p>
+                        <div
+                          className="rounded-md border border-sky-200 bg-sky-50 p-3 text-sm leading-6 text-sky-950"
+                          data-outstanding-review-detail={item.key}
+                        >
+                          <p className="font-bold">Mock/local detail only for {item.invoiceNumber}</p>
+                          <ul className="mt-2 list-disc space-y-1 pl-5">
+                            <li>Customer folder reminder: open {item.customerName} before any real collection work.</li>
+                            <li>{item.outstandingBookingsCount} mock outstanding booking rows are visible for this account.</li>
+                            <li>Follow-up note placeholder only. No note, payment record, audit record, or customer record is created.</li>
+                            <li>No invoice, statement, PDF, invoice number, sending, Supabase call, payment API, bank API, notification, or calendar action.</li>
+                          </ul>
+                        </div>
+
+                        <div className="grid gap-2 md:grid-cols-4">
+                          <button
+                            className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
+                            data-payment-action="invoice-sent"
+                            onClick={() => handleMockPaymentAction(item, "invoice-sent")}
+                            type="button"
+                          >
+                            Mark Invoice Sent
+                          </button>
+                          <button
+                            className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
+                            data-payment-action="partial-payment"
+                            onClick={() => handleMockPaymentAction(item, "partial-payment")}
+                            type="button"
+                          >
+                            Record Partial Payment
+                          </button>
+                          <button
+                            className="min-h-10 rounded-md border border-emerald-700 bg-emerald-700 px-3 py-2 text-sm font-bold text-white transition hover:bg-emerald-600"
+                            data-payment-action="paid"
+                            onClick={() => handleMockPaymentAction(item, "paid")}
+                            type="button"
+                          >
+                            Mark Paid
+                          </button>
+                          <button
+                            className="min-h-10 rounded-md border border-amber-700 bg-amber-50 px-3 py-2 text-sm font-bold text-amber-950 transition hover:bg-amber-100"
+                            data-payment-action="waived"
+                            onClick={() => handleMockPaymentAction(item, "waived")}
+                            type="button"
+                          >
+                            Waive Balance
+                          </button>
+                        </div>
+                        <p
+                          aria-live="polite"
+                          className="rounded-md bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600"
+                          data-payment-action-feedback={item.key}
+                        >
+                          {item.feedback ?? "Mock helper: this row updates local page state only."}
+                        </p>
                       </div>
                     ) : null}
-
-                    <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                      <button
-                        className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
-                        data-payment-action="invoice-sent"
-                        onClick={() => handleMockPaymentAction(item, "invoice-sent")}
-                        type="button"
-                      >
-                        Mark Invoice Sent
-                      </button>
-                      <button
-                        className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
-                        data-payment-action="partial-payment"
-                        onClick={() => handleMockPaymentAction(item, "partial-payment")}
-                        type="button"
-                      >
-                        Record Partial Payment
-                      </button>
-                      <button
-                        className="min-h-10 rounded-md border border-emerald-700 bg-emerald-700 px-3 py-2 text-sm font-bold text-white transition hover:bg-emerald-600"
-                        data-payment-action="paid"
-                        onClick={() => handleMockPaymentAction(item, "paid")}
-                        type="button"
-                      >
-                        Mark Paid
-                      </button>
-                      <button
-                        className="min-h-10 rounded-md border border-amber-700 bg-amber-50 px-3 py-2 text-sm font-bold text-amber-950 transition hover:bg-amber-100"
-                        data-payment-action="waived"
-                        onClick={() => handleMockPaymentAction(item, "waived")}
-                        type="button"
-                      >
-                        Waive Balance
-                      </button>
-                    </div>
-                    <p
-                      aria-live="polite"
-                      className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600"
-                      data-payment-action-feedback={item.key}
-                    >
-                      {item.feedback ?? "Mock helper: this row updates local page state only."}
-                    </p>
                   </article>
                 );
               })

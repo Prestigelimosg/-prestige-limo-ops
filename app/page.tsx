@@ -9022,7 +9022,7 @@ export default function Home() {
   const dashboardBookingsInitialLoadAttemptedRef = useRef(false);
   const bookingAutoSyncInFlightRef = useRef(false);
   const bookingAutoSyncPausedUntilRef = useRef(0);
-  const driverJobLinkVehicleFallbackRefreshRequestedRef = useRef<Set<string>>(new Set());
+  const driverJobLinkVehicleFallbackRefreshLastRequestedRef = useRef<Record<string, number>>({});
   const [handledCustomerBookingRequestKeys, setHandledCustomerBookingRequestKeys] = useState<
     string[]
   >(() => {
@@ -9089,6 +9089,7 @@ export default function Home() {
   const [completingBookingId, setCompletingBookingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [showAllActiveJobs, setShowAllActiveJobs] = useState(false);
+  const [dashboardDriverJobAutoRefreshEnabled, setDashboardDriverJobAutoRefreshEnabled] = useState(true);
   const [dashboardDriverJobStatusReadStates, setDashboardDriverJobStatusReadStates] =
     useState<Record<string, AdminDriverJobStatusReadState>>({});
   const dashboardDriverJobStatusAutoRequestedRef = useRef<Set<string>>(new Set());
@@ -9543,6 +9544,18 @@ export default function Home() {
       cancelled = true;
     };
   }, [activeTab, adminAppNotificationReadRevision]);
+
+  useEffect(() => {
+    if (activeTab !== "dashboard") {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setAdminAppNotificationReadRevision((revision) => revision + 1);
+    }, 10 * 1000);
+
+    return () => window.clearInterval(intervalId);
+  }, [activeTab]);
 
   useEffect(() => {
     let cancelled = false;
@@ -13805,6 +13818,25 @@ export default function Home() {
     );
   }
 
+  function requestDriverJobLinkVehicleFallbackRefresh(bookingReference: string) {
+    const cleanedReference = cleanReferenceText(bookingReference);
+
+    if (!cleanedReference) {
+      return;
+    }
+
+    const now = Date.now();
+    const lastRequestedAt =
+      driverJobLinkVehicleFallbackRefreshLastRequestedRef.current[cleanedReference] || 0;
+
+    if (now - lastRequestedAt < 8_000) {
+      return;
+    }
+
+    driverJobLinkVehicleFallbackRefreshLastRequestedRef.current[cleanedReference] = now;
+    void refreshAdminDriverJobLinkForReference(cleanedReference, { silent: true });
+  }
+
   function mergeCurrentBookingDriverDetailsFromRecord(record: BookingRecord | null | undefined) {
     if (!record) {
       return;
@@ -13827,11 +13859,9 @@ export default function Home() {
       recordReference &&
       recordReference === currentBookingReference &&
       (driverName || driverContact || driverPlate) &&
-      !driverVehicleModel &&
-      !driverJobLinkVehicleFallbackRefreshRequestedRef.current.has(recordReference)
+      !driverVehicleModel
     ) {
-      driverJobLinkVehicleFallbackRefreshRequestedRef.current.add(recordReference);
-      void refreshAdminDriverJobLinkForReference(recordReference, { silent: true });
+      requestDriverJobLinkVehicleFallbackRefresh(recordReference);
     }
 
     setBooking((currentBooking) => {
@@ -14036,7 +14066,7 @@ export default function Home() {
     rememberHandledCustomerBookingRequest(bookingRecord);
     setBooking(() => loadedBookingForm);
     if (bookingReference) {
-      driverJobLinkVehicleFallbackRefreshRequestedRef.current.delete(bookingReference);
+      delete driverJobLinkVehicleFallbackRefreshLastRequestedRef.current[bookingReference];
     }
     appliedAdminBookingSnapshotReferenceRef.current = "";
     loadedBookingIdRef.current = bookingReference;
@@ -14061,8 +14091,7 @@ export default function Home() {
           clean(loadedBookingForm.driverPlate)) &&
         !safeDriverVehicleModelDisplay(loadedBookingForm.driverVehicleModel)
       ) {
-        driverJobLinkVehicleFallbackRefreshRequestedRef.current.add(bookingReference);
-        void refreshAdminDriverJobLinkForReference(bookingReference, { silent: true });
+        requestDriverJobLinkVehicleFallbackRefresh(bookingReference);
       }
     }
     setDispatchReleaseWorkflowLoadRevision((currentRevision) => currentRevision + 1);
@@ -15629,10 +15658,40 @@ export default function Home() {
             operationalCard.traveler_display_name ||
             operationalCard.customer_display_name ||
             "Unknown";
+          const rowBookingReference =
+            cleanReferenceText(savedBooking.booking_reference) ||
+            cleanReferenceText(savedBooking.id);
+          const rowIsLoadedBooking =
+            Boolean(rowBookingReference) &&
+            rowBookingReference === cleanReferenceText(loadedBookingId);
+          const activeDriverJobLinkVehicleModel =
+            rowIsLoadedBooking &&
+            cleanReferenceText(activeAdminDriverJobLink?.booking_reference) === rowBookingReference
+              ? safeDriverVehicleModelDisplay(activeAdminDriverJobLink?.safe_summary.vehicle)
+              : "";
           const driverText =
+            (rowIsLoadedBooking ? clean(booking.driverName) : "") ||
             operationalCard.assigned_driver_display_name ||
             clean(savedBooking.driver_name) ||
             "Driver TBC";
+          const driverContactText =
+            (rowIsLoadedBooking ? clean(booking.driverContact) : "") ||
+            operationalCard.assigned_driver_phone ||
+            clean(savedBooking.driver_contact);
+          const driverPlateText =
+            (rowIsLoadedBooking ? clean(booking.driverPlate) : "") ||
+            operationalCard.assigned_driver_plate ||
+            clean(savedBooking.driver_plate_number);
+          const driverVehicleText =
+            activeDriverJobLinkVehicleModel ||
+            safeDriverVehicleModelDisplay(rowIsLoadedBooking ? booking.driverVehicleModel : "") ||
+            safeDriverVehicleModelFromBookingRecord(savedBooking);
+          const assignedDriverSummary = [
+            driverText,
+            driverContactText ? `Contact ${driverContactText}` : "",
+            driverPlateText ? `Plate ${driverPlateText}` : "",
+            driverVehicleText ? `Vehicle ${driverVehicleText}` : "",
+          ].filter(Boolean);
 
           return (
             <article
@@ -15651,7 +15710,12 @@ export default function Home() {
               </div>
               <div className="min-w-0">
                 <p className="truncate text-slate-800">{passengerText}</p>
-                <p className="truncate text-xs text-slate-500">{driverText}</p>
+                <p
+                  className="truncate text-xs text-slate-500"
+                  data-dashboard-assigned-driver-details="true"
+                >
+                  {assignedDriverSummary.join(" | ")}
+                </p>
               </div>
               <p className="min-w-0 truncate text-slate-700">{routeText}</p>
               <span
@@ -17626,12 +17690,31 @@ export default function Home() {
 
     return dateKey >= todayKey ? 0 : 1;
   }
+  function activeJobPickupTimeMs(bookingRecord: BookingRecord) {
+    return parsePickupDateTimeMs(
+      getBookingDateKey(bookingRecord),
+      formatPickupTimeFromRecord(bookingRecord),
+    );
+  }
+  function activeJobIsInMonitorWindow(bookingRecord: BookingRecord) {
+    const pickupTimeMs = activeJobPickupTimeMs(bookingRecord);
+
+    if (pickupTimeMs === null) {
+      return false;
+    }
+
+    const monitorWindowStartMs = pickupTimeMs - 60 * 60 * 1000;
+    const monitorWindowEndMs = pickupTimeMs + 24 * 60 * 60 * 1000;
+
+    return currentTimeMs >= monitorWindowStartMs && currentTimeMs <= monitorWindowEndMs;
+  }
   const dayOfTripActiveJobBookings = operationalBookings
     .filter((bookingRecord) => {
       const normalizedStatus = clean(bookingRecord.status).toLowerCase();
 
       return normalizedStatus !== "completed" && normalizedStatus !== "cancelled";
     })
+    .filter(activeJobIsInMonitorWindow)
     .filter((bookingRecord) =>
       activeJobDashboardSearchTerm
         ? bookingMatchesLocalSearch(bookingRecord, activeJobDashboardSearchTerm)
@@ -17717,7 +17800,11 @@ export default function Home() {
   useEffect(() => {
     const bookingReferences = activeJobDriverStatusReferenceKey.split("|").filter(Boolean);
 
-    if (activeTab !== "dashboard" || bookingReferences.length === 0) {
+    if (
+      activeTab !== "dashboard" ||
+      !dashboardDriverJobAutoRefreshEnabled ||
+      bookingReferences.length === 0
+    ) {
       return;
     }
 
@@ -17728,7 +17815,7 @@ export default function Home() {
     }, 10 * 1000);
 
     return () => window.clearInterval(intervalId);
-  }, [activeTab, activeJobDriverStatusReferenceKey]);
+  }, [activeTab, activeJobDriverStatusReferenceKey, dashboardDriverJobAutoRefreshEnabled]);
 
   function refreshVisibleDashboardDriverReports() {
     for (const bookingReference of activeJobDriverStatusReferenceList) {
@@ -17761,14 +17848,24 @@ export default function Home() {
               Refresh reports
             </button>
           ) : null}
-          {activeJobDriverStatusReferenceList.length > 0 ? (
-            <span
-              className="w-fit rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold uppercase text-lime-900 ring-1 ring-lime-200"
-              data-admin-multi-driver-active-jobs-auto-refresh="true"
-            >
-              Auto-refresh 10s
-            </span>
-          ) : null}
+          <button
+            aria-pressed={dashboardDriverJobAutoRefreshEnabled}
+            className={`h-8 rounded-md border px-3 text-xs font-semibold transition ${
+              dashboardDriverJobAutoRefreshEnabled
+                ? "border-lime-400 bg-lime-100 text-lime-950 hover:bg-lime-200"
+                : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+            }`}
+            data-admin-multi-driver-active-jobs-auto-refresh="true"
+            data-admin-multi-driver-active-jobs-auto-refresh-state={
+              dashboardDriverJobAutoRefreshEnabled ? "on" : "off"
+            }
+            onClick={() =>
+              setDashboardDriverJobAutoRefreshEnabled((currentValue) => !currentValue)
+            }
+            type="button"
+          >
+            Auto-refresh 10s {dashboardDriverJobAutoRefreshEnabled ? "On" : "Off"}
+          </button>
           <span
             className="w-fit rounded-full bg-lime-100 px-2.5 py-1 text-xs font-semibold uppercase text-lime-900 ring-1 ring-lime-200"
             data-admin-multi-driver-active-jobs-count={String(dayOfTripActiveJobBookings.length)}
@@ -17918,7 +18015,7 @@ export default function Home() {
         </div>
       ) : (
         <p className="mt-3 rounded-md border border-lime-100 bg-white px-3 py-2 text-sm font-semibold text-lime-900">
-          Load bookings to monitor active driver jobs.
+          No active jobs inside the 1-hour pickup monitor window.
         </p>
       )}
       {!showAllActiveJobs && activeJobsMonitorCollapsedCount > 0 ? (

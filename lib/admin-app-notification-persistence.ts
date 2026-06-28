@@ -84,6 +84,10 @@ export type DriverJobIssueAdminAppNotificationInput = {
   issue_type: string;
 };
 
+export type CustomerBookingRequestAdminAppNotificationInput = {
+  booking_reference: string | null;
+};
+
 export type AdminAppNotificationPagination = {
   has_next_page: boolean;
   has_previous_page: boolean;
@@ -534,7 +538,7 @@ function getServerOnlyNotificationSupabaseClient(
   }
 }
 
-function getServerOnlyDriverIssueNotificationSupabaseClient(): AdminBookingResult<SupabaseClient> {
+function getServerOnlySystemNotificationSupabaseClient(): AdminBookingResult<SupabaseClient> {
   if (process.env.PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED !== "true") {
     return {
       error: disabledNotificationPersistenceError,
@@ -581,6 +585,10 @@ function getServerOnlyDriverIssueNotificationSupabaseClient(): AdminBookingResul
       status: 503,
     };
   }
+}
+
+function getServerOnlyDriverIssueNotificationSupabaseClient(): AdminBookingResult<SupabaseClient> {
+  return getServerOnlySystemNotificationSupabaseClient();
 }
 
 function normalizeNotificationRecord(row: UnknownRecord): AdminAppNotificationRecord {
@@ -975,6 +983,63 @@ export async function createDriverJobIssueAdminAppNotification(
   const payload = {
     ...parsed.data,
     actor_label: "driver-job-issue-alert",
+    actor_role: "system",
+    delivery_surface: "admin_app",
+    source_surface: "system",
+    updated_at: new Date().toISOString(),
+  };
+  const { data, error } = await clientResult.data
+    .from("admin_app_notification_outbox")
+    .insert(payload)
+    .select(notificationSelect)
+    .single();
+
+  if (error) {
+    return safeAdapterFailure(safeNotificationCreateError, 500, error);
+  }
+
+  return {
+    data: normalizeNotificationRecord(asRecord(data)),
+    ok: true,
+  };
+}
+
+export async function createCustomerBookingRequestAdminAppNotification(
+  input: CustomerBookingRequestAdminAppNotificationInput,
+): Promise<AdminBookingResult<AdminAppNotificationRecord>> {
+  const bookingReference = optionalSafeText(input.booking_reference, maxBookingReferenceLength);
+  const parsed = parseAdminAppNotificationCreatePayload({
+    booking_reference: bookingReference,
+    event_key: [
+      "new-booking-request",
+      String(bookingReference || "unassigned").replace(/[^A-Za-z0-9._:-]+/g, "-"),
+      Date.now(),
+    ].join("-"),
+    notification_status: "queued",
+    notification_type: "booking_workflow",
+    priority: "high",
+    safe_context: {
+      surface: "customer_booking_request",
+      workflow_area: "new_booking_request",
+    },
+    safe_message: "New booking request received. Open Bookings to review.",
+    safe_title: "New booking request",
+    workflow_area: "new_booking_request",
+  });
+
+  if (!parsed.ok) {
+    return parsed;
+  }
+
+  const clientResult = getServerOnlySystemNotificationSupabaseClient();
+
+  if (!clientResult.ok) {
+    return clientResult;
+  }
+
+  const payload = {
+    ...parsed.data,
+    actor_label: "customer-booking-request",
     actor_role: "system",
     delivery_surface: "admin_app",
     source_surface: "system",

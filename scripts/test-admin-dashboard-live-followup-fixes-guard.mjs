@@ -1,0 +1,163 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+
+const ledgerPath = "docs/current-implementation-ledger.md";
+const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
+const guardScript = "scripts/test-admin-dashboard-live-followup-fixes-guard.mjs";
+
+const appPagePath = "app/page.tsx";
+const customersPagePath = "app/customers/page.tsx";
+const customerBookingRequestRoutePath = "app/api/customer-booking-requests/route.ts";
+const adminAppNotificationPersistencePath = "lib/admin-app-notification-persistence.ts";
+
+function assertIncludes(source, fragment, label = fragment) {
+  assert.equal(source.includes(fragment), true, `${label} must include ${fragment}.`);
+}
+
+function assertExcludes(source, fragment, label = fragment) {
+  assert.equal(source.includes(fragment), false, `${label} must not include ${fragment}.`);
+}
+
+function sectionBetween(source, startHeading, nextHeadingPrefix = "\n### ") {
+  const start = source.indexOf(startHeading);
+  assert.notEqual(start, -1, `Missing section heading: ${startHeading}`);
+  const next = source.indexOf(nextHeadingPrefix, start + startHeading.length);
+
+  return next === -1 ? source.slice(start) : source.slice(start, next);
+}
+
+const [
+  ledger,
+  preactivationSuite,
+  appPage,
+  customersPage,
+  customerBookingRequestRoute,
+  adminAppNotificationPersistence,
+] = await Promise.all([
+  readFile(ledgerPath, "utf8"),
+  readFile(preactivationSuitePath, "utf8"),
+  readFile(appPagePath, "utf8"),
+  readFile(customersPagePath, "utf8"),
+  readFile(customerBookingRequestRoutePath, "utf8"),
+  readFile(adminAppNotificationPersistencePath, "utf8"),
+]);
+
+const ledgerSection = sectionBetween(ledger, "### Admin Dashboard Live Follow-up Fixes");
+
+for (const phrase of [
+  "Customer `/book` requests now create an internal admin-app inbox item after the booking request is saved.",
+  "The admin-app notification payload is safe and template-only: no phone, email, pricing, payout, billing, provider payload, live location, token, parser/debug, or internal note data is included.",
+  "Customer Copy and Driver Dispatch keep using the existing active driver job link safe-summary fallback for driver-entered vehicle models, and the fallback read can retry after a driver save instead of getting stuck behind an early stale read.",
+  "Dashboard Active Jobs Monitor only lists jobs inside the one-hour-before-pickup monitor window.",
+  "Dashboard Upcoming booking rows show assigned driver name/contact/plate/vehicle details when available.",
+  "Dashboard driver report auto-refresh has an explicit 10-second on/off switch; manual Refresh remains available.",
+  "Customers payment review rows are compact by default; the mock payment controls and long notes stay collapsed until `View details` is opened.",
+  "No app smoke, provider send, external notification delivery, GPS/live location, billing/payment/PDF/invoice/payout, env, DB schema, parser, calendar, or duplicate workflow sector was added.",
+  "Guard coverage lives in `scripts/test-admin-dashboard-live-followup-fixes-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",
+]) {
+  assertIncludes(ledgerSection, phrase, `ledger phrase: ${phrase}`);
+}
+
+assertIncludes(preactivationSuite, guardScript, "preactivation suite registration");
+
+assertIncludes(
+  customerBookingRequestRoute,
+  "createCustomerBookingRequestAdminAppNotification",
+  "customer booking request route admin app notification hook",
+);
+assertIncludes(
+  customerBookingRequestRoute,
+  "Customer booking intake must not fail because the admin in-app inbox is unavailable.",
+  "customer booking request best-effort admin inbox boundary",
+);
+assertIncludes(
+  adminAppNotificationPersistence,
+  "createCustomerBookingRequestAdminAppNotification",
+  "customer request admin app notification helper",
+);
+assertIncludes(adminAppNotificationPersistence, 'notification_type: "booking_workflow"', "booking workflow notification type");
+assertIncludes(adminAppNotificationPersistence, 'safe_title: "New booking request"', "safe new booking title");
+assertIncludes(
+  adminAppNotificationPersistence,
+  'safe_message: "New booking request received. Open Bookings to review."',
+  "safe new booking message",
+);
+
+const customerNotificationHelper = adminAppNotificationPersistence.slice(
+  adminAppNotificationPersistence.indexOf("export async function createCustomerBookingRequestAdminAppNotification"),
+  adminAppNotificationPersistence.indexOf("export async function updateAdminAppNotificationStatus"),
+);
+
+for (const forbidden of [
+  "contact_phone",
+  "contact_email",
+  "customer_phone",
+  "customer_email",
+  "customer_price",
+  "driver_payout",
+  "paynow",
+  "payment",
+  "invoice",
+  "billing",
+  "live_location",
+  "token",
+  "parser",
+  "whatsapp",
+  "sms",
+  "telegram",
+]) {
+  assertExcludes(customerNotificationHelper.toLowerCase(), forbidden, `customer notification helper forbidden ${forbidden}`);
+}
+
+for (const fragment of [
+  "driverJobLinkVehicleFallbackRefreshLastRequestedRef",
+  "requestDriverJobLinkVehicleFallbackRefresh",
+  "now - lastRequestedAt < 8_000",
+  "activeJobIsInMonitorWindow",
+  "pickupTimeMs - 60 * 60 * 1000",
+  "No active jobs inside the 1-hour pickup monitor window.",
+  "dashboardDriverJobAutoRefreshEnabled",
+  "data-admin-multi-driver-active-jobs-auto-refresh-state",
+  "Auto-refresh 10s {dashboardDriverJobAutoRefreshEnabled ? \"On\" : \"Off\"}",
+  "data-dashboard-assigned-driver-details",
+  "Contact ${driverContactText}",
+  "Plate ${driverPlateText}",
+  "Vehicle ${driverVehicleText}",
+]) {
+  assertIncludes(appPage, fragment, `app page follow-up fragment ${fragment}`);
+}
+
+assertIncludes(
+  appPage,
+  "setAdminAppNotificationReadRevision((revision) => revision + 1);",
+  "admin app notification dashboard refresh interval",
+);
+
+for (const forbidden of [
+  "setInterval(() => {\n      for (const bookingReference of bookingReferences) {\n        void refreshDashboardDriverJobStatusRead(bookingReference);\n      }\n    }, 10 * 1000);\n\n    return () => window.clearInterval(intervalId);\n  }, [activeTab, activeJobDriverStatusReferenceKey]);",
+]) {
+  assertExcludes(appPage, forbidden, "old dashboard monitor un-switchable auto-refresh interval");
+}
+
+for (const fragment of [
+  "data-outstanding-review-expanded",
+  "md:grid-cols-[1.15fr_0.75fr_0.7fr_0.95fr_auto]",
+  "{isExpanded ? (",
+  "data-payment-action-feedback={item.key}",
+]) {
+  assertIncludes(customersPage, fragment, `customers compact row fragment ${fragment}`);
+}
+
+const collapsedOutstandingBlock = customersPage.slice(
+  customersPage.indexOf('data-outstanding-payment-row={item.key}'),
+  customersPage.indexOf('data-collection-follow-up-queue="true"'),
+);
+
+assert.equal(
+  collapsedOutstandingBlock.indexOf("data-payment-action=\"invoice-sent\"") >
+    collapsedOutstandingBlock.indexOf("data-outstanding-review-expanded"),
+  true,
+  "mock payment controls must live in the expanded outstanding-payment area.",
+);
+
+console.log("Admin dashboard live follow-up fixes guard passed.");

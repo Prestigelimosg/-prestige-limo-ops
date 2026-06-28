@@ -200,6 +200,18 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer/driver-visible forbidden data remains blocked from this path: driver payout, PayNow payout, customer price, billing, invoice, payment, internal admin notes, parser/debug, secrets, raw provider payloads, and mock QA/dev archive data.
 - Guard coverage lives in `scripts/test-driver-job-details-admin-sync-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Admin Dashboard Live Follow-up Fixes
+
+- Customer `/book` requests now create an internal admin-app inbox item after the booking request is saved.
+- The admin-app notification payload is safe and template-only: no phone, email, pricing, payout, billing, provider payload, live location, token, parser/debug, or internal note data is included.
+- Customer Copy and Driver Dispatch keep using the existing active driver job link safe-summary fallback for driver-entered vehicle models, and the fallback read can retry after a driver save instead of getting stuck behind an early stale read.
+- Dashboard Active Jobs Monitor only lists jobs inside the one-hour-before-pickup monitor window.
+- Dashboard Upcoming booking rows show assigned driver name/contact/plate/vehicle details when available.
+- Dashboard driver report auto-refresh has an explicit 10-second on/off switch; manual Refresh remains available.
+- Customers payment review rows are compact by default; the mock payment controls and long notes stay collapsed until `View details` is opened.
+- No app smoke, provider send, external notification delivery, GPS/live location, billing/payment/PDF/invoice/payout, env, DB schema, parser, calendar, or duplicate workflow sector was added.
+- Guard coverage lives in `scripts/test-admin-dashboard-live-followup-fixes-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Live William Walkthrough CRM And Driver Job Proof
 
 - Evidence marker: `WILLIAM-WALKTHROUGH-20260626074259`.

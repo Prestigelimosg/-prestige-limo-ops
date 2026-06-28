@@ -302,6 +302,10 @@ const guardChecks = [
     script: "scripts/test-driver-job-details-admin-sync-guard.mjs",
   },
   {
+    label: "admin dashboard live follow-up fixes guard",
+    script: "scripts/test-admin-dashboard-live-followup-fixes-guard.mjs",
+  },
+  {
     label: "driver reporting status contract guard",
     script: "scripts/test-driver-reporting-status-contract.mjs",
   },

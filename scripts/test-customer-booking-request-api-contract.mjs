@@ -31,6 +31,7 @@ async function loadRouteHarness() {
   const outputPath = path.join(tempDir, routePath.replace(/\.ts$/, ".js"));
   const routeSource = await readFile(sourcePath, "utf8");
   const persistencePath = path.join(tempDir, "lib/admin-booking-persistence.js");
+  const adminAppNotificationPath = path.join(tempDir, "lib/admin-app-notification-persistence.js");
   const adapterPath = path.join(tempDir, "lib/admin-booking-supabase-adapter.js");
   const emailAlertPath = path.join(tempDir, "lib/admin-new-booking-email-alert.js");
   const devicePushAlertPath = path.join(tempDir, "lib/admin-device-push-notification.js");
@@ -66,6 +67,21 @@ async function loadRouteHarness() {
       "    source_surface: 'customer_booking_request',",
       "  },",
       "};",
+    ].join("\n"),
+  );
+  await writeFile(
+    adminAppNotificationPath,
+    [
+      "function mock() { return globalThis.__prestigeCustomerBookingRequestApiMock; }",
+      "async function createCustomerBookingRequestAdminAppNotification(input) {",
+      "  const state = mock();",
+      "  state.adminAppNotificationCalls.push(input);",
+      "  if (state.adminAppNotificationThrows) {",
+      "    throw new Error('mock admin app notification failure');",
+      "  }",
+      "  return { data: { booking_reference: input.booking_reference }, ok: true };",
+      "}",
+      "module.exports = { createCustomerBookingRequestAdminAppNotification };",
     ].join("\n"),
   );
   await writeFile(
@@ -107,6 +123,8 @@ async function loadRouteHarness() {
 
 function installMock(overrides = {}) {
   const state = {
+    adminAppNotificationCalls: [],
+    adminAppNotificationThrows: false,
     alertCalls: [],
     alertThrows: false,
     createCalls: [],
@@ -247,6 +265,11 @@ try {
     },
   });
   assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.alertCalls.length, 1);
+  assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.adminAppNotificationCalls.length, 1);
+  assert.equal(
+    globalThis.__prestigeCustomerBookingRequestApiMock.adminAppNotificationCalls[0].booking_reference,
+    "CUST-SAFE-001",
+  );
   assert.equal(
     globalThis.__prestigeCustomerBookingRequestApiMock.alertCalls[0].booking_reference,
     "CUST-SAFE-001",
@@ -257,6 +280,36 @@ try {
     "CUST-SAFE-001",
   );
   assertSafeCustomerBody(success.body, "short-notice success body");
+
+  installMock({
+    adminAppNotificationThrows: true,
+    createResult: {
+      data: {
+        admin_internal_status: "Admin Review Required",
+        booking_reference: "CUST-SAFE-INAPP-FAIL",
+        customer_facing_status: "Request Received",
+        short_notice_review_status: "Admin Review Required",
+      },
+      ok: true,
+    },
+  });
+  const adminAppNotificationFailureStillSucceeds = await readJson(
+    await harness.route.POST(postRequest({ passengerName: "Safe Passenger" })),
+  );
+
+  assert.equal(adminAppNotificationFailureStillSucceeds.status, 200);
+  assert.deepEqual(adminAppNotificationFailureStillSucceeds.body, {
+    ok: true,
+    request: {
+      booking_reference: "CUST-SAFE-INAPP-FAIL",
+      customer_facing_status: "Request Received",
+      short_notice_review_required: true,
+    },
+  });
+  assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.adminAppNotificationCalls.length, 1);
+  assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.alertCalls.length, 1);
+  assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.devicePushAlertCalls.length, 1);
+  assertSafeCustomerBody(adminAppNotificationFailureStillSucceeds.body, "admin-app-notification-failure success body");
 
   installMock({
     alertThrows: true,
@@ -284,6 +337,7 @@ try {
     },
   });
   assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.alertCalls.length, 1);
+  assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.adminAppNotificationCalls.length, 1);
   assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.devicePushAlertCalls.length, 1);
   assertSafeCustomerBody(alertFailureStillSucceeds.body, "alert-failure success body");
 
@@ -313,6 +367,7 @@ try {
     },
   });
   assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.alertCalls.length, 1);
+  assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.adminAppNotificationCalls.length, 1);
   assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.devicePushAlertCalls.length, 1);
   assertSafeCustomerBody(devicePushFailureStillSucceeds.body, "device-push-failure success body");
 

@@ -3,6 +3,7 @@ import {
   parseCustomerBookingRequestPayload,
   type AdminBookingPersistenceRecord,
 } from "../../../lib/admin-booking-persistence";
+import { createCustomerBookingRequestAdminAppNotification } from "../../../lib/admin-app-notification-persistence";
 import { customerBookingRequestPersistenceAdapterActor } from "../../../lib/admin-booking-supabase-adapter";
 import { sendAdminNewBookingDevicePushAlert } from "../../../lib/admin-device-push-notification";
 import { sendAdminNewBookingEmailAlert } from "../../../lib/admin-new-booking-email-alert";
@@ -93,6 +94,14 @@ function customerSafeError(rawError: string) {
 }
 
 async function notifyAdminNewBookingRequest(booking: AdminBookingPersistenceRecord) {
+  try {
+    await createCustomerBookingRequestAdminAppNotification({
+      booking_reference: booking.booking_reference,
+    });
+  } catch {
+    // Customer booking intake must not fail because the admin in-app inbox is unavailable.
+  }
+
   try {
     await sendAdminNewBookingEmailAlert(booking);
   } catch {

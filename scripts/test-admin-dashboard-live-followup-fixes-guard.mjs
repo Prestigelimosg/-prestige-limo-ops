@@ -141,8 +141,9 @@ for (const forbidden of [
 
 for (const fragment of [
   "data-outstanding-review-expanded",
-  "md:grid-cols-[1.15fr_0.75fr_0.7fr_0.95fr_auto]",
-  "{isExpanded ? (",
+  "lg:grid-cols-[minmax(12rem,1.35fr)_minmax(7rem,0.65fr)_minmax(6rem,0.55fr)_minmax(10rem,0.85fr)_minmax(9rem,auto)]",
+  "data-outstanding-review-actions-dropdown",
+  '<details className="group relative flex-1 lg:flex-none">',
   "data-payment-action-feedback={item.key}",
 ]) {
   assertIncludes(customersPage, fragment, `customers compact row fragment ${fragment}`);

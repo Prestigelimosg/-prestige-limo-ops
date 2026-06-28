@@ -212,6 +212,14 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No app smoke, provider send, external notification delivery, GPS/live location, billing/payment/PDF/invoice/payout, env, DB schema, parser, calendar, or duplicate workflow sector was added.
 - Guard coverage lives in `scripts/test-admin-dashboard-live-followup-fixes-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Customers Outstanding Review Compact Dropdown
+
+- Outstanding Payments Review now renders each customer as a slim account row with only compact `Open` and `Actions` controls visible by default.
+- The `Actions` control uses the existing expanded row state as a dropdown; mock payment controls, long notes, and row feedback stay inside that dropdown.
+- The default row keeps the practical scan fields visible: customer, invoice, outstanding amount/status, aging, due date, and next action.
+- This is UI-only polish on the existing local/mock customers page; it does not add routes, APIs, DB reads/writes, env changes, deploys, provider sends, GPS/live location, billing/payment/PDF/invoice/payout activation, calendar sync, or shims.
+- Guard coverage lives in `scripts/test-customers-outstanding-review-dropdown-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Live William Walkthrough CRM And Driver Job Proof
 
 - Evidence marker: `WILLIAM-WALKTHROUGH-20260626074259`.

@@ -703,7 +703,6 @@ export default function MockCustomerDashboardPage() {
   const [collectionFollowUpPage, setCollectionFollowUpPage] = useState(1);
   const [monthlyStatementPageSize, setMonthlyStatementPageSize] = useState(10);
   const [monthlyStatementPage, setMonthlyStatementPage] = useState(1);
-  const [expandedOutstandingPaymentKey, setExpandedOutstandingPaymentKey] = useState("");
   const [mockFollowUpSectionFeedback, setMockFollowUpSectionFeedback] = useState(
     "Mock follow-up controls only. Use the buttons to simulate collection follow-up without sending messages.",
   );
@@ -3629,126 +3628,143 @@ export default function MockCustomerDashboardPage() {
               </div>
             ) : paginatedOutstandingReviewItems.length > 0 ? (
               paginatedOutstandingReviewItems.map((item) => {
-                const isExpanded = expandedOutstandingPaymentKey === item.key;
-
                 return (
                   <article
-                    className="p-3 sm:p-4"
+                    className="px-3 py-2 transition hover:bg-slate-50 sm:px-4"
                     data-outstanding-payment-row={item.key}
                     key={item.key}
                   >
-                    <div className="grid gap-3 md:grid-cols-[1.15fr_0.75fr_0.7fr_0.95fr_auto] md:items-center">
+                    <div className="grid gap-2 lg:grid-cols-[minmax(12rem,1.35fr)_minmax(7rem,0.65fr)_minmax(6rem,0.55fr)_minmax(10rem,0.85fr)_minmax(9rem,auto)] lg:items-center">
                       <div className="min-w-0">
-                        <h3 className="text-base font-bold text-slate-950">{item.customerName}</h3>
-                        <p className="mt-1 truncate text-sm text-slate-600">{item.invoiceNumber}</p>
-                        {item.isMonthlyAccount ? (
-                          <p className="mt-1 text-xs font-semibold text-slate-500">Monthly Account</p>
-                        ) : null}
+                        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                          <h3 className="truncate text-sm font-bold text-slate-950 sm:text-base">
+                            {item.customerName}
+                          </h3>
+                          {item.isMonthlyAccount ? (
+                            <span className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] font-semibold text-slate-500">
+                              Monthly
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="mt-0.5 truncate text-xs text-slate-500">{item.invoiceNumber}</p>
                       </div>
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                           Outstanding
                         </p>
-                        <p className="mt-1 text-base font-bold text-slate-950">{item.balanceDue}</p>
-                        <p className="mt-1 text-xs text-slate-500">{item.paymentStatus}</p>
+                        <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                          <p className="text-sm font-bold text-slate-950">{item.balanceDue}</p>
+                          <p className="text-xs text-slate-500">{item.paymentStatus}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Aging</p>
-                        <p className="mt-1 text-sm font-bold text-slate-900">{item.agingBucket}</p>
-                        <p className="mt-1 text-xs text-slate-500">{item.dueStatusLabel}</p>
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Aging</p>
+                        <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                          <p className="text-sm font-bold text-slate-900">{item.agingBucket}</p>
+                          <p className="text-xs text-slate-500">{item.dueStatusLabel}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Due date</p>
-                        <p className="mt-1 text-sm font-semibold text-slate-800">{item.dueOrFollowUpDate}</p>
-                        <p className="mt-1 text-xs text-slate-500">
-                          Last: {item.lastFollowUpDate}
-                        </p>
-                        <p className="mt-1 text-xs text-slate-500">
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Due</p>
+                        <p className="mt-0.5 text-sm font-semibold text-slate-800">{item.dueOrFollowUpDate}</p>
+                        <p className="mt-0.5 truncate text-xs text-slate-500">
                           Next: {getOutstandingNextActionLabel(item)}
                         </p>
                       </div>
-                      <div className="flex flex-col gap-2 md:w-44">
+                      <div className="flex items-center gap-2 lg:justify-end">
                         <Link
-                          className="inline-flex min-h-10 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 py-2 text-sm font-bold text-white transition hover:bg-slate-700"
+                          aria-label={`Open Customer Folder for ${item.customerName}`}
+                          className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-slate-700"
                           data-outstanding-open-customer-folder={item.key}
                           href={`/customers/${item.customerId}`}
                         >
-                          Open Customer Folder
+                          Open
                         </Link>
-                        <button
-                          className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
-                          data-outstanding-review-detail-toggle={item.key}
-                          onClick={() =>
-                            setExpandedOutstandingPaymentKey((currentKey) =>
-                              currentKey === item.key ? "" : item.key,
-                            )
-                          }
-                          type="button"
-                        >
-                          {isExpanded ? "Hide details — Mock Only" : "View details — Mock Only"}
-                        </button>
+                        <details className="group relative flex-1 lg:flex-none">
+                          <summary
+                            className="inline-flex min-h-9 w-full cursor-pointer list-none items-center justify-between gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50 [&::-webkit-details-marker]:hidden"
+                            data-outstanding-review-detail-toggle={item.key}
+                          >
+                            <span>Actions</span>
+                            <span aria-hidden="true" className="text-slate-500 group-open:hidden">
+                              v
+                            </span>
+                            <span aria-hidden="true" className="hidden text-slate-500 group-open:inline">
+                              ^
+                            </span>
+                          </summary>
+                          <div
+                            className="absolute right-0 z-20 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-md border border-slate-200 bg-white p-2 shadow-lg sm:w-96"
+                            data-outstanding-review-actions-dropdown={item.key}
+                            data-outstanding-review-expanded={item.key}
+                          >
+                            <div className="grid gap-2">
+                              <div className="min-w-0">
+                                <p className="text-xs leading-5 text-slate-700">{item.reason}</p>
+                                <p className="mt-1 text-xs text-slate-500">
+                                  Last follow-up: {item.lastFollowUpDate}
+                                </p>
+                                <div
+                                  className="mt-2 rounded-md border border-sky-200 bg-sky-50 px-2 py-1.5 text-xs leading-5 text-sky-950"
+                                  data-outstanding-review-detail={item.key}
+                                >
+                                  <p className="font-bold">Mock/local detail only for {item.invoiceNumber}</p>
+                                  <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                                    <li>Customer folder reminder: open {item.customerName} before any real collection work.</li>
+                                    <li>{item.outstandingBookingsCount} mock outstanding booking rows are visible for this account.</li>
+                                    <li>Follow-up note placeholder only. No note, payment record, audit record, or customer record is created.</li>
+                                    <li>No invoice, statement, PDF, invoice number, sending, Supabase call, payment API, bank API, notification, or calendar action.</li>
+                                  </ul>
+                                </div>
+                              </div>
+
+                              <div className="grid content-start gap-2 sm:grid-cols-2">
+                                <button
+                                  className="min-h-9 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
+                                  data-payment-action="invoice-sent"
+                                  onClick={() => handleMockPaymentAction(item, "invoice-sent")}
+                                  type="button"
+                                >
+                                  Invoice sent
+                                </button>
+                                <button
+                                  className="min-h-9 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
+                                  data-payment-action="partial-payment"
+                                  onClick={() => handleMockPaymentAction(item, "partial-payment")}
+                                  type="button"
+                                >
+                                  Partial payment
+                                </button>
+                                <button
+                                  className="min-h-9 rounded-md border border-emerald-700 bg-emerald-700 px-2 py-1.5 text-xs font-bold text-white transition hover:bg-emerald-600"
+                                  data-payment-action="paid"
+                                  onClick={() => handleMockPaymentAction(item, "paid")}
+                                  type="button"
+                                >
+                                  Paid
+                                </button>
+                                <button
+                                  className="min-h-9 rounded-md border border-amber-700 bg-amber-50 px-2 py-1.5 text-xs font-bold text-amber-950 transition hover:bg-amber-100"
+                                  data-payment-action="waived"
+                                  onClick={() => handleMockPaymentAction(item, "waived")}
+                                  type="button"
+                                >
+                                  Waive
+                                </button>
+                              </div>
+
+                              <p
+                                aria-live="polite"
+                                className="rounded-md bg-slate-50 px-2 py-1.5 text-xs leading-5 text-slate-600"
+                                data-payment-action-feedback={item.key}
+                              >
+                                {item.feedback ?? "Mock helper: this row updates local page state only."}
+                              </p>
+                            </div>
+                          </div>
+                        </details>
                       </div>
                     </div>
-
-                    {isExpanded ? (
-                      <div className="mt-3 space-y-3" data-outstanding-review-expanded={item.key}>
-                        <p className="text-sm leading-6 text-slate-700">{item.reason}</p>
-                        <div
-                          className="rounded-md border border-sky-200 bg-sky-50 p-3 text-sm leading-6 text-sky-950"
-                          data-outstanding-review-detail={item.key}
-                        >
-                          <p className="font-bold">Mock/local detail only for {item.invoiceNumber}</p>
-                          <ul className="mt-2 list-disc space-y-1 pl-5">
-                            <li>Customer folder reminder: open {item.customerName} before any real collection work.</li>
-                            <li>{item.outstandingBookingsCount} mock outstanding booking rows are visible for this account.</li>
-                            <li>Follow-up note placeholder only. No note, payment record, audit record, or customer record is created.</li>
-                            <li>No invoice, statement, PDF, invoice number, sending, Supabase call, payment API, bank API, notification, or calendar action.</li>
-                          </ul>
-                        </div>
-
-                        <div className="grid gap-2 md:grid-cols-4">
-                          <button
-                            className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
-                            data-payment-action="invoice-sent"
-                            onClick={() => handleMockPaymentAction(item, "invoice-sent")}
-                            type="button"
-                          >
-                            Mark Invoice Sent
-                          </button>
-                          <button
-                            className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
-                            data-payment-action="partial-payment"
-                            onClick={() => handleMockPaymentAction(item, "partial-payment")}
-                            type="button"
-                          >
-                            Record Partial Payment
-                          </button>
-                          <button
-                            className="min-h-10 rounded-md border border-emerald-700 bg-emerald-700 px-3 py-2 text-sm font-bold text-white transition hover:bg-emerald-600"
-                            data-payment-action="paid"
-                            onClick={() => handleMockPaymentAction(item, "paid")}
-                            type="button"
-                          >
-                            Mark Paid
-                          </button>
-                          <button
-                            className="min-h-10 rounded-md border border-amber-700 bg-amber-50 px-3 py-2 text-sm font-bold text-amber-950 transition hover:bg-amber-100"
-                            data-payment-action="waived"
-                            onClick={() => handleMockPaymentAction(item, "waived")}
-                            type="button"
-                          >
-                            Waive Balance
-                          </button>
-                        </div>
-                        <p
-                          aria-live="polite"
-                          className="rounded-md bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600"
-                          data-payment-action-feedback={item.key}
-                        >
-                          {item.feedback ?? "Mock helper: this row updates local page state only."}
-                        </p>
-                      </div>
-                    ) : null}
                   </article>
                 );
               })

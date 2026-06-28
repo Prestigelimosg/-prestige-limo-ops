@@ -26252,7 +26252,7 @@ async function runChromeTest() {
           outstandingRows: [...document.querySelectorAll("[data-outstanding-payment-row]")].map((row) => ({
             actions: [...row.querySelectorAll("[data-payment-action]")].map((button) => button.textContent.trim()),
             detailButtons: [...row.querySelectorAll("[data-outstanding-review-detail-toggle]")].map((button) =>
-              button.textContent.trim(),
+              button.innerText.trim().replace(/\s+/g, " "),
             ),
             href: row.querySelector("[data-outstanding-open-customer-folder]")?.getAttribute("href") || "",
             id: row.getAttribute("data-outstanding-payment-row"),
@@ -27341,8 +27341,8 @@ async function runChromeTest() {
       for (const row of dashboardState.outstandingRows) {
         assert.deepEqual(
           row.detailButtons,
-          ["View details — Mock Only"],
-          `Expected mock detail control on ${row.id}`,
+          ["Actions v"],
+          `Expected compact mock action control on ${row.id}`,
         );
       }
       assert.deepEqual(
@@ -27435,8 +27435,8 @@ async function runChromeTest() {
       for (const row of dashboardState.outstandingRows) {
         assert.deepEqual(
           row.actions,
-          ["Mark Invoice Sent", "Record Partial Payment", "Mark Paid", "Waive Balance"],
-          `Expected mock manual payment controls on ${row.id}`,
+          ["Invoice sent", "Partial payment", "Paid", "Waive"],
+          `Expected compact mock manual payment controls on ${row.id}`,
         );
       }
       for (const row of dashboardState.collectionFollowUpRows) {
@@ -27607,6 +27607,28 @@ async function runChromeTest() {
       const clickMockPaymentAction = async (rowId, action, description) => {
         const rowSelector = `[data-outstanding-payment-row="${rowId}"]`;
         const actionSelector = `[data-payment-action="${action}"]`;
+        const opened = await evaluate(`(() => {
+          const row = document.querySelector(${JSON.stringify(rowSelector)});
+
+          if (!row) {
+            return false;
+          }
+
+          const details = row.querySelector("details");
+
+          if (details && !details.open) {
+            details.open = true;
+          }
+
+          return Boolean(row.querySelector(${JSON.stringify(actionSelector)}));
+        })()`);
+        assert.equal(opened, true, `Expected ${description} dropdown to be openable`);
+        await waitForCondition(
+          () =>
+            evaluate(`Boolean(document.querySelector(${JSON.stringify(rowSelector)})?.querySelector(${JSON.stringify(actionSelector)}))`),
+          10000,
+          `${description} dropdown action`,
+        );
         const clicked = await evaluate(`(() => {
           const row = document.querySelector(${JSON.stringify(rowSelector)});
           const button = row?.querySelector(${JSON.stringify(actionSelector)});
@@ -31008,10 +31030,10 @@ async function runChromeTest() {
         "Expected mock follow-up buttons not to call payment, bank, webhook, notification, WhatsApp, email, SMS, or Supabase resources",
       );
 
-      await clickMockPaymentAction("ritz-carlton:RITZ-0004", "invoice-sent", "Mark Invoice Sent");
-      await clickMockPaymentAction("ubs:UBS-0004", "partial-payment", "Record Partial Payment");
-      await clickMockPaymentAction("ritz-carlton:RITZ-0003", "paid", "Mark Paid");
-      await clickMockPaymentAction("vip-customer:VIP-0003", "waived", "Waive Balance");
+      await clickMockPaymentAction("ritz-carlton:RITZ-0004", "invoice-sent", "Invoice sent");
+      await clickMockPaymentAction("ubs:UBS-0004", "partial-payment", "Partial payment");
+      await clickMockPaymentAction("ritz-carlton:RITZ-0003", "paid", "Paid");
+      await clickMockPaymentAction("vip-customer:VIP-0003", "waived", "Waive");
 
       const paymentActionState = await waitForCondition(
         () =>

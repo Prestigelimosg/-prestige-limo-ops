@@ -32,6 +32,7 @@ async function loadRouteHarness() {
   const routeSource = await readFile(sourcePath, "utf8");
   const persistencePath = path.join(tempDir, "lib/admin-booking-persistence.js");
   const adapterPath = path.join(tempDir, "lib/admin-booking-supabase-adapter.js");
+  const emailAlertPath = path.join(tempDir, "lib/admin-new-booking-email-alert.js");
 
   await mkdir(path.dirname(outputPath), { recursive: true });
   await mkdir(path.dirname(persistencePath), { recursive: true });
@@ -66,6 +67,21 @@ async function loadRouteHarness() {
       "};",
     ].join("\n"),
   );
+  await writeFile(
+    emailAlertPath,
+    [
+      "function mock() { return globalThis.__prestigeCustomerBookingRequestApiMock; }",
+      "async function sendAdminNewBookingEmailAlert(booking) {",
+      "  const state = mock();",
+      "  state.alertCalls.push(booking);",
+      "  if (state.alertThrows) {",
+      "    throw new Error('mock alert failure');",
+      "  }",
+      "  return { ok: false, reason: 'alert_gate_closed', status: 'blocked' };",
+      "}",
+      "module.exports = { sendAdminNewBookingEmailAlert };",
+    ].join("\n"),
+  );
 
   return {
     cleanup: () => rm(tempDir, { force: true, recursive: true }),
@@ -75,6 +91,8 @@ async function loadRouteHarness() {
 
 function installMock(overrides = {}) {
   const state = {
+    alertCalls: [],
+    alertThrows: false,
     createCalls: [],
     createResult: {
       data: {
@@ -210,7 +228,40 @@ try {
       short_notice_review_required: true,
     },
   });
+  assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.alertCalls.length, 1);
+  assert.equal(
+    globalThis.__prestigeCustomerBookingRequestApiMock.alertCalls[0].booking_reference,
+    "CUST-SAFE-001",
+  );
   assertSafeCustomerBody(success.body, "short-notice success body");
+
+  installMock({
+    alertThrows: true,
+    createResult: {
+      data: {
+        admin_internal_status: "Admin Review Required",
+        booking_reference: "CUST-SAFE-ALERT-FAIL",
+        customer_facing_status: "Request Received",
+        short_notice_review_status: "Admin Review Required",
+      },
+      ok: true,
+    },
+  });
+  const alertFailureStillSucceeds = await readJson(
+    await harness.route.POST(postRequest({ passengerName: "Safe Passenger" })),
+  );
+
+  assert.equal(alertFailureStillSucceeds.status, 200);
+  assert.deepEqual(alertFailureStillSucceeds.body, {
+    ok: true,
+    request: {
+      booking_reference: "CUST-SAFE-ALERT-FAIL",
+      customer_facing_status: "Request Received",
+      short_notice_review_required: true,
+    },
+  });
+  assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.alertCalls.length, 1);
+  assertSafeCustomerBody(alertFailureStillSucceeds.body, "alert-failure success body");
 
   installMock({
     createResult: {

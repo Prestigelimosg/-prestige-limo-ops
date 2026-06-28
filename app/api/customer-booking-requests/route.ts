@@ -1,8 +1,10 @@
 import {
   createAdminBooking,
   parseCustomerBookingRequestPayload,
+  type AdminBookingPersistenceRecord,
 } from "../../../lib/admin-booking-persistence";
 import { customerBookingRequestPersistenceAdapterActor } from "../../../lib/admin-booking-supabase-adapter";
+import { sendAdminNewBookingEmailAlert } from "../../../lib/admin-new-booking-email-alert";
 
 export const dynamic = "force-dynamic";
 
@@ -89,6 +91,14 @@ function customerSafeError(rawError: string) {
   return "Booking request could not be saved safely.";
 }
 
+async function notifyAdminNewBookingRequest(booking: AdminBookingPersistenceRecord) {
+  try {
+    await sendAdminNewBookingEmailAlert(booking);
+  } catch {
+    // Customer booking intake must not fail because an admin alert channel is unavailable.
+  }
+}
+
 export async function GET() {
   return blockedResponse();
 }
@@ -147,6 +157,8 @@ export async function POST(request: Request) {
         { status: result.status },
       );
     }
+
+    await notifyAdminNewBookingRequest(result.data);
 
     return Response.json({
       ok: true,

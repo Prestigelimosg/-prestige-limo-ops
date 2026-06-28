@@ -57,6 +57,17 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer/driver-visible forbidden data remains blocked from this list path: driver payout, PayNow payout, customer price, billing, invoice, payment, internal admin notes, parser/debug, secrets, raw provider payloads, and mock QA/dev archive data.
 - Guard coverage lives in `scripts/test-admin-load-bookings-crm-fallback-compact-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Admin New Booking Email Alert Runtime Gate
+
+- A server-side admin Email alert can run after a customer `/book` request is saved, so the owner can receive new-booking alerts without depending on the admin Dashboard or Mac being open.
+- The alert is default-closed and requires `PRESTIGE_ADMIN_NEW_BOOKING_EMAIL_ALERT_ENABLED=true`, `PRESTIGE_EMAIL_PROVIDER=resend`, `PRESTIGE_ADMIN_NEW_BOOKING_EMAIL_ALERT_TO`, and `RESEND_API_KEY` before any provider request can happen.
+- The customer booking request response remains unchanged and customer-safe; an Email alert failure must not make customer booking submission fail.
+- The alert is one-message-per-saved-request, template-only, and includes only admin-safe booking summary fields: reference, customer/account, passenger, contact, pickup time, pickup, drop-off, trip type, and the admin Dashboard URL.
+- The alert must not expose driver payout, PayNow payout, customer price, billing/payment/PDF/invoice, internal admin notes, parser/debug, secrets/tokens, raw provider payloads, GPS/live location, calendar sync, or mock QA/dev archive data.
+- This does not add polling, scheduler, retry loop, batch/blast sending, DB writes beyond the already-approved booking save, Vercel env changes, deploys, provider SDKs, Telegram/WhatsApp/SMS, browser push notifications, GPS/live-location activation, billing/payment/PDF/invoice/payout, or calendar sync.
+- Browser/app push notifications for phone/Mac/admin devices remain a separate future lane requiring explicit device subscription, push-key/env, audit, rollback, and allowlist proof.
+- Guard coverage lives in `scripts/test-admin-new-booking-email-alert-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Live Admin Load Bookings Fallback Compact UI Verification
 
 - Evidence marker: `ADMIN-LOAD-BOOKINGS-FALLBACK-COMPACT-LIVE-20260626`.

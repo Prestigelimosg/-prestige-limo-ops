@@ -655,6 +655,7 @@ export default function MockCustomerDashboardPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [customerFolderFinderPageSize, setCustomerFolderFinderPageSize] = useState(10);
   const [customerFolderFinderPage, setCustomerFolderFinderPage] = useState(1);
+  const [customerFolderFinderSelectedId, setCustomerFolderFinderSelectedId] = useState("");
   const [regularCustomerBookingForm, setRegularCustomerBookingForm] = useState<RegularCustomerBookingForm>(
     initialRegularCustomerBookingForm,
   );
@@ -796,8 +797,19 @@ export default function MockCustomerDashboardPage() {
       };
     });
   }, [regularCustomerAccountReadState.accounts, regularCustomerAccountReadState.status]);
+  const selectedCustomerFolderFinderRow = useMemo(
+    () =>
+      customerFolderIndexRows.find(
+        (row) => row.customerId === customerFolderFinderSelectedId,
+      ) ?? null,
+    [customerFolderFinderSelectedId, customerFolderIndexRows],
+  );
   const filteredCustomers = useMemo(() => {
     return customerFolderIndexRows.filter((row) => {
+      if (customerFolderFinderSelectedId && row.customerId !== customerFolderFinderSelectedId) {
+        return false;
+      }
+
       if (!normalizedSearchTerm) {
         return true;
       }
@@ -813,7 +825,7 @@ export default function MockCustomerDashboardPage() {
         .toLowerCase()
         .includes(normalizedSearchTerm);
     });
-  }, [customerFolderIndexRows, normalizedSearchTerm]);
+  }, [customerFolderFinderSelectedId, customerFolderIndexRows, normalizedSearchTerm]);
   const customerFolderFinderTotalPages = Math.max(
     1,
     Math.ceil(filteredCustomers.length / customerFolderFinderPageSize),
@@ -1326,7 +1338,14 @@ export default function MockCustomerDashboardPage() {
   }
 
   function updateCustomerFolderFinderSearch(value: string) {
+    setCustomerFolderFinderSelectedId("");
     setSearchTerm(value);
+    setCustomerFolderFinderPage(1);
+  }
+
+  function updateCustomerFolderFinderSelection(value: string) {
+    setCustomerFolderFinderSelectedId(value);
+    setSearchTerm("");
     setCustomerFolderFinderPage(1);
   }
 
@@ -3572,7 +3591,23 @@ export default function MockCustomerDashboardPage() {
           </div>
 
           <div className="p-4 sm:p-5">
-            <div className="grid gap-3 lg:grid-cols-[1fr_12rem_auto] lg:items-end">
+            <div className="grid gap-3 lg:grid-cols-[minmax(14rem,0.9fr)_minmax(16rem,1fr)_10rem_auto] lg:items-end">
+              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
+                Customer dropdown
+                <select
+                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950 outline-none focus:border-slate-700"
+                  data-customer-folder-finder-select="true"
+                  onChange={(event) => updateCustomerFolderFinderSelection(event.target.value)}
+                  value={customerFolderFinderSelectedId}
+                >
+                  <option value="">All customer folders - {customerFolderFinderPageSize} per page</option>
+                  {customerFolderIndexRows.map((customer) => (
+                    <option key={customer.customerId} value={customer.customerId}>
+                      {customer.customerName} - {customer.customerId}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
                 Search customer / company / latest booking
                 <input
@@ -3634,7 +3669,9 @@ export default function MockCustomerDashboardPage() {
               data-customer-folder-finder-feedback="true"
               data-customer-search-helper="true"
             >
-              {normalizedSearchTerm
+              {selectedCustomerFolderFinderRow
+                ? `Dropdown selected ${selectedCustomerFolderFinderRow.customerName}. Open the row below or choose All customer folders to browse ${customerFolderFinderPageSize} per page.`
+                : normalizedSearchTerm
                 ? `Search is filtering customer folders locally for "${searchTerm}".`
                 : regularCustomerAccountReadState.message}
             </p>

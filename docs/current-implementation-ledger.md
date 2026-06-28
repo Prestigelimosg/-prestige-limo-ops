@@ -276,6 +276,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Customers Folder Finder And Unbilled Queue
 
 - Customers page now has a visible Customer Folder Finder that searches all loaded customer folders and paginates the compact folder rows 10 per page by default.
+- The finder includes a visible customer dropdown for direct folder selection plus search, so larger 200-plus account lists do not depend on typing first.
 - The finder keeps the existing guarded Load Saved Accounts control visible, but it does not auto-load or create a new route/API.
 - A new Unbilled Customers checkpoint sits before the invoice workspace so unbilled draft rows and statement-needed account rows are visible before invoice work starts.
 - Both lists are compact row/table layouts with next/previous controls for larger account books instead of giant account cards.

@@ -58,7 +58,7 @@ for (const phrase of [
   "The Dashboard now uses compact read-only booking summaries plus `Open` handoff buttons; single-booking driver assignment, status, copy, job-card, and completion work stays in Dispatch/Bookings so page purposes do not duplicate.",
   "The loaded active jobs monitor is shown on the Dashboard command centre for multi-driver scanning; the Dispatch day-of-trip monitor remains the selected single-booking workbench.",
   "The loaded active jobs monitor keeps the first four active jobs visible by default and provides a compact `Show all active jobs` / `Show less` toggle when more loaded active jobs exist, so dispatch can inspect all running jobs from Dashboard without leaving the command centre.",
-  "The Dashboard active jobs monitor now shows a compact saved driver report readout per visible active job, using the existing guarded admin `GET /api/admin-driver-job-statuses` path only, with monitor-wide and per-card refresh controls.",
+  "The Dashboard active jobs monitor now shows a compact saved driver report readout per visible active job, using the existing guarded admin `GET /api/admin-driver-job-statuses` path only, with monitor-wide/per-card refresh controls and a read-only dashboard auto-refresh every 10 seconds while the operator is viewing Dashboard.",
   "The Dashboard driver report readout is read-only and does not create driver status events, notification rows, provider sends, GPS/live-location records, billing/payment/PDF/invoice/payout records, or a duplicate single-booking Dispatch workflow.",
   "The Bookings tab shows a compact new-request badge/highlight after open customer requests are detected; no sound, browser notification, polling loop, provider send, or new route is added.",
 ]) {
@@ -286,6 +286,16 @@ assertIncludes(
   appPage,
   'data-admin-multi-driver-active-jobs-refresh-statuses="true"',
   "Dashboard monitor-wide driver report refresh button",
+);
+assertIncludes(
+  appPage,
+  'data-admin-multi-driver-active-jobs-auto-refresh="true"',
+  "Dashboard driver report auto-refresh indicator",
+);
+assertIncludes(
+  appPage,
+  "window.setInterval(() => {\n      for (const bookingReference of bookingReferences) {\n        void refreshDashboardDriverJobStatusRead(bookingReference);\n      }\n    }, 10 * 1000);",
+  "Dashboard driver report read-only auto-refresh interval",
 );
 assertIncludes(
   appPage,

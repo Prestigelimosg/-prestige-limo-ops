@@ -17375,6 +17375,22 @@ export default function Home() {
     }
   }, [activeTab, activeJobDriverStatusReferenceKey]);
 
+  useEffect(() => {
+    const bookingReferences = activeJobDriverStatusReferenceKey.split("|").filter(Boolean);
+
+    if (activeTab !== "dashboard" || bookingReferences.length === 0) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      for (const bookingReference of bookingReferences) {
+        void refreshDashboardDriverJobStatusRead(bookingReference);
+      }
+    }, 10 * 1000);
+
+    return () => window.clearInterval(intervalId);
+  }, [activeTab, activeJobDriverStatusReferenceKey]);
+
   function refreshVisibleDashboardDriverReports() {
     for (const bookingReference of activeJobDriverStatusReferenceList) {
       dashboardDriverJobStatusAutoRequestedRef.current.add(bookingReference);
@@ -17405,6 +17421,14 @@ export default function Home() {
             >
               Refresh reports
             </button>
+          ) : null}
+          {activeJobDriverStatusReferenceList.length > 0 ? (
+            <span
+              className="w-fit rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold uppercase text-lime-900 ring-1 ring-lime-200"
+              data-admin-multi-driver-active-jobs-auto-refresh="true"
+            >
+              Auto-refresh 10s
+            </span>
           ) : null}
           <span
             className="w-fit rounded-full bg-lime-100 px-2.5 py-1 text-xs font-semibold uppercase text-lime-900 ring-1 ring-lime-200"

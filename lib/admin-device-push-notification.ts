@@ -550,6 +550,71 @@ async function sendWebPush(
   });
 }
 
+function getPushProviderStatusCode(error: unknown): number | null {
+  if (!error || typeof error !== "object") {
+    return null;
+  }
+
+  const statusCode = (error as { statusCode?: unknown }).statusCode;
+  return typeof statusCode === "number" ? statusCode : null;
+}
+
+async function recordSubscriptionSendSuccess(
+  config: AdminDevicePushConfig,
+  subscription: PushSubscription,
+): Promise<void> {
+  const endpoint = safeText(subscription.endpoint, 2048);
+  if (!endpoint) {
+    return;
+  }
+
+  const now = new Date().toISOString();
+  try {
+    await createSupabaseClient(config)
+      .from("admin_device_push_subscriptions")
+      .update({
+        last_success_at: now,
+        updated_at: now,
+      })
+      .eq("endpoint", endpoint);
+  } catch {
+    // Delivery health writes are best-effort; alert delivery already succeeded.
+  }
+}
+
+async function recordSubscriptionSendFailure(
+  config: AdminDevicePushConfig,
+  subscription: PushSubscription,
+  error: unknown,
+): Promise<void> {
+  const endpoint = safeText(subscription.endpoint, 2048);
+  if (!endpoint) {
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const statusCode = getPushProviderStatusCode(error);
+  const shouldRevoke = statusCode === 404 || statusCode === 410;
+  const failureUpdate: Record<string, string> = {
+    last_failure_at: now,
+    updated_at: now,
+  };
+
+  if (shouldRevoke) {
+    failureUpdate.subscription_status = "revoked";
+    failureUpdate.revoked_at = now;
+  }
+
+  try {
+    await createSupabaseClient(config)
+      .from("admin_device_push_subscriptions")
+      .update(failureUpdate)
+      .eq("endpoint", endpoint);
+  } catch {
+    // A stale-device health update must not block alerts to other devices.
+  }
+}
+
 function blockedAlertResult(
   reason: AdminNewBookingDevicePushAlertResult["reason"],
   devicePushEnabled = false,
@@ -612,18 +677,32 @@ export async function sendAdminNewBookingDevicePushAlert(
     ((subscription: PushSubscription, pushPayload: AdminDevicePushPayload) =>
       sendWebPush(config, subscription, pushPayload));
 
+  const shouldRecordSubscriptionHealth =
+    !options.subscriptionLoader && !options.pushSender;
+
   let providerRequestCount = 0;
+  let successfulRequestCount = 0;
   for (const subscription of subscriptions) {
     providerRequestCount += 1;
     try {
       await sender(subscription, payload);
-    } catch {
-      return {
-        ...blockedAlertResult("provider_failure", true),
-        status: "failed",
-        provider_request_count: providerRequestCount,
-      };
+      successfulRequestCount += 1;
+      if (shouldRecordSubscriptionHealth) {
+        await recordSubscriptionSendSuccess(config, subscription);
+      }
+    } catch (error) {
+      if (shouldRecordSubscriptionHealth) {
+        await recordSubscriptionSendFailure(config, subscription, error);
+      }
     }
+  }
+
+  if (successfulRequestCount === 0) {
+    return {
+      ...blockedAlertResult("provider_failure", true),
+      status: "failed",
+      provider_request_count: providerRequestCount,
+    };
   }
 
   return {

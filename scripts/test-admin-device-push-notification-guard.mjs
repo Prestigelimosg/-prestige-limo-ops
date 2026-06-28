@@ -300,6 +300,77 @@ try {
     ["Private Passenger", "Private pickup", "CUST-PRIVATE-003", "private-id"],
     "admin push payload",
   );
+
+  let resilientSendCount = 0;
+  const resilientAlert = await helper.sendAdminNewBookingDevicePushAlert(
+    {
+      booking_reference: "CUST-PRIVATE-004",
+      id: "private-id-2",
+      passenger_name: "Second Private Passenger",
+      pickup_location: "Second Private pickup",
+    },
+    {
+      env: configuredEnv,
+      subscriptionLoader: async () => [
+        {
+          endpoint: "https://push.example.test/stale-subscription",
+          keys: {
+            auth: "fake-auth-stale",
+            p256dh: "fake-p256dh-stale",
+          },
+        },
+        {
+          endpoint: "https://push.example.test/active-subscription",
+          keys: {
+            auth: "fake-auth-active",
+            p256dh: "fake-p256dh-active",
+          },
+        },
+      ],
+      pushSender: async () => {
+        resilientSendCount += 1;
+        if (resilientSendCount === 1) {
+          const staleError = new Error("stale subscription");
+          staleError.statusCode = 410;
+          throw staleError;
+        }
+      },
+    },
+  );
+
+  assert.equal(resilientAlert.ok, true);
+  assert.equal(resilientAlert.reason, "send_succeeded");
+  assert.equal(resilientAlert.provider_request_count, 2);
+
+  const failedAlert = await helper.sendAdminNewBookingDevicePushAlert(
+    { booking_reference: "CUST-HIDDEN-005", id: "hidden" },
+    {
+      env: configuredEnv,
+      subscriptionLoader: async () => [
+        {
+          endpoint: "https://push.example.test/failed-a",
+          keys: {
+            auth: "fake-auth-failed-a",
+            p256dh: "fake-p256dh-failed-a",
+          },
+        },
+        {
+          endpoint: "https://push.example.test/failed-b",
+          keys: {
+            auth: "fake-auth-failed-b",
+            p256dh: "fake-p256dh-failed-b",
+          },
+        },
+      ],
+      pushSender: async () => {
+        throw new Error("provider unavailable");
+      },
+    },
+  );
+
+  assert.equal(failedAlert.ok, false);
+  assert.equal(failedAlert.reason, "provider_failure");
+  assert.equal(failedAlert.provider_request_count, 2);
 } finally {
   await rm(tempDir, { force: true, recursive: true });
 }

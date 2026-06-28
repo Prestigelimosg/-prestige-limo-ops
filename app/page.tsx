@@ -4815,6 +4815,43 @@ function bookingRecordBelongsInCompletedHistory(bookingRecord: BookingRecord, to
   return bookingRecordIsCompletedStatus(bookingRecord) || bookingRecordIsEarlierJob(bookingRecord, todayKey);
 }
 
+function bookingRecordPickupDateTimeMs(bookingRecord: BookingRecord) {
+  return parsePickupDateTimeMs(
+    getBookingDateKey(bookingRecord),
+    formatPickupTimeFromRecord(bookingRecord),
+  );
+}
+
+function bookingRecordIsPickupWithinNextHours(
+  bookingRecord: BookingRecord,
+  currentTimeMs: number,
+  hours: number,
+) {
+  const pickupTimeMs = bookingRecordPickupDateTimeMs(bookingRecord);
+
+  return (
+    pickupTimeMs !== null &&
+    pickupTimeMs >= currentTimeMs &&
+    pickupTimeMs - currentTimeMs < hours * 60 * 60 * 1000
+  );
+}
+
+function bookingRecordIsInsideActiveJobMonitorWindow(
+  bookingRecord: BookingRecord,
+  currentTimeMs: number,
+) {
+  const pickupTimeMs = bookingRecordPickupDateTimeMs(bookingRecord);
+
+  if (pickupTimeMs === null) {
+    return false;
+  }
+
+  const monitorWindowStartMs = pickupTimeMs - 60 * 60 * 1000;
+  const monitorWindowEndMs = pickupTimeMs + 24 * 60 * 60 * 1000;
+
+  return currentTimeMs >= monitorWindowStartMs && currentTimeMs <= monitorWindowEndMs;
+}
+
 function sortBookingHistoryNewestFirst(firstBooking: BookingRecord, secondBooking: BookingRecord) {
   const firstDate = getBookingDateKey(firstBooking);
   const secondDate = getBookingDateKey(secondBooking);
@@ -9181,7 +9218,7 @@ export default function Home() {
   const [completingBookingId, setCompletingBookingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [showAllActiveJobs, setShowAllActiveJobs] = useState(false);
-  const [dashboardDriverJobAutoRefreshEnabled, setDashboardDriverJobAutoRefreshEnabled] = useState(true);
+  const [dashboardDriverJobAutoRefreshEnabled, setDashboardDriverJobAutoRefreshEnabled] = useState(false);
   const [dashboardDriverJobStatusReadStates, setDashboardDriverJobStatusReadStates] =
     useState<Record<string, AdminDriverJobStatusReadState>>({});
   const dashboardDriverJobStatusAutoRequestedRef = useRef<Set<string>>(new Set());
@@ -11839,9 +11876,29 @@ export default function Home() {
       ),
     [handledCustomerBookingRequestKeySet, operationalBookings],
   );
+  const urgentCustomerBookingRequestBookings = useMemo(
+    () =>
+      customerBookingRequestBookings.filter((bookingRecord) =>
+        bookingRecordIsPickupWithinNextHours(bookingRecord, currentTimeMs, 24),
+      ),
+    [currentTimeMs, customerBookingRequestBookings],
+  );
   const visibleCustomerBookingRequestBookings = useMemo(
     () => customerBookingRequestBookings.slice(0, 5),
     [customerBookingRequestBookings],
+  );
+  const visibleUrgentCustomerBookingRequestBookings = useMemo(
+    () => urgentCustomerBookingRequestBookings.slice(0, 3),
+    [urgentCustomerBookingRequestBookings],
+  );
+  const urgentCustomerBookingRequestKeySet = useMemo(
+    () =>
+      new Set(
+        urgentCustomerBookingRequestBookings
+          .map(getCustomerBookingRequestQueueKey)
+          .filter(Boolean),
+      ),
+    [urgentCustomerBookingRequestBookings],
   );
   const filteredRecentBookings = useMemo(
     () =>
@@ -11973,6 +12030,11 @@ export default function Home() {
       useTypedOperationalOrder: true,
     });
   const customerBookingRequestCount = customerBookingRequestBookings.length;
+  const urgentCustomerBookingRequestDisplayItems =
+    buildLoadBookingsOperationalDisplayItems(visibleUrgentCustomerBookingRequestBookings, {
+      useTypedOperationalOrder: true,
+    });
+  const urgentCustomerBookingRequestCount = urgentCustomerBookingRequestBookings.length;
   const filteredRecentBookingDisplayItems =
     buildLoadBookingsOperationalDisplayItems(filteredRecentBookings, { useTypedOperationalOrder: true });
   const filteredCompletedBookingDisplayItems =
@@ -15989,14 +16051,22 @@ export default function Home() {
     >
       <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-emerald-950">New Booking Requests</h3>
+          <h3 className="text-sm font-semibold text-emerald-950">Urgent &amp; New Booking Requests</h3>
           <p className="text-xs text-emerald-800">
-            Review the request first, then load it into Dispatch when ready.
+            Urgent means pickup is under 24 hours; new stays here until reviewed.
           </p>
         </div>
-        <span className="inline-flex w-fit rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-emerald-900 ring-1 ring-emerald-200">
-          {customerBookingRequestDisplayItems.length} open
-        </span>
+        <div className="flex flex-wrap gap-1.5">
+          <span
+            className="inline-flex w-fit rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900 ring-1 ring-amber-200"
+            data-new-customer-booking-requests-urgent-count={String(urgentCustomerBookingRequestCount)}
+          >
+            {urgentCustomerBookingRequestCount} urgent
+          </span>
+          <span className="inline-flex w-fit rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-emerald-900 ring-1 ring-emerald-200">
+            {customerBookingRequestDisplayItems.length} open
+          </span>
+        </div>
       </div>
       <div className="mt-3 space-y-2">
         {customerBookingRequestDisplayItems.map(({ bookingRecord: requestBooking, operationalCard }) => {
@@ -16014,6 +16084,9 @@ export default function Home() {
             operationalCard.traveler_display_name ||
             operationalCard.customer_display_name ||
             "Unknown";
+          const isUrgentRequest = urgentCustomerBookingRequestKeySet.has(
+            getCustomerBookingRequestQueueKey(requestBooking),
+          );
           const pickupMetaText = [
             operationalCard.pickup_datetime ||
               formatPickupDateTime(getBookingDateKey(requestBooking), requestBooking.pickup_time),
@@ -16024,6 +16097,7 @@ export default function Home() {
             <article
               className="grid gap-2 rounded-md border border-emerald-200 bg-white p-2 text-sm shadow-sm md:grid-cols-[minmax(12rem,0.8fr)_minmax(10rem,0.8fr)_minmax(14rem,1.2fr)_auto] md:items-center"
               data-new-customer-booking-request-row={bookingId}
+              data-new-customer-booking-request-urgency={isUrgentRequest ? "urgent" : "new"}
               key={`customer-request-${requestBooking.id}`}
             >
               <div className="min-w-0">
@@ -16034,9 +16108,20 @@ export default function Home() {
               </div>
               <div className="min-w-0">
                 <p className="truncate text-slate-800">{passengerText}</p>
-                <p className="truncate text-xs text-slate-500">
-                  {bookingStatusLabel(requestBooking.status)}
-                </p>
+                <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                      isUrgentRequest
+                        ? "bg-amber-100 text-amber-900 ring-1 ring-amber-200"
+                        : "bg-emerald-50 text-emerald-900 ring-1 ring-emerald-100"
+                    }`}
+                  >
+                    {isUrgentRequest ? "Urgent <24h" : "New"}
+                  </span>
+                  <span className="truncate text-xs text-slate-500">
+                    {bookingStatusLabel(requestBooking.status)}
+                  </span>
+                </div>
               </div>
               <p className="min-w-0 truncate text-slate-700">{routeText}</p>
               <button
@@ -17821,23 +17906,8 @@ export default function Home() {
 
     return dateKey >= todayKey ? 0 : 1;
   }
-  function activeJobPickupTimeMs(bookingRecord: BookingRecord) {
-    return parsePickupDateTimeMs(
-      getBookingDateKey(bookingRecord),
-      formatPickupTimeFromRecord(bookingRecord),
-    );
-  }
   function activeJobIsInMonitorWindow(bookingRecord: BookingRecord) {
-    const pickupTimeMs = activeJobPickupTimeMs(bookingRecord);
-
-    if (pickupTimeMs === null) {
-      return false;
-    }
-
-    const monitorWindowStartMs = pickupTimeMs - 60 * 60 * 1000;
-    const monitorWindowEndMs = pickupTimeMs + 24 * 60 * 60 * 1000;
-
-    return currentTimeMs >= monitorWindowStartMs && currentTimeMs <= monitorWindowEndMs;
+    return bookingRecordIsInsideActiveJobMonitorWindow(bookingRecord, currentTimeMs);
   }
   const dayOfTripActiveJobBookings = operationalBookings
     .filter((bookingRecord) => {
@@ -17881,8 +17951,15 @@ export default function Home() {
       cleanReferenceText(bookingRecord.id)
     );
   }
-  const activeJobsMonitorCollapsedCount = Math.max(dayOfTripActiveJobBookings.length - 4, 0);
-  const defaultDayOfTripActiveJobVisibleBookings = dayOfTripActiveJobBookings.slice(0, 4);
+  const activeJobsMonitorDefaultVisibleCount = 1;
+  const activeJobsMonitorCollapsedCount = Math.max(
+    dayOfTripActiveJobBookings.length - activeJobsMonitorDefaultVisibleCount,
+    0,
+  );
+  const defaultDayOfTripActiveJobVisibleBookings = dayOfTripActiveJobBookings.slice(
+    0,
+    activeJobsMonitorDefaultVisibleCount,
+  );
   const loadedActiveJobReference = cleanReferenceText(loadedBookingId);
   const loadedActiveJobBooking = loadedActiveJobReference
     ? dayOfTripActiveJobBookings.find(
@@ -17896,7 +17973,10 @@ export default function Home() {
           (activeJobBooking) =>
             getActiveJobBookingReference(activeJobBooking) === loadedActiveJobReference,
         )
-      ? [loadedActiveJobBooking, ...defaultDayOfTripActiveJobVisibleBookings].slice(0, 4)
+      ? [loadedActiveJobBooking, ...defaultDayOfTripActiveJobVisibleBookings].slice(
+          0,
+          activeJobsMonitorDefaultVisibleCount,
+        )
       : defaultDayOfTripActiveJobVisibleBookings;
   const dayOfTripActiveJobGridClass =
     dayOfTripActiveJobVisibleBookings.length >= 4
@@ -17965,7 +18045,7 @@ export default function Home() {
         <div className="min-w-0">
           <h3 className="text-base font-semibold text-lime-950">Active Jobs Monitor</h3>
           <p className="text-xs text-lime-900 sm:text-sm">
-            Watch loaded running jobs here. Open one booking in Dispatch for detailed work.
+            One job window by default. Jobs appear here 1 hour before pickup; expand only when more are active.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -18001,16 +18081,16 @@ export default function Home() {
             className="w-fit rounded-full bg-lime-100 px-2.5 py-1 text-xs font-semibold uppercase text-lime-900 ring-1 ring-lime-200"
             data-admin-multi-driver-active-jobs-count={String(dayOfTripActiveJobBookings.length)}
           >
-            {dayOfTripActiveJobBookings.length} active
+            {dayOfTripActiveJobBookings.length} in window
           </span>
-          {dayOfTripActiveJobBookings.length > 4 ? (
+          {dayOfTripActiveJobBookings.length > activeJobsMonitorDefaultVisibleCount ? (
             <button
               className="h-8 rounded-md border border-lime-300 bg-white px-3 text-xs font-semibold text-lime-950 transition hover:bg-lime-50"
               data-admin-multi-driver-active-jobs-toggle="true"
               onClick={() => setShowAllActiveJobs((currentValue) => !currentValue)}
               type="button"
             >
-              {showAllActiveJobs ? "Show less" : "Show all active jobs"}
+              {showAllActiveJobs ? "Show one job" : "Show other active jobs"}
             </button>
           ) : null}
         </div>
@@ -18151,9 +18231,9 @@ export default function Home() {
       )}
       {!showAllActiveJobs && activeJobsMonitorCollapsedCount > 0 ? (
         <p className="mt-2 text-xs text-lime-800">
-          {activeJobsMonitorCollapsedCount} more loaded active job
-          {activeJobsMonitorCollapsedCount === 1 ? "" : "s"}. Use Show all active jobs to view
-          them here.
+          {activeJobsMonitorCollapsedCount} more active job
+          {activeJobsMonitorCollapsedCount === 1 ? "" : "s"} inside the 1-hour pickup monitor window. Use Show
+          other active jobs to expand.
         </p>
       ) : null}
     </section>
@@ -33941,46 +34021,48 @@ export default function Home() {
           {statusPanel}
 
           <section
-            aria-label="New Booking Requests"
+            aria-label="Urgent Booking Requests"
             className={`mb-4 rounded-md border p-2 sm:p-3 ${
-              customerBookingRequestCount > 0
-                ? "border-emerald-300 bg-emerald-50"
+              urgentCustomerBookingRequestCount > 0
+                ? "border-amber-300 bg-amber-50"
                 : "border-stone-200 bg-stone-50"
             }`}
             data-dashboard-new-booking-requests-panel="true"
+            data-dashboard-urgent-booking-requests-panel="true"
           >
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="text-base font-semibold text-slate-950">New Booking Requests</h3>
+                  <h3 className="text-base font-semibold text-slate-950">Urgent Booking Requests</h3>
                   <span
                     className={`rounded-full px-2.5 py-1 text-xs font-semibold uppercase ring-1 ${
-                      customerBookingRequestCount > 0
-                        ? "bg-emerald-100 text-emerald-900 ring-emerald-200"
+                      urgentCustomerBookingRequestCount > 0
+                        ? "bg-amber-100 text-amber-900 ring-amber-200"
                         : "bg-white text-slate-600 ring-stone-200"
                     }`}
-                    data-dashboard-new-booking-requests-count={String(customerBookingRequestCount)}
+                    data-dashboard-new-booking-requests-count={String(urgentCustomerBookingRequestCount)}
+                    data-dashboard-urgent-booking-requests-count={String(urgentCustomerBookingRequestCount)}
                   >
-                    {customerBookingRequestCount} open
+                    {urgentCustomerBookingRequestCount} urgent
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-slate-600 sm:text-sm">
-                  Customer requests land here first. Review them in Bookings before loading Dispatch.
+                  Pickup under 24 hours only. Review urgent requests in Bookings before loading Dispatch.
                 </p>
               </div>
               <button
-                className="h-9 rounded-md border border-emerald-300 bg-white px-3 text-sm font-semibold text-emerald-900 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:border-stone-200 disabled:text-slate-400"
+                className="h-9 rounded-md border border-amber-300 bg-white px-3 text-sm font-semibold text-amber-900 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:border-stone-200 disabled:text-slate-400"
                 data-dashboard-review-new-booking-requests="true"
-                disabled={customerBookingRequestCount === 0}
+                disabled={urgentCustomerBookingRequestCount === 0}
                 onClick={openCustomerBookingRequestsReview}
                 type="button"
               >
                 Review Requests
               </button>
             </div>
-            {customerBookingRequestDisplayItems.length > 0 ? (
+            {urgentCustomerBookingRequestDisplayItems.length > 0 ? (
               <div className="mt-3 grid gap-2" data-dashboard-new-booking-request-rows="true">
-                {customerBookingRequestDisplayItems.slice(0, 3).map(({ bookingRecord, operationalCard }) => {
+                {urgentCustomerBookingRequestDisplayItems.map(({ bookingRecord, operationalCard }) => {
                   const routePoints = getRoutePoints(bookingRecord);
                   const pickup = operationalCard.pickup_address || routePoints[0] || "Pickup";
                   const dropoff =
@@ -33994,8 +34076,9 @@ export default function Home() {
 
                   return (
                     <button
-                      className="grid min-h-10 gap-1 rounded-md border border-emerald-200 bg-white px-3 py-2 text-left text-sm transition hover:bg-emerald-50 md:grid-cols-[minmax(9rem,0.8fr)_minmax(10rem,0.8fr)_minmax(12rem,1.2fr)] md:items-center"
+                      className="grid min-h-10 gap-1 rounded-md border border-amber-200 bg-white px-3 py-2 text-left text-sm transition hover:bg-amber-50 md:grid-cols-[minmax(9rem,0.8fr)_minmax(10rem,0.8fr)_minmax(12rem,1.2fr)] md:items-center"
                       data-dashboard-new-booking-request-row={bookingId}
+                      data-dashboard-urgent-booking-request-row={bookingId}
                       key={`dashboard-request-${bookingRecord.id}`}
                       onClick={openCustomerBookingRequestsReview}
                       type="button"
@@ -34021,7 +34104,7 @@ export default function Home() {
               </div>
             ) : (
               <p className="mt-3 rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-slate-600">
-                No new customer booking requests loaded.
+                No urgent booking requests inside 24 hours loaded.
               </p>
             )}
           </section>

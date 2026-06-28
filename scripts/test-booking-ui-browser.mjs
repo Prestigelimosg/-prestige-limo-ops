@@ -7654,7 +7654,7 @@ async function runChromeTest() {
       0,
       "Expected Dashboard command centre not to duplicate detailed assignment/status controls",
     );
-    assert.match(dashboardCommandCentreState.visibleText, /New Booking Requests/);
+    assert.match(dashboardCommandCentreState.visibleText, /Urgent Booking Requests/);
     assert.match(dashboardCommandCentreState.visibleText, /Active Jobs Monitor/);
     assert.match(dashboardCommandCentreState.visibleText, /Admin App Notifications/);
 

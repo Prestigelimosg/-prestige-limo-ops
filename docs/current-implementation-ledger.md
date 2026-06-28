@@ -45,17 +45,17 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Recent and Completed booking lists now render compact expandable rows by default so dispatch can scan more bookings at once while keeping existing details and action buttons available.
 - The Bookings tab now triggers the same safe Load Bookings read automatically the first time it is opened with an empty loaded list.
 - Open customer booking requests are surfaced on the Dashboard command centre and above Recent Bookings, using the existing customer request source markers with a bounded fallback for open `CUST-` request references when live rows do not carry those markers.
-- The Dashboard is the default admin landing tab, shows a compact `New Booking Requests` alert, and routes request clicks to the existing Bookings review area instead of loading Dispatch directly.
+- The Dashboard is the default admin landing tab, shows a compact `Urgent Booking Requests` alert for open customer requests with pickup under 24 hours, and routes request clicks to the existing Bookings review area instead of loading Dispatch directly.
 - The Dashboard now runs the same existing safe Load Bookings read once on initial command-centre entry when the local booking list is empty, so newly submitted customer requests can appear without first opening the Bookings tab.
 - Dashboard initial Load Bookings completion only writes the global status message while the operator is still on Dashboard, so a delayed read cannot overwrite Rates or other tab feedback after navigation.
 - The Bookings request row is the review handoff point and can load the selected request into the existing Dispatch form only when the operator chooses `Load this booking`; the handoff focuses the existing Customer Copy section for admin review/send preparation without adding a duplicate write path.
-- Loading a customer request into Dispatch now records a bounded browser-local handled-request key so that request leaves the Dashboard/Bookings `New Booking Requests` queue and badge on that admin browser while remaining available in Recent/Active booking lists.
+- Loading a customer request into Dispatch now records a bounded browser-local handled-request key so that request leaves the Dashboard urgent queue plus the Bookings `Urgent & New Booking Requests` queue and badge on that admin browser while remaining available in Recent/Active booking lists.
 - Loading a saved booking into Dispatch refreshes the typed operational display once immediately and pauses one background sync tick, keeping the existing guarded read set stable while Customer Copy focuses for review.
 - The Dashboard now uses compact read-only booking summaries plus `Open` handoff buttons; single-booking driver assignment, status, copy, job-card, and completion work stays in Dispatch/Bookings so page purposes do not duplicate.
 - The loaded active jobs monitor is shown on the Dashboard command centre for multi-driver scanning; the Dispatch day-of-trip monitor remains the selected single-booking workbench.
-- The loaded active jobs monitor keeps the first four active jobs visible by default and provides a compact `Show all active jobs` / `Show less` toggle when more loaded active jobs exist, so dispatch can inspect all running jobs from Dashboard without leaving the command centre.
-- The default active jobs monitor set pins the currently loaded booking when it would otherwise be hidden below the first four rows, so its saved driver report can refresh after OTW/OTS/POB/Completed without first opening `Show all active jobs`.
-- The Dashboard active jobs monitor now shows a compact saved driver report readout per visible active job, using the existing guarded admin `GET /api/admin-driver-job-statuses` path only, with monitor-wide/per-card refresh controls and a read-only dashboard auto-refresh every 10 seconds while the operator is viewing Dashboard.
+- The loaded active jobs monitor shows one active job window by default and provides a compact `Show other active jobs` / `Show one job` toggle only when more loaded active jobs are inside the 1-hour pickup monitor window.
+- The default active jobs monitor set pins the currently loaded booking when it would otherwise be hidden below the one visible row, so its saved driver report can refresh after OTW/OTS/POB/Completed without expanding the monitor first.
+- The Dashboard active jobs monitor now shows a compact saved driver report readout per visible job, using the existing guarded admin `GET /api/admin-driver-job-statuses` path only, with monitor-wide/per-card refresh controls and a read-only dashboard auto-refresh toggle that is off by default.
 - The Dashboard driver report readout is read-only and does not create driver status events, notification rows, provider sends, GPS/live-location records, billing/payment/PDF/invoice/payout records, or a duplicate single-booking Dispatch workflow.
 - The Bookings tab shows a compact new-request badge/highlight after open customer requests are detected; no sound, browser notification, polling loop, provider send, or new route is added.
 - Customer/driver-visible forbidden data remains blocked from this list path: driver payout, PayNow payout, customer price, billing, invoice, payment, internal admin notes, parser/debug, secrets, raw provider payloads, and mock QA/dev archive data.
@@ -70,6 +70,15 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Earlier non-completed rows do not show `Undo completed` or `Delete` because they are history rows, not completed-status rows.
 - This is UI-only grouping/layout on existing loaded booking data; it does not add routes/APIs, DB writes, env changes, provider sends, GPS/live location, billing/payment/PDF/invoice/payout, calendar sync, parser changes, or shims.
 - Guard coverage lives in `scripts/test-bookings-earlier-history-compact-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+
+### Dashboard Urgent Requests And One-Window Active Monitor
+
+- Dashboard request panel is now `Urgent Booking Requests` and only displays open customer requests with pickup under 24 hours.
+- The Bookings page request panel remains the full queue as `Urgent & New Booking Requests`, with row badges separating urgent under-24h requests from new non-urgent requests.
+- Active Jobs Monitor shows one job window by default, auto-includes jobs only when they are inside the 1-hour-before-pickup monitor window, and expands with `Show other active jobs` only when more jobs are inside that window.
+- Dashboard driver report auto-refresh remains a manual toggle and is off by default.
+- This is UI-only filtering/layout on existing loaded booking data; it does not add routes/APIs, DB writes, env changes, provider sends, notification sends, GPS/live location, billing/payment/PDF/invoice/payout, calendar sync, parser changes, or shims.
+- Guard coverage lives in `scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Admin New Booking Email Alert Runtime Gate
 
@@ -204,7 +213,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The admin Dispatch page quietly refreshes the existing active driver job link read once when booking sync sees driver name/contact/plate but no vehicle model on the currently loaded booking, so the safe vehicle summary can catch up after driver `Save & Acknowledge Job` without a manual refresh.
 - If the loaded Dispatch booking already has driver name/contact/plate but no vehicle model, the same one-shot active driver job link safe-summary fallback starts immediately on load.
 - Customer Copy and Driver Dispatch can reflect driver-entered details without pressing Refresh or reloading the page.
-- The Dashboard Active Jobs Monitor pins the currently loaded booking into the default visible monitor set, so its saved OTW/OTS/POB/Completed driver report can appear without first opening `Show all active jobs`.
+- The Dashboard Active Jobs Monitor pins the currently loaded booking into the single default visible monitor window, so its saved OTW/OTS/POB/Completed driver report can appear without expanding the monitor first.
 - This is not a customer send; admin still reviews Customer Copy before any customer-facing send.
 - The auto-sync uses existing admin-safe booking read paths only and does not add public reads, broad writes, provider sends, Email/Resend/Telegram/WhatsApp/SMS, push sends, live GPS/customer map, billing/payment/PDF/invoice/payout, parser, calendar, or shims.
 - Customer/driver-visible forbidden data remains blocked from this path: driver payout, PayNow payout, customer price, billing, invoice, payment, internal admin notes, parser/debug, secrets, raw provider payloads, and mock QA/dev archive data.

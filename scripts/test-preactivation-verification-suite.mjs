@@ -214,6 +214,10 @@ const guardChecks = [
     script: "scripts/test-bookings-earlier-history-compact-guard.mjs",
   },
   {
+    label: "dashboard urgent requests and active monitor guard",
+    script: "scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs",
+  },
+  {
     label: "admin new booking email alert guard",
     script: "scripts/test-admin-new-booking-email-alert-guard.mjs",
   },

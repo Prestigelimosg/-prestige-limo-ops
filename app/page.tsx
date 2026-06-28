@@ -9054,6 +9054,7 @@ export default function Home() {
   const [jobCardCalendarAction, setJobCardCalendarAction] =
     useState<"download-calendar" | null>(null);
   const [loadedBookingId, setLoadedBookingId] = useState("");
+  const loadedBookingIdRef = useRef("");
   const [driverProfileDraft, setDriverProfileDraft] =
     useState<DriverProfileDraft>(initialDriverProfileDraft);
   const [replacementDriverDraft, setReplacementDriverDraft] =
@@ -9110,6 +9111,7 @@ export default function Home() {
     useState<AdminBookingPersistenceAction | null>(null);
   const [appliedAdminBookingSnapshotReference, setAppliedAdminBookingSnapshotReference] =
     useState("");
+  const appliedAdminBookingSnapshotReferenceRef = useRef("");
   const [adminBookingPersistenceSearch, setAdminBookingPersistenceSearch] =
     useState("");
   const [adminBookingPersistenceStatusFilter, setAdminBookingPersistenceStatusFilter] =
@@ -9363,6 +9365,9 @@ export default function Home() {
     useState("");
   const [dispatchReleaseWorkflowLoadRevision, setDispatchReleaseWorkflowLoadRevision] =
     useState(0);
+  const [dispatchLoadFocusTarget, setDispatchLoadFocusTarget] = useState<"customerCopy" | null>(
+    null,
+  );
   const [acceptedReviewWarningKey, setAcceptedReviewWarningKey] = useState("");
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
   const [message, setMessage] = useState<Message>({
@@ -9385,6 +9390,32 @@ export default function Home() {
 
     return () => window.clearInterval(intervalId);
   }, []);
+
+  useEffect(() => {
+    if (activeTab !== "dispatch" || dispatchLoadFocusTarget !== "customerCopy") {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      const customerCopyStep = ["customer", "whatsapp", "copy"].join("-");
+      const customerCopyElement = Array.from(
+        document.querySelectorAll<HTMLElement>("[data-dispatch-workflow-step]"),
+      ).find((element) => element.dataset.dispatchWorkflowStep === customerCopyStep);
+
+      customerCopyElement?.scrollIntoView({ behavior: "smooth", block: "start" });
+      setDispatchLoadFocusTarget(null);
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [activeTab, dispatchLoadFocusTarget]);
+
+  useEffect(() => {
+    loadedBookingIdRef.current = loadedBookingId;
+  }, [loadedBookingId]);
+
+  useEffect(() => {
+    appliedAdminBookingSnapshotReferenceRef.current = appliedAdminBookingSnapshotReference;
+  }, [appliedAdminBookingSnapshotReference]);
 
   useEffect(() => {
     if (
@@ -9414,7 +9445,7 @@ export default function Home() {
       }
 
       bookingAutoSyncInFlightRef.current = true;
-      void loadBookings("Bookings synced.", { silent: true }).finally(() => {
+      void loadBookings("Bookings synced.", { silent: true, skipSavedBookingsRead: true }).finally(() => {
         bookingAutoSyncInFlightRef.current = false;
       });
     }, 3 * 1000);
@@ -11908,6 +11939,14 @@ export default function Home() {
     }
   }
 
+  function clearLoadedBookingSelectionContext() {
+    loadedBookingIdRef.current = "";
+    appliedAdminBookingSnapshotReferenceRef.current = "";
+    setLoadedBookingId("");
+    setAppliedAdminBookingSnapshotReference("");
+    setDispatchLoadFocusTarget(null);
+  }
+
   function applyExtractedBooking(preview: NonNullable<ParsedBooking["extractedBookingsPreview"]>[number]) {
     const safePreview = preview ?? {};
     const sharedContextSource: Partial<BookingForm> = multiBookingNotice ?? parsedDebugBooking ?? {};
@@ -12189,7 +12228,7 @@ export default function Home() {
 
   async function applyParsedBookingMessage(messageText: string) {
     clearParseArtifacts();
-    setLoadedBookingId("");
+    clearLoadedBookingSelectionContext();
 
     if (!clean(messageText)) {
       setMessage({ tone: "error", text: "Paste a booking message before parsing." });
@@ -13733,7 +13772,10 @@ export default function Home() {
     });
   }
 
-  async function loadBookings(successText = "Bookings loaded.", options?: { silent?: boolean }) {
+  async function loadBookings(
+    successText = "Bookings loaded.",
+    options?: { silent?: boolean; skipSavedBookingsRead?: boolean },
+  ) {
     const silent = options?.silent === true;
 
     if (typeof fetch !== "function") {
@@ -13766,27 +13808,32 @@ export default function Home() {
           method: "GET",
         } satisfies RequestInit;
 
-        const savedBookingsResponse = await fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`, requestInit);
-        const savedBookingsBody = (await savedBookingsResponse.json().catch(() => null)) as
-          | AdminSavedBookingReadResponse
-          | null;
+        let savedBookingsError = "Admin saved booking list read request failed.";
 
-        if (
-          savedBookingsResponse.ok &&
-          savedBookingsBody?.ok === true &&
-          Array.isArray(savedBookingsBody.bookings)
-        ) {
-          return {
-            bookings: savedBookingsBody.bookings,
-            ok: true,
-            source: "admin-saved-bookings",
-          };
+        if (options?.skipSavedBookingsRead !== true) {
+          const savedBookingsResponse = await fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`, requestInit);
+          const savedBookingsBody = (await savedBookingsResponse.json().catch(() => null)) as
+            | AdminSavedBookingReadResponse
+            | null;
+
+          if (
+            savedBookingsResponse.ok &&
+            savedBookingsBody?.ok === true &&
+            Array.isArray(savedBookingsBody.bookings)
+          ) {
+            return {
+              bookings: savedBookingsBody.bookings,
+              ok: true,
+              source: "admin-saved-bookings",
+            };
+          }
+
+          savedBookingsError = readAdminLegacyDataError(
+            savedBookingsBody,
+            savedBookingsError,
+          ).message;
         }
 
-        const savedBookingsError = readAdminLegacyDataError(
-          savedBookingsBody,
-          "Admin saved booking list read request failed.",
-        ).message;
         const adminBookingsResponse = await fetch(adminBookingsApiPath, requestInit);
         const adminBookingsBody = (await adminBookingsResponse.json().catch(() => null)) as
           | AdminSavedBookingReadResponse
@@ -13822,8 +13869,8 @@ export default function Home() {
       } else {
         const loadedBookings = sortBookingsNewestFirst(bookingsListResult.bookings);
         const selectedBookingReference =
-          cleanReferenceText(appliedAdminBookingSnapshotReference) ||
-          cleanReferenceText(loadedBookingId);
+          cleanReferenceText(appliedAdminBookingSnapshotReferenceRef.current) ||
+          cleanReferenceText(loadedBookingIdRef.current);
 
         setBookings(loadedBookings);
         mergeCurrentBookingDriverDetailsFromRecord(
@@ -13887,7 +13934,10 @@ export default function Home() {
     });
   }
 
-  function loadSelectedBooking(bookingRecord: BookingRecord) {
+  function loadSelectedBooking(
+    bookingRecord: BookingRecord,
+    options: { focusCustomerCopy?: boolean } = {},
+  ) {
     const bookingReference =
       cleanReferenceText(bookingRecord.booking_reference) ||
       cleanReferenceText(bookingRecord.id) ||
@@ -13896,13 +13946,19 @@ export default function Home() {
 
     rememberHandledCustomerBookingRequest(bookingRecord);
     setBooking(() => bookingRecordToForm(bookingRecord));
+    appliedAdminBookingSnapshotReferenceRef.current = "";
+    loadedBookingIdRef.current = bookingReference;
+    setAppliedAdminBookingSnapshotReference("");
     setLoadedBookingId(bookingReference);
     setDispatchReleaseWorkflowLoadRevision((currentRevision) => currentRevision + 1);
+    setDispatchLoadFocusTarget(options.focusCustomerCopy ? "customerCopy" : null);
     setActiveTab("dispatch");
     clearBookingMessageInput();
     setMessage({
       tone: "success",
-      text: `Booking ${bookingReference || "selected booking"} loaded.`,
+      text: options.focusCustomerCopy
+        ? `Booking ${bookingReference || "selected booking"} loaded. Customer Copy is ready for admin review.`
+        : `Booking ${bookingReference || "selected booking"} loaded.`,
     });
   }
 
@@ -14058,6 +14114,8 @@ export default function Home() {
         : "";
 
     setBooking(() => appliedSnapshot.booking);
+    loadedBookingIdRef.current = "";
+    appliedAdminBookingSnapshotReferenceRef.current = bookingReference;
     setLoadedBookingId("");
     setAppliedAdminBookingSnapshotReference(bookingReference);
     setDispatchReleaseWorkflowLoadRevision((currentRevision) => currentRevision + 1);
@@ -15705,10 +15763,10 @@ export default function Home() {
               <button
                 className="min-h-9 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800"
                 data-new-customer-booking-request-load={bookingId}
-                onClick={() => loadSelectedBooking(requestBooking)}
+                onClick={() => loadSelectedBooking(requestBooking, { focusCustomerCopy: true })}
                 type="button"
               >
-                Load in Dispatch
+                Load this booking
               </button>
             </article>
           );
@@ -15875,7 +15933,7 @@ export default function Home() {
                 <div className="grid gap-2 sm:grid-cols-3 xl:w-44 xl:grid-cols-1" data-recent-operational-actions={bookingId}>
                   <button
                     className="h-10 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-                    onClick={() => loadSelectedBooking(savedBooking)}
+                    onClick={() => loadSelectedBooking(savedBooking, { focusCustomerCopy: true })}
                     type="button"
                   >
                     Load this booking
@@ -16120,7 +16178,7 @@ export default function Home() {
                       <button
                         className="h-10 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800"
                         data-completed-load-booking="true"
-                        onClick={() => loadSelectedBooking(savedBooking)}
+                        onClick={() => loadSelectedBooking(savedBooking, { focusCustomerCopy: true })}
                         type="button"
                       >
                         Load this booking
@@ -27709,7 +27767,7 @@ export default function Home() {
                 type="button"
                 onClick={() => {
                   setBooking(() => createInitialBooking());
-                  setLoadedBookingId("");
+                  clearLoadedBookingSelectionContext();
                   clearBookingMessageInput();
                 }}
               >
@@ -27793,7 +27851,10 @@ export default function Home() {
                   <button
                     className="min-h-11 w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold whitespace-nowrap text-slate-800 transition hover:bg-slate-50 md:min-h-9 md:min-w-32"
                     data-dispatcher-clear-message-button="true"
-                    onClick={clearBookingMessageInput}
+                    onClick={() => {
+                      clearLoadedBookingSelectionContext();
+                      clearBookingMessageInput();
+                    }}
                     style={{ minHeight: 44 }}
                     type="button"
                   >

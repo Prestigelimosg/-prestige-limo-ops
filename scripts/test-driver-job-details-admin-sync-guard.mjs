@@ -179,7 +179,7 @@ for (const fragment of [
   "bookingRecordReferenceCandidates",
   "findLoadedBookingRecordByReference",
   "mergeCurrentBookingDriverDetailsFromRecord",
-  'void loadBookings("Bookings synced.", { silent: true })',
+  'void loadBookings("Bookings synced.", { silent: true, skipSavedBookingsRead: true })',
   "3 * 1000",
   "driverContact: driverContact || currentBooking.driverContact",
   "driverName: driverName || currentBooking.driverName",
@@ -194,6 +194,7 @@ for (const fragment of [
 
 const loadBookingsBlock = sliceBetween(appPage, "async function loadBookings", "function loadSelectedBooking");
 assertIncludes(loadBookingsBlock, "const silent = options?.silent === true;", "Load bookings silent mode");
+assertIncludes(loadBookingsBlock, "skipSavedBookingsRead?: boolean", "Load bookings silent sync can skip saved-bookings read");
 assertIncludes(loadBookingsBlock, "if (!silent)", "Load bookings avoids noisy loading state during sync");
 assertIncludes(loadBookingsBlock, "mergeCurrentBookingDriverDetailsFromRecord", "Load bookings merges current driver details");
 assertExcludes(loadBookingsBlock, "window.location.reload", "Load bookings reload");

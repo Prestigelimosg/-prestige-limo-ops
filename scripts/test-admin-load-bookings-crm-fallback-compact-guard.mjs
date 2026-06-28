@@ -47,13 +47,14 @@ const ledgerSection = sectionBetween(ledger, "### Admin Load Bookings CRM Fallba
 for (const phrase of [
   "Admin `Load Bookings` now tries same-origin admin `GET /api/admin-saved-bookings?limit=25` first and falls back to same-origin admin `GET /api/admin-bookings` when the saved-bookings read fails or returns a malformed list.",
   "Both reads use the existing `x-prestige-admin-purpose` browser-admin header and remain GET-only.",
+  "Silent dashboard/bookings/dispatch auto-sync skips the legacy saved-bookings read and uses the CRM-safe admin bookings list, so `Save Booking + CRM` cannot accidentally reload through `/api/admin-saved-bookings`.",
   "The fallback is an admin dashboard read fallback only; it does not add public reads, broad writes, DB writes, provider sends, env changes, deploys, parser changes, live GPS/customer-wide live map, billing/payment/PDF/invoice/payout, or shims.",
   "Save Booking + CRM remains on `POST /api/admin-bookings` and is not changed by this fallback.",
   "Recent and Completed booking lists now render compact expandable rows by default so dispatch can scan more bookings at once while keeping existing details and action buttons available.",
   "The Bookings tab now triggers the same safe Load Bookings read automatically the first time it is opened with an empty loaded list.",
   "Open customer booking requests are surfaced on the Dashboard command centre and above Recent Bookings, using the existing customer request source markers with a bounded fallback for open `CUST-` request references when live rows do not carry those markers.",
   "The Dashboard is the default admin landing tab, shows a compact `New Booking Requests` alert, and routes request clicks to the existing Bookings review area instead of loading Dispatch directly.",
-  "The Bookings request row is the review handoff point and can load the selected request into the existing Dispatch form only when the operator chooses `Load in Dispatch`, without adding a duplicate write path.",
+  "The Bookings request row is the review handoff point and can load the selected request into the existing Dispatch form only when the operator chooses `Load this booking`; the handoff focuses the existing Customer Copy section for admin review/send preparation without adding a duplicate write path.",
   "Loading a customer request into Dispatch now records a bounded browser-local handled-request key so that request leaves the Dashboard/Bookings `New Booking Requests` queue and badge on that admin browser while remaining available in Recent/Active booking lists.",
   "The Dashboard now uses compact read-only booking summaries plus `Open` handoff buttons; single-booking driver assignment, status, copy, job-card, and completion work stays in Dispatch/Bookings so page purposes do not duplicate.",
   "The loaded active jobs monitor is shown on the Dashboard command centre for multi-driver scanning; the Dispatch day-of-trip monitor remains the selected single-booking workbench.",
@@ -95,6 +96,13 @@ const dispatchBlock = sliceBetween(
 
 assertIncludes(appPage, 'const adminBookingsApiPath = "/api/admin-bookings";', "Admin bookings fallback path");
 assertIncludes(loadBookingsBlock, "function fetchAdminBookingsList", "Admin bookings list fallback helper");
+assertIncludes(loadBookingsBlock, "skipSavedBookingsRead?: boolean", "Load Bookings supports silent saved-booking skip");
+assertIncludes(loadBookingsBlock, "options?.skipSavedBookingsRead !== true", "Saved bookings read can be skipped");
+assertIncludes(
+  appPage,
+  'void loadBookings("Bookings synced.", { silent: true, skipSavedBookingsRead: true })',
+  "Silent auto-sync skips legacy saved bookings read",
+);
 assertIncludes(
   loadBookingsBlock,
   "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`",
@@ -145,7 +153,7 @@ assertIncludes(appPage, "function rememberHandledCustomerBookingRequest", "Handl
 assertIncludes(
   appPage,
   "rememberHandledCustomerBookingRequest(bookingRecord);",
-  "Load in Dispatch marks customer request handled",
+  "Load this booking marks customer request handled",
 );
 assertIncludes(appPage, 'useState<AppTab>("dashboard")', "Dashboard default tab");
 assertIncludes(
@@ -199,8 +207,11 @@ for (const customerRequestFragment of [
   "data-new-customer-booking-requests-panel",
   "data-new-customer-booking-request-row",
   "data-new-customer-booking-request-load",
-  "Load in Dispatch",
-  "onClick={() => loadSelectedBooking(requestBooking)}",
+  "Load this booking",
+  "onClick={() => loadSelectedBooking(requestBooking, { focusCustomerCopy: true })}",
+  "dispatchLoadFocusTarget",
+  "scrollIntoView({ behavior: \"smooth\", block: \"start\" })",
+  "Customer Copy is ready for admin review.",
   "{customerBookingRequestsPanel}",
 ]) {
   assertIncludes(appPage, customerRequestFragment, `Customer request auto-load fragment ${customerRequestFragment}`);

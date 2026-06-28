@@ -13251,7 +13251,7 @@ async function runChromeTest() {
 
     const clickedRestoreAfterDriverDeleteClear = await evaluate(`(() => {
       const clearButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Clear",
+        (button) => button.textContent.trim() === "Clear Message",
       );
 
       if (!clearButton || clearButton.disabled) {
@@ -13264,7 +13264,7 @@ async function runChromeTest() {
     assert.equal(
       clickedRestoreAfterDriverDeleteClear,
       true,
-      "Expected Clear button to restore Dispatch draft after driver delete cleanup check",
+      "Expected Clear Message button to restore Dispatch draft after driver delete cleanup check",
     );
 
     await setInputValue("textarea", bookingSample, "restored Dispatch booking message after driver delete");
@@ -15458,6 +15458,7 @@ async function runChromeTest() {
       "GET /api/admin-customer-driver-details-email-review-item-setup?booking_reference=ui-cleanup-load-fixture&driver_ack_status=pending&customer_email=booker%40loadedsaved.example.com&driver_name=LOADED+SAVED+DRIVER&driver_phone=%2B65+8888+0000&vehicle_plate=SLA1234X&vehicle_type=VAN",
       "GET /api/admin-email-activation-preflight-setup",
       "GET /api/admin-driver-job-statuses?booking_reference=ui-cleanup-load-fixture&limit=4",
+      "GET /api/admin-load-bookings-typed-read?limit=25",
       "GET /api/admin-monthly-billing-groups?limit=1&page=1&billing_month=2026-05",
       "GET /api/admin-monthly-billing-draft-plans?limit=1&page=1&billing_month=2026-05",
       "GET /api/admin-monthly-invoice-drafts?limit=1&page=1&billing_month=2026-05",

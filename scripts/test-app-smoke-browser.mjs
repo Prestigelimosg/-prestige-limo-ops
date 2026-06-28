@@ -36398,6 +36398,7 @@ async function runChromeTest() {
       })()`);
 
     const checkDriverJobRoute = async (viewport) => {
+      const driverJobEndpointPath = `/api/driver-job/${driverJobWorkflowToken}`;
       const statusEndpointPath = `/api/driver-job/${driverJobWorkflowToken}/status`;
       await setDriverJobViewportAndLoad(viewport);
 
@@ -36820,12 +36821,13 @@ async function runChromeTest() {
               : false;
           })()`),
         10000,
-        `${viewport.label} local driver details save and acknowledgement`,
+        `${viewport.label} driver details save and acknowledgement`,
       );
+      const saveFetchCalls = savedDetailsState.fetchCalls.slice(beforeSaveNetwork.fetchCalls.length);
       assert.deepEqual(
-        savedDetailsState.fetchCalls,
-        beforeSaveNetwork.fetchCalls,
-        `${viewport.label}: expected driver details save and acknowledgement to stay local`,
+        saveFetchCalls,
+        [`PATCH ${driverJobEndpointPath}`],
+        `${viewport.label}: expected driver details save and acknowledgement to use the token-scoped driver job endpoint once`,
       );
 
       await clickValidDriverJobStatus("OTW", "I'm on the way", "Status updated to I'm on the way.");
@@ -36841,6 +36843,11 @@ async function runChromeTest() {
         finalNetwork.fetchCalls.filter((call) => call.includes(statusEndpointPath)).length,
         4,
         `${viewport.label}: expected exactly four protected mock status API calls for OTW, OTS, POB, and Job Completed`,
+      );
+      assert.deepEqual(
+        finalNetwork.fetchCalls.filter((call) => call.includes(driverJobEndpointPath) && !call.includes(statusEndpointPath)),
+        [`PATCH ${driverJobEndpointPath}`],
+        `${viewport.label}: expected exactly one token-scoped driver detail save call`,
       );
       const finalDriverJobState = await readDriverJobState();
       assert.deepEqual(

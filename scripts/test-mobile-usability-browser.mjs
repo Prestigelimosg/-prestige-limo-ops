@@ -4165,9 +4165,18 @@ async function runChromeTest() {
                     (button) => button.textContent.trim() === label,
                   ),
                 ) &&
-                text.includes("Dispatcher Intake") &&
-                text.includes("Job Card Preview") &&
-                text.includes("Driver Dispatch"),
+                (
+                  (
+                    text.includes("Operations Dashboard") &&
+                    text.includes("New Booking Requests") &&
+                    text.includes("Active Jobs Monitor")
+                  ) ||
+                  (
+                    text.includes("Dispatcher Intake") &&
+                    text.includes("Job Card Preview") &&
+                    text.includes("Driver Dispatch")
+                  )
+                ),
               toggleHeight: Math.round(toggleRect?.height || 0),
               toggleWidth: Math.round(toggleRect?.width || 0),
             };
@@ -12966,57 +12975,42 @@ async function runChromeTest() {
       }
       await clickTab("Dashboard");
       await waitForBodyText(evaluate, "MOBILE USABILITY TRAVELER", "dashboard loaded booking");
-      const dashboardOperationalCardState = await waitForCondition(
+      const dashboardActiveJobState = await waitForCondition(
         () =>
           evaluate(`(() => {
-            const dashboardCard = [...document.querySelectorAll("[data-dashboard-operational-card]")].find((card) =>
-              card.innerText.includes("MOBILE USABILITY TRAVELER")
+            const activeJobCard = [...document.querySelectorAll("[data-admin-multi-driver-active-job]")].find((card) =>
+              card.innerText.includes("MOBILE USABILITY DRIVER") &&
+              card.innerText.includes("Changi Airport Terminal 3 Departure Door 5")
             );
-            if (!dashboardCard) {
+            if (!activeJobCard) {
               return false;
             }
-            const sections = [...dashboardCard.querySelectorAll("[data-operational-card-section]")].map(
-              (section) => ({
-                key: section.getAttribute("data-operational-card-section"),
-                text: section.innerText,
-              })
-            );
-            const summaryGridText =
-              dashboardCard.querySelector("[data-operational-card-summary-grid]")?.innerText || "";
-            const actionsText = dashboardCard.querySelector("[data-dashboard-action-group]")?.innerText || "";
             return {
-              actionsText,
-              sections,
-              summaryGridText,
+              reportVisible: Boolean(activeJobCard.querySelector("[data-admin-multi-driver-active-job-driver-report]")),
+              text: activeJobCard.innerText,
             };
           })()`),
         10000,
-        "dashboard operational card structure",
-      );
-      assert.deepEqual(
-        dashboardOperationalCardState.sections.map((section) => section.key),
-        ["booking", "route", "vehicle-pax-price"],
-        `${viewport.label}: expected dashboard card to group booking, route, and vehicle/pax sections`,
+        "dashboard active job monitor card",
       );
       for (const expectedText of [
-        "Dispatcher Status",
-        "Assigned Driver",
-        "Operational Readiness",
-        "OTS Proof: Pending OTS step",
-        "Exception / Replacement: No replacement recorded",
+        "MOBILE USABILITY DRIVER",
+        "Changi Airport Terminal 3 Departure Door 5",
+        "The Fullerton Hotel Singapore",
+        "Driver report:",
       ]) {
         assert.equal(
-          dashboardOperationalCardState.summaryGridText.includes(expectedText),
+          dashboardActiveJobState.text.includes(expectedText),
           true,
-          `${viewport.label}: expected dashboard summary grid to include ${expectedText}`,
+          `${viewport.label}: expected dashboard active job monitor to include ${expectedText}`,
         );
       }
       assert.equal(
-        dashboardOperationalCardState.actionsText.includes("INTERNAL ACTIONS"),
+        dashboardActiveJobState.reportVisible,
         true,
-        `${viewport.label}: expected dashboard card to label internal actions`,
+        `${viewport.label}: expected dashboard active job monitor to include driver report panel`,
       );
-      assertNoHorizontalOverflow(await layoutState(), `${viewport.label} dashboard operational card`);
+      assertNoHorizontalOverflow(await layoutState(), `${viewport.label} dashboard active job monitor`);
       await clickTab("Bookings");
       await waitForBodyText(evaluate, "MOBILE USABILITY TRAVELER", "mock loaded booking after dashboard check");
       await clickButtonByText("Load this booking");

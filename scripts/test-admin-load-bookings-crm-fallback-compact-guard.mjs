@@ -54,11 +54,14 @@ for (const phrase of [
   "The Bookings tab now triggers the same safe Load Bookings read automatically the first time it is opened with an empty loaded list.",
   "Open customer booking requests are surfaced on the Dashboard command centre and above Recent Bookings, using the existing customer request source markers with a bounded fallback for open `CUST-` request references when live rows do not carry those markers.",
   "The Dashboard is the default admin landing tab, shows a compact `New Booking Requests` alert, and routes request clicks to the existing Bookings review area instead of loading Dispatch directly.",
+  "Dashboard initial Load Bookings completion only writes the global status message while the operator is still on Dashboard, so a delayed read cannot overwrite Rates or other tab feedback after navigation.",
   "The Bookings request row is the review handoff point and can load the selected request into the existing Dispatch form only when the operator chooses `Load this booking`; the handoff focuses the existing Customer Copy section for admin review/send preparation without adding a duplicate write path.",
   "Loading a customer request into Dispatch now records a bounded browser-local handled-request key so that request leaves the Dashboard/Bookings `New Booking Requests` queue and badge on that admin browser while remaining available in Recent/Active booking lists.",
+  "Loading a saved booking into Dispatch refreshes the typed operational display once immediately and pauses one background sync tick, keeping the existing guarded read set stable while Customer Copy focuses for review.",
   "The Dashboard now uses compact read-only booking summaries plus `Open` handoff buttons; single-booking driver assignment, status, copy, job-card, and completion work stays in Dispatch/Bookings so page purposes do not duplicate.",
   "The loaded active jobs monitor is shown on the Dashboard command centre for multi-driver scanning; the Dispatch day-of-trip monitor remains the selected single-booking workbench.",
   "The loaded active jobs monitor keeps the first four active jobs visible by default and provides a compact `Show all active jobs` / `Show less` toggle when more loaded active jobs exist, so dispatch can inspect all running jobs from Dashboard without leaving the command centre.",
+  "The default active jobs monitor set pins the currently loaded booking when it would otherwise be hidden below the first four rows, so its saved driver report can refresh after OTW/OTS/POB/Completed without first opening `Show all active jobs`.",
   "The Dashboard active jobs monitor now shows a compact saved driver report readout per visible active job, using the existing guarded admin `GET /api/admin-driver-job-statuses` path only, with monitor-wide/per-card refresh controls and a read-only dashboard auto-refresh every 10 seconds while the operator is viewing Dashboard.",
   "The Dashboard driver report readout is read-only and does not create driver status events, notification rows, provider sends, GPS/live-location records, billing/payment/PDF/invoice/payout records, or a duplicate single-booking Dispatch workflow.",
   "The Bookings tab shows a compact new-request badge/highlight after open customer requests are detected; no sound, browser notification, polling loop, provider send, or new route is added.",
@@ -198,6 +201,9 @@ assertIncludes(
   "Bookings/Dashboard tab auto-load empty-list guard",
 );
 assertIncludes(appPage, 'void loadBookings("Bookings loaded.");', "Bookings tab visible auto-load");
+assertIncludes(appPage, 'void loadBookings("Bookings loaded.", { messageTab: "dashboard" });', "Dashboard tab-scoped initial load");
+assertIncludes(appPage, 'const activeTabRef = useRef<AppTab>("dashboard");', "Active tab async message ref");
+assertIncludes(appPage, "activeTabRef.current === options.messageTab", "Load bookings tab-scoped message guard");
 
 for (const customerRequestFragment of [
   "customerBookingRequestDisplayItems",
@@ -273,6 +279,22 @@ assert.equal(
 assertIncludes(appPage, "const activeJobDashboardSearchTerm = clean(searchTerm);", "Active jobs monitor search term");
 assertIncludes(appPage, "const [showAllActiveJobs, setShowAllActiveJobs] = useState(false);", "Active jobs monitor expanded state");
 assertIncludes(appPage, "const activeJobsMonitorCollapsedCount = Math.max", "Active jobs monitor hidden count");
+assertIncludes(appPage, "const bookingAutoSyncPausedUntilRef = useRef(0);", "Loaded booking sync pause ref");
+assertIncludes(appPage, "Date.now() < bookingAutoSyncPausedUntilRef.current", "Loaded booking pauses one auto-sync tick");
+assertIncludes(appPage, "const typedDisplaySearchParams = new URLSearchParams({ limit: \"25\" });", "Loaded booking typed refresh params");
+assertIncludes(appPage, "fetchLoadBookingsTypedOperationalDisplayResult(typedDisplaySearchParams)", "Loaded booking immediate typed refresh");
+assertIncludes(
+  appPage,
+  "const defaultDayOfTripActiveJobVisibleBookings = dayOfTripActiveJobBookings.slice(0, 4);",
+  "Active jobs monitor default visible rows",
+);
+assertIncludes(appPage, "const loadedActiveJobReference = cleanReferenceText(loadedBookingId);", "Active jobs monitor selected reference");
+assertIncludes(appPage, "const loadedActiveJobBooking = loadedActiveJobReference", "Active jobs monitor selected booking lookup");
+assertIncludes(
+  appPage,
+  "[loadedActiveJobBooking, ...defaultDayOfTripActiveJobVisibleBookings].slice(0, 4)",
+  "Active jobs monitor pins selected booking without expanding row count",
+);
 assertIncludes(appPage, "showAllActiveJobs\n    ? dayOfTripActiveJobBookings", "Active jobs monitor expands to all loaded jobs");
 assertIncludes(appPage, 'data-admin-multi-driver-active-jobs-toggle="true"', "Active jobs monitor expand toggle");
 assertIncludes(appPage, '"Show all active jobs"', "Active jobs monitor show-all label");

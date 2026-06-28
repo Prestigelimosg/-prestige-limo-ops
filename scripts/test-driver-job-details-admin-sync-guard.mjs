@@ -69,9 +69,13 @@ const ledgerSection = sectionBetween(ledger, "### Driver Save And Acknowledge De
 
 for (const phrase of [
   "Driver job link `Save & Acknowledge Job` now persists safe driver name/contact/plate/vehicle details through the verified driver job token path.",
+  "The driver job page may prefill assigned driver details, but it does not mark the job acknowledged or show confirmed saved driver details until the driver presses `Save & Acknowledge Job`.",
   "Admin Dashboard, Bookings, and Dispatch silently re-read the existing admin-safe booking list every 3 seconds while loaded and merge only driver name/contact/plate/vehicle into the currently opened booking.",
   "Driver-entered vehicle model uses the existing safe booking vehicle display field only after driver details are present; no new DB schema, customer-wide vehicle exposure, provider send, GPS, billing, payout, or env gate is added.",
   "Customer Copy and Driver Dispatch can reflect driver-entered details without pressing Refresh or reloading the page.",
+  "Customer Copy and Driver Dispatch also use the active driver job link safe vehicle summary as an admin-display fallback when the booking list has already picked up driver name/contact/plate but the driver vehicle model is still coming from the job-link payload.",
+  "The admin Dispatch page quietly refreshes the existing active driver job link read once when booking sync sees driver name/contact/plate but no vehicle model on the currently loaded booking, so the safe vehicle summary can catch up after driver `Save & Acknowledge Job` without a manual refresh.",
+  "If the loaded Dispatch booking already has driver name/contact/plate but no vehicle model, the same one-shot active driver job link safe-summary fallback starts immediately on load.",
   "This is not a customer send; admin still reviews Customer Copy before any customer-facing send.",
   "The auto-sync uses existing admin-safe booking read paths only and does not add public reads, broad writes, provider sends, Email/Resend/Telegram/WhatsApp/SMS, push sends, live GPS/customer map, billing/payment/PDF/invoice/payout, parser, calendar, or shims.",
   "Guard coverage lives in `scripts/test-driver-job-details-admin-sync-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",
@@ -186,10 +190,31 @@ for (const fragment of [
   "driverPlate: driverPlate || currentBooking.driverPlate",
   "driverVehicleModel: driverVehicleModel || currentBooking.driverVehicleModel",
   "safeDriverVehicleModelFromBookingRecord",
-  "clean(booking.driverVehicleModel) || clean(assignedDriverRecord?.vehicle_type)",
+  "safeDriverVehicleModelDisplay",
+  "activeAdminDriverJobLink?.safe_summary.vehicle",
+  "cleanReferenceText(activeAdminDriverJobLink?.booking_reference) ===",
+  "cleanReferenceText(dispatchReleaseWorkflowBookingReference)",
+  "if (activeTab !== \"dispatch\")",
+  "driverJobLinkVehicleFallbackRefreshRequestedRef",
+  "refreshAdminDriverJobLinkForReference(recordReference, { silent: true })",
+  "refreshAdminDriverJobLinkForReference(bookingReference, { silent: true })",
+  "recordReference === currentBookingReference",
+  "link_status: \"active\"",
+  "const hasAssignedDriverDetails = Boolean",
+  "safeDriverVehicleModelDisplay(booking.driverVehicleModel)",
+  "safeDriverVehicleModelDisplay(assignedDriverRecord?.vehicle_type)",
   "Vehicle: ${driverVehicleModel}",
 ]) {
   assertIncludes(appPage, fragment, `Admin booking details auto-sync fragment ${fragment}`);
+}
+
+for (const fragment of [
+  "setDriverDetails(loadedDriverDetails)",
+  "setSavedDriverDetails(null)",
+  "setAcknowledged(false)",
+  "Driver details saved and job acknowledged.",
+]) {
+  assertIncludes(driverJobPage, fragment, `Driver job page acknowledgement fragment ${fragment}`);
 }
 
 const loadBookingsBlock = sliceBetween(appPage, "async function loadBookings", "function loadSelectedBooking");

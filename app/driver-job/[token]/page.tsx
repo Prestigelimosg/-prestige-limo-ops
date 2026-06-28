@@ -255,10 +255,6 @@ function cleanDriverDetails(details: DriverDetails): DriverDetails {
   };
 }
 
-function hasAnyDriverDetails(details: DriverDetails) {
-  return Boolean(details.name || details.contact || details.plate || details.vehicleModel);
-}
-
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -628,8 +624,8 @@ export default function DriverJobPage() {
         };
 
         setDriverDetails(loadedDriverDetails);
-        setSavedDriverDetails(hasAnyDriverDetails(loadedDriverDetails) ? loadedDriverDetails : null);
-        setAcknowledged(hasAnyDriverDetails(loadedDriverDetails));
+        setSavedDriverDetails(null);
+        setAcknowledged(false);
         setWorkflowStatus(result.payload.status || "assigned");
         setPageState({ kind: "ready", job: result.payload });
 

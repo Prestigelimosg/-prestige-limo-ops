@@ -479,6 +479,11 @@ async function runChromeTest() {
 
     const saveAndAcknowledgeJob = async () => {
       const beforeSaveState = await pageState();
+      const expectedDriverJobPatchPath = await evaluate(`(() => {
+        const token = location.pathname.split("/").filter(Boolean).at(-1) || "";
+
+        return \`/api/driver-job/\${token}\`;
+      })()`);
       const parsed = await evaluate(`(() => {
         const textarea = document.querySelector("[data-driver-job-details-raw]");
         const parseButton = document.querySelector("[data-driver-job-parse-details]");
@@ -601,8 +606,13 @@ async function runChromeTest() {
       assert.equal(savedState.distance <= 16, true, "Expected driver details feedback near Save & Acknowledge button.");
       assert.equal(
         afterSaveState.fetchCalls.length,
-        beforeSaveState.fetchCalls.length,
-        "Public driver details Save & Acknowledge should stay local and avoid network requests.",
+        beforeSaveState.fetchCalls.length + 1,
+        "Public driver details Save & Acknowledge should make one tokenized safe driver-job PATCH.",
+      );
+      assert.equal(
+        afterSaveState.fetchCalls.at(-1),
+        `PATCH ${expectedDriverJobPatchPath}`,
+        "Expected public driver details Save & Acknowledge to persist through the tokenized driver job route.",
       );
       assert.deepEqual(
         afterSaveState.activityLogLabels,

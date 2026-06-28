@@ -5050,6 +5050,23 @@ function loadBookingsOperationalDisplayText(value: unknown, maxLength = 500) {
   return text;
 }
 
+function safeDriverVehicleModelDisplay(value: string | number | null | undefined) {
+  const vehicleModel = clean(value);
+  const normalized = vehicleModel.toLowerCase();
+
+  if (
+    !vehicleModel ||
+    normalized === "avf" ||
+    normalized === "vehicle tbc" ||
+    normalized === "no preference" ||
+    normalized.includes("prestige to advise")
+  ) {
+    return "";
+  }
+
+  return vehicleModel;
+}
+
 function safeDriverVehicleModelFromBookingRecord(
   bookingRecord: BookingRecord,
   preferredValue?: string | null,
@@ -5060,20 +5077,12 @@ function safeDriverVehicleModelFromBookingRecord(
       clean(bookingRecord.driver_plate_number),
   );
   const vehicleModel =
-    clean(preferredValue) ||
-    clean(bookingRecord.vehicle_type_or_category) ||
-    clean(bookingRecord.vehicle_type) ||
-    clean(bookingRecord.vehicle);
-  const normalized = vehicleModel.toLowerCase();
+    safeDriverVehicleModelDisplay(preferredValue) ||
+    safeDriverVehicleModelDisplay(bookingRecord.vehicle_type_or_category) ||
+    safeDriverVehicleModelDisplay(bookingRecord.vehicle_type) ||
+    safeDriverVehicleModelDisplay(bookingRecord.vehicle);
 
-  if (
-    !hasDriverDetails ||
-    !vehicleModel ||
-    normalized === "avf" ||
-    normalized === "vehicle tbc" ||
-    normalized === "no preference" ||
-    normalized.includes("prestige to advise")
-  ) {
+  if (!hasDriverDetails || !vehicleModel) {
     return "";
   }
 
@@ -8996,6 +9005,7 @@ function isMockMidnightChargeDetected(value: string) {
 export default function Home() {
   const [booking, setBooking] = useState<BookingForm>(() => createInitialBooking());
   const [activeTab, setActiveTab] = useState<AppTab>("dashboard");
+  const activeTabRef = useRef<AppTab>("dashboard");
   const [isInternalQaMockArchiveOpen, setIsInternalQaMockArchiveOpen] = useState(false);
   const [bookingMessage, setBookingMessage] = useState("");
   const [bookingMessageResetKey, setBookingMessageResetKey] = useState(0);
@@ -9011,6 +9021,8 @@ export default function Home() {
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const dashboardBookingsInitialLoadAttemptedRef = useRef(false);
   const bookingAutoSyncInFlightRef = useRef(false);
+  const bookingAutoSyncPausedUntilRef = useRef(0);
+  const driverJobLinkVehicleFallbackRefreshRequestedRef = useRef<Set<string>>(new Set());
   const [handledCustomerBookingRequestKeys, setHandledCustomerBookingRequestKeys] = useState<
     string[]
   >(() => {
@@ -9384,6 +9396,10 @@ export default function Home() {
     });
 
   useEffect(() => {
+    activeTabRef.current = activeTab;
+  }, [activeTab]);
+
+  useEffect(() => {
     const intervalId = window.setInterval(() => {
       setCurrentTimeMs(Date.now());
     }, 30 * 1000);
@@ -9428,7 +9444,7 @@ export default function Home() {
     }
 
     dashboardBookingsInitialLoadAttemptedRef.current = true;
-    void loadBookings("Bookings loaded.");
+    void loadBookings("Bookings loaded.", { messageTab: "dashboard" });
   }, [activeTab, bookings.length, loading]);
 
   useEffect(() => {
@@ -9440,7 +9456,7 @@ export default function Home() {
     }
 
     const intervalId = window.setInterval(() => {
-      if (bookingAutoSyncInFlightRef.current) {
+      if (bookingAutoSyncInFlightRef.current || Date.now() < bookingAutoSyncPausedUntilRef.current) {
         return;
       }
 
@@ -9827,6 +9843,94 @@ export default function Home() {
   const adminMonthlyBillingGroupingBillingMonthFilter =
     adminMonthlyBillingGroupingBillingMonthFromDate(booking.date);
 
+  async function refreshAdminDriverJobLinkForReference(
+    bookingReferenceValue: string,
+    options: { isCancelled?: () => boolean; silent?: boolean } = {},
+  ) {
+    const bookingReference = cleanReferenceText(bookingReferenceValue);
+    const silent = options.silent === true;
+
+    if (!bookingReference) {
+      return;
+    }
+
+    if (!silent) {
+      setAdminDriverJobLinkState((current) => ({
+        ...current,
+        action: "load",
+        loadedReference: bookingReference,
+        message: {
+          tone: "info",
+          text: `Checking saved driver job link for ${bookingReference}...`,
+        },
+        oneTimeUrl: current.loadedReference === bookingReference ? current.oneTimeUrl : "",
+      }));
+    }
+
+    try {
+      const params = new URLSearchParams({
+        booking_reference: bookingReference,
+        limit: "1",
+        link_status: "active",
+        page: "1",
+      });
+      const response = await fetch(`${adminDriverJobLinksApiPath}?${params.toString()}`, {
+        headers: {
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "GET",
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.error || "Driver job link load failed.");
+      }
+
+      const links = Array.isArray(result.links) ? (result.links as AdminDriverJobLinkRecord[]) : [];
+      const activeLink = links.find((link) => link.link_status === "active") || null;
+
+      if (options.isCancelled?.()) {
+        return;
+      }
+
+      setAdminDriverJobLinkState((current) => ({
+        ...current,
+        action: silent ? current.action : null,
+        link: activeLink,
+        loadedReference: bookingReference,
+        message: silent
+          ? current.message
+          : activeLink
+            ? {
+                tone: "success",
+                text: `Loaded active driver job link for ${bookingReference}. Create a fresh link only if the current one should be replaced.`,
+              }
+            : {
+                tone: "info",
+                text: `No active driver job link loaded for ${bookingReference}.`,
+              },
+        oneTimeUrl: current.loadedReference === bookingReference ? current.oneTimeUrl : "",
+      }));
+    } catch (error) {
+      if (options.isCancelled?.() || silent) {
+        return;
+      }
+
+      const errorText = error instanceof Error ? error.message : "Unknown driver job link load error.";
+      setAdminDriverJobLinkState((current) => ({
+        ...current,
+        action: null,
+        link: null,
+        loadedReference: bookingReference,
+        message: {
+          tone: "error",
+          text: `Driver job link load failed safely: ${errorText}`,
+        },
+        oneTimeUrl: current.loadedReference === bookingReference ? current.oneTimeUrl : "",
+      }));
+    }
+  }
+
   useEffect(() => {
     const bookingReference = clean(dispatchReleaseWorkflowBookingReference);
     let cancelled = false;
@@ -9844,86 +9948,20 @@ export default function Home() {
       };
     }
 
-    async function loadAdminDriverJobLink() {
-      setAdminDriverJobLinkState((current) => ({
-        ...current,
-        action: "load",
-        loadedReference: bookingReference,
-        message: {
-          tone: "info",
-          text: `Checking saved driver job link for ${bookingReference}...`,
-        },
-        oneTimeUrl: current.loadedReference === bookingReference ? current.oneTimeUrl : "",
-      }));
-
-      try {
-        const params = new URLSearchParams({
-          booking_reference: bookingReference,
-          limit: "1",
-          link_status: "active",
-          page: "1",
-        });
-        const response = await fetch(`${adminDriverJobLinksApiPath}?${params.toString()}`, {
-          headers: {
-            "x-prestige-admin-purpose": adminLegacyDataPurpose,
-          },
-          method: "GET",
-        });
-        const result = await response.json().catch(() => null);
-
-        if (!response.ok || !result?.ok) {
-          throw new Error(result?.error || "Driver job link load failed.");
-        }
-
-        const links = Array.isArray(result.links) ? (result.links as AdminDriverJobLinkRecord[]) : [];
-        const activeLink = links.find((link) => link.link_status === "active") || null;
-
-        if (cancelled) {
-          return;
-        }
-
-        setAdminDriverJobLinkState((current) => ({
-          ...current,
-          action: null,
-          link: activeLink,
-          loadedReference: bookingReference,
-          message: activeLink
-            ? {
-                tone: "success",
-                text: `Loaded active driver job link for ${bookingReference}. Create a fresh link only if the current one should be replaced.`,
-              }
-            : {
-                tone: "info",
-                text: `No active driver job link loaded for ${bookingReference}.`,
-              },
-          oneTimeUrl: current.loadedReference === bookingReference ? current.oneTimeUrl : "",
-        }));
-      } catch (error) {
-        if (cancelled) {
-          return;
-        }
-
-        const errorText = error instanceof Error ? error.message : "Unknown driver job link load error.";
-        setAdminDriverJobLinkState((current) => ({
-          ...current,
-          action: null,
-          link: null,
-          loadedReference: bookingReference,
-          message: {
-            tone: "error",
-            text: `Driver job link load failed safely: ${errorText}`,
-          },
-          oneTimeUrl: current.loadedReference === bookingReference ? current.oneTimeUrl : "",
-        }));
-      }
+    if (activeTab !== "dispatch") {
+      return () => {
+        cancelled = true;
+      };
     }
 
-    loadAdminDriverJobLink();
+    void refreshAdminDriverJobLinkForReference(bookingReference, {
+      isCancelled: () => cancelled,
+    });
 
     return () => {
       cancelled = true;
     };
-  }, [dispatchReleaseWorkflowBookingReference]);
+  }, [activeTab, dispatchReleaseWorkflowBookingReference]);
 
   useEffect(() => {
     const bookingReference = clean(dispatchReleaseWorkflowBookingReference);
@@ -11402,16 +11440,36 @@ export default function Home() {
     () => customerLiveLocationState(booking, currentTimeMs),
     [booking, currentTimeMs],
   );
+  const activeAdminDriverJobLink =
+    adminDriverJobLinkState.link?.link_status === "active" ? adminDriverJobLinkState.link : null;
 
   const customerCopyCard = useMemo(() => {
     const serviceType = customerBookingTypeLabel(booking.bookingType);
     const bookingReference = clean(dispatchReleaseWorkflowBookingReference);
     const flightLine = clean(booking.flight) ? `Flight: ${clean(booking.flight)}` : "";
-    const carType = clean(booking.driverVehicleModel) || clean(assignedDriverRecord?.vehicle_type);
+    const bookingDriverName = clean(booking.driverName);
+    const bookingDriverContact = clean(booking.driverContact);
+    const bookingDriverPlate = clean(booking.driverPlate);
+    const hasAssignedDriverDetails = Boolean(
+      bookingDriverName ||
+        bookingDriverContact ||
+        bookingDriverPlate,
+    );
+    const activeDriverJobLinkVehicleModel =
+      cleanReferenceText(activeAdminDriverJobLink?.booking_reference) === bookingReference
+        ? safeDriverVehicleModelDisplay(activeAdminDriverJobLink?.safe_summary.vehicle)
+        : "";
+    const customerCopyDriverPlate =
+      bookingDriverPlate || (hasAssignedDriverDetails ? clean(assignedDriverRecord?.plate_number) : "");
+    const carType = hasAssignedDriverDetails
+      ? safeDriverVehicleModelDisplay(booking.driverVehicleModel) ||
+        activeDriverJobLinkVehicleModel ||
+        safeDriverVehicleModelDisplay(assignedDriverRecord?.vehicle_type)
+      : "";
     const driverLines = [
-      clean(booking.driverName) ? `Driver: ${clean(booking.driverName)}` : "",
-      clean(booking.driverContact) ? `Driver contact: ${clean(booking.driverContact)}` : "",
-      assignedDriverPlate ? `Car plate: ${assignedDriverPlate}` : "",
+      bookingDriverName ? `Driver: ${bookingDriverName}` : "",
+      bookingDriverContact ? `Driver contact: ${bookingDriverContact}` : "",
+      customerCopyDriverPlate ? `Car plate: ${customerCopyDriverPlate}` : "",
       carType ? `Car type: ${carType}` : "",
     ];
     const sections = [
@@ -11435,7 +11493,9 @@ export default function Home() {
       .map((section) => section.join("\n").trim())
       .join("\n\n");
   }, [
-    assignedDriverPlate,
+    activeAdminDriverJobLink?.booking_reference,
+    activeAdminDriverJobLink?.safe_summary.vehicle,
+    assignedDriverRecord?.plate_number,
     assignedDriverRecord?.vehicle_type,
     booking,
     dispatchReleaseWorkflowBookingReference,
@@ -11450,7 +11510,15 @@ export default function Home() {
         (bookingDriverName && clean(driver.driver_name).toLowerCase() === bookingDriverName),
     );
     const driverPlate = clean(booking.driverPlate) || clean(selectedDriver?.plate_number);
-    const driverVehicleModel = clean(booking.driverVehicleModel) || clean(selectedDriver?.vehicle_type);
+    const activeDriverJobLinkVehicleModel =
+      cleanReferenceText(activeAdminDriverJobLink?.booking_reference) ===
+      cleanReferenceText(dispatchReleaseWorkflowBookingReference)
+        ? safeDriverVehicleModelDisplay(activeAdminDriverJobLink?.safe_summary.vehicle)
+        : "";
+    const driverVehicleModel =
+      safeDriverVehicleModelDisplay(booking.driverVehicleModel) ||
+      activeDriverJobLinkVehicleModel ||
+      safeDriverVehicleModelDisplay(selectedDriver?.vehicle_type);
     const driverPayout = draftPricing.driverPayout;
     const childSeatLine =
       clean(booking.childSeatRequired) === "yes"
@@ -11495,7 +11563,10 @@ export default function Home() {
       .map((section) => section.join("\n").trim())
       .join("\n\n");
   }, [
+    activeAdminDriverJobLink?.booking_reference,
+    activeAdminDriverJobLink?.safe_summary.vehicle,
     booking,
+    dispatchReleaseWorkflowBookingReference,
     draftPricing.driverPayout,
     driverAssignmentDisplayDrivers,
     isDspItinerary,
@@ -11503,8 +11574,6 @@ export default function Home() {
     route,
   ]);
 
-  const activeAdminDriverJobLink =
-    adminDriverJobLinkState.link?.link_status === "active" ? adminDriverJobLinkState.link : null;
   const driverJobLinkMessage = useMemo(() => {
     const bookingReference =
       cleanReferenceText(dispatchReleaseWorkflowBookingReference) ||
@@ -13745,9 +13814,24 @@ export default function Home() {
     const driverContact = clean(record.driver_contact);
     const driverPlate = clean(record.driver_plate_number);
     const driverVehicleModel = safeDriverVehicleModelFromBookingRecord(record);
+    const recordReference =
+      cleanReferenceText(record.booking_reference) || cleanReferenceText(record.id);
+    const currentBookingReference = cleanReferenceText(dispatchReleaseWorkflowBookingReference);
 
     if (!driverName && !driverContact && !driverPlate && !driverVehicleModel) {
       return;
+    }
+
+    if (
+      activeTab === "dispatch" &&
+      recordReference &&
+      recordReference === currentBookingReference &&
+      (driverName || driverContact || driverPlate) &&
+      !driverVehicleModel &&
+      !driverJobLinkVehicleFallbackRefreshRequestedRef.current.has(recordReference)
+    ) {
+      driverJobLinkVehicleFallbackRefreshRequestedRef.current.add(recordReference);
+      void refreshAdminDriverJobLinkForReference(recordReference, { silent: true });
     }
 
     setBooking((currentBooking) => {
@@ -13774,12 +13858,13 @@ export default function Home() {
 
   async function loadBookings(
     successText = "Bookings loaded.",
-    options?: { silent?: boolean; skipSavedBookingsRead?: boolean },
+    options?: { messageTab?: AppTab; silent?: boolean; skipSavedBookingsRead?: boolean },
   ) {
     const silent = options?.silent === true;
+    const canShowMessage = () => !silent && (!options?.messageTab || activeTabRef.current === options.messageTab);
 
     if (typeof fetch !== "function") {
-      if (!silent) {
+      if (canShowMessage()) {
         setMessage({
           tone: "error",
           text: "Admin saved booking read API is not available.",
@@ -13790,7 +13875,9 @@ export default function Home() {
 
     if (!silent) {
       setLoading(true);
-      setMessage({ tone: "info", text: "Loading bookings..." });
+      if (canShowMessage()) {
+        setMessage({ tone: "info", text: "Loading bookings..." });
+      }
       setLoadBookingsTypedOperationalCardsById({});
       setLoadBookingsTypedOperationalCardOrder([]);
     }
@@ -13860,7 +13947,7 @@ export default function Home() {
       const bookingsListResult = await fetchAdminBookingsList();
 
       if (!bookingsListResult.ok) {
-        if (!options?.silent) {
+        if (canShowMessage()) {
           setMessage({
             tone: "error",
             text: `Load bookings failed: ${formatSupabaseError(bookingsListResult.error)}`,
@@ -13878,7 +13965,7 @@ export default function Home() {
         );
         setLoadBookingsTypedOperationalCardsById(typedOperationalDisplay?.cardsById ?? {});
         setLoadBookingsTypedOperationalCardOrder(typedOperationalDisplay?.orderedCardIds ?? []);
-        if (!silent) {
+        if (canShowMessage()) {
           if (loadedBookings.length === 0) {
             setMessage({ tone: "info", text: "No bookings found." });
           } else {
@@ -13892,7 +13979,7 @@ export default function Home() {
         }
       }
     } catch (error) {
-      if (!silent) {
+      if (canShowMessage()) {
         const errorMessage = error instanceof Error ? error.message : "Unknown load error.";
         setMessage({ tone: "error", text: `Load bookings failed: ${errorMessage}` });
       }
@@ -13944,12 +14031,40 @@ export default function Home() {
       cleanReferenceText(bookingRecord.flight_no) ||
       getBookingDateKey(bookingRecord);
 
+    const loadedBookingForm = bookingRecordToForm(bookingRecord);
+
     rememberHandledCustomerBookingRequest(bookingRecord);
-    setBooking(() => bookingRecordToForm(bookingRecord));
+    setBooking(() => loadedBookingForm);
+    if (bookingReference) {
+      driverJobLinkVehicleFallbackRefreshRequestedRef.current.delete(bookingReference);
+    }
     appliedAdminBookingSnapshotReferenceRef.current = "";
     loadedBookingIdRef.current = bookingReference;
     setAppliedAdminBookingSnapshotReference("");
     setLoadedBookingId(bookingReference);
+    if (bookingReference) {
+      bookingAutoSyncPausedUntilRef.current = Date.now() + 5_000;
+      const typedDisplaySearchParams = new URLSearchParams({ limit: "25" });
+      void fetchLoadBookingsTypedOperationalDisplayResult(typedDisplaySearchParams)
+        .then((typedOperationalDisplay) => {
+          if (!typedOperationalDisplay) {
+            return;
+          }
+
+          setLoadBookingsTypedOperationalCardsById(typedOperationalDisplay.cardsById);
+          setLoadBookingsTypedOperationalCardOrder(typedOperationalDisplay.orderedCardIds);
+        })
+        .catch(() => null);
+      if (
+        (clean(loadedBookingForm.driverName) ||
+          clean(loadedBookingForm.driverContact) ||
+          clean(loadedBookingForm.driverPlate)) &&
+        !safeDriverVehicleModelDisplay(loadedBookingForm.driverVehicleModel)
+      ) {
+        driverJobLinkVehicleFallbackRefreshRequestedRef.current.add(bookingReference);
+        void refreshAdminDriverJobLinkForReference(bookingReference, { silent: true });
+      }
+    }
     setDispatchReleaseWorkflowLoadRevision((currentRevision) => currentRevision + 1);
     setDispatchLoadFocusTarget(options.focusCustomerCopy ? "customerCopy" : null);
     setActiveTab("dispatch");
@@ -17546,10 +17661,29 @@ export default function Home() {
         normaliseTimeForSort(secondBooking.pickup_time)
       );
     });
+  function getActiveJobBookingReference(bookingRecord: BookingRecord) {
+    return (
+      cleanReferenceText(bookingRecord.booking_reference) ||
+      cleanReferenceText(bookingRecord.id)
+    );
+  }
   const activeJobsMonitorCollapsedCount = Math.max(dayOfTripActiveJobBookings.length - 4, 0);
+  const defaultDayOfTripActiveJobVisibleBookings = dayOfTripActiveJobBookings.slice(0, 4);
+  const loadedActiveJobReference = cleanReferenceText(loadedBookingId);
+  const loadedActiveJobBooking = loadedActiveJobReference
+    ? dayOfTripActiveJobBookings.find(
+        (activeJobBooking) => getActiveJobBookingReference(activeJobBooking) === loadedActiveJobReference,
+      )
+    : null;
   const dayOfTripActiveJobVisibleBookings = showAllActiveJobs
     ? dayOfTripActiveJobBookings
-    : dayOfTripActiveJobBookings.slice(0, 4);
+    : loadedActiveJobBooking &&
+        !defaultDayOfTripActiveJobVisibleBookings.some(
+          (activeJobBooking) =>
+            getActiveJobBookingReference(activeJobBooking) === loadedActiveJobReference,
+        )
+      ? [loadedActiveJobBooking, ...defaultDayOfTripActiveJobVisibleBookings].slice(0, 4)
+      : defaultDayOfTripActiveJobVisibleBookings;
   const dayOfTripActiveJobGridClass =
     dayOfTripActiveJobVisibleBookings.length >= 4
       ? "grid-cols-1 sm:grid-cols-2 xl:grid-cols-4"
@@ -17559,11 +17693,7 @@ export default function Home() {
           ? "grid-cols-1 sm:grid-cols-2"
           : "grid-cols-1";
   const activeJobDriverStatusReferenceList = dayOfTripActiveJobVisibleBookings
-    .map(
-      (activeJobBooking) =>
-        cleanReferenceText(activeJobBooking.booking_reference) ||
-        cleanReferenceText(activeJobBooking.id),
-    )
+    .map(getActiveJobBookingReference)
     .filter(Boolean);
   const activeJobDriverStatusReferenceKey = activeJobDriverStatusReferenceList.join("|");
 
@@ -17660,9 +17790,7 @@ export default function Home() {
       {dayOfTripActiveJobVisibleBookings.length > 0 ? (
         <div className={`mt-3 grid gap-2 ${dayOfTripActiveJobGridClass}`}>
           {dayOfTripActiveJobVisibleBookings.map((activeJobBooking) => {
-            const activeJobBookingReference =
-              cleanReferenceText(activeJobBooking.booking_reference) ||
-              cleanReferenceText(activeJobBooking.id);
+            const activeJobBookingReference = getActiveJobBookingReference(activeJobBooking);
             const isSelectedActiveJob =
               Boolean(activeJobBookingReference) &&
               activeJobBookingReference === cleanReferenceText(loadedBookingId);
@@ -33413,7 +33541,7 @@ export default function Home() {
 
           <section
             aria-label="Admin App Notifications"
-            className="mb-4 rounded-md border border-sky-200 bg-sky-50/70 p-2 sm:p-3"
+            className="mb-4 rounded-md border border-sky-200 bg-sky-50/70 p-2"
             data-admin-app-notification-feed="true"
           >
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -33456,7 +33584,7 @@ export default function Home() {
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
                   <h4 className="text-sm font-semibold text-slate-950">Device Push</h4>
-                  <p className="text-xs text-slate-600">
+                  <p className="hidden text-xs text-slate-600">
                     Phone/Mac browser alert for new booking requests. No WhatsApp, SMS, GPS, or billing.
                   </p>
                 </div>
@@ -33536,7 +33664,7 @@ export default function Home() {
 
                   return (
                     <div
-                      className="rounded-md border border-sky-100 bg-white p-2 text-xs sm:p-3 sm:text-sm"
+                      className="rounded-md border border-sky-100 bg-white p-2 text-xs sm:text-sm"
                       data-admin-app-notification-feed-row="true"
                       key={notificationId || `${title}-${index}`}
                     >
@@ -33559,7 +33687,7 @@ export default function Home() {
                           {notificationPriority}
                         </span>
                       </div>
-                      <p className="mt-2 break-words text-xs text-slate-600">
+                      <p className="mt-2 hidden break-words text-xs text-slate-600">
                         {notificationType} / {notificationStatus} / {createdTime}
                       </p>
                       <div className="mt-2 flex flex-wrap gap-2">

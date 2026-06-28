@@ -37,7 +37,7 @@ const [customersPage, ledger, preactivationSuite] = await Promise.all([
 const collectionSection = sectionBetween(
   customersPage,
   'data-collection-follow-up-queue="true"',
-  'data-customer-debug-tools-drawer="true"',
+  'data-customer-advanced-booking-drawer="true"',
 );
 const monthlyStatementSection = sectionBetween(
   customersPage,

@@ -112,7 +112,7 @@ const outstandingReviewSortOptions: Array<{ label: string; value: OutstandingRev
 
 const outstandingReviewPageSizeOptions = [10, 25];
 const customerQueuePageSizeOptions = [10, 25];
-const customerFolderFinderPageSizeOptions = [10, 25];
+const customerFolderFinderPageSize = 10;
 const customerInvoiceWorkspaceTabs = [
   { label: "Statements", value: "statements" },
   { label: "Outstanding", value: "outstanding" },
@@ -653,9 +653,9 @@ const outstandingPaymentReviewItems: OutstandingPaymentReviewItem[] = mockCustom
 
 export default function MockCustomerDashboardPage() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [customerFolderFinderPageSize, setCustomerFolderFinderPageSize] = useState(10);
   const [customerFolderFinderPage, setCustomerFolderFinderPage] = useState(1);
   const [customerFolderFinderSelectedId, setCustomerFolderFinderSelectedId] = useState("");
+  const [customerFolderFinderDropdownOpen, setCustomerFolderFinderDropdownOpen] = useState(false);
   const [regularCustomerBookingForm, setRegularCustomerBookingForm] = useState<RegularCustomerBookingForm>(
     initialRegularCustomerBookingForm,
   );
@@ -846,6 +846,29 @@ export default function MockCustomerDashboardPage() {
     customerFolderFinderStartIndex + customerFolderFinderPageSize,
     filteredCustomers.length,
   );
+  const customerFolderFinderDropdownTotalPages = Math.max(
+    1,
+    Math.ceil(customerFolderIndexRows.length / customerFolderFinderPageSize),
+  );
+  const currentCustomerFolderFinderDropdownPage = Math.min(
+    customerFolderFinderPage,
+    customerFolderFinderDropdownTotalPages,
+  );
+  const customerFolderFinderDropdownStartIndex =
+    customerFolderIndexRows.length === 0
+      ? 0
+      : (currentCustomerFolderFinderDropdownPage - 1) * customerFolderFinderPageSize;
+  const customerFolderFinderDropdownRows = customerFolderIndexRows.slice(
+    customerFolderFinderDropdownStartIndex,
+    customerFolderFinderDropdownStartIndex + customerFolderFinderPageSize,
+  );
+  const customerFolderFinderDropdownPageNumbers = Array.from(
+    { length: customerFolderFinderDropdownTotalPages },
+    (_, pageIndex) => pageIndex + 1,
+  );
+  const customerFolderFinderDropdownLabel = selectedCustomerFolderFinderRow
+    ? selectedCustomerFolderFinderRow.customerName
+    : `All customers - page ${currentCustomerFolderFinderDropdownPage} of ${customerFolderFinderDropdownTotalPages}`;
   const visibleOutstandingPaymentReviewItems = useMemo(
     () =>
       outstandingPaymentReviewItems
@@ -1339,19 +1362,22 @@ export default function MockCustomerDashboardPage() {
 
   function updateCustomerFolderFinderSearch(value: string) {
     setCustomerFolderFinderSelectedId("");
+    setCustomerFolderFinderDropdownOpen(false);
     setSearchTerm(value);
     setCustomerFolderFinderPage(1);
   }
 
   function updateCustomerFolderFinderSelection(value: string) {
     setCustomerFolderFinderSelectedId(value);
+    setCustomerFolderFinderDropdownOpen(false);
     setSearchTerm("");
     setCustomerFolderFinderPage(1);
   }
 
-  function updateCustomerFolderFinderPageSize(value: number) {
-    setCustomerFolderFinderPageSize(value);
-    setCustomerFolderFinderPage(1);
+  function showAllCustomerFolderFinderRows(pageNumber = 1) {
+    setCustomerFolderFinderSelectedId("");
+    setSearchTerm("");
+    setCustomerFolderFinderPage(pageNumber);
   }
 
   function updateOutstandingReviewSearch(value: string) {
@@ -1834,148 +1860,1111 @@ export default function MockCustomerDashboardPage() {
           </div>
         </header>
 
-        <section aria-label="Customer payment summary" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {summaryCards.map((card) => (
-            <div
-              className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
-              data-customer-summary-card={card.label}
-              key={card.label}
-            >
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{card.label}</p>
-              <p className="mt-3 text-2xl font-bold text-slate-950">{card.value}</p>
-            </div>
-          ))}
-        </section>
-
-        <details className="rounded-lg border border-slate-200 bg-white shadow-sm" data-customer-folder-support-drawer="true">
-          <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-slate-900 [&::-webkit-details-marker]:hidden">
-            Customer folder support list
-            <span className="text-xs font-semibold text-slate-500">Open when needed</span>
-          </summary>
-          <section
-            className="border-t border-slate-200 p-3 sm:p-4"
-            data-customer-folder-index-handoff="true"
-            data-customer-folder-index-handoff-layout="compact-list"
-          >
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">
-                Staff folder handoff
-              </p>
-              <h2 className="mt-1 text-base font-bold text-slate-950">
-                Customer Folder / Job History Handoff
-              </h2>
-              <p
-                className="mt-1 max-w-3xl text-xs leading-5 text-slate-600"
-                data-customer-folder-index-handoff-helper="true"
+        <section
+          aria-label="Customer payment summary"
+          className="rounded-md border border-slate-200 bg-white px-3 py-2 shadow-sm"
+          data-customer-summary-strip="true"
+        >
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {summaryCards.map((card) => (
+              <div
+                className="flex min-h-10 items-center justify-between gap-3 rounded-md bg-slate-50 px-3 py-2"
+                data-customer-summary-card={card.label}
+                key={card.label}
               >
-                Open the customer folder and review job history there. Staff-facing only.
-              </p>
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <p
-                className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-700"
-                data-customer-folder-index-handoff-count="true"
-              >
-                {regularCustomerAccountReadState.status === "loaded"
-                  ? `Saved accounts: ${customerFolderIndexRows.length}`
-                  : `Customers: ${customerFolderIndexHandoffRows.length}`}
-              </p>
-              <button
-                className="min-h-9 rounded-md border border-slate-900 bg-slate-900 px-3 py-1.5 text-sm font-bold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-                data-customer-folder-index-load-accounts="true"
-                disabled={regularCustomerAccountReadState.status === "loading"}
-                onClick={loadRegularCustomerAccounts}
-                type="button"
-              >
-                {regularCustomerAccountReadState.status === "loading" ? "Loading..." : "Load Saved Accounts"}
-              </button>
-            </div>
-          </div>
-
-          <p
-            aria-live="polite"
-            className={`mt-3 rounded-md border px-3 py-2 text-sm font-semibold leading-5 ${regularCustomerBookingFeedbackClass(
-              regularCustomerAccountReadState.tone,
-            )}`}
-            data-customer-folder-index-account-read-feedback="true"
-            data-customer-folder-index-account-read-feedback-tone={regularCustomerAccountReadState.tone}
-          >
-            {regularCustomerAccountReadState.message}
-          </p>
-
-          <div
-            className="mt-3 overflow-hidden rounded-md border border-slate-200"
-            data-customer-folder-index-compact-list="true"
-          >
-            <div
-              aria-hidden="true"
-              className="hidden grid-cols-[minmax(10rem,1.3fr)_6rem_8rem_minmax(8rem,1fr)_8rem] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 md:grid"
-            >
-              <span>Customer</span>
-              <span>Jobs</span>
-              <span>Status</span>
-              <span>Latest</span>
-              <span className="text-right">Action</span>
-            </div>
-            {customerFolderIndexRows.map((row) => (
-              <article
-                className="grid gap-2 border-b border-slate-200 bg-white px-3 py-2 text-sm leading-5 last:border-b-0 md:grid-cols-[minmax(10rem,1.3fr)_6rem_8rem_minmax(8rem,1fr)_8rem] md:items-center md:gap-3"
-                data-customer-folder-index-handoff-row={row.customerId}
-                key={row.customerId}
-              >
-                <p className="font-bold text-slate-950">{row.customerName}</p>
-                <p className="text-slate-600">
-                  {row.historyRows} job{row.historyRows === 1 ? "" : "s"}
+                <p className="truncate text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  {card.label}
                 </p>
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-                  {row.upcomingJobs} up / {row.completedJobs} done
-                </p>
-                {row.source === "saved-account-read" ? (
-                  <p className="truncate text-xs font-semibold text-slate-500">
-                    {[row.latestPickupAt, row.latestServiceType, row.latestBookingReference].filter(Boolean).join(" | ") ||
-                      "Latest saved service not available"}
-                  </p>
-                ) : (
-                  <p className="text-xs font-semibold text-slate-500">Folder ready</p>
-                )}
-                {row.folderHref ? (
-                  <Link
-                    className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-center text-xs font-bold text-white transition hover:bg-slate-700 md:justify-self-end"
-                    data-customer-folder-index-handoff-link={row.customerId}
-                    href={row.folderHref}
-                  >
-                    Review folder
-                  </Link>
-                ) : (
-                  <span
-                    className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-center text-xs font-bold text-slate-600 md:justify-self-end"
-                    data-customer-folder-index-handoff-no-folder={row.customerId}
-                  >
-                    Folder route pending
-                  </span>
-                )}
-              </article>
+                <p className="text-sm font-bold text-slate-950">{card.value}</p>
+              </div>
             ))}
           </div>
+        </section>
 
-          {regularCustomerAccountReadState.status === "loaded" && customerFolderIndexRows.length === 0 ? (
+        <section
+          className="rounded-lg border border-slate-200 bg-white shadow-sm"
+          data-customer-dashboard="true"
+          data-customer-folder-finder="true"
+        >
+          <div className="border-b border-slate-200 p-4 sm:p-5">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-slate-950">Find Customer Folder</h2>
+                <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
+                  Search all customer folders, scan 10 at a time, then open the correct account before invoice work.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center lg:justify-end">
+                <p
+                  className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700"
+                  data-customer-folder-finder-count="true"
+                >
+                  Showing {customerFolderFinderShowingStart}-{customerFolderFinderShowingEnd} of{" "}
+                  {filteredCustomers.length} customer folders
+                </p>
+                <button
+                  className="min-h-10 rounded-md border border-slate-900 bg-slate-900 px-3 py-2 text-sm font-bold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  data-customer-folder-finder-load-accounts="true"
+                  disabled={regularCustomerAccountReadState.status === "loading"}
+                  onClick={loadRegularCustomerAccounts}
+                  type="button"
+                >
+                  {regularCustomerAccountReadState.status === "loading" ? "Loading..." : "Load Saved Accounts"}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-4 sm:p-5">
+            <div className="grid gap-3 lg:grid-cols-[minmax(18rem,0.9fr)_minmax(16rem,1fr)] lg:items-start">
+              <div className="relative flex flex-col gap-1 text-sm font-semibold text-slate-700">
+                <span>All customers</span>
+                <button
+                  aria-expanded={customerFolderFinderDropdownOpen}
+                  aria-haspopup="listbox"
+                  className="flex min-h-11 items-center justify-between gap-3 rounded-md border border-slate-300 bg-white px-3 py-2 text-left text-sm font-semibold text-slate-950 outline-none transition hover:border-slate-700 focus:border-slate-700"
+                  data-customer-folder-finder-select="true"
+                  onClick={() =>
+                    setCustomerFolderFinderDropdownOpen((currentDropdownState) => !currentDropdownState)
+                  }
+                  type="button"
+                >
+                  <span className="truncate">{customerFolderFinderDropdownLabel}</span>
+                  <span aria-hidden="true" className="text-slate-500">
+                    v
+                  </span>
+                </button>
+                {customerFolderFinderDropdownOpen ? (
+                  <div
+                    className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-md border border-slate-300 bg-white shadow-lg"
+                    data-customer-folder-finder-dropdown-panel="true"
+                    role="listbox"
+                  >
+                    <button
+                      className="flex w-full items-center justify-between gap-3 border-b border-slate-200 px-3 py-2 text-left text-sm font-bold text-slate-950 transition hover:bg-slate-50"
+                      data-customer-folder-finder-all-customers-option="true"
+                      onClick={() => {
+                        showAllCustomerFolderFinderRows(1);
+                        setCustomerFolderFinderDropdownOpen(false);
+                      }}
+                      type="button"
+                    >
+                      <span>All customers</span>
+                      <span className="text-xs font-semibold text-slate-500">10 per page</span>
+                    </button>
+                    <div className="max-h-80 overflow-y-auto">
+                      {customerFolderFinderDropdownRows.length > 0 ? (
+                        customerFolderFinderDropdownRows.map((customer) => (
+                          <button
+                            className={`grid w-full gap-1 px-3 py-2 text-left text-sm transition hover:bg-slate-50 ${
+                              customer.customerId === customerFolderFinderSelectedId
+                                ? "bg-emerald-50 text-emerald-950"
+                                : "bg-white text-slate-900"
+                            }`}
+                            data-customer-folder-finder-dropdown-page-row={customer.customerId}
+                            aria-selected={customer.customerId === customerFolderFinderSelectedId}
+                            key={customer.customerId}
+                            onClick={() => updateCustomerFolderFinderSelection(customer.customerId)}
+                            role="option"
+                            type="button"
+                          >
+                            <span className="font-bold">{customer.customerName}</span>
+                            <span className="text-xs font-semibold text-slate-500">{customer.customerId}</span>
+                          </button>
+                        ))
+                      ) : (
+                        <p className="px-3 py-3 text-sm font-semibold text-slate-500">
+                          No customer folders loaded.
+                        </p>
+                      )}
+                    </div>
+                    <div
+                      className="flex flex-wrap gap-1 border-t border-slate-200 bg-slate-50 px-3 py-2"
+                      data-customer-folder-finder-page-numbers="true"
+                    >
+                      {customerFolderFinderDropdownPageNumbers.map((pageNumber) => (
+                        <button
+                          className={`min-h-8 min-w-8 rounded-md border px-2 text-xs font-bold transition ${
+                            pageNumber === currentCustomerFolderFinderDropdownPage &&
+                            !selectedCustomerFolderFinderRow &&
+                            !normalizedSearchTerm
+                              ? "border-slate-900 bg-slate-900 text-white"
+                              : "border-slate-300 bg-white text-slate-700 hover:border-slate-700"
+                          }`}
+                          data-customer-folder-finder-dropdown-page-number={pageNumber}
+                          key={pageNumber}
+                          onClick={() => {
+                            showAllCustomerFolderFinderRows(pageNumber);
+                            setCustomerFolderFinderDropdownOpen(true);
+                          }}
+                          type="button"
+                        >
+                          {pageNumber}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
+                Search customer / company / latest booking
+                <input
+                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                  data-customer-folder-finder-search="true"
+                  data-customer-search="true"
+                  onChange={(event) => updateCustomerFolderFinderSearch(event.target.value)}
+                  placeholder="Type customer, company, account, booking reference"
+                  type="search"
+                  value={searchTerm}
+                />
+              </label>
+            </div>
+
             <p
-              className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm font-semibold leading-6 text-slate-700"
-              data-customer-folder-index-handoff-empty="true"
+              aria-live="polite"
+              className={`mt-3 rounded-md border px-3 py-2 text-sm font-semibold leading-5 ${regularCustomerBookingFeedbackClass(
+                regularCustomerAccountReadState.tone,
+              )}`}
+              data-customer-folder-finder-feedback="true"
+              data-customer-search-helper="true"
             >
-              No saved customer accounts loaded.
+              {selectedCustomerFolderFinderRow
+                ? `Dropdown selected ${selectedCustomerFolderFinderRow.customerName}. Open the row below or choose All customer folders to browse ${customerFolderFinderPageSize} per page.`
+                : normalizedSearchTerm
+                ? `Search is filtering customer folders locally for "${searchTerm}".`
+                : regularCustomerAccountReadState.message}
             </p>
-          ) : null}
 
+            <div
+              aria-live="polite"
+              className="mt-4 overflow-hidden rounded-md border border-slate-200"
+              data-customer-results-panel="true"
+            >
+              {paginatedCustomerFolderFinderRows.length > 0 ? (
+                <div>
+                  <div
+                    aria-hidden="true"
+                    className="hidden grid-cols-[minmax(12rem,1.4fr)_7rem_8rem_minmax(12rem,1fr)_7rem] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 md:grid"
+                  >
+                    <span>Customer</span>
+                    <span>Jobs</span>
+                    <span>Status</span>
+                    <span>Latest</span>
+                    <span className="text-right">Folder</span>
+                  </div>
+                  <div className="divide-y divide-slate-200" data-customer-folder-finder-list="true">
+                    {paginatedCustomerFolderFinderRows.map((customer) => (
+                      <article
+                        className="grid gap-2 bg-white px-3 py-2 text-sm leading-5 transition hover:bg-slate-50 md:grid-cols-[minmax(12rem,1.4fr)_7rem_8rem_minmax(12rem,1fr)_7rem] md:items-center md:gap-3"
+                        data-customer-folder-finder-row={customer.customerId}
+                        data-customer-row={customer.customerId}
+                        key={customer.customerId}
+                      >
+                        <div className="min-w-0">
+                          <h3 className="truncate text-sm font-bold text-slate-950 sm:text-base">
+                            {customer.customerName}
+                          </h3>
+                          <p className="mt-0.5 truncate text-xs text-slate-500">
+                            Account: {customer.customerId}
+                          </p>
+                        </div>
+                        <p className="font-semibold text-slate-800">
+                          {customer.historyRows} job{customer.historyRows === 1 ? "" : "s"}
+                        </p>
+                        <p className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">
+                          {customer.upcomingJobs} up / {customer.completedJobs} done
+                        </p>
+                        <p className="min-w-0 truncate text-xs font-semibold text-slate-600">
+                          {customer.source === "saved-account-read"
+                            ? [customer.latestPickupAt, customer.latestServiceType, customer.latestBookingReference]
+                                .filter(Boolean)
+                                .join(" | ") || "Latest saved service not available"
+                            : "Local folder ready"}
+                        </p>
+                        {customer.folderHref ? (
+                          <Link
+                            className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-center text-xs font-bold text-white transition hover:bg-slate-700 md:justify-self-end"
+                            data-customer-folder-finder-link={customer.customerId}
+                            data-open-customer-folder={customer.customerId}
+                            href={customer.folderHref}
+                          >
+                            Open
+                          </Link>
+                        ) : (
+                          <span
+                            className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-center text-xs font-bold text-slate-600 md:justify-self-end"
+                            data-customer-folder-finder-no-folder={customer.customerId}
+                          >
+                            Pending
+                          </span>
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div
+                  className="p-5 text-sm leading-6 text-slate-600"
+                  data-customer-empty-state="true"
+                  data-customer-folder-finder-empty="true"
+                >
+                  No customer folders match this search. Clear the search to show all folders again.
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
+        <section
+          className="rounded-lg border border-amber-200 bg-white shadow-sm"
+          data-unbilled-customers-sector="true"
+        >
+          <div className="border-b border-amber-200 bg-amber-50/60 p-4 sm:p-5">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-800">
+                  Billing checkpoint
+                </p>
+                <h2 className="mt-1 text-lg font-bold text-slate-950">Unbilled Customers</h2>
+                <p className="mt-1 max-w-3xl text-sm font-semibold leading-6 text-amber-950">
+                  Review these before sending invoices so unbilled or statement-needed accounts are not missed.
+                </p>
+              </div>
+              <p
+                className="rounded-md border border-amber-200 bg-white px-3 py-2 text-sm font-bold text-amber-950"
+                data-unbilled-customers-count="true"
+              >
+                Showing {unbilledCustomersShowingStart}-{unbilledCustomersShowingEnd} of{" "}
+                {unbilledCustomerRows.length} unbilled rows
+              </p>
+            </div>
+            <div
+              className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+              data-unbilled-customers-pagination="true"
+            >
+              <label className="text-sm font-semibold text-slate-700 sm:max-w-48">
+                Per page
+                <select
+                  className="mt-1 min-h-10 w-full rounded-md border border-amber-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950 outline-none focus:border-amber-700"
+                  data-unbilled-customers-page-size="true"
+                  onChange={(event) => {
+                    setUnbilledCustomersPageSize(Number(event.target.value));
+                    setUnbilledCustomersPage(1);
+                  }}
+                  value={unbilledCustomersPageSize}
+                >
+                  {customerQueuePageSizeOptions.map((pageSize) => (
+                    <option key={pageSize} value={pageSize}>
+                      {pageSize} per page
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex gap-2">
+                <button
+                  className="min-h-10 rounded-md border border-amber-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  data-unbilled-customers-previous="true"
+                  disabled={currentUnbilledCustomersPage <= 1}
+                  onClick={() => setUnbilledCustomersPage((currentPage) => Math.max(1, currentPage - 1))}
+                  type="button"
+                >
+                  Previous
+                </button>
+                <button
+                  className="min-h-10 rounded-md border border-amber-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  data-unbilled-customers-next="true"
+                  disabled={currentUnbilledCustomersPage >= unbilledCustomersTotalPages}
+                  onClick={() =>
+                    setUnbilledCustomersPage((currentPage) =>
+                      Math.min(unbilledCustomersTotalPages, currentPage + 1),
+                    )
+                  }
+                  type="button"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="divide-y divide-slate-200" data-unbilled-customers-list="true">
+            {paginatedUnbilledCustomerRows.length > 0 ? (
+              paginatedUnbilledCustomerRows.map((row) => (
+                <article
+                  className="grid gap-2 px-3 py-2 text-sm leading-5 transition hover:bg-amber-50/50 sm:px-4 lg:grid-cols-[minmax(12rem,1.25fr)_minmax(8rem,0.7fr)_minmax(8rem,0.7fr)_minmax(14rem,1.35fr)_7rem] lg:items-center"
+                  data-unbilled-customer-row={row.key}
+                  key={row.key}
+                >
+                  <div className="min-w-0">
+                    <h3 className="truncate text-sm font-bold text-slate-950 sm:text-base">{row.customerName}</h3>
+                    <p className="mt-0.5 truncate text-xs text-slate-500">{row.reference}</p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Status</p>
+                    <p className="mt-0.5 text-sm font-bold text-amber-950">{row.statusLabel}</p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Amount</p>
+                    <p className="mt-0.5 text-sm font-bold text-slate-950">{row.amount}</p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+                      Job / service
+                    </p>
+                    <p className="mt-0.5 truncate text-sm font-semibold text-slate-800">
+                      {row.dateLabel} · {row.service}
+                    </p>
+                    <p className="mt-0.5 truncate text-xs text-slate-500">{row.route}</p>
+                  </div>
+                  {row.customerFolderHref ? (
+                    <Link
+                      className="inline-flex min-h-9 items-center justify-center rounded-md border border-amber-900 bg-amber-900 px-3 text-center text-xs font-bold text-white transition hover:bg-amber-800 lg:justify-self-end"
+                      data-unbilled-customer-open-folder={row.key}
+                      href={row.customerFolderHref}
+                    >
+                      Open
+                    </Link>
+                  ) : (
+                    <span className="text-xs font-semibold text-slate-500 lg:text-right">Folder pending</span>
+                  )}
+                </article>
+              ))
+            ) : (
+              <div className="p-5 text-sm leading-6 text-slate-600" data-unbilled-customers-empty="true">
+                No unbilled customer rows are visible right now.
+              </div>
+            )}
+          </div>
           <p
-            className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-700"
-            data-customer-folder-index-handoff-boundary="true"
+            className="border-t border-amber-100 bg-amber-50/60 px-4 py-3 text-xs font-semibold leading-5 text-amber-950 sm:px-5"
+            data-unbilled-customers-boundary="true"
           >
-            Read-only local guide. It does not create, save, send, assign work, or change customer records.
+            Review-only checkpoint. Opening a folder does not create invoice numbers, generate invoices/PDFs, send
+            payment requests, write records, call providers, or change payment status.
           </p>
-          </section>
-        </details>
+        </section>
+
+        <section
+          className="rounded-lg border border-slate-200 bg-white shadow-sm"
+          data-customer-invoice-workspace="true"
+        >
+          <div className="border-b border-slate-200 p-4 sm:p-5">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                  Invoice workspace
+                </p>
+                <h2 className="mt-1 text-lg font-bold text-slate-950">Send Invoice Workbench</h2>
+                <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
+                  Use Statements first when preparing invoices. Outstanding balances and follow-up queues stay one
+                  click away.
+                </p>
+              </div>
+              <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
+                {mockStatementPreviewGroups.length} statement preview
+                {mockStatementPreviewGroups.length === 1 ? "" : "s"}
+              </p>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2" data-customer-invoice-workspace-tabs="true">
+              {customerInvoiceWorkspaceTabs.map((tab) => (
+                <button
+                  className={`min-h-10 rounded-md border px-3 py-2 text-sm font-bold transition ${
+                    customerInvoiceWorkspaceTab === tab.value
+                      ? "border-slate-900 bg-slate-900 text-white"
+                      : "border-slate-300 bg-white text-slate-800 hover:border-slate-500 hover:bg-slate-50"
+                  }`}
+                  data-customer-invoice-workspace-tab={tab.value}
+                  key={tab.value}
+                  onClick={() => setCustomerInvoiceWorkspaceTab(tab.value)}
+                  type="button"
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <div
+          className={customerInvoiceWorkspaceTab === "statements" ? "" : "hidden"}
+          data-customer-invoice-workspace-panel="statements"
+        >
+        <section
+          className="rounded-lg border border-slate-200 bg-white shadow-sm"
+          data-monthly-statement-preview="true"
+        >
+          <div className="border-b border-slate-200 p-4 sm:p-5">
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-slate-950">Monthly Account Statement Preview</h2>
+                <p className="mt-1 text-sm leading-6 text-slate-600" data-monthly-statement-boundary="true">
+                  Mock/read-only only. No statement record, invoice record, payment record, bank record, notification,
+                  or Supabase row is created.
+                </p>
+                <p className="mt-1 text-sm leading-6 text-slate-600" data-monthly-statement-no-number-boundary="true">
+                  No statement is generated, sent, saved, or assigned a real statement number.
+                </p>
+              </div>
+              <p className="text-sm font-semibold text-slate-600">
+                Showing {monthlyStatementShowingStart}-{monthlyStatementShowingEnd} of{" "}
+                {mockStatementPreviewGroups.length} statement previews
+              </p>
+            </div>
+            <div
+              className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+              data-monthly-statement-pagination="true"
+            >
+              <label className="text-sm font-semibold text-slate-700 sm:max-w-48">
+                Page size
+                <select
+                  className="mt-1 min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950"
+                  data-monthly-statement-page-size="true"
+                  onChange={(event) => {
+                    setMonthlyStatementPageSize(Number(event.target.value));
+                    setMonthlyStatementPage(1);
+                  }}
+                  value={monthlyStatementPageSize}
+                >
+                  {customerQueuePageSizeOptions.map((pageSize) => (
+                    <option key={pageSize} value={pageSize}>
+                      {pageSize} rows
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex gap-2">
+                <button
+                  className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  data-monthly-statement-previous="true"
+                  disabled={currentMonthlyStatementPage <= 1}
+                  onClick={() => setMonthlyStatementPage((currentPage) => Math.max(1, currentPage - 1))}
+                  type="button"
+                >
+                  Previous
+                </button>
+                <button
+                  className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  data-monthly-statement-next="true"
+                  disabled={currentMonthlyStatementPage >= monthlyStatementTotalPages}
+                  onClick={() =>
+                    setMonthlyStatementPage((currentPage) => Math.min(monthlyStatementTotalPages, currentPage + 1))
+                  }
+                  type="button"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="divide-y divide-slate-200">
+            {mockStatementPreviewGroups.length > 0 ? (
+              paginatedMonthlyStatementGroups.map((group) => (
+                <article
+                  className="grid gap-2 px-3 py-2 transition hover:bg-slate-50 sm:px-4 lg:grid-cols-[minmax(12rem,1.25fr)_minmax(10rem,0.9fr)_minmax(7rem,0.6fr)_minmax(9rem,auto)] lg:items-center"
+                  data-monthly-statement-group={group.key}
+                  key={group.key}
+                >
+                  <div className="min-w-0">
+                    <h3 className="truncate text-sm font-bold text-slate-950 sm:text-base">{group.customerName}</h3>
+                    <p className="mt-0.5 truncate text-xs text-slate-500">Prefix: {group.invoicePrefix}</p>
+                    <p className="mt-0.5 truncate text-xs text-slate-500">{group.periodLabel}</p>
+                  </div>
+
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Rows</p>
+                    <p className="mt-0.5 text-sm font-bold text-slate-900">
+                      {group.items.length} invoice/reference rows
+                    </p>
+                    <p className="mt-0.5 truncate text-xs text-slate-500">Statement number: not generated</p>
+                  </div>
+
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Mock total</p>
+                    <p className="mt-0.5 text-sm font-bold text-slate-950" data-monthly-statement-total={group.key}>
+                      {group.statementTotal}
+                    </p>
+                    <p className="mt-0.5 truncate text-xs text-slate-500">Fully paid rows excluded</p>
+                  </div>
+
+                  <div className="flex items-center gap-2 lg:justify-end">
+                    <Link
+                      aria-label={`Open Customer Folder for ${group.customerName}`}
+                      className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-slate-700"
+                      data-monthly-statement-open-customer-folder={group.key}
+                      href={`/customers/${group.customerId}`}
+                    >
+                      Open
+                    </Link>
+                    <details className="group relative flex-1 lg:flex-none">
+                      <summary
+                        className="inline-flex min-h-9 w-full cursor-pointer list-none items-center justify-between gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50 [&::-webkit-details-marker]:hidden"
+                        data-monthly-statement-actions-toggle={group.key}
+                      >
+                        <span>Actions</span>
+                        <span aria-hidden="true" className="text-slate-500 group-open:hidden">
+                          v
+                        </span>
+                        <span aria-hidden="true" className="hidden text-slate-500 group-open:inline">
+                          ^
+                        </span>
+                      </summary>
+                      <div
+                        className="absolute right-0 z-20 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-md border border-slate-200 bg-white p-2 shadow-lg sm:w-96"
+                        data-monthly-statement-actions-dropdown={group.key}
+                      >
+                        <div className="grid gap-2">
+                          <p className="rounded-md bg-slate-50 px-2 py-1.5 text-xs leading-5 text-slate-700">
+                            Monthly account can be grouped into statement later. Balance due remains visible until
+                            paid. Statement preview is not generated or saved.
+                          </p>
+                          <div className="grid gap-2">
+                            {group.items.map((item) => (
+                              <div
+                                className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs"
+                                data-monthly-statement-row={item.key}
+                                key={item.key}
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <p className="truncate font-bold text-slate-950">{item.invoiceNumber}</p>
+                                    <p className="mt-0.5 text-slate-600">{item.paymentStatus}</p>
+                                  </div>
+                                  <p className="font-bold text-slate-950">{item.balanceDue}</p>
+                                </div>
+                                <p className="mt-1 text-slate-500">Follow-up: {item.followUpDate}</p>
+                              </div>
+                            ))}
+                          </div>
+                          <button
+                            className="min-h-9 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
+                            data-statement-preview-action={group.key}
+                            onClick={() => handleMockStatementPreview(group)}
+                            type="button"
+                          >
+                            Preview Mock Statement
+                          </button>
+                          <p
+                            aria-live="polite"
+                            className="rounded-md bg-slate-50 px-2 py-1.5 text-xs leading-5 text-slate-600"
+                            data-statement-preview-feedback={group.key}
+                          >
+                            {group.feedback ?? "Mock helper: preview only; nothing is generated, saved, or sent."}
+                          </p>
+                        </div>
+                      </div>
+                    </details>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <div className="p-5 text-sm text-slate-600" data-monthly-statement-empty="true">
+                No mock monthly account statement items remain after local actions. Refreshing the page restores the
+                mock data.
+              </div>
+            )}
+          </div>
+        </section>
+        </div>
+
+        <div
+          className={customerInvoiceWorkspaceTab === "outstanding" ? "" : "hidden"}
+          data-customer-invoice-workspace-panel="outstanding"
+        >
+        <section
+          className="rounded-lg border border-slate-200 bg-white shadow-sm"
+          data-outstanding-payments-review="true"
+        >
+          <div className="border-b border-slate-200 p-4 sm:p-5">
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-slate-950">Outstanding Payments Review</h2>
+                <p className="mt-1 text-sm leading-6 text-slate-600" data-outstanding-review-boundary="true">
+                  Mock/local only. Changes reset on refresh and are not saved. No payment API, bank API,
+                  notification, or Supabase write is used.
+                </p>
+              </div>
+              <p className="text-sm font-semibold text-slate-600">
+                {visibleOutstandingPaymentReviewItems.length} mock items need account follow-up.
+              </p>
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {outstandingReviewSummaryCards.map((card) => (
+                <div
+                  className="rounded-md border border-slate-200 bg-slate-50 px-3 py-3"
+                  data-outstanding-review-summary-card={card.label}
+                  key={card.label}
+                >
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{card.label}</p>
+                  <p className="mt-2 text-xl font-bold text-slate-950">{card.value}</p>
+                  <p className="mt-1 text-xs text-slate-600">{card.helper}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 grid gap-3 xl:grid-cols-[1.3fr_1fr_1fr_0.7fr] xl:items-end">
+              <label className="text-sm font-semibold text-slate-700">
+                Search customer / booker / reference
+                <input
+                  className="mt-2 min-h-11 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-950"
+                  data-outstanding-review-search="true"
+                  onChange={(event) => updateOutstandingReviewSearch(event.target.value)}
+                  placeholder="Search company, contact, invoice, route"
+                  type="search"
+                  value={outstandingReviewSearchTerm}
+                />
+              </label>
+
+              <label className="text-sm font-semibold text-slate-700">
+                Sort
+                <select
+                  className="mt-2 min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950"
+                  data-outstanding-review-sort="true"
+                  onChange={(event) => updateOutstandingReviewSort(event.target.value as OutstandingReviewSort)}
+                  value={outstandingReviewSort}
+                >
+                  {outstandingReviewSortOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="text-sm font-semibold text-slate-700">
+                Page size
+                <select
+                  className="mt-2 min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950"
+                  data-outstanding-review-page-size="true"
+                  onChange={(event) => updateOutstandingReviewPageSize(Number(event.target.value))}
+                  value={outstandingReviewPageSize}
+                >
+                  {outstandingReviewPageSizeOptions.map((pageSize) => (
+                    <option key={pageSize} value={pageSize}>
+                      {pageSize} customers
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <p
+                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+                data-outstanding-review-showing="true"
+              >
+                Showing {outstandingReviewShowingStart}-{outstandingReviewShowingEnd} of{" "}
+                {filteredOutstandingReviewItems.length} customers
+              </p>
+            </div>
+
+            <div
+              className="mt-4 flex flex-wrap gap-2"
+              data-outstanding-review-filter-controls="true"
+            >
+              {outstandingReviewFilterOptions.map((option) => (
+                <button
+                  className={`min-h-10 rounded-md border px-3 py-2 text-sm font-bold transition ${
+                    outstandingReviewFilter === option.value
+                      ? "border-slate-900 bg-slate-900 text-white"
+                      : "border-slate-300 bg-white text-slate-800 hover:border-slate-500 hover:bg-slate-50"
+                  }`}
+                  data-outstanding-review-filter={option.value}
+                  key={option.value}
+                  onClick={() => updateOutstandingReviewFilter(option.value)}
+                  type="button"
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p
+                aria-live="polite"
+                className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 sm:flex-1"
+                data-payment-section-feedback="true"
+              >
+                {mockPaymentSectionFeedback}
+              </p>
+              <div className="flex gap-2">
+                <button
+                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  data-outstanding-review-previous="true"
+                  disabled={currentOutstandingReviewPage <= 1}
+                  onClick={() => setOutstandingReviewPage((currentPage) => Math.max(1, currentPage - 1))}
+                  type="button"
+                >
+                  Previous
+                </button>
+                <button
+                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  data-outstanding-review-next="true"
+                  disabled={currentOutstandingReviewPage >= outstandingReviewTotalPages}
+                  onClick={() =>
+                    setOutstandingReviewPage((currentPage) =>
+                      Math.min(outstandingReviewTotalPages, currentPage + 1),
+                    )
+                  }
+                  type="button"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="divide-y divide-slate-200">
+            {visibleOutstandingPaymentReviewItems.length === 0 ? (
+              <div className="p-5 text-sm text-slate-600" data-outstanding-payments-empty="true">
+                No mock outstanding payment items remain after local actions. Refreshing the page restores the mock data.
+              </div>
+            ) : paginatedOutstandingReviewItems.length > 0 ? (
+              paginatedOutstandingReviewItems.map((item) => {
+                return (
+                  <article
+                    className="px-3 py-2 transition hover:bg-slate-50 sm:px-4"
+                    data-outstanding-payment-row={item.key}
+                    key={item.key}
+                  >
+                    <div className="grid gap-2 lg:grid-cols-[minmax(12rem,1.35fr)_minmax(7rem,0.65fr)_minmax(6rem,0.55fr)_minmax(10rem,0.85fr)_minmax(9rem,auto)] lg:items-center">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                          <h3 className="truncate text-sm font-bold text-slate-950 sm:text-base">
+                            {item.customerName}
+                          </h3>
+                          {item.isMonthlyAccount ? (
+                            <span className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] font-semibold text-slate-500">
+                              Monthly
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="mt-0.5 truncate text-xs text-slate-500">{item.invoiceNumber}</p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+                          Outstanding
+                        </p>
+                        <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                          <p className="text-sm font-bold text-slate-950">{item.balanceDue}</p>
+                          <p className="text-xs text-slate-500">{item.paymentStatus}</p>
+                        </div>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Aging</p>
+                        <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                          <p className="text-sm font-bold text-slate-900">{item.agingBucket}</p>
+                          <p className="text-xs text-slate-500">{item.dueStatusLabel}</p>
+                        </div>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Due</p>
+                        <p className="mt-0.5 text-sm font-semibold text-slate-800">{item.dueOrFollowUpDate}</p>
+                        <p className="mt-0.5 truncate text-xs text-slate-500">
+                          Next: {getOutstandingNextActionLabel(item)}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 lg:justify-end">
+                        <Link
+                          aria-label={`Open Customer Folder for ${item.customerName}`}
+                          className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-slate-700"
+                          data-outstanding-open-customer-folder={item.key}
+                          href={`/customers/${item.customerId}`}
+                        >
+                          Open
+                        </Link>
+                        <details className="group relative flex-1 lg:flex-none">
+                          <summary
+                            className="inline-flex min-h-9 w-full cursor-pointer list-none items-center justify-between gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50 [&::-webkit-details-marker]:hidden"
+                            data-outstanding-review-detail-toggle={item.key}
+                          >
+                            <span>Actions</span>
+                            <span aria-hidden="true" className="text-slate-500 group-open:hidden">
+                              v
+                            </span>
+                            <span aria-hidden="true" className="hidden text-slate-500 group-open:inline">
+                              ^
+                            </span>
+                          </summary>
+                          <div
+                            className="absolute right-0 z-20 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-md border border-slate-200 bg-white p-2 shadow-lg sm:w-96"
+                            data-outstanding-review-actions-dropdown={item.key}
+                            data-outstanding-review-expanded={item.key}
+                          >
+                            <div className="grid gap-2">
+                              <div className="min-w-0">
+                                <p className="text-xs leading-5 text-slate-700">{item.reason}</p>
+                                <p className="mt-1 text-xs text-slate-500">
+                                  Last follow-up: {item.lastFollowUpDate}
+                                </p>
+                                <div
+                                  className="mt-2 rounded-md border border-sky-200 bg-sky-50 px-2 py-1.5 text-xs leading-5 text-sky-950"
+                                  data-outstanding-review-detail={item.key}
+                                >
+                                  <p className="font-bold">Mock/local detail only for {item.invoiceNumber}</p>
+                                  <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                                    <li>Customer folder reminder: open {item.customerName} before any real collection work.</li>
+                                    <li>{item.outstandingBookingsCount} mock outstanding booking rows are visible for this account.</li>
+                                    <li>Follow-up note placeholder only. No note, payment record, audit record, or customer record is created.</li>
+                                    <li>No invoice, statement, PDF, invoice number, sending, Supabase call, payment API, bank API, notification, or calendar action.</li>
+                                  </ul>
+                                </div>
+                              </div>
+
+                              <div className="grid content-start gap-2 sm:grid-cols-2">
+                                <button
+                                  className="min-h-9 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
+                                  data-payment-action="invoice-sent"
+                                  onClick={() => handleMockPaymentAction(item, "invoice-sent")}
+                                  type="button"
+                                >
+                                  Invoice sent
+                                </button>
+                                <button
+                                  className="min-h-9 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
+                                  data-payment-action="partial-payment"
+                                  onClick={() => handleMockPaymentAction(item, "partial-payment")}
+                                  type="button"
+                                >
+                                  Partial payment
+                                </button>
+                                <button
+                                  className="min-h-9 rounded-md border border-emerald-700 bg-emerald-700 px-2 py-1.5 text-xs font-bold text-white transition hover:bg-emerald-600"
+                                  data-payment-action="paid"
+                                  onClick={() => handleMockPaymentAction(item, "paid")}
+                                  type="button"
+                                >
+                                  Paid
+                                </button>
+                                <button
+                                  className="min-h-9 rounded-md border border-amber-700 bg-amber-50 px-2 py-1.5 text-xs font-bold text-amber-950 transition hover:bg-amber-100"
+                                  data-payment-action="waived"
+                                  onClick={() => handleMockPaymentAction(item, "waived")}
+                                  type="button"
+                                >
+                                  Waive
+                                </button>
+                              </div>
+
+                              <p
+                                aria-live="polite"
+                                className="rounded-md bg-slate-50 px-2 py-1.5 text-xs leading-5 text-slate-600"
+                                data-payment-action-feedback={item.key}
+                              >
+                                {item.feedback ?? "Mock helper: this row updates local page state only."}
+                              </p>
+                            </div>
+                          </div>
+                        </details>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })
+            ) : (
+              <div className="p-5 text-sm leading-6 text-slate-600" data-outstanding-payments-no-results="true">
+                No mock customers match this search or filter. No data was removed and no API was called.
+              </div>
+            )}
+          </div>
+        </section>
+        </div>
+
+        <div
+          className={customerInvoiceWorkspaceTab === "follow-up" ? "" : "hidden"}
+          data-customer-invoice-workspace-panel="follow-up"
+        >
+        <section className="rounded-lg border border-slate-200 bg-white shadow-sm" data-collection-follow-up-queue="true">
+          <div className="border-b border-slate-200 p-4 sm:p-5">
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-slate-950">Collection Follow-up Queue</h2>
+                <p className="mt-1 text-sm leading-6 text-slate-600" data-collection-follow-up-boundary="true">
+                  Mock/local only. Follow-up changes reset on refresh and are not saved.
+                </p>
+                <p className="mt-1 text-sm leading-6 text-slate-600" data-collection-follow-up-no-send-boundary="true">
+                  No notification, WhatsApp message, email, payment record, bank record, or Supabase row is created.
+                </p>
+              </div>
+              <p className="text-sm font-semibold text-slate-600">
+                Showing {collectionFollowUpShowingStart}-{collectionFollowUpShowingEnd} of{" "}
+                {visibleCollectionFollowUpItems.length} follow-ups
+              </p>
+            </div>
+            <p
+              aria-live="polite"
+              className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+              data-follow-up-section-feedback="true"
+            >
+              {mockFollowUpSectionFeedback}
+            </p>
+            <div
+              className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+              data-collection-follow-up-pagination="true"
+            >
+              <label className="text-sm font-semibold text-slate-700 sm:max-w-48">
+                Page size
+                <select
+                  className="mt-1 min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950"
+                  data-collection-follow-up-page-size="true"
+                  onChange={(event) => {
+                    setCollectionFollowUpPageSize(Number(event.target.value));
+                    setCollectionFollowUpPage(1);
+                  }}
+                  value={collectionFollowUpPageSize}
+                >
+                  {customerQueuePageSizeOptions.map((pageSize) => (
+                    <option key={pageSize} value={pageSize}>
+                      {pageSize} rows
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex gap-2">
+                <button
+                  className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  data-collection-follow-up-previous="true"
+                  disabled={currentCollectionFollowUpPage <= 1}
+                  onClick={() => setCollectionFollowUpPage((currentPage) => Math.max(1, currentPage - 1))}
+                  type="button"
+                >
+                  Previous
+                </button>
+                <button
+                  className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  data-collection-follow-up-next="true"
+                  disabled={currentCollectionFollowUpPage >= collectionFollowUpTotalPages}
+                  onClick={() =>
+                    setCollectionFollowUpPage((currentPage) =>
+                      Math.min(collectionFollowUpTotalPages, currentPage + 1),
+                    )
+                  }
+                  type="button"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="divide-y divide-slate-200">
+            {visibleCollectionFollowUpItems.length > 0 ? (
+              paginatedCollectionFollowUpItems.map((item) => (
+                <article
+                  className="grid gap-2 px-3 py-2 transition hover:bg-slate-50 sm:px-4 lg:grid-cols-[minmax(12rem,1.25fr)_minmax(8rem,0.75fr)_minmax(7rem,0.6fr)_minmax(10rem,0.8fr)_minmax(9rem,auto)] lg:items-center"
+                  data-collection-follow-up-row={item.key}
+                  key={item.key}
+                >
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                      <h3 className="truncate text-sm font-bold text-slate-950 sm:text-base">
+                        {item.customerName}
+                      </h3>
+                    {item.isMonthlyAccount ? (
+                        <span className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] font-semibold text-slate-500">
+                          Monthly
+                        </span>
+                    ) : null}
+                    </div>
+                    <p className="mt-0.5 truncate text-xs text-slate-500">{item.invoiceNumber}</p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Status</p>
+                    <p className="mt-0.5 text-sm font-bold text-slate-900">{item.paymentStatus}</p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Balance</p>
+                    <p className="mt-0.5 text-sm font-bold text-slate-950">{item.balanceDue}</p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Follow-up</p>
+                    <p className="mt-0.5 text-sm font-semibold text-slate-800">{item.followUpDate}</p>
+                    <p className="mt-0.5 truncate text-xs text-slate-500">{getCollectionFollowUpReason(item)}</p>
+                  </div>
+                  <div className="flex items-center gap-2 lg:justify-end">
+                    <Link
+                      aria-label={`Open Customer Folder for ${item.customerName}`}
+                      className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-slate-700"
+                      data-follow-up-open-customer-folder={item.key}
+                      href={`/customers/${item.customerId}`}
+                    >
+                      Open
+                    </Link>
+                    <details className="group relative flex-1 lg:flex-none">
+                      <summary
+                        className="inline-flex min-h-9 w-full cursor-pointer list-none items-center justify-between gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50 [&::-webkit-details-marker]:hidden"
+                        data-collection-follow-up-actions-toggle={item.key}
+                      >
+                        <span>Actions</span>
+                        <span aria-hidden="true" className="text-slate-500 group-open:hidden">
+                          v
+                        </span>
+                        <span aria-hidden="true" className="hidden text-slate-500 group-open:inline">
+                          ^
+                        </span>
+                      </summary>
+                      <div
+                        className="absolute right-0 z-20 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-md border border-slate-200 bg-white p-2 shadow-lg sm:w-96"
+                        data-collection-follow-up-actions-dropdown={item.key}
+                      >
+                        <div className="grid gap-2">
+                          <div className="rounded-md bg-slate-50 px-2 py-1.5 text-xs leading-5 text-slate-700">
+                            <p>{getCollectionFollowUpReason(item)}</p>
+                            {item.isMonthlyAccount ? (
+                              <p className="mt-1 font-semibold text-slate-600">
+                                Monthly account can be grouped into statement later.
+                              </p>
+                            ) : null}
+                            {item.followUpNote ? (
+                              <p className="mt-1 text-slate-600">{item.followUpNote}</p>
+                            ) : null}
+                          </div>
+                          <div className="grid gap-2 sm:grid-cols-3">
+                            <button
+                              className="min-h-9 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
+                              data-follow-up-action="schedule"
+                              onClick={() => handleMockFollowUpAction(item, "schedule")}
+                              type="button"
+                            >
+                              Schedule Follow-up
+                            </button>
+                            <button
+                              className="min-h-9 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
+                              data-follow-up-action="done"
+                              onClick={() => handleMockFollowUpAction(item, "done")}
+                              type="button"
+                            >
+                              Mark Follow-up Done
+                            </button>
+                            <button
+                              className="min-h-9 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
+                              data-follow-up-action="note"
+                              onClick={() => handleMockFollowUpAction(item, "note")}
+                              type="button"
+                            >
+                              Add Mock Note
+                            </button>
+                          </div>
+                          <p
+                            aria-live="polite"
+                            className="rounded-md bg-slate-50 px-2 py-1.5 text-xs leading-5 text-slate-600"
+                            data-follow-up-action-feedback={item.key}
+                          >
+                            {item.followUpFeedback ?? "Mock helper: this follow-up updates local page state only."}
+                          </p>
+                        </div>
+                      </div>
+                    </details>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <div className="p-5 text-sm text-slate-600" data-collection-follow-up-empty="true">
+                No mock collection follow-up items remain after local actions. Refreshing the page restores the mock data.
+              </div>
+            )}
+          </div>
+        </section>
+        </div>
 
         <details className="rounded-lg border border-slate-200 bg-white shadow-sm" data-customer-advanced-booking-drawer="true">
           <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-slate-900 [&::-webkit-details-marker]:hidden">
@@ -3555,1057 +4544,6 @@ export default function MockCustomerDashboardPage() {
           </div>
         </section>
         </details>
-
-        <section
-          className="rounded-lg border border-slate-200 bg-white shadow-sm"
-          data-customer-dashboard="true"
-          data-customer-folder-finder="true"
-        >
-          <div className="border-b border-slate-200 p-4 sm:p-5">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-slate-950">Find Customer Folder</h2>
-                <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
-                  Search all customer folders, scan 10 at a time, then open the correct account before invoice work.
-                </p>
-              </div>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center lg:justify-end">
-                <p
-                  className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700"
-                  data-customer-folder-finder-count="true"
-                >
-                  Showing {customerFolderFinderShowingStart}-{customerFolderFinderShowingEnd} of{" "}
-                  {filteredCustomers.length} customer folders
-                </p>
-                <button
-                  className="min-h-10 rounded-md border border-slate-900 bg-slate-900 px-3 py-2 text-sm font-bold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-                  data-customer-folder-finder-load-accounts="true"
-                  disabled={regularCustomerAccountReadState.status === "loading"}
-                  onClick={loadRegularCustomerAccounts}
-                  type="button"
-                >
-                  {regularCustomerAccountReadState.status === "loading" ? "Loading..." : "Load Saved Accounts"}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="p-4 sm:p-5">
-            <div className="grid gap-3 lg:grid-cols-[minmax(14rem,0.9fr)_minmax(16rem,1fr)_10rem_auto] lg:items-end">
-              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
-                Customer dropdown
-                <select
-                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950 outline-none focus:border-slate-700"
-                  data-customer-folder-finder-select="true"
-                  onChange={(event) => updateCustomerFolderFinderSelection(event.target.value)}
-                  value={customerFolderFinderSelectedId}
-                >
-                  <option value="">All customer folders - {customerFolderFinderPageSize} per page</option>
-                  {customerFolderIndexRows.map((customer) => (
-                    <option key={customer.customerId} value={customer.customerId}>
-                      {customer.customerName} - {customer.customerId}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
-                Search customer / company / latest booking
-                <input
-                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
-                  data-customer-folder-finder-search="true"
-                  data-customer-search="true"
-                  onChange={(event) => updateCustomerFolderFinderSearch(event.target.value)}
-                  placeholder="Type customer, company, account, booking reference"
-                  type="search"
-                  value={searchTerm}
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
-                Per page
-                <select
-                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950 outline-none focus:border-slate-700"
-                  data-customer-folder-finder-page-size="true"
-                  onChange={(event) => updateCustomerFolderFinderPageSize(Number(event.target.value))}
-                  value={customerFolderFinderPageSize}
-                >
-                  {customerFolderFinderPageSizeOptions.map((pageSize) => (
-                    <option key={pageSize} value={pageSize}>
-                      {pageSize} per page
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="flex gap-2">
-                <button
-                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                  data-customer-folder-finder-previous="true"
-                  disabled={currentCustomerFolderFinderPage <= 1}
-                  onClick={() => setCustomerFolderFinderPage((currentPage) => Math.max(1, currentPage - 1))}
-                  type="button"
-                >
-                  Previous
-                </button>
-                <button
-                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                  data-customer-folder-finder-next="true"
-                  disabled={currentCustomerFolderFinderPage >= customerFolderFinderTotalPages}
-                  onClick={() =>
-                    setCustomerFolderFinderPage((currentPage) =>
-                      Math.min(customerFolderFinderTotalPages, currentPage + 1),
-                    )
-                  }
-                  type="button"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-
-            <p
-              aria-live="polite"
-              className={`mt-3 rounded-md border px-3 py-2 text-sm font-semibold leading-5 ${regularCustomerBookingFeedbackClass(
-                regularCustomerAccountReadState.tone,
-              )}`}
-              data-customer-folder-finder-feedback="true"
-              data-customer-search-helper="true"
-            >
-              {selectedCustomerFolderFinderRow
-                ? `Dropdown selected ${selectedCustomerFolderFinderRow.customerName}. Open the row below or choose All customer folders to browse ${customerFolderFinderPageSize} per page.`
-                : normalizedSearchTerm
-                ? `Search is filtering customer folders locally for "${searchTerm}".`
-                : regularCustomerAccountReadState.message}
-            </p>
-
-            <div
-              aria-live="polite"
-              className="mt-4 overflow-hidden rounded-md border border-slate-200"
-              data-customer-results-panel="true"
-            >
-              {paginatedCustomerFolderFinderRows.length > 0 ? (
-                <div>
-                  <div
-                    aria-hidden="true"
-                    className="hidden grid-cols-[minmax(12rem,1.4fr)_7rem_8rem_minmax(12rem,1fr)_7rem] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 md:grid"
-                  >
-                    <span>Customer</span>
-                    <span>Jobs</span>
-                    <span>Status</span>
-                    <span>Latest</span>
-                    <span className="text-right">Folder</span>
-                  </div>
-                  <div className="divide-y divide-slate-200" data-customer-folder-finder-list="true">
-                    {paginatedCustomerFolderFinderRows.map((customer) => (
-                      <article
-                        className="grid gap-2 bg-white px-3 py-2 text-sm leading-5 transition hover:bg-slate-50 md:grid-cols-[minmax(12rem,1.4fr)_7rem_8rem_minmax(12rem,1fr)_7rem] md:items-center md:gap-3"
-                        data-customer-folder-finder-row={customer.customerId}
-                        data-customer-row={customer.customerId}
-                        key={customer.customerId}
-                      >
-                        <div className="min-w-0">
-                          <h3 className="truncate text-sm font-bold text-slate-950 sm:text-base">
-                            {customer.customerName}
-                          </h3>
-                          <p className="mt-0.5 truncate text-xs text-slate-500">
-                            Account: {customer.customerId}
-                          </p>
-                        </div>
-                        <p className="font-semibold text-slate-800">
-                          {customer.historyRows} job{customer.historyRows === 1 ? "" : "s"}
-                        </p>
-                        <p className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">
-                          {customer.upcomingJobs} up / {customer.completedJobs} done
-                        </p>
-                        <p className="min-w-0 truncate text-xs font-semibold text-slate-600">
-                          {customer.source === "saved-account-read"
-                            ? [customer.latestPickupAt, customer.latestServiceType, customer.latestBookingReference]
-                                .filter(Boolean)
-                                .join(" | ") || "Latest saved service not available"
-                            : "Local folder ready"}
-                        </p>
-                        {customer.folderHref ? (
-                          <Link
-                            className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-center text-xs font-bold text-white transition hover:bg-slate-700 md:justify-self-end"
-                            data-customer-folder-finder-link={customer.customerId}
-                            data-open-customer-folder={customer.customerId}
-                            href={customer.folderHref}
-                          >
-                            Open
-                          </Link>
-                        ) : (
-                          <span
-                            className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-center text-xs font-bold text-slate-600 md:justify-self-end"
-                            data-customer-folder-finder-no-folder={customer.customerId}
-                          >
-                            Pending
-                          </span>
-                        )}
-                      </article>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div
-                  className="p-5 text-sm leading-6 text-slate-600"
-                  data-customer-empty-state="true"
-                  data-customer-folder-finder-empty="true"
-                >
-                  No customer folders match this search. Clear the search to show all folders again.
-                </div>
-              )}
-            </div>
-          </div>
-        </section>
-
-        <section
-          className="rounded-lg border border-amber-200 bg-white shadow-sm"
-          data-unbilled-customers-sector="true"
-        >
-          <div className="border-b border-amber-200 bg-amber-50/60 p-4 sm:p-5">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-800">
-                  Billing checkpoint
-                </p>
-                <h2 className="mt-1 text-lg font-bold text-slate-950">Unbilled Customers</h2>
-                <p className="mt-1 max-w-3xl text-sm font-semibold leading-6 text-amber-950">
-                  Review these before sending invoices so unbilled or statement-needed accounts are not missed.
-                </p>
-              </div>
-              <p
-                className="rounded-md border border-amber-200 bg-white px-3 py-2 text-sm font-bold text-amber-950"
-                data-unbilled-customers-count="true"
-              >
-                Showing {unbilledCustomersShowingStart}-{unbilledCustomersShowingEnd} of{" "}
-                {unbilledCustomerRows.length} unbilled rows
-              </p>
-            </div>
-            <div
-              className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
-              data-unbilled-customers-pagination="true"
-            >
-              <label className="text-sm font-semibold text-slate-700 sm:max-w-48">
-                Per page
-                <select
-                  className="mt-1 min-h-10 w-full rounded-md border border-amber-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950 outline-none focus:border-amber-700"
-                  data-unbilled-customers-page-size="true"
-                  onChange={(event) => {
-                    setUnbilledCustomersPageSize(Number(event.target.value));
-                    setUnbilledCustomersPage(1);
-                  }}
-                  value={unbilledCustomersPageSize}
-                >
-                  {customerFolderFinderPageSizeOptions.map((pageSize) => (
-                    <option key={pageSize} value={pageSize}>
-                      {pageSize} per page
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="flex gap-2">
-                <button
-                  className="min-h-10 rounded-md border border-amber-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                  data-unbilled-customers-previous="true"
-                  disabled={currentUnbilledCustomersPage <= 1}
-                  onClick={() => setUnbilledCustomersPage((currentPage) => Math.max(1, currentPage - 1))}
-                  type="button"
-                >
-                  Previous
-                </button>
-                <button
-                  className="min-h-10 rounded-md border border-amber-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                  data-unbilled-customers-next="true"
-                  disabled={currentUnbilledCustomersPage >= unbilledCustomersTotalPages}
-                  onClick={() =>
-                    setUnbilledCustomersPage((currentPage) =>
-                      Math.min(unbilledCustomersTotalPages, currentPage + 1),
-                    )
-                  }
-                  type="button"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="divide-y divide-slate-200" data-unbilled-customers-list="true">
-            {paginatedUnbilledCustomerRows.length > 0 ? (
-              paginatedUnbilledCustomerRows.map((row) => (
-                <article
-                  className="grid gap-2 px-3 py-2 text-sm leading-5 transition hover:bg-amber-50/50 sm:px-4 lg:grid-cols-[minmax(12rem,1.25fr)_minmax(8rem,0.7fr)_minmax(8rem,0.7fr)_minmax(14rem,1.35fr)_7rem] lg:items-center"
-                  data-unbilled-customer-row={row.key}
-                  key={row.key}
-                >
-                  <div className="min-w-0">
-                    <h3 className="truncate text-sm font-bold text-slate-950 sm:text-base">{row.customerName}</h3>
-                    <p className="mt-0.5 truncate text-xs text-slate-500">{row.reference}</p>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Status</p>
-                    <p className="mt-0.5 text-sm font-bold text-amber-950">{row.statusLabel}</p>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Amount</p>
-                    <p className="mt-0.5 text-sm font-bold text-slate-950">{row.amount}</p>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
-                      Job / service
-                    </p>
-                    <p className="mt-0.5 truncate text-sm font-semibold text-slate-800">
-                      {row.dateLabel} · {row.service}
-                    </p>
-                    <p className="mt-0.5 truncate text-xs text-slate-500">{row.route}</p>
-                  </div>
-                  {row.customerFolderHref ? (
-                    <Link
-                      className="inline-flex min-h-9 items-center justify-center rounded-md border border-amber-900 bg-amber-900 px-3 text-center text-xs font-bold text-white transition hover:bg-amber-800 lg:justify-self-end"
-                      data-unbilled-customer-open-folder={row.key}
-                      href={row.customerFolderHref}
-                    >
-                      Open
-                    </Link>
-                  ) : (
-                    <span className="text-xs font-semibold text-slate-500 lg:text-right">Folder pending</span>
-                  )}
-                </article>
-              ))
-            ) : (
-              <div className="p-5 text-sm leading-6 text-slate-600" data-unbilled-customers-empty="true">
-                No unbilled customer rows are visible right now.
-              </div>
-            )}
-          </div>
-          <p
-            className="border-t border-amber-100 bg-amber-50/60 px-4 py-3 text-xs font-semibold leading-5 text-amber-950 sm:px-5"
-            data-unbilled-customers-boundary="true"
-          >
-            Review-only checkpoint. Opening a folder does not create invoice numbers, generate invoices/PDFs, send
-            payment requests, write records, call providers, or change payment status.
-          </p>
-        </section>
-
-        <section
-          className="rounded-lg border border-slate-200 bg-white shadow-sm"
-          data-customer-invoice-workspace="true"
-        >
-          <div className="border-b border-slate-200 p-4 sm:p-5">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
-                  Invoice workspace
-                </p>
-                <h2 className="mt-1 text-lg font-bold text-slate-950">Send Invoice Workbench</h2>
-                <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
-                  Use Statements first when preparing invoices. Outstanding balances and follow-up queues stay one
-                  click away.
-                </p>
-              </div>
-              <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
-                {mockStatementPreviewGroups.length} statement preview
-                {mockStatementPreviewGroups.length === 1 ? "" : "s"}
-              </p>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2" data-customer-invoice-workspace-tabs="true">
-              {customerInvoiceWorkspaceTabs.map((tab) => (
-                <button
-                  className={`min-h-10 rounded-md border px-3 py-2 text-sm font-bold transition ${
-                    customerInvoiceWorkspaceTab === tab.value
-                      ? "border-slate-900 bg-slate-900 text-white"
-                      : "border-slate-300 bg-white text-slate-800 hover:border-slate-500 hover:bg-slate-50"
-                  }`}
-                  data-customer-invoice-workspace-tab={tab.value}
-                  key={tab.value}
-                  onClick={() => setCustomerInvoiceWorkspaceTab(tab.value)}
-                  type="button"
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <div
-          className={customerInvoiceWorkspaceTab === "statements" ? "" : "hidden"}
-          data-customer-invoice-workspace-panel="statements"
-        >
-        <section
-          className="rounded-lg border border-slate-200 bg-white shadow-sm"
-          data-monthly-statement-preview="true"
-        >
-          <div className="border-b border-slate-200 p-4 sm:p-5">
-            <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-slate-950">Monthly Account Statement Preview</h2>
-                <p className="mt-1 text-sm leading-6 text-slate-600" data-monthly-statement-boundary="true">
-                  Mock/read-only only. No statement record, invoice record, payment record, bank record, notification,
-                  or Supabase row is created.
-                </p>
-                <p className="mt-1 text-sm leading-6 text-slate-600" data-monthly-statement-no-number-boundary="true">
-                  No statement is generated, sent, saved, or assigned a real statement number.
-                </p>
-              </div>
-              <p className="text-sm font-semibold text-slate-600">
-                Showing {monthlyStatementShowingStart}-{monthlyStatementShowingEnd} of{" "}
-                {mockStatementPreviewGroups.length} statement previews
-              </p>
-            </div>
-            <div
-              className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
-              data-monthly-statement-pagination="true"
-            >
-              <label className="text-sm font-semibold text-slate-700 sm:max-w-48">
-                Page size
-                <select
-                  className="mt-1 min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950"
-                  data-monthly-statement-page-size="true"
-                  onChange={(event) => {
-                    setMonthlyStatementPageSize(Number(event.target.value));
-                    setMonthlyStatementPage(1);
-                  }}
-                  value={monthlyStatementPageSize}
-                >
-                  {customerQueuePageSizeOptions.map((pageSize) => (
-                    <option key={pageSize} value={pageSize}>
-                      {pageSize} rows
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="flex gap-2">
-                <button
-                  className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                  data-monthly-statement-previous="true"
-                  disabled={currentMonthlyStatementPage <= 1}
-                  onClick={() => setMonthlyStatementPage((currentPage) => Math.max(1, currentPage - 1))}
-                  type="button"
-                >
-                  Previous
-                </button>
-                <button
-                  className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                  data-monthly-statement-next="true"
-                  disabled={currentMonthlyStatementPage >= monthlyStatementTotalPages}
-                  onClick={() =>
-                    setMonthlyStatementPage((currentPage) => Math.min(monthlyStatementTotalPages, currentPage + 1))
-                  }
-                  type="button"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="divide-y divide-slate-200">
-            {mockStatementPreviewGroups.length > 0 ? (
-              paginatedMonthlyStatementGroups.map((group) => (
-                <article
-                  className="grid gap-2 px-3 py-2 transition hover:bg-slate-50 sm:px-4 lg:grid-cols-[minmax(12rem,1.25fr)_minmax(10rem,0.9fr)_minmax(7rem,0.6fr)_minmax(9rem,auto)] lg:items-center"
-                  data-monthly-statement-group={group.key}
-                  key={group.key}
-                >
-                  <div className="min-w-0">
-                    <h3 className="truncate text-sm font-bold text-slate-950 sm:text-base">{group.customerName}</h3>
-                    <p className="mt-0.5 truncate text-xs text-slate-500">Prefix: {group.invoicePrefix}</p>
-                    <p className="mt-0.5 truncate text-xs text-slate-500">{group.periodLabel}</p>
-                  </div>
-
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Rows</p>
-                    <p className="mt-0.5 text-sm font-bold text-slate-900">
-                      {group.items.length} invoice/reference rows
-                    </p>
-                    <p className="mt-0.5 truncate text-xs text-slate-500">Statement number: not generated</p>
-                  </div>
-
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Mock total</p>
-                    <p className="mt-0.5 text-sm font-bold text-slate-950" data-monthly-statement-total={group.key}>
-                      {group.statementTotal}
-                    </p>
-                    <p className="mt-0.5 truncate text-xs text-slate-500">Fully paid rows excluded</p>
-                  </div>
-
-                  <div className="flex items-center gap-2 lg:justify-end">
-                    <Link
-                      aria-label={`Open Customer Folder for ${group.customerName}`}
-                      className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-slate-700"
-                      data-monthly-statement-open-customer-folder={group.key}
-                      href={`/customers/${group.customerId}`}
-                    >
-                      Open
-                    </Link>
-                    <details className="group relative flex-1 lg:flex-none">
-                      <summary
-                        className="inline-flex min-h-9 w-full cursor-pointer list-none items-center justify-between gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50 [&::-webkit-details-marker]:hidden"
-                        data-monthly-statement-actions-toggle={group.key}
-                      >
-                        <span>Actions</span>
-                        <span aria-hidden="true" className="text-slate-500 group-open:hidden">
-                          v
-                        </span>
-                        <span aria-hidden="true" className="hidden text-slate-500 group-open:inline">
-                          ^
-                        </span>
-                      </summary>
-                      <div
-                        className="absolute right-0 z-20 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-md border border-slate-200 bg-white p-2 shadow-lg sm:w-96"
-                        data-monthly-statement-actions-dropdown={group.key}
-                      >
-                        <div className="grid gap-2">
-                          <p className="rounded-md bg-slate-50 px-2 py-1.5 text-xs leading-5 text-slate-700">
-                            Monthly account can be grouped into statement later. Balance due remains visible until
-                            paid. Statement preview is not generated or saved.
-                          </p>
-                          <div className="grid gap-2">
-                            {group.items.map((item) => (
-                              <div
-                                className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs"
-                                data-monthly-statement-row={item.key}
-                                key={item.key}
-                              >
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="min-w-0">
-                                    <p className="truncate font-bold text-slate-950">{item.invoiceNumber}</p>
-                                    <p className="mt-0.5 text-slate-600">{item.paymentStatus}</p>
-                                  </div>
-                                  <p className="font-bold text-slate-950">{item.balanceDue}</p>
-                                </div>
-                                <p className="mt-1 text-slate-500">Follow-up: {item.followUpDate}</p>
-                              </div>
-                            ))}
-                          </div>
-                          <button
-                            className="min-h-9 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
-                            data-statement-preview-action={group.key}
-                            onClick={() => handleMockStatementPreview(group)}
-                            type="button"
-                          >
-                            Preview Mock Statement
-                          </button>
-                          <p
-                            aria-live="polite"
-                            className="rounded-md bg-slate-50 px-2 py-1.5 text-xs leading-5 text-slate-600"
-                            data-statement-preview-feedback={group.key}
-                          >
-                            {group.feedback ?? "Mock helper: preview only; nothing is generated, saved, or sent."}
-                          </p>
-                        </div>
-                      </div>
-                    </details>
-                  </div>
-                </article>
-              ))
-            ) : (
-              <div className="p-5 text-sm text-slate-600" data-monthly-statement-empty="true">
-                No mock monthly account statement items remain after local actions. Refreshing the page restores the
-                mock data.
-              </div>
-            )}
-          </div>
-        </section>
-        </div>
-
-        <div
-          className={customerInvoiceWorkspaceTab === "outstanding" ? "" : "hidden"}
-          data-customer-invoice-workspace-panel="outstanding"
-        >
-        <section
-          className="rounded-lg border border-slate-200 bg-white shadow-sm"
-          data-outstanding-payments-review="true"
-        >
-          <div className="border-b border-slate-200 p-4 sm:p-5">
-            <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-slate-950">Outstanding Payments Review</h2>
-                <p className="mt-1 text-sm leading-6 text-slate-600" data-outstanding-review-boundary="true">
-                  Mock/local only. Changes reset on refresh and are not saved. No payment API, bank API,
-                  notification, or Supabase write is used.
-                </p>
-              </div>
-              <p className="text-sm font-semibold text-slate-600">
-                {visibleOutstandingPaymentReviewItems.length} mock items need account follow-up.
-              </p>
-            </div>
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {outstandingReviewSummaryCards.map((card) => (
-                <div
-                  className="rounded-md border border-slate-200 bg-slate-50 px-3 py-3"
-                  data-outstanding-review-summary-card={card.label}
-                  key={card.label}
-                >
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{card.label}</p>
-                  <p className="mt-2 text-xl font-bold text-slate-950">{card.value}</p>
-                  <p className="mt-1 text-xs text-slate-600">{card.helper}</p>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-4 grid gap-3 xl:grid-cols-[1.3fr_1fr_1fr_0.7fr] xl:items-end">
-              <label className="text-sm font-semibold text-slate-700">
-                Search customer / booker / reference
-                <input
-                  className="mt-2 min-h-11 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-950"
-                  data-outstanding-review-search="true"
-                  onChange={(event) => updateOutstandingReviewSearch(event.target.value)}
-                  placeholder="Search company, contact, invoice, route"
-                  type="search"
-                  value={outstandingReviewSearchTerm}
-                />
-              </label>
-
-              <label className="text-sm font-semibold text-slate-700">
-                Sort
-                <select
-                  className="mt-2 min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950"
-                  data-outstanding-review-sort="true"
-                  onChange={(event) => updateOutstandingReviewSort(event.target.value as OutstandingReviewSort)}
-                  value={outstandingReviewSort}
-                >
-                  {outstandingReviewSortOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="text-sm font-semibold text-slate-700">
-                Page size
-                <select
-                  className="mt-2 min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950"
-                  data-outstanding-review-page-size="true"
-                  onChange={(event) => updateOutstandingReviewPageSize(Number(event.target.value))}
-                  value={outstandingReviewPageSize}
-                >
-                  {outstandingReviewPageSizeOptions.map((pageSize) => (
-                    <option key={pageSize} value={pageSize}>
-                      {pageSize} customers
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <p
-                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
-                data-outstanding-review-showing="true"
-              >
-                Showing {outstandingReviewShowingStart}-{outstandingReviewShowingEnd} of{" "}
-                {filteredOutstandingReviewItems.length} customers
-              </p>
-            </div>
-
-            <div
-              className="mt-4 flex flex-wrap gap-2"
-              data-outstanding-review-filter-controls="true"
-            >
-              {outstandingReviewFilterOptions.map((option) => (
-                <button
-                  className={`min-h-10 rounded-md border px-3 py-2 text-sm font-bold transition ${
-                    outstandingReviewFilter === option.value
-                      ? "border-slate-900 bg-slate-900 text-white"
-                      : "border-slate-300 bg-white text-slate-800 hover:border-slate-500 hover:bg-slate-50"
-                  }`}
-                  data-outstanding-review-filter={option.value}
-                  key={option.value}
-                  onClick={() => updateOutstandingReviewFilter(option.value)}
-                  type="button"
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p
-                aria-live="polite"
-                className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 sm:flex-1"
-                data-payment-section-feedback="true"
-              >
-                {mockPaymentSectionFeedback}
-              </p>
-              <div className="flex gap-2">
-                <button
-                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                  data-outstanding-review-previous="true"
-                  disabled={currentOutstandingReviewPage <= 1}
-                  onClick={() => setOutstandingReviewPage((currentPage) => Math.max(1, currentPage - 1))}
-                  type="button"
-                >
-                  Previous
-                </button>
-                <button
-                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                  data-outstanding-review-next="true"
-                  disabled={currentOutstandingReviewPage >= outstandingReviewTotalPages}
-                  onClick={() =>
-                    setOutstandingReviewPage((currentPage) =>
-                      Math.min(outstandingReviewTotalPages, currentPage + 1),
-                    )
-                  }
-                  type="button"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="divide-y divide-slate-200">
-            {visibleOutstandingPaymentReviewItems.length === 0 ? (
-              <div className="p-5 text-sm text-slate-600" data-outstanding-payments-empty="true">
-                No mock outstanding payment items remain after local actions. Refreshing the page restores the mock data.
-              </div>
-            ) : paginatedOutstandingReviewItems.length > 0 ? (
-              paginatedOutstandingReviewItems.map((item) => {
-                return (
-                  <article
-                    className="px-3 py-2 transition hover:bg-slate-50 sm:px-4"
-                    data-outstanding-payment-row={item.key}
-                    key={item.key}
-                  >
-                    <div className="grid gap-2 lg:grid-cols-[minmax(12rem,1.35fr)_minmax(7rem,0.65fr)_minmax(6rem,0.55fr)_minmax(10rem,0.85fr)_minmax(9rem,auto)] lg:items-center">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                          <h3 className="truncate text-sm font-bold text-slate-950 sm:text-base">
-                            {item.customerName}
-                          </h3>
-                          {item.isMonthlyAccount ? (
-                            <span className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] font-semibold text-slate-500">
-                              Monthly
-                            </span>
-                          ) : null}
-                        </div>
-                        <p className="mt-0.5 truncate text-xs text-slate-500">{item.invoiceNumber}</p>
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
-                          Outstanding
-                        </p>
-                        <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                          <p className="text-sm font-bold text-slate-950">{item.balanceDue}</p>
-                          <p className="text-xs text-slate-500">{item.paymentStatus}</p>
-                        </div>
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Aging</p>
-                        <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                          <p className="text-sm font-bold text-slate-900">{item.agingBucket}</p>
-                          <p className="text-xs text-slate-500">{item.dueStatusLabel}</p>
-                        </div>
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Due</p>
-                        <p className="mt-0.5 text-sm font-semibold text-slate-800">{item.dueOrFollowUpDate}</p>
-                        <p className="mt-0.5 truncate text-xs text-slate-500">
-                          Next: {getOutstandingNextActionLabel(item)}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 lg:justify-end">
-                        <Link
-                          aria-label={`Open Customer Folder for ${item.customerName}`}
-                          className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-slate-700"
-                          data-outstanding-open-customer-folder={item.key}
-                          href={`/customers/${item.customerId}`}
-                        >
-                          Open
-                        </Link>
-                        <details className="group relative flex-1 lg:flex-none">
-                          <summary
-                            className="inline-flex min-h-9 w-full cursor-pointer list-none items-center justify-between gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50 [&::-webkit-details-marker]:hidden"
-                            data-outstanding-review-detail-toggle={item.key}
-                          >
-                            <span>Actions</span>
-                            <span aria-hidden="true" className="text-slate-500 group-open:hidden">
-                              v
-                            </span>
-                            <span aria-hidden="true" className="hidden text-slate-500 group-open:inline">
-                              ^
-                            </span>
-                          </summary>
-                          <div
-                            className="absolute right-0 z-20 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-md border border-slate-200 bg-white p-2 shadow-lg sm:w-96"
-                            data-outstanding-review-actions-dropdown={item.key}
-                            data-outstanding-review-expanded={item.key}
-                          >
-                            <div className="grid gap-2">
-                              <div className="min-w-0">
-                                <p className="text-xs leading-5 text-slate-700">{item.reason}</p>
-                                <p className="mt-1 text-xs text-slate-500">
-                                  Last follow-up: {item.lastFollowUpDate}
-                                </p>
-                                <div
-                                  className="mt-2 rounded-md border border-sky-200 bg-sky-50 px-2 py-1.5 text-xs leading-5 text-sky-950"
-                                  data-outstanding-review-detail={item.key}
-                                >
-                                  <p className="font-bold">Mock/local detail only for {item.invoiceNumber}</p>
-                                  <ul className="mt-1 list-disc space-y-0.5 pl-4">
-                                    <li>Customer folder reminder: open {item.customerName} before any real collection work.</li>
-                                    <li>{item.outstandingBookingsCount} mock outstanding booking rows are visible for this account.</li>
-                                    <li>Follow-up note placeholder only. No note, payment record, audit record, or customer record is created.</li>
-                                    <li>No invoice, statement, PDF, invoice number, sending, Supabase call, payment API, bank API, notification, or calendar action.</li>
-                                  </ul>
-                                </div>
-                              </div>
-
-                              <div className="grid content-start gap-2 sm:grid-cols-2">
-                                <button
-                                  className="min-h-9 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
-                                  data-payment-action="invoice-sent"
-                                  onClick={() => handleMockPaymentAction(item, "invoice-sent")}
-                                  type="button"
-                                >
-                                  Invoice sent
-                                </button>
-                                <button
-                                  className="min-h-9 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
-                                  data-payment-action="partial-payment"
-                                  onClick={() => handleMockPaymentAction(item, "partial-payment")}
-                                  type="button"
-                                >
-                                  Partial payment
-                                </button>
-                                <button
-                                  className="min-h-9 rounded-md border border-emerald-700 bg-emerald-700 px-2 py-1.5 text-xs font-bold text-white transition hover:bg-emerald-600"
-                                  data-payment-action="paid"
-                                  onClick={() => handleMockPaymentAction(item, "paid")}
-                                  type="button"
-                                >
-                                  Paid
-                                </button>
-                                <button
-                                  className="min-h-9 rounded-md border border-amber-700 bg-amber-50 px-2 py-1.5 text-xs font-bold text-amber-950 transition hover:bg-amber-100"
-                                  data-payment-action="waived"
-                                  onClick={() => handleMockPaymentAction(item, "waived")}
-                                  type="button"
-                                >
-                                  Waive
-                                </button>
-                              </div>
-
-                              <p
-                                aria-live="polite"
-                                className="rounded-md bg-slate-50 px-2 py-1.5 text-xs leading-5 text-slate-600"
-                                data-payment-action-feedback={item.key}
-                              >
-                                {item.feedback ?? "Mock helper: this row updates local page state only."}
-                              </p>
-                            </div>
-                          </div>
-                        </details>
-                      </div>
-                    </div>
-                  </article>
-                );
-              })
-            ) : (
-              <div className="p-5 text-sm leading-6 text-slate-600" data-outstanding-payments-no-results="true">
-                No mock customers match this search or filter. No data was removed and no API was called.
-              </div>
-            )}
-          </div>
-        </section>
-        </div>
-
-        <div
-          className={customerInvoiceWorkspaceTab === "follow-up" ? "" : "hidden"}
-          data-customer-invoice-workspace-panel="follow-up"
-        >
-        <section className="rounded-lg border border-slate-200 bg-white shadow-sm" data-collection-follow-up-queue="true">
-          <div className="border-b border-slate-200 p-4 sm:p-5">
-            <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-slate-950">Collection Follow-up Queue</h2>
-                <p className="mt-1 text-sm leading-6 text-slate-600" data-collection-follow-up-boundary="true">
-                  Mock/local only. Follow-up changes reset on refresh and are not saved.
-                </p>
-                <p className="mt-1 text-sm leading-6 text-slate-600" data-collection-follow-up-no-send-boundary="true">
-                  No notification, WhatsApp message, email, payment record, bank record, or Supabase row is created.
-                </p>
-              </div>
-              <p className="text-sm font-semibold text-slate-600">
-                Showing {collectionFollowUpShowingStart}-{collectionFollowUpShowingEnd} of{" "}
-                {visibleCollectionFollowUpItems.length} follow-ups
-              </p>
-            </div>
-            <p
-              aria-live="polite"
-              className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
-              data-follow-up-section-feedback="true"
-            >
-              {mockFollowUpSectionFeedback}
-            </p>
-            <div
-              className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
-              data-collection-follow-up-pagination="true"
-            >
-              <label className="text-sm font-semibold text-slate-700 sm:max-w-48">
-                Page size
-                <select
-                  className="mt-1 min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950"
-                  data-collection-follow-up-page-size="true"
-                  onChange={(event) => {
-                    setCollectionFollowUpPageSize(Number(event.target.value));
-                    setCollectionFollowUpPage(1);
-                  }}
-                  value={collectionFollowUpPageSize}
-                >
-                  {customerQueuePageSizeOptions.map((pageSize) => (
-                    <option key={pageSize} value={pageSize}>
-                      {pageSize} rows
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="flex gap-2">
-                <button
-                  className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                  data-collection-follow-up-previous="true"
-                  disabled={currentCollectionFollowUpPage <= 1}
-                  onClick={() => setCollectionFollowUpPage((currentPage) => Math.max(1, currentPage - 1))}
-                  type="button"
-                >
-                  Previous
-                </button>
-                <button
-                  className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                  data-collection-follow-up-next="true"
-                  disabled={currentCollectionFollowUpPage >= collectionFollowUpTotalPages}
-                  onClick={() =>
-                    setCollectionFollowUpPage((currentPage) =>
-                      Math.min(collectionFollowUpTotalPages, currentPage + 1),
-                    )
-                  }
-                  type="button"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="divide-y divide-slate-200">
-            {visibleCollectionFollowUpItems.length > 0 ? (
-              paginatedCollectionFollowUpItems.map((item) => (
-                <article
-                  className="grid gap-2 px-3 py-2 transition hover:bg-slate-50 sm:px-4 lg:grid-cols-[minmax(12rem,1.25fr)_minmax(8rem,0.75fr)_minmax(7rem,0.6fr)_minmax(10rem,0.8fr)_minmax(9rem,auto)] lg:items-center"
-                  data-collection-follow-up-row={item.key}
-                  key={item.key}
-                >
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                      <h3 className="truncate text-sm font-bold text-slate-950 sm:text-base">
-                        {item.customerName}
-                      </h3>
-                    {item.isMonthlyAccount ? (
-                        <span className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] font-semibold text-slate-500">
-                          Monthly
-                        </span>
-                    ) : null}
-                    </div>
-                    <p className="mt-0.5 truncate text-xs text-slate-500">{item.invoiceNumber}</p>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Status</p>
-                    <p className="mt-0.5 text-sm font-bold text-slate-900">{item.paymentStatus}</p>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Balance</p>
-                    <p className="mt-0.5 text-sm font-bold text-slate-950">{item.balanceDue}</p>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Follow-up</p>
-                    <p className="mt-0.5 text-sm font-semibold text-slate-800">{item.followUpDate}</p>
-                    <p className="mt-0.5 truncate text-xs text-slate-500">{getCollectionFollowUpReason(item)}</p>
-                  </div>
-                  <div className="flex items-center gap-2 lg:justify-end">
-                    <Link
-                      aria-label={`Open Customer Folder for ${item.customerName}`}
-                      className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-slate-700"
-                      data-follow-up-open-customer-folder={item.key}
-                      href={`/customers/${item.customerId}`}
-                    >
-                      Open
-                    </Link>
-                    <details className="group relative flex-1 lg:flex-none">
-                      <summary
-                        className="inline-flex min-h-9 w-full cursor-pointer list-none items-center justify-between gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50 [&::-webkit-details-marker]:hidden"
-                        data-collection-follow-up-actions-toggle={item.key}
-                      >
-                        <span>Actions</span>
-                        <span aria-hidden="true" className="text-slate-500 group-open:hidden">
-                          v
-                        </span>
-                        <span aria-hidden="true" className="hidden text-slate-500 group-open:inline">
-                          ^
-                        </span>
-                      </summary>
-                      <div
-                        className="absolute right-0 z-20 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-md border border-slate-200 bg-white p-2 shadow-lg sm:w-96"
-                        data-collection-follow-up-actions-dropdown={item.key}
-                      >
-                        <div className="grid gap-2">
-                          <div className="rounded-md bg-slate-50 px-2 py-1.5 text-xs leading-5 text-slate-700">
-                            <p>{getCollectionFollowUpReason(item)}</p>
-                            {item.isMonthlyAccount ? (
-                              <p className="mt-1 font-semibold text-slate-600">
-                                Monthly account can be grouped into statement later.
-                              </p>
-                            ) : null}
-                            {item.followUpNote ? (
-                              <p className="mt-1 text-slate-600">{item.followUpNote}</p>
-                            ) : null}
-                          </div>
-                          <div className="grid gap-2 sm:grid-cols-3">
-                            <button
-                              className="min-h-9 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
-                              data-follow-up-action="schedule"
-                              onClick={() => handleMockFollowUpAction(item, "schedule")}
-                              type="button"
-                            >
-                              Schedule Follow-up
-                            </button>
-                            <button
-                              className="min-h-9 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
-                              data-follow-up-action="done"
-                              onClick={() => handleMockFollowUpAction(item, "done")}
-                              type="button"
-                            >
-                              Mark Follow-up Done
-                            </button>
-                            <button
-                              className="min-h-9 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
-                              data-follow-up-action="note"
-                              onClick={() => handleMockFollowUpAction(item, "note")}
-                              type="button"
-                            >
-                              Add Mock Note
-                            </button>
-                          </div>
-                          <p
-                            aria-live="polite"
-                            className="rounded-md bg-slate-50 px-2 py-1.5 text-xs leading-5 text-slate-600"
-                            data-follow-up-action-feedback={item.key}
-                          >
-                            {item.followUpFeedback ?? "Mock helper: this follow-up updates local page state only."}
-                          </p>
-                        </div>
-                      </div>
-                    </details>
-                  </div>
-                </article>
-              ))
-            ) : (
-              <div className="p-5 text-sm text-slate-600" data-collection-follow-up-empty="true">
-                No mock collection follow-up items remain after local actions. Refreshing the page restores the mock data.
-              </div>
-            )}
-          </div>
-        </section>
-        </div>
 
         <details className="rounded-lg border border-slate-200 bg-white shadow-sm" data-customer-debug-tools-drawer="true">
           <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-slate-900 [&::-webkit-details-marker]:hidden">

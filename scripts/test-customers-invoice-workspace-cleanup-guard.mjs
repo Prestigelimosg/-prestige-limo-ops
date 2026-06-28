@@ -37,7 +37,7 @@ const [customersPage, ledger, preactivationSuite] = await Promise.all([
 const invoiceWorkspace = sectionBetween(
   customersPage,
   'data-customer-invoice-workspace="true"',
-  'data-customer-debug-tools-drawer="true"',
+  'data-customer-advanced-booking-drawer="true"',
 );
 const ledgerSection = sectionBetween(ledger, "### Customers Invoice Workspace Cleanup", "\n### ");
 
@@ -52,7 +52,9 @@ for (const fragment of [
   'data-customer-invoice-workspace-panel="statements"',
   'data-customer-invoice-workspace-panel="outstanding"',
   'data-customer-invoice-workspace-panel="follow-up"',
-  'data-customer-folder-support-drawer="true"',
+  'data-customer-summary-strip="true"',
+  'data-customer-folder-finder="true"',
+  'data-unbilled-customers-sector="true"',
   'data-customer-advanced-booking-drawer="true"',
   'data-customer-debug-tools-drawer="true"',
   "Send Invoice Workbench",
@@ -88,6 +90,23 @@ assert.equal(
   "invoice guardrails must sit inside the collapsed support drawer.",
 );
 
+assert.equal(
+  customersPage.includes('data-customer-folder-support-drawer="true"'),
+  false,
+  "duplicate customer folder support drawer must not return to the daily Customers page.",
+);
+
+assert.equal(
+  customersPage.indexOf('data-customer-folder-finder="true"') <
+    customersPage.indexOf('data-unbilled-customers-sector="true"') &&
+    customersPage.indexOf('data-unbilled-customers-sector="true"') <
+      customersPage.indexOf('data-customer-invoice-workspace="true"') &&
+    customersPage.indexOf('data-customer-invoice-workspace-panel="follow-up"') <
+      customersPage.indexOf('data-customer-advanced-booking-drawer="true"'),
+  true,
+  "daily Customers page order must be finder, unbilled checkpoint, invoice workspace, then advanced/support drawers.",
+);
+
 for (const forbiddenPattern of [
   /fetch\(|\/api\/|createClient|service_role|process\.env/i,
   /sendMail|new\s+Resend|api\.telegram\.org|twilio/i,
@@ -99,9 +118,9 @@ for (const forbiddenPattern of [
 }
 
 for (const phrase of [
-  "Customers page now leads with a customer invoice workspace for statement previews, outstanding balances, and follow-up.",
+  "Customers page daily flow is compact: summary strip, customer finder, unbilled checkpoint, then invoice workspace.",
   "Statement previews are the default tab because this page is the invoice-sending workbench.",
-  "Duplicate folder handoff, booking and draft tools, mock logs, mock state references, collection rules, and guardrails are collapsed into support/admin drawers instead of normal daily rows.",
+  "The duplicate folder handoff support drawer is removed; advanced booking/draft tools and mock logs sit after the daily invoice workflow instead of before it.",
   "This is UI-only structure cleanup; it does not activate invoice/PDF/payment/provider sending, DB writes, env changes, GPS/live location, billing/payout, calendar sync, parser changes, or shims.",
   "Guard coverage lives in `scripts/test-customers-invoice-workspace-cleanup-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {

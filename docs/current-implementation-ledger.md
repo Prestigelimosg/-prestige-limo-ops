@@ -118,10 +118,9 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Customer Folder Compact Index UI Lock
 
-- The Customer Folder / Job History Handoff area now renders as a compact responsive list instead of three giant cards.
-- Desktop/tablet uses dense rows so the three existing customer folders fit on one Mac screen without repeated scrolling.
-- Mobile remains responsive with stacked compact rows; this is not a desktop-only layout and does not change customer or driver runtime behavior.
-- The visible `Visible mock folders` wording is removed from the handoff; the count now uses the customer-facing admin label `Customers`.
+- The old Customer Folder / Job History Handoff support drawer is removed from the normal Customers page flow; the compact finder is now the single customer-folder lookup surface.
+- The compact finder keeps 10-row pages and an `All customers` dropdown with numbered page buttons for 200-plus accounts.
+- The top payment summary is a slim strip instead of four large cards.
 - No route, API, parser, DB, env, Vercel, provider-send, GPS/live-location, billing/payment/PDF/payout, calendar, or shim behavior is changed.
 - This polish is guarded by `scripts/test-customer-folder-compact-index-guard.mjs` and registered in `scripts/test-preactivation-verification-suite.mjs`.
 
@@ -267,19 +266,19 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Customers Invoice Workspace Cleanup
 
-- Customers page now leads with a customer invoice workspace for statement previews, outstanding balances, and follow-up.
+- Customers page daily flow is compact: summary strip, customer finder, unbilled checkpoint, then invoice workspace.
 - Statement previews are the default tab because this page is the invoice-sending workbench.
-- Duplicate folder handoff, booking and draft tools, mock logs, mock state references, collection rules, and guardrails are collapsed into support/admin drawers instead of normal daily rows.
+- The duplicate folder handoff support drawer is removed; advanced booking/draft tools and mock logs sit after the daily invoice workflow instead of before it.
 - This is UI-only structure cleanup; it does not activate invoice/PDF/payment/provider sending, DB writes, env changes, GPS/live location, billing/payout, calendar sync, parser changes, or shims.
 - Guard coverage lives in `scripts/test-customers-invoice-workspace-cleanup-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Customers Folder Finder And Unbilled Queue
 
 - Customers page now has a visible Customer Folder Finder that searches all loaded customer folders and paginates the compact folder rows 10 per page by default.
-- The finder includes a visible customer dropdown for direct folder selection plus search, so larger 200-plus account lists do not depend on typing first.
+- The finder uses a visible `All customers` dropdown for direct folder selection; it shows 10 customer folders at a time and keeps numbered page buttons inside the dropdown for larger 200-plus account lists.
 - The finder keeps the existing guarded Load Saved Accounts control visible, but it does not auto-load or create a new route/API.
 - A new Unbilled Customers checkpoint sits before the invoice workspace so unbilled draft rows and statement-needed account rows are visible before invoice work starts.
-- Both lists are compact row/table layouts with next/previous controls for larger account books instead of giant account cards.
+- The finder no longer shows a separate page-size dropdown or separate previous/next buttons; the Unbilled Customers list remains a compact paged row/table so invoice work can be scanned without giant account cards.
 - This is UI-only structure on the existing Customers page; it does not activate invoice/PDF/payment/provider sending, DB writes, env changes, GPS/live location, billing/payout, calendar sync, parser changes, or shims.
 - Guard coverage lives in `scripts/test-customers-folder-finder-unbilled-queue-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 

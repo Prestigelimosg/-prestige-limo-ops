@@ -51,35 +51,40 @@ const ledgerSection = sectionBetween(
 );
 
 for (const fragment of [
-  "const customerFolderFinderPageSizeOptions = [10, 25];",
-  "const [customerFolderFinderPageSize, setCustomerFolderFinderPageSize] = useState(10);",
+  "const customerFolderFinderPageSize = 10;",
   "const [customerFolderFinderPage, setCustomerFolderFinderPage] = useState(1);",
   "const [customerFolderFinderSelectedId, setCustomerFolderFinderSelectedId] = useState(\"\");",
+  "const [customerFolderFinderDropdownOpen, setCustomerFolderFinderDropdownOpen] = useState(false);",
   "const selectedCustomerFolderFinderRow = useMemo(",
   "const filteredCustomers = useMemo(() => {",
   "if (customerFolderFinderSelectedId && row.customerId !== customerFolderFinderSelectedId) {",
   "return customerFolderIndexRows.filter((row) => {",
   "const paginatedCustomerFolderFinderRows = filteredCustomers.slice(",
+  "const customerFolderFinderDropdownRows = customerFolderIndexRows.slice(",
+  "const customerFolderFinderDropdownPageNumbers = Array.from(",
   "function updateCustomerFolderFinderSearch(value: string) {",
   "setCustomerFolderFinderSelectedId(\"\");",
   "function updateCustomerFolderFinderSelection(value: string) {",
-  "function updateCustomerFolderFinderPageSize(value: number) {",
+  "function showAllCustomerFolderFinderRows(pageNumber = 1) {",
 ]) {
   assertIncludes(customersPage, fragment, `customer folder finder source fragment ${fragment}`);
 }
 
 for (const fragment of [
-  "Customer dropdown",
+  "All customers",
   'data-customer-folder-finder-select="true"',
-  "All customer folders - {customerFolderFinderPageSize} per page",
+  'data-customer-folder-finder-dropdown-panel="true"',
+  'data-customer-folder-finder-all-customers-option="true"',
+  'data-customer-folder-finder-dropdown-page-row={customer.customerId}',
+  'data-customer-folder-finder-page-numbers="true"',
+  'data-customer-folder-finder-dropdown-page-number={pageNumber}',
+  "customerFolderFinderDropdownRows.map((customer)",
+  "customerFolderFinderDropdownPageNumbers.map((pageNumber)",
+  "10 per page",
   'data-customer-folder-finder-search="true"',
-  'data-customer-folder-finder-page-size="true"',
-  'data-customer-folder-finder-previous="true"',
-  'data-customer-folder-finder-next="true"',
   'data-customer-folder-finder-list="true"',
   'data-customer-folder-finder-row={customer.customerId}',
   'data-customer-folder-finder-load-accounts="true"',
-  "{pageSize} per page",
   "paginatedCustomerFolderFinderRows.map((customer)",
   "Search all customer folders, scan 10 at a time",
   "Dropdown selected ${selectedCustomerFolderFinderRow.customerName}",
@@ -130,10 +135,10 @@ for (const forbiddenPattern of [
 
 for (const phrase of [
   "Customers page now has a visible Customer Folder Finder that searches all loaded customer folders and paginates the compact folder rows 10 per page by default.",
-  "The finder includes a visible customer dropdown for direct folder selection plus search, so larger 200-plus account lists do not depend on typing first.",
+  "The finder uses a visible `All customers` dropdown for direct folder selection; it shows 10 customer folders at a time and keeps numbered page buttons inside the dropdown for larger 200-plus account lists.",
   "The finder keeps the existing guarded Load Saved Accounts control visible, but it does not auto-load or create a new route/API.",
   "A new Unbilled Customers checkpoint sits before the invoice workspace so unbilled draft rows and statement-needed account rows are visible before invoice work starts.",
-  "Both lists are compact row/table layouts with next/previous controls for larger account books instead of giant account cards.",
+  "The finder no longer shows a separate page-size dropdown or separate previous/next buttons; the Unbilled Customers list remains a compact paged row/table so invoice work can be scanned without giant account cards.",
   "This is UI-only structure on the existing Customers page; it does not activate invoice/PDF/payment/provider sending, DB writes, env changes, GPS/live location, billing/payout, calendar sync, parser changes, or shims.",
   "Guard coverage lives in `scripts/test-customers-folder-finder-unbilled-queue-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {

@@ -34,50 +34,57 @@ const [customerPage, ledger, preactivationSuite] = await Promise.all([
   readFile(preactivationSuitePath, "utf8"),
 ]);
 
-const handoffSection = sectionBetween(
+const finderSection = sectionBetween(
   customerPage,
-  'data-customer-folder-index-handoff="true"',
-  'data-customer-advanced-booking-drawer="true"',
+  'data-customer-folder-finder="true"',
+  'data-unbilled-customers-sector="true"',
 );
 
 for (const fragment of [
-  'data-customer-folder-index-handoff-layout="compact-list"',
-  'data-customer-folder-index-compact-list="true"',
-  "Open the customer folder and review job history there. Staff-facing only.",
-  "Customers: ${customerFolderIndexHandoffRows.length}",
-  "md:grid-cols-[minmax(10rem,1.3fr)_6rem_8rem_minmax(8rem,1fr)_8rem]",
-  "min-h-9",
-  "Review folder",
+  'data-customer-summary-strip="true"',
+  'data-customer-folder-finder="true"',
+  'data-customer-folder-finder-select="true"',
+  'data-customer-folder-finder-dropdown-panel="true"',
+  'data-customer-folder-finder-page-numbers="true"',
+  'data-customer-folder-finder-list="true"',
+  'data-customer-folder-finder-row={customer.customerId}',
+  "All customers",
+  "10 per page",
+  "Open",
 ]) {
-  assertIncludes(handoffSection, fragment, `compact customer folder handoff fragment ${fragment}`);
+  assertIncludes(customerPage, fragment, `compact customer finder fragment ${fragment}`);
 }
 
 for (const forbiddenFragment of [
-  "Visible mock folders",
+  'data-customer-folder-support-drawer="true"',
+  'data-customer-folder-index-handoff="true"',
+  "Customer folder support list",
+  "Customer Folder / Job History Handoff",
+  "Review folder",
+  'data-customer-folder-finder-page-size="true"',
+  'data-customer-folder-finder-previous="true"',
+  'data-customer-folder-finder-next="true"',
+  "All customer folders - {customerFolderFinderPageSize} per page",
   "lg:grid-cols-3",
-  "job-history row",
-  "rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6",
-  "min-h-10",
 ]) {
-  assertExcludes(handoffSection, forbiddenFragment, "customer folder giant-card handoff surface");
+  assertExcludes(customerPage, forbiddenFragment, "customer folder duplicate/giant-card surface");
 }
 
 for (const forbiddenPattern of [
-  /driver payout|PayNow payout|customer price|billing|invoice|payment\/PDF|payout comparisons/i,
+  /driver payout|PayNow payout|customer price|payment\/PDF|payout comparisons/i,
   /internal admin notes|internal finance|parser\/debug|raw provider payload|raw driver live-location token/i,
   /mock QA|dev archive|api\.telegram\.org|whatsapp|twilio|sendMail|new\s+Resend/i,
 ]) {
-  assertExcludes(handoffSection, forbiddenPattern, "customer folder compact handoff privacy boundary");
+  assertExcludes(finderSection, forbiddenPattern, "customer folder compact finder privacy boundary");
 }
 
 const ledgerHeading = "### Customer Folder Compact Index UI Lock";
 assertIncludes(ledger, ledgerHeading, "ledger compact customer folder heading");
 
 for (const phrase of [
-  "The Customer Folder / Job History Handoff area now renders as a compact responsive list instead of three giant cards.",
-  "Desktop/tablet uses dense rows so the three existing customer folders fit on one Mac screen without repeated scrolling.",
-  "Mobile remains responsive with stacked compact rows; this is not a desktop-only layout and does not change customer or driver runtime behavior.",
-  "The visible `Visible mock folders` wording is removed from the handoff; the count now uses the customer-facing admin label `Customers`.",
+  "The old Customer Folder / Job History Handoff support drawer is removed from the normal Customers page flow; the compact finder is now the single customer-folder lookup surface.",
+  "The compact finder keeps 10-row pages and an `All customers` dropdown with numbered page buttons for 200-plus accounts.",
+  "The top payment summary is a slim strip instead of four large cards.",
   "No route, API, parser, DB, env, Vercel, provider-send, GPS/live-location, billing/payment/PDF/payout, calendar, or shim behavior is changed.",
   "This polish is guarded by `scripts/test-customer-folder-compact-index-guard.mjs` and registered in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {

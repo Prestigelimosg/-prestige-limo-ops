@@ -113,6 +113,13 @@ const outstandingReviewSortOptions: Array<{ label: string; value: OutstandingRev
 
 const outstandingReviewPageSizeOptions = [10, 25];
 const customerQueuePageSizeOptions = [10, 25];
+const customerInvoiceWorkspaceTabs = [
+  { label: "Statements", value: "statements" },
+  { label: "Outstanding", value: "outstanding" },
+  { label: "Follow-up", value: "follow-up" },
+] as const;
+
+type CustomerInvoiceWorkspaceTab = (typeof customerInvoiceWorkspaceTabs)[number]["value"];
 
 const mockTodayDateValue = Date.UTC(2026, 4, 25);
 
@@ -703,6 +710,8 @@ export default function MockCustomerDashboardPage() {
   const [collectionFollowUpPage, setCollectionFollowUpPage] = useState(1);
   const [monthlyStatementPageSize, setMonthlyStatementPageSize] = useState(10);
   const [monthlyStatementPage, setMonthlyStatementPage] = useState(1);
+  const [customerInvoiceWorkspaceTab, setCustomerInvoiceWorkspaceTab] =
+    useState<CustomerInvoiceWorkspaceTab>("statements");
   const [mockFollowUpSectionFeedback, setMockFollowUpSectionFeedback] = useState(
     "Mock follow-up controls only. Use the buttons to simulate collection follow-up without sending messages.",
   );
@@ -1667,10 +1676,10 @@ export default function MockCustomerDashboardPage() {
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Prestige Limo Ops</p>
           <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <h1 className="text-3xl font-bold tracking-normal text-slate-950">Customers</h1>
+              <h1 className="text-3xl font-bold tracking-normal text-slate-950">Customers & Invoices</h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-                Mock customer payments dashboard. Local/mock only. No payment API, bank API,
-                notification, or Supabase write is used.
+                Work from customer account, statement, outstanding balance, and follow-up queues before sending
+                invoices from the approved invoice workflow.
               </p>
             </div>
             <div
@@ -1699,11 +1708,16 @@ export default function MockCustomerDashboardPage() {
           ))}
         </section>
 
-        <section
-          className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4"
-          data-customer-folder-index-handoff="true"
-          data-customer-folder-index-handoff-layout="compact-list"
-        >
+        <details className="rounded-lg border border-slate-200 bg-white shadow-sm" data-customer-folder-support-drawer="true">
+          <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-slate-900 [&::-webkit-details-marker]:hidden">
+            Customer folder support list
+            <span className="text-xs font-semibold text-slate-500">Open when needed</span>
+          </summary>
+          <section
+            className="border-t border-slate-200 p-3 sm:p-4"
+            data-customer-folder-index-handoff="true"
+            data-customer-folder-index-handoff-layout="compact-list"
+          >
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">
@@ -1821,12 +1835,18 @@ export default function MockCustomerDashboardPage() {
           >
             Read-only local guide. It does not create, save, send, assign work, or change customer records.
           </p>
-        </section>
+          </section>
+        </details>
 
-        <section
-          className="rounded-lg border border-slate-200 bg-white shadow-sm"
-          data-regular-customer-booking-form-section="true"
-        >
+        <details className="rounded-lg border border-slate-200 bg-white shadow-sm" data-customer-advanced-booking-drawer="true">
+          <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-slate-900 [&::-webkit-details-marker]:hidden">
+            Advanced booking and draft invoice tools
+            <span className="text-xs font-semibold text-slate-500">Collapsed</span>
+          </summary>
+          <section
+            className="border-t border-slate-200"
+            data-regular-customer-booking-form-section="true"
+          >
           <div className="border-b border-slate-200 p-4 sm:p-5">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
@@ -3395,6 +3415,7 @@ export default function MockCustomerDashboardPage() {
             )}
           </div>
         </section>
+        </details>
 
         <section className="rounded-lg border border-slate-200 bg-white shadow-sm" data-customer-dashboard="true">
           <div className="border-b border-slate-200 p-4 sm:p-5">
@@ -3479,6 +3500,233 @@ export default function MockCustomerDashboardPage() {
           </div>
         </section>
 
+        <section
+          className="rounded-lg border border-slate-200 bg-white shadow-sm"
+          data-customer-invoice-workspace="true"
+        >
+          <div className="border-b border-slate-200 p-4 sm:p-5">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                  Invoice workspace
+                </p>
+                <h2 className="mt-1 text-lg font-bold text-slate-950">Send Invoice Workbench</h2>
+                <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
+                  Use Statements first when preparing invoices. Outstanding balances and follow-up queues stay one
+                  click away.
+                </p>
+              </div>
+              <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
+                {mockStatementPreviewGroups.length} statement preview
+                {mockStatementPreviewGroups.length === 1 ? "" : "s"}
+              </p>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2" data-customer-invoice-workspace-tabs="true">
+              {customerInvoiceWorkspaceTabs.map((tab) => (
+                <button
+                  className={`min-h-10 rounded-md border px-3 py-2 text-sm font-bold transition ${
+                    customerInvoiceWorkspaceTab === tab.value
+                      ? "border-slate-900 bg-slate-900 text-white"
+                      : "border-slate-300 bg-white text-slate-800 hover:border-slate-500 hover:bg-slate-50"
+                  }`}
+                  data-customer-invoice-workspace-tab={tab.value}
+                  key={tab.value}
+                  onClick={() => setCustomerInvoiceWorkspaceTab(tab.value)}
+                  type="button"
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <div
+          className={customerInvoiceWorkspaceTab === "statements" ? "" : "hidden"}
+          data-customer-invoice-workspace-panel="statements"
+        >
+        <section
+          className="rounded-lg border border-slate-200 bg-white shadow-sm"
+          data-monthly-statement-preview="true"
+        >
+          <div className="border-b border-slate-200 p-4 sm:p-5">
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-slate-950">Monthly Account Statement Preview</h2>
+                <p className="mt-1 text-sm leading-6 text-slate-600" data-monthly-statement-boundary="true">
+                  Mock/read-only only. No statement record, invoice record, payment record, bank record, notification,
+                  or Supabase row is created.
+                </p>
+                <p className="mt-1 text-sm leading-6 text-slate-600" data-monthly-statement-no-number-boundary="true">
+                  No statement is generated, sent, saved, or assigned a real statement number.
+                </p>
+              </div>
+              <p className="text-sm font-semibold text-slate-600">
+                Showing {monthlyStatementShowingStart}-{monthlyStatementShowingEnd} of{" "}
+                {mockStatementPreviewGroups.length} statement previews
+              </p>
+            </div>
+            <div
+              className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+              data-monthly-statement-pagination="true"
+            >
+              <label className="text-sm font-semibold text-slate-700 sm:max-w-48">
+                Page size
+                <select
+                  className="mt-1 min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950"
+                  data-monthly-statement-page-size="true"
+                  onChange={(event) => {
+                    setMonthlyStatementPageSize(Number(event.target.value));
+                    setMonthlyStatementPage(1);
+                  }}
+                  value={monthlyStatementPageSize}
+                >
+                  {customerQueuePageSizeOptions.map((pageSize) => (
+                    <option key={pageSize} value={pageSize}>
+                      {pageSize} rows
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex gap-2">
+                <button
+                  className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  data-monthly-statement-previous="true"
+                  disabled={currentMonthlyStatementPage <= 1}
+                  onClick={() => setMonthlyStatementPage((currentPage) => Math.max(1, currentPage - 1))}
+                  type="button"
+                >
+                  Previous
+                </button>
+                <button
+                  className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  data-monthly-statement-next="true"
+                  disabled={currentMonthlyStatementPage >= monthlyStatementTotalPages}
+                  onClick={() =>
+                    setMonthlyStatementPage((currentPage) => Math.min(monthlyStatementTotalPages, currentPage + 1))
+                  }
+                  type="button"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="divide-y divide-slate-200">
+            {mockStatementPreviewGroups.length > 0 ? (
+              paginatedMonthlyStatementGroups.map((group) => (
+                <article
+                  className="grid gap-2 px-3 py-2 transition hover:bg-slate-50 sm:px-4 lg:grid-cols-[minmax(12rem,1.25fr)_minmax(10rem,0.9fr)_minmax(7rem,0.6fr)_minmax(9rem,auto)] lg:items-center"
+                  data-monthly-statement-group={group.key}
+                  key={group.key}
+                >
+                  <div className="min-w-0">
+                    <h3 className="truncate text-sm font-bold text-slate-950 sm:text-base">{group.customerName}</h3>
+                    <p className="mt-0.5 truncate text-xs text-slate-500">Prefix: {group.invoicePrefix}</p>
+                    <p className="mt-0.5 truncate text-xs text-slate-500">{group.periodLabel}</p>
+                  </div>
+
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Rows</p>
+                    <p className="mt-0.5 text-sm font-bold text-slate-900">
+                      {group.items.length} invoice/reference rows
+                    </p>
+                    <p className="mt-0.5 truncate text-xs text-slate-500">Statement number: not generated</p>
+                  </div>
+
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Mock total</p>
+                    <p className="mt-0.5 text-sm font-bold text-slate-950" data-monthly-statement-total={group.key}>
+                      {group.statementTotal}
+                    </p>
+                    <p className="mt-0.5 truncate text-xs text-slate-500">Fully paid rows excluded</p>
+                  </div>
+
+                  <div className="flex items-center gap-2 lg:justify-end">
+                    <Link
+                      aria-label={`Open Customer Folder for ${group.customerName}`}
+                      className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-slate-700"
+                      data-monthly-statement-open-customer-folder={group.key}
+                      href={`/customers/${group.customerId}`}
+                    >
+                      Open
+                    </Link>
+                    <details className="group relative flex-1 lg:flex-none">
+                      <summary
+                        className="inline-flex min-h-9 w-full cursor-pointer list-none items-center justify-between gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50 [&::-webkit-details-marker]:hidden"
+                        data-monthly-statement-actions-toggle={group.key}
+                      >
+                        <span>Actions</span>
+                        <span aria-hidden="true" className="text-slate-500 group-open:hidden">
+                          v
+                        </span>
+                        <span aria-hidden="true" className="hidden text-slate-500 group-open:inline">
+                          ^
+                        </span>
+                      </summary>
+                      <div
+                        className="absolute right-0 z-20 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-md border border-slate-200 bg-white p-2 shadow-lg sm:w-96"
+                        data-monthly-statement-actions-dropdown={group.key}
+                      >
+                        <div className="grid gap-2">
+                          <p className="rounded-md bg-slate-50 px-2 py-1.5 text-xs leading-5 text-slate-700">
+                            Monthly account can be grouped into statement later. Balance due remains visible until
+                            paid. Statement preview is not generated or saved.
+                          </p>
+                          <div className="grid gap-2">
+                            {group.items.map((item) => (
+                              <div
+                                className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs"
+                                data-monthly-statement-row={item.key}
+                                key={item.key}
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <p className="truncate font-bold text-slate-950">{item.invoiceNumber}</p>
+                                    <p className="mt-0.5 text-slate-600">{item.paymentStatus}</p>
+                                  </div>
+                                  <p className="font-bold text-slate-950">{item.balanceDue}</p>
+                                </div>
+                                <p className="mt-1 text-slate-500">Follow-up: {item.followUpDate}</p>
+                              </div>
+                            ))}
+                          </div>
+                          <button
+                            className="min-h-9 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
+                            data-statement-preview-action={group.key}
+                            onClick={() => handleMockStatementPreview(group)}
+                            type="button"
+                          >
+                            Preview Mock Statement
+                          </button>
+                          <p
+                            aria-live="polite"
+                            className="rounded-md bg-slate-50 px-2 py-1.5 text-xs leading-5 text-slate-600"
+                            data-statement-preview-feedback={group.key}
+                          >
+                            {group.feedback ?? "Mock helper: preview only; nothing is generated, saved, or sent."}
+                          </p>
+                        </div>
+                      </div>
+                    </details>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <div className="p-5 text-sm text-slate-600" data-monthly-statement-empty="true">
+                No mock monthly account statement items remain after local actions. Refreshing the page restores the
+                mock data.
+              </div>
+            )}
+          </div>
+        </section>
+        </div>
+
+        <div
+          className={customerInvoiceWorkspaceTab === "outstanding" ? "" : "hidden"}
+          data-customer-invoice-workspace-panel="outstanding"
+        >
         <section
           className="rounded-lg border border-slate-200 bg-white shadow-sm"
           data-outstanding-payments-review="true"
@@ -3775,7 +4023,12 @@ export default function MockCustomerDashboardPage() {
             )}
           </div>
         </section>
+        </div>
 
+        <div
+          className={customerInvoiceWorkspaceTab === "follow-up" ? "" : "hidden"}
+          data-customer-invoice-workspace-panel="follow-up"
+        >
         <section className="rounded-lg border border-slate-200 bg-white shadow-sm" data-collection-follow-up-queue="true">
           <div className="border-b border-slate-200 p-4 sm:p-5">
             <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
@@ -3967,184 +4220,14 @@ export default function MockCustomerDashboardPage() {
             )}
           </div>
         </section>
+        </div>
 
-        <section
-          className="rounded-lg border border-slate-200 bg-white shadow-sm"
-          data-monthly-statement-preview="true"
-        >
-          <div className="border-b border-slate-200 p-4 sm:p-5">
-            <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-slate-950">Monthly Account Statement Preview</h2>
-                <p className="mt-1 text-sm leading-6 text-slate-600" data-monthly-statement-boundary="true">
-                  Mock/read-only only. No statement record, invoice record, payment record, bank record, notification,
-                  or Supabase row is created.
-                </p>
-                <p className="mt-1 text-sm leading-6 text-slate-600" data-monthly-statement-no-number-boundary="true">
-                  No statement is generated, sent, saved, or assigned a real statement number.
-                </p>
-              </div>
-              <p className="text-sm font-semibold text-slate-600">
-                Showing {monthlyStatementShowingStart}-{monthlyStatementShowingEnd} of{" "}
-                {mockStatementPreviewGroups.length} statement previews
-              </p>
-            </div>
-            <div
-              className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
-              data-monthly-statement-pagination="true"
-            >
-              <label className="text-sm font-semibold text-slate-700 sm:max-w-48">
-                Page size
-                <select
-                  className="mt-1 min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950"
-                  data-monthly-statement-page-size="true"
-                  onChange={(event) => {
-                    setMonthlyStatementPageSize(Number(event.target.value));
-                    setMonthlyStatementPage(1);
-                  }}
-                  value={monthlyStatementPageSize}
-                >
-                  {customerQueuePageSizeOptions.map((pageSize) => (
-                    <option key={pageSize} value={pageSize}>
-                      {pageSize} rows
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="flex gap-2">
-                <button
-                  className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                  data-monthly-statement-previous="true"
-                  disabled={currentMonthlyStatementPage <= 1}
-                  onClick={() => setMonthlyStatementPage((currentPage) => Math.max(1, currentPage - 1))}
-                  type="button"
-                >
-                  Previous
-                </button>
-                <button
-                  className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                  data-monthly-statement-next="true"
-                  disabled={currentMonthlyStatementPage >= monthlyStatementTotalPages}
-                  onClick={() =>
-                    setMonthlyStatementPage((currentPage) => Math.min(monthlyStatementTotalPages, currentPage + 1))
-                  }
-                  type="button"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="divide-y divide-slate-200">
-            {mockStatementPreviewGroups.length > 0 ? (
-              paginatedMonthlyStatementGroups.map((group) => (
-                <article
-                  className="grid gap-2 px-3 py-2 transition hover:bg-slate-50 sm:px-4 lg:grid-cols-[minmax(12rem,1.25fr)_minmax(10rem,0.9fr)_minmax(7rem,0.6fr)_minmax(9rem,auto)] lg:items-center"
-                  data-monthly-statement-group={group.key}
-                  key={group.key}
-                >
-                  <div className="min-w-0">
-                    <h3 className="truncate text-sm font-bold text-slate-950 sm:text-base">{group.customerName}</h3>
-                    <p className="mt-0.5 truncate text-xs text-slate-500">Prefix: {group.invoicePrefix}</p>
-                    <p className="mt-0.5 truncate text-xs text-slate-500">{group.periodLabel}</p>
-                  </div>
-
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Rows</p>
-                    <p className="mt-0.5 text-sm font-bold text-slate-900">
-                      {group.items.length} invoice/reference rows
-                    </p>
-                    <p className="mt-0.5 truncate text-xs text-slate-500">Statement number: not generated</p>
-                  </div>
-
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Mock total</p>
-                    <p className="mt-0.5 text-sm font-bold text-slate-950" data-monthly-statement-total={group.key}>
-                      {group.statementTotal}
-                    </p>
-                    <p className="mt-0.5 truncate text-xs text-slate-500">Fully paid rows excluded</p>
-                  </div>
-
-                  <div className="flex items-center gap-2 lg:justify-end">
-                    <Link
-                      aria-label={`Open Customer Folder for ${group.customerName}`}
-                      className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-slate-700"
-                      data-monthly-statement-open-customer-folder={group.key}
-                      href={`/customers/${group.customerId}`}
-                    >
-                      Open
-                    </Link>
-                    <details className="group relative flex-1 lg:flex-none">
-                      <summary
-                        className="inline-flex min-h-9 w-full cursor-pointer list-none items-center justify-between gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50 [&::-webkit-details-marker]:hidden"
-                        data-monthly-statement-actions-toggle={group.key}
-                      >
-                        <span>Actions</span>
-                        <span aria-hidden="true" className="text-slate-500 group-open:hidden">
-                          v
-                        </span>
-                        <span aria-hidden="true" className="hidden text-slate-500 group-open:inline">
-                          ^
-                        </span>
-                      </summary>
-                      <div
-                        className="absolute right-0 z-20 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-md border border-slate-200 bg-white p-2 shadow-lg sm:w-96"
-                        data-monthly-statement-actions-dropdown={group.key}
-                      >
-                        <div className="grid gap-2">
-                          <p className="rounded-md bg-slate-50 px-2 py-1.5 text-xs leading-5 text-slate-700">
-                            Monthly account can be grouped into statement later. Balance due remains visible until
-                            paid. Statement preview is not generated or saved.
-                          </p>
-                          <div className="grid gap-2">
-                            {group.items.map((item) => (
-                              <div
-                                className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs"
-                                data-monthly-statement-row={item.key}
-                                key={item.key}
-                              >
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="min-w-0">
-                                    <p className="truncate font-bold text-slate-950">{item.invoiceNumber}</p>
-                                    <p className="mt-0.5 text-slate-600">{item.paymentStatus}</p>
-                                  </div>
-                                  <p className="font-bold text-slate-950">{item.balanceDue}</p>
-                                </div>
-                                <p className="mt-1 text-slate-500">Follow-up: {item.followUpDate}</p>
-                              </div>
-                            ))}
-                          </div>
-                          <button
-                            className="min-h-9 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
-                            data-statement-preview-action={group.key}
-                            onClick={() => handleMockStatementPreview(group)}
-                            type="button"
-                          >
-                            Preview Mock Statement
-                          </button>
-                          <p
-                            aria-live="polite"
-                            className="rounded-md bg-slate-50 px-2 py-1.5 text-xs leading-5 text-slate-600"
-                            data-statement-preview-feedback={group.key}
-                          >
-                            {group.feedback ?? "Mock helper: preview only; nothing is generated, saved, or sent."}
-                          </p>
-                        </div>
-                      </div>
-                    </details>
-                  </div>
-                </article>
-              ))
-            ) : (
-              <div className="p-5 text-sm text-slate-600" data-monthly-statement-empty="true">
-                No mock monthly account statement items remain after local actions. Refreshing the page restores the
-                mock data.
-              </div>
-            )}
-          </div>
-        </section>
-
+        <details className="rounded-lg border border-slate-200 bg-white shadow-sm" data-customer-debug-tools-drawer="true">
+          <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-slate-900 [&::-webkit-details-marker]:hidden">
+            Support logs and guardrails
+            <span className="text-xs font-semibold text-slate-500">Collapsed</span>
+          </summary>
+          <div className="grid gap-4 border-t border-slate-200 p-4 sm:p-5">
         <section className="rounded-lg border border-slate-200 bg-white shadow-sm" data-mock-payment-event-log="true">
           <div className="border-b border-slate-200 p-4 sm:p-5">
             <h2 className="text-lg font-bold text-slate-950">Mock Payment Event Log</h2>
@@ -4317,6 +4400,8 @@ export default function MockCustomerDashboardPage() {
             This dashboard does not implement real invoice generation yet; it only shows local mock examples.
           </p>
         </section>
+          </div>
+        </details>
       </div>
     </main>
   );

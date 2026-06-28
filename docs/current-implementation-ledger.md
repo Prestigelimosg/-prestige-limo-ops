@@ -228,6 +228,14 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This is UI-only polish on the existing local/mock customers page; it does not add routes, APIs, DB reads/writes, env changes, provider sends, GPS/live location, billing/payment/PDF/invoice/payout activation, calendar sync, or shims.
 - Guard coverage lives in `scripts/test-customers-remaining-queues-compact-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Customers Invoice Workspace Cleanup
+
+- Customers page now leads with a customer invoice workspace for statement previews, outstanding balances, and follow-up.
+- Statement previews are the default tab because this page is the invoice-sending workbench.
+- Duplicate folder handoff, booking and draft tools, mock logs, mock state references, collection rules, and guardrails are collapsed into support/admin drawers instead of normal daily rows.
+- This is UI-only structure cleanup; it does not activate invoice/PDF/payment/provider sending, DB writes, env changes, GPS/live location, billing/payout, calendar sync, parser changes, or shims.
+- Guard coverage lives in `scripts/test-customers-invoice-workspace-cleanup-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Live William Walkthrough CRM And Driver Job Proof
 
 - Evidence marker: `WILLIAM-WALKTHROUGH-20260626074259`.

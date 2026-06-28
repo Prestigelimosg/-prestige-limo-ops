@@ -37,12 +37,12 @@ const [customerPage, ledger, preactivationSuite] = await Promise.all([
 const followUpSection = sectionBetween(
   customerPage,
   'data-collection-follow-up-queue="true"',
-  'data-monthly-statement-preview="true"',
+  'data-customer-debug-tools-drawer="true"',
 );
 const monthlyStatementSection = sectionBetween(
   customerPage,
   'data-monthly-statement-preview="true"',
-  'data-mock-payment-event-log="true"',
+  'data-customer-invoice-workspace-panel="outstanding"',
 );
 
 for (const fragment of [

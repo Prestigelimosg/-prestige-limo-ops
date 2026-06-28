@@ -37,7 +37,7 @@ const [customerPage, ledger, preactivationSuite] = await Promise.all([
 const handoffSection = sectionBetween(
   customerPage,
   'data-customer-folder-index-handoff="true"',
-  'data-regular-customer-booking-form-section="true"',
+  'data-customer-advanced-booking-drawer="true"',
 );
 
 for (const fragment of [

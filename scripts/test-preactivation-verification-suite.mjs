@@ -314,6 +314,10 @@ const guardChecks = [
     script: "scripts/test-customers-remaining-queues-compact-guard.mjs",
   },
   {
+    label: "customers invoice workspace cleanup guard",
+    script: "scripts/test-customers-invoice-workspace-cleanup-guard.mjs",
+  },
+  {
     label: "driver reporting status contract guard",
     script: "scripts/test-driver-reporting-status-contract.mjs",
   },

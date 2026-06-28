@@ -4820,17 +4820,21 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This lock adds `scripts/test-customer-driver-in-app-notification-channel-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Driver Status to Customer In-App Automatic Notification Readiness Contract Guard Lock
-- This is a docs/test-only guard for future Driver Status -> Customer In-App automatic notifications.
-- This lock does not implement runtime notification writes, DB writes, provider sends, Email/Telegram/WhatsApp/SMS, free-form chat, customer-driver messaging runtime, auth/session changes, env changes, deploys, GPS/location activation, billing/payment/PDF/payout, or production activation.
-- Future OTW status may create exactly one safe `customer_app` notification scoped to the correct customer/account/booking.
+- Driver Status -> Customer In-App automatic notification fanout is implemented through the verified driver job status route only.
+- The fanout runs after a persisted `driver_job_status_events` update is accepted for the verified driver job token and queues one fixed safe `customer_app` notification for the same booking/customer scope.
+- Fanout is best-effort; a customer notification insert failure must not undo or hide the accepted driver status event.
+- OTW status queues exactly one safe `customer_app` notification scoped to the correct customer/account/booking.
 - OTW title: `Driver is on the way`.
 - OTW message: `Your Prestige Limo driver is on the way to pickup.`
-- Future OTS status may create exactly one safe `customer_app` notification scoped to the correct customer/account/booking.
+- OTS status queues exactly one safe `customer_app` notification scoped to the correct customer/account/booking.
 - OTS title: `Driver has arrived`.
 - OTS message: `Your Prestige Limo driver is at the pickup location.`
-- Future POB status may create exactly one safe `customer_app` notification scoped to the correct customer/account/booking.
+- POB status queues exactly one safe `customer_app` notification scoped to the correct customer/account/booking.
 - POB title: `Passenger on board`.
 - POB message: `Your trip has started.`
+- Job Completed status queues exactly one safe `customer_app` notification scoped to the correct customer/account/booking.
+- Job Completed title: `Trip completed`.
+- Job Completed message: `Your trip is completed. Thank you for choosing Prestige Limo.`
 - Status-triggered customer notifications must be template-only.
 - Status-triggered customer notifications must use the guarded driver status workflow `driver_otw -> ots -> pob -> completed`.
 - Status-triggered customer notifications must use persisted status evidence and must not rely on local/demo/mock UI state, customer-visible status text, localStorage, or untrusted browser-submitted status history.
@@ -4839,7 +4843,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Admin/dispatch must be able to see the status-triggered in-app notification/audit trail through approved admin surfaces.
 - POB must stop any future pre-POB customer-driver quick replies for that job.
 - No phone number exposure is approved.
-- No Email, Resend, Telegram, WhatsApp, SMS, SMTP, IMAP, push provider, fallback, scheduler, retry, polling, or blast is approved by this lock.
+- No Email, Resend, Telegram, WhatsApp, SMS, SMTP, IMAP, push provider, fallback, scheduler, retry, or blast is approved by this lock.
+- The Dashboard driver report readout keeps the existing guarded 10-second polling fallback while driver status writes and customer-app fanout happen server-side when the driver presses OTW, OTS, POB, or Job Completed.
 - Customer-driver quick replies are a later separate lane, not implemented by this guard.
 - Future customer-to-driver quick reply templates are limited to `I am at the lobby.`, `I am running 5 minutes late.`, `Please wait at pickup point.`, and `I cannot find the car.` unless separately approved.
 - Future driver-to-customer quick reply templates are limited to `I am on the way.`, `I have arrived.`, `Please meet me at pickup point.`, and `I am waiting nearby.` unless separately approved.

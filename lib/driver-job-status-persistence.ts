@@ -44,6 +44,7 @@ export type DriverJobProductionPayloadResult =
 
 export type DriverJobProductionStatusUpdateResult =
   | {
+      customer_notification: DriverStatusCustomerInAppFanoutResult;
       ok: true;
       payload: SafeDriverJobPayload;
       reason: "updated";
@@ -123,12 +124,34 @@ type ClientResult =
       reason: "not_configured";
     };
 
+type DriverStatusCustomerInAppFanoutResult =
+  | {
+      data: Record<string, unknown>;
+      ok: true;
+    }
+  | {
+      error: string;
+      external_send: false;
+      no_op: true;
+      ok: false;
+      provider_send: false;
+      status: number;
+    };
+
 const driverJobLinkSelect =
   "id, booking_reference, link_status, expires_at, revoked_at, safe_link_context";
 const driverJobStatusEventSelect =
   "id, booking_reference, driver_job_link_id, status_value, status_source, safe_status_note, safe_status_context, occurred_at, source_surface, actor_role, actor_label, created_at";
 const maxSafeTextLength = 500;
 const maxSafeStatusNoteLength = 1000;
+const customerInAppNotificationSkippedResult: DriverStatusCustomerInAppFanoutResult = {
+  error: "Customer in-app driver status notification was not queued.",
+  external_send: false,
+  no_op: true,
+  ok: false,
+  provider_send: false,
+  status: 503,
+};
 const safeOutputFragments = [
   "amount_due",
   "auth_link",
@@ -763,7 +786,24 @@ export async function saveDriverJobStatusThroughStatusPersistence(
     return statusBlockedResult("not_configured");
   }
 
+  let customerNotification = customerInAppNotificationSkippedResult;
+
+  try {
+    const { queueDriverStatusCustomerInAppNotification } = await import(
+      "./customer-driver-app-notification-persistence.ts"
+    );
+
+    customerNotification = await queueDriverStatusCustomerInAppNotification(input.client, {
+      bookingReference: resolvedLink.link.booking_reference,
+      driverJobLinkId: resolvedLink.link.id,
+      status: nextStatus,
+    });
+  } catch {
+    customerNotification = customerInAppNotificationSkippedResult;
+  }
+
   return {
+    customer_notification: customerNotification,
     ok: true,
     payload: payloadForLink(resolvedLink.link, nextStatus, [
       persistedEvent,

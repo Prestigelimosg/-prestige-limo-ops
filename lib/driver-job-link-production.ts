@@ -72,8 +72,9 @@ export async function getProductionDriverJobPayloadForToken(
   });
 }
 
-// Status updates insert one event for the verified token/link only. No Driver
-// Database access, pricing, payout, notification, proof, or live-location path.
+// Status updates insert one event for the verified token/link only and may queue
+// one fixed customer-app status update. No Driver Database access, pricing,
+// payout, provider send, proof, or live-location path.
 export async function applyProductionDriverJobStatusUpdate({
   completionNote,
   exceptionReason,

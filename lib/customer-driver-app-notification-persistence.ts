@@ -124,6 +124,26 @@ export type CustomerDriverQuickReplyResult = {
   status: number;
 };
 
+export type DriverStatusCustomerInAppStatus =
+  | "driver_otw"
+  | "ots"
+  | "pob"
+  | "completed";
+
+export type DriverStatusCustomerInAppFanoutResult =
+  | {
+      data: CustomerDriverAppNotificationSafeRecord;
+      ok: true;
+    }
+  | {
+      error: string;
+      external_send: false;
+      no_op: true;
+      ok: false;
+      provider_send: false;
+      status: number;
+    };
+
 export type CustomerDriverAppNotificationPagination = {
   has_next_page: boolean;
   has_previous_page: boolean;
@@ -258,6 +278,35 @@ const allowedCustomerInAppNotificationReadQueryParams = new Set([
   "limit",
   "page",
 ]);
+const driverStatusCustomerInAppTemplates: Record<
+  DriverStatusCustomerInAppStatus,
+  {
+    message: string;
+    statusLabel: string;
+    title: string;
+  }
+> = {
+  completed: {
+    message: "Your trip is completed. Thank you for choosing Prestige Limo.",
+    statusLabel: "Completed",
+    title: "Trip completed",
+  },
+  driver_otw: {
+    message: "Your Prestige Limo driver is on the way to pickup.",
+    statusLabel: "I'm on the way",
+    title: "Driver is on the way",
+  },
+  ots: {
+    message: "Your Prestige Limo driver is at the pickup location.",
+    statusLabel: "I've arrived",
+    title: "Driver has arrived",
+  },
+  pob: {
+    message: "Your trip has started.",
+    statusLabel: "Passenger on board",
+    title: "Passenger on board",
+  },
+};
 const controlledCustomerRuntimeModes = new Set<ControlledCustomerRuntimeMode>([
   "one-customer",
   "small-allowlist",
@@ -2079,6 +2128,95 @@ function quickReplyInput(
     safe_message: safeMessage,
     safe_title: direction === "customer_to_driver" ? "Passenger reply" : "Driver reply",
     workflow_area: "customer_driver_quick_replies",
+  };
+}
+
+function driverStatusCustomerInAppInput(
+  status: DriverStatusCustomerInAppStatus,
+  bookingReference: string,
+  driverJobLinkId: string | null,
+): CustomerDriverAppNotificationInput {
+  const template = driverStatusCustomerInAppTemplates[status];
+
+  return {
+    booking_reference: bookingReference,
+    delivery_surface: "customer_app",
+    driver_job_link_id: driverJobLinkId,
+    event_key: `driver_status_customer_in_app:${bookingReference}:${status}`,
+    notification_status: "queued",
+    notification_type: "driver_status",
+    priority: "normal",
+    safe_context: {
+      external_send: false,
+      provider_send: false,
+      source: "driver_job_status",
+      status_key: status,
+      status_label: template.statusLabel,
+    },
+    safe_message: template.message,
+    safe_title: template.title,
+    workflow_area: "driver_status_customer_in_app",
+  };
+}
+
+function driverStatusCustomerInAppError(
+  error: string,
+  status: number,
+): DriverStatusCustomerInAppFanoutResult {
+  return {
+    error,
+    external_send: false,
+    no_op: true,
+    ok: false,
+    provider_send: false,
+    status,
+  };
+}
+
+export async function queueDriverStatusCustomerInAppNotification(
+  client: NotificationClient,
+  input: {
+    bookingReference: string;
+    driverJobLinkId: string | null;
+    status: DriverStatusCustomerInAppStatus;
+  },
+): Promise<DriverStatusCustomerInAppFanoutResult> {
+  const bookingReference = safeIdentifier(
+    input.bookingReference,
+    maxBookingReferenceLength,
+  );
+  const driverJobLinkId = safeUuidOrNull(input.driverJobLinkId);
+
+  if (!bookingReference || !driverStatusCustomerInAppTemplates[input.status]) {
+    return driverStatusCustomerInAppError(safeNotificationCreateError, 400);
+  }
+
+  const accountReference = await loadCustomerAccountReferenceForBooking(
+    client,
+    bookingReference,
+  );
+
+  if (!accountReference.ok) {
+    return driverStatusCustomerInAppError(accountReference.error, accountReference.status);
+  }
+
+  const created = await insertQuickReplyNotification(
+    client,
+    driverStatusCustomerInAppInput(input.status, bookingReference, driverJobLinkId),
+    {
+      actor_label: "verified_driver_job_link",
+      actor_role: "driver",
+      source_surface: "driver_api",
+    },
+  );
+
+  if (!created.ok) {
+    return driverStatusCustomerInAppError(created.error, created.status);
+  }
+
+  return {
+    data: created.data,
+    ok: true,
   };
 }
 

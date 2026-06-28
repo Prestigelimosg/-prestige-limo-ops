@@ -58,6 +58,21 @@ export async function PATCH(request: Request, context: DriverJobStatusRouteConte
 
     if (result.ok) {
       return Response.json({
+        customer_notification: result.customer_notification.ok
+          ? {
+              delivery_surface: "customer_app",
+              external_send: false,
+              notification_status: "queued",
+              ok: true,
+              provider_send: false,
+            }
+          : {
+              external_send: false,
+              no_op: true,
+              ok: false,
+              provider_send: false,
+              status: result.customer_notification.status,
+            },
         ok: true,
         mode: "production",
         payload: result.payload,

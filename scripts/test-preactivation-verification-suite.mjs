@@ -591,7 +591,7 @@ const guardChecks = [
     script: "scripts/test-customer-driver-in-app-notification-channel-contract-guard.mjs",
   },
   {
-    label: "Driver Status to Customer In-App automatic notification readiness guard",
+    label: "Driver Status to Customer In-App runtime fanout guard",
     script: "scripts/test-driver-status-customer-in-app-readiness-contract-guard.mjs",
   },
   {

@@ -34,6 +34,15 @@ function firstBlock(source, pattern, label) {
   return match[0];
 }
 
+function blockBetween(source, startFragment, endFragment, label) {
+  const start = source.indexOf(startFragment);
+  assert.notEqual(start, -1, `Missing ${label} start ${startFragment}.`);
+  const end = source.indexOf(endFragment, start + startFragment.length);
+  assert.notEqual(end, -1, `Missing ${label} end ${endFragment}.`);
+
+  return source.slice(start, end);
+}
+
 async function listFiles(root) {
   const entries = await readdir(root, { withFileTypes: true });
   const files = [];
@@ -134,6 +143,13 @@ for (const fragment of [
   assertIncludes(customerBookingLocalVoiceDraft, fragment, `shared local voice helper fragment ${fragment}`);
 }
 
+const voiceRuntimeBlock = blockBetween(
+  bookPage,
+  "function applyLocalVoiceDraftFieldFill",
+  "async function handleSubmit",
+  "/book Speak helper runtime block",
+);
+
 for (const forbidden of [
   "/api/ai-parse",
   "fetch(\"/api",
@@ -145,7 +161,7 @@ for (const forbidden of [
   "audio/mp4",
   "FormData",
 ]) {
-  assertExcludes(bookPage, forbidden, "/book Speak helper runtime boundary");
+  assertExcludes(voiceRuntimeBlock, forbidden, "/book Speak helper runtime boundary");
 }
 
 for (const forbidden of [

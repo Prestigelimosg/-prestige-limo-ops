@@ -32960,20 +32960,16 @@ async function runChromeTest() {
         false,
         "Expected /book not to show driver demo DSP usage workflow",
       );
-      assert.equal(initialState.nextSteps.visible, true, "Expected /book compact next-step guidance");
+      assert.equal(initialState.nextSteps.visible, false, "Expected /book compact header to remove step-card guidance");
       assert.equal(
-        initialState.nextSteps.height <= 190,
+        initialState.nextSteps.height === 0,
         true,
-        `Expected /book next-step guidance to stay compact, got ${initialState.nextSteps.height}px`,
+        `Expected /book removed next-step guidance to have no height, got ${initialState.nextSteps.height}px`,
       );
       assert.deepEqual(
         initialState.nextSteps.items,
-        [
-          "Step 1: Submit the trip details you know.",
-          "Step 2: Prestige Limo reviews timing and availability.",
-          "Step 3: We reply before the booking is confirmed.",
-        ],
-        "Expected /book customer next-step guidance",
+        [],
+        "Expected /book customer step cards to be removed",
       );
       assert.equal(initialState.preSubmitReview.visible, true, "Expected /book pre-submit review clarity");
       assert.equal(
@@ -33014,10 +33010,20 @@ async function runChromeTest() {
       );
       assert.equal(
         initialState.text.includes(
-          "Mobile web request form for trip details only. Prestige Limo will reply before confirmation.",
+          "Thank you for your request. Admin will review it at our soonest. Hotline: +65 9655 0807.",
         ),
         true,
-        "Expected /book to show mobile-web request guidance",
+        "Expected /book to show compact thank-you hotline guidance",
+      );
+      assert.equal(
+        initialState.text.includes("Share the trip details you have now."),
+        false,
+        "Expected /book old booking-request hero copy to be removed",
+      );
+      assert.equal(
+        initialState.text.includes("Mobile web request form for trip details only."),
+        false,
+        "Expected /book duplicate mobile-web guidance to be removed from compact header",
       );
       assert.equal(
         initialState.text.includes("Admin will review and confirm your booking shortly. Thank you"),
@@ -33574,7 +33580,7 @@ async function runChromeTest() {
         `Expected /book mobile page not to overflow horizontally: ${mobileState.docScrollWidth} > ${mobileState.docClientWidth}`,
       );
       assert.equal(mobileState.submitVisible, true, "Expected /book submit button to remain touch-friendly on mobile");
-      assert.equal(mobileState.nextSteps.visible, true, "Expected /book mobile next-step guidance");
+      assert.equal(mobileState.nextSteps.visible, false, "Expected /book mobile step-card guidance to stay removed");
       assert.equal(mobileState.preSubmitReview.visible, true, "Expected /book mobile pre-submit clarity");
       assert.equal(
         mobileState.preSubmitReview.text.includes(

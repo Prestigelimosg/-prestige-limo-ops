@@ -198,6 +198,11 @@ export default function CustomerBookingPage() {
     text: "Send a request and our staff will review the details before confirming availability.",
   });
   const companyName = companyProfile.company_name || defaultCompanyProfile.company_name;
+  const hotlineContact =
+    companyProfile.whatsapp_phone ||
+    companyProfile.phone ||
+    defaultCompanyProfile.whatsapp_phone ||
+    defaultCompanyProfile.phone;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -460,8 +465,8 @@ export default function CustomerBookingPage() {
       data-customer-booking-page="true"
     >
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-5">
-        <header className="rounded-md border border-slate-200 bg-white px-4 py-5 shadow-sm sm:px-6">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <header className="rounded-md border border-slate-200 bg-white px-4 py-4 shadow-sm sm:px-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <div
                 className="flex min-w-0 items-center gap-2"
@@ -477,9 +482,12 @@ export default function CustomerBookingPage() {
                 ) : null}
                 <p className="truncate text-sm font-semibold uppercase text-slate-600">{companyName}</p>
               </div>
-              <h1 className="mt-2 text-3xl font-bold text-slate-950 sm:text-4xl">Booking Request</h1>
-              <p className="mt-3 max-w-3xl text-base leading-7 text-slate-700">
-                Share the trip details you have now. Your booking is not confirmed until {companyName} staff replies.
+              <h1 className="mt-1 text-2xl font-bold text-slate-950 sm:text-3xl">Booking Request</h1>
+              <p
+                className="mt-2 max-w-3xl text-sm leading-6 text-slate-700 sm:text-base"
+                data-customer-booking-header-note="true"
+              >
+                Thank you for your request. Admin will review it at our soonest. Hotline: {hotlineContact}.
               </p>
             </div>
             <div
@@ -505,24 +513,8 @@ export default function CustomerBookingPage() {
               </Link>
             </div>
           </div>
-          <p
-            className="mt-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium leading-6 text-sky-950"
-            data-customer-booking-mobile-web-note="true"
-          >
-            Mobile web request form for trip details only. {companyName} will reply before confirmation.
-          </p>
-          {companyProfile.whatsapp_phone || companyProfile.phone || companyProfile.email ? (
-            <p
-              className="mt-2 text-xs leading-5 text-slate-600"
-              data-customer-company-profile-contact="true"
-            >
-              {[companyProfile.whatsapp_phone, companyProfile.phone, companyProfile.email]
-                .filter(Boolean)
-                .join(" | ")}
-            </p>
-          ) : null}
           <div
-            className="mt-3 text-sm leading-6 text-slate-700"
+            className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600"
             data-customer-voice-booking-helper="true"
             data-customer-voice-booking-local-only="true"
           >
@@ -543,26 +535,6 @@ export default function CustomerBookingPage() {
               </p>
             ) : null}
           </div>
-          <ol
-            aria-label="Booking request next steps"
-            className="mt-4 grid gap-2 text-sm sm:grid-cols-3"
-            data-customer-booking-next-steps="true"
-          >
-            {[
-              "Submit the trip details you know.",
-              `${companyName} reviews timing and availability.`,
-              "We reply before the booking is confirmed.",
-            ].map((step, index) => (
-              <li
-                className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-slate-700"
-                data-customer-booking-next-step={index + 1}
-                key={step}
-              >
-                <span className="font-semibold text-slate-950">Step {index + 1}: </span>
-                {step}
-              </li>
-            ))}
-          </ol>
         </header>
 
         <form

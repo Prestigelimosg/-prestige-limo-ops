@@ -144,6 +144,13 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer/driver-visible forbidden data remains blocked from these surfaces: driver payout, PayNow payout, internal admin notes, parser/debug internals, admin finance, mock QA/dev archive, customer price on driver surfaces, billing/payment/payout comparisons on driver surfaces, and internal finance notes.
 - Guard coverage lives in `scripts/test-customer-terms-hourly-billing-guard.mjs` and `scripts/test-admin-monthly-invoice-billable-item-price-review-api-contract.mjs`, both registered through the existing test paths.
 
+### Public Booking Request Compact Header Lock
+
+- The public `/book` header is compact: smaller title, one thank-you/hotline sentence, no duplicate profile contact row, and no Step 1/2/3 cards.
+- The request form fields, submit route, booking persistence, company profile read, customer portal, billing/payment/PDF/invoice, provider-send, GPS/live location, parser, and admin routes are unchanged.
+- Customer-visible forbidden data remains blocked from the public booking request page.
+- Guard coverage lives in `scripts/test-public-booking-request-compact-header-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Company Profile Customer Settings Lock
 
 - Admin now has a compact `Company` settings tab for public-facing company logo URL, company name, WhatsApp/phone/email, address, UEN/business reg no., bank/payment instructions, Stripe card availability, optional card fee percentage, and invoice footer terms.

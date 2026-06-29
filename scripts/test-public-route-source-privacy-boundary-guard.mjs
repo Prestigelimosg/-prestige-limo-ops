@@ -115,7 +115,7 @@ assertIncludes(
 );
 assertIncludes(
   customerPortalPage,
-  "Booking request received for review. This is not confirmed yet. Our staff will reply to confirm availability.",
+  "Booking request received for review. This is not confirmed yet. ${companyName} staff will reply to confirm availability.",
   "customer portal request-only feedback",
 );
 

@@ -58,7 +58,7 @@ const dispatcherIntakeControlLabels = [
 const responsiveRoutes = [
   {
     expectedMobileWebText:
-      "Mobile web request form for trip details only. Prestige Limo will reply before confirmation.",
+      "Thank you for your request. Admin will review it at our soonest. Hotline: +65 9655 0807.",
     expectedText: "Booking Request",
     label: "/book",
     path: "/book",

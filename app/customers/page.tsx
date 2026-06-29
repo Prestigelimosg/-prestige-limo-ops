@@ -1885,6 +1885,24 @@ export default function MockCustomerDashboardPage() {
     );
   }
 
+  function markIssuedCustomerInvoiceUnpaid(invoice: CustomerLocalInvoiceRecord) {
+    if (invoice.status === "Unpaid") {
+      setCustomerInvoiceIssueFeedback(`${invoice.invoiceNumber} is already marked Unpaid in this browser.`);
+      return;
+    }
+
+    const unpaidInvoice = {
+      ...invoice,
+      status: "Unpaid" as const,
+    };
+    const nextInvoices = saveCustomerLocalInvoice(unpaidInvoice);
+
+    setIssuedCustomerInvoices(nextInvoices);
+    setCustomerInvoiceIssueFeedback(
+      `${invoice.invoiceNumber} marked Unpaid locally. No bank, Stripe, payment provider, or Supabase record was changed.`,
+    );
+  }
+
   function clearRegularCustomerBookingListFilters() {
     setRegularCustomerBookingListFilters(initialRegularCustomerBookingListFilters);
     setRegularCustomerBillingQuickFilter(regularCustomerBillingQuickFilterAllValue);
@@ -3014,18 +3032,34 @@ export default function MockCustomerDashboardPage() {
                                 >
                                   Email Invoice
                                 </button>
-                                <button
-                                  className={`rounded-md border px-2 py-1 font-bold transition ${
-                                    invoice.status === "Paid"
-                                      ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-                                      : "border-slate-300 bg-white text-slate-800 hover:border-slate-600"
-                                  }`}
-                                  data-customer-invoice-issued-local-mark-paid={invoice.invoiceNumber}
-                                  onClick={() => markIssuedCustomerInvoicePaid(invoice)}
-                                  type="button"
-                                >
-                                  {invoice.status === "Paid" ? "Paid" : "Mark Paid"}
-                                </button>
+                                {invoice.status === "Paid" ? (
+                                  <>
+                                    <span
+                                      className="rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 font-bold text-emerald-800"
+                                      data-customer-invoice-issued-local-paid={invoice.invoiceNumber}
+                                    >
+                                      Paid
+                                    </span>
+                                    <button
+                                      className="rounded-md border border-amber-300 bg-white px-2 py-1 font-bold text-amber-800 transition hover:border-amber-600"
+                                      data-customer-invoice-issued-local-mark-unpaid={invoice.invoiceNumber}
+                                      onClick={() => markIssuedCustomerInvoiceUnpaid(invoice)}
+                                      type="button"
+                                    >
+                                      Mark Unpaid
+                                    </button>
+                                  </>
+                                ) : (
+                                  <button
+                                    className="rounded-md border border-slate-300 bg-white px-2 py-1 font-bold text-slate-800 transition hover:border-slate-600"
+                                    data-customer-invoice-issued-local-mark-paid={invoice.invoiceNumber}
+                                    data-customer-invoice-issued-local-pay={invoice.invoiceNumber}
+                                    onClick={() => markIssuedCustomerInvoicePaid(invoice)}
+                                    type="button"
+                                  >
+                                    Pay
+                                  </button>
+                                )}
                                 <button
                                   className="rounded-md border border-slate-300 bg-white px-2 py-1 font-bold text-slate-800 transition hover:border-slate-600"
                                   data-customer-invoice-issued-local-reminder={invoice.invoiceNumber}

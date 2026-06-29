@@ -88,8 +88,14 @@ for (const fragment of [
   'data-customer-invoice-issue-local-boundary="true"',
   'data-customer-invoice-issued-local-list="true"',
   'data-customer-invoice-issued-local-download={invoice.invoiceNumber}',
+  'data-customer-invoice-issued-local-pay={invoice.invoiceNumber}',
+  'data-customer-invoice-issued-local-paid={invoice.invoiceNumber}',
+  'data-customer-invoice-issued-local-mark-unpaid={invoice.invoiceNumber}',
   "Issue Invoice + PDF",
   "Issued",
+  "Pay",
+  "Paid",
+  "Mark Unpaid",
 ]) {
   assertIncludes(customersPage, fragment, `customers local issue fragment ${fragment}`);
 }
@@ -97,8 +103,21 @@ for (const fragment of [
 for (const fragment of [
   "Enter the approved customer amount before issuing. This prevents under-billing or over-billing.",
   "Invoice number is created only when you click issue.",
+  "marked Paid locally. No bank, Stripe, payment provider, or Supabase record was changed.",
+  "marked Unpaid locally. No bank, Stripe, payment provider, or Supabase record was changed.",
 ]) {
   assertIncludes(customersPage, fragment, `customer issue safety wording ${fragment}`);
+}
+
+for (const fragment of [
+  "function markIssuedCustomerInvoicePaid(invoice: CustomerLocalInvoiceRecord)",
+  "function markIssuedCustomerInvoiceUnpaid(invoice: CustomerLocalInvoiceRecord)",
+  'status: "Paid" as const',
+  'status: "Unpaid" as const',
+  "saveCustomerLocalInvoice(paidInvoice)",
+  "saveCustomerLocalInvoice(unpaidInvoice)",
+]) {
+  assertIncludes(customersPage, fragment, `customers local payment status action ${fragment}`);
 }
 
 for (const fragment of [
@@ -138,6 +157,7 @@ for (const phrase of [
   "The issue action creates a unique `INV-YYYYMMDD-####` invoice number only at click time, saves the invoice record to this Mac browser storage, and starts a real PDF download generated in-browser.",
   "The customer portal `Invoices` tab reads the same browser-local invoice records and shows them under compact `Unpaid` and `Paid` monthly folders with PDF download buttons.",
   "The amount input is required before issue so admin must review the charge before invoice number/PDF creation.",
+  "Issued local invoices show `Pay` for unpaid invoices, then `Paid` plus `Mark Unpaid` so an accidental local paid click can be reversed before real payment sync exists.",
   "This pass does not send email, create Stripe/payment links, write bank/payment/provider records, write Supabase rows, change env, apply migrations, or create cross-device customer portal sync.",
   "Guard coverage lives in `scripts/test-customer-local-invoice-issue-pdf-portal-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {

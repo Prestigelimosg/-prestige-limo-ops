@@ -347,6 +347,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The issue action creates a unique `INV-YYYYMMDD-####` invoice number only at click time, saves the invoice record to this Mac browser storage, and starts a real PDF download generated in-browser.
 - The customer portal `Invoices` tab reads the same browser-local invoice records and shows them under compact `Unpaid` and `Paid` monthly folders with PDF download buttons.
 - The amount input is required before issue so admin must review the charge before invoice number/PDF creation.
+- Issued local invoices show `Pay` for unpaid invoices, then `Paid` plus `Mark Unpaid` so an accidental local paid click can be reversed before real payment sync exists.
 - This pass does not send email, create Stripe/payment links, write bank/payment/provider records, write Supabase rows, change env, apply migrations, or create cross-device customer portal sync.
 - Guard coverage lives in `scripts/test-customer-local-invoice-issue-pdf-portal-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
@@ -356,7 +357,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Hourly invoice amounts use the locked 15-minute grace rule: 16 minutes or more starts the next chargeable hour.
 - Preparing an hourly unbilled row carries the calculated amount and calculation breakdown into the Send Invoice Workbench.
 - The generated browser-local invoice/PDF line item includes the hourly start/end, actual minutes, billable minutes, and hourly rate.
-- Issued local invoices show Download PDF, guarded Email Invoice, local-only Mark Paid, and guarded Send Reminder actions.
+- Issued local invoices show Download PDF, guarded Email Invoice, local-only Pay / Paid / Mark Unpaid, and guarded Send Reminder actions.
 - The added `Hourly Test Customer` is mock/local test data only and does not create real customer, payment, provider, bank, or Supabase records.
 - This pass does not send email/reminders, create Stripe/payment links, write bank/payment/provider records, write Supabase rows, change env, apply migrations, or activate cross-device invoice sync.
 - Guard coverage lives in `scripts/test-customer-hourly-invoice-auto-calculation-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.

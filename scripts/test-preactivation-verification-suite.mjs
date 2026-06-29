@@ -218,6 +218,10 @@ const guardChecks = [
     script: "scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs",
   },
   {
+    label: "driver completed history grouping guard",
+    script: "scripts/test-driver-completed-history-grouping-guard.mjs",
+  },
+  {
     label: "customer terms and hourly billing guard",
     script: "scripts/test-customer-terms-hourly-billing-guard.mjs",
   },

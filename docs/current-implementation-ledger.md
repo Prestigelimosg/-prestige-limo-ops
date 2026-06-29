@@ -80,6 +80,14 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This is UI-only filtering/layout on existing loaded booking data; it does not add routes/APIs, DB writes, env changes, provider sends, notification sends, GPS/live location, billing/payment/PDF/invoice/payout, calendar sync, parser changes, or shims.
 - Guard coverage lives in `scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Driver Completed History Grouping Lock
+
+- Saved driver `Job Completed` reports now move the loaded booking out of Today/Upcoming and Active Jobs Monitor and into Completed / History.
+- The booking row is not overwritten; admin history reads the existing guarded driver status state from the dashboard/dispatch read cache.
+- Driver-completed rows show a compact `Driver completed` badge and do not expose admin billing, customer pricing, payout, internal notes, parser/debug internals, or mock/dev archive data.
+- This is UI-only grouping/read behavior; it does not add routes/APIs, DB writes, provider sends, notification sends, GPS/live location, billing/payment/PDF/invoice/payout, calendar sync, env changes, deploy activation, parser changes, or shims.
+- Guard coverage lives in `scripts/test-driver-completed-history-grouping-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Admin New Booking Email Alert Runtime Gate
 
 - A server-side admin Email alert can run after a customer `/book` request is saved, so the owner can receive new-booking alerts without depending on the admin Dashboard or Mac being open.

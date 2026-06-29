@@ -11,8 +11,15 @@ import {
   type MockPaymentStatus,
 } from "./_data/mock-customers";
 import {
+  calculateHourlyInvoiceAmountCents,
+  hourlyBillingDefaultRateCents,
+  hourlyBillingGraceRuleText,
+  hourlyBillingUnitMinutes,
+} from "../../lib/hourly-billing";
+import {
   createCustomerLocalInvoiceRecord,
   downloadCustomerInvoicePdf,
+  formatInvoiceAmount,
   formatInvoiceMonth,
   invoiceDateInputDaysFromNow,
   parseInvoiceAmountToCents,
@@ -74,6 +81,8 @@ const regularCustomerBillingQuickFilterAllValue = "all";
 const regularCustomerBillingQuickFilterNoMatchValue = "mock-no-match";
 
 const initialRegularCustomerBookingForm = {
+  actualEndTime: "",
+  actualStartTime: "",
   billingMonth: "2026-05",
   billingStatus: "unbilled / draft",
   booker: "",
@@ -90,6 +99,7 @@ const initialRegularCustomerBookingForm = {
   pickupDate: "",
   pickupLocation: "",
   pickupTime: "",
+  ratePerHour: String(hourlyBillingDefaultRateCents / 100),
   routeType: "Airport Arrival",
   vehicleType: "AVF",
 };
@@ -222,10 +232,12 @@ type MockStatementPreviewEvent = {
 
 type UnbilledCustomerRow = {
   amount: string;
+  billingBreakdown?: string;
   customerFolderHref: string;
   customerId: string;
   customerName: string;
   dateLabel: string;
+  invoiceLineDescription?: string;
   key: string;
   reference: string;
   route: string;
@@ -359,6 +371,47 @@ function getRegularCustomerBillingMonth(form: RegularCustomerBookingForm) {
 
 function getMissingRegularCustomerRequiredFields(form: RegularCustomerBookingForm) {
   return regularCustomerRequiredFields.filter(({ field }) => !form[field].trim());
+}
+
+function parseHourlyRateToCents(value: string) {
+  const rate = Number(value.replace(/[^0-9.]/g, ""));
+
+  return Number.isFinite(rate) && rate > 0
+    ? Math.round(rate * 100)
+    : hourlyBillingDefaultRateCents;
+}
+
+function getRegularCustomerHourlyInvoiceReview(form: RegularCustomerBookingForm) {
+  const isHourlyService = /hourly|disposal/i.test(form.routeType);
+
+  if (!isHourlyService || !form.actualStartTime.trim() || !form.actualEndTime.trim()) {
+    return null;
+  }
+
+  const rateCents = parseHourlyRateToCents(form.ratePerHour);
+  const calculation = calculateHourlyInvoiceAmountCents(
+    form.actualStartTime,
+    form.actualEndTime,
+    rateCents,
+  );
+
+  if (!calculation) {
+    return null;
+  }
+
+  const billableHours = calculation.billableMinutes / hourlyBillingUnitMinutes;
+  const billableHoursLabel =
+    billableHours === 1 ? "1 billable hour" : `${billableHours} billable hours`;
+  const amountLabel = formatInvoiceAmount(calculation.amountCents);
+  const rateLabel = `${formatInvoiceAmount(calculation.rateCents)}/hr`;
+  const billingBreakdown = `${form.actualStartTime} to ${form.actualEndTime}: ${calculation.actualMinutes} actual min / ${calculation.billableMinutes} billable min (${billableHoursLabel}) at ${rateLabel}. ${hourlyBillingGraceRuleText}`;
+
+  return {
+    amountCents: calculation.amountCents,
+    amountLabel,
+    billingBreakdown,
+    invoiceLineDescription: `Hourly ${form.actualStartTime}-${form.actualEndTime} | ${calculation.actualMinutes} actual min | ${calculation.billableMinutes} billable min | ${rateLabel}`,
+  };
 }
 
 function regularCustomerBookingFeedbackClass(tone: RegularCustomerBookingFeedbackTone) {
@@ -796,6 +849,10 @@ export default function MockCustomerDashboardPage() {
     () => mockCustomers.find((customer) => customer.id === regularCustomerBookingForm.customerId),
     [regularCustomerBookingForm.customerId],
   );
+  const regularCustomerHourlyInvoiceReview = useMemo(
+    () => getRegularCustomerHourlyInvoiceReview(regularCustomerBookingForm),
+    [regularCustomerBookingForm],
+  );
   const customerFolderIndexRows = useMemo(() => {
     if (regularCustomerAccountReadState.status !== "loaded") {
       return customerFolderIndexHandoffRows.map((row) => ({
@@ -1092,18 +1149,24 @@ export default function MockCustomerDashboardPage() {
   const unbilledCustomerRows = useMemo<UnbilledCustomerRow[]>(() => {
     const localDraftRows = regularCustomerBookingListItems
       .filter((item) => item.billingStatus.trim().toLowerCase().includes("unbilled"))
-      .map((item) => ({
-        amount: "Draft amount not set",
-        customerFolderHref: item.customerFolderHref,
-        customerId: item.customerId,
-        customerName: item.customerName,
-        dateLabel: item.pickupDate || "Date TBC",
-        key: `local-unbilled:${item.id}`,
-        reference: item.customerReference || item.id,
-        route: `${item.pickupLocation || "Pickup TBC"} > ${item.dropoffLocation || "Drop-off TBC"}`,
-        service: item.routeType,
-        statusLabel: "Unbilled / draft booking",
-      }));
+      .map((item) => {
+        const hourlyInvoiceReview = getRegularCustomerHourlyInvoiceReview(item);
+
+        return {
+          amount: hourlyInvoiceReview?.amountLabel ?? "Draft amount not set",
+          billingBreakdown: hourlyInvoiceReview?.billingBreakdown,
+          customerFolderHref: item.customerFolderHref,
+          customerId: item.customerId,
+          customerName: item.customerName,
+          dateLabel: item.pickupDate || "Date TBC",
+          invoiceLineDescription: hourlyInvoiceReview?.invoiceLineDescription,
+          key: `local-unbilled:${item.id}`,
+          reference: item.customerReference || item.id,
+          route: `${item.pickupLocation || "Pickup TBC"} > ${item.dropoffLocation || "Drop-off TBC"}`,
+          service: item.routeType,
+          statusLabel: hourlyInvoiceReview ? "Hourly auto-calculated" : "Unbilled / draft booking",
+        };
+      });
 
     return [...localDraftRows, ...getMockUnbilledCustomerRows()].sort(
       (firstRow, secondRow) =>
@@ -1512,6 +1575,14 @@ export default function MockCustomerDashboardPage() {
       customerId: customerInvoicePrepRow.customerId,
       customerName: customerInvoicePrepRow.customerName,
       dueDateIso: customerInvoiceIssueDueDate,
+      lineItems: [
+        {
+          amountLabel: formatInvoiceAmount(amountCents),
+          description:
+            customerInvoicePrepRow.invoiceLineDescription ||
+            `${customerInvoicePrepRow.service} - ${customerInvoicePrepRow.reference} - ${customerInvoicePrepRow.route}`,
+        },
+      ],
       reference: customerInvoicePrepRow.reference,
       route: customerInvoicePrepRow.route,
       service: customerInvoicePrepRow.service,
@@ -1533,6 +1604,36 @@ export default function MockCustomerDashboardPage() {
   function downloadIssuedCustomerInvoice(invoice: CustomerLocalInvoiceRecord) {
     downloadCustomerInvoicePdf(invoice);
     setCustomerInvoiceIssueFeedback(`${invoice.invoiceNumber} PDF download started.`);
+  }
+
+  function handleGuardedInvoiceEmailAction(invoice: CustomerLocalInvoiceRecord) {
+    setCustomerInvoiceIssueFeedback(
+      `${invoice.invoiceNumber} email not sent. Email provider sending is still off; download the PDF and send manually until that lane is approved.`,
+    );
+  }
+
+  function handleGuardedInvoiceReminderAction(invoice: CustomerLocalInvoiceRecord) {
+    setCustomerInvoiceIssueFeedback(
+      `${invoice.invoiceNumber} reminder not sent. Reminder/email provider sending is still off; no customer notification was sent.`,
+    );
+  }
+
+  function markIssuedCustomerInvoicePaid(invoice: CustomerLocalInvoiceRecord) {
+    if (invoice.status === "Paid") {
+      setCustomerInvoiceIssueFeedback(`${invoice.invoiceNumber} is already marked Paid in this browser.`);
+      return;
+    }
+
+    const paidInvoice = {
+      ...invoice,
+      status: "Paid" as const,
+    };
+    const nextInvoices = saveCustomerLocalInvoice(paidInvoice);
+
+    setIssuedCustomerInvoices(nextInvoices);
+    setCustomerInvoiceIssueFeedback(
+      `${invoice.invoiceNumber} marked Paid locally. No bank, Stripe, payment provider, or Supabase record was changed.`,
+    );
   }
 
   function clearRegularCustomerBookingListFilters() {
@@ -2324,7 +2425,17 @@ export default function MockCustomerDashboardPage() {
                           <p className="max-w-[13rem] truncate font-bold text-slate-950">{row.customerName}</p>
                           <p className="max-w-[13rem] truncate text-xs text-slate-500">{row.reference}</p>
                         </td>
-                        <td className="px-3 py-2 font-semibold text-amber-950">{row.statusLabel}</td>
+                        <td className="px-3 py-2">
+                          <p className="font-semibold text-amber-950">{row.statusLabel}</p>
+                          {row.billingBreakdown ? (
+                            <p
+                              className="mt-1 max-w-[14rem] text-xs font-semibold leading-4 text-amber-800"
+                              data-unbilled-customer-billing-breakdown={row.key}
+                            >
+                              {row.billingBreakdown}
+                            </p>
+                          ) : null}
+                        </td>
                         <td className="px-3 py-2 font-bold text-slate-950">{row.amount}</td>
                         <td className="px-3 py-2">
                           <p className="max-w-[18rem] truncate font-semibold text-slate-800">
@@ -2439,6 +2550,14 @@ export default function MockCustomerDashboardPage() {
                     <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Amount</p>
                     <p className="font-bold text-slate-950">{customerInvoicePrepRow.amount}</p>
                     <p className="truncate text-xs text-slate-500">{customerInvoicePrepRow.statusLabel}</p>
+                    {customerInvoicePrepRow.billingBreakdown ? (
+                      <p
+                        className="mt-1 line-clamp-2 text-xs font-semibold leading-4 text-slate-600"
+                        data-customer-invoice-prep-billing-breakdown="true"
+                      >
+                        {customerInvoicePrepRow.billingBreakdown}
+                      </p>
+                    ) : null}
                   </div>
                   <div className="min-w-0">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
@@ -2453,7 +2572,6 @@ export default function MockCustomerDashboardPage() {
                     {customerInvoicePrepRow.customerFolderHref ? (
                       <Link
                         className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-xs font-bold text-white transition hover:bg-slate-700"
-                        data-customer-invoice-prep-next-action="true"
                         data-customer-invoice-prep-open-folder="true"
                         href={customerInvoicePrepRow.customerFolderHref}
                       >
@@ -2532,6 +2650,7 @@ export default function MockCustomerDashboardPage() {
                           ? "border-emerald-300 bg-emerald-50 text-emerald-800"
                           : "border-slate-900 bg-slate-900 text-white hover:bg-slate-700"
                       }`}
+                      data-customer-invoice-prep-next-action="true"
                       data-customer-invoice-issue-download-pdf="true"
                       onClick={issuePreparedCustomerInvoice}
                       type="button"
@@ -2584,14 +2703,44 @@ export default function MockCustomerDashboardPage() {
                             <td className="py-2 pr-3 font-semibold text-slate-950">{invoice.amountLabel}</td>
                             <td className="py-2 pr-3 text-slate-700">{invoice.status}</td>
                             <td className="py-2 text-right">
-                              <button
-                                className="rounded-md border border-slate-300 bg-white px-2 py-1 font-bold text-slate-800 transition hover:border-slate-600"
-                                data-customer-invoice-issued-local-download={invoice.invoiceNumber}
-                                onClick={() => downloadIssuedCustomerInvoice(invoice)}
-                                type="button"
-                              >
-                                Download PDF
-                              </button>
+                              <div className="inline-flex flex-wrap justify-end gap-1">
+                                <button
+                                  className="rounded-md border border-slate-300 bg-white px-2 py-1 font-bold text-slate-800 transition hover:border-slate-600"
+                                  data-customer-invoice-issued-local-download={invoice.invoiceNumber}
+                                  onClick={() => downloadIssuedCustomerInvoice(invoice)}
+                                  type="button"
+                                >
+                                  Download PDF
+                                </button>
+                                <button
+                                  className="rounded-md border border-slate-300 bg-white px-2 py-1 font-bold text-slate-800 transition hover:border-slate-600"
+                                  data-customer-invoice-issued-local-email={invoice.invoiceNumber}
+                                  onClick={() => handleGuardedInvoiceEmailAction(invoice)}
+                                  type="button"
+                                >
+                                  Email Invoice
+                                </button>
+                                <button
+                                  className={`rounded-md border px-2 py-1 font-bold transition ${
+                                    invoice.status === "Paid"
+                                      ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                                      : "border-slate-300 bg-white text-slate-800 hover:border-slate-600"
+                                  }`}
+                                  data-customer-invoice-issued-local-mark-paid={invoice.invoiceNumber}
+                                  onClick={() => markIssuedCustomerInvoicePaid(invoice)}
+                                  type="button"
+                                >
+                                  {invoice.status === "Paid" ? "Paid" : "Mark Paid"}
+                                </button>
+                                <button
+                                  className="rounded-md border border-slate-300 bg-white px-2 py-1 font-bold text-slate-800 transition hover:border-slate-600"
+                                  data-customer-invoice-issued-local-reminder={invoice.invoiceNumber}
+                                  onClick={() => handleGuardedInvoiceReminderAction(invoice)}
+                                  type="button"
+                                >
+                                  Send Reminder
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -3471,6 +3620,51 @@ export default function MockCustomerDashboardPage() {
               </label>
 
               <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
+                Actual start
+                <input
+                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                  data-regular-booking-field="actualStartTime"
+                  onChange={(event) => updateRegularCustomerBookingField("actualStartTime", event.target.value)}
+                  type="time"
+                  value={regularCustomerBookingForm.actualStartTime}
+                />
+              </label>
+
+              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
+                Actual end
+                <input
+                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                  data-regular-booking-field="actualEndTime"
+                  onChange={(event) => updateRegularCustomerBookingField("actualEndTime", event.target.value)}
+                  type="time"
+                  value={regularCustomerBookingForm.actualEndTime}
+                />
+              </label>
+
+              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
+                Hourly rate
+                <input
+                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                  data-regular-booking-field="ratePerHour"
+                  inputMode="decimal"
+                  onChange={(event) => updateRegularCustomerBookingField("ratePerHour", event.target.value)}
+                  placeholder="65"
+                  value={regularCustomerBookingForm.ratePerHour}
+                />
+              </label>
+
+              <p
+                className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold leading-5 text-emerald-950 md:col-span-2 xl:col-span-3"
+                data-regular-booking-hourly-calculation="true"
+              >
+                {regularCustomerHourlyInvoiceReview
+                  ? `Auto invoice amount: ${regularCustomerHourlyInvoiceReview.amountLabel}. ${regularCustomerHourlyInvoiceReview.billingBreakdown}`
+                  : /hourly|disposal/i.test(regularCustomerBookingForm.routeType)
+                    ? `Enter actual start and actual end to auto-calculate hourly billing at $65/hr default. ${hourlyBillingGraceRuleText}`
+                    : `Hourly auto-calculation applies when Type of Service is Hourly / Disposal. ${hourlyBillingGraceRuleText}`}
+              </p>
+
+              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
                 Vehicle type *
                 <select
                   aria-invalid={isRegularCustomerBookingFieldMissing("vehicleType")}
@@ -3905,6 +4099,15 @@ export default function MockCustomerDashboardPage() {
                     Customer reference: {regularCustomerBookingPreview.customerReference || "No reference entered"}
                   </p>
                   <p>Payment method: {regularCustomerBookingPreview.paymentMethod}</p>
+                  {getRegularCustomerHourlyInvoiceReview(regularCustomerBookingPreview) ? (
+                    <p
+                      className="mt-2 font-bold"
+                      data-regular-customer-booking-hourly-preview="true"
+                    >
+                      Hourly invoice auto-calculation:{" "}
+                      {getRegularCustomerHourlyInvoiceReview(regularCustomerBookingPreview)?.billingBreakdown}
+                    </p>
+                  ) : null}
                 </div>
 
                 <p

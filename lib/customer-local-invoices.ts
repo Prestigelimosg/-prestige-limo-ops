@@ -35,6 +35,7 @@ export type CustomerLocalInvoiceCreateInput = {
   customerId: string;
   customerName: string;
   dueDateIso: string;
+  lineItems?: CustomerLocalInvoiceLineItem[];
   reference: string;
   route: string;
   service: string;
@@ -229,6 +230,15 @@ export function createCustomerLocalInvoiceRecord(
   const dueDate = new Date(`${input.dueDateIso}T00:00:00+08:00`);
   const invoiceNumber = nextInvoiceNumber(existingRecords, issueDate);
   const amountLabel = formatInvoiceAmount(input.amountCents);
+  const lineItems =
+    input.lineItems?.length
+      ? input.lineItems
+      : [
+          {
+            amountLabel,
+            description: `${input.service} - ${input.reference} - ${input.route}`,
+          },
+        ];
 
   return {
     amountCents: input.amountCents,
@@ -241,12 +251,7 @@ export function createCustomerLocalInvoiceRecord(
     invoiceNumber,
     issueDateIso: issueDate.toISOString(),
     issueDateLabel: formatInvoiceDate(issueDate),
-    lineItems: [
-      {
-        amountLabel,
-        description: `${input.service} - ${input.reference} - ${input.route}`,
-      },
-    ],
+    lineItems,
     reference: input.reference,
     route: input.route,
     service: input.service,

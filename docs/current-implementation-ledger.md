@@ -342,6 +342,17 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This pass does not send email, create Stripe/payment links, write bank/payment/provider records, write Supabase rows, change env, apply migrations, or create cross-device customer portal sync.
 - Guard coverage lives in `scripts/test-customer-local-invoice-issue-pdf-portal-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Customer Hourly Invoice Auto Calculation Lock
+
+- Admin Customers can create a mock/local hourly booking row with actual start time, actual end time, and a default `$65/hr` rate.
+- Hourly invoice amounts use the locked 15-minute grace rule: 16 minutes or more starts the next chargeable hour.
+- Preparing an hourly unbilled row carries the calculated amount and calculation breakdown into the Send Invoice Workbench.
+- The generated browser-local invoice/PDF line item includes the hourly start/end, actual minutes, billable minutes, and hourly rate.
+- Issued local invoices show Download PDF, guarded Email Invoice, local-only Mark Paid, and guarded Send Reminder actions.
+- The added `Hourly Test Customer` is mock/local test data only and does not create real customer, payment, provider, bank, or Supabase records.
+- This pass does not send email/reminders, create Stripe/payment links, write bank/payment/provider records, write Supabase rows, change env, apply migrations, or activate cross-device invoice sync.
+- Guard coverage lives in `scripts/test-customer-hourly-invoice-auto-calculation-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Customer Booking Request Flight Persistence Fix
 
 - Public `/book` flight number input now persists into the safe operational `flight_no` booking field, instead of living only in the parser/source summary.

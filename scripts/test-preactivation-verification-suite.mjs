@@ -222,6 +222,10 @@ const guardChecks = [
     script: "scripts/test-customer-terms-hourly-billing-guard.mjs",
   },
   {
+    label: "customer hourly invoice auto calculation guard",
+    script: "scripts/test-customer-hourly-invoice-auto-calculation-guard.mjs",
+  },
+  {
     label: "public booking request compact header guard",
     script: "scripts/test-public-booking-request-compact-header-guard.mjs",
   },

@@ -242,6 +242,27 @@ export const mockCustomers: MockCustomer[] = [
     paymentStatusSummary: "Invoice Sent",
     paymentTerms: "Payment requested before pickup for future implementation review",
   },
+  {
+    accountType: "Test Account",
+    bookingHistory: [],
+    companyName: "Hourly Test Customer",
+    contacts: [
+      { label: "Test contact", name: "William hourly test", value: "+65 9000 0650" },
+    ],
+    documentsPlaceholder: "Local browser test customer only. No real customer documents.",
+    followUpNotes: ["Use only for local browser hourly invoice calculation checks."],
+    id: "hourly-test-customer",
+    invoiceExamples: ["HTC-0001"],
+    invoicePrefix: "HTC",
+    invoices: [],
+    nextFollowUpDate: "29 Jun 2026",
+    outstandingAmount: "$0",
+    overdueAmount: "$0",
+    paidThisMonth: "$0",
+    paymentHistory: [],
+    paymentStatusSummary: "Test customer / no live balance",
+    paymentTerms: "Mock/local browser invoice testing only",
+  },
 ];
 
 export const mockPaymentSummary = {

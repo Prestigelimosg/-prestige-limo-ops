@@ -242,6 +242,10 @@ const guardChecks = [
     script: "scripts/test-company-profile-settings-guard.mjs",
   },
   {
+    label: "invoice settings direct link guard",
+    script: "scripts/test-invoice-settings-direct-link-guard.mjs",
+  },
+  {
     label: "admin new booking email alert guard",
     script: "scripts/test-admin-new-booking-email-alert-guard.mjs",
   },

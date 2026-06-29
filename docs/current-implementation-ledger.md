@@ -162,6 +162,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Company Profile Customer Settings Lock
 
 - Admin now has a compact `Company` settings tab for public-facing company logo URL, company name, WhatsApp/phone/email, address, UEN/business reg no., bank/payment instructions, Stripe card availability, optional card fee percentage, and invoice footer terms.
+- `/settings/invoice` opens the existing admin Company settings tab directly for invoice-facing logo, company contact, bank/payment instructions, Stripe card option/card fee wording, and invoice footer terms.
 - The default public company profile email is `acc@prestigelimo.sg`, used as the official accounting contact fallback on customer-facing pages and invoice PDFs.
 - The default public company profile logo is `/prestige-limo-sg-logo.jpg` and the default address is `10 Anson Rd, #10-11 Prestige Limo SG, International Plaza, Singapore 079903`.
 - Customer `/book` and `/my-bookings` read the same public-safe profile through `GET /api/company-profile` and fall back to safe defaults when the settings table is not ready.

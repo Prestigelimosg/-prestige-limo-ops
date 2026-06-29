@@ -2013,6 +2013,10 @@ const appTabs: Array<{ id: AppTab; label: string }> = [
   { id: "rates", label: "Rates" },
 ];
 
+type HomeProps = {
+  initialTab?: AppTab;
+};
+
 const adminAccessLinks = [
   { href: "/", label: "Admin Home" },
   { href: "/book", label: "Book Request" },
@@ -9189,10 +9193,10 @@ function isMockMidnightChargeDetected(value: string) {
   return minutes >= 23 * 60 || minutes <= 6 * 60 + 59;
 }
 
-export default function Home() {
+export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   const [booking, setBooking] = useState<BookingForm>(() => createInitialBooking());
-  const [activeTab, setActiveTab] = useState<AppTab>("dashboard");
-  const activeTabRef = useRef<AppTab>("dashboard");
+  const [activeTab, setActiveTab] = useState<AppTab>(initialTab);
+  const activeTabRef = useRef<AppTab>(initialTab);
   const [isInternalQaMockArchiveOpen, setIsInternalQaMockArchiveOpen] = useState(false);
   const [bookingMessage, setBookingMessage] = useState("");
   const [bookingMessageResetKey, setBookingMessageResetKey] = useState(0);
@@ -14373,7 +14377,7 @@ export default function Home() {
     }
   }
 
-  async function loadCompanyProfileSettings() {
+  const loadCompanyProfileSettings = useCallback(async () => {
     setCompanyProfileAction("loading");
     setCompanyProfileMessage({
       tone: "info",
@@ -14415,7 +14419,13 @@ export default function Home() {
         text: error instanceof Error ? error.message : "Company settings could not be loaded.",
       });
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "company" && !companyProfileLoaded && companyProfileAction === "idle") {
+      void loadCompanyProfileSettings();
+    }
+  }, [activeTab, companyProfileAction, companyProfileLoaded, loadCompanyProfileSettings]);
 
   async function saveCompanyProfileSettings() {
     setCompanyProfileAction("saving");

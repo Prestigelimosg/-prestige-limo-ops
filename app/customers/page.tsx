@@ -21,6 +21,7 @@ import {
   createCustomerLocalInvoiceRecord,
   downloadCustomerInvoicePdf,
   formatInvoiceAmount,
+  formatInvoiceDate,
   formatInvoiceMonth,
   invoiceDateInputDaysFromNow,
   parseInvoiceAmountToCents,
@@ -269,6 +270,21 @@ type CustomerInvoiceCalculatedAmount = {
   amountCents: number;
   billingBreakdown: string;
   invoiceLineDescription: string;
+  sourceLabel: string;
+};
+
+type CustomerInvoicePreview = {
+  amountCents: number;
+  amountLabel: string;
+  customerName: string;
+  dueDateIso: string;
+  dueDateLabel: string;
+  folder: CustomerLocalInvoiceStatus;
+  lineDescription: string;
+  previewKey: string;
+  reference: string;
+  route: string;
+  service: string;
   sourceLabel: string;
 };
 
@@ -927,6 +943,8 @@ export default function MockCustomerDashboardPage() {
   const [customerInvoiceIssueFeedback, setCustomerInvoiceIssueFeedback] = useState(
     "Review the amount and due date before issuing. Invoice number is created only when you click issue.",
   );
+  const [customerInvoicePreview, setCustomerInvoicePreview] =
+    useState<CustomerInvoicePreview | null>(null);
   const [customerInvoiceCalculatedAmountCents, setCustomerInvoiceCalculatedAmountCents] =
     useState<number | null>(null);
   const [customerInvoiceCalculatedBillingBreakdown, setCustomerInvoiceCalculatedBillingBreakdown] =
@@ -1312,6 +1330,33 @@ export default function MockCustomerDashboardPage() {
     customerInvoiceCalculatedAmountCents !== null &&
     customerInvoiceApprovedAmountCents !== null &&
     customerInvoiceApprovedAmountCents !== customerInvoiceCalculatedAmountCents;
+  const customerInvoiceCurrentPreviewKey = useMemo(() => {
+    if (!customerInvoicePrepRow || !customerInvoiceApprovedAmountCents) {
+      return "";
+    }
+
+    return [
+      customerInvoicePrepRow.key,
+      customerInvoiceApprovedAmountCents,
+      customerInvoiceIssueDueDate,
+      customerInvoiceIssueStatus,
+      customerInvoiceCalculatedAmountCents ?? "",
+      customerInvoiceCalculatedLineDescription,
+      customerInvoiceAmountEdited ? customerInvoiceAdjustmentReason.trim() : "",
+    ].join("|");
+  }, [
+    customerInvoiceAdjustmentReason,
+    customerInvoiceAmountEdited,
+    customerInvoiceApprovedAmountCents,
+    customerInvoiceCalculatedAmountCents,
+    customerInvoiceCalculatedLineDescription,
+    customerInvoiceIssueDueDate,
+    customerInvoiceIssueStatus,
+    customerInvoicePrepRow,
+  ]);
+  const isCustomerInvoicePreviewCurrent =
+    Boolean(customerInvoicePreview) &&
+    customerInvoicePreview?.previewKey === customerInvoiceCurrentPreviewKey;
   const regularCustomerBillingQuickFilterOptions = useMemo(() => {
     const billingMonths = Array.from(
       new Set(regularCustomerBookingListItems.map((item) => item.billingMonth.trim()).filter(Boolean)),
@@ -1658,6 +1703,7 @@ export default function MockCustomerDashboardPage() {
     setCustomerInvoiceIssueAmount(suggestedAmountCents ? row.amount.replace(/^\$/, "") : "");
     setCustomerInvoiceIssueDueDate(invoiceDateInputDaysFromNow(7));
     setCustomerInvoiceIssueStatus("Unpaid");
+    setCustomerInvoicePreview(null);
     setCustomerInvoiceAdjustmentReason("");
     setCustomerInvoiceCalculatedAmountCents(baseCalculation?.amountCents ?? null);
     setCustomerInvoiceCalculatedBillingBreakdown(baseCalculation?.billingBreakdown ?? "");
@@ -1763,6 +1809,7 @@ export default function MockCustomerDashboardPage() {
     setCustomerInvoiceIssueAmount("");
     setCustomerInvoiceIssueDueDate(invoiceDateInputDaysFromNow(7));
     setCustomerInvoiceIssueStatus("Unpaid");
+    setCustomerInvoicePreview(null);
     setCustomerInvoiceAdjustmentReason("");
     setCustomerInvoiceCalculatedAmountCents(null);
     setCustomerInvoiceCalculatedBillingBreakdown("");
@@ -1783,6 +1830,77 @@ export default function MockCustomerDashboardPage() {
     setCustomerInvoiceIssueFeedback(
       "Review the amount and due date before issuing. Invoice number is created only when you click issue.",
     );
+  }
+
+  function customerInvoiceLineDescriptionForPreview(
+    row: UnbilledCustomerRow,
+    amountEdited: boolean,
+  ) {
+    return amountEdited
+      ? `${row.service} - approved customer amount - ${row.reference}`
+      : customerInvoiceCalculatedLineDescription ||
+          row.invoiceLineDescription ||
+          `${row.service} - ${row.reference} - ${row.route}`;
+  }
+
+  function previewPreparedCustomerInvoice() {
+    if (!customerInvoicePrepRow) {
+      setCustomerInvoiceIssueFeedback("Choose Prepare from Unbilled Customers before previewing an invoice.");
+      return;
+    }
+
+    const amountCents = parseInvoiceAmountToCents(customerInvoiceIssueAmount);
+
+    if (!amountCents) {
+      setCustomerInvoiceIssueFeedback(
+        "Enter the approved customer amount before previewing. This prevents under-billing or over-billing.",
+      );
+      return;
+    }
+
+    if (customerInvoiceAmountEdited && !customerInvoiceAdjustmentReason.trim()) {
+      setCustomerInvoiceIssueFeedback(
+        "Enter adjustment reason before previewing an invoice with an edited amount.",
+      );
+      document
+        .querySelector<HTMLElement>("[data-customer-invoice-override-reason='true']")
+        ?.focus();
+      return;
+    }
+
+    const dueDate = new Date(`${customerInvoiceIssueDueDate}T00:00:00+08:00`);
+    const dueDateLabel = Number.isNaN(dueDate.getTime())
+      ? "Due date to confirm"
+      : formatInvoiceDate(dueDate);
+    const lineDescription = customerInvoiceLineDescriptionForPreview(
+      customerInvoicePrepRow,
+      customerInvoiceAmountEdited,
+    );
+
+    setCustomerInvoicePreview({
+      amountCents,
+      amountLabel: formatInvoiceAmount(amountCents),
+      customerName: customerInvoicePrepRow.customerName,
+      dueDateIso: customerInvoiceIssueDueDate,
+      dueDateLabel,
+      folder: customerInvoiceIssueStatus,
+      lineDescription,
+      previewKey: customerInvoiceCurrentPreviewKey,
+      reference: customerInvoicePrepRow.reference,
+      route: customerInvoicePrepRow.route,
+      service: customerInvoicePrepRow.service,
+      sourceLabel: customerInvoiceAmountEdited
+        ? "Approved edited amount"
+        : customerInvoiceCalculatedSourceLabel || "Prepared unbilled row",
+    });
+    setCustomerInvoiceIssueFeedback(
+      "Preview ready. Review the details below, then issue only when the PDF details are correct.",
+    );
+    window.setTimeout(() => {
+      document
+        .querySelector<HTMLElement>("[data-customer-invoice-issue-download-pdf='true']")
+        ?.focus();
+    }, 50);
   }
 
   function issuePreparedCustomerInvoice() {
@@ -1810,30 +1928,34 @@ export default function MockCustomerDashboardPage() {
       return;
     }
 
+    if (!customerInvoicePreview || !isCustomerInvoicePreviewCurrent) {
+      setCustomerInvoiceIssueFeedback(
+        "Click Preview Invoice first. If you changed amount, due date, folder, or adjustment reason, refresh the preview before issuing.",
+      );
+      document
+        .querySelector<HTMLElement>("[data-customer-invoice-preview-action='true']")
+        ?.focus();
+      return;
+    }
+
     setIssuingCustomerInvoiceKey(customerInvoicePrepRow.key);
 
-    const customerFacingInvoiceLineDescription = customerInvoiceAmountEdited
-      ? `${customerInvoicePrepRow.service} - approved customer amount - ${customerInvoicePrepRow.reference}`
-      : customerInvoiceCalculatedLineDescription ||
-        customerInvoicePrepRow.invoiceLineDescription ||
-        `${customerInvoicePrepRow.service} - ${customerInvoicePrepRow.reference} - ${customerInvoicePrepRow.route}`;
-
     const issuedInvoice = createCustomerLocalInvoiceRecord({
-      amountCents,
+      amountCents: customerInvoicePreview.amountCents,
       billingMonthLabel: formatInvoiceMonth(new Date()),
       customerId: customerInvoicePrepRow.customerId,
       customerName: customerInvoicePrepRow.customerName,
-      dueDateIso: customerInvoiceIssueDueDate,
+      dueDateIso: customerInvoicePreview.dueDateIso,
       lineItems: [
         {
-          amountLabel: formatInvoiceAmount(amountCents),
-          description: customerFacingInvoiceLineDescription,
+          amountLabel: customerInvoicePreview.amountLabel,
+          description: customerInvoicePreview.lineDescription,
         },
       ],
       reference: customerInvoicePrepRow.reference,
       route: customerInvoicePrepRow.route,
       service: customerInvoicePrepRow.service,
-      status: customerInvoiceIssueStatus,
+      status: customerInvoicePreview.folder,
     });
     const nextInvoices = saveCustomerLocalInvoice(issuedInvoice);
 
@@ -1847,6 +1969,7 @@ export default function MockCustomerDashboardPage() {
         : `${issuedInvoice.invoiceNumber} issued and saved in this browser. It now appears in the customer portal invoice folder on this Mac browser.`,
     );
     downloadCustomerInvoicePdf(issuedInvoice);
+    setCustomerInvoicePreview(null);
     window.setTimeout(() => setIssuingCustomerInvoiceKey(""), 700);
   }
 
@@ -2908,14 +3031,16 @@ export default function MockCustomerDashboardPage() {
                   className="mt-3 border-t border-slate-200 pt-3"
                   data-customer-invoice-issue-panel="true"
                 >
-                  <div className="grid gap-2 md:grid-cols-[minmax(9rem,0.8fr)_minmax(9rem,0.8fr)_minmax(9rem,0.7fr)_auto] md:items-end">
+                  <div className="grid gap-2 md:grid-cols-[minmax(9rem,0.8fr)_minmax(9rem,0.8fr)_minmax(9rem,0.7fr)_auto_auto] md:items-end">
                     <label className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
                       Approved amount
                       <input
                         className="mt-1 min-h-9 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950 outline-none focus:border-slate-700"
                         data-customer-invoice-issue-amount="true"
                         inputMode="decimal"
-                        onChange={(event) => setCustomerInvoiceIssueAmount(event.target.value)}
+                        onChange={(event) => {
+                          setCustomerInvoiceIssueAmount(event.target.value);
+                        }}
                         placeholder="e.g. 420.00"
                         value={customerInvoiceIssueAmount}
                       />
@@ -2925,7 +3050,9 @@ export default function MockCustomerDashboardPage() {
                       <input
                         className="mt-1 min-h-9 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950 outline-none focus:border-slate-700"
                         data-customer-invoice-issue-due-date="true"
-                        onChange={(event) => setCustomerInvoiceIssueDueDate(event.target.value)}
+                        onChange={(event) => {
+                          setCustomerInvoiceIssueDueDate(event.target.value);
+                        }}
                         type="date"
                         value={customerInvoiceIssueDueDate}
                       />
@@ -2935,9 +3062,9 @@ export default function MockCustomerDashboardPage() {
                       <select
                         className="mt-1 min-h-9 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950 outline-none focus:border-slate-700"
                         data-customer-invoice-issue-status="true"
-                        onChange={(event) =>
-                          setCustomerInvoiceIssueStatus(event.target.value as CustomerLocalInvoiceStatus)
-                        }
+                        onChange={(event) => {
+                          setCustomerInvoiceIssueStatus(event.target.value as CustomerLocalInvoiceStatus);
+                        }}
                         value={customerInvoiceIssueStatus}
                       >
                         <option value="Unpaid">Unpaid</option>
@@ -2950,7 +3077,9 @@ export default function MockCustomerDashboardPage() {
                         <input
                           className="mt-1 min-h-9 w-full rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950 outline-none focus:border-amber-700"
                           data-customer-invoice-override-reason="true"
-                          onChange={(event) => setCustomerInvoiceAdjustmentReason(event.target.value)}
+                          onChange={(event) => {
+                            setCustomerInvoiceAdjustmentReason(event.target.value);
+                          }}
                           placeholder="e.g. approved discount, waiting time waived, corrected rate"
                           value={customerInvoiceAdjustmentReason}
                         />
@@ -2958,20 +3087,91 @@ export default function MockCustomerDashboardPage() {
                     ) : null}
                     <button
                       className={`min-h-9 rounded-md border px-3 py-2 text-sm font-bold transition ${
-                        issuingCustomerInvoiceKey === customerInvoicePrepRow.key
+                        isCustomerInvoicePreviewCurrent
                           ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-                          : "border-slate-900 bg-slate-900 text-white hover:bg-slate-700"
+                          : customerInvoicePreview
+                            ? "border-amber-300 bg-amber-50 text-amber-900 hover:border-amber-500"
+                            : "border-slate-300 bg-white text-slate-800 hover:border-slate-600"
                       }`}
                       data-customer-invoice-prep-next-action="true"
+                      data-customer-invoice-preview-action="true"
+                      onClick={previewPreparedCustomerInvoice}
+                      type="button"
+                    >
+                      {isCustomerInvoicePreviewCurrent
+                        ? "Previewed"
+                        : customerInvoicePreview
+                          ? "Refresh Preview"
+                          : "Preview Invoice"}
+                    </button>
+                    <button
+                      className={`min-h-9 rounded-md border px-3 py-2 text-sm font-bold transition ${
+                        issuingCustomerInvoiceKey === customerInvoicePrepRow.key
+                          ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                          : !isCustomerInvoicePreviewCurrent
+                            ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                          : "border-slate-900 bg-slate-900 text-white hover:bg-slate-700"
+                      }`}
+                      aria-disabled={!isCustomerInvoicePreviewCurrent}
                       data-customer-invoice-issue-download-pdf="true"
                       onClick={issuePreparedCustomerInvoice}
                       type="button"
                     >
                       {issuingCustomerInvoiceKey === customerInvoicePrepRow.key
                         ? "Issued"
-                        : "Issue Invoice + PDF"}
+                        : isCustomerInvoicePreviewCurrent
+                          ? "Issue Invoice + PDF"
+                          : "Preview first"}
                     </button>
                   </div>
+                  {customerInvoicePreview ? (
+                    <div
+                      className={`mt-3 rounded-md border px-3 py-2 text-xs leading-5 ${
+                        isCustomerInvoicePreviewCurrent
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-950"
+                          : "border-amber-200 bg-amber-50 text-amber-950"
+                      }`}
+                      data-customer-invoice-preview-card="true"
+                    >
+                      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="font-bold uppercase tracking-[0.08em]">
+                          Invoice Preview {isCustomerInvoicePreviewCurrent ? "Ready" : "Needs Refresh"}
+                        </p>
+                        <p className="font-semibold" data-customer-invoice-preview-amount="true">
+                          {customerInvoicePreview.amountLabel} / {customerInvoicePreview.folder}
+                        </p>
+                      </div>
+                      <dl className="mt-2 grid gap-x-4 gap-y-1 sm:grid-cols-2">
+                        <div>
+                          <dt className="font-bold text-slate-600">Customer</dt>
+                          <dd className="font-semibold" data-customer-invoice-preview-customer="true">
+                            {customerInvoicePreview.customerName}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="font-bold text-slate-600">Due date</dt>
+                          <dd className="font-semibold">{customerInvoicePreview.dueDateLabel}</dd>
+                        </div>
+                        <div>
+                          <dt className="font-bold text-slate-600">Reference</dt>
+                          <dd className="font-semibold">{customerInvoicePreview.reference}</dd>
+                        </div>
+                        <div>
+                          <dt className="font-bold text-slate-600">Source</dt>
+                          <dd className="font-semibold">{customerInvoicePreview.sourceLabel}</dd>
+                        </div>
+                      </dl>
+                      <p className="mt-2 font-semibold" data-customer-invoice-preview-line="true">
+                        {customerInvoicePreview.lineDescription}
+                      </p>
+                      <p className="mt-1 text-slate-700">{customerInvoicePreview.route}</p>
+                      {!isCustomerInvoicePreviewCurrent ? (
+                        <p className="mt-2 font-bold text-amber-800" data-customer-invoice-preview-stale="true">
+                          Amount, due date, folder, or adjustment reason changed. Refresh preview before issuing.
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <p
                     aria-live="polite"
                     className="mt-2 text-xs font-semibold leading-5 text-slate-600"

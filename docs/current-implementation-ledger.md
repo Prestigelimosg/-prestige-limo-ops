@@ -350,6 +350,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The issue action creates a unique `INV-YYYYMMDD-####` invoice number only at click time, saves the invoice record to this Mac browser storage, and starts a real PDF download generated in-browser.
 - The customer portal `Invoices` tab reads the same browser-local invoice records and shows them under compact `Unpaid` and `Paid` monthly folders with PDF download buttons.
 - Downloaded invoice PDFs embed the safe Company Profile JPEG logo when available and keep company name, contact, accounting email, address, and footer terms in the same customer-facing profile path.
+- Admin must click `Preview Invoice` before `Issue Invoice + PDF`; changing amount, due date, folder, or adjustment reason makes the preview stale and blocks issue until refreshed.
 - The amount input is required before issue so admin must review the charge before invoice number/PDF creation.
 - Issued local invoices show `Pay` for unpaid invoices, then `Paid` plus `Mark Unpaid` so an accidental local paid click can be reversed before real payment sync exists.
 - This pass does not send email, create Stripe/payment links, write bank/payment/provider records, write Supabase rows, change env, apply migrations, or create cross-device customer portal sync.

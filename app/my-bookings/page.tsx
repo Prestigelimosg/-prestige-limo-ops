@@ -8,6 +8,11 @@ import {
   type CustomerPortalBooking,
 } from "../../lib/customer-portal-saved-bookings-adapter";
 import {
+  fetchCustomerPortalInvoicePdf,
+  loadCustomerPortalInvoiceRecords,
+  type CustomerPortalInvoiceRecord,
+} from "../../lib/customer-portal-invoices-adapter";
+import {
   applyCustomerBookingLocalVoiceDraftFieldFillToForm,
   getCustomerBookingSpeechRecognitionConstructor,
   transcriptFromCustomerBookingSpeechEvent,
@@ -19,6 +24,7 @@ import {
   defaultCompanyProfile,
   type PublicCompanyProfile,
 } from "../../lib/company-profile-shared";
+import { loadPublicCompanyProfile } from "../../lib/public-company-profile-adapter";
 import {
   downloadCustomerInvoicePdf,
   readCustomerLocalInvoices,
@@ -27,13 +33,10 @@ import {
 
 type BookingFilter = "Cancelled" | "Completed" | "Upcoming";
 type InvoiceFolder = "Paid" | "Unpaid";
+type InvoiceDownloadState = "downloaded" | "downloading" | "failed";
 type PortalSection = "New Booking Request" | "Invoices" | BookingFilter;
 type PortalBookingsLoadState = "blocked" | "loading" | "ready";
-
-type CustomerPortalInvoiceRecord = CustomerLocalInvoiceRecord & {
-  pdfFilename?: string;
-  storageSource?: "local" | "server";
-};
+type PortalInvoicesLoadState = "blocked" | "loading" | "local-fallback" | "stored";
 
 type BookingRequestForm = {
   companyName: string;
@@ -96,8 +99,6 @@ const bookingFilters: BookingFilter[] = ["Upcoming", "Completed", "Cancelled"];
 const bookingFilterSet = new Set<PortalSection>(bookingFilters);
 const invoiceFolders: InvoiceFolder[] = ["Unpaid", "Paid"];
 const portalSections: PortalSection[] = ["New Booking Request", "Invoices", ...bookingFilters];
-const customerInvoicesApiPath = "/api/customer-invoices";
-const customerInvoicePdfApiPath = "/api/customer-invoice-pdf";
 
 const initialBookingPages: Record<BookingFilter, number> = {
   Cancelled: 1,
@@ -256,10 +257,6 @@ function displayLocalInvoice(invoice: CustomerLocalInvoiceRecord): CustomerPorta
   };
 }
 
-function safePortalInvoiceApiRecords(value: unknown) {
-  return Array.isArray(value) ? (value as CustomerPortalInvoiceRecord[]) : [];
-}
-
 function mergePortalInvoices(
   primaryRecords: CustomerPortalInvoiceRecord[],
   fallbackRecords: CustomerPortalInvoiceRecord[],
@@ -301,6 +298,10 @@ export default function CustomerPortalPage() {
   const [selectedBookingMonths, setSelectedBookingMonths] =
     useState<Record<BookingFilter, string>>(initialSelectedBookingMonths);
   const [customerInvoiceRecords, setCustomerInvoiceRecords] = useState<CustomerPortalInvoiceRecord[]>([]);
+  const [customerInvoicesLoadState, setCustomerInvoicesLoadState] =
+    useState<PortalInvoicesLoadState>("loading");
+  const [invoiceDownloadStates, setInvoiceDownloadStates] =
+    useState<Record<string, InvoiceDownloadState>>({});
   const [bookingRequestForm, setBookingRequestForm] = useState<BookingRequestForm>(initialBookingRequestForm);
   const [pickupTimeDraft, setPickupTimeDraft] = useState(() => splitPickupTime(initialBookingRequestForm.pickupTime));
   const [missingBookingRequestFields, setMissingBookingRequestFields] = useState<Array<keyof BookingRequestForm>>([]);
@@ -344,27 +345,40 @@ export default function CustomerPortalPage() {
 
     return byFolder;
   }, [customerInvoiceRecords]);
+  const storedCustomerInvoiceCount = useMemo(
+    () => customerInvoiceRecords.filter((invoice) => invoice.storageSource === "server").length,
+    [customerInvoiceRecords],
+  );
+  const customerInvoiceAccessMessage = (() => {
+    if (customerInvoicesLoadState === "loading") {
+      return "Checking this customer account for stored invoice PDFs.";
+    }
+
+    if (customerInvoicesLoadState === "stored") {
+      return storedCustomerInvoiceCount > 0
+        ? `Stored invoice PDFs appear here when this customer portal session is active. ${storedCustomerInvoiceCount} stored PDF${storedCustomerInvoiceCount === 1 ? "" : "s"} ready.`
+        : "Stored invoice PDFs appear here when this customer portal session is active. No invoice PDFs are ready yet.";
+    }
+
+    if (customerInvoicesLoadState === "local-fallback") {
+      return "Stored invoice PDFs appear here when this customer portal session is active. Showing local PDFs saved on this Mac until the secure account session is active.";
+    }
+
+    return "Sign in to view stored invoice PDFs for this customer account. This folder is view and download only.";
+  })();
 
   useEffect(() => {
     const controller = new AbortController();
 
     async function loadCompanyProfile() {
-      try {
-        const response = await fetch("/api/company-profile", {
-          cache: "no-store",
-          signal: controller.signal,
-        });
-        const data = (await response.json()) as {
-          ok?: boolean;
-          profile?: PublicCompanyProfile;
-        };
+      const profile = await loadPublicCompanyProfile({ signal: controller.signal });
 
-        if (response.ok && data.ok && data.profile) {
-          setCompanyProfile(data.profile);
-        }
-      } catch {
-        setCompanyProfile(defaultCompanyProfile);
+      if (profile) {
+        setCompanyProfile(profile);
+        return;
       }
+
+      setCompanyProfile(defaultCompanyProfile);
     }
 
     void loadCompanyProfile();
@@ -379,19 +393,11 @@ export default function CustomerPortalPage() {
       const localInvoices = readCustomerLocalInvoices().map(displayLocalInvoice);
 
       try {
-        const response = await fetch(customerInvoicesApiPath, {
-          cache: "no-store",
-          headers: {
-            "x-prestige-customer-purpose": "customer-saved-bookings-read",
-          },
-          signal: controller.signal,
-        });
-        const result = await response.json().catch(() => null);
+        const storedInvoices = await loadCustomerPortalInvoiceRecords({ signal: controller.signal });
 
-        if (response.ok && result?.ok) {
-          setCustomerInvoiceRecords(
-            mergePortalInvoices(safePortalInvoiceApiRecords(result.invoices), localInvoices),
-          );
+        if (storedInvoices) {
+          setCustomerInvoiceRecords(mergePortalInvoices(storedInvoices, localInvoices));
+          setCustomerInvoicesLoadState("stored");
           return;
         }
       } catch {
@@ -401,6 +407,7 @@ export default function CustomerPortalPage() {
       }
 
       setCustomerInvoiceRecords(localInvoices);
+      setCustomerInvoicesLoadState(localInvoices.length > 0 ? "local-fallback" : "blocked");
     }
 
     void loadCustomerInvoices();
@@ -582,25 +589,43 @@ export default function CustomerPortalPage() {
   }
 
   async function downloadPortalInvoice(invoice: CustomerPortalInvoiceRecord) {
-    if (invoice.storageSource === "server") {
-      const response = await fetch(
-        `${customerInvoicePdfApiPath}/${encodeURIComponent(invoice.invoiceNumber)}`,
-        {
-          cache: "no-store",
-          headers: {
-            "x-prestige-customer-purpose": "customer-saved-bookings-read",
-          },
-        },
-      );
+    setInvoiceDownloadStates((current) => ({
+      ...current,
+      [invoice.invoiceNumber]: "downloading",
+    }));
 
-      if (response.ok) {
-        downloadBrowserBlob(await response.blob(), invoice.pdfFilename || `${invoice.invoiceNumber}.pdf`);
+    try {
+      if (invoice.storageSource === "server") {
+        const pdf = await fetchCustomerPortalInvoicePdf(invoice.invoiceNumber);
+
+        if (!pdf) {
+          throw new Error("Stored invoice PDF download failed safely.");
+        }
+
+        downloadBrowserBlob(pdf.blob, pdf.filename || invoice.pdfFilename || `${invoice.invoiceNumber}.pdf`);
+      } else {
+        await downloadCustomerInvoicePdf(invoice, companyProfile);
       }
 
-      return;
-    }
+      setInvoiceDownloadStates((current) => ({
+        ...current,
+        [invoice.invoiceNumber]: "downloaded",
+      }));
+    } catch {
+      setInvoiceDownloadStates((current) => ({
+        ...current,
+        [invoice.invoiceNumber]: "failed",
+      }));
+    } finally {
+      window.setTimeout(() => {
+        setInvoiceDownloadStates((current) => {
+          const next = { ...current };
+          delete next[invoice.invoiceNumber];
 
-    await downloadCustomerInvoicePdf(invoice, companyProfile);
+          return next;
+        });
+      }, 1500);
+    }
   }
 
   function updateBookingRequestField(field: keyof BookingRequestForm, value: string) {
@@ -1148,6 +1173,13 @@ export default function CustomerPortalPage() {
               <p className="text-sm leading-6 text-slate-600">
                 Invoice folders are grouped by month and separated by unpaid and paid status.
               </p>
+              <p
+                className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold leading-5 text-slate-700"
+                data-customer-portal-invoice-access-state={customerInvoicesLoadState}
+                data-customer-portal-invoice-access-summary="true"
+              >
+                {customerInvoiceAccessMessage}
+              </p>
             </div>
 
             <div className="mt-3 grid gap-3 lg:grid-cols-2">
@@ -1194,7 +1226,10 @@ export default function CustomerPortalPage() {
                         </thead>
                         <tbody>
                           {folderRecords.length > 0 ? (
-                            folderRecords.map((invoice) => (
+                            folderRecords.map((invoice) => {
+                              const downloadState = invoiceDownloadStates[invoice.invoiceNumber];
+
+                              return (
                               <tr
                                 className="border-b border-slate-100 last:border-b-0"
                                 data-customer-portal-invoice-row={invoice.invoiceNumber}
@@ -1212,16 +1247,31 @@ export default function CustomerPortalPage() {
                                 </td>
                                 <td className="px-3 py-2 text-right">
                                   <button
-                                    className="min-h-8 rounded-md border border-slate-300 bg-white px-2 text-xs font-bold text-slate-800 transition hover:border-slate-600"
+                                    className={[
+                                      "min-h-8 rounded-md border px-2 text-xs font-bold transition disabled:cursor-wait",
+                                      downloadState === "downloaded"
+                                        ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                                        : downloadState === "failed"
+                                          ? "border-red-200 bg-red-50 text-red-900 hover:border-red-300"
+                                          : "border-slate-300 bg-white text-slate-800 hover:border-slate-600",
+                                    ].join(" ")}
                                     data-customer-portal-invoice-download={invoice.invoiceNumber}
+                                    disabled={downloadState === "downloading"}
                                     onClick={() => downloadPortalInvoice(invoice)}
                                     type="button"
                                   >
-                                    Download PDF
+                                    {downloadState === "downloading"
+                                      ? "Downloading"
+                                      : downloadState === "downloaded"
+                                        ? "Downloaded"
+                                        : downloadState === "failed"
+                                          ? "Try again"
+                                          : "Download PDF"}
                                   </button>
                                 </td>
                               </tr>
-                            ))
+                              );
+                            })
                           ) : (
                             <tr data-customer-portal-invoice-empty-row={folderKey}>
                               <td className="px-3 py-3 text-sm text-slate-600" colSpan={4}>
@@ -1233,17 +1283,17 @@ export default function CustomerPortalPage() {
                       </table>
                     </div>
                     {folderRecords.length === 0 ? (
-                    <div className="flex justify-end border-t border-slate-100 px-3 py-2">
-                      <button
-                        aria-disabled="true"
-                        className="min-h-9 rounded-md border border-slate-200 bg-slate-100 px-3 text-sm font-semibold text-slate-500"
-                        data-customer-portal-invoice-download={folderKey}
-                        disabled
-                        type="button"
-                      >
-                        Download PDF
-                      </button>
-                    </div>
+                      <div className="flex justify-end border-t border-slate-100 px-3 py-2">
+                        <button
+                          aria-disabled="true"
+                          className="min-h-9 rounded-md border border-slate-200 bg-slate-100 px-3 text-sm font-semibold text-slate-500"
+                          data-customer-portal-invoice-download={folderKey}
+                          disabled
+                          type="button"
+                        >
+                          Download PDF
+                        </button>
+                      </div>
                     ) : null}
                   </section>
                 );

@@ -11,6 +11,8 @@ const customerAdapterPaths = [
   "lib/customer-booking-request-adapter.ts",
   "lib/customer-booking-memory-adapter.ts",
   "lib/customer-portal-saved-bookings-adapter.ts",
+  "lib/customer-portal-invoices-adapter.ts",
+  "lib/public-company-profile-adapter.ts",
 ];
 const driverPagePath = "app/driver-job/[token]/page.tsx";
 
@@ -211,12 +213,33 @@ for (const fragment of [
   assertIncludes(portalAdapter, fragment, `customer portal saved bookings adapter caller ${fragment}`);
 }
 
+const portalInvoicesAdapter = files["lib/customer-portal-invoices-adapter.ts"];
+for (const fragment of [
+  "fetcher(customerPortalInvoicesApiPath",
+  "fetcher(\n      `${customerPortalInvoicePdfApiPath}/${encodeURIComponent(invoiceNumber)}`",
+  'cache: "no-store"',
+  'credentials: "same-origin"',
+  '"x-prestige-customer-purpose": "customer-saved-bookings-read"',
+]) {
+  assertIncludes(portalInvoicesAdapter, fragment, `customer portal invoices adapter caller ${fragment}`);
+}
+
+const publicProfileAdapter = files["lib/public-company-profile-adapter.ts"];
+for (const fragment of [
+  "fetcher(publicCompanyProfileApiPath",
+  'cache: "no-store"',
+]) {
+  assertIncludes(publicProfileAdapter, fragment, `public company profile adapter caller ${fragment}`);
+}
+
 for (const [label, source] of [
   ["/book page", bookingPage],
   ["/my-bookings page", portalPage],
   ["customer booking request adapter", requestAdapter],
   ["customer booking memory adapter", memoryAdapter],
   ["customer portal saved bookings adapter", portalAdapter],
+  ["customer portal invoices adapter", portalInvoicesAdapter],
+  ["public company profile adapter", publicProfileAdapter],
 ]) {
   assertExcludes(source, forbiddenClientAuthPattern, `${label} manual auth/header/env-token plumbing`);
   assertExcludes(source, /localStorage|sessionStorage|document\.cookie|navigator\.credentials/i, `${label} browser credential storage`);

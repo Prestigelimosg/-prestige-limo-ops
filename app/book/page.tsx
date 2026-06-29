@@ -28,6 +28,7 @@ import {
   defaultCompanyProfile,
   type PublicCompanyProfile,
 } from "../../lib/company-profile-shared";
+import { loadPublicCompanyProfile } from "../../lib/public-company-profile-adapter";
 
 const serviceOptions = [
   "Airport Arrival",
@@ -207,22 +208,14 @@ export default function CustomerBookingPage() {
     const controller = new AbortController();
 
     async function loadCompanyProfile() {
-      try {
-        const response = await fetch("/api/company-profile", {
-          cache: "no-store",
-          signal: controller.signal,
-        });
-        const data = (await response.json()) as {
-          ok?: boolean;
-          profile?: PublicCompanyProfile;
-        };
+      const profile = await loadPublicCompanyProfile({ signal: controller.signal });
 
-        if (response.ok && data.ok && data.profile) {
-          setCompanyProfile(data.profile);
-        }
-      } catch {
-        setCompanyProfile(defaultCompanyProfile);
+      if (profile) {
+        setCompanyProfile(profile);
+        return;
       }
+
+      setCompanyProfile(defaultCompanyProfile);
     }
 
     void loadCompanyProfile();

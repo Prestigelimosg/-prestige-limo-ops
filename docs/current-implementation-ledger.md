@@ -345,6 +345,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 - Customer `/book` and `/my-bookings` request forms both require contact number, passenger name, pickup date, pickup time, pickup location, and drop-off location before submission.
 - The customer portal has a compact `Invoices` section with `Unpaid` and `Paid` folders grouped by month, reading stored customer invoice records through the existing secure customer portal session boundary and using browser-local invoices only as fallback.
+- Customer portal stored invoice and PDF reads explicitly use same-origin credentials so the secure HttpOnly account session is sent without exposing token plumbing in the page.
+- The portal invoice section shows whether the customer is seeing stored account PDFs, local fallback PDFs from this Mac, or a sign-in-required state, and PDF buttons change through Downloading, Downloaded, or Try again.
 - The portal invoice folders do not import admin mock customer data and do not call admin APIs, Stripe/payment providers, email/SMS/WhatsApp providers, or write APIs.
 - Admin Customers keeps the Unbilled Customers checkpoint as one dropdown plus a compact scrollable table; the duplicate wording block below the dropdown is removed.
 - Customer saved-booking reads remain booking-only and strip invoice/payment/PDF/finance/internal fields; invoice rows now use their own customer-scoped source and PDF download route filtered by the portal customer account.
@@ -357,6 +359,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Admin Customers can issue a stored customer invoice from the prepared Unbilled Customers row after the approved amount, due date, folder, and optional customer email are reviewed.
 - The issue action creates a unique `INV-YYYYMMDD-####` invoice number only at click time, writes one `customer_invoice_records` row with the generated PDF bytes, and starts a PDF download from the stored server record.
 - The customer portal `Invoices` tab reads the stored invoice records under compact `Unpaid` and `Paid` monthly folders when the secure portal session is active, with browser-local invoices kept only as a fallback on the same Mac.
+- The customer portal invoice/PDF reads explicitly send same-origin credentials, keep the secure account session invisible to the page, and show stored/local/sign-in state plus Downloading/Downloaded/Try again button feedback.
 - Downloaded invoice PDFs embed the safe Company Profile JPEG logo when available and keep company name, contact, accounting email, address, bank/payment instructions, and footer terms in the same customer-facing profile path.
 - Admin must click `Preview Invoice` before `Issue Invoice + PDF`; changing amount, due date, folder, or adjustment reason makes the preview stale and blocks issue until refreshed.
 - The amount input is required before issue so admin must review the charge before invoice number/PDF creation.
@@ -1662,6 +1665,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Public customer/driver browser caller boundaries are guarded across `/book`, `/my-bookings`, and `/driver-job/[token]` client surfaces plus their customer-safe adapters.
 - This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.
 - `/book` and `/my-bookings` must delegate public API calls to customer-safe adapters instead of owning raw fetch/session plumbing.
+- Public Company Profile reads and customer portal invoice/PDF reads now live in dedicated customer-safe adapters, so `/book` and `/my-bookings` pages do not own raw fetch calls.
 - Customer client adapters must use `cache: "no-store"`, `credentials: "same-origin"`, and purpose headers while never manually attaching Cookie, Authorization, customer session-token, admin purpose, or server env-token plumbing.
 - `/driver-job/[token]` must keep driver API calls no-store and limited to safe job GET, token-scoped driver-details PATCH, notification GET, issue-alert POST with `issue_type`, and status PATCH with `status` only.
 - Driver client code must not expose customer price, billing, invoice/payment, payout comparisons, PayNow payout details, internal finance/admin notes, parser/debug internals, token secrets, or mock QA/dev archive fields.

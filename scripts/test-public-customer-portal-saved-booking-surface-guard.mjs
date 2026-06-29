@@ -238,7 +238,13 @@ assertIncludes(
 
 assertSameList(extractRowActionValues(portalPage), allowedRowActions, "/my-bookings row action values");
 
-const pdfButtonBlock = blockBetween(portalPage, 'aria-disabled="true"', "</button>");
+const pdfRowActionIndex = portalPage.indexOf('data-customer-portal-row-action="pdf"');
+assert.notEqual(pdfRowActionIndex, -1, "Missing /my-bookings booking-row disabled PDF control.");
+const pdfButtonStart = portalPage.lastIndexOf("<button", pdfRowActionIndex);
+const pdfButtonEnd = portalPage.indexOf("</button>", pdfRowActionIndex);
+assert.notEqual(pdfButtonStart, -1, "Missing /my-bookings booking-row PDF button start.");
+assert.notEqual(pdfButtonEnd, -1, "Missing /my-bookings booking-row PDF button end.");
+const pdfButtonBlock = portalPage.slice(pdfButtonStart, pdfButtonEnd + "</button>".length);
 for (const fragment of [
   'aria-disabled="true"',
   'data-customer-portal-row-action="pdf"',
@@ -259,7 +265,7 @@ const editHandlerBlock = blockBetween(
 );
 assertIncludes(
   editHandlerBlock,
-  "Edit request noted for review. Prestige Limo staff will confirm before anything changes.",
+  "Edit request noted for review. ${companyName} staff will confirm before anything changes.",
   "/my-bookings local edit review feedback",
 );
 assertExcludes(editHandlerBlock, /\bfetch\s*\(|loadCustomerPortalSavedBookings|submitCustomerBookingRequest|new Request\(/, "/my-bookings edit handler API call");
@@ -267,11 +273,11 @@ assertExcludes(editHandlerBlock, /\bfetch\s*\(|loadCustomerPortalSavedBookings|s
 const cancelHandlerBlock = blockBetween(
   portalPage,
   "function handleCancelRequest(booking: CustomerPortalBooking)",
-  "function updateBookingRequestField",
-);
+  "async function downloadPortalInvoice",
+).replace("async function downloadPortalInvoice", "");
 assertIncludes(
   cancelHandlerBlock,
-  "Cancel request noted for review. Your booking is not cancelled until Prestige Limo confirms.",
+  "Cancel request noted for review. Your booking is not cancelled until ${companyName} confirms.",
   "/my-bookings local cancel review feedback",
 );
 assertExcludes(cancelHandlerBlock, /\bfetch\s*\(|loadCustomerPortalSavedBookings|submitCustomerBookingRequest|new Request\(/, "/my-bookings cancel handler API call");
@@ -304,11 +310,21 @@ for (const fragment of [
   assertIncludes(detailBlock, fragment, `/my-bookings safe detail binding ${fragment}`);
 }
 
-const portalPageWithoutDisabledPdf = portalPage.replace(pdfButtonBlock, "");
+const bookingResultsBlock = blockBetween(
+  portalPage,
+  'aria-labelledby="booking-search-title"',
+  "{expandedBooking ? (",
+);
+const savedBookingVisibleSource = [
+  bookingResultsBlock.replace(pdfButtonBlock, ""),
+  detailBlock,
+  editHandlerBlock,
+  cancelHandlerBlock,
+].join("\n");
 assertExcludes(
-  portalPageWithoutDisabledPdf,
+  savedBookingVisibleSource,
   unsafePortalSurfacePattern,
-  "/my-bookings saved-booking visible/source surface outside disabled PDF no-op",
+  "/my-bookings saved-booking visible/source surface outside invoices tab and disabled PDF no-op",
 );
 
 assertSameList(

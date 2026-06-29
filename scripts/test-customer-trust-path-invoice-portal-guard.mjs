@@ -5,6 +5,7 @@ const bookPagePath = "app/book/page.tsx";
 const portalPagePath = "app/my-bookings/page.tsx";
 const customersPagePath = "app/customers/page.tsx";
 const savedBookingsAdapterPath = "lib/customer-portal-saved-bookings-adapter.ts";
+const portalInvoicesAdapterPath = "lib/customer-portal-invoices-adapter.ts";
 const hourlyBillingPath = "lib/hourly-billing.ts";
 const ledgerPath = "docs/current-implementation-ledger.md";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
@@ -37,6 +38,7 @@ const [
   portalPage,
   customersPage,
   savedBookingsAdapter,
+  portalInvoicesAdapter,
   hourlyBilling,
   ledger,
   preactivationSuite,
@@ -45,6 +47,7 @@ const [
   readFile(portalPagePath, "utf8"),
   readFile(customersPagePath, "utf8"),
   readFile(savedBookingsAdapterPath, "utf8"),
+  readFile(portalInvoicesAdapterPath, "utf8"),
   readFile(hourlyBillingPath, "utf8"),
   readFile(ledgerPath, "utf8"),
   readFile(preactivationSuitePath, "utf8"),
@@ -108,18 +111,33 @@ assertIncludes(
 for (const fragment of [
   'type InvoiceFolder = "Paid" | "Unpaid";',
   'type PortalSection = "New Booking Request" | "Invoices" | BookingFilter;',
-  "type CustomerPortalInvoiceRecord = CustomerLocalInvoiceRecord & {",
   'const invoiceFolders: InvoiceFolder[] = ["Unpaid", "Paid"];',
   'const portalSections: PortalSection[] = ["New Booking Request", "Invoices", ...bookingFilters];',
-  'const customerInvoicesApiPath = "/api/customer-invoices";',
-  'const customerInvoicePdfApiPath = "/api/customer-invoice-pdf";',
   "const [customerInvoiceRecords, setCustomerInvoiceRecords] = useState<CustomerPortalInvoiceRecord[]>([]);",
+  "const [customerInvoicesLoadState, setCustomerInvoicesLoadState]",
+  "const [invoiceDownloadStates, setInvoiceDownloadStates]",
+  "loadCustomerPortalInvoiceRecords",
+  "fetchCustomerPortalInvoicePdf",
+  "Sign in to view stored invoice PDFs for this customer account.",
 ]) {
   assertIncludes(portalPage, fragment, `customer portal invoice source fragment ${fragment}`);
 }
 
 for (const fragment of [
+  "export type CustomerPortalInvoiceRecord = CustomerLocalInvoiceRecord & {",
+  'export const customerPortalInvoicesApiPath = "/api/customer-invoices";',
+  'export const customerPortalInvoicePdfApiPath = "/api/customer-invoice-pdf";',
+  "safePortalInvoiceApiRecords(result.invoices)",
+  'credentials: "same-origin"',
+  '"x-prestige-customer-purpose": "customer-saved-bookings-read"',
+]) {
+  assertIncludes(portalInvoicesAdapter, fragment, `customer portal invoice adapter fragment ${fragment}`);
+}
+
+for (const fragment of [
   'data-customer-portal-invoice-folders="true"',
+  'data-customer-portal-invoice-access-state={customerInvoicesLoadState}',
+  'data-customer-portal-invoice-access-summary="true"',
   'data-customer-portal-invoice-folder={folderKey}',
   'data-customer-portal-invoice-folder-count={folderKey}',
   'data-customer-portal-invoice-month-group={folderKey}',
@@ -130,6 +148,9 @@ for (const fragment of [
   "downloadPortalInvoice(invoice)",
   "Stored PDF",
   "Local PDF",
+  "Downloading",
+  "Downloaded",
+  "Try again",
   "No {folder.toLowerCase()} invoice PDFs are available in this customer folder yet.",
   "Download PDF",
   "disabled",
@@ -191,6 +212,8 @@ for (const forbiddenPattern of [
 for (const phrase of [
   "Customer `/book` and `/my-bookings` request forms both require contact number, passenger name, pickup date, pickup time, pickup location, and drop-off location before submission.",
   "The customer portal has a compact `Invoices` section with `Unpaid` and `Paid` folders grouped by month, reading stored customer invoice records through the existing secure customer portal session boundary and using browser-local invoices only as fallback.",
+  "Customer portal stored invoice and PDF reads explicitly use same-origin credentials so the secure HttpOnly account session is sent without exposing token plumbing in the page.",
+  "The portal invoice section shows whether the customer is seeing stored account PDFs, local fallback PDFs from this Mac, or a sign-in-required state, and PDF buttons change through Downloading, Downloaded, or Try again.",
   "The portal invoice folders do not import admin mock customer data and do not call admin APIs, Stripe/payment providers, email/SMS/WhatsApp providers, or write APIs.",
   "Admin Customers keeps the Unbilled Customers checkpoint as one dropdown plus a compact scrollable table; the duplicate wording block below the dropdown is removed.",
   "Customer saved-booking reads remain booking-only and strip invoice/payment/PDF/finance/internal fields; invoice rows now use their own customer-scoped source and PDF download route filtered by the portal customer account.",

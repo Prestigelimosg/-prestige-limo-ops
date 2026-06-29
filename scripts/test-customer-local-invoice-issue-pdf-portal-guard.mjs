@@ -12,6 +12,7 @@ const customerPdfRoutePath = "app/api/customer-invoice-pdf/[invoiceNumber]/route
 const migrationPath = "supabase/migrations/202606290002_customer_invoice_records_foundation.sql";
 const customersPagePath = "app/customers/page.tsx";
 const portalPagePath = "app/my-bookings/page.tsx";
+const portalInvoicesAdapterPath = "lib/customer-portal-invoices-adapter.ts";
 const ledgerPath = "docs/current-implementation-ledger.md";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
 const guardScript = "scripts/test-customer-local-invoice-issue-pdf-portal-guard.mjs";
@@ -50,6 +51,7 @@ const [
   migration,
   customersPage,
   portalPage,
+  portalInvoicesAdapter,
   ledger,
   preactivationSuite,
 ] = await Promise.all([
@@ -64,6 +66,7 @@ const [
   readFile(migrationPath, "utf8"),
   readFile(customersPagePath, "utf8"),
   readFile(portalPagePath, "utf8"),
+  readFile(portalInvoicesAdapterPath, "utf8"),
   readFile(ledgerPath, "utf8"),
   readFile(preactivationSuitePath, "utf8"),
 ]);
@@ -243,17 +246,38 @@ for (const forbiddenFragment of [
 }
 
 for (const fragment of [
-  "type CustomerPortalInvoiceRecord = CustomerLocalInvoiceRecord & {",
-  "const customerInvoicesApiPath = \"/api/customer-invoices\";",
-  "const customerInvoicePdfApiPath = \"/api/customer-invoice-pdf\";",
-  "safePortalInvoiceApiRecords(result.invoices)",
-  '"x-prestige-customer-purpose": "customer-saved-bookings-read"',
+  "const [customerInvoicesLoadState, setCustomerInvoicesLoadState]",
+  "const [invoiceDownloadStates, setInvoiceDownloadStates]",
+  "loadCustomerPortalInvoiceRecords",
+  "fetchCustomerPortalInvoicePdf",
   "downloadPortalInvoice(invoice)",
   "Stored PDF",
   "Local PDF",
   "Stored invoice PDFs appear here when this customer portal session is active.",
+  "Sign in to view stored invoice PDFs for this customer account.",
 ]) {
   assertIncludes(portalPage, fragment, `portal stored invoice fragment ${fragment}`);
+}
+
+for (const fragment of [
+  "export type CustomerPortalInvoiceRecord = CustomerLocalInvoiceRecord & {",
+  'export const customerPortalInvoicesApiPath = "/api/customer-invoices";',
+  'export const customerPortalInvoicePdfApiPath = "/api/customer-invoice-pdf";',
+  "safePortalInvoiceApiRecords(result.invoices)",
+  'credentials: "same-origin"',
+  '"x-prestige-customer-purpose": "customer-saved-bookings-read"',
+]) {
+  assertIncludes(portalInvoicesAdapter, fragment, `portal stored invoice adapter fragment ${fragment}`);
+}
+
+for (const fragment of [
+  'data-customer-portal-invoice-access-state={customerInvoicesLoadState}',
+  'data-customer-portal-invoice-access-summary="true"',
+  "Downloading",
+  "Downloaded",
+  "Try again",
+]) {
+  assertIncludes(portalInvoiceSection, fragment, `portal stored invoice state fragment ${fragment}`);
 }
 
 for (const forbiddenPattern of [
@@ -268,6 +292,7 @@ for (const phrase of [
   "Admin Customers can issue a stored customer invoice from the prepared Unbilled Customers row after the approved amount, due date, folder, and optional customer email are reviewed.",
   "The issue action creates a unique `INV-YYYYMMDD-####` invoice number only at click time, writes one `customer_invoice_records` row with the generated PDF bytes, and starts a PDF download from the stored server record.",
   "The customer portal `Invoices` tab reads the stored invoice records under compact `Unpaid` and `Paid` monthly folders when the secure portal session is active, with browser-local invoices kept only as a fallback on the same Mac.",
+  "The customer portal invoice/PDF reads explicitly send same-origin credentials, keep the secure account session invisible to the page, and show stored/local/sign-in state plus Downloading/Downloaded/Try again button feedback.",
   "`Email Invoice` is wired behind `PRESTIGE_CUSTOMER_INVOICE_EMAIL_SEND_ENABLED`, `PRESTIGE_EMAIL_PROVIDER=resend`, `PRESTIGE_CUSTOMER_INVOICE_EMAIL_FROM`, optional `PRESTIGE_CUSTOMER_INVOICE_EMAIL_RECIPIENT_ALLOWLIST`, and `RESEND_API_KEY`; closed gates mark the invoice email status blocked and do not call Resend.",
   "The `customer_invoice_records` migration scaffold is service-role only with RLS enabled and no anon/authenticated grants.",
   "This pass does not activate Stripe/payment links, bank debit, payout, provider job sending, GPS/live location, automatic payment reconciliation, or customer-visible internal/mock/debug data.",

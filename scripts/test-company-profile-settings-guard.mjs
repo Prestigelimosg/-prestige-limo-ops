@@ -164,7 +164,7 @@ for (const customerPage of [
 ]) {
   assertIncludes(
     customerPage[1],
-    'fetch("/api/company-profile"',
+    "loadPublicCompanyProfile",
     `${customerPage[0]} must load public company profile settings.`,
   );
   assertIncludes(

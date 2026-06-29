@@ -266,7 +266,13 @@ class MockSupabaseClient {
   }
 
   failureFor(action, table) {
-    return this.failures[`${action}:${table}`] || this.failures[table] || null;
+    const configuredFailure = this.failures[`${action}:${table}`] || this.failures[table] || null;
+
+    if (Array.isArray(configuredFailure)) {
+      return configuredFailure.shift() || null;
+    }
+
+    return configuredFailure;
   }
 
   insert(payload) {
@@ -433,6 +439,32 @@ function seedSavedBookingRows() {
         auth_user_id: "99999999-9999-4999-8999-999999999999",
         customer_account_reference: "55555555-5555-4555-8555-555555555555",
         safe_display_label: "Other customer account",
+      },
+    ],
+  };
+}
+
+function seedFoundationSavedBookingRows() {
+  return {
+    bookings: [
+      {
+        booking_reference: "CUST-FOUNDATION-001",
+        created_at: "2026-06-10T01:00:00.000Z",
+        customer_display_name: "Foundation Passenger",
+        customer_facing_status: "confirmed",
+        customer_id: customerAccountReference,
+        dropoff_location: "Singapore Expo",
+        pickup_datetime: "2026-06-10T11:30:00.000Z",
+        pickup_location: "UBS office",
+        route_type: "transfer",
+        updated_at: "2026-06-10T01:30:00.000Z",
+      },
+    ],
+    customer_access_accounts: [
+      {
+        account_status: "active",
+        auth_user_id: authUserId,
+        customer_account_reference: customerAccountReference,
       },
     ],
   };
@@ -722,6 +754,65 @@ try {
     false,
     "Select columns should avoid private customer/admin/finance/payout/parser fields.",
   );
+
+  validEnv();
+  const foundationFallbackMock = installMockClient(seedFoundationSavedBookingRows(), {
+    failures: {
+      "select:bookings": [
+        { code: "42703", message: "column pickup_at does not exist" },
+        null,
+      ],
+    },
+  });
+  const foundationFallbackResponse = await harness.route.GET(
+    new Request("http://localhost/api/customer-saved-bookings?booking_reference=CUST-FOUNDATION-001", {
+      headers: validHeaders(),
+    }),
+  );
+  const foundationFallbackBody = await json(foundationFallbackResponse);
+  assert.equal(
+    foundationFallbackResponse.status,
+    200,
+    "Missing current-schema booking columns should fall back to the foundation booking schema.",
+  );
+  assert.equal(foundationFallbackBody.saved_bookings.length, 1);
+  assertAllowedSavedBookingShape(
+    foundationFallbackBody.saved_bookings[0],
+    "foundation fallback booking response",
+  );
+  assert.deepEqual(foundationFallbackBody.saved_bookings[0], {
+    booking_month: "2026-06",
+    booking_reference: "CUST-FOUNDATION-001",
+    created_at: "2026-06-10T01:00:00.000Z",
+    customer_facing_status: "confirmed",
+    dropoff_location: "Singapore Expo",
+    passenger_name: "Foundation Passenger",
+    pickup_at: "2026-06-10T11:30:00.000Z",
+    pickup_location: "UBS office",
+    service_type: "transfer",
+    updated_at: "2026-06-10T01:30:00.000Z",
+  });
+  assert.deepEqual(foundationFallbackMock.client.selectHistory[1].orderBy, {
+    column: "pickup_at",
+    options: { ascending: false },
+  });
+  assert.deepEqual(foundationFallbackMock.client.selectHistory[2].orderBy, {
+    column: "pickup_datetime",
+    options: { ascending: false },
+  });
+  assert.equal(
+    foundationFallbackMock.client.selectHistory[2].selectedColumns.includes("pickup_datetime"),
+    true,
+    "Foundation fallback must select the foundation pickup column.",
+  );
+  assert.equal(
+    /admin_internal_status|contact_phone|contact_email|passenger_phone|customer_price|driver_payout|paynow|invoice|payment|payout|parser_source_reference/.test(
+      foundationFallbackMock.client.selectHistory[2].selectedColumns,
+    ),
+    false,
+    "Foundation fallback select columns should avoid private customer/admin/finance/payout/parser fields.",
+  );
+  assertSafeApiBody(foundationFallbackBody, "foundation fallback response body");
 
   validEnv({
     PRESTIGE_CUSTOMER_PORTAL_RUNTIME_ACCOUNT_ALLOWLIST: [

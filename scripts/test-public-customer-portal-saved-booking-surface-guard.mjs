@@ -362,12 +362,20 @@ assertExcludes(portalAdapter, /\.(?:insert|upsert|delete|update|rpc)\s*\(/, "cus
 assertSameList(extractSetItems(savedBookingsRead, "allowedQueryParams"), allowedQueryParams, "customer saved bookings query params");
 assertIncludes(
   savedBookingsRead,
-  "booking_reference, service_type, pickup_at, pickup_datetime, pickup_location, dropoff_location, route_type, passenger_name, customer_facing_status, created_at, updated_at",
-  "customer saved bookings safe DB select",
+  "booking_reference, service_type, pickup_at, pickup_location, dropoff_location, passenger_name, customer_facing_status, created_at, updated_at",
+  "customer saved bookings current-schema safe DB select",
+);
+assertIncludes(
+  savedBookingsRead,
+  "booking_reference, route_type, pickup_datetime, pickup_location, dropoff_location, customer_display_name, customer_facing_status, created_at, updated_at",
+  "customer saved bookings foundation-schema safe DB select",
 );
 assertIncludes(savedBookingsRead, 'refererUrl.pathname !== "/my-bookings"', "customer saved bookings my-bookings referer boundary");
 assertExcludes(
-  savedBookingsRead.match(/customerSavedBookingsSelect\s*=\s*([^;]+)/)?.[1] || "",
+  [
+    savedBookingsRead.match(/customerSavedBookingsCurrentSelect\s*=\s*([^;]+)/)?.[1] || "",
+    savedBookingsRead.match(/customerSavedBookingsFoundationSelect\s*=\s*([^;]+)/)?.[1] || "",
+  ].join("\n"),
   unsafePortalSurfacePattern,
   "customer saved bookings selected columns",
 );

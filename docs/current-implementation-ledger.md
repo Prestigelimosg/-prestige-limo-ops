@@ -33,6 +33,16 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Parser behavior and `/api/ai-parse` remain unchanged.
 - Guard coverage lives in `scripts/test-customer-portal-access-link-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Customer Portal Saved Bookings Schema Fallback Lock
+
+- Customer portal saved-bookings reads now try the current customer-safe booking columns first, then fall back to the foundation booking schema only when the live DB reports a missing-column schema drift.
+- The fallback keeps the same public saved-booking response shape, mapping foundation `pickup_datetime`, `route_type`, and `customer_display_name` into the customer portal booking fields.
+- The customer portal should return a safe saved-bookings result for the signed customer account instead of showing the generic sign-in state when current/foundation booking columns differ.
+- Selected and returned fields remain customer-safe only: booking reference, service/type, pickup time, pickup/drop-off, passenger display name, status, month, and timestamps.
+- Customer/driver-visible forbidden data remains blocked: driver payout, PayNow payout, customer price, billing, invoice/payment, internal admin/finance notes, parser/debug internals, secrets/tokens, raw provider payloads, and mock QA/dev archive data.
+- This is read-only schema fallback. It does not write DB records, create invoices/PDFs, send email/providers, change env, alter Save Booking + CRM, use `/api/admin-saved-bookings`, change parser behavior, activate billing/payment/payout, or activate GPS/live location.
+- Guard coverage lives in `scripts/test-customer-saved-bookings-api-contract.mjs` and `scripts/test-public-customer-portal-saved-booking-surface-guard.mjs`.
+
 ### Admin Dashboard Browser Read Boundary Fix
 
 - Live admin troubleshooting on 2026-06-25 found that customer `/book` request intake and admin CRM API proof passed, but the browser admin dashboard `Load Bookings` path still returned the safe `Admin booking persistence is available only from the internal admin dashboard.` boundary error.

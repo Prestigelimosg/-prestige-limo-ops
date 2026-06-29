@@ -72,8 +72,10 @@ const maxBookingReferenceLength = 120;
 const maxSafeTextLength = 500;
 const customerAccountSelect =
   "customer_account_reference, account_status";
-const customerSavedBookingsSelect =
-  "booking_reference, service_type, pickup_at, pickup_datetime, pickup_location, dropoff_location, route_type, passenger_name, customer_facing_status, created_at, updated_at";
+const customerSavedBookingsCurrentSelect =
+  "booking_reference, service_type, pickup_at, pickup_location, dropoff_location, passenger_name, customer_facing_status, created_at, updated_at";
+const customerSavedBookingsFoundationSelect =
+  "booking_reference, route_type, pickup_datetime, pickup_location, dropoff_location, customer_display_name, customer_facing_status, created_at, updated_at";
 const customerSavedBookingsAuthRequiredError =
   "Customer saved bookings read requires secure customer account access before saved bookings can be read.";
 const customerSavedBookingsDisabledError =
@@ -645,6 +647,7 @@ function toCustomerSavedBookingRecord(row: UnknownRecord): CustomerSavedBookingR
   const bookingReference = validBookingReference(row.booking_reference);
   const pickupAt = safeDateTextFromDb(row.pickup_at) || safeDateTextFromDb(row.pickup_datetime);
   const serviceType = safeTextFromDb(row.service_type) || safeTextFromDb(row.route_type);
+  const passengerName = safeTextFromDb(row.passenger_name) || safeTextFromDb(row.customer_display_name);
 
   if (!bookingReference) {
     return null;
@@ -656,12 +659,76 @@ function toCustomerSavedBookingRecord(row: UnknownRecord): CustomerSavedBookingR
     created_at: safeDateTextFromDb(row.created_at),
     customer_facing_status: publicSafeStatus(row.customer_facing_status),
     dropoff_location: safeTextFromDb(row.dropoff_location),
-    passenger_name: safeTextFromDb(row.passenger_name),
+    passenger_name: passengerName,
     pickup_at: pickupAt,
     pickup_location: safeTextFromDb(row.pickup_location),
     service_type: serviceType,
     updated_at: safeDateTextFromDb(row.updated_at),
   };
+}
+
+async function readCustomerSavedBookingRowsForSchema({
+  client,
+  customerAccountReference,
+  parsed,
+  pickupColumn,
+  selectedColumns,
+}: {
+  client: CustomerSavedBookingsClient;
+  customerAccountReference: string;
+  parsed: CustomerSavedBookingsReadParams;
+  pickupColumn: "pickup_at" | "pickup_datetime";
+  selectedColumns: string;
+}): Promise<AdminBookingResult<unknown[]>> {
+  const offset = (parsed.page - 1) * parsed.limit;
+  const rangeEnd = offset + parsed.limit;
+  let bookingQuery = client
+    .from("bookings")
+    .select(selectedColumns)
+    .eq("customer_id", customerAccountReference)
+    .order(pickupColumn, { ascending: false })
+    .range(offset, rangeEnd);
+
+  if (parsed.booking_reference) {
+    bookingQuery = bookingQuery.eq("booking_reference", parsed.booking_reference);
+  }
+
+  const { data, error } = await bookingQuery;
+
+  if (error) {
+    return safeAdapterFailure(customerSavedBookingsReadError, 500, error);
+  }
+
+  return {
+    data: asArray(data),
+    ok: true,
+  };
+}
+
+async function readCustomerSavedBookingRows(
+  client: CustomerSavedBookingsClient,
+  customerAccountReference: string,
+  parsed: CustomerSavedBookingsReadParams,
+): Promise<AdminBookingResult<unknown[]>> {
+  const currentResult = await readCustomerSavedBookingRowsForSchema({
+    client,
+    customerAccountReference,
+    parsed,
+    pickupColumn: "pickup_at",
+    selectedColumns: customerSavedBookingsCurrentSelect,
+  });
+
+  if (currentResult.ok || currentResult.category !== "column_missing") {
+    return currentResult;
+  }
+
+  return readCustomerSavedBookingRowsForSchema({
+    client,
+    customerAccountReference,
+    parsed,
+    pickupColumn: "pickup_datetime",
+    selectedColumns: customerSavedBookingsFoundationSelect,
+  });
 }
 
 export function customerSavedBookingsAuthRequiredResult<T = null>(): AdminBookingResult<T> {
@@ -900,26 +967,17 @@ export async function loadCustomerSavedBookings(
     return customerSavedBookingsAuthRequiredResult();
   }
 
-  const offset = (parsed.data.page - 1) * parsed.data.limit;
-  const rangeEnd = offset + parsed.data.limit;
-  let bookingQuery = clientResult.data
-    .from("bookings")
-    .select(customerSavedBookingsSelect)
-    .eq("customer_id", customerAccountReference)
-    .order("pickup_at", { ascending: false })
-    .range(offset, rangeEnd);
+  const bookingRowsResult = await readCustomerSavedBookingRows(
+    clientResult.data,
+    customerAccountReference,
+    parsed.data,
+  );
 
-  if (parsed.data.booking_reference) {
-    bookingQuery = bookingQuery.eq("booking_reference", parsed.data.booking_reference);
+  if (!bookingRowsResult.ok) {
+    return bookingRowsResult;
   }
 
-  const { data: bookingRows, error: bookingError } = await bookingQuery;
-
-  if (bookingError) {
-    return safeAdapterFailure(customerSavedBookingsReadError, 500, bookingError);
-  }
-
-  const rawRows = asArray(bookingRows);
+  const rawRows = bookingRowsResult.data;
 
   if (parsed.data.booking_reference && rawRows.length === 0) {
     // Targeted booking lookups are isolation checks: a ref outside this account must hard-block.

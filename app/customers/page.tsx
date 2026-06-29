@@ -11,6 +11,7 @@ import {
   type MockPaymentStatus,
 } from "./_data/mock-customers";
 import {
+  calculateHourlyBillableMinutes,
   calculateHourlyInvoiceAmountCents,
   hourlyBillingDefaultRateCents,
   hourlyBillingGraceRuleText,
@@ -38,6 +39,8 @@ const summaryCards = [
 
 const adminCustomerAccountsApiPath = "/api/admin-customer-accounts";
 const adminCustomerSavedBookingsApiPath = "/api/admin-customer-saved-bookings";
+const adminDriverJobDspActualTimeSummariesApiPath =
+  "/api/admin-driver-job-dsp-actual-time-summaries";
 
 const customerFolderIndexHandoffRows = mockCustomers.map((customer) => {
   const upcomingJobs = customer.bookingHistory.filter((booking) => booking.jobStatus === "Upcoming").length;
@@ -245,6 +248,30 @@ type UnbilledCustomerRow = {
   statusLabel: string;
 };
 
+type CustomerInvoiceDriverActualTimeSummary = {
+  actual_time_status?: "complete" | "not_started" | "started" | string | null;
+  booking_reference?: string | null;
+  dsp_billable_minutes?: number | null;
+  dsp_ended_at?: string | null;
+  dsp_started_at?: string | null;
+  dsp_total_minutes?: number | null;
+};
+
+type CustomerInvoiceDriverActualTimeReadState = {
+  bookingReference: string;
+  message: string;
+  status: "error" | "idle" | "loaded" | "loading" | "skipped";
+  summary: CustomerInvoiceDriverActualTimeSummary | null;
+  tone: RegularCustomerBookingFeedbackTone;
+};
+
+type CustomerInvoiceCalculatedAmount = {
+  amountCents: number;
+  billingBreakdown: string;
+  invoiceLineDescription: string;
+  sourceLabel: string;
+};
+
 type RegularCustomerBookingForm = typeof initialRegularCustomerBookingForm;
 
 type RegularCustomerBookingPreview = RegularCustomerBookingForm & {
@@ -411,6 +438,70 @@ function getRegularCustomerHourlyInvoiceReview(form: RegularCustomerBookingForm)
     amountLabel,
     billingBreakdown,
     invoiceLineDescription: `Hourly ${form.actualStartTime}-${form.actualEndTime} | ${calculation.actualMinutes} actual min | ${calculation.billableMinutes} billable min | ${rateLabel}`,
+  };
+}
+
+function isHourlyCustomerInvoiceRow(row: UnbilledCustomerRow) {
+  return /hourly|disposal/i.test(
+    `${row.service} ${row.statusLabel} ${row.invoiceLineDescription ?? ""} ${row.billingBreakdown ?? ""}`,
+  );
+}
+
+function validCustomerInvoiceDriverTimingReference(reference: string) {
+  const trimmedReference = reference.trim();
+
+  return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(trimmedReference)
+    ? trimmedReference
+    : "";
+}
+
+function getCustomerInvoiceRowCalculatedAmount(
+  row: UnbilledCustomerRow,
+): CustomerInvoiceCalculatedAmount | null {
+  const amountCents = parseInvoiceAmountToCents(row.amount);
+
+  if (!amountCents) {
+    return null;
+  }
+
+  return {
+    amountCents,
+    billingBreakdown: row.billingBreakdown ?? "",
+    invoiceLineDescription:
+      row.invoiceLineDescription ?? `${row.service} - ${row.reference} - ${row.route}`,
+    sourceLabel: "Selected unbilled row",
+  };
+}
+
+function getCustomerInvoiceDriverActualTimeCalculatedAmount(
+  row: UnbilledCustomerRow,
+  summary: CustomerInvoiceDriverActualTimeSummary | null,
+): CustomerInvoiceCalculatedAmount | null {
+  if (!isHourlyCustomerInvoiceRow(row) || summary?.actual_time_status !== "complete") {
+    return null;
+  }
+
+  const actualMinutes =
+    typeof summary.dsp_total_minutes === "number" && Number.isFinite(summary.dsp_total_minutes)
+      ? Math.round(summary.dsp_total_minutes)
+      : null;
+  const billableMinutes = calculateHourlyBillableMinutes(actualMinutes);
+
+  if (actualMinutes === null || actualMinutes <= 0 || billableMinutes === null) {
+    return null;
+  }
+
+  const billableHours = billableMinutes / hourlyBillingUnitMinutes;
+  const billableHoursLabel =
+    billableHours === 1 ? "1 billable hour" : `${billableHours} billable hours`;
+  const amountCents = Math.round(billableHours * hourlyBillingDefaultRateCents);
+  const rateLabel = `${formatInvoiceAmount(hourlyBillingDefaultRateCents)}/hr`;
+
+  return {
+    amountCents,
+    billingBreakdown: `Driver JC timing: ${actualMinutes} actual min / ${billableMinutes} billable min (${billableHoursLabel}) at ${rateLabel}. ${hourlyBillingGraceRuleText}`,
+    invoiceLineDescription: `Driver JC actual time | ${actualMinutes} actual min | ${billableMinutes} billable min | ${rateLabel}`,
+    sourceLabel: "Driver JC timing",
   };
 }
 
@@ -717,6 +808,7 @@ const outstandingPaymentReviewItems: OutstandingPaymentReviewItem[] = mockCustom
 
 export default function MockCustomerDashboardPage() {
   const customerInvoicePrepPanelRef = useRef<HTMLDivElement | null>(null);
+  const customerInvoicePrepRowKeyRef = useRef("");
   const [searchTerm, setSearchTerm] = useState("");
   const [customerFolderFinderPage, setCustomerFolderFinderPage] = useState(1);
   const [customerFolderFinderSelectedId, setCustomerFolderFinderSelectedId] = useState("");
@@ -835,6 +927,22 @@ export default function MockCustomerDashboardPage() {
   const [customerInvoiceIssueFeedback, setCustomerInvoiceIssueFeedback] = useState(
     "Review the amount and due date before issuing. Invoice number is created only when you click issue.",
   );
+  const [customerInvoiceCalculatedAmountCents, setCustomerInvoiceCalculatedAmountCents] =
+    useState<number | null>(null);
+  const [customerInvoiceCalculatedBillingBreakdown, setCustomerInvoiceCalculatedBillingBreakdown] =
+    useState("");
+  const [customerInvoiceCalculatedLineDescription, setCustomerInvoiceCalculatedLineDescription] =
+    useState("");
+  const [customerInvoiceCalculatedSourceLabel, setCustomerInvoiceCalculatedSourceLabel] = useState("");
+  const [customerInvoiceAdjustmentReason, setCustomerInvoiceAdjustmentReason] = useState("");
+  const [customerInvoiceDriverActualTimeReadState, setCustomerInvoiceDriverActualTimeReadState] =
+    useState<CustomerInvoiceDriverActualTimeReadState>({
+      bookingReference: "",
+      message: "Driver JC timing is checked after an hourly unbilled row is prepared.",
+      status: "idle",
+      summary: null,
+      tone: "info",
+    });
   const [issuingCustomerInvoiceKey, setIssuingCustomerInvoiceKey] = useState("");
   const [issuedCustomerInvoices, setIssuedCustomerInvoices] = useState<CustomerLocalInvoiceRecord[]>(() =>
     readCustomerLocalInvoices(),
@@ -1196,6 +1304,14 @@ export default function MockCustomerDashboardPage() {
     () => unbilledCustomerRows.find((row) => row.key === customerInvoicePrepRowKey) ?? null,
     [customerInvoicePrepRowKey, unbilledCustomerRows],
   );
+  const customerInvoiceApprovedAmountCents = useMemo(
+    () => parseInvoiceAmountToCents(customerInvoiceIssueAmount),
+    [customerInvoiceIssueAmount],
+  );
+  const customerInvoiceAmountEdited =
+    customerInvoiceCalculatedAmountCents !== null &&
+    customerInvoiceApprovedAmountCents !== null &&
+    customerInvoiceApprovedAmountCents !== customerInvoiceCalculatedAmountCents;
   const regularCustomerBillingQuickFilterOptions = useMemo(() => {
     const billingMonths = Array.from(
       new Set(regularCustomerBookingListItems.map((item) => item.billingMonth.trim()).filter(Boolean)),
@@ -1501,16 +1617,63 @@ export default function MockCustomerDashboardPage() {
     setSelectedUnbilledCustomerRowKey(value);
   }
 
-  function prepareCustomerInvoiceFromUnbilled(row: UnbilledCustomerRow) {
+  async function readCustomerInvoiceDriverActualTimeSummary(bookingReference: string) {
+    const params = new URLSearchParams({
+      booking_reference: bookingReference,
+      limit: "1",
+    });
+    const response = await fetch(`${adminDriverJobDspActualTimeSummariesApiPath}?${params.toString()}`, {
+      headers: {
+        "x-prestige-admin-purpose": "admin-booking-persistence",
+      },
+      method: "GET",
+    });
+    const result = await response.json().catch(() => null);
+
+    if (!response.ok || !result?.ok) {
+      throw new Error(result?.error || "Driver JC timing read failed safely.");
+    }
+
+    return (
+      (result.latest_summary as CustomerInvoiceDriverActualTimeSummary | null | undefined) ??
+      (result.summary as CustomerInvoiceDriverActualTimeSummary | null | undefined) ??
+      (Array.isArray(result.summaries)
+        ? (result.summaries[0] as CustomerInvoiceDriverActualTimeSummary | undefined)
+        : null) ??
+      null
+    );
+  }
+
+  async function prepareCustomerInvoiceFromUnbilled(row: UnbilledCustomerRow) {
     const suggestedAmountCents = parseInvoiceAmountToCents(row.amount);
+    const baseCalculation = getCustomerInvoiceRowCalculatedAmount(row);
+    const bookingReference = validCustomerInvoiceDriverTimingReference(row.reference);
+    const shouldReadDriverActualTime = isHourlyCustomerInvoiceRow(row) && Boolean(bookingReference);
 
     setPreparingUnbilledCustomerRowKey(row.key);
     setSelectedUnbilledCustomerRowKey(row.key);
     setCustomerInvoicePrepRowKey(row.key);
+    customerInvoicePrepRowKeyRef.current = row.key;
     setCustomerInvoiceWorkspaceTab("statements");
     setCustomerInvoiceIssueAmount(suggestedAmountCents ? row.amount.replace(/^\$/, "") : "");
     setCustomerInvoiceIssueDueDate(invoiceDateInputDaysFromNow(7));
     setCustomerInvoiceIssueStatus("Unpaid");
+    setCustomerInvoiceAdjustmentReason("");
+    setCustomerInvoiceCalculatedAmountCents(baseCalculation?.amountCents ?? null);
+    setCustomerInvoiceCalculatedBillingBreakdown(baseCalculation?.billingBreakdown ?? "");
+    setCustomerInvoiceCalculatedLineDescription(baseCalculation?.invoiceLineDescription ?? "");
+    setCustomerInvoiceCalculatedSourceLabel(baseCalculation?.sourceLabel ?? "");
+    setCustomerInvoiceDriverActualTimeReadState({
+      bookingReference,
+      message: shouldReadDriverActualTime
+        ? `Checking driver JC timing for ${bookingReference}...`
+        : isHourlyCustomerInvoiceRow(row)
+          ? "Driver JC timing can be checked only when the unbilled row has a saved booking reference."
+          : "Driver JC timing check is skipped for non-hourly invoice rows.",
+      status: shouldReadDriverActualTime ? "loading" : "skipped",
+      summary: null,
+      tone: "info",
+    });
     setOutstandingReviewSearchTerm(row.customerName);
     setOutstandingReviewFilter("all");
     setOutstandingReviewPage(1);
@@ -1533,15 +1696,85 @@ export default function MockCustomerDashboardPage() {
       customerInvoicePrepPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       nextAction?.focus();
     }, 250);
+
+    if (!shouldReadDriverActualTime) {
+      return;
+    }
+
+    try {
+      const summary = await readCustomerInvoiceDriverActualTimeSummary(bookingReference);
+
+      if (customerInvoicePrepRowKeyRef.current !== row.key) {
+        return;
+      }
+
+      const driverCalculation = getCustomerInvoiceDriverActualTimeCalculatedAmount(row, summary);
+
+      if (!driverCalculation) {
+        setCustomerInvoiceDriverActualTimeReadState({
+          bookingReference,
+          message:
+            summary?.actual_time_status === "complete"
+              ? "Driver JC timing was found, but actual minutes were not ready for invoice calculation."
+              : "Driver JC timing is not complete yet. Review or enter the approved amount before issuing.",
+          status: "loaded",
+          summary,
+          tone: "info",
+        });
+        return;
+      }
+
+      setCustomerInvoiceCalculatedAmountCents(driverCalculation.amountCents);
+      setCustomerInvoiceCalculatedBillingBreakdown(driverCalculation.billingBreakdown);
+      setCustomerInvoiceCalculatedLineDescription(driverCalculation.invoiceLineDescription);
+      setCustomerInvoiceCalculatedSourceLabel(driverCalculation.sourceLabel);
+      setCustomerInvoiceIssueAmount(formatInvoiceAmount(driverCalculation.amountCents).replace(/^\$/, ""));
+      setCustomerInvoiceDriverActualTimeReadState({
+        bookingReference,
+        message: `${driverCalculation.sourceLabel} applied: ${driverCalculation.billingBreakdown}`,
+        status: "loaded",
+        summary,
+        tone: "success",
+      });
+      setCustomerInvoiceIssueFeedback(
+        "Driver JC timing loaded into Approved amount. Review it, then issue only when correct.",
+      );
+    } catch {
+      if (customerInvoicePrepRowKeyRef.current !== row.key) {
+        return;
+      }
+
+      setCustomerInvoiceDriverActualTimeReadState({
+        bookingReference,
+        message:
+          "Driver JC timing read failed safely. Keep the row amount or enter the approved amount before issuing.",
+        status: "error",
+        summary: null,
+        tone: "error",
+      });
+    }
   }
 
   function clearCustomerInvoicePrep() {
     setCustomerInvoicePrepRowKey("");
+    customerInvoicePrepRowKeyRef.current = "";
     setPreparingUnbilledCustomerRowKey("");
     setIssuingCustomerInvoiceKey("");
     setCustomerInvoiceIssueAmount("");
     setCustomerInvoiceIssueDueDate(invoiceDateInputDaysFromNow(7));
     setCustomerInvoiceIssueStatus("Unpaid");
+    setCustomerInvoiceAdjustmentReason("");
+    setCustomerInvoiceCalculatedAmountCents(null);
+    setCustomerInvoiceCalculatedBillingBreakdown("");
+    setCustomerInvoiceCalculatedLineDescription("");
+    setCustomerInvoiceCalculatedSourceLabel("");
+    setCustomerInvoiceDriverActualTimeReadState({
+      bookingReference: "",
+      message: "Driver JC timing is checked after an hourly unbilled row is prepared.",
+      status: "idle",
+      summary: null,
+      tone: "info",
+    });
     setOutstandingReviewSearchTerm("");
     setOutstandingReviewPage(1);
     setCustomerInvoicePrepFeedback(
@@ -1567,7 +1800,23 @@ export default function MockCustomerDashboardPage() {
       return;
     }
 
+    if (customerInvoiceAmountEdited && !customerInvoiceAdjustmentReason.trim()) {
+      setCustomerInvoiceIssueFeedback(
+        "Enter adjustment reason before issuing an invoice with an edited amount.",
+      );
+      document
+        .querySelector<HTMLElement>("[data-customer-invoice-override-reason='true']")
+        ?.focus();
+      return;
+    }
+
     setIssuingCustomerInvoiceKey(customerInvoicePrepRow.key);
+
+    const customerFacingInvoiceLineDescription = customerInvoiceAmountEdited
+      ? `${customerInvoicePrepRow.service} - approved customer amount - ${customerInvoicePrepRow.reference}`
+      : customerInvoiceCalculatedLineDescription ||
+        customerInvoicePrepRow.invoiceLineDescription ||
+        `${customerInvoicePrepRow.service} - ${customerInvoicePrepRow.reference} - ${customerInvoicePrepRow.route}`;
 
     const issuedInvoice = createCustomerLocalInvoiceRecord({
       amountCents,
@@ -1578,9 +1827,7 @@ export default function MockCustomerDashboardPage() {
       lineItems: [
         {
           amountLabel: formatInvoiceAmount(amountCents),
-          description:
-            customerInvoicePrepRow.invoiceLineDescription ||
-            `${customerInvoicePrepRow.service} - ${customerInvoicePrepRow.reference} - ${customerInvoicePrepRow.route}`,
+          description: customerFacingInvoiceLineDescription,
         },
       ],
       reference: customerInvoicePrepRow.reference,
@@ -1595,7 +1842,9 @@ export default function MockCustomerDashboardPage() {
       `${issuedInvoice.invoiceNumber} issued for ${issuedInvoice.customerName}. PDF download started.`,
     );
     setCustomerInvoiceIssueFeedback(
-      `${issuedInvoice.invoiceNumber} issued and saved in this browser. It now appears in the customer portal invoice folder on this Mac browser.`,
+      customerInvoiceAmountEdited
+        ? `${issuedInvoice.invoiceNumber} issued with an approved amount adjustment. The reason stays in admin review and is not printed on the customer PDF.`
+        : `${issuedInvoice.invoiceNumber} issued and saved in this browser. It now appears in the customer portal invoice folder on this Mac browser.`,
     );
     downloadCustomerInvoicePdf(issuedInvoice);
     window.setTimeout(() => setIssuingCustomerInvoiceKey(""), 700);
@@ -2550,12 +2799,32 @@ export default function MockCustomerDashboardPage() {
                     <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Amount</p>
                     <p className="font-bold text-slate-950">{customerInvoicePrepRow.amount}</p>
                     <p className="truncate text-xs text-slate-500">{customerInvoicePrepRow.statusLabel}</p>
+                    {customerInvoiceCalculatedAmountCents !== null ? (
+                      <p
+                        className="mt-1 text-xs font-semibold leading-4 text-emerald-800"
+                        data-customer-invoice-calculated-amount="true"
+                      >
+                        Calculated: {formatInvoiceAmount(customerInvoiceCalculatedAmountCents)}
+                        {customerInvoiceCalculatedSourceLabel
+                          ? ` (${customerInvoiceCalculatedSourceLabel})`
+                          : ""}
+                      </p>
+                    ) : null}
                     {customerInvoicePrepRow.billingBreakdown ? (
                       <p
                         className="mt-1 line-clamp-2 text-xs font-semibold leading-4 text-slate-600"
                         data-customer-invoice-prep-billing-breakdown="true"
                       >
                         {customerInvoicePrepRow.billingBreakdown}
+                      </p>
+                    ) : null}
+                    {customerInvoiceCalculatedBillingBreakdown &&
+                    customerInvoiceCalculatedBillingBreakdown !== customerInvoicePrepRow.billingBreakdown ? (
+                      <p
+                        className="mt-1 line-clamp-2 text-xs font-semibold leading-4 text-emerald-800"
+                        data-customer-invoice-calculated-breakdown="true"
+                      >
+                        {customerInvoiceCalculatedBillingBreakdown}
                       </p>
                     ) : null}
                   </div>
@@ -2603,6 +2872,19 @@ export default function MockCustomerDashboardPage() {
               >
                 {customerInvoicePrepFeedback}
               </p>
+              <p
+                aria-live="polite"
+                className={`mt-1 text-xs font-semibold leading-5 ${
+                  customerInvoiceDriverActualTimeReadState.tone === "error"
+                    ? "text-rose-700"
+                    : customerInvoiceDriverActualTimeReadState.tone === "success"
+                      ? "text-emerald-700"
+                      : "text-slate-600"
+                }`}
+                data-customer-invoice-driver-jc-timing="true"
+              >
+                {customerInvoiceDriverActualTimeReadState.message}
+              </p>
               {customerInvoicePrepRow ? (
                 <div
                   className="mt-3 border-t border-slate-200 pt-3"
@@ -2644,6 +2926,18 @@ export default function MockCustomerDashboardPage() {
                         <option value="Paid">Paid</option>
                       </select>
                     </label>
+                    {customerInvoiceAmountEdited ? (
+                      <label className="text-xs font-bold uppercase tracking-[0.08em] text-amber-700 md:col-span-3">
+                        Adjustment reason
+                        <input
+                          className="mt-1 min-h-9 w-full rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950 outline-none focus:border-amber-700"
+                          data-customer-invoice-override-reason="true"
+                          onChange={(event) => setCustomerInvoiceAdjustmentReason(event.target.value)}
+                          placeholder="e.g. approved discount, waiting time waived, corrected rate"
+                          value={customerInvoiceAdjustmentReason}
+                        />
+                      </label>
+                    ) : null}
                     <button
                       className={`min-h-9 rounded-md border px-3 py-2 text-sm font-bold transition ${
                         issuingCustomerInvoiceKey === customerInvoicePrepRow.key

@@ -230,6 +230,10 @@ const guardChecks = [
     script: "scripts/test-customer-hourly-invoice-auto-calculation-guard.mjs",
   },
   {
+    label: "customer invoice driver JC timing and override guard",
+    script: "scripts/test-customer-invoice-driver-jc-override-guard.mjs",
+  },
+  {
     label: "public booking request compact header guard",
     script: "scripts/test-public-booking-request-compact-header-guard.mjs",
   },

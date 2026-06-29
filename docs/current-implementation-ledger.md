@@ -361,6 +361,16 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This pass does not send email/reminders, create Stripe/payment links, write bank/payment/provider records, write Supabase rows, change env, apply migrations, or activate cross-device invoice sync.
 - Guard coverage lives in `scripts/test-customer-hourly-invoice-auto-calculation-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Customer Invoice Driver JC Timing And Override Guard
+
+- Preparing an hourly unbilled invoice row now checks the existing guarded driver JC actual-time summary read path by booking reference.
+- A completed driver JC timing summary recalculates the customer invoice amount with the locked 15-minute grace hourly rule and the `$65/hr` default rate.
+- The Approved amount remains editable before issue, but changing it away from the calculated amount requires an Adjustment reason before invoice/PDF creation.
+- Adjustment reasons stay in admin review feedback and are not printed into the customer PDF line item.
+- The driver JC invoice read is GET-only through `/api/admin-driver-job-dsp-actual-time-summaries` with `x-prestige-admin-purpose`; it does not write records, send providers, activate payments, or expose driver/customer forbidden data.
+- This pass does not send invoices/email/reminders, create Stripe/payment links, write bank/payment/provider records, write Supabase rows, change env, apply migrations, or activate cross-device invoice sync.
+- Guard coverage lives in `scripts/test-customer-invoice-driver-jc-override-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Customer Booking Request Flight Persistence Fix
 
 - Public `/book` flight number input now persists into the safe operational `flight_no` booking field, instead of living only in the parser/source summary.

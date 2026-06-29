@@ -346,6 +346,10 @@ const guardChecks = [
     script: "scripts/test-customers-folder-finder-unbilled-queue-guard.mjs",
   },
   {
+    label: "customer trust path invoice portal guard",
+    script: "scripts/test-customer-trust-path-invoice-portal-guard.mjs",
+  },
+  {
     label: "customer folder job history compact guard",
     script: "scripts/test-customer-folder-job-history-compact-guard.mjs",
   },

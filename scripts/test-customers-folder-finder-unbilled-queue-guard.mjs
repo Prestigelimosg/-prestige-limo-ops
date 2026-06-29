@@ -129,7 +129,6 @@ for (const fragment of [
   'data-unbilled-customers-count="true"',
   'data-unbilled-customers-dropdown="true"',
   'data-unbilled-customers-select="true"',
-  'data-unbilled-customers-selected-label="true"',
   'data-unbilled-customers-scroll-list="true"',
   'data-unbilled-customers-list="true"',
   'data-unbilled-customer-row={row.key}',
@@ -142,6 +141,13 @@ for (const fragment of [
   "visibleUnbilledCustomerRows.map((row)",
 ]) {
   assertIncludes(unbilledSection, fragment, `unbilled customers UI fragment ${fragment}`);
+}
+
+for (const duplicateFragment of [
+  'data-unbilled-customers-selected-label="true"',
+  "preparedUnbilledCustomerLabel",
+]) {
+  assertExcludes(unbilledSection, duplicateFragment, "duplicate unbilled customer selector");
 }
 
 for (const fragment of [
@@ -178,7 +184,7 @@ for (const phrase of [
   "The finder keeps the existing guarded Load Saved Accounts control visible, but it does not auto-load or create a new route/API.",
   "A new Unbilled Customers checkpoint sits before the invoice workspace so unbilled draft rows and statement-needed account rows are visible before invoice work starts.",
   "Each unbilled row has a compact `Prepare` action that changes through `Preparing` to `Prepared`, loads that exact customer/job into the Send Invoice Workbench prep strip, opens the Statements tab, narrows the Outstanding search to that customer, and focuses the next workbench action.",
-  "The finder no longer shows a separate page-size dropdown or separate previous/next buttons; the Unbilled Customers list uses one dropdown plus a compact scrollable row/table so invoice work can be scanned without giant account cards.",
+  "The finder no longer shows a separate page-size dropdown or separate previous/next buttons; the Unbilled Customers list keeps one dropdown plus a compact scrollable row/table, with the duplicate selected-label wording below the dropdown removed.",
   "This is a UI handoff into the existing admin monthly billing workflow; it does not add a second invoice engine, create invoice numbers, generate PDFs, send invoices, activate payment/provider sending, write DB rows, change env, activate GPS/live location, billing/payout automation, calendar sync, parser changes, or shims.",
   "Guard coverage lives in `scripts/test-customers-folder-finder-unbilled-queue-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {

@@ -311,9 +311,20 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The finder keeps the existing guarded Load Saved Accounts control visible, but it does not auto-load or create a new route/API.
 - A new Unbilled Customers checkpoint sits before the invoice workspace so unbilled draft rows and statement-needed account rows are visible before invoice work starts.
 - Each unbilled row has a compact `Prepare` action that changes through `Preparing` to `Prepared`, loads that exact customer/job into the Send Invoice Workbench prep strip, opens the Statements tab, narrows the Outstanding search to that customer, and focuses the next workbench action.
-- The finder no longer shows a separate page-size dropdown or separate previous/next buttons; the Unbilled Customers list uses one dropdown plus a compact scrollable row/table so invoice work can be scanned without giant account cards.
+- The finder no longer shows a separate page-size dropdown or separate previous/next buttons; the Unbilled Customers list keeps one dropdown plus a compact scrollable row/table, with the duplicate selected-label wording below the dropdown removed.
 - This is a UI handoff into the existing admin monthly billing workflow; it does not add a second invoice engine, create invoice numbers, generate PDFs, send invoices, activate payment/provider sending, write DB rows, change env, activate GPS/live location, billing/payout automation, calendar sync, parser changes, or shims.
 - Guard coverage lives in `scripts/test-customers-folder-finder-unbilled-queue-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+
+### Customer Trust Path And Portal Invoice Folder Lock
+
+- Customer `/book` and `/my-bookings` request forms both require contact number, passenger name, pickup date, pickup time, pickup location, and drop-off location before submission.
+- The customer portal now has a compact `Invoices` section with `Unpaid` and `Paid` folders grouped by month, but it shows empty disabled download rows until a customer-authenticated invoice/PDF API is approved.
+- The portal invoice folders do not import admin mock customer data and do not call admin APIs, Stripe/payment providers, PDF generation, email/SMS/WhatsApp providers, or DB writes.
+- Admin Customers keeps the Unbilled Customers checkpoint as one dropdown plus a compact scrollable table; the duplicate wording block below the dropdown is removed.
+- Customer saved-booking reads remain booking-only and strip invoice/payment/PDF/finance/internal fields, so invoice rows need their own future customer-scoped source before downloads or email sending go live.
+- Hourly billing remains locked to the 15-minute grace rule: 16 minutes or more starts the next chargeable hour.
+- This pass does not create invoice numbers, generate PDFs, send invoices, activate payment links, write invoice/payment records, change env, call providers, activate GPS/live location, or deploy database migrations.
+- Guard coverage lives in `scripts/test-customer-trust-path-invoice-portal-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Customer Folder Job History Compact Rows
 

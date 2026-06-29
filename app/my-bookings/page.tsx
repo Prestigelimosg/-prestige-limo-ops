@@ -20,7 +20,8 @@ import {
 } from "../../lib/company-profile-shared";
 
 type BookingFilter = "Cancelled" | "Completed" | "Upcoming";
-type PortalSection = "New Booking Request" | BookingFilter;
+type InvoiceFolder = "Paid" | "Unpaid";
+type PortalSection = "New Booking Request" | "Invoices" | BookingFilter;
 type PortalBookingsLoadState = "blocked" | "loading" | "ready";
 
 type BookingRequestForm = {
@@ -81,7 +82,9 @@ const monthNames = [
 ];
 
 const bookingFilters: BookingFilter[] = ["Upcoming", "Completed", "Cancelled"];
-const portalSections: PortalSection[] = ["New Booking Request", ...bookingFilters];
+const bookingFilterSet = new Set<PortalSection>(bookingFilters);
+const invoiceFolders: InvoiceFolder[] = ["Unpaid", "Paid"];
+const portalSections: PortalSection[] = ["New Booking Request", "Invoices", ...bookingFilters];
 
 const initialBookingPages: Record<BookingFilter, number> = {
   Cancelled: 1,
@@ -118,6 +121,8 @@ const requiredBookingRequestFields: Array<keyof BookingRequestForm> = [
   "passengerName",
   "pickupDate",
   "pickupTime",
+  "pickupLocation",
+  "dropoffLocation",
 ];
 
 const bookingRequestFieldLabels: Record<keyof BookingRequestForm, string> = {
@@ -262,7 +267,9 @@ export default function CustomerPortalPage() {
   });
   const companyName = companyProfile.company_name || defaultCompanyProfile.company_name;
 
-  const activeFilter: BookingFilter = activeSection === "New Booking Request" ? "Upcoming" : activeSection;
+  const activeFilter: BookingFilter = bookingFilterSet.has(activeSection)
+    ? (activeSection as BookingFilter)
+    : "Upcoming";
   const selectedBookingMonth = selectedBookingMonths[activeFilter] || "";
   const currentPortalMonth = useMemo(() => getCurrentPortalMonthInfo(), []);
 
@@ -405,7 +412,7 @@ export default function CustomerPortalPage() {
         : "No bookings match the current search.";
 
   function handleSectionChange(section: PortalSection) {
-    const nextFilter: BookingFilter = section === "New Booking Request" ? "Upcoming" : section;
+    const nextFilter: BookingFilter = bookingFilterSet.has(section) ? (section as BookingFilter) : "Upcoming";
 
     setActiveSection(section);
     setExpandedBookingId("");
@@ -574,7 +581,7 @@ export default function CustomerPortalPage() {
       setMissingBookingRequestFields(missing);
       setBookingRequestFeedback({
         tone: "error",
-        text: "Please complete contact no., passenger name, pickup date, and pickup time before submitting your request.",
+        text: "Please complete contact no., passenger name, pickup date, pickup time, pickup location, and drop-off location before submitting your request.",
       });
       return;
     }
@@ -994,6 +1001,84 @@ export default function CustomerPortalPage() {
               </div>
             </div>
           </form>
+        ) : activeSection === "Invoices" ? (
+          <section
+            aria-labelledby="customer-portal-invoices-title"
+            className="rounded-md border border-slate-200 bg-white p-3"
+            data-customer-portal-invoice-folders="true"
+          >
+            <div className="flex flex-col gap-1 border-b border-slate-200 pb-3">
+              <h2 className="text-base font-bold text-slate-950" id="customer-portal-invoices-title">
+                Invoices
+              </h2>
+              <p className="text-sm leading-6 text-slate-600">
+                Invoice folders are grouped by month and separated by unpaid and paid status.
+              </p>
+            </div>
+
+            <div className="mt-3 grid gap-3 lg:grid-cols-2">
+              {invoiceFolders.map((folder) => {
+                const folderKey = folder.toLowerCase();
+
+                return (
+                  <section
+                    className="overflow-hidden rounded-md border border-slate-200"
+                    data-customer-portal-invoice-folder={folderKey}
+                    key={folder}
+                  >
+                    <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2">
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-950">{folder} Invoices</h3>
+                        <p className="text-xs text-slate-600">Grouped monthly</p>
+                      </div>
+                      <span
+                        className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-600"
+                        data-customer-portal-invoice-folder-count={folderKey}
+                      >
+                        0
+                      </span>
+                    </div>
+                    <div
+                      className="border-b border-slate-100 px-3 py-2 text-xs font-semibold text-slate-600"
+                      data-customer-portal-invoice-month-group={folderKey}
+                    >
+                      Current month
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[520px] text-left text-sm">
+                        <thead className="bg-white text-[11px] uppercase tracking-[0.1em] text-slate-500">
+                          <tr className="border-b border-slate-100">
+                            <th className="px-3 py-2 font-bold">Invoice</th>
+                            <th className="px-3 py-2 font-bold">Amount</th>
+                            <th className="px-3 py-2 font-bold">{folder === "Paid" ? "Paid date" : "Due date"}</th>
+                            <th className="px-3 py-2 text-right font-bold">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr data-customer-portal-invoice-empty-row={folderKey}>
+                            <td className="px-3 py-3 text-sm text-slate-600" colSpan={4}>
+                              No {folder.toLowerCase()} invoice PDFs are available in this customer folder yet.
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="flex justify-end border-t border-slate-100 px-3 py-2">
+                      <button
+                        aria-disabled="true"
+                        className="min-h-9 rounded-md border border-slate-200 bg-slate-100 px-3 text-sm font-semibold text-slate-500"
+                        data-customer-portal-invoice-download={folderKey}
+                        disabled
+                        type="button"
+                      >
+                        Download PDF
+                      </button>
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+          </section>
         ) : (
           <>
             <section

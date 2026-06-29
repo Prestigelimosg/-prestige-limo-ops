@@ -1097,9 +1097,6 @@ export default function MockCustomerDashboardPage() {
   const unbilledCustomersShowingLabel = selectedUnbilledCustomerRow
     ? `Showing selected unbilled row of ${unbilledCustomerRows.length}`
     : `Showing all ${unbilledCustomerRows.length} unbilled rows`;
-  const preparedUnbilledCustomerLabel = selectedUnbilledCustomerRow
-    ? `${selectedUnbilledCustomerRow.customerName} - ${selectedUnbilledCustomerRow.reference}`
-    : "All unbilled customers";
   const getUnbilledPrepareButtonLabel = (rowKey: string) =>
     preparingUnbilledCustomerRowKey === rowKey
       ? "Preparing"
@@ -2189,7 +2186,7 @@ export default function MockCustomerDashboardPage() {
               </p>
             </div>
             <div
-              className="mt-3 grid gap-2 lg:grid-cols-[minmax(16rem,1fr)_auto] lg:items-end"
+              className="mt-3"
               data-unbilled-customers-dropdown="true"
             >
               <label className="text-sm font-semibold text-slate-700">
@@ -2208,12 +2205,6 @@ export default function MockCustomerDashboardPage() {
                   ))}
                 </select>
               </label>
-              <div
-                className="rounded-md border border-amber-200 bg-white px-3 py-2 text-xs font-semibold text-amber-950"
-                data-unbilled-customers-selected-label="true"
-              >
-                {preparedUnbilledCustomerLabel}
-              </div>
             </div>
           </div>
 

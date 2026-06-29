@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 function read(path) {
   return readFileSync(path, "utf8");
@@ -27,6 +27,9 @@ const bookPage = read("app/book/page.tsx");
 const ledger = read("docs/current-implementation-ledger.md");
 const portalPage = read("app/my-bookings/page.tsx");
 const migration = read("supabase/migrations/202606290001_company_profile_settings_foundation.sql");
+const defaultLogoPath = "public/prestige-limo-sg-logo.jpg";
+
+assert(existsSync(defaultLogoPath), "Default company logo asset file is missing.");
 
 for (const field of [
   "company_name",
@@ -48,6 +51,26 @@ assertIncludes(
   shared,
   'email: "acc@prestigelimo.sg"',
   "Default company profile email must use the official accounting email.",
+);
+assertIncludes(
+  shared,
+  'address: "10 Anson Rd, #10-11 Prestige Limo SG, International Plaza, Singapore 079903"',
+  "Default company profile address must use the official International Plaza address.",
+);
+assertIncludes(
+  shared,
+  'export const defaultCompanyLogoPath = "/prestige-limo-sg-logo.jpg";',
+  "Default company logo asset path must be locked.",
+);
+assertIncludes(
+  shared,
+  '^\\/[a-z0-9][a-z0-9/_-]*\\.(?:png|jpe?g|webp)$',
+  "Public profile sanitizer must allow safe same-site public logo paths.",
+);
+assertIncludes(
+  shared,
+  "profileForbiddenPattern.test(raw)",
+  "Public profile logo sanitizer must reject customer-hidden/internal logo URL fragments.",
 );
 
 for (const forbidden of [
@@ -108,11 +131,21 @@ assertIncludes(adminPage, '"company"', "Admin app tab type must include Company.
 assertIncludes(adminPage, 'data-company-profile-settings="true"', "Admin Company settings panel is missing.");
 assertIncludes(adminPage, 'data-company-profile-save="true"', "Admin Company settings save button is missing.");
 assertIncludes(adminPage, 'data-company-profile-preview="true"', "Admin Company settings preview is missing.");
+assertIncludes(
+  adminPage,
+  '^\\/[a-z0-9][a-z0-9/_-]*\\.(?:png|jpe?g|webp)$',
+  "Admin Company settings preview must allow the bundled same-site logo.",
+);
 
 assertIncludes(
   ledger,
   "The default public company profile email is `acc@prestigelimo.sg`, used as the official accounting contact fallback on customer-facing pages and invoice PDFs.",
   "Ledger must record the official accounting email fallback.",
+);
+assertIncludes(
+  ledger,
+  "The default public company profile logo is `/prestige-limo-sg-logo.jpg` and the default address is `10 Anson Rd, #10-11 Prestige Limo SG, International Plaza, Singapore 079903`.",
+  "Ledger must record the official logo and address fallback.",
 );
 
 for (const customerPage of [

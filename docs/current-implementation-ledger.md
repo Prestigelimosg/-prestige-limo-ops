@@ -163,6 +163,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 - Admin now has a compact `Company` settings tab for public-facing company logo URL, company name, WhatsApp/phone/email, address, UEN/business reg no., bank/payment instructions, Stripe card availability, optional card fee percentage, and invoice footer terms.
 - The default public company profile email is `acc@prestigelimo.sg`, used as the official accounting contact fallback on customer-facing pages and invoice PDFs.
+- The default public company profile logo is `/prestige-limo-sg-logo.jpg` and the default address is `10 Anson Rd, #10-11 Prestige Limo SG, International Plaza, Singapore 079903`.
 - Customer `/book` and `/my-bookings` read the same public-safe profile through `GET /api/company-profile` and fall back to safe defaults when the settings table is not ready.
 - Admin saves use `GET/POST /api/admin-company-profile` behind the existing same-origin admin dashboard boundary and `x-prestige-admin-purpose`; the browser does not receive or expose the private admin session token.
 - The Stripe and bank settings are wording/settings only. This does not create Stripe charges, payment links, invoices, PDFs, payment reconciliation records, provider sends, payouts, GPS/live-location records, env changes, or activation of billing/payment providers.
@@ -347,6 +348,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Admin Customers can issue a browser-local invoice from the prepared Unbilled Customers row after the approved amount and due date are reviewed.
 - The issue action creates a unique `INV-YYYYMMDD-####` invoice number only at click time, saves the invoice record to this Mac browser storage, and starts a real PDF download generated in-browser.
 - The customer portal `Invoices` tab reads the same browser-local invoice records and shows them under compact `Unpaid` and `Paid` monthly folders with PDF download buttons.
+- Downloaded invoice PDFs embed the safe Company Profile JPEG logo when available and keep company name, contact, accounting email, address, and footer terms in the same customer-facing profile path.
 - The amount input is required before issue so admin must review the charge before invoice number/PDF creation.
 - Issued local invoices show `Pay` for unpaid invoices, then `Paid` plus `Mark Unpaid` so an accidental local paid click can be reversed before real payment sync exists.
 - This pass does not send email, create Stripe/payment links, write bank/payment/provider records, write Supabase rows, change env, apply migrations, or create cross-device customer portal sync.

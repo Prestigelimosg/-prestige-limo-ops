@@ -21673,6 +21673,7 @@ export default function Home() {
       ? "Revoked"
       : "Revoke";
   const companyProfileLogoPreviewUrl =
+    /^\/[a-z0-9][a-z0-9/_-]*\.(?:png|jpe?g|webp)$/i.test(companyProfileDraft.logo_image_url) ||
     /^https:\/\/[^\s"')]+$/i.test(companyProfileDraft.logo_image_url) ||
     /^data:image\/(?:png|jpe?g|webp);base64,[a-z0-9+/=\s]+$/i.test(companyProfileDraft.logo_image_url)
       ? companyProfileDraft.logo_image_url

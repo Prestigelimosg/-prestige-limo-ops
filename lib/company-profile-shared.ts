@@ -23,6 +23,8 @@ export type CompanyProfileSanitizeResult = {
 
 type UnknownRecord = Record<string, unknown>;
 
+export const defaultCompanyLogoPath = "/prestige-limo-sg-logo.jpg";
+
 const profileForbiddenPattern =
   /driver[_\s-]*payout|paynow[_\s-]*payout|internal[_\s-]*admin|internal[_\s-]*finance|admin[_\s-]*finance|parser|debug|service[_\s-]*role|secret|api[_\s-]*key|access[_\s-]*token|raw[_\s-]*token|customer[_\s-]*price|mock[_\s-]*qa|dev[_\s-]*archive|payout[_\s-]*comparison/i;
 
@@ -43,13 +45,13 @@ const maxFieldLengths: Record<keyof PublicCompanyProfile, number> = {
 };
 
 export const defaultCompanyProfile: PublicCompanyProfile = {
-  address: "",
+  address: "10 Anson Rd, #10-11 Prestige Limo SG, International Plaza, Singapore 079903",
   bank_payment_instructions: "",
   company_name: "Prestige Limo SG",
   email: "acc@prestigelimo.sg",
   invoice_footer_terms:
     "Thank you for choosing our service. Bookings are confirmed upon receipt of the required payment or deposit. Waiting time includes a 15-minute grace period; additional waiting time may be chargeable. Requests made less than 12 hours before pickup may incur a SGD $50 change fee.",
-  logo_image_url: "",
+  logo_image_url: defaultCompanyLogoPath,
   phone: "+65 9655 0807",
   stripe_card_fee_percent: 10,
   stripe_card_fee_required: false,
@@ -94,7 +96,15 @@ function safeLogoUrl(value: unknown) {
     return "";
   }
 
+  if (profileForbiddenPattern.test(raw)) {
+    return "";
+  }
+
   if (/^data:image\/(?:png|jpe?g|webp);base64,[a-z0-9+/=\s]+$/i.test(raw)) {
+    return raw;
+  }
+
+  if (/^\/[a-z0-9][a-z0-9/_-]*\.(?:png|jpe?g|webp)$/i.test(raw)) {
     return raw;
   }
 

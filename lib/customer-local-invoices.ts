@@ -295,9 +295,138 @@ function pdfLine(value: string, fontSize = 10) {
   return `/${"F1"} ${fontSize} Tf (${escapePdfText(value)}) Tj 0 -15 Td`;
 }
 
+type CustomerInvoicePdfLogoImage = {
+  bytes: Uint8Array;
+  height: number;
+  width: number;
+};
+
+const pdfTextEncoder = new TextEncoder();
+
+function bytesForPdfText(value: string) {
+  return pdfTextEncoder.encode(value);
+}
+
+function concatPdfBytes(chunks: Uint8Array[]) {
+  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const result = new Uint8Array(totalLength);
+  let offset = 0;
+
+  chunks.forEach((chunk) => {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  });
+
+  return result;
+}
+
+function decodeBase64Bytes(base64: string) {
+  try {
+    const binary = atob(base64.replace(/\s/g, ""));
+    const bytes = new Uint8Array(binary.length);
+
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+
+    return bytes;
+  } catch {
+    return null;
+  }
+}
+
+function readJpegDimensions(bytes: Uint8Array) {
+  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) {
+    return null;
+  }
+
+  let offset = 2;
+  const startOfFrameMarkers = new Set([
+    0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf,
+  ]);
+
+  while (offset + 8 < bytes.length) {
+    while (bytes[offset] === 0xff) {
+      offset += 1;
+    }
+
+    const marker = bytes[offset];
+    offset += 1;
+
+    if (marker === 0xd9 || marker === 0xda) {
+      break;
+    }
+
+    const segmentLength = (bytes[offset] << 8) + bytes[offset + 1];
+
+    if (segmentLength < 2 || offset + segmentLength > bytes.length) {
+      break;
+    }
+
+    if (startOfFrameMarkers.has(marker)) {
+      const height = (bytes[offset + 3] << 8) + bytes[offset + 4];
+      const width = (bytes[offset + 5] << 8) + bytes[offset + 6];
+
+      return width > 0 && height > 0 ? { height, width } : null;
+    }
+
+    offset += segmentLength;
+  }
+
+  return null;
+}
+
+function pdfLogoFromJpegBytes(bytes: Uint8Array): CustomerInvoicePdfLogoImage | null {
+  const dimensions = readJpegDimensions(bytes);
+
+  return dimensions ? { ...dimensions, bytes } : null;
+}
+
+async function loadCustomerInvoicePdfLogoImage(
+  companyProfile: PublicCompanyProfile,
+): Promise<CustomerInvoicePdfLogoImage | null> {
+  const logoImageUrl = companyProfile.logo_image_url || defaultCompanyProfile.logo_image_url;
+
+  if (!logoImageUrl) {
+    return null;
+  }
+
+  const dataUrlMatch = /^data:image\/jpe?g;base64,([\s\S]+)$/i.exec(logoImageUrl);
+
+  if (dataUrlMatch) {
+    const bytes = decodeBase64Bytes(dataUrlMatch[1]);
+
+    return bytes ? pdfLogoFromJpegBytes(bytes) : null;
+  }
+
+  if (typeof window === "undefined" || typeof fetch === "undefined") {
+    return null;
+  }
+
+  if (
+    !/^\/[a-z0-9][a-z0-9/_-]*\.jpe?g$/i.test(logoImageUrl) &&
+    !/^https:\/\/[^\s"')]+\.jpe?g(?:[?#][^\s"')]*)?$/i.test(logoImageUrl)
+  ) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(logoImageUrl, { cache: "force-cache" });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    return pdfLogoFromJpegBytes(new Uint8Array(await response.arrayBuffer()));
+  } catch {
+    return null;
+  }
+}
+
 export function createCustomerInvoicePdfBytes(
   invoice: CustomerLocalInvoiceRecord,
   companyProfile: PublicCompanyProfile = defaultCompanyProfile,
+  logoImage: CustomerInvoicePdfLogoImage | null = null,
 ) {
   const companyName = companyProfile.company_name || defaultCompanyProfile.company_name;
   const contactLine = [
@@ -348,7 +477,20 @@ export function createCustomerInvoicePdfBytes(
     { size: 12, text: "Terms" },
     ...termsLines.slice(0, 8).map((textLine) => ({ size: 8, text: textLine })),
   ];
+  const logoDisplayWidth = 150;
+  const logoDisplayHeight = logoImage
+    ? Math.max(44, Math.min(92, Math.round((logoDisplayWidth * logoImage.height) / logoImage.width)))
+    : 0;
+  const logoStreamLines = logoImage
+    ? [
+        "q",
+        `${logoDisplayWidth} 0 0 ${logoDisplayHeight} 410 ${764 - logoDisplayHeight} cm`,
+        "/Im1 Do",
+        "Q",
+      ]
+    : [];
   const streamLines = [
+    ...logoStreamLines,
     "BT",
     "/F1 18 Tf",
     "50 790 Td",
@@ -356,33 +498,61 @@ export function createCustomerInvoicePdfBytes(
     "ET",
   ];
   const stream = streamLines.join("\n");
+  const streamBytes = bytesForPdfText(stream);
+  const pageResources = logoImage
+    ? "<< /Font << /F1 4 0 R >> /XObject << /Im1 6 0 R >> >>"
+    : "<< /Font << /F1 4 0 R >> >>";
   const objects = [
-    "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
-    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+    bytesForPdfText("<< /Type /Catalog /Pages 2 0 R >>"),
+    bytesForPdfText("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
+    bytesForPdfText(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources ${pageResources} /Contents 5 0 R >>`,
+    ),
+    bytesForPdfText("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"),
+    concatPdfBytes([
+      bytesForPdfText(`<< /Length ${streamBytes.length} >>\nstream\n`),
+      streamBytes,
+      bytesForPdfText("\nendstream"),
+    ]),
+    ...(logoImage
+      ? [
+          concatPdfBytes([
+            bytesForPdfText(
+              `<< /Type /XObject /Subtype /Image /Width ${logoImage.width} /Height ${logoImage.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${logoImage.bytes.length} >>\nstream\n`,
+            ),
+            logoImage.bytes,
+            bytesForPdfText("\nendstream"),
+          ]),
+        ]
+      : []),
   ];
-  let pdf = "%PDF-1.4\n";
+  const pdfChunks = [bytesForPdfText("%PDF-1.4\n")];
   const offsets = [0];
+  let pdfLength = pdfChunks[0].length;
 
   objects.forEach((object, index) => {
-    offsets.push(pdf.length);
-    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+    offsets.push(pdfLength);
+
+    const prefix = bytesForPdfText(`${index + 1} 0 obj\n`);
+    const suffix = bytesForPdfText("\nendobj\n");
+
+    pdfChunks.push(prefix, object, suffix);
+    pdfLength += prefix.length + object.length + suffix.length;
   });
 
-  const xrefOffset = pdf.length;
-  pdf += `xref\n0 ${objects.length + 1}\n`;
-  pdf += "0000000000 65535 f \n";
+  const xrefOffset = pdfLength;
+  let xref = `xref\n0 ${objects.length + 1}\n`;
+  xref += "0000000000 65535 f \n";
   offsets.slice(1).forEach((offset) => {
-    pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
+    xref += `${String(offset).padStart(10, "0")} 00000 n \n`;
   });
-  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  xref += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  pdfChunks.push(bytesForPdfText(xref));
 
-  return new TextEncoder().encode(pdf);
+  return concatPdfBytes(pdfChunks);
 }
 
-export function downloadCustomerInvoicePdf(
+export async function downloadCustomerInvoicePdf(
   invoice: CustomerLocalInvoiceRecord,
   companyProfile?: PublicCompanyProfile,
 ) {
@@ -390,7 +560,9 @@ export function downloadCustomerInvoicePdf(
     return;
   }
 
-  const bytes = createCustomerInvoicePdfBytes(invoice, companyProfile);
+  const effectiveCompanyProfile = companyProfile || defaultCompanyProfile;
+  const logoImage = await loadCustomerInvoicePdfLogoImage(effectiveCompanyProfile);
+  const bytes = createCustomerInvoicePdfBytes(invoice, effectiveCompanyProfile, logoImage);
   const blob = new Blob([bytes], { type: "application/pdf" });
   const url = window.URL.createObjectURL(blob);
   const anchor = document.createElement("a");

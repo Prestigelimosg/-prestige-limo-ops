@@ -100,17 +100,25 @@ for (const fragment of [
 for (const fragment of [
   "type UnbilledCustomerRow = {",
   "function getMockUnbilledCustomerRows() {",
-  "const [unbilledCustomersPageSize, setUnbilledCustomersPageSize] = useState(10);",
-  "const [unbilledCustomersPage, setUnbilledCustomersPage] = useState(1);",
+  "const [selectedUnbilledCustomerRowKey, setSelectedUnbilledCustomerRowKey] = useState(\"\");",
+  "const [preparingUnbilledCustomerRowKey, setPreparingUnbilledCustomerRowKey] = useState(\"\");",
   "const [customerInvoicePrepRowKey, setCustomerInvoicePrepRowKey] = useState(\"\");",
   "const [customerInvoicePrepFeedback, setCustomerInvoicePrepFeedback] = useState(",
   "const unbilledCustomerRows = useMemo<UnbilledCustomerRow[]>(() => {",
   "item.billingStatus.trim().toLowerCase().includes(\"unbilled\")",
-  "const paginatedUnbilledCustomerRows = unbilledCustomerRows.slice(",
+  "const selectedUnbilledCustomerRow = useMemo(",
+  "const visibleUnbilledCustomerRows = selectedUnbilledCustomerRow",
+  "const getUnbilledPrepareButtonLabel = (rowKey: string) =>",
+  "\"Preparing\"",
+  "\"Prepared\"",
+  "function updateSelectedUnbilledCustomerRow(value: string) {",
   "const customerInvoicePrepRow = useMemo(",
   "function prepareCustomerInvoiceFromUnbilled(row: UnbilledCustomerRow) {",
+  "setPreparingUnbilledCustomerRowKey(row.key);",
+  "setSelectedUnbilledCustomerRowKey(row.key);",
   "setCustomerInvoiceWorkspaceTab(\"statements\");",
   "setOutstandingReviewSearchTerm(row.customerName);",
+  "document.querySelector<HTMLElement>(\"[data-customer-invoice-prep-next-action='true']\")",
   "continue in the existing admin monthly billing workflow when ready",
   "function clearCustomerInvoicePrep() {",
 ]) {
@@ -119,10 +127,10 @@ for (const fragment of [
 
 for (const fragment of [
   'data-unbilled-customers-count="true"',
-  'data-unbilled-customers-pagination="true"',
-  'data-unbilled-customers-page-size="true"',
-  'data-unbilled-customers-previous="true"',
-  'data-unbilled-customers-next="true"',
+  'data-unbilled-customers-dropdown="true"',
+  'data-unbilled-customers-select="true"',
+  'data-unbilled-customers-selected-label="true"',
+  'data-unbilled-customers-scroll-list="true"',
   'data-unbilled-customers-list="true"',
   'data-unbilled-customer-row={row.key}',
   'data-unbilled-customer-prepare-invoice={row.key}',
@@ -130,13 +138,16 @@ for (const fragment of [
   'data-unbilled-customers-boundary="true"',
   "Prepare",
   "Review these before sending invoices so unbilled or statement-needed accounts are not missed.",
-  "paginatedUnbilledCustomerRows.map((row)",
+  "All unbilled customers",
+  "visibleUnbilledCustomerRows.map((row)",
 ]) {
   assertIncludes(unbilledSection, fragment, `unbilled customers UI fragment ${fragment}`);
 }
 
 for (const fragment of [
   'data-customer-invoice-prep-panel="true"',
+  'ref={customerInvoicePrepPanelRef}',
+  'data-customer-invoice-prep-next-action="true"',
   'data-customer-invoice-prep-active={customerInvoicePrepRow.key}',
   'data-customer-invoice-prep-open-folder="true"',
   'data-customer-invoice-prep-clear="true"',
@@ -166,8 +177,8 @@ for (const phrase of [
   "The finder uses a visible `All customers` dropdown for direct folder selection; it shows 10 customer folders at a time and keeps numbered page buttons inside the dropdown for larger 200-plus account lists.",
   "The finder keeps the existing guarded Load Saved Accounts control visible, but it does not auto-load or create a new route/API.",
   "A new Unbilled Customers checkpoint sits before the invoice workspace so unbilled draft rows and statement-needed account rows are visible before invoice work starts.",
-  "Each unbilled row has a compact `Prepare` action that loads that exact customer/job into the Send Invoice Workbench prep strip, opens the Statements tab, and narrows the Outstanding search to that customer.",
-  "The finder no longer shows a separate page-size dropdown or separate previous/next buttons; the Unbilled Customers list remains a compact paged row/table so invoice work can be scanned without giant account cards.",
+  "Each unbilled row has a compact `Prepare` action that changes through `Preparing` to `Prepared`, loads that exact customer/job into the Send Invoice Workbench prep strip, opens the Statements tab, narrows the Outstanding search to that customer, and focuses the next workbench action.",
+  "The finder no longer shows a separate page-size dropdown or separate previous/next buttons; the Unbilled Customers list uses one dropdown plus a compact scrollable row/table so invoice work can be scanned without giant account cards.",
   "This is a UI handoff into the existing admin monthly billing workflow; it does not add a second invoice engine, create invoice numbers, generate PDFs, send invoices, activate payment/provider sending, write DB rows, change env, activate GPS/live location, billing/payout automation, calendar sync, parser changes, or shims.",
   "Guard coverage lives in `scripts/test-customers-folder-finder-unbilled-queue-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, useMemo, useRef, useState } from "react";
 import {
   collectionRules,
   mockCustomers,
@@ -652,6 +652,7 @@ const outstandingPaymentReviewItems: OutstandingPaymentReviewItem[] = mockCustom
 );
 
 export default function MockCustomerDashboardPage() {
+  const customerInvoicePrepPanelRef = useRef<HTMLDivElement | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [customerFolderFinderPage, setCustomerFolderFinderPage] = useState(1);
   const [customerFolderFinderSelectedId, setCustomerFolderFinderSelectedId] = useState("");
@@ -755,8 +756,8 @@ export default function MockCustomerDashboardPage() {
   const [collectionFollowUpPage, setCollectionFollowUpPage] = useState(1);
   const [monthlyStatementPageSize, setMonthlyStatementPageSize] = useState(10);
   const [monthlyStatementPage, setMonthlyStatementPage] = useState(1);
-  const [unbilledCustomersPageSize, setUnbilledCustomersPageSize] = useState(10);
-  const [unbilledCustomersPage, setUnbilledCustomersPage] = useState(1);
+  const [selectedUnbilledCustomerRowKey, setSelectedUnbilledCustomerRowKey] = useState("");
+  const [preparingUnbilledCustomerRowKey, setPreparingUnbilledCustomerRowKey] = useState("");
   const [customerInvoicePrepRowKey, setCustomerInvoicePrepRowKey] = useState("");
   const [customerInvoicePrepFeedback, setCustomerInvoicePrepFeedback] = useState(
     "Choose Prepare from Unbilled Customers to load one customer into the invoice workbench.",
@@ -1086,23 +1087,27 @@ export default function MockCustomerDashboardPage() {
         firstRow.customerName.localeCompare(secondRow.customerName),
     );
   }, [regularCustomerBookingListItems]);
-  const unbilledCustomersTotalPages = Math.max(
-    1,
-    Math.ceil(unbilledCustomerRows.length / unbilledCustomersPageSize),
+  const selectedUnbilledCustomerRow = useMemo(
+    () => unbilledCustomerRows.find((row) => row.key === selectedUnbilledCustomerRowKey) ?? null,
+    [selectedUnbilledCustomerRowKey, unbilledCustomerRows],
   );
-  const currentUnbilledCustomersPage = Math.min(unbilledCustomersPage, unbilledCustomersTotalPages);
-  const unbilledCustomersStartIndex =
-    unbilledCustomerRows.length === 0 ? 0 : (currentUnbilledCustomersPage - 1) * unbilledCustomersPageSize;
-  const paginatedUnbilledCustomerRows = unbilledCustomerRows.slice(
-    unbilledCustomersStartIndex,
-    unbilledCustomersStartIndex + unbilledCustomersPageSize,
-  );
-  const unbilledCustomersShowingStart =
-    unbilledCustomerRows.length === 0 ? 0 : unbilledCustomersStartIndex + 1;
-  const unbilledCustomersShowingEnd = Math.min(
-    unbilledCustomersStartIndex + unbilledCustomersPageSize,
-    unbilledCustomerRows.length,
-  );
+  const visibleUnbilledCustomerRows = selectedUnbilledCustomerRow
+    ? [selectedUnbilledCustomerRow]
+    : unbilledCustomerRows;
+  const unbilledCustomersShowingLabel = selectedUnbilledCustomerRow
+    ? `Showing selected unbilled row of ${unbilledCustomerRows.length}`
+    : `Showing all ${unbilledCustomerRows.length} unbilled rows`;
+  const preparedUnbilledCustomerLabel = selectedUnbilledCustomerRow
+    ? `${selectedUnbilledCustomerRow.customerName} - ${selectedUnbilledCustomerRow.reference}`
+    : "All unbilled customers";
+  const getUnbilledPrepareButtonLabel = (rowKey: string) =>
+    preparingUnbilledCustomerRowKey === rowKey
+      ? "Preparing"
+      : customerInvoicePrepRowKey === rowKey
+        ? "Prepared"
+        : "Prepare";
+  const isUnbilledPrepareButtonPrepared = (rowKey: string) =>
+    customerInvoicePrepRowKey === rowKey && preparingUnbilledCustomerRowKey !== rowKey;
   const customerInvoicePrepRow = useMemo(
     () => unbilledCustomerRows.find((row) => row.key === customerInvoicePrepRowKey) ?? null,
     [customerInvoicePrepRowKey, unbilledCustomerRows],
@@ -1408,7 +1413,13 @@ export default function MockCustomerDashboardPage() {
     setOutstandingReviewPage(1);
   }
 
+  function updateSelectedUnbilledCustomerRow(value: string) {
+    setSelectedUnbilledCustomerRowKey(value);
+  }
+
   function prepareCustomerInvoiceFromUnbilled(row: UnbilledCustomerRow) {
+    setPreparingUnbilledCustomerRowKey(row.key);
+    setSelectedUnbilledCustomerRowKey(row.key);
     setCustomerInvoicePrepRowKey(row.key);
     setCustomerInvoiceWorkspaceTab("statements");
     setOutstandingReviewSearchTerm(row.customerName);
@@ -1419,10 +1430,20 @@ export default function MockCustomerDashboardPage() {
     setCustomerInvoicePrepFeedback(
       `${row.customerName} loaded from Unbilled Customers. Review the folder and statement/outstanding rows, then continue in the existing admin monthly billing workflow when ready.`,
     );
+    window.setTimeout(() => {
+      setPreparingUnbilledCustomerRowKey("");
+      const nextAction =
+        document.querySelector<HTMLElement>("[data-customer-invoice-prep-next-action='true']") ??
+        customerInvoicePrepPanelRef.current;
+
+      customerInvoicePrepPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      nextAction?.focus();
+    }, 250);
   }
 
   function clearCustomerInvoicePrep() {
     setCustomerInvoicePrepRowKey("");
+    setPreparingUnbilledCustomerRowKey("");
     setOutstandingReviewSearchTerm("");
     setOutstandingReviewPage(1);
     setCustomerInvoicePrepFeedback(
@@ -2164,111 +2185,107 @@ export default function MockCustomerDashboardPage() {
                 className="rounded-md border border-amber-200 bg-white px-3 py-2 text-sm font-bold text-amber-950"
                 data-unbilled-customers-count="true"
               >
-                Showing {unbilledCustomersShowingStart}-{unbilledCustomersShowingEnd} of{" "}
-                {unbilledCustomerRows.length} unbilled rows
+                {unbilledCustomersShowingLabel}
               </p>
             </div>
             <div
-              className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
-              data-unbilled-customers-pagination="true"
+              className="mt-3 grid gap-2 lg:grid-cols-[minmax(16rem,1fr)_auto] lg:items-end"
+              data-unbilled-customers-dropdown="true"
             >
-              <label className="text-sm font-semibold text-slate-700 sm:max-w-48">
-                Per page
+              <label className="text-sm font-semibold text-slate-700">
+                Unbilled customer/job
                 <select
                   className="mt-1 min-h-10 w-full rounded-md border border-amber-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950 outline-none focus:border-amber-700"
-                  data-unbilled-customers-page-size="true"
-                  onChange={(event) => {
-                    setUnbilledCustomersPageSize(Number(event.target.value));
-                    setUnbilledCustomersPage(1);
-                  }}
-                  value={unbilledCustomersPageSize}
+                  data-unbilled-customers-select="true"
+                  onChange={(event) => updateSelectedUnbilledCustomerRow(event.target.value)}
+                  value={selectedUnbilledCustomerRowKey}
                 >
-                  {customerQueuePageSizeOptions.map((pageSize) => (
-                    <option key={pageSize} value={pageSize}>
-                      {pageSize} per page
+                  <option value="">All unbilled customers</option>
+                  {unbilledCustomerRows.map((row) => (
+                    <option key={row.key} value={row.key}>
+                      {row.customerName} - {row.reference} - {row.amount}
                     </option>
                   ))}
                 </select>
               </label>
-              <div className="flex gap-2">
-                <button
-                  className="min-h-10 rounded-md border border-amber-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                  data-unbilled-customers-previous="true"
-                  disabled={currentUnbilledCustomersPage <= 1}
-                  onClick={() => setUnbilledCustomersPage((currentPage) => Math.max(1, currentPage - 1))}
-                  type="button"
-                >
-                  Previous
-                </button>
-                <button
-                  className="min-h-10 rounded-md border border-amber-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                  data-unbilled-customers-next="true"
-                  disabled={currentUnbilledCustomersPage >= unbilledCustomersTotalPages}
-                  onClick={() =>
-                    setUnbilledCustomersPage((currentPage) =>
-                      Math.min(unbilledCustomersTotalPages, currentPage + 1),
-                    )
-                  }
-                  type="button"
-                >
-                  Next
-                </button>
+              <div
+                className="rounded-md border border-amber-200 bg-white px-3 py-2 text-xs font-semibold text-amber-950"
+                data-unbilled-customers-selected-label="true"
+              >
+                {preparedUnbilledCustomerLabel}
               </div>
             </div>
           </div>
 
-          <div className="divide-y divide-slate-200" data-unbilled-customers-list="true">
-            {paginatedUnbilledCustomerRows.length > 0 ? (
-              paginatedUnbilledCustomerRows.map((row) => (
-                <article
-                  className="grid gap-2 px-3 py-2 text-sm leading-5 transition hover:bg-amber-50/50 sm:px-4 lg:grid-cols-[minmax(12rem,1.25fr)_minmax(8rem,0.7fr)_minmax(8rem,0.7fr)_minmax(14rem,1.35fr)_minmax(9rem,auto)] lg:items-center"
-                  data-unbilled-customer-row={row.key}
-                  key={row.key}
-                >
-                  <div className="min-w-0">
-                    <h3 className="truncate text-sm font-bold text-slate-950 sm:text-base">{row.customerName}</h3>
-                    <p className="mt-0.5 truncate text-xs text-slate-500">{row.reference}</p>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Status</p>
-                    <p className="mt-0.5 text-sm font-bold text-amber-950">{row.statusLabel}</p>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Amount</p>
-                    <p className="mt-0.5 text-sm font-bold text-slate-950">{row.amount}</p>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
-                      Job / service
-                    </p>
-                    <p className="mt-0.5 truncate text-sm font-semibold text-slate-800">
-                      {row.dateLabel} · {row.service}
-                    </p>
-                    <p className="mt-0.5 truncate text-xs text-slate-500">{row.route}</p>
-                  </div>
-                  <div className="flex items-center gap-2 lg:justify-end">
-                    <button
-                      className="inline-flex min-h-9 items-center justify-center rounded-md border border-amber-900 bg-amber-900 px-3 text-center text-xs font-bold text-white transition hover:bg-amber-800"
-                      data-unbilled-customer-prepare-invoice={row.key}
-                      onClick={() => prepareCustomerInvoiceFromUnbilled(row)}
-                      type="button"
-                    >
-                      Prepare
-                    </button>
-                    {row.customerFolderHref ? (
-                      <Link
-                        className="inline-flex min-h-9 items-center justify-center rounded-md border border-amber-300 bg-white px-3 text-center text-xs font-bold text-amber-950 transition hover:border-amber-700"
-                        data-unbilled-customer-open-folder={row.key}
-                        href={row.customerFolderHref}
+          <div className="max-h-72 overflow-auto" data-unbilled-customers-scroll-list="true">
+            {visibleUnbilledCustomerRows.length > 0 ? (
+              <table
+                className="w-full min-w-[820px] border-collapse text-left text-sm"
+                data-unbilled-customers-list="true"
+              >
+                <thead className="sticky top-0 z-10 bg-white">
+                  <tr className="border-b border-amber-100 text-[11px] uppercase tracking-[0.1em] text-slate-500">
+                    <th className="px-3 py-2 font-bold sm:px-4">Customer</th>
+                    <th className="px-3 py-2 font-bold">Status</th>
+                    <th className="px-3 py-2 font-bold">Amount</th>
+                    <th className="px-3 py-2 font-bold">Job / route</th>
+                    <th className="px-3 py-2 text-right font-bold sm:px-4">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleUnbilledCustomerRows.map((row) => {
+                    const prepareButtonPrepared = isUnbilledPrepareButtonPrepared(row.key);
+
+                    return (
+                      <tr
+                        className="border-b border-slate-100 text-sm last:border-b-0 hover:bg-amber-50/40"
+                        data-unbilled-customer-row={row.key}
+                        key={row.key}
                       >
-                        Open
-                      </Link>
-                    ) : (
-                      <span className="text-xs font-semibold text-slate-500 lg:text-right">Folder pending</span>
-                    )}
-                  </div>
-                </article>
-              ))
+                        <td className="px-3 py-2 sm:px-4">
+                          <p className="max-w-[13rem] truncate font-bold text-slate-950">{row.customerName}</p>
+                          <p className="max-w-[13rem] truncate text-xs text-slate-500">{row.reference}</p>
+                        </td>
+                        <td className="px-3 py-2 font-semibold text-amber-950">{row.statusLabel}</td>
+                        <td className="px-3 py-2 font-bold text-slate-950">{row.amount}</td>
+                        <td className="px-3 py-2">
+                          <p className="max-w-[18rem] truncate font-semibold text-slate-800">
+                            {row.dateLabel} · {row.service}
+                          </p>
+                          <p className="max-w-[18rem] truncate text-xs text-slate-500">{row.route}</p>
+                        </td>
+                        <td className="px-3 py-2 text-right sm:px-4">
+                          <div className="inline-flex items-center gap-2">
+                            <button
+                              className={`inline-flex min-h-8 items-center justify-center rounded-md border px-3 text-center text-xs font-bold transition ${
+                                prepareButtonPrepared
+                                  ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                                  : "border-amber-900 bg-amber-900 text-white hover:bg-amber-800"
+                              }`}
+                              data-unbilled-customer-prepare-invoice={row.key}
+                              onClick={() => prepareCustomerInvoiceFromUnbilled(row)}
+                              type="button"
+                            >
+                              {getUnbilledPrepareButtonLabel(row.key)}
+                            </button>
+                            {row.customerFolderHref ? (
+                              <Link
+                                className="inline-flex min-h-8 items-center justify-center rounded-md border border-amber-300 bg-white px-3 text-center text-xs font-bold text-amber-950 transition hover:border-amber-700"
+                                data-unbilled-customer-open-folder={row.key}
+                                href={row.customerFolderHref}
+                              >
+                                Open
+                              </Link>
+                            ) : (
+                              <span className="text-xs font-semibold text-slate-500">Folder pending</span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             ) : (
               <div className="p-5 text-sm leading-6 text-slate-600" data-unbilled-customers-empty="true">
                 No unbilled customer rows are visible right now.
@@ -2325,6 +2342,8 @@ export default function MockCustomerDashboardPage() {
             <div
               className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2"
               data-customer-invoice-prep-panel="true"
+              ref={customerInvoicePrepPanelRef}
+              tabIndex={-1}
             >
               {customerInvoicePrepRow ? (
                 <div
@@ -2356,6 +2375,7 @@ export default function MockCustomerDashboardPage() {
                     {customerInvoicePrepRow.customerFolderHref ? (
                       <Link
                         className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-xs font-bold text-white transition hover:bg-slate-700"
+                        data-customer-invoice-prep-next-action="true"
                         data-customer-invoice-prep-open-folder="true"
                         href={customerInvoicePrepRow.customerFolderHref}
                       >

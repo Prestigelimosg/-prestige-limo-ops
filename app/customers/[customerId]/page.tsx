@@ -281,54 +281,47 @@ export default async function MockCustomerFolderPage({ params }: CustomerFolderP
             </p>
           </div>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Customer/account</p>
-              <p className="mt-1 text-sm font-bold text-slate-950">{customer.companyName}</p>
-            </div>
-            <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Visible history rows</p>
-              <p className="mt-1 text-sm font-bold text-slate-950">{customer.bookingHistory.length}</p>
-            </div>
-            <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Customer context</p>
-              <p className="mt-1 text-sm font-bold text-slate-950">Recent trips and active bookings</p>
-            </div>
+          <div
+            className="mt-3 flex flex-wrap gap-x-4 gap-y-1 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700"
+            data-customer-job-history-compact-summary="true"
+          >
+            <span>{customer.companyName}</span>
+            <span>{customer.bookingHistory.length} visible history rows</span>
+            <span>{upcomingJobs.length} upcoming</span>
+            <span>{completedJobs.length} completed</span>
           </div>
 
-          <div className="mt-4 grid gap-3">
-            {jobHistorySnapshotRows.map((booking) => (
-              <article
-                className="grid gap-3 rounded-md border border-slate-200 bg-white p-4 text-sm lg:grid-cols-[0.8fr_0.8fr_1.4fr_1fr_1.3fr]"
-                data-customer-job-history-clarity-row={booking.invoiceNumber}
-                key={`${booking.invoiceNumber}-snapshot`}
-              >
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Reference</p>
-                  <p className="mt-1 font-bold text-slate-950">{booking.invoiceNumber}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Pickup/trip date</p>
-                  <p className="mt-1 font-semibold text-slate-900">{booking.date}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Route</p>
-                  <p className="mt-1 leading-6 text-slate-700">{booking.route}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                    Customer-facing status
-                  </p>
-                  <p className="mt-1 font-semibold text-slate-900">{getCustomerSafeJobStatus(booking)}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                    Request/change status
-                  </p>
-                  <p className="mt-1 leading-6 text-slate-700">{getCustomerSafeRequestStatus(booking)}</p>
-                </div>
-              </article>
-            ))}
+          <div className="mt-3 max-h-80 overflow-auto" data-customer-job-history-compact-table="true">
+            <table className="w-full min-w-[860px] border-collapse text-left text-sm">
+              <thead className="sticky top-0 z-10 bg-white">
+                <tr className="border-b border-slate-200 text-[11px] uppercase tracking-[0.1em] text-slate-500">
+                  <th className="px-3 py-2 font-bold">Reference</th>
+                  <th className="px-3 py-2 font-bold">Date</th>
+                  <th className="px-3 py-2 font-bold">Route</th>
+                  <th className="px-3 py-2 font-bold">Status</th>
+                  <th className="px-3 py-2 font-bold">Request/change</th>
+                </tr>
+              </thead>
+              <tbody>
+                {jobHistorySnapshotRows.map((booking) => (
+                  <tr
+                    className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50"
+                    data-customer-job-history-clarity-row={booking.invoiceNumber}
+                    key={`${booking.invoiceNumber}-snapshot`}
+                  >
+                    <td className="px-3 py-2 font-bold text-slate-950">{booking.invoiceNumber}</td>
+                    <td className="px-3 py-2 font-semibold text-slate-900">{booking.date}</td>
+                    <td className="px-3 py-2">
+                      <p className="max-w-[22rem] truncate text-slate-700">{booking.route}</p>
+                    </td>
+                    <td className="px-3 py-2 font-semibold text-slate-900">{getCustomerSafeJobStatus(booking)}</td>
+                    <td className="px-3 py-2">
+                      <p className="max-w-[22rem] truncate text-slate-700">{getCustomerSafeRequestStatus(booking)}</p>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
 
           <p
@@ -514,27 +507,39 @@ export default async function MockCustomerFolderPage({ params }: CustomerFolderP
           </div>
         </section>
 
-        <section className="grid gap-4 lg:grid-cols-2">
-          <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="text-lg font-bold text-slate-950">Upcoming jobs</h2>
-            <ul className="mt-4 space-y-3 text-sm text-slate-700">
-              {upcomingJobs.map((booking) => (
-                <li className="border-b border-slate-100 pb-3 last:border-b-0 last:pb-0" key={booking.invoiceNumber}>
-                  <strong className="text-slate-950">{booking.invoiceNumber}</strong> - {booking.date}, {booking.service}
-                </li>
-              ))}
-            </ul>
+        <section
+          className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
+          data-customer-job-status-index="true"
+        >
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+            <h2 className="text-lg font-bold text-slate-950">Upcoming / Completed Index</h2>
+            <p className="text-sm font-semibold text-slate-600">
+              {upcomingJobs.length} upcoming / {completedJobs.length} completed
+            </p>
           </div>
-
-          <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="text-lg font-bold text-slate-950">Completed jobs</h2>
-            <ul className="mt-4 space-y-3 text-sm text-slate-700">
-              {completedJobs.map((booking) => (
-                <li className="border-b border-slate-100 pb-3 last:border-b-0 last:pb-0" key={booking.invoiceNumber}>
-                  <strong className="text-slate-950">{booking.invoiceNumber}</strong> - {booking.date}, {booking.paymentStatus}
-                </li>
-              ))}
-            </ul>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[680px] border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-[11px] uppercase tracking-[0.1em] text-slate-500">
+                  <th className="py-2 pr-4 font-bold">Status</th>
+                  <th className="py-2 pr-4 font-bold">Reference</th>
+                  <th className="py-2 pr-4 font-bold">Date</th>
+                  <th className="py-2 font-bold">Service / payment</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...upcomingJobs, ...completedJobs].map((booking) => (
+                  <tr className="border-b border-slate-100 last:border-b-0" key={`${booking.invoiceNumber}-index`}>
+                    <td className="py-2 pr-4 font-semibold text-slate-900">{booking.jobStatus}</td>
+                    <td className="py-2 pr-4 font-bold text-slate-950">{booking.invoiceNumber}</td>
+                    <td className="py-2 pr-4 text-slate-700">{booking.date}</td>
+                    <td className="py-2 text-slate-700">
+                      {booking.jobStatus === "Upcoming" ? booking.service : booking.paymentStatus}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </section>
 

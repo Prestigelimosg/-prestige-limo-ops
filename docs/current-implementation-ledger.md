@@ -278,10 +278,17 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The finder uses a visible `All customers` dropdown for direct folder selection; it shows 10 customer folders at a time and keeps numbered page buttons inside the dropdown for larger 200-plus account lists.
 - The finder keeps the existing guarded Load Saved Accounts control visible, but it does not auto-load or create a new route/API.
 - A new Unbilled Customers checkpoint sits before the invoice workspace so unbilled draft rows and statement-needed account rows are visible before invoice work starts.
-- Each unbilled row has a compact `Prepare` action that loads that exact customer/job into the Send Invoice Workbench prep strip, opens the Statements tab, and narrows the Outstanding search to that customer.
-- The finder no longer shows a separate page-size dropdown or separate previous/next buttons; the Unbilled Customers list remains a compact paged row/table so invoice work can be scanned without giant account cards.
+- Each unbilled row has a compact `Prepare` action that changes through `Preparing` to `Prepared`, loads that exact customer/job into the Send Invoice Workbench prep strip, opens the Statements tab, narrows the Outstanding search to that customer, and focuses the next workbench action.
+- The finder no longer shows a separate page-size dropdown or separate previous/next buttons; the Unbilled Customers list uses one dropdown plus a compact scrollable row/table so invoice work can be scanned without giant account cards.
 - This is a UI handoff into the existing admin monthly billing workflow; it does not add a second invoice engine, create invoice numbers, generate PDFs, send invoices, activate payment/provider sending, write DB rows, change env, activate GPS/live location, billing/payout automation, calendar sync, parser changes, or shims.
 - Guard coverage lives in `scripts/test-customers-folder-finder-unbilled-queue-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+
+### Customer Folder Job History Compact Rows
+
+- Customer folder `Job history snapshot` now uses one slim summary strip plus a compact scrollable table instead of summary cards and large job cards.
+- The duplicate Upcoming/Completed job blocks are combined into one compact index table below All booking history.
+- This is customer-folder UI-only polish on existing mock/customer data; it does not add routes, APIs, DB reads/writes, env changes, Vercel changes, invoice/PDF/payment/provider sending, payout automation, GPS/live location, calendar sync, parser changes, or shims.
+- Guard coverage lives in `scripts/test-customer-folder-job-history-compact-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Live William Walkthrough CRM And Driver Job Proof
 

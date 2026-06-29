@@ -20,6 +20,19 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This is display-only cleanup. It does not add routes/APIs, DB writes, env changes, provider sends, email sends, payment/Stripe actions, GPS/live location, billing/payout changes, parser changes, or customer/driver-visible internal data.
 - Guard coverage lives in `scripts/test-company-profile-settings-guard.mjs`.
 
+### Customer Portal Access Link Lock
+
+- Admin can create a compact customer portal access link from the Customers finder row.
+- The link is signed server-side, account allowlisted, expires after a bounded window, and does not require the customer browser page to know any session token.
+- Opening the link sets the existing customer saved-bookings HttpOnly Secure SameSite=Lax Priority=High cookie and redirects to `/my-bookings`.
+- `/my-bookings` still calls only the existing saved-bookings and stored-invoice read adapters with same-origin credentials and purpose headers.
+- Portal reads remain scoped to the signed customer account and the controlled customer runtime allowlist.
+- The public access route does not read or write Supabase, create invoices, generate PDFs, send providers, send email, activate Stripe/payment, expose billing internals, expose customer price, expose driver payout, or expose parser/debug/mock archive data.
+- No Save Booking + CRM change.
+- No `/api/admin-saved-bookings` change.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- Guard coverage lives in `scripts/test-customer-portal-access-link-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Admin Dashboard Browser Read Boundary Fix
 
 - Live admin troubleshooting on 2026-06-25 found that customer `/book` request intake and admin CRM API proof passed, but the browser admin dashboard `Load Bookings` path still returned the safe `Admin booking persistence is available only from the internal admin dashboard.` boundary error.

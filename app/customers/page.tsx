@@ -42,6 +42,7 @@ const adminCustomerSavedBookingsApiPath = "/api/admin-customer-saved-bookings";
 const adminCustomerInvoicesApiPath = "/api/admin-customer-invoices";
 const adminCustomerInvoicePdfApiPath = "/api/admin-customer-invoice-pdf";
 const adminCustomerInvoiceEmailApiPath = "/api/admin-customer-invoice-email";
+const adminCustomerPortalAccessLinksApiPath = "/api/admin-customer-portal-access-links";
 const adminDriverJobDspActualTimeSummariesApiPath =
   "/api/admin-driver-job-dsp-actual-time-summaries";
 
@@ -333,6 +334,12 @@ type RegularCustomerDraftInvoicePreview = {
 };
 
 type RegularCustomerBookingFeedbackTone = "error" | "info" | "success";
+type CustomerPortalAccessCopyStatus = "copied" | "copying" | "error";
+
+type CustomerPortalAccessFeedback = {
+  message: string;
+  tone: RegularCustomerBookingFeedbackTone;
+};
 
 type RegularCustomerMockSaveReview = {
   billingMonth: string;
@@ -879,6 +886,11 @@ export default function MockCustomerDashboardPage() {
   const [customerFolderFinderPage, setCustomerFolderFinderPage] = useState(1);
   const [customerFolderFinderSelectedId, setCustomerFolderFinderSelectedId] = useState("");
   const [customerFolderFinderDropdownOpen, setCustomerFolderFinderDropdownOpen] = useState(false);
+  const [customerPortalAccessCopyStates, setCustomerPortalAccessCopyStates] = useState<
+    Record<string, CustomerPortalAccessCopyStatus>
+  >({});
+  const [customerPortalAccessFeedback, setCustomerPortalAccessFeedback] =
+    useState<CustomerPortalAccessFeedback | null>(null);
   const [regularCustomerBookingForm, setRegularCustomerBookingForm] = useState<RegularCustomerBookingForm>(
     initialRegularCustomerBookingForm,
   );
@@ -1727,6 +1739,84 @@ export default function MockCustomerDashboardPage() {
     setCustomerFolderFinderSelectedId("");
     setSearchTerm("");
     setCustomerFolderFinderPage(pageNumber);
+  }
+
+  function customerPortalAccessButtonLabel(customerId: string) {
+    const status = customerPortalAccessCopyStates[customerId];
+
+    if (status === "copying") {
+      return "Copying";
+    }
+
+    if (status === "copied") {
+      return "Copied";
+    }
+
+    if (status === "error") {
+      return "Failed";
+    }
+
+    return "Portal";
+  }
+
+  async function copyCustomerPortalAccessLink(customer: (typeof customerFolderIndexRows)[number]) {
+    const customerAccountReference = customer.customerId.trim();
+
+    if (!customerAccountReference) {
+      setCustomerPortalAccessFeedback({
+        message: "Customer portal link needs a saved customer account reference first.",
+        tone: "error",
+      });
+      return;
+    }
+
+    setCustomerPortalAccessCopyStates((currentStates) => ({
+      ...currentStates,
+      [customerAccountReference]: "copying",
+    }));
+    setCustomerPortalAccessFeedback({
+      message: `Preparing portal link for ${customer.customerName}...`,
+      tone: "info",
+    });
+
+    try {
+      const response = await fetch(adminCustomerPortalAccessLinksApiPath, {
+        body: JSON.stringify({ customerAccountReference }),
+        cache: "no-store",
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "POST",
+      });
+      const result = await response.json().catch(() => null);
+      const url = typeof result?.url === "string" ? result.url : "";
+
+      if (!response.ok || result?.ok !== true || !url) {
+        throw new Error("portal-link-blocked");
+      }
+
+      await navigator.clipboard.writeText(url);
+
+      setCustomerPortalAccessCopyStates((currentStates) => ({
+        ...currentStates,
+        [customerAccountReference]: "copied",
+      }));
+      setCustomerPortalAccessFeedback({
+        message: `Portal link copied for ${customer.customerName}. It opens only this customer folder.`,
+        tone: "success",
+      });
+    } catch {
+      setCustomerPortalAccessCopyStates((currentStates) => ({
+        ...currentStates,
+        [customerAccountReference]: "error",
+      }));
+      setCustomerPortalAccessFeedback({
+        message:
+          "Customer portal link was not copied. Check the customer portal access allowlist before sharing.",
+        tone: "error",
+      });
+    }
   }
 
   function updateOutstandingReviewSearch(value: string) {
@@ -2943,6 +3033,17 @@ export default function MockCustomerDashboardPage() {
                 ? `Search is filtering customer folders locally for "${searchTerm}".`
                 : regularCustomerAccountReadState.message}
             </p>
+            {customerPortalAccessFeedback ? (
+              <p
+                aria-live="polite"
+                className={`mt-2 rounded-md border px-3 py-2 text-sm font-semibold leading-5 ${regularCustomerBookingFeedbackClass(
+                  customerPortalAccessFeedback.tone,
+                )}`}
+                data-customer-portal-access-link-feedback="true"
+              >
+                {customerPortalAccessFeedback.message}
+              </p>
+            ) : null}
 
             <div
               aria-live="polite"
@@ -2953,18 +3054,18 @@ export default function MockCustomerDashboardPage() {
                 <div>
                   <div
                     aria-hidden="true"
-                    className="hidden grid-cols-[minmax(12rem,1.4fr)_7rem_8rem_minmax(12rem,1fr)_7rem] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 md:grid"
+                    className="hidden grid-cols-[minmax(12rem,1.4fr)_7rem_8rem_minmax(12rem,1fr)_11rem] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 md:grid"
                   >
                     <span>Customer</span>
                     <span>Jobs</span>
                     <span>Status</span>
                     <span>Latest</span>
-                    <span className="text-right">Folder</span>
+                    <span className="text-right">Actions</span>
                   </div>
                   <div className="divide-y divide-slate-200" data-customer-folder-finder-list="true">
                     {paginatedCustomerFolderFinderRows.map((customer) => (
                       <article
-                        className="grid gap-2 bg-white px-3 py-2 text-sm leading-5 transition hover:bg-slate-50 md:grid-cols-[minmax(12rem,1.4fr)_7rem_8rem_minmax(12rem,1fr)_7rem] md:items-center md:gap-3"
+                        className="grid gap-2 bg-white px-3 py-2 text-sm leading-5 transition hover:bg-slate-50 md:grid-cols-[minmax(12rem,1.4fr)_7rem_8rem_minmax(12rem,1fr)_11rem] md:items-center md:gap-3"
                         data-customer-folder-finder-row={customer.customerId}
                         data-customer-row={customer.customerId}
                         key={customer.customerId}
@@ -2990,23 +3091,40 @@ export default function MockCustomerDashboardPage() {
                                 .join(" | ") || "Latest saved service not available"
                             : "Local folder ready"}
                         </p>
-                        {customer.folderHref ? (
-                          <Link
-                            className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-center text-xs font-bold text-white transition hover:bg-slate-700 md:justify-self-end"
-                            data-customer-folder-finder-link={customer.customerId}
-                            data-open-customer-folder={customer.customerId}
-                            href={customer.folderHref}
+                        <div className="flex flex-wrap gap-2 md:justify-end">
+                          {customer.folderHref ? (
+                            <Link
+                              className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-center text-xs font-bold text-white transition hover:bg-slate-700"
+                              data-customer-folder-finder-link={customer.customerId}
+                              data-open-customer-folder={customer.customerId}
+                              href={customer.folderHref}
+                            >
+                              Open
+                            </Link>
+                          ) : (
+                            <span
+                              className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-center text-xs font-bold text-slate-600"
+                              data-customer-folder-finder-no-folder={customer.customerId}
+                            >
+                              Pending
+                            </span>
+                          )}
+                          <button
+                            className={`inline-flex min-h-9 items-center justify-center rounded-md border px-3 text-center text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-70 ${
+                              customerPortalAccessCopyStates[customer.customerId] === "copied"
+                                ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                                : customerPortalAccessCopyStates[customer.customerId] === "error"
+                                  ? "border-rose-300 bg-rose-50 text-rose-800"
+                                  : "border-sky-300 bg-white text-sky-900 hover:border-sky-700"
+                            }`}
+                            data-customer-portal-access-link={customer.customerId}
+                            disabled={customerPortalAccessCopyStates[customer.customerId] === "copying"}
+                            onClick={() => copyCustomerPortalAccessLink(customer)}
+                            type="button"
                           >
-                            Open
-                          </Link>
-                        ) : (
-                          <span
-                            className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-center text-xs font-bold text-slate-600 md:justify-self-end"
-                            data-customer-folder-finder-no-folder={customer.customerId}
-                          >
-                            Pending
-                          </span>
-                        )}
+                            {customerPortalAccessButtonLabel(customer.customerId)}
+                          </button>
+                        </div>
                       </article>
                     ))}
                   </div>

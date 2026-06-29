@@ -6,6 +6,7 @@ import type {
   AdminBookingPersistenceSafeErrorCategory,
   AdminBookingResult,
 } from "./admin-booking-persistence";
+import { resolveCustomerPortalAccessSession } from "./customer-portal-access-link";
 import { resolveExactTwoCustomerRuntimeSessionMap } from "./customer-runtime-session-map";
 
 export const customerSavedBookingsReadVersion =
@@ -786,11 +787,25 @@ export function resolveCustomerSavedBookingsBoundary(
     mapValue: process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_MAP,
     providedToken: providedToken.token,
   });
+  const portalAccessSession = resolveCustomerPortalAccessSession(providedToken.token, runtimeGate.data);
 
   let authUserId: string | null = null;
   let customerAccountReference: string | null = null;
 
-  if (mappedSession.configured) {
+  if (portalAccessSession.accessToken) {
+    if (!portalAccessSession.ok) {
+      return portalAccessSession.status === 503
+        ? {
+            error: customerSavedBookingsConfigError,
+            ok: false,
+            status: 503,
+          }
+        : customerSavedBookingsAuthRequiredResult();
+    }
+
+    authUserId = portalAccessSession.data.auth_user_id;
+    customerAccountReference = portalAccessSession.data.customer_account_reference;
+  } else if (mappedSession.configured) {
     if (!mappedSession.ok) {
       return mappedSession.reason === "invalid_config"
         ? {

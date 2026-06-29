@@ -31,6 +31,7 @@ const safeApiLeakPattern =
 const unsafeCustomerSavedBookingsLeakPattern =
   /admin_internal_status|admin_status|billing|contact_phone|contact_email|passenger_phone|customer_price|quoted_price|rate_amount|driver_payout|paynow|pay_now|invoice|payment|pdf|payout|finance|parser_debug|parser_learning|raw_ai|parser_prompt|live_location|proof|photo|telegram|whatsapp|sms|email_payload|notification|mock_archive|mock_qa|dev_workbench|internal_admin_note|internal_finance_note|internal_note|admin_note|server_secret|session_token|raw_token|token_hash|driver_token/i;
 const sourceFiles = [
+  "lib/customer-portal-access-link.ts",
   "lib/customer-runtime-session-map.ts",
   "lib/customer-saved-bookings-read.ts",
   "lib/admin-booking-persistence.ts",

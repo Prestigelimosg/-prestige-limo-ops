@@ -15,6 +15,7 @@ import {
   type CustomerBookingSpeechRecognition,
 } from "../../lib/customer-booking-local-voice-draft";
 import {
+  companyProfileContactLines,
   defaultCompanyProfile,
   type PublicCompanyProfile,
 } from "../../lib/company-profile-shared";
@@ -318,6 +319,7 @@ export default function CustomerPortalPage() {
     text: "Submit a booking request and our staff will review availability before confirming.",
   });
   const companyName = companyProfile.company_name || defaultCompanyProfile.company_name;
+  const companyContactLines = companyProfileContactLines(companyProfile);
 
   const activeFilter: BookingFilter = bookingFilterSet.has(activeSection)
     ? (activeSection as BookingFilter)
@@ -765,14 +767,12 @@ export default function CustomerPortalPage() {
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-700">
             Customers can view booking requests and booking history here after staff confirmation.
           </p>
-          {companyProfile.whatsapp_phone || companyProfile.phone || companyProfile.email ? (
+          {companyContactLines.length > 0 ? (
             <p
               className="mt-1 text-xs leading-5 text-slate-600"
               data-customer-company-profile-contact="true"
             >
-              {[companyProfile.whatsapp_phone, companyProfile.phone, companyProfile.email]
-                .filter(Boolean)
-                .join(" | ")}
+              {companyContactLines.join(" | ")}
             </p>
           ) : null}
         </header>

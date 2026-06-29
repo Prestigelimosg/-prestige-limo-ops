@@ -24,6 +24,7 @@ import {
   customerTermsAndSurchargeSummary,
 } from "../../lib/customer-facing-booking-terms";
 import {
+  companyProfileContactLines,
   defaultCompanyProfile,
   type PublicCompanyProfile,
 } from "../../lib/company-profile-shared";
@@ -198,11 +199,9 @@ export default function CustomerBookingPage() {
     text: "Send a request and our staff will review the details before confirming availability.",
   });
   const companyName = companyProfile.company_name || defaultCompanyProfile.company_name;
-  const hotlineContact =
-    companyProfile.whatsapp_phone ||
-    companyProfile.phone ||
-    defaultCompanyProfile.whatsapp_phone ||
-    defaultCompanyProfile.phone;
+  const companyContactLines = companyProfileContactLines(companyProfile);
+  const fallbackContactLines = companyProfileContactLines(defaultCompanyProfile);
+  const hotlineContact = companyContactLines[0] || fallbackContactLines[0];
 
   useEffect(() => {
     const controller = new AbortController();

@@ -12,6 +12,14 @@ Latest remote staging branch head:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Public Company Contact Dedupe
+
+- Public company profile contact display now dedupes WhatsApp/phone/email contact lines before rendering on `/my-bookings`, `/book`, invoice PDFs, and the admin Company Profile preview.
+- When WhatsApp and phone contain the same number, customer-facing pages show the number once instead of `+65 9655 0807 | +65 9655 0807`.
+- The settings page can still store separate WhatsApp and phone fields for future operation; the preview and public output are compact and non-duplicative.
+- This is display-only cleanup. It does not add routes/APIs, DB writes, env changes, provider sends, email sends, payment/Stripe actions, GPS/live location, billing/payout changes, parser changes, or customer/driver-visible internal data.
+- Guard coverage lives in `scripts/test-company-profile-settings-guard.mjs`.
+
 ### Admin Dashboard Browser Read Boundary Fix
 
 - Live admin troubleshooting on 2026-06-25 found that customer `/book` request intake and admin CRM API proof passed, but the browser admin dashboard `Load Bookings` path still returned the safe `Admin booking persistence is available only from the internal admin dashboard.` boundary error.

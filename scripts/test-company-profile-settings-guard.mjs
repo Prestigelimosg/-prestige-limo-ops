@@ -72,6 +72,16 @@ assertIncludes(
   "profileForbiddenPattern.test(raw)",
   "Public profile logo sanitizer must reject customer-hidden/internal logo URL fragments.",
 );
+assertIncludes(
+  shared,
+  "export function companyProfileContactLines",
+  "Shared company profile must expose deduped public contact lines.",
+);
+assertIncludes(
+  shared,
+  "companyProfileContactKey",
+  "Shared company profile contact lines must use a stable dedupe key.",
+);
 
 for (const forbidden of [
   "driver[_\\s-]*payout",
@@ -168,6 +178,42 @@ for (const customerPage of [
     `${customerPage[0]} must not expose driver payout internals.`,
   );
 }
+
+assertIncludes(
+  portalPage,
+  "const companyContactLines = companyProfileContactLines(companyProfile);",
+  "/my-bookings must build deduped company contact lines.",
+);
+assertIncludes(
+  portalPage,
+  "{companyContactLines.join(\" | \")}",
+  "/my-bookings must render deduped company contact lines.",
+);
+assertNotIncludes(
+  portalPage,
+  "[companyProfile.whatsapp_phone, companyProfile.phone, companyProfile.email]",
+  "/my-bookings must not manually print duplicate WhatsApp and phone values.",
+);
+assertIncludes(
+  bookPage,
+  "const companyContactLines = companyProfileContactLines(companyProfile);",
+  "/book must use deduped company contact lines for hotline copy.",
+);
+assertIncludes(
+  adminPage,
+  "const companyProfilePreviewContactLines = companyProfileContactLines(companyProfileDraft);",
+  "Admin Company profile preview must build deduped contact lines.",
+);
+assertNotIncludes(
+  adminPage,
+  "<p>{companyProfileDraft.whatsapp_phone || \"WhatsApp not shown\"}</p>",
+  "Admin Company profile preview must not print duplicate WhatsApp separately.",
+);
+assertNotIncludes(
+  adminPage,
+  "<p>{companyProfileDraft.phone || \"Phone not shown\"}</p>",
+  "Admin Company profile preview must not print duplicate phone separately.",
+);
 
 assertIncludes(migration, "enable row level security", "Company profile table must enable RLS.");
 assertIncludes(migration, "revoke all on public.company_profile_settings from anon", "Company profile table must revoke anon access.");

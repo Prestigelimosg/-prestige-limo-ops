@@ -36,6 +36,7 @@ import {
   hourlyBillingGraceRuleText,
 } from "../lib/hourly-billing";
 import {
+  companyProfileContactLines,
   defaultCompanyProfile,
   type PublicCompanyProfile,
 } from "../lib/company-profile-shared";
@@ -21694,6 +21695,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     /^data:image\/(?:png|jpe?g|webp);base64,[a-z0-9+/=\s]+$/i.test(companyProfileDraft.logo_image_url)
       ? companyProfileDraft.logo_image_url
       : "";
+  const companyProfilePreviewContactLines = companyProfileContactLines(companyProfileDraft);
 
   return (
     <main className="admin-ops-shell min-h-screen bg-stone-50 text-slate-950">
@@ -34023,9 +34025,11 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   </div>
                 </div>
                 <div className="mt-3 space-y-1 text-xs leading-5 text-slate-700">
-                  <p>{companyProfileDraft.whatsapp_phone || "WhatsApp not shown"}</p>
-                  <p>{companyProfileDraft.phone || "Phone not shown"}</p>
-                  <p>{companyProfileDraft.email || "Email not shown"}</p>
+                  {companyProfilePreviewContactLines.length > 0 ? (
+                    companyProfilePreviewContactLines.map((line) => <p key={line}>{line}</p>)
+                  ) : (
+                    <p>Contact not shown</p>
+                  )}
                   <p>{companyProfileDraft.address || "Address not shown"}</p>
                 </div>
                 <div className="mt-3 rounded-md border border-white bg-white p-2 text-xs leading-5 text-slate-700">

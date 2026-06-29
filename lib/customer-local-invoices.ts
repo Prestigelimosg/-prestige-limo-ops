@@ -1,4 +1,5 @@
 import {
+  companyProfileContactLines,
   defaultCompanyProfile,
   type PublicCompanyProfile,
 } from "./company-profile-shared";
@@ -429,12 +430,7 @@ export function createCustomerInvoicePdfBytes(
   logoImage: CustomerInvoicePdfLogoImage | null = null,
 ) {
   const companyName = companyProfile.company_name || defaultCompanyProfile.company_name;
-  const contactLine = [
-    companyProfile.whatsapp_phone || companyProfile.phone,
-    companyProfile.email,
-  ]
-    .filter(Boolean)
-    .join(" | ");
+  const contactLine = companyProfileContactLines(companyProfile).join(" | ");
   const paymentLines = wrapText(
     companyProfile.bank_payment_instructions ||
       defaultCompanyProfile.bank_payment_instructions ||

@@ -210,3 +210,31 @@ export function companyProfilePaymentSummary(profile: PublicCompanyProfile) {
 
   return lines.map((line) => line.trim()).filter(Boolean).join("\n");
 }
+
+function companyProfileContactKey(value: string) {
+  const cleaned = value.replace(/\s+/g, " ").trim().toLowerCase();
+  const digits = cleaned.replace(/\D/g, "");
+
+  return digits.length >= 7 ? `phone:${digits}` : `text:${cleaned}`;
+}
+
+export function companyProfileContactLines(profile: PublicCompanyProfile) {
+  const seen = new Set<string>();
+
+  return [profile.whatsapp_phone, profile.phone, profile.email]
+    .map((value) => value.replace(/\s+/g, " ").trim())
+    .filter((value) => {
+      if (!value) {
+        return false;
+      }
+
+      const key = companyProfileContactKey(value);
+
+      if (seen.has(key)) {
+        return false;
+      }
+
+      seen.add(key);
+      return true;
+    });
+}

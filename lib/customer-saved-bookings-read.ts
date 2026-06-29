@@ -6,7 +6,10 @@ import type {
   AdminBookingPersistenceSafeErrorCategory,
   AdminBookingResult,
 } from "./admin-booking-persistence";
-import { resolveCustomerPortalAccessSession } from "./customer-portal-access-link";
+import {
+  isCustomerPortalAccessToken,
+  resolveCustomerPortalAccessSession,
+} from "./customer-portal-access-link";
 import { resolveExactTwoCustomerRuntimeSessionMap } from "./customer-runtime-session-map";
 
 export const customerSavedBookingsReadVersion =
@@ -857,12 +860,44 @@ export function resolveCustomerSavedBookingsBoundary(
     return customerSavedBookingsAuthRequiredResult();
   }
 
+  const providedToken = readCustomerSavedBookingsSessionToken(request);
+
+  if (isCustomerPortalAccessToken(providedToken.token)) {
+    const runtimeGate = resolveControlledCustomerPortalRuntimeGate();
+
+    if (!runtimeGate.ok) {
+      return runtimeGate;
+    }
+
+    const portalAccessSession = resolveCustomerPortalAccessSession(providedToken.token, runtimeGate.data);
+
+    if (!portalAccessSession.ok) {
+      return portalAccessSession.status === 503
+        ? {
+            error: customerSavedBookingsConfigError,
+            ok: false,
+            status: 503,
+          }
+        : customerSavedBookingsAuthRequiredResult();
+    }
+
+    return {
+      data: {
+        auth_user_id: portalAccessSession.data.auth_user_id,
+        customer_account_reference: portalAccessSession.data.customer_account_reference,
+        mode: "server-session-cookie",
+        runtime_gate: runtimeGate.data,
+        source_surface: "customer_api",
+      },
+      ok: true,
+    };
+  }
+
   if (process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_ENABLED !== "true") {
     return customerSavedBookingsAuthRequiredResult();
   }
 
   const expectedToken = configValueOrNull(process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_TOKEN);
-  const providedToken = readCustomerSavedBookingsSessionToken(request);
   const mode = configValueOrNull(process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_MODE);
 
   if (mode !== "server-session-token") {
@@ -880,25 +915,11 @@ export function resolveCustomerSavedBookingsBoundary(
     mapValue: process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_MAP,
     providedToken: providedToken.token,
   });
-  const portalAccessSession = resolveCustomerPortalAccessSession(providedToken.token, runtimeGate.data);
 
   let authUserId: string | null = null;
   let customerAccountReference: string | null = null;
 
-  if (portalAccessSession.accessToken) {
-    if (!portalAccessSession.ok) {
-      return portalAccessSession.status === 503
-        ? {
-            error: customerSavedBookingsConfigError,
-            ok: false,
-            status: 503,
-          }
-        : customerSavedBookingsAuthRequiredResult();
-    }
-
-    authUserId = portalAccessSession.data.auth_user_id;
-    customerAccountReference = portalAccessSession.data.customer_account_reference;
-  } else if (mappedSession.configured) {
+  if (mappedSession.configured) {
     if (!mappedSession.ok) {
       return mappedSession.reason === "invalid_config"
         ? {

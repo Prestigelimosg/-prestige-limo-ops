@@ -18,6 +18,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Production scope only was selected for the portal access link gate, signing secret, access account allowlist, customer portal runtime gate, small-allowlist runtime mode, and runtime account allowlist.
 - The bounded production allowlist covers the current customer portal test accounts: `ubs`, `ritz-carlton`, `vip-customer`, and `hourly-test-customer`.
 - The saved settings require a fresh production deployment before live `https://app.prestigelimo.sg` can create signed customer portal links.
+- Live verification found the public access route created and sent the signed HttpOnly cookie, but the customer saved-bookings boundary tried the legacy saved-bookings session-token gate before the new signed portal-access cookie branch. The boundary now accepts a valid portal-access cookie immediately after the same-origin `/my-bookings` and controlled runtime allowlist checks, while keeping the legacy session-token path as fallback.
 - This activation does not create invoices/PDFs, send email, send payment links, call providers, activate Stripe charges, expose payout/customer pricing, write bookings, write invoice rows, change parser behavior, enable GPS/live location, or expose customer/driver-forbidden internal data.
 - Guard coverage for this gate remains in `scripts/test-customer-portal-access-link-guard.mjs` and the customer trust path remains covered by `scripts/test-customer-trust-path-invoice-portal-guard.mjs`.
 

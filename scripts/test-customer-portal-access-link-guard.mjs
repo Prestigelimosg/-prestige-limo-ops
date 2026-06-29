@@ -85,6 +85,11 @@ const portalClientSource = [
   files[portalInvoicesAdapterPath],
 ].join("\n");
 const ledgerSection = sectionBetween(ledger, "### Customer Portal Access Link Lock");
+const customerBoundaryFunction = sectionBetween(
+  customerBoundary,
+  "export function resolveCustomerSavedBookingsBoundary",
+  "\nexport async function loadCustomerSavedBookings",
+);
 
 for (const phrase of [
   "Admin can create a compact customer portal access link from the Customers finder row.",
@@ -124,8 +129,15 @@ assert.deepEqual(envNames(helper), allowedHelperEnvNames, "portal access helper 
 assertExcludes(helper, /@supabase\/supabase-js|\bcreateClient\b|\.(?:insert|upsert|delete|rpc)\s*\(/, "portal access helper DB/provider path");
 
 assertIncludes(customerBoundary, "resolveCustomerPortalAccessSession(providedToken.token, runtimeGate.data)", "customer boundary portal access handoff");
-assertIncludes(customerBoundary, "portalAccessSession.accessToken", "customer boundary access-token branch");
+assertIncludes(customerBoundary, "isCustomerPortalAccessToken(providedToken.token)", "customer boundary portal access token guard");
+assertIncludes(customerBoundary, 'mode: "server-session-cookie"', "customer boundary access-cookie mode");
 assertIncludes(customerBoundary, "customer_account_reference: customerAccountReference", "customer boundary scoped account context");
+assert.equal(
+  customerBoundaryFunction.indexOf("isCustomerPortalAccessToken(providedToken.token)") <
+    customerBoundaryFunction.indexOf('process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_ENABLED !== "true"'),
+  true,
+  "signed portal-access cookie must be accepted before the legacy saved-bookings session-token gate.",
+);
 
 assert.deepEqual(exportedMethods(adminRoute), ["DELETE", "GET", "PATCH", "POST", "PUT"], "admin portal access route methods");
 assertIncludes(adminRoute, "resolveAdminCustomerInvoiceBoundary(request)", "admin portal access route boundary");

@@ -19,6 +19,10 @@ import {
   type CustomerBookingSpeechRecognition,
 } from "../../lib/customer-booking-local-voice-draft";
 import { submitCustomerBookingRequest } from "../../lib/customer-booking-request-adapter";
+import {
+  customerTermsAndConditionsSummary,
+  customerTermsAndSurchargeSummary,
+} from "../../lib/customer-facing-booking-terms";
 
 const serviceOptions = [
   "Airport Arrival",
@@ -170,6 +174,7 @@ export default function CustomerBookingPage() {
   const [missingFields, setMissingFields] = useState<Array<keyof BookingRequestForm>>([]);
   const [bookingMemorySuggestions, setBookingMemorySuggestions] = useState<CustomerBookingMemorySuggestion[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const bookingMemoryLoadStarted = useRef(false);
   const voiceRecognitionRef = useRef<CustomerBookingSpeechRecognition | null>(null);
   const voiceRecognitionErroredRef = useRef(false);
@@ -348,6 +353,16 @@ export default function CustomerBookingPage() {
       setFeedback({
         tone: "error",
         text: "Please complete contact no., passenger name, pickup date, pickup time, pickup location, and drop-off location before submitting your request.",
+      });
+      return;
+    }
+
+    if (!termsAccepted) {
+      setMissingFields([]);
+      setConfirmationStatus(null);
+      setFeedback({
+        tone: "error",
+        text: "Please accept the booking terms, surcharges, and waiting-time policy before submitting.",
       });
       return;
     }
@@ -843,6 +858,39 @@ export default function CustomerBookingPage() {
                   </li>
                 </ul>
               </section>
+              <div
+                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-[11px] leading-5 text-slate-500"
+                data-customer-booking-terms-summary="true"
+              >
+                <label
+                  className="flex min-w-0 items-start gap-2 font-medium text-slate-600"
+                  data-customer-booking-terms-acceptance="true"
+                >
+                  <input
+                    checked={termsAccepted}
+                    className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300 text-slate-950 focus:ring-slate-300"
+                    data-customer-booking-terms-checkbox="true"
+                    onChange={(event) => setTermsAccepted(event.target.checked)}
+                    type="checkbox"
+                  />
+                  <span>
+                    I agree to the booking terms, surcharges, waiting-time policy, and hourly grace rule.
+                  </span>
+                </label>
+                <details className="mt-2" data-customer-booking-terms-details="true">
+                  <summary className="cursor-pointer text-[11px] font-semibold text-slate-600">
+                    View terms, surcharges and grace periods
+                  </summary>
+                  <ul className="mt-1 grid gap-1 pl-4">
+                    {customerTermsAndSurchargeSummary.map((term) => (
+                      <li className="list-disc" key={term}>
+                        {term}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-1">{customerTermsAndConditionsSummary}</p>
+                </details>
+              </div>
               <p className="text-sm leading-6 text-slate-600">
                 After you submit, Prestige Limo will review the request and reply with the next step.
               </p>

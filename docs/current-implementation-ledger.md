@@ -132,6 +132,18 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Existing admin-only boundaries remain unchanged and customer/driver forbidden finance/internal/mock-archive data remains blocked from public surfaces.
 - This polish is guarded by `scripts/test-customers-page-scaled-queues-guard.mjs` and registered in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Customer Terms And Hourly Billing Rule Lock
+
+- Customer-facing terms are centralized for compact reuse across the public booking form, admin Customer Copy, and the monthly invoice review footer.
+- The public `/book` form now requires customers to accept booking terms, surcharges, waiting-time policy, and the hourly grace rule before request submission.
+- Customer Copy includes the compact customer notes in the copied text and shows a tiny visual note in the admin UI; the invoice review workspace shows the same terms as a small footer note.
+- Hourly actual-time billing is locked to 15 minutes grace after each hour: 16 minutes or more starts the next chargeable hour.
+- Monthly invoice billable price review calculates hourly billable minutes from saved actual total minutes before approval and rejects hourly minute values that do not match the 15-minute grace rule.
+- DSP actual-time behavior remains separate; DSP billable minutes are not rounded by the hourly rule.
+- This does not generate invoices, PDFs, payment links, provider sends, customer notifications, payout records, live GPS/location records, DB migrations, env changes, Vercel actions, parser changes, or shims.
+- Customer/driver-visible forbidden data remains blocked from these surfaces: driver payout, PayNow payout, internal admin notes, parser/debug internals, admin finance, mock QA/dev archive, customer price on driver surfaces, billing/payment/payout comparisons on driver surfaces, and internal finance notes.
+- Guard coverage lives in `scripts/test-customer-terms-hourly-billing-guard.mjs` and `scripts/test-admin-monthly-invoice-billable-item-price-review-api-contract.mjs`, both registered through the existing test paths.
+
 ### Customer Booking Request Persistence Actor Fix
 
 - The public `/book` customer booking request path now keeps its existing same-origin `/book`, `x-prestige-customer-purpose`, and safe payload parser boundary, while allowing only the exact `Customer booking request` system actor to pass the admin booking persistence write gate.

@@ -11,6 +11,7 @@ import {
   type AdminBookingPersistenceAdapterActor,
 } from "./admin-booking-supabase-adapter";
 import { assertAdminMonthlyInvoiceDraftUnlocked } from "./admin-monthly-invoice-draft-lock-enforcement";
+import { calculateHourlyBillableMinutes } from "./hourly-billing";
 
 export const adminMonthlyInvoiceBillableItemPriceReviewVersion =
   "stage-monthly-invoice-billable-item-price-review-api-v1";
@@ -1075,10 +1076,29 @@ export function parseAdminMonthlyInvoiceBillableItemPriceReviewSavePayload(
 
   if (
     dspBillableMinutes !== null &&
-    (dspTotalMinutes === null || dspBillableMinutes > dspTotalMinutes)
+    (dspTotalMinutes === null || (bookingType !== "hourly" && dspBillableMinutes > dspTotalMinutes))
   ) {
     return {
       error: "DSP billable minutes must not exceed saved actual minutes.",
+      ok: false,
+      status: 400,
+    };
+  }
+
+  const expectedHourlyBillableMinutes =
+    bookingType === "hourly" && dspTotalMinutes !== null
+      ? calculateHourlyBillableMinutes(dspTotalMinutes)
+      : null;
+
+  if (
+    bookingType === "hourly" &&
+    dspTotalMinutes !== null &&
+    dspBillableMinutes !== null &&
+    expectedHourlyBillableMinutes !== null &&
+    dspBillableMinutes !== expectedHourlyBillableMinutes
+  ) {
+    return {
+      error: "Hourly billable minutes must follow the 15-minute grace rule.",
       ok: false,
       status: 400,
     };

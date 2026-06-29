@@ -29,6 +29,12 @@ import {
   type RateRules,
   type RateSettings,
 } from "../lib/pricing";
+import { customerCopyTermsText, customerTermsAndSurchargeSummary } from "../lib/customer-facing-booking-terms";
+import {
+  calculateHourlyBillableMinutes,
+  hourlyBillingGraceMinutes,
+  hourlyBillingGraceRuleText,
+} from "../lib/hourly-billing";
 
 const adminLegacyDataPurpose = "admin-booking-persistence";
 const adminWorkflowStatusApiPath = "/api/admin-booking-workflow-statuses";
@@ -7844,13 +7850,18 @@ async function saveAdminMonthlyInvoiceBillablePriceReviewFromItemReview({
       dspActualTimeSummary as Record<string, unknown> | null,
       "dsp_total_minutes",
     );
-  const dspBillableMinutes =
+  const savedDspBillableMinutes =
     adminMonthlyInvoiceContextNumber(itemSummary, "dsp_billable_minutes") ??
     adminMonthlyInvoiceContextNumber(tripContext, "dsp_billable_minutes") ??
     adminMonthlyInvoiceContextNumber(
       dspActualTimeSummary as Record<string, unknown> | null,
       "dsp_billable_minutes",
     );
+  const dspBillableMinutes = adminMonthlyInvoiceActualTimeBillableMinutes(
+    bookingType,
+    dspTotalMinutes,
+    savedDspBillableMinutes,
+  );
   const isDspBillableReview = calculationBasis === "dsp_actual_time";
   const hasDspActualMinutes =
     !isDspBillableReview || (dspTotalMinutes !== null && dspBillableMinutes !== null);
@@ -7880,12 +7891,18 @@ async function saveAdminMonthlyInvoiceBillablePriceReviewFromItemReview({
       price_review_status: priceReviewStatus,
       reviewed_customer_amount_cents: reviewedAmountCents,
       safe_price_review_context: {
+        ...(bookingType === "hourly" && dspTotalMinutes !== null && dspBillableMinutes !== null
+          ? {
+              hourly_billing_grace_minutes: hourlyBillingGraceMinutes,
+              hourly_billing_rule: hourlyBillingGraceRuleText,
+            }
+          : {}),
         next_action: hasDspActualMinutes
           ? "Continue monthly invoice issue review after admin price approval."
-          : "Save DSP actual minutes before approving this item for invoice draft.",
+          : "Save actual start/end minutes before approving this item for invoice draft.",
         price_review_summary: hasDspActualMinutes
           ? "Admin reviewed billable item amount for invoice draft preparation."
-          : "Admin entered billable amount but DSP actual minutes are still needed.",
+          : "Admin entered billable amount but actual start/end minutes are still needed.",
         review_status: existingPriceReview
           ? "Saved billable item price review refreshed from the existing item review."
           : "Saved billable item price review created from the existing item review.",
@@ -7904,6 +7921,12 @@ async function saveAdminMonthlyInvoiceBillablePriceReviewFromItemReview({
           : {}),
         ...(isDspBillableReview && dspTotalMinutes !== null
           ? { dsp_total_minutes: dspTotalMinutes }
+          : {}),
+        ...(bookingType === "hourly" && dspTotalMinutes !== null && dspBillableMinutes !== null
+          ? {
+              hourly_billing_grace_minutes: hourlyBillingGraceMinutes,
+              hourly_billing_rule: hourlyBillingGraceRuleText,
+            }
           : {}),
         draft_id: draftId,
         item_review_status: itemReview.item_review_status || null,
@@ -8513,6 +8536,18 @@ function adminMonthlyInvoiceBillableCalculationBasis(
   bookingType: AdminMonthlyInvoiceBillableBookingType,
 ): AdminMonthlyInvoiceCalculationBasis {
   return bookingType === "DSP" || bookingType === "hourly" ? "dsp_actual_time" : "fixed_trip";
+}
+
+function adminMonthlyInvoiceActualTimeBillableMinutes(
+  bookingType: AdminMonthlyInvoiceBillableBookingType | null,
+  totalMinutes: number | null,
+  savedBillableMinutes: number | null,
+) {
+  if (bookingType === "hourly") {
+    return calculateHourlyBillableMinutes(totalMinutes);
+  }
+
+  return savedBillableMinutes;
 }
 
 function adminMonthlyBillingGroupingReadinessLabel(
@@ -11619,6 +11654,7 @@ export default function Home() {
         flightLocationParts.standaloneFlightLine,
       ],
       ["DRIVER DETAILS", ...driverLines],
+      customerCopyTermsText.split("\n"),
     ];
 
     return sections
@@ -20018,32 +20054,41 @@ export default function Home() {
     adminMonthlyInvoiceContextNumber(monthlyInvoiceBillableItemSummary, "dsp_total_minutes") ??
     adminMonthlyInvoiceContextNumber(monthlyInvoiceBillableTripContext, "dsp_total_minutes") ??
     adminMonthlyInvoiceContextNumber(monthlyInvoiceBillableDspSummaryRecord, "dsp_total_minutes");
-  const monthlyInvoiceBillableDspBillableMinutes =
+  const monthlyInvoiceBillableSavedDspBillableMinutes =
     adminMonthlyInvoiceContextNumber(monthlyInvoiceBillableItemSummary, "dsp_billable_minutes") ??
     adminMonthlyInvoiceContextNumber(monthlyInvoiceBillableTripContext, "dsp_billable_minutes") ??
     adminMonthlyInvoiceContextNumber(monthlyInvoiceBillableDspSummaryRecord, "dsp_billable_minutes");
+  const monthlyInvoiceBillableDspBillableMinutes = adminMonthlyInvoiceActualTimeBillableMinutes(
+    monthlyInvoiceBillableBookingType,
+    monthlyInvoiceBillableDspTotalMinutes,
+    monthlyInvoiceBillableSavedDspBillableMinutes,
+  );
   const monthlyInvoiceBillableDspActualTimeComplete =
     !monthlyInvoiceBillableUsesDspActualTime ||
     (monthlyInvoiceBillableDspTotalMinutes !== null &&
       monthlyInvoiceBillableDspBillableMinutes !== null);
+  const monthlyInvoiceBillableActualTimeLabel =
+    monthlyInvoiceBillableBookingType === "hourly" ? "Hourly actual time" : "DSP actual time";
   const monthlyInvoiceBillableDspEvidenceLabel = (() => {
     if (!monthlyInvoiceBillableUsesDspActualTime) {
       return "";
     }
 
     if (adminDriverJobDspActualTimeReadState.status === "loading") {
-      return "DSP actual time: loading saved timing evidence.";
+      return `${monthlyInvoiceBillableActualTimeLabel}: loading saved timing evidence.`;
     }
 
     if (adminDriverJobDspActualTimeReadState.status === "error") {
-      return "DSP actual time: saved timing evidence unavailable.";
+      return `${monthlyInvoiceBillableActualTimeLabel}: saved timing evidence unavailable.`;
     }
 
     if (monthlyInvoiceBillableDspActualTimeComplete) {
-      return `DSP actual time: ${monthlyInvoiceBillableDspTotalMinutes} total min / ${monthlyInvoiceBillableDspBillableMinutes} billable min.`;
+      return monthlyInvoiceBillableBookingType === "hourly"
+        ? `${monthlyInvoiceBillableActualTimeLabel}: ${monthlyInvoiceBillableDspTotalMinutes} actual min / ${monthlyInvoiceBillableDspBillableMinutes} billable min (${hourlyBillingGraceMinutes}-min grace rule).`
+        : `${monthlyInvoiceBillableActualTimeLabel}: ${monthlyInvoiceBillableDspTotalMinutes} total min / ${monthlyInvoiceBillableDspBillableMinutes} billable min.`;
     }
 
-    return "DSP actual time: start/end evidence needed before invoice issue review.";
+    return `${monthlyInvoiceBillableActualTimeLabel}: start/end evidence needed before invoice issue review.`;
   })();
   const monthlyInvoiceIssueReviewReadinessLabel =
     adminMonthlyBillingGroupingReadinessLabel(
@@ -32405,6 +32450,12 @@ export default function Home() {
                   </div>
                 </div>
               ) : null}
+              <p
+                className="mt-1 text-[10px] leading-4 text-slate-500"
+                data-admin-monthly-invoice-terms-footer="true"
+              >
+                Invoice footer note: {customerTermsAndSurchargeSummary.join(" ")}
+              </p>
               <label className="mt-1 block min-w-0 text-xs font-semibold text-teal-950 sm:mt-3">
                 <span>Local grouping note</span>
                 <textarea
@@ -32966,6 +33017,12 @@ export default function Home() {
                   {customerCopyText}
                 </pre>
               )}
+              <p
+                className="mt-1 text-[10px] leading-4 text-slate-500"
+                data-customer-copy-terms-note="true"
+              >
+                Customer notes included: midnight surcharge, waiting time, hourly grace, and amendment policy.
+              </p>
             </div>
 
             <div

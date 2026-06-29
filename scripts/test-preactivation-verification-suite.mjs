@@ -218,6 +218,10 @@ const guardChecks = [
     script: "scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs",
   },
   {
+    label: "customer terms and hourly billing guard",
+    script: "scripts/test-customer-terms-hourly-billing-guard.mjs",
+  },
+  {
     label: "admin new booking email alert guard",
     script: "scripts/test-admin-new-booking-email-alert-guard.mjs",
   },

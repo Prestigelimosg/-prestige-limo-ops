@@ -22,6 +22,7 @@ const unsafePriceReviewLeakPattern =
 const sourceFiles = [
   "lib/admin-monthly-invoice-draft-lock-enforcement.ts",
   "lib/admin-monthly-invoice-billable-item-price-review-persistence.ts",
+  "lib/hourly-billing.ts",
   "lib/admin-booking-supabase-adapter.ts",
   "lib/admin-booking-persistence.ts",
   "lib/admin-dispatcher-auth-boundary.ts",
@@ -521,6 +522,24 @@ const validDspPayload = {
     source: "driver_status_evidence",
   },
 };
+const validHourlyPayload = {
+  ...validFixedPayload,
+  booking_reference: "SAFE-HOURLY-777",
+  booking_type: "hourly",
+  calculation_basis: "dsp_actual_time",
+  dsp_billable_minutes: 120,
+  dsp_total_minutes: 76,
+  item_review_id: "00000000-0000-4000-8000-000000000203",
+  price_review_summary: "Hourly actual time reviewed by admin.",
+  reviewed_customer_amount_cents: 26000,
+  source_price_context: {
+    booking_type: "hourly",
+    dsp_billable_minutes: 120,
+    dsp_total_minutes: 76,
+    hourly_billing_rule: "15-minute grace; 16 minutes starts the next chargeable hour",
+    source: "driver_status_evidence",
+  },
+};
 
 const harness = await loadHarness();
 
@@ -655,6 +674,14 @@ try {
       "DSP billable minutes must not exceed saved actual minutes.",
     ],
     [
+      "hourly billable ignores grace rule",
+      {
+        ...validHourlyPayload,
+        dsp_billable_minutes: 76,
+      },
+      "Hourly billable minutes must follow the 15-minute grace rule.",
+    ],
+    [
       "approved not included",
       {
         ...validFixedPayload,
@@ -775,6 +802,27 @@ try {
   assert.equal(dspSaveResult.body.price_review.dsp_total_minutes, 195);
   assert.equal(dspSaveResult.body.price_review.dsp_billable_minutes, 180);
   assertNoLeaks(dspSaveResult.body, "enabled DSP save response should stay safe");
+
+  mock = installMockClient(seed);
+  const hourlySaveResult = await readRouteResponse(
+    await route.POST(
+      new Request("http://localhost/api/admin-monthly-invoice-billable-item-price-reviews", {
+        body: JSON.stringify(validHourlyPayload),
+        headers: sessionHeaders({
+          "Content-Type": "application/json",
+        }),
+        method: "POST",
+      }),
+    ),
+  );
+
+  assert.equal(hourlySaveResult.status, 200);
+  assert.equal(hourlySaveResult.body.ok, true);
+  assert.equal(hourlySaveResult.body.price_review.booking_type, "hourly");
+  assert.equal(hourlySaveResult.body.price_review.calculation_basis, "dsp_actual_time");
+  assert.equal(hourlySaveResult.body.price_review.dsp_total_minutes, 76);
+  assert.equal(hourlySaveResult.body.price_review.dsp_billable_minutes, 120);
+  assertNoLeaks(hourlySaveResult.body, "enabled hourly save response should stay safe");
 
   const lockedSaveMock = installMockClient({
     monthly_invoice_issue_records: [

@@ -11959,6 +11959,10 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         .sort(sortBookingHistoryNewestFirst),
     [bookingRecordBelongsInCompletedHistoryWithDriverReport, operationalBookings],
   );
+  const completedBillingAuditBookings = useMemo(
+    () => completedBookings.filter(bookingRecordIsCompletedStatus),
+    [completedBookings],
+  );
   const handledCustomerBookingRequestKeySet = useMemo(
     () => new Set(handledCustomerBookingRequestKeys),
     [handledCustomerBookingRequestKeys],
@@ -12033,7 +12037,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       return;
     }
 
-    const auditBookings = completedBookings.map(buildCompletedBookingBillingReadinessAuditPayload);
+    const auditBookings = completedBillingAuditBookings.map(
+      buildCompletedBookingBillingReadinessAuditPayload,
+    );
 
     if (auditBookings.length === 0) {
       setAdminCompletedBookingBillingReadinessAuditReadState({
@@ -20140,9 +20146,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       return `Audit: ${completedBillingReadinessAuditReadyCount} ready, ${completedBillingReadinessAuditBlockedCount} blocked, ${completedBillingReadinessAuditTotalCount} completed. Missing customer/account ${completedBillingReadinessAuditMissingAccountCount}, billing month ${completedBillingReadinessAuditMissingMonthCount}, billable source ${completedBillingReadinessAuditMissingBillableSourceCount}.`;
     }
 
-    return completedBookings.length > 0
-      ? `Audit not run for ${completedBookings.length} loaded completed saved booking${
-          completedBookings.length === 1 ? "" : "s"
+    return completedBillingAuditBookings.length > 0
+      ? `Audit not run for ${completedBillingAuditBookings.length} loaded completed saved booking${
+          completedBillingAuditBookings.length === 1 ? "" : "s"
         }.`
       : "No completed saved bookings loaded for audit.";
   })();
@@ -20162,7 +20168,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   const completedBillingReadinessAuditRunning =
     adminCompletedBookingBillingReadinessAuditAction === "read-audit";
   const completedBillingReadinessAuditButtonDisabled =
-    completedBillingReadinessAuditRunning || completedBookings.length === 0;
+    completedBillingReadinessAuditRunning || completedBillingAuditBookings.length === 0;
   const completedBillingReadinessAuditButtonLabel = completedBillingReadinessAuditRunning
     ? "Auditing..."
     : adminCompletedBookingBillingReadinessAuditReadState.status === "loaded"

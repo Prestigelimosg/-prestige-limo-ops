@@ -295,7 +295,7 @@ function pdfLine(value: string, fontSize = 10) {
   return `/${"F1"} ${fontSize} Tf (${escapePdfText(value)}) Tj 0 -15 Td`;
 }
 
-type CustomerInvoicePdfLogoImage = {
+export type CustomerInvoicePdfLogoImage = {
   bytes: Uint8Array;
   height: number;
   width: number;
@@ -376,7 +376,7 @@ function readJpegDimensions(bytes: Uint8Array) {
   return null;
 }
 
-function pdfLogoFromJpegBytes(bytes: Uint8Array): CustomerInvoicePdfLogoImage | null {
+export function pdfLogoFromJpegBytes(bytes: Uint8Array): CustomerInvoicePdfLogoImage | null {
   const dimensions = readJpegDimensions(bytes);
 
   return dimensions ? { ...dimensions, bytes } : null;

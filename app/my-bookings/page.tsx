@@ -29,6 +29,11 @@ type InvoiceFolder = "Paid" | "Unpaid";
 type PortalSection = "New Booking Request" | "Invoices" | BookingFilter;
 type PortalBookingsLoadState = "blocked" | "loading" | "ready";
 
+type CustomerPortalInvoiceRecord = CustomerLocalInvoiceRecord & {
+  pdfFilename?: string;
+  storageSource?: "local" | "server";
+};
+
 type BookingRequestForm = {
   companyName: string;
   contactNo: string;
@@ -90,6 +95,8 @@ const bookingFilters: BookingFilter[] = ["Upcoming", "Completed", "Cancelled"];
 const bookingFilterSet = new Set<PortalSection>(bookingFilters);
 const invoiceFolders: InvoiceFolder[] = ["Unpaid", "Paid"];
 const portalSections: PortalSection[] = ["New Booking Request", "Invoices", ...bookingFilters];
+const customerInvoicesApiPath = "/api/customer-invoices";
+const customerInvoicePdfApiPath = "/api/customer-invoice-pdf";
 
 const initialBookingPages: Record<BookingFilter, number> = {
   Cancelled: 1,
@@ -240,6 +247,45 @@ function splitPickupTime(value: string) {
   };
 }
 
+function displayLocalInvoice(invoice: CustomerLocalInvoiceRecord): CustomerPortalInvoiceRecord {
+  return {
+    ...invoice,
+    pdfFilename: `${invoice.invoiceNumber}.pdf`,
+    storageSource: "local",
+  };
+}
+
+function safePortalInvoiceApiRecords(value: unknown) {
+  return Array.isArray(value) ? (value as CustomerPortalInvoiceRecord[]) : [];
+}
+
+function mergePortalInvoices(
+  primaryRecords: CustomerPortalInvoiceRecord[],
+  fallbackRecords: CustomerPortalInvoiceRecord[],
+) {
+  const records = new Map<string, CustomerPortalInvoiceRecord>();
+
+  [...fallbackRecords, ...primaryRecords].forEach((record) => {
+    records.set(record.invoiceNumber, record);
+  });
+
+  return [...records.values()].sort((firstRecord, secondRecord) =>
+    secondRecord.issueDateIso.localeCompare(firstRecord.issueDateIso),
+  );
+}
+
+function downloadBrowserBlob(blob: Blob, filename: string) {
+  const url = window.URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+}
+
 export default function CustomerPortalPage() {
   const [activeSection, setActiveSection] = useState<PortalSection>("Upcoming");
   const [companyProfile, setCompanyProfile] =
@@ -253,7 +299,7 @@ export default function CustomerPortalPage() {
   const [bookingPages, setBookingPages] = useState<Record<BookingFilter, number>>(initialBookingPages);
   const [selectedBookingMonths, setSelectedBookingMonths] =
     useState<Record<BookingFilter, string>>(initialSelectedBookingMonths);
-  const [customerInvoiceRecords, setCustomerInvoiceRecords] = useState<CustomerLocalInvoiceRecord[]>([]);
+  const [customerInvoiceRecords, setCustomerInvoiceRecords] = useState<CustomerPortalInvoiceRecord[]>([]);
   const [bookingRequestForm, setBookingRequestForm] = useState<BookingRequestForm>(initialBookingRequestForm);
   const [pickupTimeDraft, setPickupTimeDraft] = useState(() => splitPickupTime(initialBookingRequestForm.pickupTime));
   const [missingBookingRequestFields, setMissingBookingRequestFields] = useState<Array<keyof BookingRequestForm>>([]);
@@ -279,7 +325,7 @@ export default function CustomerPortalPage() {
   const selectedBookingMonth = selectedBookingMonths[activeFilter] || "";
   const currentPortalMonth = useMemo(() => getCurrentPortalMonthInfo(), []);
   const customerInvoiceRecordsByFolder = useMemo(() => {
-    const byFolder: Record<InvoiceFolder, CustomerLocalInvoiceRecord[]> = {
+    const byFolder: Record<InvoiceFolder, CustomerPortalInvoiceRecord[]> = {
       Paid: [],
       Unpaid: [],
     };
@@ -325,17 +371,44 @@ export default function CustomerPortalPage() {
   }, []);
 
   useEffect(() => {
-    function loadLocalInvoices() {
-      setCustomerInvoiceRecords(readCustomerLocalInvoices());
+    const controller = new AbortController();
+
+    async function loadCustomerInvoices() {
+      const localInvoices = readCustomerLocalInvoices().map(displayLocalInvoice);
+
+      try {
+        const response = await fetch(customerInvoicesApiPath, {
+          cache: "no-store",
+          headers: {
+            "x-prestige-customer-purpose": "customer-saved-bookings-read",
+          },
+          signal: controller.signal,
+        });
+        const result = await response.json().catch(() => null);
+
+        if (response.ok && result?.ok) {
+          setCustomerInvoiceRecords(
+            mergePortalInvoices(safePortalInvoiceApiRecords(result.invoices), localInvoices),
+          );
+          return;
+        }
+      } catch {
+        if (controller.signal.aborted) {
+          return;
+        }
+      }
+
+      setCustomerInvoiceRecords(localInvoices);
     }
 
-    loadLocalInvoices();
-    window.addEventListener("storage", loadLocalInvoices);
-    window.addEventListener("prestige-local-invoices-updated", loadLocalInvoices);
+    void loadCustomerInvoices();
+    window.addEventListener("storage", loadCustomerInvoices);
+    window.addEventListener("prestige-local-invoices-updated", loadCustomerInvoices);
 
     return () => {
-      window.removeEventListener("storage", loadLocalInvoices);
-      window.removeEventListener("prestige-local-invoices-updated", loadLocalInvoices);
+      controller.abort();
+      window.removeEventListener("storage", loadCustomerInvoices);
+      window.removeEventListener("prestige-local-invoices-updated", loadCustomerInvoices);
     };
   }, []);
 
@@ -504,6 +577,28 @@ export default function CustomerPortalPage() {
         ? `Cancel request noted for review. Your booking is not cancelled until ${companyName} confirms.`
         : "Completed or cancelled bookings are read-only here. Please contact our team if you need help.",
     });
+  }
+
+  async function downloadPortalInvoice(invoice: CustomerPortalInvoiceRecord) {
+    if (invoice.storageSource === "server") {
+      const response = await fetch(
+        `${customerInvoicePdfApiPath}/${encodeURIComponent(invoice.invoiceNumber)}`,
+        {
+          cache: "no-store",
+          headers: {
+            "x-prestige-customer-purpose": "customer-saved-bookings-read",
+          },
+        },
+      );
+
+      if (response.ok) {
+        downloadBrowserBlob(await response.blob(), invoice.pdfFilename || `${invoice.invoiceNumber}.pdf`);
+      }
+
+      return;
+    }
+
+    await downloadCustomerInvoicePdf(invoice, companyProfile);
   }
 
   function updateBookingRequestField(field: keyof BookingRequestForm, value: string) {
@@ -1107,7 +1202,9 @@ export default function CustomerPortalPage() {
                               >
                                 <td className="px-3 py-2">
                                   <p className="font-bold text-slate-950">{invoice.invoiceNumber}</p>
-                                  <p className="text-xs text-slate-500">{invoice.reference}</p>
+                                  <p className="text-xs text-slate-500">
+                                    {invoice.reference} · {invoice.storageSource === "server" ? "Stored PDF" : "Local PDF"}
+                                  </p>
                                 </td>
                                 <td className="px-3 py-2 font-semibold text-slate-950">{invoice.amountLabel}</td>
                                 <td className="px-3 py-2 text-slate-700">
@@ -1117,7 +1214,7 @@ export default function CustomerPortalPage() {
                                   <button
                                     className="min-h-8 rounded-md border border-slate-300 bg-white px-2 text-xs font-bold text-slate-800 transition hover:border-slate-600"
                                     data-customer-portal-invoice-download={invoice.invoiceNumber}
-                                    onClick={() => downloadCustomerInvoicePdf(invoice, companyProfile)}
+                                    onClick={() => downloadPortalInvoice(invoice)}
                                     type="button"
                                   >
                                     Download PDF
@@ -1156,8 +1253,8 @@ export default function CustomerPortalPage() {
               className="mt-3 rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-950"
               data-customer-portal-invoice-local-boundary="true"
             >
-              These invoice PDFs appear on this Mac browser after admin issues them. Email, Stripe, bank payment,
-              provider sending, and cross-device customer portal sync are not active in this pass.
+              Stored invoice PDFs appear here when this customer portal session is active. Local PDFs from this Mac
+              remain visible as a fallback. This folder is view and download only.
             </p>
           </section>
         ) : (

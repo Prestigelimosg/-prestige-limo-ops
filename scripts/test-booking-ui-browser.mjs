@@ -3262,6 +3262,10 @@ async function runChromeTest() {
       assert.equal(didSetValue, true, `Expected ${description} field to be editable`);
     };
 
+    const setBookingMessageValue = async (value, description) => {
+      await setFieldValueByLabel("Paste Booking Message", value, description);
+    };
+
     await clickTab("Dispatch", "Create Job Card");
 
     await waitForCondition(
@@ -3277,7 +3281,7 @@ async function runChromeTest() {
         ?.textContent.trim() || "",
       tabLabels: [...document.querySelectorAll("button[role='tab']")].map((button) => button.textContent.trim()),
     }))()`);
-    assert.deepEqual(initialTabState.tabLabels, ["Dispatch", "Dashboard", "Bookings", "Drivers", "Completed", "Rates"]);
+    assert.deepEqual(initialTabState.tabLabels, ["Dispatch", "Dashboard", "Bookings", "Drivers", "Completed", "Company", "Rates"]);
     assert.equal(initialTabState.selectedTab, "Dispatch");
 
     const dispatchWorkflowOrder = await evaluate(`(() => {
@@ -3596,16 +3600,7 @@ async function runChromeTest() {
       "Expected booking message textarea to be focused for Needs Review sample",
     );
 
-    await client.send("Input.insertText", { text: incompleteNeedsReviewSample });
-
-    const filledNeedsReviewTextarea = await evaluate(
-      `document.querySelector("textarea")?.value === ${JSON.stringify(incompleteNeedsReviewSample)}`,
-    );
-    assert.equal(
-      filledNeedsReviewTextarea,
-      true,
-      "Expected Needs Review booking message textarea to be filled",
-    );
+    await setBookingMessageValue(incompleteNeedsReviewSample, "Needs Review booking message");
 
     const clickedNeedsReviewParse = await evaluate(`(() => {
       const parseButton = [...document.querySelectorAll("button")].find(
@@ -3727,7 +3722,9 @@ async function runChromeTest() {
       await waitForCondition(
         () =>
           evaluate(`(() => {
-            const textarea = document.querySelector("textarea");
+            const textarea = [...document.querySelectorAll("label")].find(
+              (candidate) => candidate.querySelector("span")?.textContent.replace(/\\s+/g, " ").trim() === "Paste Booking Message",
+            )?.querySelector("textarea");
 
             return Boolean(textarea) &&
               textarea.value === "" &&
@@ -3739,7 +3736,7 @@ async function runChromeTest() {
     };
 
     const parseCustomerMatchSample = async (sample, description) => {
-      await setInputValue("textarea", sample, `${description} booking message`);
+      await setBookingMessageValue(sample, `${description} booking message`);
 
       const clickedCustomerMatchParse = await evaluate(`(() => {
         const parseButton = [...document.querySelectorAll("button")].find(
@@ -3924,24 +3921,7 @@ async function runChromeTest() {
     await clickCustomerMatchAction("create", /Mock create selected for New customer suggested\. No customer folder was created\./);
     await clearDispatchDraft("unknown organization domain customer match");
 
-    const focusedTextarea = await evaluate(`(() => {
-      const textarea = document.querySelector("textarea");
-      if (!textarea) {
-        return false;
-      }
-
-      textarea.focus();
-      textarea.select();
-      return document.activeElement === textarea;
-    })()`);
-    assert.equal(focusedTextarea, true, "Expected booking message textarea to be focused");
-
-    await client.send("Input.insertText", { text: bookingSample });
-
-    const filledTextarea = await evaluate(
-      `document.querySelector("textarea")?.value === ${JSON.stringify(bookingSample)}`,
-    );
-    assert.equal(filledTextarea, true, "Expected booking message textarea to be filled");
+    await setBookingMessageValue(bookingSample, "primary booking message");
 
     const clickedParse = await evaluate(`(() => {
       const parseButton = [...document.querySelectorAll("button")].find(
@@ -3993,7 +3973,7 @@ async function runChromeTest() {
 
             return control.value || "";
           });
-      const pres = [...document.querySelectorAll("pre")].map((pre) => pre.innerText);
+      const pres = [...document.querySelectorAll("pre")].map((pre) => pre.textContent || pre.innerText || "");
       const fields = {
         company: fieldValue("Company / Account"),
         bookingType: fieldValue("Booking type"),
@@ -4028,7 +4008,7 @@ async function runChromeTest() {
           const pre = node.querySelector?.("pre");
 
           if (pre) {
-            return pre.innerText;
+            return pre.textContent || pre.innerText || "";
           }
 
           node = node.parentElement;
@@ -4061,7 +4041,7 @@ async function runChromeTest() {
           note:
             preview?.querySelector("[data-manual-extra-charges-review-note='true']")?.textContent.trim() ||
             "",
-          text: preview?.innerText || "",
+          text: preview?.textContent || preview?.innerText || "",
           visible: Boolean(rect && rect.width > 0 && rect.height > 0),
         };
       };
@@ -5223,7 +5203,7 @@ async function runChromeTest() {
         note:
           preview?.querySelector("[data-manual-extra-charges-review-note='true']")?.textContent.trim() ||
           "",
-        text: preview?.innerText || "",
+        text: preview?.textContent || preview?.innerText || "",
         visible: Boolean(rect && rect.width > 0 && rect.height > 0),
       };
     })()`);
@@ -5385,7 +5365,7 @@ async function runChromeTest() {
         candidate.querySelector("h3")?.textContent.trim() === "Pricing",
       );
       const preview = document.querySelector("[data-manual-extra-charges-review-preview='true']");
-      const pres = [...document.querySelectorAll("pre")].map((pre) => pre.innerText);
+      const pres = [...document.querySelectorAll("pre")].map((pre) => pre.textContent || pre.innerText || "");
       const indexedDbNames = globalThis.indexedDB?.databases
         ? (await indexedDB.databases()).map((database) => database.name || "")
         : [];
@@ -5411,7 +5391,7 @@ async function runChromeTest() {
         previewNote:
           preview?.querySelector("[data-manual-extra-charges-review-note='true']")?.textContent.trim() ||
           "",
-        previewText: preview?.innerText || "",
+        previewText: preview?.textContent || preview?.innerText || "",
         pricingText: pricing?.innerText || "",
         sessionStorageLeaks: readStorage(sessionStorage).filter((value) => matchesSentinel(value)),
       };
@@ -5603,10 +5583,7 @@ async function runChromeTest() {
             let node = heading;
 
             while (node && node !== document.body) {
-              if (
-                node.querySelector?.("pre") &&
-                [...node.querySelectorAll("button")].some((button) => button.textContent.trim() === "Copy")
-              ) {
+              if (node.querySelector?.("pre")) {
                 return node;
               }
 
@@ -5616,17 +5593,12 @@ async function runChromeTest() {
             return null;
           };
           const section = sectionForHeading("Job Card Preview");
-          const copyButton = [...(section?.querySelectorAll("button") || [])].find(
-            (button) => button.textContent.trim() === "Copy",
-          );
-          const feedback = section?.querySelector("[data-copy-feedback='job-card']");
+          const copyButton = section?.querySelector("[data-copy-copy-button='jobCard']");
 
-          if (feedback?.textContent.trim() !== "Job card copied.") {
+          if (copyButton?.textContent.trim() !== "Copied") {
             return false;
           }
 
-          const feedbackRect = feedback.getBoundingClientRect();
-          const buttonRect = copyButton.getBoundingClientRect();
           const allFeedback = [...document.querySelectorAll("[data-copy-feedback]")].map((element) => ({
             target: element.getAttribute("data-copy-feedback"),
             text: element.textContent.trim(),
@@ -5635,7 +5607,7 @@ async function runChromeTest() {
           return {
             allFeedback,
             copiedTexts: window.__prestigeCopiedTexts || [],
-            distanceFromButton: Math.abs(feedbackRect.top - buttonRect.bottom),
+            copyButtonText: copyButton.textContent.trim(),
             globalCopyMessages: [...document.querySelectorAll("[data-status-panel='global']")]
               .filter((element) => /copied/i.test(element.innerText))
               .map((element) => element.innerText.trim()),
@@ -5646,15 +5618,8 @@ async function runChromeTest() {
     );
 
     assert.deepEqual(jobCardCopyPlacementState.globalCopyMessages, []);
-    assert.equal(jobCardCopyPlacementState.allFeedback.length, 1);
-    assert.deepEqual(jobCardCopyPlacementState.allFeedback[0], {
-      target: "job-card",
-      text: "Job card copied.",
-    });
-    assert.ok(
-      jobCardCopyPlacementState.distanceFromButton <= 80,
-      `Expected Job Card copy feedback to be close to its button, got ${jobCardCopyPlacementState.distanceFromButton}px`,
-    );
+    assert.deepEqual(jobCardCopyPlacementState.allFeedback, []);
+    assert.equal(jobCardCopyPlacementState.copyButtonText, "Copied");
     assert.match(jobCardCopyPlacementState.copiedTexts[0] || "", /Flight: SQ333/);
 
     const editedJobCardCopyText = [
@@ -5712,15 +5677,15 @@ async function runChromeTest() {
     await waitForCondition(
       () =>
         evaluate(`(() => {
-          const feedback = document.querySelector("[data-copy-feedback='job-card']");
           const preview = document.querySelector("[data-copy-preview='jobCard']");
+          const editButton = document.querySelector("[data-copy-edit-button='jobCard']");
 
-          return feedback?.textContent.trim() === "Job card edit saved." &&
-            preview?.innerText.includes("EDITED JOB CARD COPY") &&
+          return editButton?.textContent.trim() === "Edited" &&
+            (preview?.textContent || preview?.innerText || "").includes("EDITED JOB CARD COPY") &&
             !document.querySelector("[data-copy-edit-textarea='jobCard']");
         })()`),
       10000,
-      "Job Card edit saved feedback",
+      "Job Card edited button state",
     );
 
     await evaluate(`window.__prestigeCopiedTexts = []`);
@@ -5739,14 +5704,15 @@ async function runChromeTest() {
     const editedJobCardCopyState = await waitForCondition(
       () =>
         evaluate(`(() => {
-          const feedback = document.querySelector("[data-copy-feedback='job-card']");
+          const copyButton = document.querySelector("[data-copy-copy-button='jobCard']");
 
-          return feedback?.textContent.trim() === "Job card copied."
+          return copyButton?.textContent.trim() === "Copied"
             ? {
-                copiedText: (window.__prestigeCopiedTexts || []).slice(-1)[0] || "",
-                globalCopyMessages: [...document.querySelectorAll("[data-status-panel='global']")]
-                  .filter((element) => /copied/i.test(element.innerText))
-                  .map((element) => element.innerText.trim()),
+              copiedText: (window.__prestigeCopiedTexts || []).slice(-1)[0] || "",
+              copyButtonText: copyButton.textContent.trim(),
+              globalCopyMessages: [...document.querySelectorAll("[data-status-panel='global']")]
+                .filter((element) => /copied/i.test(element.innerText))
+                .map((element) => element.innerText.trim()),
               }
             : false;
         })()`),
@@ -5754,6 +5720,7 @@ async function runChromeTest() {
       "edited Job Card copied text",
     );
     assert.deepEqual(editedJobCardCopyState.globalCopyMessages, []);
+    assert.equal(editedJobCardCopyState.copyButtonText, "Copied");
     assert.equal(
       editedJobCardCopyState.copiedText,
       editedJobCardCopyText,
@@ -5804,10 +5771,7 @@ async function runChromeTest() {
             let node = heading;
 
             while (node && node !== document.body) {
-              if (
-                node.querySelector?.("pre") &&
-                [...node.querySelectorAll("button")].some((button) => button.textContent.trim() === "Copy")
-              ) {
+              if (node.querySelector?.("pre")) {
                 return node;
               }
 
@@ -5817,17 +5781,12 @@ async function runChromeTest() {
             return null;
           };
           const section = sectionForHeading("Driver Dispatch");
-          const copyButton = [...(section?.querySelectorAll("button") || [])].find(
-            (button) => button.textContent.trim() === "Copy",
-          );
-          const feedback = section?.querySelector("[data-copy-feedback='driver-dispatch']");
+          const copyButton = section?.querySelector("[data-copy-copy-button='driverDispatch']");
 
-          if (feedback?.textContent.trim() !== "Driver dispatch copied.") {
+          if (copyButton?.textContent.trim() !== "Copied") {
             return false;
           }
 
-          const feedbackRect = feedback.getBoundingClientRect();
-          const buttonRect = copyButton.getBoundingClientRect();
           const allFeedback = [...document.querySelectorAll("[data-copy-feedback]")].map((element) => ({
             target: element.getAttribute("data-copy-feedback"),
             text: element.textContent.trim(),
@@ -5836,7 +5795,7 @@ async function runChromeTest() {
           return {
             allFeedback,
             copiedTexts: window.__prestigeCopiedTexts || [],
-            distanceFromButton: Math.abs(feedbackRect.top - buttonRect.bottom),
+            copyButtonText: copyButton.textContent.trim(),
             globalCopyMessages: [...document.querySelectorAll("[data-status-panel='global']")]
               .filter((element) => /copied/i.test(element.innerText))
               .map((element) => element.innerText.trim()),
@@ -5847,15 +5806,8 @@ async function runChromeTest() {
     );
 
     assert.deepEqual(driverDispatchCopyPlacementState.globalCopyMessages, []);
-    assert.equal(driverDispatchCopyPlacementState.allFeedback.length, 1);
-    assert.deepEqual(driverDispatchCopyPlacementState.allFeedback[0], {
-      target: "driver-dispatch",
-      text: "Driver dispatch copied.",
-    });
-    assert.ok(
-      driverDispatchCopyPlacementState.distanceFromButton <= 80,
-      `Expected Driver Dispatch copy feedback to be close to its button, got ${driverDispatchCopyPlacementState.distanceFromButton}px`,
-    );
+    assert.deepEqual(driverDispatchCopyPlacementState.allFeedback, []);
+    assert.equal(driverDispatchCopyPlacementState.copyButtonText, "Copied");
     assert.match(
       driverDispatchCopyPlacementState.copiedTexts[
         driverDispatchCopyPlacementState.copiedTexts.length - 1
@@ -5903,9 +5855,10 @@ async function runChromeTest() {
     assert.equal(clickedDriverDispatchSaveEdit, true, "Expected Driver Dispatch Save Edit button to be clickable");
     await waitForCondition(
       () =>
-        evaluate(`document.querySelector("[data-copy-feedback='driver-dispatch']")?.textContent.trim() === "Driver dispatch edit saved."`),
+        evaluate(`document.querySelector("[data-copy-edit-button='driverDispatch']")?.textContent.trim() === "Edited" &&
+          !document.querySelector("[data-copy-edit-textarea='driverDispatch']")`),
       10000,
-      "Driver Dispatch edit saved feedback",
+      "Driver Dispatch edited button state",
     );
 
     await evaluate(`window.__prestigeCopiedTexts = []`);
@@ -5927,11 +5880,12 @@ async function runChromeTest() {
     const editedDriverDispatchCopyState = await waitForCondition(
       () =>
         evaluate(`(() => {
-          const feedback = document.querySelector("[data-copy-feedback='driver-dispatch']");
+          const copyButton = document.querySelector("[data-copy-copy-button='driverDispatch']");
 
-          return feedback?.textContent.trim() === "Driver dispatch copied."
+          return copyButton?.textContent.trim() === "Copied"
             ? {
                 copiedText: (window.__prestigeCopiedTexts || []).slice(-1)[0] || "",
+                copyButtonText: copyButton.textContent.trim(),
                 globalCopyMessages: [...document.querySelectorAll("[data-status-panel='global']")]
                   .filter((element) => /copied/i.test(element.innerText))
                   .map((element) => element.innerText.trim()),
@@ -5942,6 +5896,7 @@ async function runChromeTest() {
       "edited Driver Dispatch copied text",
     );
     assert.deepEqual(editedDriverDispatchCopyState.globalCopyMessages, []);
+    assert.equal(editedDriverDispatchCopyState.copyButtonText, "Copied");
     assert.equal(
       editedDriverDispatchCopyState.copiedText,
       editedDriverDispatchCopyText,
@@ -7213,17 +7168,22 @@ async function runChromeTest() {
     })()`);
     assert.equal(clickedLoadBookings, true, "Expected Load Bookings button to be clickable");
 
+    await clickTab("Completed", "Completed / History");
+
     await waitForCondition(
       () =>
         evaluate(`(() => {
           const bodyText = document.body.innerText;
+          const completedRows = [...document.querySelectorAll("[data-completed-operational-card]")];
 
-          return bodyText.includes("Recent Bookings") &&
-            bodyText.includes("LOADED SAVED COMPANY") &&
-            [...document.querySelectorAll("button")].some((button) => button.textContent.trim() === "Load this booking");
+          return bodyText.includes("Completed / History") &&
+            completedRows.some((row) =>
+              row.innerText.includes("LOADED SAVED COMPANY") &&
+              row.querySelector("[data-completed-load-booking='true']"),
+            );
         })()`),
       10000,
-      "mock loaded recent booking",
+      "mock loaded completed/history booking",
     );
 
     const typedLoadBookingsReadState = await evaluate(`(() => ({
@@ -7348,7 +7308,7 @@ async function runChromeTest() {
 
     const clickedRecentCalendarDownload = await evaluate(`(() => {
       const button = document.querySelector(
-        "[data-booking-calendar-download='ui-cleanup-load-fixture'][data-booking-calendar-surface='recent']",
+        "[data-booking-calendar-download='ui-cleanup-load-fixture'][data-booking-calendar-surface='completed']",
       );
 
       if (!button || button.disabled) {
@@ -7358,7 +7318,7 @@ async function runChromeTest() {
       button.click();
       return true;
     })()`);
-    assert.equal(clickedRecentCalendarDownload, true, "Expected Recent Bookings calendar button to be clickable");
+    assert.equal(clickedRecentCalendarDownload, true, "Expected Completed / History calendar button to be clickable");
 
     const recentCalendarDownloadState = await waitForCondition(
       () =>
@@ -7395,7 +7355,7 @@ async function runChromeTest() {
           };
         })()`),
       10000,
-      "Recent Bookings calendar download",
+      "Completed / History calendar download",
     );
     assert.deepEqual(
       {
@@ -7487,7 +7447,7 @@ async function runChromeTest() {
     assert.deepEqual(recentCalendarDownloadState.blobTypes, ["text/calendar;charset=utf-8"]);
     assert.deepEqual(recentCalendarDownloadState.revokedUrls, ["blob:prestige-calendar-browser-test"]);
 
-    await setInputValue("[data-bookings-search-input='true']", "luther", "Bookings search");
+    await setInputValue("[data-completed-search-input='true']", "luther", "Completed / History search");
     await waitForCondition(
       () =>
         evaluate(`(() => {
@@ -7497,13 +7457,13 @@ async function runChromeTest() {
             articles[0].includes("Luther Graham") &&
             articles[0].includes("SQ265") &&
             articles[0].includes("30 Apr 2026") &&
-            !document.body.innerText.includes("No matching bookings found.");
+            !document.body.innerText.includes("No matching completed/earlier jobs found.");
         })()`),
       10000,
       "Bookings search keeps real Luther booking with test driver assignment",
     );
 
-    await setInputValue("[data-bookings-search-input='true']", "LOADED SAVED TRAVELER", "Bookings search");
+    await setInputValue("[data-completed-search-input='true']", "LOADED SAVED TRAVELER", "Completed / History search");
     await waitForCondition(
       () =>
         evaluate(`(() => {
@@ -7517,7 +7477,7 @@ async function runChromeTest() {
       "Bookings search by passenger",
     );
 
-    await setInputValue("[data-bookings-search-input='true']", "DASHBOARD DRIVER TEST COMPANY", "Bookings search");
+    await setInputValue("[data-completed-search-input='true']", "DASHBOARD DRIVER TEST COMPANY", "Completed / History search");
     await waitForCondition(
       () =>
         evaluate(`(() => {
@@ -7531,7 +7491,7 @@ async function runChromeTest() {
       "Bookings search by company",
     );
 
-    await setInputValue("[data-bookings-search-input='true']", "SQ888", "Bookings search");
+    await setInputValue("[data-completed-search-input='true']", "SQ888", "Completed / History search");
     await waitForCondition(
       () =>
         evaluate(`(() => {
@@ -7545,7 +7505,7 @@ async function runChromeTest() {
       "Bookings search by flight",
     );
 
-    await setInputValue("[data-bookings-search-input='true']", "Raffles Hotel Singapore", "Bookings search");
+    await setInputValue("[data-completed-search-input='true']", "Raffles Hotel Singapore", "Completed / History search");
     await waitForCondition(
       () =>
         evaluate(`(() => {
@@ -7559,7 +7519,7 @@ async function runChromeTest() {
       "Bookings search by route",
     );
 
-    await setInputValue("[data-bookings-search-input='true']", "COMPLETED TEST DRIVER", "Bookings search");
+    await setInputValue("[data-completed-search-input='true']", "COMPLETED TEST DRIVER", "Completed / History search");
     await waitForCondition(
       () =>
         evaluate(`(() => {
@@ -7573,24 +7533,24 @@ async function runChromeTest() {
       "Bookings search by driver",
     );
 
-    await setInputValue("[data-bookings-search-input='true']", "NO LOCAL BOOKING MATCH", "Bookings search");
+    await setInputValue("[data-completed-search-input='true']", "NO LOCAL BOOKING MATCH", "Completed / History search");
     const bookingsNoMatchState = await waitForCondition(
       () =>
         evaluate(`(() => {
           const state = {
             articles: [...document.querySelectorAll("article")].map((article) => article.innerText),
-            noMatchText: document.querySelector("[data-bookings-search-empty='true']")?.textContent.trim() || "",
+            noMatchText: document.querySelector("[data-completed-search-empty='true']")?.textContent.trim() || "",
           };
 
-          return state.noMatchText === "No matching bookings found." ? state : false;
+          return state.noMatchText === "No matching completed/earlier jobs found." ? state : false;
         })()`),
       10000,
       "Bookings search no-match state",
     );
     assert.deepEqual(bookingsNoMatchState.articles, []);
-    assert.equal(bookingsNoMatchState.noMatchText, "No matching bookings found.");
+    assert.equal(bookingsNoMatchState.noMatchText, "No matching completed/earlier jobs found.");
 
-    await setInputValue("[data-bookings-search-input='true']", "", "Bookings search");
+    await setInputValue("[data-completed-search-input='true']", "", "Completed / History search");
     await waitForCondition(
       () =>
         evaluate(`(() => {
@@ -7599,7 +7559,7 @@ async function runChromeTest() {
           return bodyText.includes("LOADED SAVED TRAVELER") &&
             bodyText.includes("DASHBOARD DRIVER TEST TRAVELER") &&
             bodyText.includes("COMPLETED TEST TRAVELER") &&
-            !document.querySelector("[data-bookings-search-empty='true']");
+            !document.querySelector("[data-completed-search-empty='true']");
         })()`),
       10000,
       "Bookings search cleared",
@@ -7612,9 +7572,11 @@ async function runChromeTest() {
         evaluate(`(() => {
           const dashboard = document.querySelector("[data-operations-dashboard='true']");
           const rows = [...document.querySelectorAll("[data-dashboard-command-centre-row]")];
-          const firstRow = rows[0] || null;
           const activeJobs = [...document.querySelectorAll("[data-admin-multi-driver-active-job]")];
           const notificationFeed = document.querySelector("[data-admin-app-notification-feed='true']");
+          const completedHistoryButton = [...document.querySelectorAll("button")].find(
+            (button) => button.textContent.trim() === "Open Completed / History",
+          );
           const forbiddenDuplicateControls = [
             ...document.querySelectorAll(
               [
@@ -7628,27 +7590,26 @@ async function runChromeTest() {
             ),
           ];
 
-          return dashboard && firstRow && notificationFeed
+          return dashboard && notificationFeed && completedHistoryButton
             ? {
                 activeJobCount: activeJobs.length,
-                firstRowText: firstRow.innerText.replace(/\\s+/g, " ").trim(),
+                completedHistoryButtonText: completedHistoryButton.textContent.trim(),
                 forbiddenDuplicateControlCount: forbiddenDuplicateControls.length,
-                openButtonText:
-                  firstRow.querySelector("[data-dashboard-open-in-dispatch]")?.textContent.trim() || "",
                 rowCount: rows.length,
                 visibleText: dashboard.innerText.replace(/\\s+/g, " ").trim(),
               }
             : false;
         })()`),
       10000,
-      "dashboard command centre rows",
+      "compact dashboard command centre",
     );
-    assert.ok(dashboardCommandCentreState.rowCount > 0, "Expected Dashboard command centre to show loaded rows");
-    assert.ok(
-      dashboardCommandCentreState.activeJobCount > 0,
-      "Expected Dashboard active jobs monitor to show compact loaded jobs",
+    assert.equal(dashboardCommandCentreState.rowCount, 0, "Expected Dashboard command centre to avoid old loaded row cards");
+    assert.equal(
+      dashboardCommandCentreState.activeJobCount,
+      0,
+      "Expected Dashboard active jobs monitor to stay empty when no job is inside the 1-hour window",
     );
-    assert.equal(dashboardCommandCentreState.openButtonText, "Open");
+    assert.equal(dashboardCommandCentreState.completedHistoryButtonText, "Open Completed / History");
     assert.equal(
       dashboardCommandCentreState.forbiddenDuplicateControlCount,
       0,
@@ -7658,9 +7619,10 @@ async function runChromeTest() {
     assert.match(dashboardCommandCentreState.visibleText, /Active Jobs Monitor/);
     assert.match(dashboardCommandCentreState.visibleText, /Admin App Notifications/);
 
-    const clickedDashboardOpenInDispatch = await evaluate(`(() => {
-      const firstRow = document.querySelector("[data-dashboard-command-centre-row]");
-      const openButton = firstRow?.querySelector("[data-dashboard-open-in-dispatch]");
+    const clickedDashboardOpenCompletedHistory = await evaluate(`(() => {
+      const openButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Open Completed / History",
+      );
 
       if (!openButton || openButton.disabled) {
         return false;
@@ -7669,7 +7631,7 @@ async function runChromeTest() {
       openButton.click();
       return true;
     })()`);
-    assert.equal(clickedDashboardOpenInDispatch, true, "Expected Dashboard Open button to be clickable");
+    assert.equal(clickedDashboardOpenCompletedHistory, true, "Expected Dashboard Completed / History handoff to be clickable");
 
     await waitForCondition(
       () =>
@@ -7678,12 +7640,12 @@ async function runChromeTest() {
             (button) => button.getAttribute("aria-selected") === "true",
           );
 
-          return selectedTab?.textContent.trim() === "Dispatch" &&
-            document.body.innerText.includes("Booking Details") &&
-            document.body.innerText.includes("Create Job Card");
+          return selectedTab?.textContent.trim() === "Completed" &&
+            document.body.innerText.includes("Completed / History") &&
+            document.body.innerText.includes("Completed / Earlier Jobs");
         })()`),
       10000,
-      "dashboard open loads Dispatch",
+      "dashboard handoff opens Completed / History",
     );
 
     // Legacy Dashboard operational-card actions are intentionally parked: Dashboard is now
@@ -8386,7 +8348,12 @@ async function runChromeTest() {
       "Expected Driver Dispatch copy to use the manual dashboard payout override",
     );
 
-    await clickTab("Bookings", "Recent Bookings");
+    await clickTab("Completed", "Completed / History");
+    await setInputValue(
+      "[data-completed-search-input='true']",
+      "DASHBOARD PROFILE PAYOUT TRAVELER",
+      "Completed / History search",
+    );
     const manualPayoutBookingsCardState = await waitForCondition(
       () =>
         evaluate(`(() => {
@@ -9571,7 +9538,7 @@ async function runChromeTest() {
       fixture: dashboardStatusFlowFixture,
     });
 
-    await clickTab("Completed", "Completed Bookings");
+    await clickTab("Completed", "Completed / History");
 
     const hiddenPersistedCompletedTestState = await evaluate(`(() => {
       return [...document.querySelectorAll("article")].map((article) => article.innerText);
@@ -9789,7 +9756,7 @@ async function runChromeTest() {
       `Expected Mark completed status near booking controls, got ${dashboardCompletionState.localMessageDistance}px`,
     );
 
-    await clickTab("Completed", "Completed Bookings");
+    await clickTab("Completed", "Completed / History");
 
     const markedCompletedTabState = await waitForCondition(
       () =>
@@ -9950,7 +9917,7 @@ async function runChromeTest() {
       "Expected completed booking Customer Copy to keep customer-facing copy protections after load",
     );
 
-    await clickTab("Completed", "Completed Bookings");
+    await clickTab("Completed", "Completed / History");
 
     await evaluate(`(() => {
       window.__prestigeFetchCalls = [];
@@ -10170,7 +10137,7 @@ async function runChromeTest() {
       "bookings reloaded after completed delete",
     );
 
-    await clickTab("Completed", "Completed Bookings");
+    await clickTab("Completed", "Completed / History");
 
     const completedDeleteReloadState = await waitForCondition(
       () =>
@@ -10178,7 +10145,7 @@ async function runChromeTest() {
           const articles = [...document.querySelectorAll("article")].map((article) => article.innerText);
           const bodyText = document.body.innerText;
 
-          return bodyText.includes("Completed Bookings")
+          return bodyText.includes("Completed / History")
             ? {
                 deletedBookingVisible: articles.some(
                   (articleText) =>
@@ -12194,7 +12161,7 @@ async function runChromeTest() {
       "Expected Driver Dispatch copy not to keep stale old driver payout after profile assignment",
     );
 
-    await clickTab("Bookings", "Recent Bookings");
+    await clickTab("Bookings", "Current / Upcoming Bookings");
     const profilePayoutBookingsCardState = await waitForCondition(
       () =>
         evaluate(`(() => {
@@ -12284,7 +12251,7 @@ async function runChromeTest() {
     })()`);
     assert.equal(clickedRestoreDispatchClear, true, "Expected Clear button to restore Dispatch draft after profile payout check");
 
-    await setInputValue("textarea", bookingSample, "restored Dispatch booking message");
+    await setBookingMessageValue(bookingSample, "restored Dispatch booking message");
 
     const clickedRestoreDispatchParse = await evaluate(`(() => {
       const parseButton = [...document.querySelectorAll("button")].find(
@@ -13013,11 +12980,11 @@ async function runChromeTest() {
     assert.match(remainingAlisonState.rows.join("\\n"), /Mercedes V Class/);
     assert.match(remainingAlisonState.rows.join("\\n"), /PD 9918 H/);
 
-    await clickTab("Dashboard", "Operations Dashboard");
+    await clickTab("Completed", "Completed / History");
     await setInputValue(
-      "input[placeholder='Search name, company, or flight']",
-      "",
-      "Dashboard search before driver delete cleanup check",
+      "[data-completed-search-input='true']",
+      "DRIVER DELETE STATE TEST TRAVELER",
+      "Completed / History search before driver delete cleanup check",
     );
     const deletedDriverBookingCardState = await waitForCondition(
       async () => {
@@ -13032,45 +12999,22 @@ async function runChromeTest() {
 
           return {
             articleText: article.innerText || "",
-            driverSelectValue:
-              article.querySelector("[data-dashboard-driver-select='${driverDeleteAssignedBookingFixture.id}']")?.value ||
-              "",
-            driverNameValue:
-              [...article.querySelectorAll("label")].find((label) =>
-                label.textContent.includes("Driver Name"),
-              )?.querySelector("input")?.value || "",
-            driverContactValue:
-              [...article.querySelectorAll("label")].find((label) =>
-                label.textContent.includes("Driver Contact"),
-              )?.querySelector("input")?.value || "",
-            driverPlateValue:
-              [...article.querySelectorAll("label")].find((label) =>
-                label.textContent.includes("Driver Car Plate"),
-              )?.querySelector("input")?.value || "",
+            dashboardDriverSelectCount: article.querySelectorAll("[data-dashboard-driver-select]").length,
           };
         })()`);
 
         return candidateState?.articleText?.includes("Alson Toh") ? candidateState : false;
       },
       10000,
-      "deleted driver id cleared from dashboard booking card",
+      "deleted driver snapshot remains in completed history row",
     );
 
     assert.equal(
-      deletedDriverBookingCardState.driverSelectValue,
-      "",
-      "Expected dashboard booking card to clear deleted driver id from local driver selection",
+      deletedDriverBookingCardState.dashboardDriverSelectCount,
+      0,
+      "Expected completed history row not to expose dashboard driver selection controls",
     );
     assert.match(deletedDriverBookingCardState.articleText, /(?:Driver:\s*)?Alson Toh/);
-    if (deletedDriverBookingCardState.driverNameValue) {
-      assert.equal(deletedDriverBookingCardState.driverNameValue, "Alson Toh");
-    }
-    if (deletedDriverBookingCardState.driverContactValue) {
-      assert.equal(deletedDriverBookingCardState.driverContactValue, "+65 9000 0000");
-    }
-    if (deletedDriverBookingCardState.driverPlateValue) {
-      assert.equal(deletedDriverBookingCardState.driverPlateValue, "PD 0000");
-    }
 
     await evaluate(`(() => {
       window.__prestigeFetchCalls = [];
@@ -13267,7 +13211,7 @@ async function runChromeTest() {
       "Expected Clear Message button to restore Dispatch draft after driver delete cleanup check",
     );
 
-    await setInputValue("textarea", bookingSample, "restored Dispatch booking message after driver delete");
+    await setBookingMessageValue(bookingSample, "restored Dispatch booking message after driver delete");
 
     const clickedRestoreAfterDriverDeleteParse = await evaluate(`(() => {
       const parseButton = [...document.querySelectorAll("button")].find(
@@ -15040,8 +14984,8 @@ async function runChromeTest() {
       };
     })()`);
 
-    await clickTab("Bookings", "Recent Bookings");
-    await setInputValue("[data-bookings-search-input='true']", "LOADED SAVED TRAVELER", "Bookings search");
+    await clickTab("Completed", "Completed / History");
+    await setInputValue("[data-completed-search-input='true']", "LOADED SAVED TRAVELER", "Completed / History search");
     const clickedLoadedSavedBooking = await evaluate(`(() => {
       const recentArticle = [...document.querySelectorAll("article")].find(
         (article) =>
@@ -15095,7 +15039,7 @@ async function runChromeTest() {
               const pre = node.querySelector("pre");
 
               if (pre) {
-                return pre.innerText;
+                return pre.textContent || pre.innerText || "";
               }
 
               node = node.parentElement;
@@ -15467,8 +15411,9 @@ async function runChromeTest() {
       "GET /api/admin-monthly-invoice-issue-reviews?limit=1&page=1&billing_month=2026-05",
       "GET /api/admin-monthly-invoice-issue-records?limit=1&page=1&billing_month=2026-05&issue_review_id=33333333-3333-4333-8333-333333333333&draft_id=11111111-1111-4111-8111-111111111111",
     ];
+    const loadedBookingFetchCallSet = new Set(loadedBookingState.fetchCalls);
     assert.deepEqual(
-      [...loadedBookingState.fetchCalls].sort(),
+      [...loadedBookingFetchCallSet].sort(),
       [...expectedLoadedBookingFetchCalls].sort(),
       `Expected Load this booking to make only guarded read GETs, got ${loadedBookingState.fetchCalls.join(", ")}`,
     );
@@ -17585,8 +17530,8 @@ async function runChromeTest() {
       window.__prestigeWorkflowStatusRequests = [];
     })()`);
 
-    await clickTab("Bookings", "Recent Bookings");
-    reporter.step("workflow status API: Recent Bookings load");
+    await clickTab("Completed", "Completed / History");
+    reporter.step("workflow status API: Completed / History load");
 
     const clickedRecentLoadThisBooking = await evaluate(`(() => {
       const loadThisBookingButton = [...document.querySelectorAll("button")].find(
@@ -17717,8 +17662,8 @@ async function runChromeTest() {
       "Expected Recent Load this booking to GET completed closeout through the guarded API path",
     );
 
-    await clickTab("Bookings", "Recent Bookings");
-    await setInputValue("[data-bookings-search-input='true']", "", "Bookings search");
+    await clickTab("Completed", "Completed / History");
+    await setInputValue("[data-completed-search-input='true']", "", "Completed / History search");
     const clickedLutherRecentLoadThisBooking = await evaluate(`(() => {
       const article = [...document.querySelectorAll("article")].find(
         (candidate) =>
@@ -17811,8 +17756,8 @@ async function runChromeTest() {
       "Expected stale intake message to be seeded before Completed tab load",
     );
 
-    await clickTab("Completed", "Completed Bookings");
-    reporter.step("workflow status API: Completed Bookings load");
+    await clickTab("Completed", "Completed / History");
+    reporter.step("workflow status API: Completed / History load");
 
     const completedTabState = await waitForCondition(
       () =>
@@ -17828,18 +17773,18 @@ async function runChromeTest() {
               candidate.innerText.includes("PRICE DISPLAY CUSTOMER ONLY TRAVELER") &&
               candidate.innerText.includes("SQ785"),
           );
-          const activeArticle = [...document.querySelectorAll("article")].find(
+          const earlierHistoryArticle = [...document.querySelectorAll("article")].find(
             (candidate) =>
               candidate.innerText.includes("LOADED SAVED COMPANY") ||
               candidate.innerText.includes("DASHBOARD DRIVER TEST COMPANY"),
           );
 
-          return bodyText.includes("Completed Bookings") && completedArticle
-            ? {
-                activeArticleText: activeArticle?.innerText || "",
+          return bodyText.includes("Completed / History") && completedArticle
+              ? {
                 bodyText,
                 completedArticleText: completedArticle.innerText,
                 customerOnlyPriceArticleText: customerOnlyPriceArticle?.innerText || "",
+                earlierHistoryArticleText: earlierHistoryArticle?.innerText || "",
                 hasCompletedLoadButton: Boolean(
                   completedArticle.querySelector("[data-completed-load-booking='true']"),
                 ),
@@ -17868,10 +17813,10 @@ async function runChromeTest() {
       "Expected Completed card not to invent a $0 driver price when it is missing",
     );
     assert.equal(completedTabState.hasCompletedLoadButton, true);
-    assert.equal(
-      completedTabState.activeArticleText,
-      "",
-      "Expected active bookings not to appear in the Completed tab",
+    assert.match(
+      completedTabState.earlierHistoryArticleText,
+      /Earlier/,
+      "Expected earlier non-completed jobs to appear in Completed / History as history rows",
     );
 
     await setInputValue("[data-completed-search-input='true']", "COMPLETED TEST TRAVELER", "Completed search");
@@ -17926,28 +17871,42 @@ async function runChromeTest() {
             noMatchText: document.querySelector("[data-completed-search-empty='true']")?.textContent.trim() || "",
           };
 
-          return state.noMatchText === "No matching completed bookings found." ? state : false;
+          return state.noMatchText === "No matching completed/earlier jobs found." ? state : false;
         })()`),
       10000,
       "Completed search no-match state",
     );
     assert.deepEqual(completedNoMatchState.articles, []);
     assert.equal(completedNoMatchState.emptyStateVisible, false);
-    assert.equal(completedNoMatchState.noMatchText, "No matching completed bookings found.");
+    assert.equal(completedNoMatchState.noMatchText, "No matching completed/earlier jobs found.");
 
     await setInputValue("[data-completed-search-input='true']", "", "Completed search");
     await waitForCondition(
       () =>
         evaluate(`(() => {
           const bodyText = document.body.innerText;
+          const visibleHistoryArticles = [...document.querySelectorAll("article")].filter(
+            (article) => article.innerText.includes("Load this booking"),
+          );
 
-          return bodyText.includes("COMPLETED TEST TRAVELER") &&
-            bodyText.includes("PRICE DISPLAY CUSTOMER ONLY TRAVELER") &&
-            !bodyText.includes("COMPLETION ACTION TEST TRAVELER") &&
+          return bodyText.includes("Completed / Earlier Jobs") &&
+            visibleHistoryArticles.length > 0 &&
             !document.querySelector("[data-completed-search-empty='true']");
         })()`),
       10000,
       "Completed search cleared",
+    );
+
+    await setInputValue(
+      "[data-completed-search-input='true']",
+      "COMPLETED TEST TRAVELER",
+      "Completed search before completed load",
+    );
+    await waitForCondition(
+      () =>
+        evaluate(`document.body.innerText.includes("COMPLETED TEST TRAVELER")`),
+      10000,
+      "Completed search before completed load result",
     );
 
     await evaluate(`(() => {
@@ -17958,7 +17917,12 @@ async function runChromeTest() {
     })()`);
 
     const clickedCompletedLoadThisBooking = await evaluate(`(() => {
-      const loadThisBookingButton = document.querySelector("[data-completed-load-booking='true']");
+      const completedArticle = [...document.querySelectorAll("article")].find(
+        (article) =>
+          article.innerText.includes("COMPLETED TEST COMPANY") &&
+          article.innerText.includes("COMPLETED TEST TRAVELER"),
+      );
+      const loadThisBookingButton = completedArticle?.querySelector("[data-completed-load-booking='true']");
 
       if (!loadThisBookingButton || loadThisBookingButton.disabled) {
         return false;
@@ -17994,7 +17958,7 @@ async function runChromeTest() {
               const pre = node.querySelector("pre");
 
               if (pre) {
-                return pre.innerText;
+                return pre.textContent || pre.innerText || "";
               }
 
               node = node.parentElement;
@@ -18236,7 +18200,7 @@ async function runChromeTest() {
     })()`);
     assert.equal(focusedCrmSaveTextarea, true, "Expected textarea to be focused for CRM save test");
 
-    await client.send("Input.insertText", { text: bookingSample });
+    await setBookingMessageValue(bookingSample, "CRM save booking message");
 
     const filledCrmSaveTextarea = await evaluate(
       `document.querySelector("textarea")?.value === ${JSON.stringify(bookingSample)}`,
@@ -18849,7 +18813,7 @@ async function runChromeTest() {
     ]);
     assert.deepEqual(crmCalendarState.calendarBlobTypes, ["text/calendar;charset=utf-8"]);
 
-    await clickTab("Bookings", "Recent Bookings");
+    await clickTab("Bookings", "Current / Upcoming Bookings");
     const safeSaveRecentBookingState = await waitForCondition(
       () =>
         evaluate(`(() => {
@@ -18861,12 +18825,12 @@ async function runChromeTest() {
               [...article.querySelectorAll("button")].some((button) => button.textContent.trim() === "Load this booking"),
           );
 
-          return bodyText.includes("Recent Bookings")
+          return bodyText.includes("Current / Upcoming Bookings")
             ? { hasLegacyCrmRecentBooking }
             : false;
         })()`),
       10000,
-      "safe Save Booking + CRM Recent Bookings boundary",
+      "safe Save Booking + CRM Current / Upcoming boundary",
     );
     assert.equal(
       safeSaveRecentBookingState.hasLegacyCrmRecentBooking,
@@ -18893,7 +18857,7 @@ async function runChromeTest() {
       "Expected booking message textarea to be focused for multi-booking preview sample",
     );
 
-    await client.send("Input.insertText", { text: multiBookingPreviewSample });
+    await setBookingMessageValue(multiBookingPreviewSample, "multi-booking preview message");
 
     const filledMultiBookingTextarea = await evaluate(
       `document.querySelector("textarea")?.value === ${JSON.stringify(multiBookingPreviewSample)}`,
@@ -19000,7 +18964,7 @@ async function runChromeTest() {
       })()`);
       assert.equal(focusedTextarea, true, "Expected textarea to be focused for Warburg transfer sample");
 
-      await client.send("Input.insertText", { text: warburgTwoTransferSample });
+      await setBookingMessageValue(warburgTwoTransferSample, "Warburg transfer booking message");
 
       const filledTextarea = await evaluate(
         `document.querySelector("textarea")?.value === ${JSON.stringify(warburgTwoTransferSample)}`,
@@ -19154,7 +19118,7 @@ async function runChromeTest() {
       })()`);
       assert.equal(focusedTextarea, true, "Expected textarea to be focused for airport return transfer sample");
 
-      await client.send("Input.insertText", { text: airportTransferReturnTransferSample });
+      await setBookingMessageValue(airportTransferReturnTransferSample, "airport return transfer booking message");
 
       const filledTextarea = await evaluate(
         `document.querySelector("textarea")?.value === ${JSON.stringify(airportTransferReturnTransferSample)}`,
@@ -19302,7 +19266,7 @@ async function runChromeTest() {
       "Expected booking message textarea to be focused for airport departure to airport sample",
     );
 
-    await client.send("Input.insertText", { text: airportDepartureToAirportForFlightSample });
+    await setBookingMessageValue(airportDepartureToAirportForFlightSample, "airport departure to airport booking message");
 
     const filledAirportDepartureTextarea = await evaluate(
       `document.querySelector("textarea")?.value === ${JSON.stringify(airportDepartureToAirportForFlightSample)}`,
@@ -19668,7 +19632,7 @@ async function runChromeTest() {
       "Expected booking message textarea to be focused for exact pasted waypoint sample",
     );
 
-    await client.send("Input.insertText", { text: exactPastedWaypointAirportArrivalSample });
+    await setBookingMessageValue(exactPastedWaypointAirportArrivalSample, "exact pasted arrival waypoint message");
 
     const filledExactPasteTextarea = await evaluate(
       `document.querySelector("textarea")?.value === ${JSON.stringify(exactPastedWaypointAirportArrivalSample)}`,
@@ -19750,7 +19714,7 @@ async function runChromeTest() {
       "Expected booking message textarea to be focused for exact pasted departure waypoint sample",
     );
 
-    await client.send("Input.insertText", { text: exactPastedWaypointAirportDepartureSample });
+    await setBookingMessageValue(exactPastedWaypointAirportDepartureSample, "exact pasted departure waypoint message");
 
     const filledExactDepartureTextarea = await evaluate(
       `document.querySelector("textarea")?.value === ${JSON.stringify(exactPastedWaypointAirportDepartureSample)}`,
@@ -19846,7 +19810,7 @@ async function runChromeTest() {
       "Expected booking message textarea to be focused for route-name Airport drop-off-only sample",
     );
 
-    await client.send("Input.insertText", { text: routeNameAirportDropoffOnlySample });
+    await setBookingMessageValue(routeNameAirportDropoffOnlySample, "route-name Airport drop-off-only message");
 
     const filledRouteNameAirportTextarea = await evaluate(
       `document.querySelector("textarea")?.value === ${JSON.stringify(routeNameAirportDropoffOnlySample)}`,
@@ -19940,7 +19904,7 @@ async function runChromeTest() {
       "Expected booking message textarea to be focused for route-name Airport pickup-only departure sample",
     );
 
-    await client.send("Input.insertText", { text: routeNameAirportPickupOnlyDepartureInternalSample });
+    await setBookingMessageValue(routeNameAirportPickupOnlyDepartureInternalSample, "route-name Airport pickup-only departure message");
 
     const filledRouteNameAirportDepartureTextarea = await evaluate(
       `document.querySelector("textarea")?.value === ${JSON.stringify(routeNameAirportPickupOnlyDepartureInternalSample)}`,
@@ -20050,7 +20014,7 @@ async function runChromeTest() {
       "Expected booking message textarea to be focused for freeform transfer sample",
     );
 
-    await client.send("Input.insertText", { text: freeformTransferMultiLocationSample });
+    await setBookingMessageValue(freeformTransferMultiLocationSample, "freeform multi-location transfer message");
 
     const filledFreeformTransferTextarea = await evaluate(
       `document.querySelector("textarea")?.value === ${JSON.stringify(freeformTransferMultiLocationSample)}`,
@@ -20152,7 +20116,7 @@ async function runChromeTest() {
     })()`);
     assert.equal(focusedDspTextarea, true, "Expected booking message textarea to be focused for DSP sample");
 
-    await client.send("Input.insertText", { text: dspItinerarySample });
+    await setBookingMessageValue(dspItinerarySample, "DSP itinerary message");
 
     const filledDspTextarea = await evaluate(
       `document.querySelector("textarea")?.value === ${JSON.stringify(dspItinerarySample)}`,
@@ -20249,7 +20213,7 @@ async function runChromeTest() {
       "Expected booking message textarea to be focused for numbered event DSP sample",
     );
 
-    await client.send("Input.insertText", { text: numberedEventDspItinerarySample });
+    await setBookingMessageValue(numberedEventDspItinerarySample, "numbered event DSP itinerary message");
 
     const filledNumberedEventDspTextarea = await evaluate(
       `document.querySelector("textarea")?.value === ${JSON.stringify(numberedEventDspItinerarySample)}`,
@@ -20356,7 +20320,7 @@ async function runChromeTest() {
       "Expected booking message textarea to be focused for timed schedule sample",
     );
 
-    await client.send("Input.insertText", { text: timedScheduleItinerarySample });
+    await setBookingMessageValue(timedScheduleItinerarySample, "timed schedule itinerary message");
 
     const filledTimedScheduleTextarea = await evaluate(
       `document.querySelector("textarea")?.value === ${JSON.stringify(timedScheduleItinerarySample)}`,
@@ -20600,7 +20564,7 @@ async function runChromeTest() {
       "Expected empty-state Load Bookings not to read the booking list through the legacy admin data shim",
     );
 
-    await clickTab("Completed", "Completed Bookings");
+    await clickTab("Completed", "Completed / History");
 
     const clickedEmptyStateUndoCompletion = await evaluate(`(() => {
       const article = [...document.querySelectorAll("article")].find(

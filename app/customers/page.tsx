@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { type FormEvent, useMemo, useRef, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   collectionRules,
   mockCustomers,
@@ -18,7 +18,6 @@ import {
   hourlyBillingUnitMinutes,
 } from "../../lib/hourly-billing";
 import {
-  createCustomerLocalInvoiceRecord,
   downloadCustomerInvoicePdf,
   formatInvoiceAmount,
   formatInvoiceDate,
@@ -40,6 +39,9 @@ const summaryCards = [
 
 const adminCustomerAccountsApiPath = "/api/admin-customer-accounts";
 const adminCustomerSavedBookingsApiPath = "/api/admin-customer-saved-bookings";
+const adminCustomerInvoicesApiPath = "/api/admin-customer-invoices";
+const adminCustomerInvoicePdfApiPath = "/api/admin-customer-invoice-pdf";
+const adminCustomerInvoiceEmailApiPath = "/api/admin-customer-invoice-email";
 const adminDriverJobDspActualTimeSummariesApiPath =
   "/api/admin-driver-job-dsp-actual-time-summaries";
 
@@ -286,6 +288,14 @@ type CustomerInvoicePreview = {
   route: string;
   service: string;
   sourceLabel: string;
+};
+
+type CustomerDisplayedInvoiceRecord = CustomerLocalInvoiceRecord & {
+  customerEmail?: string;
+  emailDeliveryStatus?: "blocked" | "failed" | "not_sent" | "sent";
+  emailSentAt?: string | null;
+  pdfFilename?: string;
+  storageSource?: "local" | "server";
 };
 
 type RegularCustomerBookingForm = typeof initialRegularCustomerBookingForm;
@@ -822,6 +832,46 @@ const outstandingPaymentReviewItems: OutstandingPaymentReviewItem[] = mockCustom
     }),
 );
 
+function displayLocalInvoice(invoice: CustomerLocalInvoiceRecord): CustomerDisplayedInvoiceRecord {
+  return {
+    ...invoice,
+    emailDeliveryStatus: "not_sent",
+    pdfFilename: `${invoice.invoiceNumber}.pdf`,
+    storageSource: "local",
+  };
+}
+
+function mergeDisplayedInvoices(
+  primaryRecords: CustomerDisplayedInvoiceRecord[],
+  fallbackRecords: CustomerDisplayedInvoiceRecord[],
+) {
+  const records = new Map<string, CustomerDisplayedInvoiceRecord>();
+
+  [...fallbackRecords, ...primaryRecords].forEach((record) => {
+    records.set(record.invoiceNumber, record);
+  });
+
+  return [...records.values()].sort((firstRecord, secondRecord) =>
+    secondRecord.issueDateIso.localeCompare(firstRecord.issueDateIso),
+  );
+}
+
+function safeInvoiceApiRecords(value: unknown) {
+  return Array.isArray(value) ? (value as CustomerDisplayedInvoiceRecord[]) : [];
+}
+
+function downloadBrowserBlob(blob: Blob, filename: string) {
+  const url = window.URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+}
+
 export default function MockCustomerDashboardPage() {
   const customerInvoicePrepPanelRef = useRef<HTMLDivElement | null>(null);
   const customerInvoicePrepRowKeyRef = useRef("");
@@ -940,6 +990,7 @@ export default function MockCustomerDashboardPage() {
   );
   const [customerInvoiceIssueStatus, setCustomerInvoiceIssueStatus] =
     useState<CustomerLocalInvoiceStatus>("Unpaid");
+  const [customerInvoiceRecipientEmail, setCustomerInvoiceRecipientEmail] = useState("");
   const [customerInvoiceIssueFeedback, setCustomerInvoiceIssueFeedback] = useState(
     "Review the amount and due date before issuing. Invoice number is created only when you click issue.",
   );
@@ -962,8 +1013,11 @@ export default function MockCustomerDashboardPage() {
       tone: "info",
     });
   const [issuingCustomerInvoiceKey, setIssuingCustomerInvoiceKey] = useState("");
-  const [issuedCustomerInvoices, setIssuedCustomerInvoices] = useState<CustomerLocalInvoiceRecord[]>(() =>
-    readCustomerLocalInvoices(),
+  const [downloadingCustomerInvoiceNumber, setDownloadingCustomerInvoiceNumber] = useState("");
+  const [emailingCustomerInvoiceNumber, setEmailingCustomerInvoiceNumber] = useState("");
+  const [updatingCustomerInvoiceStatusNumber, setUpdatingCustomerInvoiceStatusNumber] = useState("");
+  const [issuedCustomerInvoices, setIssuedCustomerInvoices] = useState<CustomerDisplayedInvoiceRecord[]>(() =>
+    readCustomerLocalInvoices().map(displayLocalInvoice),
   );
   const [customerInvoiceWorkspaceTab, setCustomerInvoiceWorkspaceTab] =
     useState<CustomerInvoiceWorkspaceTab>("statements");
@@ -1357,6 +1411,43 @@ export default function MockCustomerDashboardPage() {
   const isCustomerInvoicePreviewCurrent =
     Boolean(customerInvoicePreview) &&
     customerInvoicePreview?.previewKey === customerInvoiceCurrentPreviewKey;
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadIssuedCustomerInvoices() {
+      const localInvoices = readCustomerLocalInvoices().map(displayLocalInvoice);
+
+      try {
+        const response = await fetch(adminCustomerInvoicesApiPath, {
+          cache: "no-store",
+          headers: {
+            "x-prestige-admin-purpose": "admin-booking-persistence",
+          },
+          signal: controller.signal,
+        });
+        const result = await response.json().catch(() => null);
+
+        if (response.ok && result?.ok) {
+          setIssuedCustomerInvoices(
+            mergeDisplayedInvoices(safeInvoiceApiRecords(result.invoices), localInvoices),
+          );
+          return;
+        }
+      } catch {
+        if (controller.signal.aborted) {
+          return;
+        }
+      }
+
+      setIssuedCustomerInvoices(localInvoices);
+    }
+
+    void loadIssuedCustomerInvoices();
+
+    return () => controller.abort();
+  }, []);
+
   const regularCustomerBillingQuickFilterOptions = useMemo(() => {
     const billingMonths = Array.from(
       new Set(regularCustomerBookingListItems.map((item) => item.billingMonth.trim()).filter(Boolean)),
@@ -1703,6 +1794,7 @@ export default function MockCustomerDashboardPage() {
     setCustomerInvoiceIssueAmount(suggestedAmountCents ? row.amount.replace(/^\$/, "") : "");
     setCustomerInvoiceIssueDueDate(invoiceDateInputDaysFromNow(7));
     setCustomerInvoiceIssueStatus("Unpaid");
+    setCustomerInvoiceRecipientEmail("");
     setCustomerInvoicePreview(null);
     setCustomerInvoiceAdjustmentReason("");
     setCustomerInvoiceCalculatedAmountCents(baseCalculation?.amountCents ?? null);
@@ -1809,6 +1901,7 @@ export default function MockCustomerDashboardPage() {
     setCustomerInvoiceIssueAmount("");
     setCustomerInvoiceIssueDueDate(invoiceDateInputDaysFromNow(7));
     setCustomerInvoiceIssueStatus("Unpaid");
+    setCustomerInvoiceRecipientEmail("");
     setCustomerInvoicePreview(null);
     setCustomerInvoiceAdjustmentReason("");
     setCustomerInvoiceCalculatedAmountCents(null);
@@ -1903,7 +1996,36 @@ export default function MockCustomerDashboardPage() {
     }, 50);
   }
 
-  function issuePreparedCustomerInvoice() {
+  function updateIssuedInvoiceState(invoice: CustomerDisplayedInvoiceRecord) {
+    setIssuedCustomerInvoices((currentInvoices) =>
+      mergeDisplayedInvoices([invoice], currentInvoices),
+    );
+  }
+
+  async function downloadStoredCustomerInvoicePdf(invoice: CustomerDisplayedInvoiceRecord) {
+    if (invoice.storageSource === "server") {
+      const response = await fetch(
+        `${adminCustomerInvoicePdfApiPath}/${encodeURIComponent(invoice.invoiceNumber)}`,
+        {
+          cache: "no-store",
+          headers: {
+            "x-prestige-admin-purpose": "admin-booking-persistence",
+          },
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error("Stored invoice PDF download failed safely.");
+      }
+
+      downloadBrowserBlob(await response.blob(), invoice.pdfFilename || `${invoice.invoiceNumber}.pdf`);
+      return;
+    }
+
+    await downloadCustomerInvoicePdf(invoice);
+  }
+
+  async function issuePreparedCustomerInvoice() {
     if (!customerInvoicePrepRow) {
       setCustomerInvoiceIssueFeedback("Choose Prepare from Unbilled Customers before issuing an invoice.");
       return;
@@ -1940,90 +2062,251 @@ export default function MockCustomerDashboardPage() {
 
     setIssuingCustomerInvoiceKey(customerInvoicePrepRow.key);
 
-    const issuedInvoice = createCustomerLocalInvoiceRecord({
-      amountCents: customerInvoicePreview.amountCents,
-      billingMonthLabel: formatInvoiceMonth(new Date()),
-      customerId: customerInvoicePrepRow.customerId,
-      customerName: customerInvoicePrepRow.customerName,
-      dueDateIso: customerInvoicePreview.dueDateIso,
-      lineItems: [
-        {
-          amountLabel: customerInvoicePreview.amountLabel,
-          description: customerInvoicePreview.lineDescription,
+    try {
+      const response = await fetch(adminCustomerInvoicesApiPath, {
+        body: JSON.stringify({
+          amountCents: customerInvoicePreview.amountCents,
+          billingMonthLabel: formatInvoiceMonth(new Date()),
+          customerEmail: customerInvoiceRecipientEmail,
+          customerId: customerInvoicePrepRow.customerId,
+          customerName: customerInvoicePrepRow.customerName,
+          dueDateIso: customerInvoicePreview.dueDateIso,
+          lineItems: [
+            {
+              amountLabel: customerInvoicePreview.amountLabel,
+              description: customerInvoicePreview.lineDescription,
+            },
+          ],
+          reference: customerInvoicePrepRow.reference,
+          route: customerInvoicePrepRow.route,
+          service: customerInvoicePrepRow.service,
+          status: customerInvoicePreview.folder,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": "admin-booking-persistence",
         },
-      ],
-      reference: customerInvoicePrepRow.reference,
-      route: customerInvoicePrepRow.route,
-      service: customerInvoicePrepRow.service,
-      status: customerInvoicePreview.folder,
-    });
-    const nextInvoices = saveCustomerLocalInvoice(issuedInvoice);
+        method: "POST",
+      });
+      const result = await response.json().catch(() => null);
 
-    setIssuedCustomerInvoices(nextInvoices);
-    setCustomerInvoicePrepFeedback(
-      `${issuedInvoice.invoiceNumber} issued for ${issuedInvoice.customerName}. PDF download started.`,
-    );
-    setCustomerInvoiceIssueFeedback(
-      customerInvoiceAmountEdited
-        ? `${issuedInvoice.invoiceNumber} issued with an approved amount adjustment. The reason stays in admin review and is not printed on the customer PDF.`
-        : `${issuedInvoice.invoiceNumber} issued and saved in this browser. It now appears in the customer portal invoice folder on this Mac browser.`,
-    );
-    downloadCustomerInvoicePdf(issuedInvoice);
-    setCustomerInvoicePreview(null);
-    window.setTimeout(() => setIssuingCustomerInvoiceKey(""), 700);
+      if (!response.ok || !result?.ok || !result.invoice) {
+        throw new Error(result?.error || "Customer invoice record failed safely.");
+      }
+
+      const issuedInvoice = {
+        ...(result.invoice as CustomerDisplayedInvoiceRecord),
+        storageSource: "server" as const,
+      };
+
+      saveCustomerLocalInvoice(issuedInvoice);
+      updateIssuedInvoiceState(issuedInvoice);
+      setCustomerInvoicePrepFeedback(
+        `${issuedInvoice.invoiceNumber} issued for ${issuedInvoice.customerName}. PDF download started.`,
+      );
+      setCustomerInvoiceIssueFeedback(
+        customerInvoiceAmountEdited
+          ? `${issuedInvoice.invoiceNumber} issued with an approved amount adjustment. The reason stays in admin review and is not printed on the customer PDF.`
+          : `${issuedInvoice.invoiceNumber} stored with PDF. It is ready for customer portal download and email.`,
+      );
+      await downloadStoredCustomerInvoicePdf(issuedInvoice);
+      setCustomerInvoicePreview(null);
+    } catch (error) {
+      setCustomerInvoiceIssueFeedback(
+        error instanceof Error
+          ? error.message
+          : "Customer invoice issue failed safely. No invoice number was confirmed.",
+      );
+    } finally {
+      window.setTimeout(() => setIssuingCustomerInvoiceKey(""), 700);
+    }
   }
 
-  function downloadIssuedCustomerInvoice(invoice: CustomerLocalInvoiceRecord) {
-    downloadCustomerInvoicePdf(invoice);
-    setCustomerInvoiceIssueFeedback(`${invoice.invoiceNumber} PDF download started.`);
+  async function downloadIssuedCustomerInvoice(invoice: CustomerDisplayedInvoiceRecord) {
+    setDownloadingCustomerInvoiceNumber(invoice.invoiceNumber);
+
+    try {
+      await downloadStoredCustomerInvoicePdf(invoice);
+      setCustomerInvoiceIssueFeedback(`${invoice.invoiceNumber} PDF download started.`);
+    } catch {
+      setCustomerInvoiceIssueFeedback(`${invoice.invoiceNumber} PDF download failed safely.`);
+    } finally {
+      window.setTimeout(() => setDownloadingCustomerInvoiceNumber(""), 700);
+    }
   }
 
-  function handleGuardedInvoiceEmailAction(invoice: CustomerLocalInvoiceRecord) {
-    setCustomerInvoiceIssueFeedback(
-      `${invoice.invoiceNumber} email not sent. Email provider sending is still off; download the PDF and send manually until that lane is approved.`,
-    );
+  async function handleCustomerInvoiceEmailAction(invoice: CustomerDisplayedInvoiceRecord) {
+    const recipientEmail = invoice.customerEmail || customerInvoiceRecipientEmail.trim();
+
+    if (!recipientEmail) {
+      setCustomerInvoiceIssueFeedback("Enter a customer email before sending this invoice.");
+      return;
+    }
+
+    if (invoice.storageSource !== "server") {
+      setCustomerInvoiceIssueFeedback(
+        `${invoice.invoiceNumber} is a local fallback invoice. Issue it as a stored invoice before email sending.`,
+      );
+      return;
+    }
+
+    setEmailingCustomerInvoiceNumber(invoice.invoiceNumber);
+
+    try {
+      const response = await fetch(adminCustomerInvoiceEmailApiPath, {
+        body: JSON.stringify({
+          invoiceNumber: invoice.invoiceNumber,
+          recipientEmail,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "POST",
+      });
+      const result = await response.json().catch(() => null);
+
+      if (result?.invoice) {
+        updateIssuedInvoiceState({
+          ...(result.invoice as CustomerDisplayedInvoiceRecord),
+          storageSource: "server",
+        });
+      }
+
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.error || "Customer invoice email failed safely.");
+      }
+
+      setCustomerInvoiceIssueFeedback(`${invoice.invoiceNumber} emailed to ${recipientEmail}.`);
+    } catch (error) {
+      setCustomerInvoiceIssueFeedback(
+        error instanceof Error ? error.message : `${invoice.invoiceNumber} email failed safely.`,
+      );
+    } finally {
+      window.setTimeout(() => setEmailingCustomerInvoiceNumber(""), 700);
+    }
   }
 
-  function handleGuardedInvoiceReminderAction(invoice: CustomerLocalInvoiceRecord) {
-    setCustomerInvoiceIssueFeedback(
-      `${invoice.invoiceNumber} reminder not sent. Reminder/email provider sending is still off; no customer notification was sent.`,
-    );
-  }
-
-  function markIssuedCustomerInvoicePaid(invoice: CustomerLocalInvoiceRecord) {
+  async function markIssuedCustomerInvoicePaid(invoice: CustomerDisplayedInvoiceRecord) {
     if (invoice.status === "Paid") {
       setCustomerInvoiceIssueFeedback(`${invoice.invoiceNumber} is already marked Paid in this browser.`);
       return;
+    }
+
+    setUpdatingCustomerInvoiceStatusNumber(invoice.invoiceNumber);
+
+    if (invoice.storageSource === "server") {
+      try {
+        const response = await fetch(adminCustomerInvoicesApiPath, {
+          body: JSON.stringify({
+            invoiceNumber: invoice.invoiceNumber,
+            status: "Paid",
+          }),
+          headers: {
+            "Content-Type": "application/json",
+            "x-prestige-admin-purpose": "admin-booking-persistence",
+          },
+          method: "PATCH",
+        });
+        const result = await response.json().catch(() => null);
+
+        if (!response.ok || !result?.ok || !result.invoice) {
+          throw new Error(result?.error || "Customer invoice status update failed safely.");
+        }
+
+        const paidInvoice = {
+          ...(result.invoice as CustomerDisplayedInvoiceRecord),
+          storageSource: "server" as const,
+        };
+
+        saveCustomerLocalInvoice(paidInvoice);
+        updateIssuedInvoiceState(paidInvoice);
+        setCustomerInvoiceIssueFeedback(`${invoice.invoiceNumber} marked Paid.`);
+        return;
+      } catch (error) {
+        setCustomerInvoiceIssueFeedback(
+          error instanceof Error
+            ? error.message
+            : `${invoice.invoiceNumber} paid status failed safely.`,
+        );
+        return;
+      } finally {
+        window.setTimeout(() => setUpdatingCustomerInvoiceStatusNumber(""), 700);
+      }
     }
 
     const paidInvoice = {
       ...invoice,
       status: "Paid" as const,
     };
-    const nextInvoices = saveCustomerLocalInvoice(paidInvoice);
+    const nextInvoices = saveCustomerLocalInvoice(paidInvoice).map(displayLocalInvoice);
 
     setIssuedCustomerInvoices(nextInvoices);
     setCustomerInvoiceIssueFeedback(
       `${invoice.invoiceNumber} marked Paid locally. No bank, Stripe, payment provider, or Supabase record was changed.`,
     );
+    window.setTimeout(() => setUpdatingCustomerInvoiceStatusNumber(""), 700);
   }
 
-  function markIssuedCustomerInvoiceUnpaid(invoice: CustomerLocalInvoiceRecord) {
+  async function markIssuedCustomerInvoiceUnpaid(invoice: CustomerDisplayedInvoiceRecord) {
     if (invoice.status === "Unpaid") {
       setCustomerInvoiceIssueFeedback(`${invoice.invoiceNumber} is already marked Unpaid in this browser.`);
       return;
+    }
+
+    setUpdatingCustomerInvoiceStatusNumber(invoice.invoiceNumber);
+
+    if (invoice.storageSource === "server") {
+      try {
+        const response = await fetch(adminCustomerInvoicesApiPath, {
+          body: JSON.stringify({
+            invoiceNumber: invoice.invoiceNumber,
+            status: "Unpaid",
+          }),
+          headers: {
+            "Content-Type": "application/json",
+            "x-prestige-admin-purpose": "admin-booking-persistence",
+          },
+          method: "PATCH",
+        });
+        const result = await response.json().catch(() => null);
+
+        if (!response.ok || !result?.ok || !result.invoice) {
+          throw new Error(result?.error || "Customer invoice status update failed safely.");
+        }
+
+        const unpaidInvoice = {
+          ...(result.invoice as CustomerDisplayedInvoiceRecord),
+          storageSource: "server" as const,
+        };
+
+        saveCustomerLocalInvoice(unpaidInvoice);
+        updateIssuedInvoiceState(unpaidInvoice);
+        setCustomerInvoiceIssueFeedback(`${invoice.invoiceNumber} marked Unpaid.`);
+        return;
+      } catch (error) {
+        setCustomerInvoiceIssueFeedback(
+          error instanceof Error
+            ? error.message
+            : `${invoice.invoiceNumber} unpaid status failed safely.`,
+        );
+        return;
+      } finally {
+        window.setTimeout(() => setUpdatingCustomerInvoiceStatusNumber(""), 700);
+      }
     }
 
     const unpaidInvoice = {
       ...invoice,
       status: "Unpaid" as const,
     };
-    const nextInvoices = saveCustomerLocalInvoice(unpaidInvoice);
+    const nextInvoices = saveCustomerLocalInvoice(unpaidInvoice).map(displayLocalInvoice);
 
     setIssuedCustomerInvoices(nextInvoices);
     setCustomerInvoiceIssueFeedback(
       `${invoice.invoiceNumber} marked Unpaid locally. No bank, Stripe, payment provider, or Supabase record was changed.`,
     );
+    window.setTimeout(() => setUpdatingCustomerInvoiceStatusNumber(""), 700);
   }
 
   function clearRegularCustomerBookingListFilters() {
@@ -3031,7 +3314,7 @@ export default function MockCustomerDashboardPage() {
                   className="mt-3 border-t border-slate-200 pt-3"
                   data-customer-invoice-issue-panel="true"
                 >
-                  <div className="grid gap-2 md:grid-cols-[minmax(9rem,0.8fr)_minmax(9rem,0.8fr)_minmax(9rem,0.7fr)_auto_auto] md:items-end">
+                  <div className="grid gap-2 md:grid-cols-[minmax(8rem,0.7fr)_minmax(8rem,0.7fr)_minmax(8rem,0.6fr)_minmax(12rem,1fr)_auto_auto] md:items-end">
                     <label className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
                       Approved amount
                       <input
@@ -3071,8 +3354,22 @@ export default function MockCustomerDashboardPage() {
                         <option value="Paid">Paid</option>
                       </select>
                     </label>
+                    <label className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
+                      Customer email
+                      <input
+                        className="mt-1 min-h-9 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950 outline-none focus:border-slate-700"
+                        data-customer-invoice-recipient-email="true"
+                        inputMode="email"
+                        onChange={(event) => {
+                          setCustomerInvoiceRecipientEmail(event.target.value);
+                        }}
+                        placeholder="customer@email.com"
+                        type="email"
+                        value={customerInvoiceRecipientEmail}
+                      />
+                    </label>
                     {customerInvoiceAmountEdited ? (
-                      <label className="text-xs font-bold uppercase tracking-[0.08em] text-amber-700 md:col-span-3">
+                      <label className="text-xs font-bold uppercase tracking-[0.08em] text-amber-700 md:col-span-4">
                         Adjustment reason
                         <input
                           className="mt-1 min-h-9 w-full rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950 outline-none focus:border-amber-700"
@@ -3183,8 +3480,8 @@ export default function MockCustomerDashboardPage() {
                     className="mt-2 rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-950"
                     data-customer-invoice-issue-local-boundary="true"
                   >
-                    Local browser invoice record and PDF download only. No email, Stripe, bank, provider send,
-                    payment record, Supabase write, customer notification, or cross-device customer portal sync.
+                    Stored invoice record with PDF download. Email sends only when the approved email provider gate is
+                    configured. No Stripe charge, bank debit, payout, provider job send, or automatic payment action.
                   </p>
                 </div>
               ) : null}
@@ -3195,7 +3492,7 @@ export default function MockCustomerDashboardPage() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
-                      Issued on this browser
+                      Issued invoices
                     </p>
                     <p className="text-xs font-bold text-slate-600">
                       {issuedCustomerInvoices.length} invoice{issuedCustomerInvoices.length === 1 ? "" : "s"}
@@ -3213,24 +3510,47 @@ export default function MockCustomerDashboardPage() {
                             <td className="py-2 pr-3 font-bold text-slate-950">{invoice.invoiceNumber}</td>
                             <td className="py-2 pr-3 text-slate-700">{invoice.customerName}</td>
                             <td className="py-2 pr-3 font-semibold text-slate-950">{invoice.amountLabel}</td>
-                            <td className="py-2 pr-3 text-slate-700">{invoice.status}</td>
+                            <td className="py-2 pr-3 text-slate-700">
+                              <span>{invoice.status}</span>
+                              <span className="ml-2 text-slate-400">
+                                {invoice.storageSource === "server" ? "Stored" : "Local"}
+                              </span>
+                            </td>
                             <td className="py-2 text-right">
                               <div className="inline-flex flex-wrap justify-end gap-1">
                                 <button
-                                  className="rounded-md border border-slate-300 bg-white px-2 py-1 font-bold text-slate-800 transition hover:border-slate-600"
+                                  className={`rounded-md border px-2 py-1 font-bold transition ${
+                                    downloadingCustomerInvoiceNumber === invoice.invoiceNumber
+                                      ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                                      : "border-slate-300 bg-white text-slate-800 hover:border-slate-600"
+                                  }`}
                                   data-customer-invoice-issued-local-download={invoice.invoiceNumber}
                                   onClick={() => downloadIssuedCustomerInvoice(invoice)}
                                   type="button"
                                 >
-                                  Download PDF
+                                  {downloadingCustomerInvoiceNumber === invoice.invoiceNumber
+                                    ? "Downloaded"
+                                    : "Download PDF"}
                                 </button>
                                 <button
-                                  className="rounded-md border border-slate-300 bg-white px-2 py-1 font-bold text-slate-800 transition hover:border-slate-600"
+                                  className={`rounded-md border px-2 py-1 font-bold transition ${
+                                    emailingCustomerInvoiceNumber === invoice.invoiceNumber ||
+                                    invoice.emailDeliveryStatus === "sent"
+                                      ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                                      : invoice.emailDeliveryStatus === "blocked" ||
+                                          invoice.emailDeliveryStatus === "failed"
+                                        ? "border-amber-300 bg-amber-50 text-amber-800"
+                                        : "border-slate-300 bg-white text-slate-800 hover:border-slate-600"
+                                  }`}
                                   data-customer-invoice-issued-local-email={invoice.invoiceNumber}
-                                  onClick={() => handleGuardedInvoiceEmailAction(invoice)}
+                                  onClick={() => handleCustomerInvoiceEmailAction(invoice)}
                                   type="button"
                                 >
-                                  Email Invoice
+                                  {emailingCustomerInvoiceNumber === invoice.invoiceNumber
+                                    ? "Emailing"
+                                    : invoice.emailDeliveryStatus === "sent"
+                                      ? "Emailed"
+                                      : "Email Invoice"}
                                 </button>
                                 {invoice.status === "Paid" ? (
                                   <>
@@ -3241,33 +3561,35 @@ export default function MockCustomerDashboardPage() {
                                       Paid
                                     </span>
                                     <button
-                                      className="rounded-md border border-amber-300 bg-white px-2 py-1 font-bold text-amber-800 transition hover:border-amber-600"
+                                      className={`rounded-md border px-2 py-1 font-bold transition ${
+                                        updatingCustomerInvoiceStatusNumber === invoice.invoiceNumber
+                                          ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                                          : "border-amber-300 bg-white text-amber-800 hover:border-amber-600"
+                                      }`}
                                       data-customer-invoice-issued-local-mark-unpaid={invoice.invoiceNumber}
                                       onClick={() => markIssuedCustomerInvoiceUnpaid(invoice)}
                                       type="button"
                                     >
-                                      Mark Unpaid
+                                      {updatingCustomerInvoiceStatusNumber === invoice.invoiceNumber
+                                        ? "Unpaid"
+                                        : "Mark Unpaid"}
                                     </button>
                                   </>
                                 ) : (
                                   <button
-                                    className="rounded-md border border-slate-300 bg-white px-2 py-1 font-bold text-slate-800 transition hover:border-slate-600"
+                                    className={`rounded-md border px-2 py-1 font-bold transition ${
+                                      updatingCustomerInvoiceStatusNumber === invoice.invoiceNumber
+                                        ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                                        : "border-slate-300 bg-white text-slate-800 hover:border-slate-600"
+                                    }`}
                                     data-customer-invoice-issued-local-mark-paid={invoice.invoiceNumber}
                                     data-customer-invoice-issued-local-pay={invoice.invoiceNumber}
                                     onClick={() => markIssuedCustomerInvoicePaid(invoice)}
                                     type="button"
                                   >
-                                    Pay
+                                    {updatingCustomerInvoiceStatusNumber === invoice.invoiceNumber ? "Paid" : "Pay"}
                                   </button>
                                 )}
-                                <button
-                                  className="rounded-md border border-slate-300 bg-white px-2 py-1 font-bold text-slate-800 transition hover:border-slate-600"
-                                  data-customer-invoice-issued-local-reminder={invoice.invoiceNumber}
-                                  onClick={() => handleGuardedInvoiceReminderAction(invoice)}
-                                  type="button"
-                                >
-                                  Send Reminder
-                                </button>
                               </div>
                             </td>
                           </tr>

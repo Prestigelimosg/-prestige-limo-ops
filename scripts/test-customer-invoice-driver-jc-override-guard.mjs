@@ -56,8 +56,8 @@ const prepareFunction = sectionBetween(
 );
 const issueFunction = sectionBetween(
   customersPage,
-  "function issuePreparedCustomerInvoice()",
-  "function downloadIssuedCustomerInvoice(invoice: CustomerLocalInvoiceRecord)",
+  "async function issuePreparedCustomerInvoice()",
+  "async function downloadIssuedCustomerInvoice(invoice: CustomerDisplayedInvoiceRecord)",
 );
 const previewFunction = sectionBetween(
   customersPage,

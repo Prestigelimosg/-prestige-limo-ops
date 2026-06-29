@@ -88,7 +88,8 @@ for (const fragment of [
   "billingBreakdown: hourlyInvoiceReview?.billingBreakdown",
   "invoiceLineDescription: hourlyInvoiceReview?.invoiceLineDescription",
   'statusLabel: hourlyInvoiceReview ? "Hourly auto-calculated" : "Unbilled / draft booking"',
-  "customerInvoicePrepRow.invoiceLineDescription",
+  "customerInvoiceCalculatedLineDescription ||",
+  "row.invoiceLineDescription ||",
   "lineItems: [",
 ]) {
   assertIncludes(customersPage, fragment, `customers hourly invoice fragment ${fragment}`);
@@ -120,14 +121,12 @@ for (const fragment of [
   'data-customer-invoice-issued-local-email={invoice.invoiceNumber}',
   'data-customer-invoice-issued-local-mark-paid={invoice.invoiceNumber}',
   'data-customer-invoice-issued-local-mark-unpaid={invoice.invoiceNumber}',
-  'data-customer-invoice-issued-local-reminder={invoice.invoiceNumber}',
 ]) {
   assertIncludes(invoiceIssuePanel, fragment, `invoice issue action fragment ${fragment}`);
 }
 
 for (const fragment of [
-  "handleGuardedInvoiceEmailAction(invoice)",
-  "handleGuardedInvoiceReminderAction(invoice)",
+  "handleCustomerInvoiceEmailAction(invoice)",
   "markIssuedCustomerInvoicePaid(invoice)",
   "markIssuedCustomerInvoiceUnpaid(invoice)",
   "saveCustomerLocalInvoice(paidInvoice)",
@@ -159,8 +158,8 @@ for (const phrase of [
   "Admin Customers can create a mock/local hourly booking row with actual start time, actual end time, and a default `$65/hr` rate.",
   "Hourly invoice amounts use the locked 15-minute grace rule: 16 minutes or more starts the next chargeable hour.",
   "Preparing an hourly unbilled row carries the calculated amount and calculation breakdown into the Send Invoice Workbench.",
-  "The generated browser-local invoice/PDF line item includes the hourly start/end, actual minutes, billable minutes, and hourly rate.",
-  "Issued local invoices show Download PDF, guarded Email Invoice, local-only Pay / Paid / Mark Unpaid, and guarded Send Reminder actions.",
+  "The generated invoice/PDF line item includes the hourly start/end, actual minutes, billable minutes, and hourly rate.",
+  "Issued invoices show Download PDF, gated Email Invoice, Pay / Paid / Mark Unpaid actions, and no duplicate reminder action in the issued invoice table.",
   "The added `Hourly Test Customer` is mock/local test data only and does not create real customer, payment, provider, bank, or Supabase records.",
   "Guard coverage lives in `scripts/test-customer-hourly-invoice-auto-calculation-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {

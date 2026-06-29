@@ -336,24 +336,26 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Customer Trust Path And Portal Invoice Folder Lock
 
 - Customer `/book` and `/my-bookings` request forms both require contact number, passenger name, pickup date, pickup time, pickup location, and drop-off location before submission.
-- The customer portal now has a compact `Invoices` section with `Unpaid` and `Paid` folders grouped by month, using browser-local issued invoice records until a customer-authenticated invoice/PDF API is approved.
-- The portal invoice folders do not import admin mock customer data and do not call admin APIs, Stripe/payment providers, email/SMS/WhatsApp providers, or DB writes.
+- The customer portal has a compact `Invoices` section with `Unpaid` and `Paid` folders grouped by month, reading stored customer invoice records through the existing secure customer portal session boundary and using browser-local invoices only as fallback.
+- The portal invoice folders do not import admin mock customer data and do not call admin APIs, Stripe/payment providers, email/SMS/WhatsApp providers, or write APIs.
 - Admin Customers keeps the Unbilled Customers checkpoint as one dropdown plus a compact scrollable table; the duplicate wording block below the dropdown is removed.
-- Customer saved-booking reads remain booking-only and strip invoice/payment/PDF/finance/internal fields, so invoice rows need their own future customer-scoped source before downloads or email sending go live.
+- Customer saved-booking reads remain booking-only and strip invoice/payment/PDF/finance/internal fields; invoice rows now use their own customer-scoped source and PDF download route filtered by the portal customer account.
 - Hourly billing remains locked to the 15-minute grace rule: 16 minutes or more starts the next chargeable hour.
-- This trust-path pass does not send invoices, activate payment links, write invoice/payment records, change env, call providers, activate GPS/live location, or deploy database migrations.
+- This trust-path pass does not activate Stripe/payment links, bank debit, payouts, provider job sending, GPS/live location, or automatic payment reconciliation.
 - Guard coverage lives in `scripts/test-customer-trust-path-invoice-portal-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
-### Customer Local Invoice Issue PDF And Portal Folder Lock
+### Customer Stored Invoice Record PDF And Portal Folder Lock
 
-- Admin Customers can issue a browser-local invoice from the prepared Unbilled Customers row after the approved amount and due date are reviewed.
-- The issue action creates a unique `INV-YYYYMMDD-####` invoice number only at click time, saves the invoice record to this Mac browser storage, and starts a real PDF download generated in-browser.
-- The customer portal `Invoices` tab reads the same browser-local invoice records and shows them under compact `Unpaid` and `Paid` monthly folders with PDF download buttons.
-- Downloaded invoice PDFs embed the safe Company Profile JPEG logo when available and keep company name, contact, accounting email, address, and footer terms in the same customer-facing profile path.
+- Admin Customers can issue a stored customer invoice from the prepared Unbilled Customers row after the approved amount, due date, folder, and optional customer email are reviewed.
+- The issue action creates a unique `INV-YYYYMMDD-####` invoice number only at click time, writes one `customer_invoice_records` row with the generated PDF bytes, and starts a PDF download from the stored server record.
+- The customer portal `Invoices` tab reads the stored invoice records under compact `Unpaid` and `Paid` monthly folders when the secure portal session is active, with browser-local invoices kept only as a fallback on the same Mac.
+- Downloaded invoice PDFs embed the safe Company Profile JPEG logo when available and keep company name, contact, accounting email, address, bank/payment instructions, and footer terms in the same customer-facing profile path.
 - Admin must click `Preview Invoice` before `Issue Invoice + PDF`; changing amount, due date, folder, or adjustment reason makes the preview stale and blocks issue until refreshed.
 - The amount input is required before issue so admin must review the charge before invoice number/PDF creation.
-- Issued local invoices show `Pay` for unpaid invoices, then `Paid` plus `Mark Unpaid` so an accidental local paid click can be reversed before real payment sync exists.
-- This pass does not send email, create Stripe/payment links, write bank/payment/provider records, write Supabase rows, change env, apply migrations, or create cross-device customer portal sync.
+- Issued invoices show `Pay` for unpaid invoices, then `Paid` plus `Mark Unpaid` so an accidental paid click can be reversed before any payment reconciliation exists.
+- `Email Invoice` is wired behind `PRESTIGE_CUSTOMER_INVOICE_EMAIL_SEND_ENABLED`, `PRESTIGE_EMAIL_PROVIDER=resend`, `PRESTIGE_CUSTOMER_INVOICE_EMAIL_FROM`, optional `PRESTIGE_CUSTOMER_INVOICE_EMAIL_RECIPIENT_ALLOWLIST`, and `RESEND_API_KEY`; closed gates mark the invoice email status blocked and do not call Resend.
+- The `customer_invoice_records` migration scaffold is service-role only with RLS enabled and no anon/authenticated grants.
+- This pass does not activate Stripe/payment links, bank debit, payout, provider job sending, GPS/live location, automatic payment reconciliation, or customer-visible internal/mock/debug data.
 - Guard coverage lives in `scripts/test-customer-local-invoice-issue-pdf-portal-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Customer Hourly Invoice Auto Calculation Lock
@@ -361,10 +363,10 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Admin Customers can create a mock/local hourly booking row with actual start time, actual end time, and a default `$65/hr` rate.
 - Hourly invoice amounts use the locked 15-minute grace rule: 16 minutes or more starts the next chargeable hour.
 - Preparing an hourly unbilled row carries the calculated amount and calculation breakdown into the Send Invoice Workbench.
-- The generated browser-local invoice/PDF line item includes the hourly start/end, actual minutes, billable minutes, and hourly rate.
-- Issued local invoices show Download PDF, guarded Email Invoice, local-only Pay / Paid / Mark Unpaid, and guarded Send Reminder actions.
+- The generated invoice/PDF line item includes the hourly start/end, actual minutes, billable minutes, and hourly rate.
+- Issued invoices show Download PDF, gated Email Invoice, Pay / Paid / Mark Unpaid actions, and no duplicate reminder action in the issued invoice table.
 - The added `Hourly Test Customer` is mock/local test data only and does not create real customer, payment, provider, bank, or Supabase records.
-- This pass does not send email/reminders, create Stripe/payment links, write bank/payment/provider records, write Supabase rows, change env, apply migrations, or activate cross-device invoice sync.
+- This pass does not create Stripe/payment links, write bank/provider/payout records, change env, activate GPS/live location, or activate automatic payment reconciliation.
 - Guard coverage lives in `scripts/test-customer-hourly-invoice-auto-calculation-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Customer Invoice Driver JC Timing And Override Guard
@@ -376,6 +378,14 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The driver JC invoice read is GET-only through `/api/admin-driver-job-dsp-actual-time-summaries` with `x-prestige-admin-purpose`; it does not write records, send providers, activate payments, or expose driver/customer forbidden data.
 - This pass does not send invoices/email/reminders, create Stripe/payment links, write bank/payment/provider records, write Supabase rows, change env, apply migrations, or activate cross-device invoice sync.
 - Guard coverage lives in `scripts/test-customer-invoice-driver-jc-override-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+
+### Completed History Billing Audit Scope Lock
+
+- Completed / History remains the search surface for earlier jobs and true completed jobs, so operators can locate older work without returning those rows to Current / Upcoming.
+- The completed booking billing readiness audit now sends only booking rows with status `Completed` to the billing audit payload.
+- Earlier non-completed history rows are not treated as completed billing evidence and do not count toward the audit button enablement or pre-run audit count.
+- This prevents older scheduled/confirmed history rows from entering billing readiness checks while keeping the compact history lookup intact.
+- No customer/driver surface, payment provider, payout, GPS/live location, env, migration, parser, provider-send, email-send, or invoice-send activation is changed by this scope lock.
 
 ### Customer Booking Request Flight Persistence Fix
 

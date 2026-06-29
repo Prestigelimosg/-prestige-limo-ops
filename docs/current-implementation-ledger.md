@@ -12,6 +12,15 @@ Latest remote staging branch head:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Customer Portal Access Production Env Activation
+
+- Production Vercel env for customer portal access links is enabled without printing or recording secret values.
+- Production scope only was selected for the portal access link gate, signing secret, access account allowlist, customer portal runtime gate, small-allowlist runtime mode, and runtime account allowlist.
+- The bounded production allowlist covers the current customer portal test accounts: `ubs`, `ritz-carlton`, `vip-customer`, and `hourly-test-customer`.
+- The saved settings require a fresh production deployment before live `https://app.prestigelimo.sg` can create signed customer portal links.
+- This activation does not create invoices/PDFs, send email, send payment links, call providers, activate Stripe charges, expose payout/customer pricing, write bookings, write invoice rows, change parser behavior, enable GPS/live location, or expose customer/driver-forbidden internal data.
+- Guard coverage for this gate remains in `scripts/test-customer-portal-access-link-guard.mjs` and the customer trust path remains covered by `scripts/test-customer-trust-path-invoice-portal-guard.mjs`.
+
 ### Public Company Contact Dedupe
 
 - Public company profile contact display now dedupes WhatsApp/phone/email contact lines before rendering on `/my-bookings`, `/book`, invoice PDFs, and the admin Company Profile preview.

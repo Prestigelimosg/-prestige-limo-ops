@@ -90,6 +90,8 @@ type DriverJobStatusEventRow = {
   status_value: DriverJobStatusUpdate;
 };
 
+type DriverJobActualTimeEventType = "dsp_start" | "dsp_end";
+
 type LoadDriverJobPersistenceInput = {
   client: DriverJobStatusPersistenceClient;
   now?: Date | string | number;
@@ -162,6 +164,8 @@ const driverJobLinkSelect =
   "id, booking_reference, link_status, expires_at, revoked_at, safe_link_context";
 const driverJobStatusEventSelect =
   "id, booking_reference, driver_job_link_id, status_value, status_source, safe_status_note, safe_status_context, occurred_at, source_surface, actor_role, actor_label, created_at";
+const driverJobActualTimeEventSelect =
+  "id, booking_reference, driver_job_link_id, event_type, occurred_at, safe_event_note, safe_event_context, source_surface, actor_role, actor_label, created_at";
 const maxSafeTextLength = 500;
 const maxSafeStatusNoteLength = 1000;
 const customerInAppNotificationSkippedResult: DriverStatusCustomerInAppFanoutResult = {
@@ -594,6 +598,84 @@ function payloadForLink(
   });
 }
 
+function normalizedActualTimeBookingType(link: DriverJobLinkPersistenceRow) {
+  return safePayloadRecordFromLink(link)
+    .booking_type
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function isHourlyActualTimeEligibleBooking(link: DriverJobLinkPersistenceRow) {
+  const bookingType = normalizedActualTimeBookingType(link);
+
+  return (
+    bookingType === "dsp" ||
+    bookingType === "hourly" ||
+    bookingType === "disposal" ||
+    bookingType.includes("hourly") ||
+    bookingType.includes("disposal")
+  );
+}
+
+function actualTimeEventTypeForDriverStatus(
+  status: DriverJobStatusUpdate,
+): DriverJobActualTimeEventType | null {
+  if (status === "ots") {
+    return "dsp_start";
+  }
+
+  if (status === "completed") {
+    return "dsp_end";
+  }
+
+  return null;
+}
+
+async function saveHourlyActualTimeEvidenceForDriverStatus({
+  client,
+  link,
+  statusEvent,
+}: {
+  client: DriverJobStatusPersistenceClient;
+  link: DriverJobLinkPersistenceRow;
+  statusEvent: DriverJobStatusEventRow;
+}) {
+  const eventType = actualTimeEventTypeForDriverStatus(statusEvent.status_value);
+
+  if (!eventType || !isHourlyActualTimeEligibleBooking(link)) {
+    return;
+  }
+
+  const bookingType = normalizedActualTimeBookingType(link) || "unknown";
+
+  try {
+    await client
+      .from("driver_job_dsp_actual_time_events")
+      .insert({
+        actor_label: "verified_driver_job_link",
+        actor_role: "driver",
+        booking_reference: statusEvent.booking_reference,
+        driver_job_link_id: statusEvent.driver_job_link_id,
+        event_type: eventType,
+        occurred_at: statusEvent.occurred_at,
+        safe_event_context: {
+          actual_time_policy: "hourly_start_ots_end_completed",
+          booking_type: bookingType,
+          driver_status_event: statusEvent.status_value,
+        },
+        safe_event_note: null,
+        source_surface: "driver_job_api",
+      })
+      .select(driverJobActualTimeEventSelect)
+      .single();
+  } catch {
+    // Driver status is the source of truth for the driver workflow. If the
+    // separate admin billing evidence table is unavailable, do not break the
+    // driver's status tap; admin review will still see missing timing evidence.
+  }
+}
+
 function configValueOrNull(value: string | undefined) {
   const trimmed = value?.trim();
 
@@ -931,6 +1013,12 @@ export async function saveDriverJobStatusThroughStatusPersistence(
   if (error || !persistedEvent || persistedEvent.status_value !== nextStatus) {
     return statusBlockedResult("not_configured");
   }
+
+  await saveHourlyActualTimeEvidenceForDriverStatus({
+    client: input.client,
+    link: resolvedLink.link,
+    statusEvent: persistedEvent,
+  });
 
   let customerNotification = customerInAppNotificationSkippedResult;
 

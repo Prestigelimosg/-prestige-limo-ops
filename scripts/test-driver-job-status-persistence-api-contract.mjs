@@ -173,9 +173,11 @@ class MockSupabaseQuery {
 
 class MockSupabaseClient {
   constructor(seed = {}) {
+    this.actualTimeInsertError = Boolean(seed.actualTimeInsertError);
     this.operations = [];
     this.selectHistory = [];
     this.tables = {
+      driver_job_dsp_actual_time_events: seed.driver_job_dsp_actual_time_events || [],
       driver_job_links: seed.driver_job_links || [],
       driver_job_status_events: seed.driver_job_status_events || [],
     };
@@ -194,21 +196,34 @@ class MockSupabaseClient {
       table: query.table,
     });
 
-    if (query.table !== "driver_job_status_events") {
+    if (
+      query.table !== "driver_job_status_events" &&
+      query.table !== "driver_job_dsp_actual_time_events"
+    ) {
       return {
         data: null,
         error: { code: "unexpected_table" },
       };
     }
 
+    if (query.table === "driver_job_dsp_actual_time_events" && this.actualTimeInsertError) {
+      return {
+        data: null,
+        error: { code: "actual_time_unavailable" },
+      };
+    }
+
     const row = {
-      id: `mock-event-${this.tables.driver_job_status_events.length + 1}`,
+      id:
+        query.table === "driver_job_status_events"
+          ? `mock-event-${this.tables.driver_job_status_events.length + 1}`
+          : `mock-actual-time-${this.tables.driver_job_dsp_actual_time_events.length + 1}`,
       occurred_at: now,
       ...query.payload,
       created_at: now,
     };
 
-    this.tables.driver_job_status_events.push(row);
+    this.tables[query.table].push(row);
 
     return {
       data: row,
@@ -269,12 +284,16 @@ class MockSupabaseClient {
 }
 
 function createSeededClient({
+  actualTimeInsertError = false,
+  bookingType = "DEP",
   latestOccurredAt = "2026-06-07T09:00:00.000Z",
   latestSafeStatusNote = null,
   latestStatus = "ots",
   priorStatusEvents = [],
 } = {}) {
   return new MockSupabaseClient({
+    actualTimeInsertError,
+    driver_job_dsp_actual_time_events: [],
     driver_job_links: [
       {
         booking_reference: "DRV-JOB-API-001",
@@ -291,7 +310,7 @@ function createSeededClient({
               plate: "SLA1234X",
               vehicleModel: "Mercedes V Class",
             },
-            booking_type: "DEP",
+            booking_type: bookingType,
             dropoff_location: "Changi Airport Terminal 3",
             flight_no: "SQ001",
             internal_admin_note: "SECRET_INTERNAL_NOTE",
@@ -415,8 +434,18 @@ function assertNoDriverJobLeaks(value) {
 }
 
 function assertInsertedStatusEvent(client, expectedStatus, expected = {}) {
-  assert.equal(client.operations.length, 1);
-  const [operation] = client.operations;
+  if (expected.totalOperations !== undefined) {
+    assert.equal(client.operations.length, expected.totalOperations);
+  } else {
+    assert.equal(client.operations.length, 1);
+  }
+
+  const statusOperations = client.operations.filter(
+    (operation) => operation.table === "driver_job_status_events",
+  );
+
+  assert.equal(statusOperations.length, 1);
+  const [operation] = statusOperations;
 
   assert.equal(operation.action, "insert");
   assert.equal(operation.table, "driver_job_status_events");
@@ -429,6 +458,36 @@ function assertInsertedStatusEvent(client, expectedStatus, expected = {}) {
   assert.equal(operation.payload.actor_label, "verified_driver_job_link");
   assert.equal(operation.payload.safe_status_note, expected.safeStatusNote ?? null);
   assert.deepEqual(operation.payload.safe_status_context, expected.safeStatusContext ?? {});
+  assertNoDriverJobLeaks(operation.payload);
+}
+
+function assertInsertedActualTimeEvent(
+  client,
+  expectedEventType,
+  expectedStatus,
+  expectedBookingType = "hourly",
+) {
+  const actualTimeOperations = client.operations.filter(
+    (operation) => operation.table === "driver_job_dsp_actual_time_events",
+  );
+
+  assert.equal(actualTimeOperations.length, 1);
+  const [operation] = actualTimeOperations;
+
+  assert.equal(operation.action, "insert");
+  assert.equal(operation.payload.booking_reference, "DRV-JOB-API-001");
+  assert.equal(operation.payload.driver_job_link_id, "91c9d972-6fa5-4f3b-b157-bb56a9366c7c");
+  assert.equal(operation.payload.event_type, expectedEventType);
+  assert.equal(operation.payload.occurred_at, now);
+  assert.equal(operation.payload.source_surface, "driver_job_api");
+  assert.equal(operation.payload.actor_role, "driver");
+  assert.equal(operation.payload.actor_label, "verified_driver_job_link");
+  assert.equal(operation.payload.safe_event_note, null);
+  assert.deepEqual(operation.payload.safe_event_context, {
+    actual_time_policy: "hourly_start_ots_end_completed",
+    booking_type: expectedBookingType,
+    driver_status_event: expectedStatus,
+  });
   assertNoDriverJobLeaks(operation.payload);
 }
 
@@ -602,6 +661,47 @@ try {
   }
 
   {
+    const client = createSeededClient({
+      bookingType: "hourly",
+      latestStatus: "driver_otw",
+    });
+    const result = await saveDriverJobStatusThroughStatusPersistence({
+      client,
+      now,
+      status: "OTS",
+      token: validToken,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.reason, "updated");
+    assert.equal(result.status, "ots");
+    assert.equal(result.payload.status, "ots");
+    assertInsertedStatusEvent(client, "ots", { totalOperations: 2 });
+    assertInsertedActualTimeEvent(client, "dsp_start", "ots");
+    assertNoDriverJobLeaks(result);
+  }
+
+  {
+    const client = createSeededClient({
+      bookingType: "DSP",
+      latestStatus: "driver_otw",
+    });
+    const result = await saveDriverJobStatusThroughStatusPersistence({
+      client,
+      now,
+      status: "OTS",
+      token: validToken,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.reason, "updated");
+    assert.equal(result.status, "ots");
+    assertInsertedStatusEvent(client, "ots", { totalOperations: 2 });
+    assertInsertedActualTimeEvent(client, "dsp_start", "ots", "dsp");
+    assertNoDriverJobLeaks(result);
+  }
+
+  {
     const client = createSeededClient();
     const result = await saveDriverJobStatusThroughStatusPersistence({
       client,
@@ -624,7 +724,7 @@ try {
   }
 
   {
-    const client = createSeededClient({ latestStatus: "pob" });
+    const client = createSeededClient({ bookingType: "hourly", latestStatus: "pob" });
     const result = await saveDriverJobStatusThroughStatusPersistence({
       client,
       completionNote: "Passenger dropped at hotel lobby.",
@@ -649,7 +749,29 @@ try {
         exception_reason_status: "provided",
       },
       safeStatusNote: "Passenger dropped at hotel lobby.",
+      totalOperations: 2,
     });
+    assertInsertedActualTimeEvent(client, "dsp_end", "completed");
+    assertNoDriverJobLeaks(result);
+  }
+
+  {
+    const client = createSeededClient({
+      actualTimeInsertError: true,
+      bookingType: "hourly",
+      latestStatus: "driver_otw",
+    });
+    const result = await saveDriverJobStatusThroughStatusPersistence({
+      client,
+      now,
+      status: "OTS",
+      token: validToken,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.reason, "updated");
+    assert.equal(result.status, "ots");
+    assertInsertedStatusEvent(client, "ots", { totalOperations: 2 });
     assertNoDriverJobLeaks(result);
   }
 

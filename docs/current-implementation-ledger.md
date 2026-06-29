@@ -144,6 +144,16 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer/driver-visible forbidden data remains blocked from these surfaces: driver payout, PayNow payout, internal admin notes, parser/debug internals, admin finance, mock QA/dev archive, customer price on driver surfaces, billing/payment/payout comparisons on driver surfaces, and internal finance notes.
 - Guard coverage lives in `scripts/test-customer-terms-hourly-billing-guard.mjs` and `scripts/test-admin-monthly-invoice-billable-item-price-review-api-contract.mjs`, both registered through the existing test paths.
 
+### Driver Status Hourly Actual-Time Evidence Lock
+
+- Verified driver job status writes now create server-side actual-time evidence for hourly/DSP-style jobs: `OTS` writes the start marker and `Job Completed` writes the end marker.
+- The evidence uses the same persisted driver status timestamp, booking reference, verified driver job link id, actor role, source surface, and safe context only.
+- `OTW` and `POB` do not create hourly billing timing evidence.
+- If the separate actual-time evidence table is unavailable, the driver status tap still succeeds; admin invoice review will continue to show missing timing evidence rather than exposing an error to the driver.
+- Driver status responses do not expose actual-time evidence, customer price, billing, invoice, payment, payout, PayNow payout details, finance/internal notes, parser/debug internals, tokens, GPS/live-location, proof/photo, or mock QA/dev archive data.
+- This does not generate invoices, PDFs, payment links, provider sends, customer notifications, payout records, live GPS/location records, env changes, migrations, parser changes, calendar sync, or shims.
+- Guard coverage lives in `scripts/test-driver-job-status-persistence-api-contract.mjs`.
+
 ### Customer Booking Request Persistence Actor Fix
 
 - The public `/book` customer booking request path now keeps its existing same-origin `/book`, `x-prestige-customer-purpose`, and safe payload parser boundary, while allowing only the exact `Customer booking request` system actor to pass the admin booking persistence write gate.

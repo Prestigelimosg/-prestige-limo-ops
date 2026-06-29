@@ -757,6 +757,10 @@ export default function MockCustomerDashboardPage() {
   const [monthlyStatementPage, setMonthlyStatementPage] = useState(1);
   const [unbilledCustomersPageSize, setUnbilledCustomersPageSize] = useState(10);
   const [unbilledCustomersPage, setUnbilledCustomersPage] = useState(1);
+  const [customerInvoicePrepRowKey, setCustomerInvoicePrepRowKey] = useState("");
+  const [customerInvoicePrepFeedback, setCustomerInvoicePrepFeedback] = useState(
+    "Choose Prepare from Unbilled Customers to load one customer into the invoice workbench.",
+  );
   const [customerInvoiceWorkspaceTab, setCustomerInvoiceWorkspaceTab] =
     useState<CustomerInvoiceWorkspaceTab>("statements");
   const [mockFollowUpSectionFeedback, setMockFollowUpSectionFeedback] = useState(
@@ -1099,6 +1103,10 @@ export default function MockCustomerDashboardPage() {
     unbilledCustomersStartIndex + unbilledCustomersPageSize,
     unbilledCustomerRows.length,
   );
+  const customerInvoicePrepRow = useMemo(
+    () => unbilledCustomerRows.find((row) => row.key === customerInvoicePrepRowKey) ?? null,
+    [customerInvoicePrepRowKey, unbilledCustomerRows],
+  );
   const regularCustomerBillingQuickFilterOptions = useMemo(() => {
     const billingMonths = Array.from(
       new Set(regularCustomerBookingListItems.map((item) => item.billingMonth.trim()).filter(Boolean)),
@@ -1398,6 +1406,28 @@ export default function MockCustomerDashboardPage() {
   function updateOutstandingReviewPageSize(value: number) {
     setOutstandingReviewPageSize(value);
     setOutstandingReviewPage(1);
+  }
+
+  function prepareCustomerInvoiceFromUnbilled(row: UnbilledCustomerRow) {
+    setCustomerInvoicePrepRowKey(row.key);
+    setCustomerInvoiceWorkspaceTab("statements");
+    setOutstandingReviewSearchTerm(row.customerName);
+    setOutstandingReviewFilter("all");
+    setOutstandingReviewPage(1);
+    setCollectionFollowUpPage(1);
+    setMonthlyStatementPage(1);
+    setCustomerInvoicePrepFeedback(
+      `${row.customerName} loaded from Unbilled Customers. Review the folder and statement/outstanding rows, then continue in the existing admin monthly billing workflow when ready.`,
+    );
+  }
+
+  function clearCustomerInvoicePrep() {
+    setCustomerInvoicePrepRowKey("");
+    setOutstandingReviewSearchTerm("");
+    setOutstandingReviewPage(1);
+    setCustomerInvoicePrepFeedback(
+      "Invoice prep selection cleared. Choose Prepare from Unbilled Customers to load one customer.",
+    );
   }
 
   function clearRegularCustomerBookingListFilters() {
@@ -2191,7 +2221,7 @@ export default function MockCustomerDashboardPage() {
             {paginatedUnbilledCustomerRows.length > 0 ? (
               paginatedUnbilledCustomerRows.map((row) => (
                 <article
-                  className="grid gap-2 px-3 py-2 text-sm leading-5 transition hover:bg-amber-50/50 sm:px-4 lg:grid-cols-[minmax(12rem,1.25fr)_minmax(8rem,0.7fr)_minmax(8rem,0.7fr)_minmax(14rem,1.35fr)_7rem] lg:items-center"
+                  className="grid gap-2 px-3 py-2 text-sm leading-5 transition hover:bg-amber-50/50 sm:px-4 lg:grid-cols-[minmax(12rem,1.25fr)_minmax(8rem,0.7fr)_minmax(8rem,0.7fr)_minmax(14rem,1.35fr)_minmax(9rem,auto)] lg:items-center"
                   data-unbilled-customer-row={row.key}
                   key={row.key}
                 >
@@ -2216,17 +2246,27 @@ export default function MockCustomerDashboardPage() {
                     </p>
                     <p className="mt-0.5 truncate text-xs text-slate-500">{row.route}</p>
                   </div>
-                  {row.customerFolderHref ? (
-                    <Link
-                      className="inline-flex min-h-9 items-center justify-center rounded-md border border-amber-900 bg-amber-900 px-3 text-center text-xs font-bold text-white transition hover:bg-amber-800 lg:justify-self-end"
-                      data-unbilled-customer-open-folder={row.key}
-                      href={row.customerFolderHref}
+                  <div className="flex items-center gap-2 lg:justify-end">
+                    <button
+                      className="inline-flex min-h-9 items-center justify-center rounded-md border border-amber-900 bg-amber-900 px-3 text-center text-xs font-bold text-white transition hover:bg-amber-800"
+                      data-unbilled-customer-prepare-invoice={row.key}
+                      onClick={() => prepareCustomerInvoiceFromUnbilled(row)}
+                      type="button"
                     >
-                      Open
-                    </Link>
-                  ) : (
-                    <span className="text-xs font-semibold text-slate-500 lg:text-right">Folder pending</span>
-                  )}
+                      Prepare
+                    </button>
+                    {row.customerFolderHref ? (
+                      <Link
+                        className="inline-flex min-h-9 items-center justify-center rounded-md border border-amber-300 bg-white px-3 text-center text-xs font-bold text-amber-950 transition hover:border-amber-700"
+                        data-unbilled-customer-open-folder={row.key}
+                        href={row.customerFolderHref}
+                      >
+                        Open
+                      </Link>
+                    ) : (
+                      <span className="text-xs font-semibold text-slate-500 lg:text-right">Folder pending</span>
+                    )}
+                  </div>
                 </article>
               ))
             ) : (
@@ -2281,6 +2321,72 @@ export default function MockCustomerDashboardPage() {
                   {tab.label}
                 </button>
               ))}
+            </div>
+            <div
+              className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2"
+              data-customer-invoice-prep-panel="true"
+            >
+              {customerInvoicePrepRow ? (
+                <div
+                  className="grid gap-2 text-sm leading-5 lg:grid-cols-[minmax(12rem,1.2fr)_minmax(8rem,0.7fr)_minmax(14rem,1.4fr)_auto] lg:items-center"
+                  data-customer-invoice-prep-active={customerInvoicePrepRow.key}
+                >
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+                      Invoice prep
+                    </p>
+                    <p className="truncate font-bold text-slate-950">{customerInvoicePrepRow.customerName}</p>
+                    <p className="truncate text-xs text-slate-500">{customerInvoicePrepRow.reference}</p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Amount</p>
+                    <p className="font-bold text-slate-950">{customerInvoicePrepRow.amount}</p>
+                    <p className="truncate text-xs text-slate-500">{customerInvoicePrepRow.statusLabel}</p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+                      Job / route
+                    </p>
+                    <p className="truncate font-semibold text-slate-800">
+                      {customerInvoicePrepRow.dateLabel} · {customerInvoicePrepRow.service}
+                    </p>
+                    <p className="truncate text-xs text-slate-500">{customerInvoicePrepRow.route}</p>
+                  </div>
+                  <div className="flex gap-2 lg:justify-end">
+                    {customerInvoicePrepRow.customerFolderHref ? (
+                      <Link
+                        className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-xs font-bold text-white transition hover:bg-slate-700"
+                        data-customer-invoice-prep-open-folder="true"
+                        href={customerInvoicePrepRow.customerFolderHref}
+                      >
+                        Open folder
+                      </Link>
+                    ) : null}
+                    <button
+                      className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-xs font-bold text-slate-800 transition hover:border-slate-500"
+                      data-customer-invoice-prep-clear="true"
+                      onClick={clearCustomerInvoicePrep}
+                      type="button"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p
+                  className="text-sm font-semibold leading-5 text-slate-700"
+                  data-customer-invoice-prep-empty="true"
+                >
+                  No customer loaded. Use Prepare in Unbilled Customers to focus one invoice job here.
+                </p>
+              )}
+              <p
+                aria-live="polite"
+                className="mt-2 text-xs font-semibold leading-5 text-slate-600"
+                data-customer-invoice-prep-feedback="true"
+              >
+                {customerInvoicePrepFeedback}
+              </p>
             </div>
           </div>
         </section>

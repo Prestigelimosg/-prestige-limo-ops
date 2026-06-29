@@ -44,6 +44,11 @@ const unbilledSection = sectionBetween(
   'data-unbilled-customers-sector="true"',
   'data-customer-invoice-workspace="true"',
 );
+const invoiceWorkspaceSection = sectionBetween(
+  customersPage,
+  'data-customer-invoice-workspace="true"',
+  'data-customer-advanced-booking-drawer="true"',
+);
 const ledgerSection = sectionBetween(
   ledger,
   "### Customers Folder Finder And Unbilled Queue",
@@ -97,9 +102,17 @@ for (const fragment of [
   "function getMockUnbilledCustomerRows() {",
   "const [unbilledCustomersPageSize, setUnbilledCustomersPageSize] = useState(10);",
   "const [unbilledCustomersPage, setUnbilledCustomersPage] = useState(1);",
+  "const [customerInvoicePrepRowKey, setCustomerInvoicePrepRowKey] = useState(\"\");",
+  "const [customerInvoicePrepFeedback, setCustomerInvoicePrepFeedback] = useState(",
   "const unbilledCustomerRows = useMemo<UnbilledCustomerRow[]>(() => {",
   "item.billingStatus.trim().toLowerCase().includes(\"unbilled\")",
   "const paginatedUnbilledCustomerRows = unbilledCustomerRows.slice(",
+  "const customerInvoicePrepRow = useMemo(",
+  "function prepareCustomerInvoiceFromUnbilled(row: UnbilledCustomerRow) {",
+  "setCustomerInvoiceWorkspaceTab(\"statements\");",
+  "setOutstandingReviewSearchTerm(row.customerName);",
+  "continue in the existing admin monthly billing workflow when ready",
+  "function clearCustomerInvoicePrep() {",
 ]) {
   assertIncludes(customersPage, fragment, `unbilled customers source fragment ${fragment}`);
 }
@@ -112,12 +125,26 @@ for (const fragment of [
   'data-unbilled-customers-next="true"',
   'data-unbilled-customers-list="true"',
   'data-unbilled-customer-row={row.key}',
+  'data-unbilled-customer-prepare-invoice={row.key}',
   'data-unbilled-customer-open-folder={row.key}',
   'data-unbilled-customers-boundary="true"',
+  "Prepare",
   "Review these before sending invoices so unbilled or statement-needed accounts are not missed.",
   "paginatedUnbilledCustomerRows.map((row)",
 ]) {
   assertIncludes(unbilledSection, fragment, `unbilled customers UI fragment ${fragment}`);
+}
+
+for (const fragment of [
+  'data-customer-invoice-prep-panel="true"',
+  'data-customer-invoice-prep-active={customerInvoicePrepRow.key}',
+  'data-customer-invoice-prep-open-folder="true"',
+  'data-customer-invoice-prep-clear="true"',
+  'data-customer-invoice-prep-empty="true"',
+  'data-customer-invoice-prep-feedback="true"',
+  "No customer loaded. Use Prepare in Unbilled Customers to focus one invoice job here.",
+]) {
+  assertIncludes(invoiceWorkspaceSection, fragment, `invoice prep handoff UI fragment ${fragment}`);
 }
 
 for (const forbiddenPattern of [
@@ -131,6 +158,7 @@ for (const forbiddenPattern of [
 ]) {
   assertExcludes(folderFinderSection, forbiddenPattern, "customer folder finder compact/privacy boundary");
   assertExcludes(unbilledSection, forbiddenPattern, "unbilled customers compact/privacy boundary");
+  assertExcludes(invoiceWorkspaceSection, forbiddenPattern, "invoice prep compact/privacy boundary");
 }
 
 for (const phrase of [
@@ -138,8 +166,9 @@ for (const phrase of [
   "The finder uses a visible `All customers` dropdown for direct folder selection; it shows 10 customer folders at a time and keeps numbered page buttons inside the dropdown for larger 200-plus account lists.",
   "The finder keeps the existing guarded Load Saved Accounts control visible, but it does not auto-load or create a new route/API.",
   "A new Unbilled Customers checkpoint sits before the invoice workspace so unbilled draft rows and statement-needed account rows are visible before invoice work starts.",
+  "Each unbilled row has a compact `Prepare` action that loads that exact customer/job into the Send Invoice Workbench prep strip, opens the Statements tab, and narrows the Outstanding search to that customer.",
   "The finder no longer shows a separate page-size dropdown or separate previous/next buttons; the Unbilled Customers list remains a compact paged row/table so invoice work can be scanned without giant account cards.",
-  "This is UI-only structure on the existing Customers page; it does not activate invoice/PDF/payment/provider sending, DB writes, env changes, GPS/live location, billing/payout, calendar sync, parser changes, or shims.",
+  "This is a UI handoff into the existing admin monthly billing workflow; it does not add a second invoice engine, create invoice numbers, generate PDFs, send invoices, activate payment/provider sending, write DB rows, change env, activate GPS/live location, billing/payout automation, calendar sync, parser changes, or shims.",
   "Guard coverage lives in `scripts/test-customers-folder-finder-unbilled-queue-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {
   assertIncludes(ledgerSection, phrase, `ledger phrase: ${phrase}`);

@@ -164,6 +164,10 @@ for (const fragment of [
   'data-unbilled-customers-scroll-list="true"',
   'data-unbilled-customers-list="true"',
   'data-unbilled-customer-prepare-invoice={row.key}',
+  "invoicedReferenceSetFrom(issuedCustomerInvoices)",
+  "normalizedInvoiceReference(row.reference)",
+  ".filter((row) => !invoicedReferences.has(normalizedInvoiceReference(row.reference)))",
+  "[issuedCustomerInvoices, regularCustomerBookingListItems]",
   'data-customer-invoice-workspace="true"',
   "Review-only checkpoint. Opening a folder does not create invoice numbers, generate invoices/PDFs, send",
 ]) {

@@ -373,6 +373,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The portal invoice section shows whether the customer is seeing stored account PDFs or a sign-in-required state, and PDF buttons change through Downloading, Downloaded, or Try again.
 - The portal invoice folders do not import admin mock customer data and do not call admin APIs, Stripe/payment providers, email/SMS/WhatsApp providers, or write APIs.
 - Admin Customers keeps the Unbilled Customers checkpoint as one dropdown plus a compact scrollable table; the duplicate wording block below the dropdown is removed.
+- Admin Customers subtracts already-issued invoice references from the Unbilled Customers checkpoint, including server-stored invoice records and browser-local issued invoice records, so an already-invoiced job does not remain available for duplicate billing.
 - Customer saved-booking reads remain booking-only and strip invoice/payment/PDF/finance/internal fields; invoice rows now use their own customer-scoped source and PDF download route filtered by the portal customer account.
 - Hourly billing remains locked to the 15-minute grace rule: 16 minutes or more starts the next chargeable hour.
 - This trust-path pass does not activate Stripe/payment links, bank debit, payouts, provider job sending, GPS/live location, or automatic payment reconciliation.

@@ -867,6 +867,24 @@ function safeInvoiceApiRecords(value: unknown) {
   return Array.isArray(value) ? (value as CustomerDisplayedInvoiceRecord[]) : [];
 }
 
+function normalizedInvoiceReference(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function invoicedReferenceSetFrom(invoices: CustomerDisplayedInvoiceRecord[]) {
+  const references = new Set<string>();
+
+  invoices.forEach((invoice) => {
+    const reference = normalizedInvoiceReference(invoice.reference);
+
+    if (reference) {
+      references.add(reference);
+    }
+  });
+
+  return references;
+}
+
 function downloadBrowserBlob(blob: Blob, filename: string) {
   const url = window.URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -1339,6 +1357,7 @@ export default function MockCustomerDashboardPage() {
     mockStatementPreviewGroups.length,
   );
   const unbilledCustomerRows = useMemo<UnbilledCustomerRow[]>(() => {
+    const invoicedReferences = invoicedReferenceSetFrom(issuedCustomerInvoices);
     const localDraftRows = regularCustomerBookingListItems
       .filter((item) => item.billingStatus.trim().toLowerCase().includes("unbilled"))
       .map((item) => {
@@ -1358,14 +1377,17 @@ export default function MockCustomerDashboardPage() {
           service: item.routeType,
           statusLabel: hourlyInvoiceReview ? "Hourly auto-calculated" : "Unbilled / draft booking",
         };
-      });
+      })
+      .filter((row) => !invoicedReferences.has(normalizedInvoiceReference(row.reference)));
 
-    return [...localDraftRows, ...getMockUnbilledCustomerRows()].sort(
-      (firstRow, secondRow) =>
-        parseMockDateValue(firstRow.dateLabel) - parseMockDateValue(secondRow.dateLabel) ||
-        firstRow.customerName.localeCompare(secondRow.customerName),
-    );
-  }, [regularCustomerBookingListItems]);
+    return [...localDraftRows, ...getMockUnbilledCustomerRows()]
+      .filter((row) => !invoicedReferences.has(normalizedInvoiceReference(row.reference)))
+      .sort(
+        (firstRow, secondRow) =>
+          parseMockDateValue(firstRow.dateLabel) - parseMockDateValue(secondRow.dateLabel) ||
+          firstRow.customerName.localeCompare(secondRow.customerName),
+      );
+  }, [issuedCustomerInvoices, regularCustomerBookingListItems]);
   const selectedUnbilledCustomerRow = useMemo(
     () => unbilledCustomerRows.find((row) => row.key === selectedUnbilledCustomerRowKey) ?? null,
     [selectedUnbilledCustomerRowKey, unbilledCustomerRows],

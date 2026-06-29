@@ -36,6 +36,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Customer Portal Saved Bookings Schema Fallback Lock
 
 - Customer portal saved-bookings reads now try the current customer-safe booking columns first, then fall back to the foundation booking schema only when the live DB reports a missing-column schema drift.
+- Text customer account references such as `ubs` are matched against `customer_display_name`; UUID-shaped account references remain matched against `customer_id`, avoiding live DB type errors when the bookings `customer_id` column is UUID-backed.
 - The fallback keeps the same public saved-booking response shape, mapping foundation `pickup_datetime`, `route_type`, and `customer_display_name` into the customer portal booking fields.
 - The customer portal should return a safe saved-bookings result for the signed customer account instead of showing the generic sign-in state when current/foundation booking columns differ.
 - Selected and returned fields remain customer-safe only: booking reference, service/type, pickup time, pickup/drop-off, passenger display name, status, month, and timestamps.

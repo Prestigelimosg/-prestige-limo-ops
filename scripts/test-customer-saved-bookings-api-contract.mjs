@@ -201,6 +201,12 @@ class MockSupabaseQuery {
     return this;
   }
 
+  ilike(column, value) {
+    this.filters.push({ column, method: "ilike", value });
+
+    return this;
+  }
+
   limit(count) {
     this.resultLimit = count;
 
@@ -308,7 +314,13 @@ class MockSupabaseClient {
     }
 
     let rows = this.tables[query.table].filter((row) =>
-      query.filters.every((filter) => row[filter.column] === filter.value),
+      query.filters.every((filter) => {
+        if (filter.method === "ilike") {
+          return String(row[filter.column] || "").toLowerCase() === String(filter.value).toLowerCase();
+        }
+
+        return row[filter.column] === filter.value;
+      }),
     );
 
     if (query.orderBy) {
@@ -465,6 +477,33 @@ function seedFoundationSavedBookingRows() {
         account_status: "active",
         auth_user_id: authUserId,
         customer_account_reference: customerAccountReference,
+      },
+    ],
+  };
+}
+
+function seedSlugCustomerSavedBookingRows() {
+  return {
+    bookings: [
+      {
+        booking_reference: "CUST-UBS-001",
+        created_at: "2026-06-11T01:00:00.000Z",
+        customer_display_name: "UBS",
+        customer_facing_status: "confirmed",
+        customer_id: "88888888-8888-4888-8888-888888888888",
+        dropoff_location: "Changi Airport T1",
+        passenger_name: "UBS Passenger",
+        pickup_at: "2026-06-11T08:00:00.000Z",
+        pickup_location: "UBS office",
+        service_type: "departure",
+        updated_at: "2026-06-11T01:30:00.000Z",
+      },
+    ],
+    customer_access_accounts: [
+      {
+        account_status: "active",
+        auth_user_id: authUserId,
+        customer_account_reference: "ubs",
       },
     ],
   };
@@ -754,6 +793,39 @@ try {
     false,
     "Select columns should avoid private customer/admin/finance/payout/parser fields.",
   );
+
+  validEnv({
+    PRESTIGE_CUSTOMER_PORTAL_RUNTIME_ACCOUNT_ALLOWLIST: "ubs",
+  });
+  const slugCustomerMock = installMockClient(seedSlugCustomerSavedBookingRows());
+  const slugCustomerResponse = await harness.route.GET(
+    new Request("http://localhost/api/customer-saved-bookings?booking_reference=CUST-UBS-001", {
+      headers: validHeaders(),
+    }),
+  );
+  const slugCustomerBody = await json(slugCustomerResponse);
+  assert.equal(
+    slugCustomerResponse.status,
+    200,
+    "Text customer account references should read bookings by customer display name, not UUID customer_id.",
+  );
+  assert.deepEqual(slugCustomerMock.client.selectHistory[1].filters, [
+    { column: "customer_display_name", method: "ilike", value: "ubs" },
+    { column: "booking_reference", value: "CUST-UBS-001" },
+  ]);
+  assert.deepEqual(slugCustomerBody.saved_bookings[0], {
+    booking_month: "2026-06",
+    booking_reference: "CUST-UBS-001",
+    created_at: "2026-06-11T01:00:00.000Z",
+    customer_facing_status: "confirmed",
+    dropoff_location: "Changi Airport T1",
+    passenger_name: "UBS Passenger",
+    pickup_at: "2026-06-11T08:00:00.000Z",
+    pickup_location: "UBS office",
+    service_type: "departure",
+    updated_at: "2026-06-11T01:30:00.000Z",
+  });
+  assertSafeApiBody(slugCustomerBody, "slug customer response body");
 
   validEnv();
   const foundationFallbackMock = installMockClient(seedFoundationSavedBookingRows(), {

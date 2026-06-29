@@ -64,6 +64,11 @@ type CustomerSavedBookingsSessionTokenSource =
   | "missing"
   | "request-cookie"
   | "request-header";
+type CustomerSavedBookingsAccountFilter = {
+  column: "customer_display_name" | "customer_id";
+  method: "eq" | "ilike";
+  value: string;
+};
 
 const defaultSavedBookingsLimit = 10;
 const maxSavedBookingsLimit = 25;
@@ -355,6 +360,22 @@ function validBookingMonth(value: unknown) {
   const month = Number(match[2]);
 
   return month >= 1 && month <= 12 ? `${match[1]}-${match[2]}` : null;
+}
+
+function customerAccountBookingFilter(
+  customerAccountReference: string,
+): CustomerSavedBookingsAccountFilter {
+  return safeUuid(customerAccountReference)
+    ? {
+        column: "customer_id",
+        method: "eq",
+        value: customerAccountReference,
+      }
+    : {
+        column: "customer_display_name",
+        method: "ilike",
+        value: customerAccountReference,
+      };
 }
 
 function isPlaceholderConfigValue(value: string) {
@@ -669,13 +690,13 @@ function toCustomerSavedBookingRecord(row: UnknownRecord): CustomerSavedBookingR
 
 async function readCustomerSavedBookingRowsForSchema({
   client,
-  customerAccountReference,
+  customerFilter,
   parsed,
   pickupColumn,
   selectedColumns,
 }: {
   client: CustomerSavedBookingsClient;
-  customerAccountReference: string;
+  customerFilter: CustomerSavedBookingsAccountFilter;
   parsed: CustomerSavedBookingsReadParams;
   pickupColumn: "pickup_at" | "pickup_datetime";
   selectedColumns: string;
@@ -685,9 +706,13 @@ async function readCustomerSavedBookingRowsForSchema({
   let bookingQuery = client
     .from("bookings")
     .select(selectedColumns)
-    .eq("customer_id", customerAccountReference)
     .order(pickupColumn, { ascending: false })
     .range(offset, rangeEnd);
+
+  bookingQuery =
+    customerFilter.method === "ilike"
+      ? bookingQuery.ilike(customerFilter.column, customerFilter.value)
+      : bookingQuery.eq(customerFilter.column, customerFilter.value);
 
   if (parsed.booking_reference) {
     bookingQuery = bookingQuery.eq("booking_reference", parsed.booking_reference);
@@ -710,9 +735,10 @@ async function readCustomerSavedBookingRows(
   customerAccountReference: string,
   parsed: CustomerSavedBookingsReadParams,
 ): Promise<AdminBookingResult<unknown[]>> {
+  const customerFilter = customerAccountBookingFilter(customerAccountReference);
   const currentResult = await readCustomerSavedBookingRowsForSchema({
     client,
-    customerAccountReference,
+    customerFilter,
     parsed,
     pickupColumn: "pickup_at",
     selectedColumns: customerSavedBookingsCurrentSelect,
@@ -724,7 +750,7 @@ async function readCustomerSavedBookingRows(
 
   return readCustomerSavedBookingRowsForSchema({
     client,
-    customerAccountReference,
+    customerFilter,
     parsed,
     pickupColumn: "pickup_datetime",
     selectedColumns: customerSavedBookingsFoundationSelect,

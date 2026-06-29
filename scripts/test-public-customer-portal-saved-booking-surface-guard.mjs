@@ -371,6 +371,8 @@ assertIncludes(
   "customer saved bookings foundation-schema safe DB select",
 );
 assertIncludes(savedBookingsRead, 'refererUrl.pathname !== "/my-bookings"', "customer saved bookings my-bookings referer boundary");
+assertIncludes(savedBookingsRead, 'bookingQuery.ilike(customerFilter.column, customerFilter.value)', "customer saved bookings text account filter");
+assertIncludes(savedBookingsRead, 'bookingQuery.eq(customerFilter.column, customerFilter.value)', "customer saved bookings uuid account filter");
 assertExcludes(
   [
     savedBookingsRead.match(/customerSavedBookingsCurrentSelect\s*=\s*([^;]+)/)?.[1] || "",

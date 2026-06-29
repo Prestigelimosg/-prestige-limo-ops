@@ -318,13 +318,22 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Customer Trust Path And Portal Invoice Folder Lock
 
 - Customer `/book` and `/my-bookings` request forms both require contact number, passenger name, pickup date, pickup time, pickup location, and drop-off location before submission.
-- The customer portal now has a compact `Invoices` section with `Unpaid` and `Paid` folders grouped by month, but it shows empty disabled download rows until a customer-authenticated invoice/PDF API is approved.
-- The portal invoice folders do not import admin mock customer data and do not call admin APIs, Stripe/payment providers, PDF generation, email/SMS/WhatsApp providers, or DB writes.
+- The customer portal now has a compact `Invoices` section with `Unpaid` and `Paid` folders grouped by month, using browser-local issued invoice records until a customer-authenticated invoice/PDF API is approved.
+- The portal invoice folders do not import admin mock customer data and do not call admin APIs, Stripe/payment providers, email/SMS/WhatsApp providers, or DB writes.
 - Admin Customers keeps the Unbilled Customers checkpoint as one dropdown plus a compact scrollable table; the duplicate wording block below the dropdown is removed.
 - Customer saved-booking reads remain booking-only and strip invoice/payment/PDF/finance/internal fields, so invoice rows need their own future customer-scoped source before downloads or email sending go live.
 - Hourly billing remains locked to the 15-minute grace rule: 16 minutes or more starts the next chargeable hour.
-- This pass does not create invoice numbers, generate PDFs, send invoices, activate payment links, write invoice/payment records, change env, call providers, activate GPS/live location, or deploy database migrations.
+- This trust-path pass does not send invoices, activate payment links, write invoice/payment records, change env, call providers, activate GPS/live location, or deploy database migrations.
 - Guard coverage lives in `scripts/test-customer-trust-path-invoice-portal-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+
+### Customer Local Invoice Issue PDF And Portal Folder Lock
+
+- Admin Customers can issue a browser-local invoice from the prepared Unbilled Customers row after the approved amount and due date are reviewed.
+- The issue action creates a unique `INV-YYYYMMDD-####` invoice number only at click time, saves the invoice record to this Mac browser storage, and starts a real PDF download generated in-browser.
+- The customer portal `Invoices` tab reads the same browser-local invoice records and shows them under compact `Unpaid` and `Paid` monthly folders with PDF download buttons.
+- The amount input is required before issue so admin must review the charge before invoice number/PDF creation.
+- This pass does not send email, create Stripe/payment links, write bank/payment/provider records, write Supabase rows, change env, apply migrations, or create cross-device customer portal sync.
+- Guard coverage lives in `scripts/test-customer-local-invoice-issue-pdf-portal-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Customer Folder Job History Compact Rows
 

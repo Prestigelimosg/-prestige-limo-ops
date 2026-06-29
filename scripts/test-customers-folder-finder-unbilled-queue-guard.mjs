@@ -119,7 +119,7 @@ for (const fragment of [
   "setCustomerInvoiceWorkspaceTab(\"statements\");",
   "setOutstandingReviewSearchTerm(row.customerName);",
   "document.querySelector<HTMLElement>(\"[data-customer-invoice-prep-next-action='true']\")",
-  "continue in the existing admin monthly billing workflow when ready",
+  "Review the amount and route, then issue only when the invoice is correct.",
   "function clearCustomerInvoicePrep() {",
 ]) {
   assertIncludes(customersPage, fragment, `unbilled customers source fragment ${fragment}`);

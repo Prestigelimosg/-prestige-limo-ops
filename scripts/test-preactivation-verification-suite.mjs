@@ -350,6 +350,10 @@ const guardChecks = [
     script: "scripts/test-customer-trust-path-invoice-portal-guard.mjs",
   },
   {
+    label: "customer local invoice issue PDF portal guard",
+    script: "scripts/test-customer-local-invoice-issue-pdf-portal-guard.mjs",
+  },
+  {
     label: "customer folder job history compact guard",
     script: "scripts/test-customer-folder-job-history-compact-guard.mjs",
   },

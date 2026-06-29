@@ -10,6 +10,17 @@ import {
   type MockCustomerBooking,
   type MockPaymentStatus,
 } from "./_data/mock-customers";
+import {
+  createCustomerLocalInvoiceRecord,
+  downloadCustomerInvoicePdf,
+  formatInvoiceMonth,
+  invoiceDateInputDaysFromNow,
+  parseInvoiceAmountToCents,
+  readCustomerLocalInvoices,
+  saveCustomerLocalInvoice,
+  type CustomerLocalInvoiceRecord,
+  type CustomerLocalInvoiceStatus,
+} from "../../lib/customer-local-invoices";
 
 const summaryCards = [
   { label: "Total Outstanding", value: mockPaymentSummary.totalOutstanding },
@@ -762,6 +773,19 @@ export default function MockCustomerDashboardPage() {
   const [customerInvoicePrepFeedback, setCustomerInvoicePrepFeedback] = useState(
     "Choose Prepare from Unbilled Customers to load one customer into the invoice workbench.",
   );
+  const [customerInvoiceIssueAmount, setCustomerInvoiceIssueAmount] = useState("");
+  const [customerInvoiceIssueDueDate, setCustomerInvoiceIssueDueDate] = useState(() =>
+    invoiceDateInputDaysFromNow(7),
+  );
+  const [customerInvoiceIssueStatus, setCustomerInvoiceIssueStatus] =
+    useState<CustomerLocalInvoiceStatus>("Unpaid");
+  const [customerInvoiceIssueFeedback, setCustomerInvoiceIssueFeedback] = useState(
+    "Review the amount and due date before issuing. Invoice number is created only when you click issue.",
+  );
+  const [issuingCustomerInvoiceKey, setIssuingCustomerInvoiceKey] = useState("");
+  const [issuedCustomerInvoices, setIssuedCustomerInvoices] = useState<CustomerLocalInvoiceRecord[]>(() =>
+    readCustomerLocalInvoices(),
+  );
   const [customerInvoiceWorkspaceTab, setCustomerInvoiceWorkspaceTab] =
     useState<CustomerInvoiceWorkspaceTab>("statements");
   const [mockFollowUpSectionFeedback, setMockFollowUpSectionFeedback] = useState(
@@ -1415,17 +1439,27 @@ export default function MockCustomerDashboardPage() {
   }
 
   function prepareCustomerInvoiceFromUnbilled(row: UnbilledCustomerRow) {
+    const suggestedAmountCents = parseInvoiceAmountToCents(row.amount);
+
     setPreparingUnbilledCustomerRowKey(row.key);
     setSelectedUnbilledCustomerRowKey(row.key);
     setCustomerInvoicePrepRowKey(row.key);
     setCustomerInvoiceWorkspaceTab("statements");
+    setCustomerInvoiceIssueAmount(suggestedAmountCents ? row.amount.replace(/^\$/, "") : "");
+    setCustomerInvoiceIssueDueDate(invoiceDateInputDaysFromNow(7));
+    setCustomerInvoiceIssueStatus("Unpaid");
     setOutstandingReviewSearchTerm(row.customerName);
     setOutstandingReviewFilter("all");
     setOutstandingReviewPage(1);
     setCollectionFollowUpPage(1);
     setMonthlyStatementPage(1);
     setCustomerInvoicePrepFeedback(
-      `${row.customerName} loaded from Unbilled Customers. Review the folder and statement/outstanding rows, then continue in the existing admin monthly billing workflow when ready.`,
+      `${row.customerName} loaded from Unbilled Customers. Review the amount and route, then issue only when the invoice is correct.`,
+    );
+    setCustomerInvoiceIssueFeedback(
+      suggestedAmountCents
+        ? "Amount copied from the selected unbilled row. Review before issuing."
+        : "Enter the approved customer amount before issuing this invoice.",
     );
     window.setTimeout(() => {
       setPreparingUnbilledCustomerRowKey("");
@@ -1441,11 +1475,64 @@ export default function MockCustomerDashboardPage() {
   function clearCustomerInvoicePrep() {
     setCustomerInvoicePrepRowKey("");
     setPreparingUnbilledCustomerRowKey("");
+    setIssuingCustomerInvoiceKey("");
+    setCustomerInvoiceIssueAmount("");
+    setCustomerInvoiceIssueDueDate(invoiceDateInputDaysFromNow(7));
+    setCustomerInvoiceIssueStatus("Unpaid");
     setOutstandingReviewSearchTerm("");
     setOutstandingReviewPage(1);
     setCustomerInvoicePrepFeedback(
       "Invoice prep selection cleared. Choose Prepare from Unbilled Customers to load one customer.",
     );
+    setCustomerInvoiceIssueFeedback(
+      "Review the amount and due date before issuing. Invoice number is created only when you click issue.",
+    );
+  }
+
+  function issuePreparedCustomerInvoice() {
+    if (!customerInvoicePrepRow) {
+      setCustomerInvoiceIssueFeedback("Choose Prepare from Unbilled Customers before issuing an invoice.");
+      return;
+    }
+
+    const amountCents = parseInvoiceAmountToCents(customerInvoiceIssueAmount);
+
+    if (!amountCents) {
+      setCustomerInvoiceIssueFeedback(
+        "Enter the approved customer amount before issuing. This prevents under-billing or over-billing.",
+      );
+      return;
+    }
+
+    setIssuingCustomerInvoiceKey(customerInvoicePrepRow.key);
+
+    const issuedInvoice = createCustomerLocalInvoiceRecord({
+      amountCents,
+      billingMonthLabel: formatInvoiceMonth(new Date()),
+      customerId: customerInvoicePrepRow.customerId,
+      customerName: customerInvoicePrepRow.customerName,
+      dueDateIso: customerInvoiceIssueDueDate,
+      reference: customerInvoicePrepRow.reference,
+      route: customerInvoicePrepRow.route,
+      service: customerInvoicePrepRow.service,
+      status: customerInvoiceIssueStatus,
+    });
+    const nextInvoices = saveCustomerLocalInvoice(issuedInvoice);
+
+    setIssuedCustomerInvoices(nextInvoices);
+    setCustomerInvoicePrepFeedback(
+      `${issuedInvoice.invoiceNumber} issued for ${issuedInvoice.customerName}. PDF download started.`,
+    );
+    setCustomerInvoiceIssueFeedback(
+      `${issuedInvoice.invoiceNumber} issued and saved in this browser. It now appears in the customer portal invoice folder on this Mac browser.`,
+    );
+    downloadCustomerInvoicePdf(issuedInvoice);
+    window.setTimeout(() => setIssuingCustomerInvoiceKey(""), 700);
+  }
+
+  function downloadIssuedCustomerInvoice(invoice: CustomerLocalInvoiceRecord) {
+    downloadCustomerInvoicePdf(invoice);
+    setCustomerInvoiceIssueFeedback(`${invoice.invoiceNumber} PDF download started.`);
   }
 
   function clearRegularCustomerBookingListFilters() {
@@ -2398,6 +2485,121 @@ export default function MockCustomerDashboardPage() {
               >
                 {customerInvoicePrepFeedback}
               </p>
+              {customerInvoicePrepRow ? (
+                <div
+                  className="mt-3 border-t border-slate-200 pt-3"
+                  data-customer-invoice-issue-panel="true"
+                >
+                  <div className="grid gap-2 md:grid-cols-[minmax(9rem,0.8fr)_minmax(9rem,0.8fr)_minmax(9rem,0.7fr)_auto] md:items-end">
+                    <label className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
+                      Approved amount
+                      <input
+                        className="mt-1 min-h-9 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950 outline-none focus:border-slate-700"
+                        data-customer-invoice-issue-amount="true"
+                        inputMode="decimal"
+                        onChange={(event) => setCustomerInvoiceIssueAmount(event.target.value)}
+                        placeholder="e.g. 420.00"
+                        value={customerInvoiceIssueAmount}
+                      />
+                    </label>
+                    <label className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
+                      Due date
+                      <input
+                        className="mt-1 min-h-9 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950 outline-none focus:border-slate-700"
+                        data-customer-invoice-issue-due-date="true"
+                        onChange={(event) => setCustomerInvoiceIssueDueDate(event.target.value)}
+                        type="date"
+                        value={customerInvoiceIssueDueDate}
+                      />
+                    </label>
+                    <label className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
+                      Folder
+                      <select
+                        className="mt-1 min-h-9 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950 outline-none focus:border-slate-700"
+                        data-customer-invoice-issue-status="true"
+                        onChange={(event) =>
+                          setCustomerInvoiceIssueStatus(event.target.value as CustomerLocalInvoiceStatus)
+                        }
+                        value={customerInvoiceIssueStatus}
+                      >
+                        <option value="Unpaid">Unpaid</option>
+                        <option value="Paid">Paid</option>
+                      </select>
+                    </label>
+                    <button
+                      className={`min-h-9 rounded-md border px-3 py-2 text-sm font-bold transition ${
+                        issuingCustomerInvoiceKey === customerInvoicePrepRow.key
+                          ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                          : "border-slate-900 bg-slate-900 text-white hover:bg-slate-700"
+                      }`}
+                      data-customer-invoice-issue-download-pdf="true"
+                      onClick={issuePreparedCustomerInvoice}
+                      type="button"
+                    >
+                      {issuingCustomerInvoiceKey === customerInvoicePrepRow.key
+                        ? "Issued"
+                        : "Issue Invoice + PDF"}
+                    </button>
+                  </div>
+                  <p
+                    aria-live="polite"
+                    className="mt-2 text-xs font-semibold leading-5 text-slate-600"
+                    data-customer-invoice-issue-feedback="true"
+                  >
+                    {customerInvoiceIssueFeedback}
+                  </p>
+                  <p
+                    className="mt-2 rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-950"
+                    data-customer-invoice-issue-local-boundary="true"
+                  >
+                    Local browser invoice record and PDF download only. No email, Stripe, bank, provider send,
+                    payment record, Supabase write, customer notification, or cross-device customer portal sync.
+                  </p>
+                </div>
+              ) : null}
+              {issuedCustomerInvoices.length > 0 ? (
+                <div
+                  className="mt-3 border-t border-slate-200 pt-3"
+                  data-customer-invoice-issued-local-list="true"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
+                      Issued on this browser
+                    </p>
+                    <p className="text-xs font-bold text-slate-600">
+                      {issuedCustomerInvoices.length} invoice{issuedCustomerInvoices.length === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                  <div className="mt-2 overflow-x-auto">
+                    <table className="w-full min-w-[620px] text-left text-xs">
+                      <tbody>
+                        {issuedCustomerInvoices.slice(0, 5).map((invoice) => (
+                          <tr
+                            className="border-t border-slate-100"
+                            data-customer-invoice-issued-local-row={invoice.invoiceNumber}
+                            key={invoice.id}
+                          >
+                            <td className="py-2 pr-3 font-bold text-slate-950">{invoice.invoiceNumber}</td>
+                            <td className="py-2 pr-3 text-slate-700">{invoice.customerName}</td>
+                            <td className="py-2 pr-3 font-semibold text-slate-950">{invoice.amountLabel}</td>
+                            <td className="py-2 pr-3 text-slate-700">{invoice.status}</td>
+                            <td className="py-2 text-right">
+                              <button
+                                className="rounded-md border border-slate-300 bg-white px-2 py-1 font-bold text-slate-800 transition hover:border-slate-600"
+                                data-customer-invoice-issued-local-download={invoice.invoiceNumber}
+                                onClick={() => downloadIssuedCustomerInvoice(invoice)}
+                                type="button"
+                              >
+                                Download PDF
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         </section>

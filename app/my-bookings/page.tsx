@@ -18,6 +18,11 @@ import {
   defaultCompanyProfile,
   type PublicCompanyProfile,
 } from "../../lib/company-profile-shared";
+import {
+  downloadCustomerInvoicePdf,
+  readCustomerLocalInvoices,
+  type CustomerLocalInvoiceRecord,
+} from "../../lib/customer-local-invoices";
 
 type BookingFilter = "Cancelled" | "Completed" | "Upcoming";
 type InvoiceFolder = "Paid" | "Unpaid";
@@ -248,6 +253,7 @@ export default function CustomerPortalPage() {
   const [bookingPages, setBookingPages] = useState<Record<BookingFilter, number>>(initialBookingPages);
   const [selectedBookingMonths, setSelectedBookingMonths] =
     useState<Record<BookingFilter, string>>(initialSelectedBookingMonths);
+  const [customerInvoiceRecords, setCustomerInvoiceRecords] = useState<CustomerLocalInvoiceRecord[]>([]);
   const [bookingRequestForm, setBookingRequestForm] = useState<BookingRequestForm>(initialBookingRequestForm);
   const [pickupTimeDraft, setPickupTimeDraft] = useState(() => splitPickupTime(initialBookingRequestForm.pickupTime));
   const [missingBookingRequestFields, setMissingBookingRequestFields] = useState<Array<keyof BookingRequestForm>>([]);
@@ -272,6 +278,24 @@ export default function CustomerPortalPage() {
     : "Upcoming";
   const selectedBookingMonth = selectedBookingMonths[activeFilter] || "";
   const currentPortalMonth = useMemo(() => getCurrentPortalMonthInfo(), []);
+  const customerInvoiceRecordsByFolder = useMemo(() => {
+    const byFolder: Record<InvoiceFolder, CustomerLocalInvoiceRecord[]> = {
+      Paid: [],
+      Unpaid: [],
+    };
+
+    customerInvoiceRecords.forEach((invoice) => {
+      byFolder[invoice.status].push(invoice);
+    });
+
+    invoiceFolders.forEach((folder) => {
+      byFolder[folder].sort((firstInvoice, secondInvoice) =>
+        secondInvoice.issueDateIso.localeCompare(firstInvoice.issueDateIso),
+      );
+    });
+
+    return byFolder;
+  }, [customerInvoiceRecords]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -298,6 +322,21 @@ export default function CustomerPortalPage() {
     void loadCompanyProfile();
 
     return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    function loadLocalInvoices() {
+      setCustomerInvoiceRecords(readCustomerLocalInvoices());
+    }
+
+    loadLocalInvoices();
+    window.addEventListener("storage", loadLocalInvoices);
+    window.addEventListener("prestige-local-invoices-updated", loadLocalInvoices);
+
+    return () => {
+      window.removeEventListener("storage", loadLocalInvoices);
+      window.removeEventListener("prestige-local-invoices-updated", loadLocalInvoices);
+    };
   }, []);
 
   useEffect(() => {
@@ -1019,6 +1058,10 @@ export default function CustomerPortalPage() {
             <div className="mt-3 grid gap-3 lg:grid-cols-2">
               {invoiceFolders.map((folder) => {
                 const folderKey = folder.toLowerCase();
+                const folderRecords = customerInvoiceRecordsByFolder[folder];
+                const monthLabels = Array.from(
+                  new Set(folderRecords.map((invoice) => invoice.billingMonthLabel)),
+                );
 
                 return (
                   <section
@@ -1035,14 +1078,14 @@ export default function CustomerPortalPage() {
                         className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-600"
                         data-customer-portal-invoice-folder-count={folderKey}
                       >
-                        0
+                        {folderRecords.length}
                       </span>
                     </div>
                     <div
                       className="border-b border-slate-100 px-3 py-2 text-xs font-semibold text-slate-600"
                       data-customer-portal-invoice-month-group={folderKey}
                     >
-                      Current month
+                      {monthLabels.length > 0 ? monthLabels.join(", ") : "Current month"}
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full min-w-[520px] text-left text-sm">
@@ -1055,14 +1098,44 @@ export default function CustomerPortalPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          <tr data-customer-portal-invoice-empty-row={folderKey}>
-                            <td className="px-3 py-3 text-sm text-slate-600" colSpan={4}>
-                              No {folder.toLowerCase()} invoice PDFs are available in this customer folder yet.
-                            </td>
-                          </tr>
+                          {folderRecords.length > 0 ? (
+                            folderRecords.map((invoice) => (
+                              <tr
+                                className="border-b border-slate-100 last:border-b-0"
+                                data-customer-portal-invoice-row={invoice.invoiceNumber}
+                                key={invoice.id}
+                              >
+                                <td className="px-3 py-2">
+                                  <p className="font-bold text-slate-950">{invoice.invoiceNumber}</p>
+                                  <p className="text-xs text-slate-500">{invoice.reference}</p>
+                                </td>
+                                <td className="px-3 py-2 font-semibold text-slate-950">{invoice.amountLabel}</td>
+                                <td className="px-3 py-2 text-slate-700">
+                                  {folder === "Paid" ? invoice.issueDateLabel : invoice.dueDateLabel}
+                                </td>
+                                <td className="px-3 py-2 text-right">
+                                  <button
+                                    className="min-h-8 rounded-md border border-slate-300 bg-white px-2 text-xs font-bold text-slate-800 transition hover:border-slate-600"
+                                    data-customer-portal-invoice-download={invoice.invoiceNumber}
+                                    onClick={() => downloadCustomerInvoicePdf(invoice, companyProfile)}
+                                    type="button"
+                                  >
+                                    Download PDF
+                                  </button>
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr data-customer-portal-invoice-empty-row={folderKey}>
+                              <td className="px-3 py-3 text-sm text-slate-600" colSpan={4}>
+                                No {folder.toLowerCase()} invoice PDFs are available in this customer folder yet.
+                              </td>
+                            </tr>
+                          )}
                         </tbody>
                       </table>
                     </div>
+                    {folderRecords.length === 0 ? (
                     <div className="flex justify-end border-t border-slate-100 px-3 py-2">
                       <button
                         aria-disabled="true"
@@ -1074,10 +1147,18 @@ export default function CustomerPortalPage() {
                         Download PDF
                       </button>
                     </div>
+                    ) : null}
                   </section>
                 );
               })}
             </div>
+            <p
+              className="mt-3 rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-950"
+              data-customer-portal-invoice-local-boundary="true"
+            >
+              These invoice PDFs appear on this Mac browser after admin issues them. Email, Stripe, bank payment,
+              provider sending, and cross-device customer portal sync are not active in this pass.
+            </p>
           </section>
         ) : (
           <>

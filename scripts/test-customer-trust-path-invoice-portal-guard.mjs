@@ -110,6 +110,7 @@ for (const fragment of [
   'type PortalSection = "New Booking Request" | "Invoices" | BookingFilter;',
   'const invoiceFolders: InvoiceFolder[] = ["Unpaid", "Paid"];',
   'const portalSections: PortalSection[] = ["New Booking Request", "Invoices", ...bookingFilters];',
+  "const [customerInvoiceRecords, setCustomerInvoiceRecords] = useState<CustomerLocalInvoiceRecord[]>([]);",
 ]) {
   assertIncludes(portalPage, fragment, `customer portal invoice source fragment ${fragment}`);
 }
@@ -121,6 +122,8 @@ for (const fragment of [
   'data-customer-portal-invoice-month-group={folderKey}',
   'data-customer-portal-invoice-empty-row={folderKey}',
   'data-customer-portal-invoice-download={folderKey}',
+  'data-customer-portal-invoice-row={invoice.invoiceNumber}',
+  'data-customer-portal-invoice-download={invoice.invoiceNumber}',
   "No {folder.toLowerCase()} invoice PDFs are available in this customer folder yet.",
   "Download PDF",
   "disabled",
@@ -171,7 +174,7 @@ for (const fragment of [
 for (const forbiddenPattern of [
   /mockCustomers|mock-customers|app\/customers\/_data/i,
   /sendMail|new\s+Resend|api\.telegram\.org|twilio/i,
-  /stripe|paymentIntent|checkout\.sessions|payment_link/i,
+  /paymentIntent|checkout\.sessions|payment_link|loadStripe|new\s+Stripe/i,
   /\/api\/admin|createClient|service_role|process\.env/i,
   /driver payout|PayNow payout|payout comparisons|customer price/i,
   /internal admin notes|internal finance notes|parser\/debug|mock QA|dev archive/i,
@@ -181,12 +184,12 @@ for (const forbiddenPattern of [
 
 for (const phrase of [
   "Customer `/book` and `/my-bookings` request forms both require contact number, passenger name, pickup date, pickup time, pickup location, and drop-off location before submission.",
-  "The customer portal now has a compact `Invoices` section with `Unpaid` and `Paid` folders grouped by month, but it shows empty disabled download rows until a customer-authenticated invoice/PDF API is approved.",
-  "The portal invoice folders do not import admin mock customer data and do not call admin APIs, Stripe/payment providers, PDF generation, email/SMS/WhatsApp providers, or DB writes.",
+  "The customer portal now has a compact `Invoices` section with `Unpaid` and `Paid` folders grouped by month, using browser-local issued invoice records until a customer-authenticated invoice/PDF API is approved.",
+  "The portal invoice folders do not import admin mock customer data and do not call admin APIs, Stripe/payment providers, email/SMS/WhatsApp providers, or DB writes.",
   "Admin Customers keeps the Unbilled Customers checkpoint as one dropdown plus a compact scrollable table; the duplicate wording block below the dropdown is removed.",
   "Customer saved-booking reads remain booking-only and strip invoice/payment/PDF/finance/internal fields, so invoice rows need their own future customer-scoped source before downloads or email sending go live.",
   "Hourly billing remains locked to the 15-minute grace rule: 16 minutes or more starts the next chargeable hour.",
-  "This pass does not create invoice numbers, generate PDFs, send invoices, activate payment links, write invoice/payment records, change env, call providers, activate GPS/live location, or deploy database migrations.",
+  "This trust-path pass does not send invoices, activate payment links, write invoice/payment records, change env, call providers, activate GPS/live location, or deploy database migrations.",
   "Guard coverage lives in `scripts/test-customer-trust-path-invoice-portal-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {
   assertIncludes(ledgerSection, phrase, `ledger phrase: ${phrase}`);

@@ -344,9 +344,9 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Customer Trust Path And Portal Invoice Folder Lock
 
 - Customer `/book` and `/my-bookings` request forms both require contact number, passenger name, pickup date, pickup time, pickup location, and drop-off location before submission.
-- The customer portal has a compact `Invoices` section with `Unpaid` and `Paid` folders grouped by month, reading stored customer invoice records through the existing secure customer portal session boundary and using browser-local invoices only as fallback.
+- The customer portal has a compact `Invoices` section with `Unpaid` and `Paid` folders grouped by month, reading only server-stored customer invoice records through the existing secure customer portal session boundary.
 - Customer portal stored invoice and PDF reads explicitly use same-origin credentials so the secure HttpOnly account session is sent without exposing token plumbing in the page.
-- The portal invoice section shows whether the customer is seeing stored account PDFs, local fallback PDFs from this Mac, or a sign-in-required state, and PDF buttons change through Downloading, Downloaded, or Try again.
+- The portal invoice section shows whether the customer is seeing stored account PDFs or a sign-in-required state, and PDF buttons change through Downloading, Downloaded, or Try again.
 - The portal invoice folders do not import admin mock customer data and do not call admin APIs, Stripe/payment providers, email/SMS/WhatsApp providers, or write APIs.
 - Admin Customers keeps the Unbilled Customers checkpoint as one dropdown plus a compact scrollable table; the duplicate wording block below the dropdown is removed.
 - Customer saved-booking reads remain booking-only and strip invoice/payment/PDF/finance/internal fields; invoice rows now use their own customer-scoped source and PDF download route filtered by the portal customer account.
@@ -358,8 +358,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 - Admin Customers can issue a stored customer invoice from the prepared Unbilled Customers row after the approved amount, due date, folder, and optional customer email are reviewed.
 - The issue action creates a unique `INV-YYYYMMDD-####` invoice number only at click time, writes one `customer_invoice_records` row with the generated PDF bytes, and starts a PDF download from the stored server record.
-- The customer portal `Invoices` tab reads the stored invoice records under compact `Unpaid` and `Paid` monthly folders when the secure portal session is active, with browser-local invoices kept only as a fallback on the same Mac.
-- The customer portal invoice/PDF reads explicitly send same-origin credentials, keep the secure account session invisible to the page, and show stored/local/sign-in state plus Downloading/Downloaded/Try again button feedback.
+- The customer portal `Invoices` tab reads only server-stored invoice records under compact `Unpaid` and `Paid` monthly folders when the secure portal session is active; browser-local invoice fallback is not rendered in the customer portal.
+- The customer portal invoice/PDF reads explicitly send same-origin credentials, keep the secure account session invisible to the page, and show stored/sign-in state plus Downloading/Downloaded/Try again button feedback.
 - Downloaded invoice PDFs embed the safe Company Profile JPEG logo when available and keep company name, contact, accounting email, address, bank/payment instructions, and footer terms in the same customer-facing profile path.
 - Admin must click `Preview Invoice` before `Issue Invoice + PDF`; changing amount, due date, folder, or adjustment reason makes the preview stale and blocks issue until refreshed.
 - The amount input is required before issue so admin must review the charge before invoice number/PDF creation.

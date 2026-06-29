@@ -147,7 +147,6 @@ for (const fragment of [
   'data-customer-portal-invoice-download={invoice.invoiceNumber}',
   "downloadPortalInvoice(invoice)",
   "Stored PDF",
-  "Local PDF",
   "Downloading",
   "Downloaded",
   "Try again",
@@ -203,6 +202,7 @@ for (const forbiddenPattern of [
   /sendMail|new\s+Resend|api\.telegram\.org|twilio/i,
   /paymentIntent|checkout\.sessions|payment_link|loadStripe|new\s+Stripe/i,
   /\/api\/admin|createClient|service_role|process\.env/i,
+  /Local PDF|local-fallback|readCustomerLocalInvoices|browser-local invoices|Local PDFs from this Mac/i,
   /driver payout|PayNow payout|payout comparisons|customer price/i,
   /internal admin notes|internal finance notes|parser\/debug|mock QA|dev archive/i,
 ]) {
@@ -211,9 +211,9 @@ for (const forbiddenPattern of [
 
 for (const phrase of [
   "Customer `/book` and `/my-bookings` request forms both require contact number, passenger name, pickup date, pickup time, pickup location, and drop-off location before submission.",
-  "The customer portal has a compact `Invoices` section with `Unpaid` and `Paid` folders grouped by month, reading stored customer invoice records through the existing secure customer portal session boundary and using browser-local invoices only as fallback.",
+  "The customer portal has a compact `Invoices` section with `Unpaid` and `Paid` folders grouped by month, reading only server-stored customer invoice records through the existing secure customer portal session boundary.",
   "Customer portal stored invoice and PDF reads explicitly use same-origin credentials so the secure HttpOnly account session is sent without exposing token plumbing in the page.",
-  "The portal invoice section shows whether the customer is seeing stored account PDFs, local fallback PDFs from this Mac, or a sign-in-required state, and PDF buttons change through Downloading, Downloaded, or Try again.",
+  "The portal invoice section shows whether the customer is seeing stored account PDFs or a sign-in-required state, and PDF buttons change through Downloading, Downloaded, or Try again.",
   "The portal invoice folders do not import admin mock customer data and do not call admin APIs, Stripe/payment providers, email/SMS/WhatsApp providers, or write APIs.",
   "Admin Customers keeps the Unbilled Customers checkpoint as one dropdown plus a compact scrollable table; the duplicate wording block below the dropdown is removed.",
   "Customer saved-booking reads remain booking-only and strip invoice/payment/PDF/finance/internal fields; invoice rows now use their own customer-scoped source and PDF download route filtered by the portal customer account.",

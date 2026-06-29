@@ -252,11 +252,22 @@ for (const fragment of [
   "fetchCustomerPortalInvoicePdf",
   "downloadPortalInvoice(invoice)",
   "Stored PDF",
-  "Local PDF",
   "Stored invoice PDFs appear here when this customer portal session is active.",
   "Sign in to view stored invoice PDFs for this customer account.",
 ]) {
   assertIncludes(portalPage, fragment, `portal stored invoice fragment ${fragment}`);
+}
+
+for (const forbiddenFragment of [
+  "Local PDF",
+  "local-fallback",
+  "readCustomerLocalInvoices",
+  "displayLocalInvoice",
+  "mergePortalInvoices",
+  "prestige-local-invoices-updated",
+  "Local PDFs from this Mac",
+]) {
+  assertExcludes(portalPage, forbiddenFragment, `portal customer invoice local fallback ${forbiddenFragment}`);
 }
 
 for (const fragment of [
@@ -291,8 +302,8 @@ for (const forbiddenPattern of [
 for (const phrase of [
   "Admin Customers can issue a stored customer invoice from the prepared Unbilled Customers row after the approved amount, due date, folder, and optional customer email are reviewed.",
   "The issue action creates a unique `INV-YYYYMMDD-####` invoice number only at click time, writes one `customer_invoice_records` row with the generated PDF bytes, and starts a PDF download from the stored server record.",
-  "The customer portal `Invoices` tab reads the stored invoice records under compact `Unpaid` and `Paid` monthly folders when the secure portal session is active, with browser-local invoices kept only as a fallback on the same Mac.",
-  "The customer portal invoice/PDF reads explicitly send same-origin credentials, keep the secure account session invisible to the page, and show stored/local/sign-in state plus Downloading/Downloaded/Try again button feedback.",
+  "The customer portal `Invoices` tab reads only server-stored invoice records under compact `Unpaid` and `Paid` monthly folders when the secure portal session is active; browser-local invoice fallback is not rendered in the customer portal.",
+  "The customer portal invoice/PDF reads explicitly send same-origin credentials, keep the secure account session invisible to the page, and show stored/sign-in state plus Downloading/Downloaded/Try again button feedback.",
   "`Email Invoice` is wired behind `PRESTIGE_CUSTOMER_INVOICE_EMAIL_SEND_ENABLED`, `PRESTIGE_EMAIL_PROVIDER=resend`, `PRESTIGE_CUSTOMER_INVOICE_EMAIL_FROM`, optional `PRESTIGE_CUSTOMER_INVOICE_EMAIL_RECIPIENT_ALLOWLIST`, and `RESEND_API_KEY`; closed gates mark the invoice email status blocked and do not call Resend.",
   "The `customer_invoice_records` migration scaffold is service-role only with RLS enabled and no anon/authenticated grants.",
   "This pass does not activate Stripe/payment links, bank debit, payout, provider job sending, GPS/live location, automatic payment reconciliation, or customer-visible internal/mock/debug data.",

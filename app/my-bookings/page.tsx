@@ -25,18 +25,13 @@ import {
   type PublicCompanyProfile,
 } from "../../lib/company-profile-shared";
 import { loadPublicCompanyProfile } from "../../lib/public-company-profile-adapter";
-import {
-  downloadCustomerInvoicePdf,
-  readCustomerLocalInvoices,
-  type CustomerLocalInvoiceRecord,
-} from "../../lib/customer-local-invoices";
 
 type BookingFilter = "Cancelled" | "Completed" | "Upcoming";
 type InvoiceFolder = "Paid" | "Unpaid";
 type InvoiceDownloadState = "downloaded" | "downloading" | "failed";
 type PortalSection = "New Booking Request" | "Invoices" | BookingFilter;
 type PortalBookingsLoadState = "blocked" | "loading" | "ready";
-type PortalInvoicesLoadState = "blocked" | "loading" | "local-fallback" | "stored";
+type PortalInvoicesLoadState = "blocked" | "loading" | "stored";
 
 type BookingRequestForm = {
   companyName: string;
@@ -249,29 +244,6 @@ function splitPickupTime(value: string) {
   };
 }
 
-function displayLocalInvoice(invoice: CustomerLocalInvoiceRecord): CustomerPortalInvoiceRecord {
-  return {
-    ...invoice,
-    pdfFilename: `${invoice.invoiceNumber}.pdf`,
-    storageSource: "local",
-  };
-}
-
-function mergePortalInvoices(
-  primaryRecords: CustomerPortalInvoiceRecord[],
-  fallbackRecords: CustomerPortalInvoiceRecord[],
-) {
-  const records = new Map<string, CustomerPortalInvoiceRecord>();
-
-  [...fallbackRecords, ...primaryRecords].forEach((record) => {
-    records.set(record.invoiceNumber, record);
-  });
-
-  return [...records.values()].sort((firstRecord, secondRecord) =>
-    secondRecord.issueDateIso.localeCompare(firstRecord.issueDateIso),
-  );
-}
-
 function downloadBrowserBlob(blob: Blob, filename: string) {
   const url = window.URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -360,10 +332,6 @@ export default function CustomerPortalPage() {
         : "Stored invoice PDFs appear here when this customer portal session is active. No invoice PDFs are ready yet.";
     }
 
-    if (customerInvoicesLoadState === "local-fallback") {
-      return "Stored invoice PDFs appear here when this customer portal session is active. Showing local PDFs saved on this Mac until the secure account session is active.";
-    }
-
     return "Sign in to view stored invoice PDFs for this customer account. This folder is view and download only.";
   })();
 
@@ -390,13 +358,11 @@ export default function CustomerPortalPage() {
     const controller = new AbortController();
 
     async function loadCustomerInvoices() {
-      const localInvoices = readCustomerLocalInvoices().map(displayLocalInvoice);
-
       try {
         const storedInvoices = await loadCustomerPortalInvoiceRecords({ signal: controller.signal });
 
         if (storedInvoices) {
-          setCustomerInvoiceRecords(mergePortalInvoices(storedInvoices, localInvoices));
+          setCustomerInvoiceRecords(storedInvoices);
           setCustomerInvoicesLoadState("stored");
           return;
         }
@@ -406,18 +372,14 @@ export default function CustomerPortalPage() {
         }
       }
 
-      setCustomerInvoiceRecords(localInvoices);
-      setCustomerInvoicesLoadState(localInvoices.length > 0 ? "local-fallback" : "blocked");
+      setCustomerInvoiceRecords([]);
+      setCustomerInvoicesLoadState("blocked");
     }
 
     void loadCustomerInvoices();
-    window.addEventListener("storage", loadCustomerInvoices);
-    window.addEventListener("prestige-local-invoices-updated", loadCustomerInvoices);
 
     return () => {
       controller.abort();
-      window.removeEventListener("storage", loadCustomerInvoices);
-      window.removeEventListener("prestige-local-invoices-updated", loadCustomerInvoices);
     };
   }, []);
 
@@ -595,17 +557,13 @@ export default function CustomerPortalPage() {
     }));
 
     try {
-      if (invoice.storageSource === "server") {
-        const pdf = await fetchCustomerPortalInvoicePdf(invoice.invoiceNumber);
+      const pdf = await fetchCustomerPortalInvoicePdf(invoice.invoiceNumber);
 
-        if (!pdf) {
-          throw new Error("Stored invoice PDF download failed safely.");
-        }
-
-        downloadBrowserBlob(pdf.blob, pdf.filename || invoice.pdfFilename || `${invoice.invoiceNumber}.pdf`);
-      } else {
-        await downloadCustomerInvoicePdf(invoice, companyProfile);
+      if (!pdf) {
+        throw new Error("Stored invoice PDF download failed safely.");
       }
+
+      downloadBrowserBlob(pdf.blob, pdf.filename || invoice.pdfFilename || `${invoice.invoiceNumber}.pdf`);
 
       setInvoiceDownloadStates((current) => ({
         ...current,
@@ -1238,7 +1196,7 @@ export default function CustomerPortalPage() {
                                 <td className="px-3 py-2">
                                   <p className="font-bold text-slate-950">{invoice.invoiceNumber}</p>
                                   <p className="text-xs text-slate-500">
-                                    {invoice.reference} · {invoice.storageSource === "server" ? "Stored PDF" : "Local PDF"}
+                                    {invoice.reference} · Stored PDF
                                   </p>
                                 </td>
                                 <td className="px-3 py-2 font-semibold text-slate-950">{invoice.amountLabel}</td>
@@ -1301,10 +1259,10 @@ export default function CustomerPortalPage() {
             </div>
             <p
               className="mt-3 rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-950"
-              data-customer-portal-invoice-local-boundary="true"
+              data-customer-portal-invoice-storage-boundary="true"
             >
-              Stored invoice PDFs appear here when this customer portal session is active. Local PDFs from this Mac
-              remain visible as a fallback. This folder is view and download only.
+              Stored invoice PDFs appear here when this customer portal session is active. This folder is view and
+              download only.
             </p>
           </section>
         ) : (

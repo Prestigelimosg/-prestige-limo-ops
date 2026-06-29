@@ -5,7 +5,7 @@ export const customerPortalInvoicePdfApiPath = "/api/customer-invoice-pdf";
 
 export type CustomerPortalInvoiceRecord = CustomerLocalInvoiceRecord & {
   pdfFilename?: string;
-  storageSource?: "local" | "server";
+  storageSource?: "server";
 };
 
 type CustomerPortalInvoicesFetch = typeof fetch;

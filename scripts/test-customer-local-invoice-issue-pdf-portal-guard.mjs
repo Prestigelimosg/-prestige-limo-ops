@@ -125,6 +125,20 @@ for (const fragment of [
   assertIncludes(persistence, fragment, `persistence fragment ${fragment}`);
 }
 
+const statusUpdateSection = sectionBetween(
+  persistence,
+  "export async function updateAdminCustomerInvoiceStatus",
+  "\nexport async function loadAdminCustomerInvoicePdf",
+);
+
+for (const fragment of [
+  "createCustomerInvoicePdfBytes(record, profile, logoImage)",
+  "pdf_base64: base64FromBytes(pdfBytes)",
+  "pdf_sha256: sha256Hex(pdfBytes)",
+]) {
+  assertIncludes(statusUpdateSection, fragment, `invoice status PDF refresh fragment ${fragment}`);
+}
+
 assertIncludes(persistence, "forbiddenCustomerInvoiceFragments", "persistence forbidden fragment list");
 assertIncludes(persistence, "includesForbiddenFragment", "persistence forbidden sanitizer");
 

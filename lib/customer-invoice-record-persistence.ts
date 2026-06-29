@@ -608,8 +608,33 @@ export async function updateAdminCustomerInvoiceStatus(
 
   const record = toStoredRecord(asRecord(data));
 
-  return record ? {
-    data: record,
+  if (!record) {
+    return safeFailure(safeMissingError, 404);
+  }
+
+  const { logoImage, profile } = await loadServerLogoImage();
+  const pdfBytes = createCustomerInvoicePdfBytes(record, profile, logoImage);
+  const { data: refreshedData, error: refreshedError } = await client
+    .from(customerInvoiceRecordTableName)
+    .update({
+      pdf_base64: base64FromBytes(pdfBytes),
+      pdf_content_type: "application/pdf",
+      pdf_filename: `${record.invoiceNumber}.pdf`,
+      pdf_sha256: sha256Hex(pdfBytes),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("invoice_number", record.invoiceNumber)
+    .select(customerInvoiceSelect)
+    .maybeSingle();
+
+  if (refreshedError) {
+    return safeFailure(safeWriteError, 500);
+  }
+
+  const refreshedRecord = toStoredRecord(asRecord(refreshedData));
+
+  return refreshedRecord ? {
+    data: refreshedRecord,
     ok: true,
     version: customerInvoiceRecordVersion,
   } : safeFailure(safeMissingError, 404);

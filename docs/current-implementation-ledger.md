@@ -399,6 +399,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Admin must click `Preview Invoice` before `Issue Invoice + PDF`; changing amount, due date, folder, or adjustment reason makes the preview stale and blocks issue until refreshed.
 - The amount input is required before issue so admin must review the charge before invoice number/PDF creation.
 - Issued invoices show `Pay` for unpaid invoices, then `Paid` plus `Mark Unpaid` so an accidental paid click can be reversed before any payment reconciliation exists.
+- Paid/Unpaid status changes refresh the stored PDF bytes/hash in the same server update so the customer portal folder status and downloaded invoice PDF status cannot disagree.
 - `Email Invoice` is wired behind `PRESTIGE_CUSTOMER_INVOICE_EMAIL_SEND_ENABLED`, `PRESTIGE_EMAIL_PROVIDER=resend`, `PRESTIGE_CUSTOMER_INVOICE_EMAIL_FROM`, optional `PRESTIGE_CUSTOMER_INVOICE_EMAIL_RECIPIENT_ALLOWLIST`, and `RESEND_API_KEY`; closed gates mark the invoice email status blocked and do not call Resend.
 - The `customer_invoice_records` migration scaffold is service-role only with RLS enabled and no anon/authenticated grants.
 - This pass does not activate Stripe/payment links, bank debit, payout, provider job sending, GPS/live location, automatic payment reconciliation, or customer-visible internal/mock/debug data.

@@ -131,6 +131,8 @@ assertExcludes(helper, /@supabase\/supabase-js|\bcreateClient\b|\.(?:insert|upse
 assertIncludes(customerBoundary, "resolveCustomerPortalAccessSession(providedToken.token, runtimeGate.data)", "customer boundary portal access handoff");
 assertIncludes(customerBoundary, "isCustomerPortalAccessToken(providedToken.token)", "customer boundary portal access token guard");
 assertIncludes(customerBoundary, 'mode: "server-session-cookie"', "customer boundary access-cookie mode");
+assertIncludes(customerBoundary, "const signedPortalCookieSession =", "customer saved-bookings read signed portal cookie gate");
+assertIncludes(customerBoundary, "!signedPortalCookieSession", "customer saved-bookings read keeps disabled gate for non-portal sessions");
 assertIncludes(customerBoundary, "customer_account_reference: customerAccountReference", "customer boundary scoped account context");
 assert.equal(
   customerBoundaryFunction.indexOf("isCustomerPortalAccessToken(providedToken.token)") <

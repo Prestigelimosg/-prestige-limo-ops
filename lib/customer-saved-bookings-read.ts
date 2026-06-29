@@ -623,8 +623,21 @@ function safeAdapterFailure<T>(
   };
 }
 
-function getServerOnlyCustomerSavedBookingsSupabaseClient(): AdminBookingResult<CustomerSavedBookingsClient> {
-  if (process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_ENABLED !== "true") {
+function getServerOnlyCustomerSavedBookingsSupabaseClient(
+  context: CustomerSavedBookingsBoundaryContext,
+): AdminBookingResult<CustomerSavedBookingsClient> {
+  const signedPortalCookieSession =
+    context.mode === "server-session-cookie" &&
+    !!context.customer_account_reference &&
+    customerAccountAllowedByControlledRuntime(
+      context.customer_account_reference,
+      context.runtime_gate,
+    );
+
+  if (
+    process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_ENABLED !== "true" &&
+    !signedPortalCookieSession
+  ) {
     return {
       error: customerSavedBookingsDisabledError,
       ok: false,
@@ -969,7 +982,7 @@ export async function loadCustomerSavedBookings(
     return parsed;
   }
 
-  const clientResult = getServerOnlyCustomerSavedBookingsSupabaseClient();
+  const clientResult = getServerOnlyCustomerSavedBookingsSupabaseClient(context);
 
   if (!clientResult.ok) {
     return clientResult;

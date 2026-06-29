@@ -144,6 +144,16 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer/driver-visible forbidden data remains blocked from these surfaces: driver payout, PayNow payout, internal admin notes, parser/debug internals, admin finance, mock QA/dev archive, customer price on driver surfaces, billing/payment/payout comparisons on driver surfaces, and internal finance notes.
 - Guard coverage lives in `scripts/test-customer-terms-hourly-billing-guard.mjs` and `scripts/test-admin-monthly-invoice-billable-item-price-review-api-contract.mjs`, both registered through the existing test paths.
 
+### Company Profile Customer Settings Lock
+
+- Admin now has a compact `Company` settings tab for public-facing company logo URL, company name, WhatsApp/phone/email, address, UEN/business reg no., bank/payment instructions, Stripe card availability, optional card fee percentage, and invoice footer terms.
+- Customer `/book` and `/my-bookings` read the same public-safe profile through `GET /api/company-profile` and fall back to safe defaults when the settings table is not ready.
+- Admin saves use `GET/POST /api/admin-company-profile` behind the existing same-origin admin dashboard boundary and `x-prestige-admin-purpose`; the browser does not receive or expose the private admin session token.
+- The Stripe and bank settings are wording/settings only. This does not create Stripe charges, payment links, invoices, PDFs, payment reconciliation records, provider sends, payouts, GPS/live-location records, env changes, or activation of billing/payment providers.
+- The `company_profile_settings` migration scaffold stores only public business identity and payment-instruction text, with RLS enabled, anon/authenticated access revoked, and service-role-only access.
+- Public profile sanitization rejects customer-hidden/internal fragments: driver payout, PayNow payout, internal admin/internal finance/admin finance, parser/debug internals, secrets/tokens/API keys, customer price, mock QA, dev archive, and payout comparisons.
+- Guard coverage lives in `scripts/test-company-profile-settings-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Driver Status Hourly Actual-Time Evidence Lock
 
 - Verified driver job status writes now create server-side actual-time evidence for hourly/DSP-style jobs: `OTS` writes the start marker and `Job Completed` writes the end marker.

@@ -35,6 +35,10 @@ import {
   hourlyBillingGraceMinutes,
   hourlyBillingGraceRuleText,
 } from "../lib/hourly-billing";
+import {
+  defaultCompanyProfile,
+  type PublicCompanyProfile,
+} from "../lib/company-profile-shared";
 
 const adminLegacyDataPurpose = "admin-booking-persistence";
 const adminWorkflowStatusApiPath = "/api/admin-booking-workflow-statuses";
@@ -60,6 +64,7 @@ const adminMonthlyInvoiceIssueRecordPdfReadinessApiPath =
   "/api/admin-monthly-invoice-issue-record-pdf-readiness";
 const adminMonthlyInvoiceNumberReservationsApiPath =
   "/api/admin-monthly-invoice-number-reservations";
+const adminCompanyProfileApiPath = "/api/admin-company-profile";
 const adminAppNotificationsApiPath = "/api/admin-app-notifications";
 const adminDevicePushSubscriptionsApiPath = "/api/admin-device-push-subscriptions";
 const adminCustomerDriverDetailsEmailReviewItemApiPath =
@@ -1989,7 +1994,14 @@ type AdminBookingSnapshotApplyResult =
       ok: false;
     };
 
-type AppTab = "dispatch" | "bookings" | "completed" | "dashboard" | "drivers" | "rates";
+type AppTab =
+  | "company"
+  | "completed"
+  | "dashboard"
+  | "dispatch"
+  | "bookings"
+  | "drivers"
+  | "rates";
 
 const appTabs: Array<{ id: AppTab; label: string }> = [
   { id: "dispatch", label: "Dispatch" },
@@ -1997,6 +2009,7 @@ const appTabs: Array<{ id: AppTab; label: string }> = [
   { id: "bookings", label: "Bookings" },
   { id: "drivers", label: "Drivers" },
   { id: "completed", label: "Completed" },
+  { id: "company", label: "Company" },
   { id: "rates", label: "Rates" },
 ];
 
@@ -9551,6 +9564,15 @@ export default function Home() {
     tone: "info",
     text: "Ready for dispatch.",
   });
+  const [companyProfileDraft, setCompanyProfileDraft] =
+    useState<PublicCompanyProfile>(defaultCompanyProfile);
+  const [companyProfileLoaded, setCompanyProfileLoaded] = useState(false);
+  const [companyProfileAction, setCompanyProfileAction] =
+    useState<"idle" | "loading" | "saving" | "saved">("idle");
+  const [companyProfileMessage, setCompanyProfileMessage] = useState<Message>({
+    tone: "info",
+    text: "Company settings are customer-facing public details only.",
+  });
   const [adminDriverJobLinkState, setAdminDriverJobLinkState] =
     useState<AdminDriverJobLinkState>({
       action: null,
@@ -14304,11 +14326,120 @@ export default function Home() {
     });
   }
 
+  function updateCompanyProfileDraft<K extends keyof PublicCompanyProfile>(
+    field: K,
+    value: PublicCompanyProfile[K],
+  ) {
+    setCompanyProfileDraft((current) => ({
+      ...current,
+      [field]: value,
+    }));
+    if (companyProfileAction === "saved") {
+      setCompanyProfileAction("idle");
+    }
+  }
+
+  async function loadCompanyProfileSettings() {
+    setCompanyProfileAction("loading");
+    setCompanyProfileMessage({
+      tone: "info",
+      text: "Loading company settings...",
+    });
+
+    try {
+      const response = await fetch(adminCompanyProfileApiPath, {
+        cache: "no-store",
+        headers: {
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+      });
+      const data = (await response.json()) as {
+        error?: string;
+        ok?: boolean;
+        persistence_status?: string;
+        profile?: PublicCompanyProfile;
+      };
+
+      if (!response.ok || !data.ok || !data.profile) {
+        throw new Error(data.error || "Company settings could not be loaded.");
+      }
+
+      setCompanyProfileDraft(data.profile);
+      setCompanyProfileLoaded(true);
+      setCompanyProfileAction("idle");
+      setCompanyProfileMessage({
+        tone: "success",
+        text:
+          data.persistence_status === "persisted"
+            ? "Company settings loaded."
+            : "Company settings loaded from safe defaults until saved.",
+      });
+    } catch (error) {
+      setCompanyProfileAction("idle");
+      setCompanyProfileMessage({
+        tone: "error",
+        text: error instanceof Error ? error.message : "Company settings could not be loaded.",
+      });
+    }
+  }
+
+  async function saveCompanyProfileSettings() {
+    setCompanyProfileAction("saving");
+    setCompanyProfileMessage({
+      tone: "info",
+      text: "Saving company settings...",
+    });
+
+    try {
+      const response = await fetch(adminCompanyProfileApiPath, {
+        body: JSON.stringify(companyProfileDraft),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "POST",
+      });
+      const data = (await response.json()) as {
+        error?: string;
+        ok?: boolean;
+        profile?: PublicCompanyProfile;
+        rejected_fields?: string[];
+      };
+
+      if (!response.ok || !data.ok || !data.profile) {
+        const rejectedFields =
+          Array.isArray(data.rejected_fields) && data.rejected_fields.length > 0
+            ? ` Rejected: ${data.rejected_fields.join(", ")}.`
+            : "";
+
+        throw new Error(`${data.error || "Company settings could not be saved."}${rejectedFields}`);
+      }
+
+      setCompanyProfileDraft(data.profile);
+      setCompanyProfileLoaded(true);
+      setCompanyProfileAction("saved");
+      setCompanyProfileMessage({
+        tone: "success",
+        text: "Company settings saved. Customer pages will use these public details.",
+      });
+    } catch (error) {
+      setCompanyProfileAction("idle");
+      setCompanyProfileMessage({
+        tone: "error",
+        text: error instanceof Error ? error.message : "Company settings could not be saved.",
+      });
+    }
+  }
+
   function selectAppTab(nextTab: AppTab) {
     setActiveTab(nextTab);
 
     if ((nextTab === "bookings" || nextTab === "dashboard") && bookings.length === 0 && !loading) {
       void loadBookings("Bookings loaded.");
+    }
+
+    if (nextTab === "company" && !companyProfileLoaded && companyProfileAction === "idle") {
+      void loadCompanyProfileSettings();
     }
   }
 
@@ -21493,6 +21624,11 @@ export default function Home() {
     : driverJobLinkRevoked
       ? "Revoked"
       : "Revoke";
+  const companyProfileLogoPreviewUrl =
+    /^https:\/\/[^\s"')]+$/i.test(companyProfileDraft.logo_image_url) ||
+    /^data:image\/(?:png|jpe?g|webp);base64,[a-z0-9+/=\s]+$/i.test(companyProfileDraft.logo_image_url)
+      ? companyProfileDraft.logo_image_url
+      : "";
 
   return (
     <main className="admin-ops-shell min-h-screen bg-stone-50 text-slate-950">
@@ -21533,7 +21669,7 @@ export default function Home() {
 
         <nav
           aria-label="Primary operations tabs"
-          className="sticky top-0 z-10 grid grid-cols-3 gap-1 rounded-md border border-stone-200 bg-stone-100/95 p-1 shadow-sm backdrop-blur sm:grid-cols-6"
+          className="sticky top-0 z-10 grid grid-cols-3 gap-1 rounded-md border border-stone-200 bg-stone-100/95 p-1 shadow-sm backdrop-blur sm:grid-cols-7"
           role="tablist"
         >
           {appTabs.map((tab) => {
@@ -33604,6 +33740,252 @@ export default function Home() {
 		            </div>
 	          </div>
 	        </section>
+        ) : null}
+
+        {activeTab === "company" ? (
+          <section
+            className="rounded-md border border-stone-200 bg-white p-3"
+            data-company-profile-settings="true"
+          >
+            <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <h2 className="text-lg font-semibold">Company Settings</h2>
+                <p className="text-xs text-slate-500">
+                  Public details used on customer pages and invoice-facing text.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <button
+                  className="h-10 rounded-md border border-slate-300 px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                  data-company-profile-load="true"
+                  disabled={companyProfileAction === "loading" || companyProfileAction === "saving"}
+                  onClick={loadCompanyProfileSettings}
+                  type="button"
+                >
+                  {companyProfileAction === "loading" ? "Loading..." : "Load Settings"}
+                </button>
+                <button
+                  className={[
+                    "h-10 rounded-md px-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:bg-slate-400",
+                    actionFeedbackButtonClass(
+                      companyProfileAction === "saved" ? "success" : null,
+                      "border border-slate-950 bg-slate-950 text-white hover:bg-slate-800",
+                    ),
+                  ].join(" ")}
+                  data-company-profile-save="true"
+                  disabled={companyProfileAction === "loading" || companyProfileAction === "saving"}
+                  onClick={saveCompanyProfileSettings}
+                  type="button"
+                >
+                  {companyProfileAction === "saving"
+                    ? "Saving..."
+                    : companyProfileAction === "saved"
+                      ? "Saved"
+                      : "Save Settings"}
+                </button>
+              </div>
+            </div>
+
+            <div
+              className={`mb-3 rounded-md border px-3 py-2 text-sm ${statusClass(companyProfileMessage.tone)}`}
+              data-company-profile-feedback="true"
+            >
+              {companyProfileMessage.text}
+            </div>
+
+            <div className="grid gap-3 lg:grid-cols-[1.4fr_0.8fr]">
+              <div className="grid gap-3">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label>
+                    <span className="mb-1 block text-sm font-medium text-slate-700">Company name</span>
+                    <input
+                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                      data-company-profile-field="company_name"
+                      onChange={(event) => updateCompanyProfileDraft("company_name", event.target.value)}
+                      value={companyProfileDraft.company_name}
+                    />
+                  </label>
+                  <label>
+                    <span className="mb-1 block text-sm font-medium text-slate-700">Logo image URL</span>
+                    <input
+                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                      data-company-profile-field="logo_image_url"
+                      onChange={(event) => updateCompanyProfileDraft("logo_image_url", event.target.value)}
+                      placeholder="https://..."
+                      value={companyProfileDraft.logo_image_url}
+                    />
+                  </label>
+                  <label>
+                    <span className="mb-1 block text-sm font-medium text-slate-700">WhatsApp</span>
+                    <input
+                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                      data-company-profile-field="whatsapp_phone"
+                      onChange={(event) => updateCompanyProfileDraft("whatsapp_phone", event.target.value)}
+                      value={companyProfileDraft.whatsapp_phone}
+                    />
+                  </label>
+                  <label>
+                    <span className="mb-1 block text-sm font-medium text-slate-700">Phone</span>
+                    <input
+                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                      data-company-profile-field="phone"
+                      onChange={(event) => updateCompanyProfileDraft("phone", event.target.value)}
+                      value={companyProfileDraft.phone}
+                    />
+                  </label>
+                  <label>
+                    <span className="mb-1 block text-sm font-medium text-slate-700">Email</span>
+                    <input
+                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                      data-company-profile-field="email"
+                      onChange={(event) => updateCompanyProfileDraft("email", event.target.value)}
+                      type="email"
+                      value={companyProfileDraft.email}
+                    />
+                  </label>
+                  <label>
+                    <span className="mb-1 block text-sm font-medium text-slate-700">UEN / Reg no.</span>
+                    <input
+                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                      data-company-profile-field="uen"
+                      onChange={(event) => updateCompanyProfileDraft("uen", event.target.value)}
+                      value={companyProfileDraft.uen}
+                    />
+                  </label>
+                </div>
+
+                <label>
+                  <span className="mb-1 block text-sm font-medium text-slate-700">Address</span>
+                  <textarea
+                    className="min-h-20 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                    data-company-profile-field="address"
+                    onChange={(event) => updateCompanyProfileDraft("address", event.target.value)}
+                    value={companyProfileDraft.address}
+                  />
+                </label>
+
+                <label>
+                  <span className="mb-1 block text-sm font-medium text-slate-700">
+                    Bank / PayNow / payment instructions
+                  </span>
+                  <textarea
+                    className="min-h-24 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                    data-company-profile-field="bank_payment_instructions"
+                    onChange={(event) =>
+                      updateCompanyProfileDraft("bank_payment_instructions", event.target.value)
+                    }
+                    placeholder="Bank name, account name, account number, PayNow UEN, or payment notes"
+                    value={companyProfileDraft.bank_payment_instructions}
+                  />
+                </label>
+
+                <div className="grid gap-2 rounded-md border border-stone-200 bg-stone-50 p-3 sm:grid-cols-[1fr_1fr_9rem]">
+                  <label className="flex items-start gap-2 text-sm font-medium text-slate-800">
+                    <input
+                      checked={companyProfileDraft.stripe_card_payment_enabled}
+                      className="mt-1"
+                      data-company-profile-field="stripe_card_payment_enabled"
+                      onChange={(event) =>
+                        updateCompanyProfileDraft("stripe_card_payment_enabled", event.target.checked)
+                      }
+                      type="checkbox"
+                    />
+                    Stripe credit card payment available
+                  </label>
+                  <label className="flex items-start gap-2 text-sm font-medium text-slate-800">
+                    <input
+                      checked={companyProfileDraft.stripe_card_fee_required}
+                      className="mt-1"
+                      data-company-profile-field="stripe_card_fee_required"
+                      disabled={!companyProfileDraft.stripe_card_payment_enabled}
+                      onChange={(event) =>
+                        updateCompanyProfileDraft("stripe_card_fee_required", event.target.checked)
+                      }
+                      type="checkbox"
+                    />
+                    Charge card fee for this customer
+                  </label>
+                  <label>
+                    <span className="mb-1 block text-xs font-semibold text-slate-600">Card fee %</span>
+                    <input
+                      className="h-9 w-full rounded-md border border-stone-300 bg-white px-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 disabled:bg-stone-100"
+                      data-company-profile-field="stripe_card_fee_percent"
+                      disabled={!companyProfileDraft.stripe_card_payment_enabled}
+                      min={0}
+                      onChange={(event) =>
+                        updateCompanyProfileDraft("stripe_card_fee_percent", Number(event.target.value))
+                      }
+                      step="0.01"
+                      type="number"
+                      value={companyProfileDraft.stripe_card_fee_percent}
+                    />
+                  </label>
+                </div>
+
+                <label>
+                  <span className="mb-1 block text-sm font-medium text-slate-700">Invoice footer terms</span>
+                  <textarea
+                    className="min-h-24 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                    data-company-profile-field="invoice_footer_terms"
+                    onChange={(event) => updateCompanyProfileDraft("invoice_footer_terms", event.target.value)}
+                    value={companyProfileDraft.invoice_footer_terms}
+                  />
+                </label>
+              </div>
+
+              <aside
+                className="rounded-md border border-stone-200 bg-stone-50 p-3 text-sm"
+                data-company-profile-preview="true"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-md border border-stone-200 bg-white text-lg font-bold text-slate-500">
+                    {companyProfileLogoPreviewUrl ? (
+                      <span
+                        aria-label={`${companyProfileDraft.company_name || "Company"} logo`}
+                        className="h-full w-full bg-contain bg-center bg-no-repeat"
+                        role="img"
+                        style={{ backgroundImage: `url("${companyProfileLogoPreviewUrl}")` }}
+                      />
+                    ) : (
+                      companyProfileDraft.company_name.slice(0, 2).toUpperCase() || "PL"
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-base font-semibold text-slate-950">
+                      {companyProfileDraft.company_name || "Company name"}
+                    </p>
+                    <p className="text-xs text-slate-600">{companyProfileDraft.uen || "UEN not shown"}</p>
+                  </div>
+                </div>
+                <div className="mt-3 space-y-1 text-xs leading-5 text-slate-700">
+                  <p>{companyProfileDraft.whatsapp_phone || "WhatsApp not shown"}</p>
+                  <p>{companyProfileDraft.phone || "Phone not shown"}</p>
+                  <p>{companyProfileDraft.email || "Email not shown"}</p>
+                  <p>{companyProfileDraft.address || "Address not shown"}</p>
+                </div>
+                <div className="mt-3 rounded-md border border-white bg-white p-2 text-xs leading-5 text-slate-700">
+                  <p className="font-semibold text-slate-900">Payment</p>
+                  <p className="whitespace-pre-wrap">
+                    {companyProfileDraft.bank_payment_instructions || "Bank/payment instructions not shown yet."}
+                  </p>
+                  {companyProfileDraft.stripe_card_payment_enabled ? (
+                    <p className="mt-2">
+                      Stripe card:{" "}
+                      {companyProfileDraft.stripe_card_fee_required
+                        ? `${companyProfileDraft.stripe_card_fee_percent}% card fee applies.`
+                        : "available with no card fee for this customer."}
+                    </p>
+                  ) : (
+                    <p className="mt-2">Stripe card: not shown.</p>
+                  )}
+                </div>
+                <p className="mt-3 text-xs leading-5 text-slate-500">
+                  Customer-facing public settings only. This does not generate invoices, payment links,
+                  card charges, provider sends, payouts, GPS, or internal finance records.
+                </p>
+              </aside>
+            </div>
+          </section>
         ) : null}
 
         {activeTab === "rates" ? (

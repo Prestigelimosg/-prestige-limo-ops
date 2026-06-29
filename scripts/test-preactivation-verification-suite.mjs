@@ -222,6 +222,10 @@ const guardChecks = [
     script: "scripts/test-customer-terms-hourly-billing-guard.mjs",
   },
   {
+    label: "company profile customer settings guard",
+    script: "scripts/test-company-profile-settings-guard.mjs",
+  },
+  {
     label: "admin new booking email alert guard",
     script: "scripts/test-admin-new-booking-email-alert-guard.mjs",
   },

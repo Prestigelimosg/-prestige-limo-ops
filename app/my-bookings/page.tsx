@@ -14,6 +14,10 @@ import {
   type CustomerBookingLocalVoiceDraftSupportedField,
   type CustomerBookingSpeechRecognition,
 } from "../../lib/customer-booking-local-voice-draft";
+import {
+  defaultCompanyProfile,
+  type PublicCompanyProfile,
+} from "../../lib/company-profile-shared";
 
 type BookingFilter = "Cancelled" | "Completed" | "Upcoming";
 type PortalSection = "New Booking Request" | BookingFilter;
@@ -228,6 +232,8 @@ function splitPickupTime(value: string) {
 
 export default function CustomerPortalPage() {
   const [activeSection, setActiveSection] = useState<PortalSection>("Upcoming");
+  const [companyProfile, setCompanyProfile] =
+    useState<PublicCompanyProfile>(defaultCompanyProfile);
   const [expandedBookingId, setExpandedBookingId] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [changeFeedback, setChangeFeedback] = useState<Record<string, string>>({});
@@ -254,10 +260,38 @@ export default function CustomerPortalPage() {
     tone: "info",
     text: "Submit a booking request and our staff will review availability before confirming.",
   });
+  const companyName = companyProfile.company_name || defaultCompanyProfile.company_name;
 
   const activeFilter: BookingFilter = activeSection === "New Booking Request" ? "Upcoming" : activeSection;
   const selectedBookingMonth = selectedBookingMonths[activeFilter] || "";
   const currentPortalMonth = useMemo(() => getCurrentPortalMonthInfo(), []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadCompanyProfile() {
+      try {
+        const response = await fetch("/api/company-profile", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const data = (await response.json()) as {
+          ok?: boolean;
+          profile?: PublicCompanyProfile;
+        };
+
+        if (response.ok && data.ok && data.profile) {
+          setCompanyProfile(data.profile);
+        }
+      } catch {
+        setCompanyProfile(defaultCompanyProfile);
+      }
+    }
+
+    void loadCompanyProfile();
+
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -412,7 +446,7 @@ export default function CustomerPortalPage() {
     setExpandedBookingId(booking.id);
     setChangeFeedback({
       [booking.id]: canRequestBookingReview(booking)
-        ? "Edit request noted for review. Prestige Limo staff will confirm before anything changes."
+        ? `Edit request noted for review. ${companyName} staff will confirm before anything changes.`
         : "Completed or cancelled bookings are read-only here. Please contact our team if you need help.",
     });
   }
@@ -421,7 +455,7 @@ export default function CustomerPortalPage() {
     setExpandedBookingId(booking.id);
     setChangeFeedback({
       [booking.id]: canRequestBookingReview(booking)
-        ? "Cancel request noted for review. Your booking is not cancelled until Prestige Limo confirms."
+        ? `Cancel request noted for review. Your booking is not cancelled until ${companyName} confirms.`
         : "Completed or cancelled bookings are read-only here. Please contact our team if you need help.",
     });
   }
@@ -548,7 +582,7 @@ export default function CustomerPortalPage() {
     setMissingBookingRequestFields([]);
     setBookingRequestFeedback({
       tone: "success",
-      text: "Booking request received for review. This is not confirmed yet. Our staff will reply to confirm availability.",
+      text: `Booking request received for review. This is not confirmed yet. ${companyName} staff will reply to confirm availability.`,
     });
   }
 
@@ -572,11 +606,34 @@ export default function CustomerPortalPage() {
     >
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-3">
         <header className="border-b border-slate-200 px-1 pb-3 pt-1">
-          <p className="text-sm font-semibold uppercase text-slate-600">Prestige Limo SG</p>
+          <div
+            className="flex min-w-0 items-center gap-2"
+            data-customer-company-profile-brand="true"
+          >
+            {companyProfile.logo_image_url ? (
+              <span
+                aria-label={`${companyName} logo`}
+                className="h-8 w-8 shrink-0 rounded-md bg-contain bg-center bg-no-repeat"
+                role="img"
+                style={{ backgroundImage: `url("${companyProfile.logo_image_url}")` }}
+              />
+            ) : null}
+            <p className="truncate text-sm font-semibold uppercase text-slate-600">{companyName}</p>
+          </div>
           <h1 className="mt-1 text-2xl font-bold text-slate-950 sm:text-3xl">My Bookings</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-700">
             Customers can view booking requests and booking history here after staff confirmation.
           </p>
+          {companyProfile.whatsapp_phone || companyProfile.phone || companyProfile.email ? (
+            <p
+              className="mt-1 text-xs leading-5 text-slate-600"
+              data-customer-company-profile-contact="true"
+            >
+              {[companyProfile.whatsapp_phone, companyProfile.phone, companyProfile.email]
+                .filter(Boolean)
+                .join(" | ")}
+            </p>
+          ) : null}
         </header>
 
         <nav

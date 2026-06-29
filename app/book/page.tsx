@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { FormEvent } from "react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   loadCustomerBookingMemorySuggestions,
   type CustomerBookingMemorySuggestion,
@@ -23,6 +23,10 @@ import {
   customerTermsAndConditionsSummary,
   customerTermsAndSurchargeSummary,
 } from "../../lib/customer-facing-booking-terms";
+import {
+  defaultCompanyProfile,
+  type PublicCompanyProfile,
+} from "../../lib/company-profile-shared";
 
 const serviceOptions = [
   "Airport Arrival",
@@ -170,6 +174,8 @@ function splitPickupTime(value: string) {
 
 export default function CustomerBookingPage() {
   const [form, setForm] = useState<BookingRequestForm>(initialForm);
+  const [companyProfile, setCompanyProfile] =
+    useState<PublicCompanyProfile>(defaultCompanyProfile);
   const [pickupTimeDraft, setPickupTimeDraft] = useState(() => splitPickupTime(initialForm.pickupTime));
   const [missingFields, setMissingFields] = useState<Array<keyof BookingRequestForm>>([]);
   const [bookingMemorySuggestions, setBookingMemorySuggestions] = useState<CustomerBookingMemorySuggestion[]>([]);
@@ -191,6 +197,34 @@ export default function CustomerBookingPage() {
     tone: "info",
     text: "Send a request and our staff will review the details before confirming availability.",
   });
+  const companyName = companyProfile.company_name || defaultCompanyProfile.company_name;
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadCompanyProfile() {
+      try {
+        const response = await fetch("/api/company-profile", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const data = (await response.json()) as {
+          ok?: boolean;
+          profile?: PublicCompanyProfile;
+        };
+
+        if (response.ok && data.ok && data.profile) {
+          setCompanyProfile(data.profile);
+        }
+      } catch {
+        setCompanyProfile(defaultCompanyProfile);
+      }
+    }
+
+    void loadCompanyProfile();
+
+    return () => controller.abort();
+  }, []);
 
   function updateForm(updater: (currentForm: BookingRequestForm) => BookingRequestForm) {
     setForm((currentForm) => {
@@ -400,7 +434,7 @@ export default function CustomerBookingPage() {
       setConfirmationStatus(null);
       setFeedback({
         tone: "error",
-        text: "Booking request could not be submitted right now. Please contact Prestige Limo.",
+        text: `Booking request could not be submitted right now. Please contact ${companyName}.`,
       });
     } finally {
       setSubmitting(false);
@@ -429,11 +463,23 @@ export default function CustomerBookingPage() {
         <header className="rounded-md border border-slate-200 bg-white px-4 py-5 shadow-sm sm:px-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
-              <p className="text-sm font-semibold uppercase text-slate-600">Prestige Limo SG</p>
+              <div
+                className="flex min-w-0 items-center gap-2"
+                data-customer-company-profile-brand="true"
+              >
+                {companyProfile.logo_image_url ? (
+                  <span
+                    aria-label={`${companyName} logo`}
+                    className="h-8 w-8 shrink-0 rounded-md bg-contain bg-center bg-no-repeat"
+                    role="img"
+                    style={{ backgroundImage: `url("${companyProfile.logo_image_url}")` }}
+                  />
+                ) : null}
+                <p className="truncate text-sm font-semibold uppercase text-slate-600">{companyName}</p>
+              </div>
               <h1 className="mt-2 text-3xl font-bold text-slate-950 sm:text-4xl">Booking Request</h1>
               <p className="mt-3 max-w-3xl text-base leading-7 text-slate-700">
-                Share the trip details you have now. Your booking is not confirmed until Prestige
-                Limo staff replies.
+                Share the trip details you have now. Your booking is not confirmed until {companyName} staff replies.
               </p>
             </div>
             <div
@@ -463,8 +509,18 @@ export default function CustomerBookingPage() {
             className="mt-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium leading-6 text-sky-950"
             data-customer-booking-mobile-web-note="true"
           >
-            Mobile web request form for trip details only. Prestige Limo will reply before confirmation.
+            Mobile web request form for trip details only. {companyName} will reply before confirmation.
           </p>
+          {companyProfile.whatsapp_phone || companyProfile.phone || companyProfile.email ? (
+            <p
+              className="mt-2 text-xs leading-5 text-slate-600"
+              data-customer-company-profile-contact="true"
+            >
+              {[companyProfile.whatsapp_phone, companyProfile.phone, companyProfile.email]
+                .filter(Boolean)
+                .join(" | ")}
+            </p>
+          ) : null}
           <div
             className="mt-3 text-sm leading-6 text-slate-700"
             data-customer-voice-booking-helper="true"
@@ -494,7 +550,7 @@ export default function CustomerBookingPage() {
           >
             {[
               "Submit the trip details you know.",
-              "Prestige Limo reviews timing and availability.",
+              `${companyName} reviews timing and availability.`,
               "We reply before the booking is confirmed.",
             ].map((step, index) => (
               <li
@@ -892,7 +948,7 @@ export default function CustomerBookingPage() {
                 </details>
               </div>
               <p className="text-sm leading-6 text-slate-600">
-                After you submit, Prestige Limo will review the request and reply with the next step.
+                After you submit, {companyName} will review the request and reply with the next step.
               </p>
               <button
                 className="min-h-12 rounded-md bg-slate-950 px-5 py-3 text-base font-semibold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300 disabled:cursor-not-allowed disabled:bg-slate-400"

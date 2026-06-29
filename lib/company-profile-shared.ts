@@ -46,7 +46,7 @@ export const defaultCompanyProfile: PublicCompanyProfile = {
   address: "",
   bank_payment_instructions: "",
   company_name: "Prestige Limo SG",
-  email: "",
+  email: "acc@prestigelimo.sg",
   invoice_footer_terms:
     "Thank you for choosing our service. Bookings are confirmed upon receipt of the required payment or deposit. Waiting time includes a 15-minute grace period; additional waiting time may be chargeable. Requests made less than 12 hours before pickup may incur a SGD $50 change fee.",
   logo_image_url: "",

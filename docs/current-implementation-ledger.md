@@ -162,6 +162,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Company Profile Customer Settings Lock
 
 - Admin now has a compact `Company` settings tab for public-facing company logo URL, company name, WhatsApp/phone/email, address, UEN/business reg no., bank/payment instructions, Stripe card availability, optional card fee percentage, and invoice footer terms.
+- The default public company profile email is `acc@prestigelimo.sg`, used as the official accounting contact fallback on customer-facing pages and invoice PDFs.
 - Customer `/book` and `/my-bookings` read the same public-safe profile through `GET /api/company-profile` and fall back to safe defaults when the settings table is not ready.
 - Admin saves use `GET/POST /api/admin-company-profile` behind the existing same-origin admin dashboard boundary and `x-prestige-admin-purpose`; the browser does not receive or expose the private admin session token.
 - The Stripe and bank settings are wording/settings only. This does not create Stripe charges, payment links, invoices, PDFs, payment reconciliation records, provider sends, payouts, GPS/live-location records, env changes, or activation of billing/payment providers.

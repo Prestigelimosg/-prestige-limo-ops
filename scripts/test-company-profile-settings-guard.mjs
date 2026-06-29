@@ -24,11 +24,13 @@ const publicRoute = read("app/api/company-profile/route.ts");
 const adminRoute = read("app/api/admin-company-profile/route.ts");
 const adminPage = read("app/page.tsx");
 const bookPage = read("app/book/page.tsx");
+const ledger = read("docs/current-implementation-ledger.md");
 const portalPage = read("app/my-bookings/page.tsx");
 const migration = read("supabase/migrations/202606290001_company_profile_settings_foundation.sql");
 
 for (const field of [
   "company_name",
+  "email",
   "logo_image_url",
   "whatsapp_phone",
   "bank_payment_instructions",
@@ -41,6 +43,12 @@ for (const field of [
   assertIncludes(adminPage, field, `Admin Company settings UI is missing ${field}.`);
   assertIncludes(migration, field, `Company profile migration is missing ${field}.`);
 }
+
+assertIncludes(
+  shared,
+  'email: "acc@prestigelimo.sg"',
+  "Default company profile email must use the official accounting email.",
+);
 
 for (const forbidden of [
   "driver[_\\s-]*payout",
@@ -100,6 +108,12 @@ assertIncludes(adminPage, '"company"', "Admin app tab type must include Company.
 assertIncludes(adminPage, 'data-company-profile-settings="true"', "Admin Company settings panel is missing.");
 assertIncludes(adminPage, 'data-company-profile-save="true"', "Admin Company settings save button is missing.");
 assertIncludes(adminPage, 'data-company-profile-preview="true"', "Admin Company settings preview is missing.");
+
+assertIncludes(
+  ledger,
+  "The default public company profile email is `acc@prestigelimo.sg`, used as the official accounting contact fallback on customer-facing pages and invoice PDFs.",
+  "Ledger must record the official accounting email fallback.",
+);
 
 for (const customerPage of [
   ["app/book/page.tsx", bookPage],

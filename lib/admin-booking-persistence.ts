@@ -23,6 +23,7 @@ export type AdminBookingRecordInput = {
   contact_email?: string | null;
   passenger_name?: string | null;
   passenger_phone?: string | null;
+  flight_no?: string | null;
   driver_contact?: string | null;
   driver_name?: string | null;
   driver_plate_number?: string | null;
@@ -173,6 +174,7 @@ const bookingFields = new Set([
   "contact_email",
   "passenger_name",
   "passenger_phone",
+  "flight_no",
   "driver_contact",
   "driver_name",
   "driver_plate_number",
@@ -453,6 +455,7 @@ function sanitizeBooking(record: UnknownRecord): AdminBookingRecordInput {
     contact_email: textOrNull(record.contact_email),
     passenger_name: textOrNull(record.passenger_name),
     passenger_phone: textOrNull(record.passenger_phone),
+    flight_no: textOrNull(record.flight_no),
     pax_count: integerOrNull(record.pax_count),
     luggage_count: integerOrNull(record.luggage_count),
     vehicle_type_or_category: textOrNull(record.vehicle_type_or_category),
@@ -899,6 +902,7 @@ export function parseCustomerBookingRequestPayload(
       contact_phone: contactNo,
       contact_email: emailAddress,
       passenger_name: passengerName,
+      flight_no: flightNumber,
       pax_count: integerOrNull(body.passengerCount),
       luggage_count: integerOrNull(body.luggage),
       vehicle_type_or_category: textOrNull(body.vehicleType),

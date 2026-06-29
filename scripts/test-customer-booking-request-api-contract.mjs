@@ -10,6 +10,7 @@ const pagePath = "app/book/page.tsx";
 const bookingPersistencePath = "lib/admin-booking-persistence.ts";
 const requestAdapterPath = "lib/customer-booking-request-adapter.ts";
 const supabaseAdapterPath = "lib/admin-booking-supabase-adapter.ts";
+const ledgerPath = "docs/current-implementation-ledger.md";
 const smokePath = "scripts/test-app-smoke-browser.mjs";
 const unsafeCustomerRequestLeakPattern =
   /admin_internal_status|short_notice_review_status|internal_admin_note|internal_finance_note|driver_payout|paynow|pay_now|invoice|payment|billing|finance|parser_debug|raw_ai|mock_archive|mock_qa|dev_workbench|session_token|service_role|secret|sql|stack/i;
@@ -189,9 +190,9 @@ function assertSafeCustomerBody(value, label) {
   );
 }
 
-const [routeSource, pageSource, bookingPersistenceSource, requestAdapterSource, supabaseAdapterSource, smokeSource] =
+const [routeSource, pageSource, bookingPersistenceSource, requestAdapterSource, supabaseAdapterSource, ledgerSource, smokeSource] =
   await Promise.all(
-    [routePath, pagePath, bookingPersistencePath, requestAdapterPath, supabaseAdapterPath, smokePath].map(
+    [routePath, pagePath, bookingPersistencePath, requestAdapterPath, supabaseAdapterPath, ledgerPath, smokePath].map(
       (relativePath) => readFile(path.join(process.cwd(), relativePath), "utf8"),
     ),
   );
@@ -242,6 +243,31 @@ assert.equal(
   true,
   "Customer booking request persistence must map passengerName into the safe passenger_name booking field.",
 );
+assert.equal(
+  bookingPersistenceSource.includes("flight_no?: string | null;") &&
+    bookingPersistenceSource.includes('"flight_no"') &&
+    bookingPersistenceSource.includes("flight_no: textOrNull(record.flight_no)") &&
+    bookingPersistenceSource.includes("flight_no: flightNumber"),
+  true,
+  "Customer booking request persistence must map flightNumber into the safe flight_no booking field.",
+);
+assert.equal(
+  supabaseAdapterSource.includes("passenger_phone, flight_no, driver_name") &&
+    supabaseAdapterSource.includes("contact_email, flight_no, pax_count") &&
+    supabaseAdapterSource.includes("flight_no: textOrNull(booking.flight_no)") &&
+    supabaseAdapterSource.includes("flight_no: textOrNull(row.flight_no)"),
+  true,
+  "Admin booking persistence adapter must write and reload flight_no so Dispatch Customer Copy receives the flight.",
+);
+for (const phrase of [
+  "### Customer Booking Request Flight Persistence Fix",
+  "Public `/book` flight number input now persists into the safe operational `flight_no` booking field",
+  "Admin booking persistence save and reload include `flight_no`, so a customer request loaded into Dispatch carries the flight into Customer Copy.",
+  "departure bookings append flight detail to drop-off, arrival bookings append flight detail to pickup",
+  "Guard coverage lives in `scripts/test-customer-booking-request-api-contract.mjs` and `scripts/test-dispatch-flight-location-copy-guard.mjs`.",
+]) {
+  assert.equal(ledgerSource.includes(phrase), true, `Ledger must include flight persistence fix phrase: ${phrase}`);
+}
 
 const harness = await loadRouteHarness();
 

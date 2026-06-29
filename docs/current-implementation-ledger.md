@@ -335,6 +335,15 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This pass does not send email, create Stripe/payment links, write bank/payment/provider records, write Supabase rows, change env, apply migrations, or create cross-device customer portal sync.
 - Guard coverage lives in `scripts/test-customer-local-invoice-issue-pdf-portal-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Customer Booking Request Flight Persistence Fix
+
+- Public `/book` flight number input now persists into the safe operational `flight_no` booking field, instead of living only in the parser/source summary.
+- Admin booking persistence save and reload include `flight_no`, so a customer request loaded into Dispatch carries the flight into Customer Copy.
+- The existing copy formatter still applies the customer-facing airport rule: departure bookings append flight detail to drop-off, arrival bookings append flight detail to pickup.
+- This fix does not add provider sends, customer notifications, GPS/live location, billing/payment/PDF/invoice/payout records, env changes, migrations, parser activation, or a duplicate workflow.
+- Customer/driver-visible forbidden data remains blocked from this path: driver payout, PayNow payout, customer price, billing, invoice, payment, internal admin notes, parser/debug, secrets, raw provider payloads, and mock QA/dev archive data.
+- Guard coverage lives in `scripts/test-customer-booking-request-api-contract.mjs` and `scripts/test-dispatch-flight-location-copy-guard.mjs`.
+
 ### Customer Folder Job History Compact Rows
 
 - Customer folder `Job history snapshot` now uses one slim summary strip plus a compact scrollable table instead of summary cards and large job cards.

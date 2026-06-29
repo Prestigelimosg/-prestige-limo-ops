@@ -1140,7 +1140,7 @@ export default function CustomerPortalPage() {
               </p>
             </div>
 
-            <div className="mt-3 grid gap-3 lg:grid-cols-2">
+            <div className="mt-3 grid gap-3">
               {invoiceFolders.map((folder) => {
                 const folderKey = folder.toLowerCase();
                 const folderRecords = customerInvoiceRecordsByFolder[folder];

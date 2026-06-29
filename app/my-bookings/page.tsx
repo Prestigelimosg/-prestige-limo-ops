@@ -1205,6 +1205,7 @@ export default function CustomerPortalPage() {
                                 </td>
                                 <td className="px-3 py-2 text-right">
                                   <button
+                                    aria-label={`Download PDF ${invoice.invoiceNumber}`}
                                     className={[
                                       "min-h-8 rounded-md border px-2 text-xs font-bold transition disabled:cursor-wait",
                                       downloadState === "downloaded"
@@ -1216,6 +1217,7 @@ export default function CustomerPortalPage() {
                                     data-customer-portal-invoice-download={invoice.invoiceNumber}
                                     disabled={downloadState === "downloading"}
                                     onClick={() => downloadPortalInvoice(invoice)}
+                                    title="Download PDF"
                                     type="button"
                                   >
                                     {downloadState === "downloading"
@@ -1224,7 +1226,7 @@ export default function CustomerPortalPage() {
                                         ? "Downloaded"
                                         : downloadState === "failed"
                                           ? "Try again"
-                                          : "Download PDF"}
+                                          : "PDF"}
                                   </button>
                                 </td>
                               </tr>
@@ -1244,12 +1246,14 @@ export default function CustomerPortalPage() {
                       <div className="flex justify-end border-t border-slate-100 px-3 py-2">
                         <button
                           aria-disabled="true"
+                          aria-label={`Download PDF ${folder.toLowerCase()} invoices`}
                           className="min-h-9 rounded-md border border-slate-200 bg-slate-100 px-3 text-sm font-semibold text-slate-500"
                           data-customer-portal-invoice-download={folderKey}
                           disabled
+                          title="Download PDF"
                           type="button"
                         >
-                          Download PDF
+                          PDF
                         </button>
                       </div>
                     ) : null}

@@ -29,6 +29,14 @@ assertIncludes(localInvoices, '"CREDIT NOTE"', "credit note PDF title");
 assertIncludes(localInvoices, '"QUOTATION"', "quotation PDF title");
 assertIncludes(localInvoices, '"Quoted Amount"', "quotation amount label");
 assertIncludes(localInvoices, '"Credit Amount"', "credit note amount label");
+assertIncludes(localInvoices, "const documentDateLabel =", "document-aware date label switch");
+assertIncludes(localInvoices, '"Quotation Date:"', "quotation date label");
+assertIncludes(localInvoices, '"Credit Note Date:"', "credit note date label");
+assertIncludes(
+  localInvoices,
+  "pdfTextAt(documentDateLabel, dateX, billToY - 3, 8",
+  "PDF uses document-aware date label",
+);
 assertIncludes(localInvoices, "const paymentY = 260;", "bank section position");
 assertIncludes(localInvoices, "const notesY = 135;", "notes moved above terms");
 assertIncludes(localInvoices, "const termsY = 55;", "terms below notes");
@@ -51,6 +59,10 @@ assertIncludes(
   'data-customer-invoice-issued-local-convert-quote',
   "quotation row convert button",
 );
+assertIncludes(customersPage, 'data-customer-invoice-issued-local-status-toggle', "compact status toggle");
+assertIncludes(customersPage, '"PDF"', "compact PDF button label");
+assertIncludes(customersPage, '"Email"', "compact email button label");
+assertIncludes(customersPage, "Convert", "compact convert button label");
 assertIncludes(
   customersPage,
   'customerInvoicePreview.documentType === "quotation"',

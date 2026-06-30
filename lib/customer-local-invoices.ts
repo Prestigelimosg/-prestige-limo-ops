@@ -532,6 +532,12 @@ export function createCustomerInvoicePdfBytes(
       : documentType === "quotation"
         ? "Quoted Amount"
         : "Balance Due";
+  const documentDateLabel =
+    documentType === "credit_note"
+      ? "Credit Note Date:"
+      : documentType === "quotation"
+        ? "Quotation Date:"
+        : "Invoice Date:";
   const companyName = companyProfile.company_name || defaultCompanyProfile.company_name;
   const contactLine = companyProfileContactLines(companyProfile).join(" | ");
   const companyAddressLines = splitInvoiceAddressLines(
@@ -588,7 +594,7 @@ export function createCustomerInvoicePdfBytes(
   const dateX = 390;
   const dateValueRightX = 562;
   const dateCommands = [
-    pdfTextAt("Invoice Date:", dateX, billToY - 3, 8, "0.25 g"),
+    pdfTextAt(documentDateLabel, dateX, billToY - 3, 8, "0.25 g"),
     pdfRightTextAt(invoice.issueDateLabel, dateValueRightX, billToY - 3, 8),
     pdfTextAt("Terms:", dateX, billToY - 24, 8, "0.25 g"),
     pdfRightTextAt("Due by date shown", dateValueRightX, billToY - 24, 8),

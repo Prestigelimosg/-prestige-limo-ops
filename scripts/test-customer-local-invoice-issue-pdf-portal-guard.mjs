@@ -265,15 +265,30 @@ for (const fragment of [
   "Refresh Preview",
   "Preview first",
   "Issue Invoice + PDF",
-  "Download PDF",
-  "Downloaded",
-  "Email Invoice",
+  "PDF",
+  "Saved",
+  "Email",
   "Emailed",
-  "Pay",
   "Paid",
-  "Mark Unpaid",
+  "Unpaid",
+  "data-customer-invoice-issued-local-status-toggle",
 ]) {
   assertIncludes(customersPage, fragment, `customers invoice action ${fragment}`);
+}
+
+for (const noisyIssuedActionFragment of [
+  "Download PDF",
+  "Email Invoice",
+  "Email Quotation",
+  "Email Credit Note",
+  "Mark Unpaid",
+  "Convert to Invoice",
+]) {
+  assertExcludes(
+    issuedInvoiceTable,
+    noisyIssuedActionFragment,
+    "compact issued invoice actions",
+  );
 }
 
 for (const forbiddenFragment of [
@@ -345,7 +360,7 @@ for (const phrase of [
   "The customer portal invoice/PDF reads explicitly send same-origin credentials, keep the secure account session invisible to the page, and show stored/sign-in state plus Downloading/Downloaded/Try again button feedback.",
   "The per-invoice Card payment checkbox is off by default; when enabled it appends customer-facing card payment wording to that invoice line item, with an optional 10% card processing fee note.",
   "Changing the card payment checkbox or card fee note makes the invoice preview stale and blocks issue until admin refreshes the preview.",
-  "`Email Invoice` is wired behind `PRESTIGE_CUSTOMER_INVOICE_EMAIL_SEND_ENABLED`, `PRESTIGE_EMAIL_PROVIDER=resend`, `PRESTIGE_CUSTOMER_INVOICE_EMAIL_FROM`, optional `PRESTIGE_CUSTOMER_INVOICE_EMAIL_RECIPIENT_ALLOWLIST`, and `RESEND_API_KEY`; closed gates mark the invoice email status blocked and do not call Resend.",
+  "`Email` is wired behind `PRESTIGE_CUSTOMER_INVOICE_EMAIL_SEND_ENABLED`, `PRESTIGE_EMAIL_PROVIDER=resend`, `PRESTIGE_CUSTOMER_INVOICE_EMAIL_FROM`, optional `PRESTIGE_CUSTOMER_INVOICE_EMAIL_RECIPIENT_ALLOWLIST`, and `RESEND_API_KEY`; closed gates mark the invoice email status blocked and do not call Resend.",
   "The `customer_invoice_records` migration scaffold is service-role only with RLS enabled and no anon/authenticated grants.",
   "This pass does not activate Stripe checkout/payment links, card charges, bank debit, payout, provider job sending, GPS/live location, automatic payment reconciliation, or customer-visible internal/mock/debug data.",
 ]) {

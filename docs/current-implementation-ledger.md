@@ -17,8 +17,9 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Admin Customers invoice workbench now has a document selector for `Invoice` or `Quotation`.
 - `Invoice` remains the default and keeps the existing stored invoice/PDF/email/paid-unpaid path.
 - `Quotation` can be previewed and downloaded as a local `QUO-YYYYMMDD-####` PDF with the PDF title `QUOTATION`; it does not write the current invoice DB or email provider path while the live DB still accepts only `INV-...` stored records.
+- Quotation and credit-note PDFs now use document-specific date labels (`Quotation Date:` and `Credit Note Date:`) instead of carrying `Invoice Date:` on every document type.
 - `Save Draft` saves the reviewed workbench details into a compact local draft list without creating an invoice number, PDF record, email, payment, provider, bank, payout, GPS, or DB write.
-- Local quotation rows show `Convert to Invoice` instead of `Pay`, so a quote is not treated as a payable invoice.
+- Local quotation rows show compact `Quote` / `Convert` actions instead of payment actions, so a quote is not treated as a payable invoice.
 - Paid invoice rows can create a separate local `CN-YYYYMMDD-####` credit-note PDF; the original paid invoice is not edited or deleted.
 - Customer portal invoice folders are future-proofed into compact monthly `Quotations`, `Unpaid Invoices`, `Paid Invoices`, and `Credit Notes` folders while existing stored invoice records still map to paid/unpaid folders.
 - Invoice PDFs now render the lower sections in this order: sign-off, bank information, `Notes`, then `Terms & Conditions`; the Notes block is immediately above Terms instead of above the sign-off/bank section.
@@ -28,6 +29,9 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Guard coverage lives in `scripts/test-customer-billing-document-lifecycle-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 - Focused checks passed: customer billing document lifecycle guard, customer stored invoice PDF portal guard, customer trust path invoice portal guard, customer invoice driver JC timing/override guard, customer hourly invoice calculation guard, `npx tsc --noEmit --pretty false`, targeted ESLint, and `git diff --check`.
 - A sample invoice PDF was rendered to PNG with Poppler and visually checked; Notes sits above Terms & Conditions with no overlap or clipping.
+- Live Mac Chrome verification on `https://app.prestigelimo.sg/customers` prepared the Ritz Carlton unbilled row, switched the document selector to `Quotation`, previewed the quotation, and downloaded `QUO-20260630-0001.pdf` without issuing an invoice, sending email, taking payment, calling providers, writing DB rows, or changing payment status.
+- The live-downloaded quotation PDF rendered cleanly to PNG; bank information, `Notes`, and `Terms & Conditions` appeared in that order with no overlap. A patched local render also verified the document-specific `Quotation Date:` label.
+- The issued invoice action row is compact: stored invoices show `PDF`, `Email`, and a single `Paid`/`Unpaid` status toggle; local quotation/credit rows do not show a dead email button while server-backed quotation/credit-note email is not activated.
 - Full `scripts/test-preactivation-verification-suite.mjs` still fails before this new guard on a pre-existing Load Bookings typed-read admin display exposure marker mismatch in untouched `app/page.tsx` / `scripts/test-load-bookings-typed-read-admin-display-exposure-guard.mjs`.
 
 ### Customer Invoice Card Payment Toggle Live Proof
@@ -455,9 +459,9 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The per-invoice Card payment checkbox is off by default; when enabled it appends customer-facing card payment wording to that invoice line item, with an optional 10% card processing fee note.
 - Changing the card payment checkbox or card fee note makes the invoice preview stale and blocks issue until admin refreshes the preview.
 - The amount input is required before issue so admin must review the charge before invoice number/PDF creation.
-- Issued invoices show `Pay` for unpaid invoices, then `Paid` plus `Mark Unpaid` so an accidental paid click can be reversed before any payment reconciliation exists.
+- Issued invoices show one compact status toggle: unpaid rows show `Paid`, and paid rows show `Unpaid`, so an accidental paid click can be reversed before any payment reconciliation exists.
 - Paid/Unpaid status changes refresh the stored PDF bytes/hash in the same server update so the customer portal folder status and downloaded invoice PDF status cannot disagree.
-- `Email Invoice` is wired behind `PRESTIGE_CUSTOMER_INVOICE_EMAIL_SEND_ENABLED`, `PRESTIGE_EMAIL_PROVIDER=resend`, `PRESTIGE_CUSTOMER_INVOICE_EMAIL_FROM`, optional `PRESTIGE_CUSTOMER_INVOICE_EMAIL_RECIPIENT_ALLOWLIST`, and `RESEND_API_KEY`; closed gates mark the invoice email status blocked and do not call Resend.
+- `Email` is wired behind `PRESTIGE_CUSTOMER_INVOICE_EMAIL_SEND_ENABLED`, `PRESTIGE_EMAIL_PROVIDER=resend`, `PRESTIGE_CUSTOMER_INVOICE_EMAIL_FROM`, optional `PRESTIGE_CUSTOMER_INVOICE_EMAIL_RECIPIENT_ALLOWLIST`, and `RESEND_API_KEY`; closed gates mark the invoice email status blocked and do not call Resend.
 - The `customer_invoice_records` migration scaffold is service-role only with RLS enabled and no anon/authenticated grants.
 - This pass does not activate Stripe checkout/payment links, card charges, bank debit, payout, provider job sending, GPS/live location, automatic payment reconciliation, or customer-visible internal/mock/debug data.
 - Guard coverage lives in `scripts/test-customer-local-invoice-issue-pdf-portal-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
@@ -468,7 +472,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Hourly invoice amounts use the locked 15-minute grace rule: 16 minutes or more starts the next chargeable hour.
 - Preparing an hourly unbilled row carries the calculated amount and calculation breakdown into the Send Invoice Workbench.
 - The generated invoice/PDF line item includes the hourly start/end, actual minutes, billable minutes, and hourly rate.
-- Issued invoices show Download PDF, gated Email Invoice, Pay / Paid / Mark Unpaid actions, and no duplicate reminder action in the issued invoice table.
+- Issued invoices show compact PDF, gated Email, and one Paid/Unpaid status toggle in the issued invoice table.
 - The added `Hourly Test Customer` is mock/local test data only and does not create real customer, payment, provider, bank, or Supabase records.
 - This pass does not create Stripe/payment links, write bank/provider/payout records, change env, activate GPS/live location, or activate automatic payment reconciliation.
 - Guard coverage lives in `scripts/test-customer-hourly-invoice-auto-calculation-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.

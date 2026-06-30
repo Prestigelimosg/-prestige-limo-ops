@@ -4079,48 +4079,48 @@ export default function MockCustomerDashboardPage() {
                                   type="button"
                                 >
                                   {downloadingCustomerInvoiceNumber === invoice.invoiceNumber
-                                    ? "Downloaded"
-                                    : "Download PDF"}
+                                    ? "Saved"
+                                    : "PDF"}
                                 </button>
-                                <button
-                                  className={`rounded-md border px-2 py-1 font-bold transition ${
-                                    emailingCustomerInvoiceNumber === invoice.invoiceNumber ||
-                                    invoice.emailDeliveryStatus === "sent"
-                                      ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-                                      : invoice.emailDeliveryStatus === "blocked" ||
-                                          invoice.emailDeliveryStatus === "failed"
-                                        ? "border-amber-300 bg-amber-50 text-amber-800"
-                                        : "border-slate-300 bg-white text-slate-800 hover:border-slate-600"
-                                  }`}
-                                  data-customer-invoice-issued-local-email={invoice.invoiceNumber}
-                                  onClick={() => handleCustomerInvoiceEmailAction(invoice)}
-                                  type="button"
-                                >
-                                  {emailingCustomerInvoiceNumber === invoice.invoiceNumber
-                                    ? "Emailing"
-                                    : invoice.emailDeliveryStatus === "sent"
-                                      ? "Emailed"
-                                      : invoiceDocumentType === "quotation"
-                                        ? "Email Quotation"
-                                        : invoiceDocumentType === "credit_note"
-                                          ? "Email Credit Note"
-                                          : "Email Invoice"}
-                                </button>
+                                {invoice.storageSource === "server" ? (
+                                  <button
+                                    className={`rounded-md border px-2 py-1 font-bold transition ${
+                                      emailingCustomerInvoiceNumber === invoice.invoiceNumber ||
+                                      invoice.emailDeliveryStatus === "sent"
+                                        ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                                        : invoice.emailDeliveryStatus === "blocked" ||
+                                            invoice.emailDeliveryStatus === "failed"
+                                          ? "border-amber-300 bg-amber-50 text-amber-800"
+                                          : "border-slate-300 bg-white text-slate-800 hover:border-slate-600"
+                                    }`}
+                                    data-customer-invoice-issued-local-email={invoice.invoiceNumber}
+                                    onClick={() => handleCustomerInvoiceEmailAction(invoice)}
+                                    title="Email invoice"
+                                    type="button"
+                                  >
+                                    {emailingCustomerInvoiceNumber === invoice.invoiceNumber
+                                      ? "Sending"
+                                      : invoice.emailDeliveryStatus === "sent"
+                                        ? "Emailed"
+                                        : "Email"}
+                                  </button>
+                                ) : null}
                                 {invoiceDocumentType === "quotation" ? (
                                   <>
                                     <span
                                       className="rounded-md border border-sky-300 bg-sky-50 px-2 py-1 font-bold text-sky-900"
                                       data-customer-invoice-issued-local-quotation={invoice.invoiceNumber}
                                     >
-                                      Quotation
+                                      Quote
                                     </span>
                                     <button
                                       className="rounded-md border border-slate-300 bg-white px-2 py-1 font-bold text-slate-800 transition hover:border-slate-600"
                                       data-customer-invoice-issued-local-convert-quote={invoice.invoiceNumber}
                                       onClick={() => convertQuotationToInvoice(invoice)}
+                                      title="Convert quotation to invoice"
                                       type="button"
                                     >
-                                      Convert to Invoice
+                                      Convert
                                     </button>
                                   </>
                                 ) : invoiceDocumentType === "credit_note" ? (
@@ -4128,16 +4128,10 @@ export default function MockCustomerDashboardPage() {
                                     className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 font-bold text-amber-900"
                                     data-customer-invoice-issued-local-credit-note={invoice.invoiceNumber}
                                   >
-                                    Credit Note
+                                    Credit
                                   </span>
                                 ) : invoice.status === "Paid" ? (
                                   <>
-                                    <span
-                                      className="rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 font-bold text-emerald-800"
-                                      data-customer-invoice-issued-local-paid={invoice.invoiceNumber}
-                                    >
-                                      Paid
-                                    </span>
                                     <button
                                       className={`rounded-md border px-2 py-1 font-bold transition ${
                                         updatingCustomerInvoiceStatusNumber === invoice.invoiceNumber
@@ -4145,20 +4139,21 @@ export default function MockCustomerDashboardPage() {
                                           : "border-amber-300 bg-white text-amber-800 hover:border-amber-600"
                                       }`}
                                       data-customer-invoice-issued-local-mark-unpaid={invoice.invoiceNumber}
+                                      data-customer-invoice-issued-local-status-toggle={invoice.invoiceNumber}
                                       onClick={() => markIssuedCustomerInvoiceUnpaid(invoice)}
+                                      title="Mark invoice unpaid"
                                       type="button"
                                     >
-                                      {updatingCustomerInvoiceStatusNumber === invoice.invoiceNumber
-                                        ? "Unpaid"
-                                        : "Mark Unpaid"}
+                                      Unpaid
                                     </button>
                                     <button
                                       className="rounded-md border border-amber-300 bg-white px-2 py-1 font-bold text-amber-800 transition hover:border-amber-600"
                                       data-customer-invoice-issued-local-credit-action={invoice.invoiceNumber}
                                       onClick={() => createCreditNoteFromPaidInvoice(invoice)}
+                                      title="Create credit note"
                                       type="button"
                                     >
-                                      Credit Note
+                                      Credit
                                     </button>
                                   </>
                                 ) : (
@@ -4166,14 +4161,15 @@ export default function MockCustomerDashboardPage() {
                                     className={`rounded-md border px-2 py-1 font-bold transition ${
                                       updatingCustomerInvoiceStatusNumber === invoice.invoiceNumber
                                         ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-                                        : "border-slate-300 bg-white text-slate-800 hover:border-slate-600"
+                                        : "border-emerald-300 bg-white text-emerald-800 hover:border-emerald-600"
                                     }`}
                                     data-customer-invoice-issued-local-mark-paid={invoice.invoiceNumber}
-                                    data-customer-invoice-issued-local-pay={invoice.invoiceNumber}
+                                    data-customer-invoice-issued-local-status-toggle={invoice.invoiceNumber}
                                     onClick={() => markIssuedCustomerInvoicePaid(invoice)}
+                                    title="Mark invoice paid"
                                     type="button"
                                   >
-                                    {updatingCustomerInvoiceStatusNumber === invoice.invoiceNumber ? "Paid" : "Pay"}
+                                    Paid
                                   </button>
                                 )}
                                 </div>

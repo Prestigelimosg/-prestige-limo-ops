@@ -121,6 +121,7 @@ for (const fragment of [
   'data-customer-invoice-issued-local-email={invoice.invoiceNumber}',
   'data-customer-invoice-issued-local-mark-paid={invoice.invoiceNumber}',
   'data-customer-invoice-issued-local-mark-unpaid={invoice.invoiceNumber}',
+  'data-customer-invoice-issued-local-status-toggle={invoice.invoiceNumber}',
 ]) {
   assertIncludes(invoiceIssuePanel, fragment, `invoice issue action fragment ${fragment}`);
 }
@@ -159,7 +160,7 @@ for (const phrase of [
   "Hourly invoice amounts use the locked 15-minute grace rule: 16 minutes or more starts the next chargeable hour.",
   "Preparing an hourly unbilled row carries the calculated amount and calculation breakdown into the Send Invoice Workbench.",
   "The generated invoice/PDF line item includes the hourly start/end, actual minutes, billable minutes, and hourly rate.",
-  "Issued invoices show Download PDF, gated Email Invoice, Pay / Paid / Mark Unpaid actions, and no duplicate reminder action in the issued invoice table.",
+  "Issued invoices show compact PDF, gated Email, and one Paid/Unpaid status toggle in the issued invoice table.",
   "The added `Hourly Test Customer` is mock/local test data only and does not create real customer, payment, provider, bank, or Supabase records.",
   "Guard coverage lives in `scripts/test-customer-hourly-invoice-auto-calculation-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {

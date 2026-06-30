@@ -102,6 +102,17 @@ export type AdminBookingPersistenceSafeErrorCategory =
   | "table_unreachable"
   | "unknown_adapter_failure";
 
+export type AdminBookingPersistenceSafeErrorOperation =
+  | "audit_log"
+  | "booking_lookup"
+  | "booking_reload"
+  | "booking_row"
+  | "client_initialization"
+  | "customer_contact"
+  | "customer_lookup"
+  | "route_points"
+  | "service_items";
+
 export type AdminBookingResult<T> =
   | {
       ok: true;
@@ -111,6 +122,7 @@ export type AdminBookingResult<T> =
       ok: false;
       category?: AdminBookingPersistenceSafeErrorCategory;
       error: string;
+      operation?: AdminBookingPersistenceSafeErrorOperation;
       status: number;
     };
 

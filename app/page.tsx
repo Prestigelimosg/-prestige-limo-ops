@@ -6439,9 +6439,38 @@ function adminBookingPersistenceFailureMessage(
         : "Operational booking load failed";
   const normalizedError =
     rawError instanceof Error ? clean(rawError.message).toLowerCase() : clean(String(rawError || "")).toLowerCase();
+  const operationContext = /customer_lookup/.test(normalizedError)
+    ? " while checking or creating the customer folder"
+    : /customer_contact/.test(normalizedError)
+      ? " while saving the customer contact"
+      : /booking_row/.test(normalizedError)
+        ? " while saving the booking row"
+        : /route_points/.test(normalizedError)
+          ? " while saving pickup/drop-off route points"
+          : /service_items/.test(normalizedError)
+            ? " while saving service items"
+            : /booking_reload|booking_lookup/.test(normalizedError)
+              ? " while reading saved booking records"
+              : /audit_log/.test(normalizedError)
+                ? " while writing the admin audit log"
+                : /save_request|update_request|load_request/.test(normalizedError)
+                  ? " inside the admin booking route"
+                  : "";
 
-  if (/not enabled|configuration/.test(normalizedError)) {
+  if (/auth_or_key_rejected|client_init_failed|not enabled|configuration/.test(normalizedError)) {
     return `${prefix}: admin booking persistence is not enabled or configured on this server.`;
+  }
+
+  if (/permission_or_rls_denied/.test(normalizedError)) {
+    return `${prefix}: database permission/RLS blocked the database request${operationContext}.`;
+  }
+
+  if (/table_unreachable/.test(normalizedError)) {
+    return `${prefix}: admin booking database table is not reachable${operationContext}.`;
+  }
+
+  if (/column_missing/.test(normalizedError)) {
+    return `${prefix}: database schema is missing a required admin booking column${operationContext}.`;
   }
 
   if (/forbidden/.test(normalizedError)) {
@@ -6460,7 +6489,34 @@ function adminBookingPersistenceFailureMessage(
     return `${prefix}: operational route or service item details need review.`;
   }
 
+  if (/unexpected_admin_booking_route_failure|admin booking persistence request failed safely/.test(normalizedError)) {
+    return `${prefix}: admin booking route failed before it could return a saved booking${operationContext}.`;
+  }
+
+  if (/unknown_adapter_failure|admin booking persistence (save|update|load) failed safely/.test(normalizedError)) {
+    return `${prefix}: database operation failed before the app could confirm the booking${operationContext}.`;
+  }
+
   return `${prefix} safely.`;
+}
+
+type AdminBookingPersistenceFailureResponse = {
+  error?: string;
+  safe_error_category?: string;
+  safe_error_operation?: string;
+};
+
+function adminBookingPersistenceFailureDetail(
+  result: AdminBookingPersistenceFailureResponse | null | undefined,
+  fallback: string,
+) {
+  return [
+    clean(result?.safe_error_category),
+    clean(result?.safe_error_operation),
+    clean(result?.error) || fallback,
+  ]
+    .filter(Boolean)
+    .join(": ");
 }
 
 function adminBookingWorkflowStatusFailureMessage(rawError: unknown, workflowLabel = "Dispatch release") {
@@ -14201,12 +14257,17 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         booking?: AdminBookingPersistenceRecord | null;
         error?: string;
         ok?: boolean;
+        safe_error_category?: string;
+        safe_error_operation?: string;
       } | null;
       const savedBooking = responseBody?.booking ?? null;
       const savedBookingReference = clean(savedBooking?.booking_reference);
 
       if (!response.ok || responseBody?.ok !== true || !savedBooking || !savedBookingReference) {
-        const errorMessage = responseBody?.error || "Admin booking persistence request failed.";
+        const errorMessage = adminBookingPersistenceFailureDetail(
+          responseBody,
+          "Admin booking persistence request failed.",
+        );
         const saveMessage = {
           tone: "error",
           text: adminBookingPersistenceFailureMessage("save", new Error(errorMessage)),
@@ -14735,7 +14796,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       const result = await response.json();
 
       if (!response.ok || !result?.ok) {
-        throw new Error(result?.error || "Admin booking save failed.");
+        throw new Error(adminBookingPersistenceFailureDetail(result, "Admin booking save failed."));
       }
 
       const savedBooking = result.booking as AdminBookingPersistenceRecord;
@@ -14784,7 +14845,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       const result = await response.json();
 
       if (!response.ok || !result?.ok) {
-        throw new Error(result?.error || "Admin booking load failed.");
+        throw new Error(adminBookingPersistenceFailureDetail(result, "Admin booking load failed."));
       }
 
       const loadedBookings = Array.isArray(result.bookings)
@@ -15346,7 +15407,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       const result = await response.json();
 
       if (!response.ok || !result?.ok) {
-        throw new Error(result?.error || "Admin booking update failed.");
+        throw new Error(adminBookingPersistenceFailureDetail(result, "Admin booking update failed."));
       }
 
       const updatedBooking = result.booking as AdminBookingPersistenceRecord;
@@ -15432,7 +15493,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       const result = await response.json();
 
       if (!response.ok || !result?.ok) {
-        throw new Error(result?.error || "Admin review decision update failed.");
+        throw new Error(adminBookingPersistenceFailureDetail(result, "Admin review decision update failed."));
       }
 
       const updatedBooking = result.booking as AdminBookingPersistenceRecord;

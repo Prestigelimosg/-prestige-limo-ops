@@ -7,6 +7,7 @@ import type {
   AdminBookingPersistenceInput,
   AdminBookingPersistenceRecord,
   AdminBookingPersistenceSafeErrorCategory,
+  AdminBookingPersistenceSafeErrorOperation,
   AdminBookingPersistenceUpdateInput,
   AdminBookingRecordInput,
   AdminBookingResult,
@@ -211,12 +212,14 @@ function safeAdapterFailure<T>(
   error: string,
   status: number,
   databaseError: unknown,
+  operation?: AdminBookingPersistenceSafeErrorOperation,
 ): AdminBookingResult<T> {
   return {
     ok: false,
     status,
     error,
     category: classifyAdapterDatabaseFailure(databaseError),
+    ...(operation ? { operation } : {}),
   };
 }
 
@@ -1110,6 +1113,7 @@ function getServerOnlySupabaseClient(actor: AdminBookingPersistenceAdapterActor)
       status: 503,
       error: safeStagingReadinessError,
       category: "client_init_failed",
+      operation: "client_initialization",
     };
   }
 }
@@ -1156,7 +1160,7 @@ async function findOrCreateCustomerId(
     .limit(1);
 
   if (existingError) {
-    return safeAdapterFailure(safeSaveError, 500, existingError);
+    return safeAdapterFailure(safeSaveError, 500, existingError, "customer_lookup");
   }
 
   const existingId = dbIdentifierOrNull(asRecord(asArray(existingRows)[0]).id);
@@ -1183,7 +1187,7 @@ async function findOrCreateCustomerId(
   const insertedId = dbIdentifierOrNull(asRecord(insertedRow).id);
 
   if (insertError || !insertedId) {
-    return safeAdapterFailure(safeSaveError, 500, insertError);
+    return safeAdapterFailure(safeSaveError, 500, insertError, "customer_lookup");
   }
 
   return {
@@ -1222,7 +1226,7 @@ async function ensureCustomerContact(
   const { data: existingRows, error: existingError } = await query;
 
   if (existingError) {
-    return safeAdapterFailure(safeSaveError, 500, existingError);
+    return safeAdapterFailure(safeSaveError, 500, existingError, "customer_contact");
   }
 
   if (dbIdentifierOrNull(asRecord(asArray(existingRows)[0]).id)) {
@@ -1253,7 +1257,7 @@ async function ensureCustomerContact(
   );
 
   if (error) {
-    return safeAdapterFailure(safeSaveError, 500, error);
+    return safeAdapterFailure(safeSaveError, 500, error, "customer_contact");
   }
 
   return {
@@ -1276,7 +1280,7 @@ async function fetchAdminBookingById(
   );
 
   if (error || !data) {
-    return safeAdapterFailure(safeReloadError, 500, error);
+    return safeAdapterFailure(safeReloadError, 500, error, "booking_reload");
   }
 
   return {
@@ -1300,7 +1304,7 @@ async function fetchAdminBookingByReference(
   const bookingId = dbIdentifierOrNull(asRecord(data).id);
 
   if (error) {
-    return safeAdapterFailure(safeUpdateError, 500, error);
+    return safeAdapterFailure(safeUpdateError, 500, error, "booking_lookup");
   }
 
   if (!bookingId || !data) {
@@ -1369,7 +1373,7 @@ async function createAuditLog(
   );
 
   if (error) {
-    return safeAdapterFailure(safeSaveError, 500, error);
+    return safeAdapterFailure(safeSaveError, 500, error, "audit_log");
   }
 
   return {
@@ -1431,7 +1435,7 @@ export async function createAdminBookingThroughSupabaseAdapter(
   const bookingId = dbIdentifierOrNull(asRecord(insertedBooking).id);
 
   if (bookingError || !bookingId) {
-    return safeAdapterFailure(safeSaveError, 500, bookingError);
+    return safeAdapterFailure(safeSaveError, 500, bookingError, "booking_row");
   }
 
   if (input.route_points.length > 0) {
@@ -1443,7 +1447,7 @@ export async function createAdminBookingThroughSupabaseAdapter(
     );
 
     if (error) {
-      return safeAdapterFailure(safeSaveError, 500, error);
+      return safeAdapterFailure(safeSaveError, 500, error, "route_points");
     }
   }
 
@@ -1456,7 +1460,7 @@ export async function createAdminBookingThroughSupabaseAdapter(
     );
 
     if (error) {
-      return safeAdapterFailure(safeSaveError, 500, error);
+      return safeAdapterFailure(safeSaveError, 500, error, "service_items");
     }
   }
 
@@ -1527,7 +1531,7 @@ export async function updateAdminBookingThroughSupabaseAdapter(
     .eq("id", existing.id);
 
   if (bookingError) {
-    return safeAdapterFailure(safeUpdateError, 500, bookingError);
+    return safeAdapterFailure(safeUpdateError, 500, bookingError, "booking_row");
   }
 
   const { error: routeDeleteError } = await client
@@ -1536,7 +1540,7 @@ export async function updateAdminBookingThroughSupabaseAdapter(
     .eq("booking_id", existing.id);
 
   if (routeDeleteError) {
-    return safeAdapterFailure(safeUpdateError, 500, routeDeleteError);
+    return safeAdapterFailure(safeUpdateError, 500, routeDeleteError, "route_points");
   }
 
   if (input.route_points.length > 0) {
@@ -1548,7 +1552,7 @@ export async function updateAdminBookingThroughSupabaseAdapter(
     );
 
     if (error) {
-      return safeAdapterFailure(safeUpdateError, 500, error);
+      return safeAdapterFailure(safeUpdateError, 500, error, "route_points");
     }
   }
 
@@ -1558,7 +1562,7 @@ export async function updateAdminBookingThroughSupabaseAdapter(
     .eq("booking_id", existing.id);
 
   if (serviceDeleteError) {
-    return safeAdapterFailure(safeUpdateError, 500, serviceDeleteError);
+    return safeAdapterFailure(safeUpdateError, 500, serviceDeleteError, "service_items");
   }
 
   if (input.service_items.length > 0) {
@@ -1570,7 +1574,7 @@ export async function updateAdminBookingThroughSupabaseAdapter(
     );
 
     if (error) {
-      return safeAdapterFailure(safeUpdateError, 500, error);
+      return safeAdapterFailure(safeUpdateError, 500, error, "service_items");
     }
   }
 
@@ -1616,7 +1620,7 @@ export async function listAdminBookingsThroughSupabaseAdapter(
   );
 
   if (error) {
-    return safeAdapterFailure(safeLoadError, 500, error);
+    return safeAdapterFailure(safeLoadError, 500, error, "booking_lookup");
   }
 
   return {

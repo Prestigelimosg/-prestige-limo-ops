@@ -37,6 +37,26 @@ function blockedResponse(error: string) {
   );
 }
 
+type AdminBookingSafeFailureDetail = {
+  category?: string;
+  error: string;
+  operation?: string;
+  status: number;
+};
+
+function safeFailurePayload(detail: AdminBookingSafeFailureDetail) {
+  return {
+    ok: false,
+    error: detail.error,
+    ...(detail.category ? { safe_error_category: detail.category } : {}),
+    ...(detail.operation ? { safe_error_operation: detail.operation } : {}),
+  };
+}
+
+function adminBookingFailureResponse(detail: AdminBookingSafeFailureDetail) {
+  return Response.json(safeFailurePayload(detail), { status: detail.status });
+}
+
 type AdminDispatcherBoundaryCheck =
   | {
       ok: true;
@@ -61,14 +81,13 @@ function requireAdminDispatcherBoundary(request: Request): AdminDispatcherBounda
       };
 }
 
-function safeFailureResponse() {
-  return Response.json(
-    {
-      ok: false,
-      error: "Admin booking persistence request failed safely.",
-    },
-    { status: 500 },
-  );
+function safeFailureResponse(operation: string) {
+  return adminBookingFailureResponse({
+    category: "unexpected_admin_booking_route_failure",
+    error: "Admin booking persistence request failed safely.",
+    operation,
+    status: 500,
+  });
 }
 
 type CustomerRequestDecisionNotificationResult =
@@ -179,13 +198,7 @@ export async function GET(request: Request) {
     const result = await listAdminBookings(actor);
 
     if (!result.ok) {
-      return Response.json(
-        {
-          ok: false,
-          error: result.error,
-        },
-        { status: result.status },
-      );
+      return adminBookingFailureResponse(result);
     }
 
     return Response.json({
@@ -193,7 +206,7 @@ export async function GET(request: Request) {
       bookings: result.data,
     });
   } catch {
-    return safeFailureResponse();
+    return safeFailureResponse("load_request");
   }
 }
 
@@ -226,13 +239,7 @@ export async function POST(request: Request) {
     });
 
     if (!result.ok) {
-      return Response.json(
-        {
-          ok: false,
-          error: result.error,
-        },
-        { status: result.status },
-      );
+      return adminBookingFailureResponse(result);
     }
 
     return Response.json({
@@ -240,7 +247,7 @@ export async function POST(request: Request) {
       booking: result.data,
     });
   } catch {
-    return safeFailureResponse();
+    return safeFailureResponse("save_request");
   }
 }
 
@@ -273,13 +280,7 @@ export async function PATCH(request: Request) {
     });
 
     if (!result.ok) {
-      return Response.json(
-        {
-          ok: false,
-          error: result.error,
-        },
-        { status: result.status },
-      );
+      return adminBookingFailureResponse(result);
     }
 
     const customerNotification = await maybeQueueCustomerRequestDecisionNotification(parsed.data, actor);
@@ -290,6 +291,6 @@ export async function PATCH(request: Request) {
       customer_notification: customerNotification,
     });
   } catch {
-    return safeFailureResponse();
+    return safeFailureResponse("update_request");
   }
 }

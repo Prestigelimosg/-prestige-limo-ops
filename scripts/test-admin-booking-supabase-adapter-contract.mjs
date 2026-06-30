@@ -37,6 +37,9 @@ const sourceFiles = [
   "lib/admin-booking-supabase-adapter.ts",
   "lib/admin-booking-persistence.ts",
   "lib/admin-dispatcher-auth-boundary.ts",
+  "lib/admin-app-notification-persistence.ts",
+  "lib/admin-device-push-notification.ts",
+  "lib/admin-new-booking-email-alert.ts",
   "lib/customer-runtime-session-map.ts",
   "lib/customer-driver-app-notification-persistence.ts",
   "lib/driver-job-link.ts",
@@ -95,9 +98,11 @@ async function writeHarnessFile(tempDir, relativePath) {
 async function writeMockModules(tempDir) {
   const serverOnlyPath = path.join(tempDir, "node_modules/server-only/index.js");
   const supabasePath = path.join(tempDir, "node_modules/@supabase/supabase-js/index.js");
+  const webPushPath = path.join(tempDir, "node_modules/web-push/index.js");
 
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await mkdir(path.dirname(supabasePath), { recursive: true });
+  await mkdir(path.dirname(webPushPath), { recursive: true });
   await writeFile(serverOnlyPath, "");
   await writeFile(
     supabasePath,
@@ -111,6 +116,15 @@ async function writeMockModules(tempDir) {
       "  return mock.client;",
       "}",
       "module.exports = { createClient };",
+    ].join("\n"),
+  );
+  await writeFile(
+    webPushPath,
+    [
+      "function setVapidDetails() {}",
+      "async function sendNotification() { return { statusCode: 201 }; }",
+      "module.exports = { setVapidDetails, sendNotification };",
+      "module.exports.default = module.exports;",
     ].join("\n"),
   );
 }
@@ -754,7 +768,11 @@ function assertSixTableCreateMapping(mock) {
     customer_display_name: "Safe Ops Account",
     customer_facing_status: "pending_review",
     customer_id: 1,
+    driver_contact: null,
+    driver_name: null,
+    driver_plate_number: null,
     dropoff_location: "Safe Canonical Dropoff",
+    flight_no: null,
     passenger_name: "Safe Passenger",
     passenger_phone: "+65 9000 0002",
     pickup_at: "2030-06-08T10:30:00+08:00",
@@ -1144,6 +1162,7 @@ try {
     customer_facing_status: "pending_review",
     customer_id: 1,
     dropoff_location: "Safe Canonical Dropoff",
+    flight_no: null,
     luggage_count: null,
     parser_source_reference: null,
     pax_count: null,
@@ -1286,6 +1305,7 @@ try {
     category: "column_missing",
     error: "Admin booking persistence save failed safely.",
     ok: false,
+    operation: "customer_lookup",
     status: 500,
   });
   assert.equal(columnFailureMock.createdClients.length, 1);
@@ -1341,10 +1361,12 @@ try {
   assert.deepEqual(categorizedRouteFailure.body, {
     error: "Admin booking persistence save failed safely.",
     ok: false,
+    safe_error_category: "column_missing",
+    safe_error_operation: "customer_lookup",
   });
   assert.equal(categorizedRouteMock.createdClients.length, 1);
   assert.equal(categorizedRouteMock.client.operations.length, 0);
-  assertNoApiLeak(categorizedRouteFailure, "categorized route response should hide internal category");
+  assertNoApiLeak(categorizedRouteFailure, "categorized route response should hide raw internal database details");
 
   setEnv({
     PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED: undefined,

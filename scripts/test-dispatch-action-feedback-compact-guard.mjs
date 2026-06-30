@@ -131,6 +131,9 @@ for (const fragment of [
 for (const fragment of [
   "setAdminBookingPersistenceMessage(null);",
   "Please review warnings before saving. Tick the review checkbox above, then save again.",
+  "adminBookingPersistenceFailureDetail",
+  "safe_error_category",
+  "safe_error_operation",
 ]) {
   assertIncludes(saveBookingBlock, fragment, `Save Booking + CRM preflight fragment ${fragment}`);
 }

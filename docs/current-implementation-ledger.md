@@ -1,16 +1,27 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-bbcd62fd Keep saved bookings active for calendar updates
+217ce4d0 Arm loaded bookings for calendar updates
 
 Latest pushed main/staging runtime checkpoint:
-bbcd62fd Keep saved bookings active for calendar updates
+217ce4d0 Arm loaded bookings for calendar updates
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
 bbcd62fd Keep saved bookings active for calendar updates
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Loaded Booking Calendar Update And Snapshot Finder
+
+- Bookings opened from Dashboard/Bookings rows now convert the loaded `BookingRecord` into a safe admin operational persistence record and mark that booking reference as the active update target.
+- After a saved booking is opened, editing the app form arms the Job Card primary action as `Update + Cal`; clicking it uses the existing guarded admin-booking `PATCH` path and then auto-syncs the same Google Calendar event for that booking reference.
+- Operators do not need to delete the old Google Calendar event when edits are made in Prestige. Prestige remains the source of truth; edit in the app, then use `Update + Cal`.
+- The lower Dispatch operational snapshot finder no longer renders only the first 3 records while saying more were loaded. It renders all matching loaded records inside a fixed-height scroll box with compact rows, so 25 loaded records stay searchable without giant cards.
+- Customer request review controls in that snapshot finder remain admin-only and compact. They still do not contact customers, dispatch drivers, or expose price, billing, payout, payment, notification provider, parser/debug, GPS, photo, or internal finance data.
+- The Load Bookings primary-list source boundary guard now fails if the loaded operational snapshot list reintroduces the three-row rendering cap or loses the scroll-box marker.
+- This pass did not use Vercel CLI, change env, change DB schema, send email, activate Stripe/payment, send providers, create payouts, or change GPS/live-location behavior.
+- Checks passed: Load Bookings primary-list source boundary guard, Load Bookings typed-read admin display exposure guard, dispatch action feedback compact guard, admin booking Google Calendar sync API contract, admin route flow lock guard, full preactivation verification suite, `npx tsc --noEmit --pretty false`, `npm run lint` with only existing `loadBookings` warnings, `npm run build`, and `git diff --check`.
 
 ### Saved Booking Calendar Update Continuity
 

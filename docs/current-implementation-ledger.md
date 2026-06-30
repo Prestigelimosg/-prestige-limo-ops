@@ -7,7 +7,7 @@ Latest pushed main/staging runtime checkpoint:
 217ce4d0 Arm loaded bookings for calendar updates
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-bbcd62fd Keep saved bookings active for calendar updates
+217ce4d0 Arm loaded bookings for calendar updates
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -22,6 +22,13 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The Load Bookings primary-list source boundary guard now fails if the loaded operational snapshot list reintroduces the three-row rendering cap or loses the scroll-box marker.
 - This pass did not use Vercel CLI, change env, change DB schema, send email, activate Stripe/payment, send providers, create payouts, or change GPS/live-location behavior.
 - Checks passed: Load Bookings primary-list source boundary guard, Load Bookings typed-read admin display exposure guard, dispatch action feedback compact guard, admin booking Google Calendar sync API contract, admin route flow lock guard, full preactivation verification suite, `npx tsc --noEmit --pretty false`, `npm run lint` with only existing `loadBookings` warnings, `npm run build`, and `git diff --check`.
+- Live Mac Chrome proof on `https://app.prestigelimo.sg/` after pushing `4b35cfdf` confirmed the lower Dispatch snapshot finder loaded 25 operational booking records, rendered 25 records, and used the fixed-height scroll box (`max-height: 512px`) instead of the previous first-3 rendering cap.
+- Live Mac Chrome proof created fake booking `ADM-20260630181427` for passenger `Codex Calendar Sync 202606301813`; `Save + CRM` returned `Operational booking saved: ADM-20260630181427. Google Calendar auto-synced; reminders included; no guest email sent.`
+- Editing that same booking in Prestige from `1530` / `Changi Airport Terminal 3` to `1600` / `Changi Airport Terminal 2` changed the Job Card primary button to `Update + Cal`; clicking it returned `Operational booking updated: ADM-20260630181427. Google Calendar auto-synced; reminders included; no guest email sent.`
+- Read-only Google Calendar search for `ADM-20260630181427` showed `1 event found` on `Prestige Ops Calendar`, now at `16:00 - 17:30`, proving the app edit updated the existing event instead of creating a duplicate.
+- Live Customers invoice path proof found 0 unbilled rows at test time, so no fresh unbilled invoice was created. Existing fake invoice `INV-20260630-0001` downloaded through the admin `PDF` UI as a 130,604-byte PDF, its `Paid`/`Unpaid` status toggle worked both directions, and it was restored to `Unpaid`.
+- Live customer portal proof for `hourly-test-customer` opened `/my-bookings`, showed monthly `Quotations`, `Unpaid Invoices`, `Paid Invoices`, and `Credit Notes` folders, passed the forbidden text scan for payout/internal/debug/payment-provider fragments, and downloaded customer PDF `INV-20260629-0003 (2).pdf` as a 128,201-byte file.
+- The live proof did not send invoice email, create payment links, charge Stripe/cards, call providers, change payouts, change DB schema, or activate GPS/live-location.
 
 ### Saved Booking Calendar Update Continuity
 

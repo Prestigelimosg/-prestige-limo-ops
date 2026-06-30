@@ -12,6 +12,20 @@ Latest remote staging branch head:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Customer Invoice Email Production Activation And Live Send
+
+- Production Vercel env for stored customer invoice email sending is enabled without printing or recording secret values.
+- Production scope only was selected for the invoice email send gate, invoice email sender, invoice email reply-to, and invoice email recipient allowlist.
+- The live send allowlist is bounded to `william@prestigelimo.sg` for this go-live proof.
+- Production was redeployed from staging commit `1059f27` through the Vercel web UI, not the Vercel CLI, and `app.prestigelimo.sg` was assigned to the ready deployment.
+- Fresh live trust-smoke booking reference: `CUST-20260629234245-ZPJ85L`.
+- Fresh live trust-smoke invoice: `INV-20260629-0003` for `hourly-test-customer`.
+- Hourly billing proof: actual 09:00-10:16 equals 76 minutes; with 15 minutes grace and the 16th minute starting a new hour, the app generated 2 billable hours at `$65/hr`, total `$130.00`.
+- Admin stored invoice read-back returned `INV-20260629-0003` as `$130.00`, `Unpaid`, and `sent` after the email send.
+- Customer portal signed-link read-back returned the same invoice as `$130.00`, `Unpaid`, and `sent`; the safe-surface scan did not detect driver payout, PayNow payout, internal admin/finance notes, parser/debug/mock archive fragments, customer price leaks, or payout comparison fragments.
+- One approved real invoice email was sent successfully to `william@prestigelimo.sg`; the stored row recorded `emailDeliveryStatus: sent`.
+- This proof did not send payment links, charge Stripe/cards, call providers, activate GPS/live location, expose payout/customer pricing, expose admin finance/internal notes, or print any API keys, tokens, passwords, or env secret values.
+
 ### Customer Portal Access Production Env Activation
 
 - Production Vercel env for customer portal access links is enabled without printing or recording secret values.

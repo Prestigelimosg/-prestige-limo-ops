@@ -1,16 +1,26 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-385b308c Tolerate unsafe optional typed traveler label
+bbcd62fd Keep saved bookings active for calendar updates
 
 Latest pushed main/staging runtime checkpoint:
-385b308c Tolerate unsafe optional typed traveler label
+bbcd62fd Keep saved bookings active for calendar updates
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-385b308c Tolerate unsafe optional typed traveler label
+bbcd62fd Keep saved bookings active for calendar updates
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Saved Booking Calendar Update Continuity
+
+- Live Mac Chrome inspection found booking `ADM-20260630171930` was saved and loaded in Dispatch, but the lower persistence panel still said no operational snapshot was applied, so the update path was not naturally armed for same-event Google Calendar edits.
+- Read-only live API proof confirmed `ADM-20260630171930` existed in `/api/admin-bookings` and was the first returned admin booking record.
+- `Save + CRM` and the lower `Save Operational Snapshot` now mark the saved booking reference as the active/applied booking for future updates, and keep the saved record at the front of the loaded operational records.
+- The Job Card primary action now changes from `Save + CRM` to `Update + Cal` when an active booking reference exists. Clicking it uses the existing guarded `PATCH /api/admin-bookings` update path and then auto-syncs the same saved booking to Google Calendar.
+- Successful update sync now feeds the Job Card button feedback too, so the operator sees the completed `Saved` state after `Operational booking updated: ... Google Calendar auto-synced; reminders included; no guest email sent.`
+- This pass did not use Vercel CLI, change env, change DB schema, send email, activate Stripe/payment, send providers, create payouts, or change GPS/live-location behavior.
+- Checks passed: dispatch action feedback compact guard, admin booking Google Calendar sync API contract, admin route flow lock guard, admin operational snapshot apply guard, full preactivation verification suite, `npx tsc --noEmit --pretty false`, `npm run lint` with only existing `loadBookings` warnings, `npm run build`, and `git diff --check`.
 
 ### Job Card Button Separation And Typed Read Tolerance
 

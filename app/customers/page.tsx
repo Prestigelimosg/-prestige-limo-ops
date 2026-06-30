@@ -575,12 +575,8 @@ function customerBillingDocumentLabel(documentType: CustomerBillingDocumentType)
   return "Invoice";
 }
 
-function customerBillingDocumentActionLabel(documentType: CustomerBillingDocumentType) {
-  if (documentType === "quotation") {
-    return "Issue Quote + PDF";
-  }
-
-  return "Issue Invoice + PDF";
+function customerBillingDocumentActionLabel() {
+  return "Issue";
 }
 
 function getCustomerInvoiceRowCalculatedAmount(
@@ -3820,15 +3816,16 @@ export default function MockCustomerDashboardPage() {
                   <div className="flex gap-2 lg:justify-end">
                     {customerInvoicePrepRow.customerFolderHref ? (
                       <Link
-                        className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-xs font-bold text-white transition hover:bg-slate-700"
+                        className="inline-flex h-8 items-center justify-center whitespace-nowrap rounded-md border border-slate-900 bg-slate-900 px-2.5 text-xs font-bold text-white transition hover:bg-slate-700"
                         data-customer-invoice-prep-open-folder="true"
                         href={customerInvoicePrepRow.customerFolderHref}
+                        title="Open customer folder"
                       >
-                        Open folder
+                        Open
                       </Link>
                     ) : null}
                     <button
-                      className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-xs font-bold text-slate-800 transition hover:border-slate-500"
+                      className="inline-flex h-8 items-center justify-center whitespace-nowrap rounded-md border border-slate-300 bg-white px-2.5 text-xs font-bold text-slate-800 transition hover:border-slate-500"
                       data-customer-invoice-prep-clear="true"
                       onClick={clearCustomerInvoicePrep}
                       type="button"
@@ -3870,11 +3867,12 @@ export default function MockCustomerDashboardPage() {
                   className="mt-3 border-t border-slate-200 pt-3"
                   data-customer-invoice-issue-panel="true"
                 >
-                  <div className="grid gap-2 md:grid-cols-[minmax(8rem,0.7fr)_minmax(8rem,0.7fr)_minmax(8rem,0.7fr)_minmax(8rem,0.6fr)_minmax(12rem,1fr)_auto_auto_auto] md:items-end">
-                    <label className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
+                  <div className="space-y-2">
+                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(7rem,0.75fr)_minmax(7rem,0.75fr)_minmax(8rem,0.8fr)_minmax(7rem,0.65fr)_minmax(11rem,1fr)_auto_auto] xl:items-end">
+                    <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
                       Document
                       <select
-                        className="mt-1 min-h-9 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950 outline-none focus:border-slate-700"
+                        className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700"
                         data-customer-invoice-document-type="true"
                         onChange={(event) => {
                           const nextType = event.target.value as CustomerBillingDocumentType;
@@ -3890,10 +3888,10 @@ export default function MockCustomerDashboardPage() {
                         <option value="quotation">Quotation</option>
                       </select>
                     </label>
-                    <label className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
+                    <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
                       Approved amount
                       <input
-                        className="mt-1 min-h-9 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950 outline-none focus:border-slate-700"
+                        className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700"
                         data-customer-invoice-issue-amount="true"
                         inputMode="decimal"
                         onChange={(event) => {
@@ -3903,10 +3901,10 @@ export default function MockCustomerDashboardPage() {
                         value={customerInvoiceIssueAmount}
                       />
                     </label>
-                    <label className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
+                    <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
                       Due date
                       <input
-                        className="mt-1 min-h-9 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950 outline-none focus:border-slate-700"
+                        className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700"
                         data-customer-invoice-issue-due-date="true"
                         onChange={(event) => {
                           setCustomerInvoiceIssueDueDate(event.target.value);
@@ -3915,10 +3913,10 @@ export default function MockCustomerDashboardPage() {
                         value={customerInvoiceIssueDueDate}
                       />
                     </label>
-                    <label className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
+                    <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
                       Status
                       <select
-                        className="mt-1 min-h-9 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950 outline-none focus:border-slate-700"
+                        className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700"
                         data-customer-invoice-issue-status="true"
                         disabled={customerInvoiceDocumentType === "quotation"}
                         onChange={(event) => {
@@ -3930,10 +3928,10 @@ export default function MockCustomerDashboardPage() {
                         <option value="Paid">Paid</option>
                       </select>
                     </label>
-                    <label className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
+                    <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
                       Customer email
                       <input
-                        className="mt-1 min-h-9 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950 outline-none focus:border-slate-700"
+                        className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700"
                         data-customer-invoice-recipient-email="true"
                         inputMode="email"
                         onChange={(event) => {
@@ -3944,10 +3942,10 @@ export default function MockCustomerDashboardPage() {
                         value={customerInvoiceRecipientEmail}
                       />
                     </label>
-                    <label className="flex min-h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 md:mt-5">
+                    <label className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-md border border-slate-300 bg-white px-2 text-[11px] font-bold text-slate-700 xl:mt-5">
                       <input
                         checked={customerInvoiceCardPaymentEnabled}
-                        className="h-4 w-4 rounded border-slate-400 text-slate-900"
+                        className="h-3.5 w-3.5 rounded border-slate-400 text-slate-900"
                         data-customer-invoice-card-payment-enabled="true"
                         onChange={(event) => {
                           const isEnabled = event.target.checked;
@@ -3959,10 +3957,10 @@ export default function MockCustomerDashboardPage() {
                         }}
                         type="checkbox"
                       />
-                      <span>Card payment</span>
+                      <span>Card</span>
                     </label>
                     <label
-                      className={`flex min-h-9 items-center gap-2 rounded-md border px-3 py-2 text-xs font-bold md:mt-5 ${
+                      className={`inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-md border px-2 text-[11px] font-bold xl:mt-5 ${
                         customerInvoiceCardPaymentEnabled
                           ? "border-slate-300 bg-white text-slate-700"
                           : "border-slate-200 bg-slate-50 text-slate-400"
@@ -3970,7 +3968,7 @@ export default function MockCustomerDashboardPage() {
                     >
                       <input
                         checked={customerInvoiceCardFeeApplies}
-                        className="h-4 w-4 rounded border-slate-400 text-slate-900 disabled:border-slate-300"
+                        className="h-3.5 w-3.5 rounded border-slate-400 text-slate-900 disabled:border-slate-300"
                         data-customer-invoice-card-fee-applies="true"
                         disabled={!customerInvoiceCardPaymentEnabled}
                         onChange={(event) => {
@@ -3978,13 +3976,13 @@ export default function MockCustomerDashboardPage() {
                         }}
                         type="checkbox"
                       />
-                      <span>10% card fee</span>
+                      <span>10% fee</span>
                     </label>
                     {customerInvoiceAmountEdited ? (
-                      <label className="text-xs font-bold uppercase tracking-[0.08em] text-amber-700 md:col-span-4">
+                      <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-amber-700 sm:col-span-2 xl:col-span-5">
                         Adjustment reason
                         <input
-                          className="mt-1 min-h-9 w-full rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950 outline-none focus:border-amber-700"
+                          className="mt-1 h-8 w-full rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-950 outline-none focus:border-amber-700"
                           data-customer-invoice-override-reason="true"
                           onChange={(event) => {
                             setCustomerInvoiceAdjustmentReason(event.target.value);
@@ -3994,8 +3992,10 @@ export default function MockCustomerDashboardPage() {
                         />
                       </label>
                     ) : null}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
                     <button
-                      className={`min-h-9 rounded-md border px-3 py-2 text-sm font-bold transition ${
+                      className={`inline-flex h-8 items-center justify-center whitespace-nowrap rounded-md border px-2.5 text-xs font-bold transition ${
                         isCustomerInvoicePreviewCurrent
                           ? "border-emerald-300 bg-emerald-50 text-emerald-800"
                           : customerInvoicePreview
@@ -4005,16 +4005,17 @@ export default function MockCustomerDashboardPage() {
                       data-customer-invoice-prep-next-action="true"
                       data-customer-invoice-preview-action="true"
                       onClick={previewPreparedCustomerInvoice}
+                      title={`Preview ${customerBillingDocumentLabel(customerInvoiceDocumentType)}`}
                       type="button"
                     >
                       {isCustomerInvoicePreviewCurrent
                         ? "Previewed"
                         : customerInvoicePreview
-                          ? "Refresh Preview"
-                          : `Preview ${customerBillingDocumentLabel(customerInvoiceDocumentType)}`}
+                          ? "Refresh"
+                          : "Preview"}
                     </button>
                     <button
-                      className={`min-h-9 rounded-md border px-3 py-2 text-sm font-bold transition ${
+                      className={`inline-flex h-8 items-center justify-center whitespace-nowrap rounded-md border px-2.5 text-xs font-bold transition ${
                         isCustomerInvoicePreviewCurrent
                           ? "border-slate-300 bg-white text-slate-800 hover:border-slate-600"
                           : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
@@ -4022,12 +4023,13 @@ export default function MockCustomerDashboardPage() {
                       aria-disabled={!isCustomerInvoicePreviewCurrent}
                       data-customer-invoice-save-draft="true"
                       onClick={saveCustomerInvoiceDraft}
+                      title="Save draft"
                       type="button"
                     >
-                      Save Draft
+                      Draft
                     </button>
                     <button
-                      className={`min-h-9 rounded-md border px-3 py-2 text-sm font-bold transition ${
+                      className={`inline-flex h-8 items-center justify-center whitespace-nowrap rounded-md border px-2.5 text-xs font-bold transition ${
                         issuingCustomerInvoiceKey === customerInvoicePrepRow.key
                           ? "border-emerald-300 bg-emerald-50 text-emerald-800"
                           : !isCustomerInvoicePreviewCurrent
@@ -4037,14 +4039,16 @@ export default function MockCustomerDashboardPage() {
                       aria-disabled={!isCustomerInvoicePreviewCurrent}
                       data-customer-invoice-issue-download-pdf="true"
                       onClick={issuePreparedCustomerInvoice}
+                      title={`${customerBillingDocumentActionLabel()} ${customerBillingDocumentLabel(customerInvoiceDocumentType)} PDF`}
                       type="button"
                     >
                       {issuingCustomerInvoiceKey === customerInvoicePrepRow.key
                         ? "Issued"
                         : isCustomerInvoicePreviewCurrent
-                          ? customerBillingDocumentActionLabel(customerInvoiceDocumentType)
+                          ? customerBillingDocumentActionLabel()
                           : "Preview first"}
                     </button>
+                    </div>
                   </div>
                   {customerInvoicePreview ? (
                     <div

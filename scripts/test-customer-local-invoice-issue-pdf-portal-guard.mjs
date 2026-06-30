@@ -261,11 +261,12 @@ for (const fragment of [
 }
 
 for (const fragment of [
-  "Preview Invoice",
+  "Preview",
   "Previewed",
-  "Refresh Preview",
+  "Refresh",
   "Preview first",
-  "Issue Invoice + PDF",
+  "Draft",
+  "Issue",
   "PDF",
   "Saved",
   "Email",
@@ -289,6 +290,20 @@ for (const noisyIssuedActionFragment of [
     issuedInvoiceTable,
     noisyIssuedActionFragment,
     "compact issued invoice actions",
+  );
+}
+
+for (const noisyWorkbenchActionFragment of [
+  "Open folder",
+  "Save Draft",
+  "Refresh Preview",
+  "Issue Invoice + PDF",
+  "Issue Quote + PDF",
+]) {
+  assertExcludes(
+    customerIssuePanel,
+    noisyWorkbenchActionFragment,
+    "compact invoice workbench actions",
   );
 }
 

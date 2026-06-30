@@ -879,6 +879,14 @@ try {
     "stage-4a-376-admin-only-safe-operational-adapter-v1",
   );
 
+  const adminBookingsRouteSource = await readFile("app/api/admin-bookings/route.ts", "utf8");
+
+  assert.match(
+    adminBookingsRouteSource,
+    /allowServerSessionRoleMethodsWithoutRequestToken:\s*\["POST",\s*"PATCH"\]/,
+    "admin-bookings live dashboard writes must use server-session role without browser token exposure",
+  );
+
   setEnv({
     PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED: "true",
     PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE: "server-session-token",
@@ -1334,6 +1342,22 @@ try {
   assert.equal(permissionFailureResult.category, "permission_or_rls_denied");
   assertNoApiLeak(permissionFailureResult, "permission categorized failure should stay sanitized");
   assert.ok(permissionFailureMock.client.operations.some((operation) => operation.table === "customer_contacts"));
+
+  const serverSessionNoTokenRouteMock = installMockClient();
+  const serverSessionNoTokenRoute = await readRouteResponse(
+    await adminRoute.POST(
+      jsonRequest("http://localhost/api/admin-bookings", canonicalAdminPayload(), {
+        headers: adminHeaders(),
+        method: "POST",
+      }),
+    ),
+  );
+
+  assert.equal(serverSessionNoTokenRoute.status, 200);
+  assert.equal(serverSessionNoTokenRoute.body.ok, true);
+  assert.equal(serverSessionNoTokenRoute.body.booking.booking_reference, "SAFE-ADM-001");
+  assertCreatedClient(serverSessionNoTokenRouteMock);
+  assertNoUnsafeKeys(serverSessionNoTokenRoute, "server-session no-token admin route response");
 
   const categorizedRouteMock = installMockClient(
     {},

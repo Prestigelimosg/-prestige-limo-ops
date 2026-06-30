@@ -1,13 +1,13 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean checkpoint:
-e47b9937 Add operations calendar agenda export
+d2a16ddf Add Google Calendar booking sync
 
 Latest pushed main/staging checkpoint:
-e47b9937 Add operations calendar agenda export
+d2a16ddf Add Google Calendar booking sync
 
 Latest remote staging branch head:
-e47b9937 Add operations calendar agenda export
+d2a16ddf Add Google Calendar booking sync
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -24,6 +24,12 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Google event writes use `sendUpdates=none`, no attendees, and Google Calendar popup reminders at 2 hours and 30 minutes before pickup. This is calendar-native reminder delivery only; it does not send customer/driver email, push, WhatsApp, Telegram, SMS, Stripe/payment, provider job dispatch, GPS/live location, payout, DB schema, or Vercel/env changes.
 - The app remains the source of truth. Google Calendar edits do not update Prestige Limo Ops, and booking amendments should be made in the app then synced again.
 - Guard coverage lives in `scripts/test-admin-booking-google-calendar-sync-api-contract.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+- Production activation on 2026-06-30 added the required Google Calendar env names as Vercel Production Sensitive values only: `PRESTIGE_ADMIN_GOOGLE_CALENDAR_SYNC_ENABLED`, `PRESTIGE_GOOGLE_CALENDAR_ID`, `PRESTIGE_GOOGLE_CALENDAR_CLIENT_EMAIL`, and `PRESTIGE_GOOGLE_CALENDAR_PRIVATE_KEY`. Secret values were not printed, logged, committed, or pasted into docs.
+- Production deployment `dpl_7T91EWzYBtqFksaPHNssa2XrGcAx` completed `READY` and was aliased to `https://app.prestigelimo.sg`.
+- Live deployed route proof on `https://app.prestigelimo.sg/api/admin-booking-calendar-google-sync` returned `ok: true`, provider `google_calendar`, `events_synced: 1`, `send_updates: none`, and `notification_delivery: calendar_native_reminders_only`.
+- Live Google Calendar read-back found `Prestige - OPS - Calendar Live Check` on `2026-07-01T09:00:00+08:00` to `2026-07-01T10:30:00+08:00` in `Prestige Ops Calendar`, with popup reminders at 120 and 30 minutes, zero attendees, and Prestige reference `CALENDAR-LIVE-CHECK-20260630-001`.
+- Mac Chrome visual verification on Google Calendar day view for 2026-07-01 showed the same `Prestige - OPS - Calendar Live Check` event under `Prestige Ops Calendar`.
+- This activation did not send guest/customer/driver email, WhatsApp, Telegram, SMS, Stripe/payment, provider job dispatch, GPS/live location, payout, DB schema changes, or customer/driver-visible internal data. It did create one harmless live calendar check event in the operator-owned `Prestige Ops Calendar`.
 
 ### Admin Operations Calendar Agenda Export
 

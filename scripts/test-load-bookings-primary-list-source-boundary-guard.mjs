@@ -139,6 +139,21 @@ assertIncludes(
   "primaryListSource: LoadBookingsOperationalDisplayItemSource;",
   "display item source field",
 );
+assertIncludes(
+  appPage,
+  'data-admin-booking-persistence-scrollbox="true"',
+  "loaded operational snapshots scrollbox",
+);
+assertIncludes(
+  appPage,
+  "displayedAdminBookingPersistenceRecords.map((record)",
+  "loaded operational snapshots full rendered list",
+);
+assertExcludes(
+  appPage,
+  "displayedAdminBookingPersistenceRecords.slice(0, 3)",
+  "loaded operational snapshots artificial three-row cap",
+);
 
 const typedDisplayBridgeBlock = sliceBetween(
   appPage,
@@ -258,6 +273,16 @@ assertExcludes(
 );
 
 assertIncludes(loadSelectedBookingBlock, "bookingRecordToForm(bookingRecord)", "selected booking legacy form source");
+assertIncludes(
+  loadSelectedBookingBlock,
+  "bookingRecordToAdminBookingPersistenceRecord(bookingRecord)",
+  "selected booking legacy update-target source",
+);
+assertIncludes(
+  loadSelectedBookingBlock,
+  "markAdminBookingAsActiveForUpdates(bookingReference, loadedAdminBookingRecord)",
+  "selected booking active update target",
+);
 for (const fragment of [
   "const bookingReference =",
   "cleanReferenceText(bookingRecord.booking_reference)",

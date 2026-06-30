@@ -642,6 +642,12 @@ type BookingRecord = {
   contact_display_name?: string | null;
   contact_phone?: string | null;
   contact_email?: string | null;
+  customer_facing_status?: string | null;
+  admin_internal_status?: string | null;
+  short_notice_review_status?: string | null;
+  request_review_status?: string | null;
+  change_review_status?: string | null;
+  cancellation_review_status?: string | null;
   job_card: string | null;
   status: string | null;
   driver_id?: number | null;
@@ -5640,6 +5646,102 @@ function bookingRecordToFinancePayoutInternalFormFields(
     driverPayoutReason: clean(bookingRecord.driver_payout_reason),
     driverNotes: clean(bookingRecord.driver_notes),
     driverIncludePayout: bookingRecord.driver_dispatch_include_payout ? "yes" : "",
+  };
+}
+
+function bookingRecordToAdminBookingPersistenceRecord(
+  bookingRecord: BookingRecord,
+): AdminBookingPersistenceRecord | null {
+  const bookingReference = clean(bookingRecord.booking_reference) || clean(String(bookingRecord.id));
+
+  if (!bookingReference) {
+    return null;
+  }
+
+  const pickupLocation = clean(bookingRecord.pickup_location) || clean(bookingRecord.pickup_address);
+  const dropoffLocation = clean(bookingRecord.dropoff_location) || clean(bookingRecord.dropoff_address);
+  const routePoints = getRoutePoints(bookingRecord);
+  type AdminBookingPersistenceRoutePoint =
+    NonNullable<AdminBookingPersistenceRecord["route_points"]>[number];
+  const fallbackRoutePointCandidates: Array<AdminBookingPersistenceRoutePoint | null> = [
+    pickupLocation
+      ? {
+          location_text: pickupLocation,
+          point_type: "pickup" as const,
+          sequence_number: 1,
+          timing_note: null,
+        }
+      : null,
+    ...routePoints.slice(1, -1).map((location, index) => ({
+      location_text: clean(location),
+      point_type: "stop" as const,
+      sequence_number: index + 2,
+      timing_note: null,
+    })),
+    dropoffLocation
+      ? {
+          location_text: dropoffLocation,
+          point_type: "dropoff" as const,
+          sequence_number: Math.max(routePoints.length, 2),
+          timing_note: null,
+        }
+      : null,
+  ];
+  const fallbackRoutePoints = fallbackRoutePointCandidates.filter(
+    (routePoint): routePoint is AdminBookingPersistenceRoutePoint =>
+      Boolean(clean(routePoint?.location_text)),
+  );
+  const paxCount = Number(bookingRecord.pax_count || bookingRecord.pax);
+
+  return {
+    admin_internal_status: clean(bookingRecord.admin_internal_status) || clean(bookingRecord.status) || null,
+    booking_reference: bookingReference,
+    cancellation_review_status: clean(bookingRecord.cancellation_review_status) || null,
+    change_review_status: clean(bookingRecord.change_review_status) || null,
+    contact_display_name: clean(bookingRecord.contact_display_name) || clean(bookingRecord.bookers?.booker_name) || null,
+    contact_email: clean(bookingRecord.contact_email) || clean(bookingRecord.bookers?.email) || null,
+    contact_phone: clean(bookingRecord.contact_phone) || clean(bookingRecord.bookers?.phone) || null,
+    created_at: clean(bookingRecord.created_at) || null,
+    customer_display_name: clean(bookingRecord.customer_display_name) || getBookingCompanyName(bookingRecord) || null,
+    customer_facing_status: clean(bookingRecord.customer_facing_status) || clean(bookingRecord.status) || null,
+    driver_contact: clean(bookingRecord.driver_contact) || null,
+    driver_name: clean(bookingRecord.driver_name) || null,
+    driver_plate_number: clean(bookingRecord.driver_plate_number) || null,
+    dropoff_location: dropoffLocation || null,
+    flight_no: clean(bookingRecord.flight_no) || null,
+    passenger_name: getBookingName(bookingRecord) || null,
+    passenger_phone: clean(bookingRecord.passenger_phone) || null,
+    pax_count: Number.isInteger(paxCount) && paxCount > 0 ? paxCount : null,
+    pickup_at: clean(bookingRecord.pickup_at) || null,
+    pickup_datetime: clean(bookingRecord.pickup_datetime) || clean(bookingRecord.pickup_at) || null,
+    pickup_location: pickupLocation || null,
+    request_review_status: clean(bookingRecord.request_review_status) || null,
+    route_points: fallbackRoutePoints,
+    route_summary:
+      clean(bookingRecord.route_summary) ||
+      clean(bookingRecord.route) ||
+      [pickupLocation, dropoffLocation].filter(Boolean).join(" > ") ||
+      null,
+    route_type:
+      clean(bookingRecord.route_type) ||
+      clean(bookingRecord.service_type) ||
+      clean(bookingRecord.booking_type) ||
+      null,
+    service_items: [],
+    service_type:
+      clean(bookingRecord.service_type) ||
+      clean(bookingRecord.route_type) ||
+      clean(bookingRecord.booking_type) ||
+      null,
+    short_notice_review_status: clean(bookingRecord.short_notice_review_status) || null,
+    source_channel: clean(bookingRecord.source_channel) || null,
+    source_surface: clean(bookingRecord.source_surface) || null,
+    updated_at: clean(bookingRecord.updated_at) || null,
+    vehicle_type_or_category:
+      clean(bookingRecord.vehicle_type_or_category) ||
+      clean(bookingRecord.vehicle_type) ||
+      clean(bookingRecord.vehicle) ||
+      null,
   };
 }
 
@@ -14610,16 +14712,21 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       getBookingDateKey(bookingRecord);
 
     const loadedBookingForm = bookingRecordToForm(bookingRecord);
+    const loadedAdminBookingRecord = bookingRecordToAdminBookingPersistenceRecord(bookingRecord);
 
     rememberHandledCustomerBookingRequest(bookingRecord);
     setBooking(() => loadedBookingForm);
     if (bookingReference) {
       delete driverJobLinkVehicleFallbackRefreshLastRequestedRef.current[bookingReference];
     }
-    appliedAdminBookingSnapshotReferenceRef.current = "";
-    loadedBookingIdRef.current = bookingReference;
-    setAppliedAdminBookingSnapshotReference("");
-    setLoadedBookingId(bookingReference);
+    if (bookingReference && loadedAdminBookingRecord) {
+      markAdminBookingAsActiveForUpdates(bookingReference, loadedAdminBookingRecord);
+    } else {
+      appliedAdminBookingSnapshotReferenceRef.current = "";
+      loadedBookingIdRef.current = bookingReference;
+      setAppliedAdminBookingSnapshotReference("");
+      setLoadedBookingId(bookingReference);
+    }
     if (bookingReference) {
       bookingAutoSyncPausedUntilRef.current = Date.now() + 5_000;
       const typedDisplaySearchParams = new URLSearchParams({ limit: "25" });
@@ -30488,145 +30595,143 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                 </p>
               ) : null}
               {displayedAdminBookingPersistenceRecords.length > 0 ? (
-                <div className="mt-3 grid gap-2" data-admin-booking-persistence-records="true">
-                  {displayedAdminBookingPersistenceRecords.slice(0, 3).map((record) => (
-                    <article
-                      className="rounded-md border border-emerald-100 bg-white px-3 py-2 text-xs text-slate-700"
-                      data-admin-booking-persistence-record={record.booking_reference}
-                      key={record.booking_reference}
-                    >
-                      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                        <p className="font-semibold text-emerald-950">
-                          {record.booking_reference}
-                        </p>
-                        <p className="text-slate-500">
-                          {record.admin_internal_status || "Draft"}
-                        </p>
-                      </div>
-                      <p className="mt-1 break-words">
-                        {[
-                          adminBookingPersistenceCustomerDisplayName(record),
-                          adminBookingPersistencePassengerDisplayName(record),
-                          record.vehicle_type_or_category,
-                          adminBookingPersistenceServiceType(record),
-                        ]
-                          .filter(Boolean)
-                          .join(" · ") || "Operational booking"}
-                      </p>
-                      <p
-                        className="mt-1 break-words text-slate-500"
-                        data-admin-booking-persistence-record-contact={record.booking_reference}
+                <div
+                  className="mt-3 max-h-[32rem] overflow-y-auto rounded-md border border-emerald-200 bg-white"
+                  data-admin-booking-persistence-records="true"
+                  data-admin-booking-persistence-scrollbox="true"
+                >
+                  {displayedAdminBookingPersistenceRecords.map((record) => {
+                    const isCustomerRequest = adminBookingPersistenceRecordIsCustomerRequest(record);
+                    const primaryStatus = adminBookingPersistencePrimaryStatus(record);
+
+                    return (
+                      <article
+                        className="grid gap-2 border-b border-emerald-100 px-3 py-2 text-xs text-slate-700 last:border-b-0 lg:grid-cols-[minmax(11rem,0.95fr)_minmax(14rem,1.4fr)_minmax(8rem,0.7fr)_minmax(12rem,1fr)_auto] lg:items-center"
+                        data-admin-booking-persistence-record={record.booking_reference}
+                        key={record.booking_reference}
                       >
-                        Contact:{" "}
-                        {[
-                          record.contact_display_name,
-                          record.contact_phone,
-                          record.contact_email,
-                        ]
-                          .filter(Boolean)
-                          .join(" · ") || "TBC"}
-                      </p>
-                      <p
-                        className="mt-1 font-semibold text-emerald-900"
-                        data-admin-booking-persistence-record-source={record.booking_reference}
-                      >
-                        {adminBookingPersistenceSourceLabel(record)}
-                        {adminBookingPersistenceRecordIsCustomerRequest(record)
-                          ? " · Admin review required before confirmation"
-                          : ""}
-                      </p>
-                      {adminBookingPersistenceRecordIsCustomerRequest(record) ? (
-                        <p
-                          className="mt-1 font-semibold text-amber-900"
-                          data-admin-booking-customer-request-wait-time={record.booking_reference}
-                        >
-                          {adminCustomerRequestWaitTimeLabel(record, currentTimeMs)}
-                        </p>
-                      ) : null}
-                      <p className="mt-1 break-words">
-                        {adminBookingPersistenceRouteSummary(record)}
-                      </p>
-                      <p className="mt-1 text-slate-500">
-                        {adminBookingPersistencePickupDisplay(record)}
-                      </p>
-                      {adminBookingPersistenceRecordIsCustomerRequest(record) ? (
-                        <div
-                          className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2"
-                          data-admin-booking-customer-request-decision={record.booking_reference}
-                        >
-                          <p className="font-semibold text-amber-950">
-                            Internal review decision only
+                        <div className="min-w-0">
+                          <p className="break-words font-semibold text-emerald-950">
+                            {record.booking_reference}
+                          </p>
+                          <p className="mt-0.5 break-words text-slate-500">
+                            {adminBookingPersistencePickupDisplay(record)}
+                          </p>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="break-words font-semibold text-slate-950">
+                            {[
+                              adminBookingPersistenceCustomerDisplayName(record),
+                              adminBookingPersistencePassengerDisplayName(record),
+                              record.vehicle_type_or_category,
+                              adminBookingPersistenceServiceType(record),
+                            ]
+                              .filter(Boolean)
+                              .join(" · ") || "Operational booking"}
+                          </p>
+                          <p className="mt-0.5 break-words text-slate-500">
+                            {adminBookingPersistenceRouteSummary(record)}
                           </p>
                           <p
-                            className="mt-1 leading-5 text-amber-900"
-                            data-admin-booking-customer-request-decision-guidance={record.booking_reference}
+                            className="mt-0.5 break-words text-slate-500"
+                            data-admin-booking-persistence-record-contact={record.booking_reference}
                           >
-                            Tracks admin decision status only. It does not contact customers or dispatch drivers.
+                            Contact:{" "}
+                            {[
+                              record.contact_display_name,
+                              record.contact_phone,
+                              record.contact_email,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ") || "TBC"}
                           </p>
-                          <div
-                            className="mt-2 grid gap-2 rounded-md border border-amber-100 bg-white/75 px-3 py-2"
-                            data-admin-booking-customer-request-review-state={record.booking_reference}
-                          >
-                            <p className="text-[11px] font-semibold uppercase text-amber-900">
-                              Current review state
-                            </p>
-                            <dl className="grid gap-2 sm:grid-cols-4">
-                              {[
-                                {
-                                  label: "Admin internal status",
-                                  value: clean(record.admin_internal_status) || "Draft",
-                                },
-                                {
-                                  label: "Customer-facing status",
-                                  value: clean(record.customer_facing_status) || "Request Received",
-                                },
-                                {
-                                  label: "Short-notice review status",
-                                  value: clean(record.short_notice_review_status) || "Not Required",
-                                },
-                                {
-                                  label: "Request review status",
-                                  value: clean(record.request_review_status) || "Pending Review",
-                                },
-                              ].map(({ label, value }) => (
-                                <div className="min-w-0" key={label}>
-                                  <dt className="text-[11px] font-semibold text-amber-800">
-                                    {label}
-                                  </dt>
-                                  <dd className="mt-0.5 break-words font-semibold text-amber-950">
-                                    {value}
-                                  </dd>
-                                </div>
-                              ))}
-                            </dl>
-                          </div>
-                          <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                            {adminCustomerRequestReviewDecisions.map((decision) => (
-                              <button
-                                className="min-h-9 rounded-md border border-amber-300 bg-white px-3 py-2 text-left text-xs font-semibold text-amber-950 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                                data-admin-booking-customer-request-decision-button={`${record.booking_reference}:${decision.key}`}
-                                disabled={adminBookingPersistenceAction !== null}
-                                key={decision.key}
-                                onClick={() => updateAdminCustomerRequestReviewDecision(record, decision.key)}
-                                type="button"
-                              >
-                                {decision.label}
-                              </button>
-                            ))}
-                          </div>
                         </div>
-                      ) : null}
-                      <button
-                        className="mt-2 min-h-9 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-left text-xs font-semibold text-emerald-950 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                        data-admin-booking-persistence-apply={record.booking_reference}
-                        disabled={adminBookingPersistenceAction !== null}
-                        onClick={() => applyAdminBookingOperationalSnapshot(record)}
-                        type="button"
-                      >
-                        Apply Operational Snapshot
-                      </button>
-                    </article>
-                  ))}
+                        <div className="min-w-0">
+                          <p
+                            className="break-words font-semibold text-emerald-900"
+                            data-admin-booking-persistence-record-source={record.booking_reference}
+                          >
+                            {adminBookingPersistenceSourceLabel(record)}
+                            {isCustomerRequest ? " · Admin review required before confirmation" : ""}
+                          </p>
+                          {isCustomerRequest ? (
+                            <p
+                              className="mt-0.5 font-semibold text-amber-900"
+                              data-admin-booking-customer-request-wait-time={record.booking_reference}
+                            >
+                              {adminCustomerRequestWaitTimeLabel(record, currentTimeMs)}
+                            </p>
+                          ) : null}
+                        </div>
+                        {isCustomerRequest ? (
+                          <div
+                            className="min-w-0 rounded-md border border-amber-200 bg-amber-50/80 px-2 py-1.5"
+                            data-admin-booking-customer-request-decision={record.booking_reference}
+                          >
+                            <p className="font-semibold text-amber-950">
+                              Internal review decision only
+                            </p>
+                            <p
+                              className="mt-0.5 text-[11px] leading-4 text-amber-900"
+                              data-admin-booking-customer-request-decision-guidance={record.booking_reference}
+                            >
+                              Status tracking only. It does not contact customers or dispatch drivers.
+                            </p>
+                            <p
+                              className="mt-1 break-words text-[11px] leading-4 text-amber-950"
+                              data-admin-booking-customer-request-review-state={record.booking_reference}
+                            >
+                              Current review state: Admin internal status{" "}
+                              <span className="font-semibold">
+                                {clean(record.admin_internal_status) || "Draft"}
+                              </span>{" "}
+                              · Customer-facing status{" "}
+                              <span className="font-semibold">
+                                {clean(record.customer_facing_status) || "Request Received"}
+                              </span>{" "}
+                              · Short-notice review status{" "}
+                              <span className="font-semibold">
+                                {clean(record.short_notice_review_status) || "Not Required"}
+                              </span>{" "}
+                              · Request review status{" "}
+                              <span className="font-semibold">
+                                {clean(record.request_review_status) || "Pending Review"}
+                              </span>
+                            </p>
+                            <div className="mt-1.5 flex flex-wrap gap-1.5">
+                              {adminCustomerRequestReviewDecisions.map((decision) => (
+                                <button
+                                  className="min-h-7 rounded-md border border-amber-300 bg-white px-2 py-1 text-left text-[11px] font-semibold text-amber-950 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                                  data-admin-booking-customer-request-decision-button={`${record.booking_reference}:${decision.key}`}
+                                  disabled={adminBookingPersistenceAction !== null}
+                                  key={decision.key}
+                                  onClick={() => updateAdminCustomerRequestReviewDecision(record, decision.key)}
+                                  type="button"
+                                >
+                                  {decision.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="break-words font-semibold text-slate-500">
+                            {primaryStatus}
+                          </p>
+                        )}
+                        <div className="flex flex-wrap gap-1.5 lg:justify-end">
+                          <button
+                            className="min-h-8 rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-left text-xs font-semibold text-emerald-950 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                            data-admin-booking-persistence-apply={record.booking_reference}
+                            disabled={adminBookingPersistenceAction !== null}
+                            onClick={() => applyAdminBookingOperationalSnapshot(record)}
+                            type="button"
+                          >
+                            Apply
+                          </button>
+                        </div>
+                      </article>
+                    );
+                  })}
                 </div>
               ) : null}
             </section>

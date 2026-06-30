@@ -1,16 +1,25 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-3ad6ea36 Fix job card save preflight feedback
+8daed205 Expose safe booking save failure reasons
 
 Latest pushed main/staging runtime checkpoint:
-3ad6ea36 Fix job card save preflight feedback
+8daed205 Expose safe booking save failure reasons
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
 95967da2 Record customer copy staging promotion
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Admin Booking Save Safe Failure Diagnostics
+
+- Admin booking persistence failures from `GET`, `POST`, and `PATCH /api/admin-bookings` now return admin-only safe labels as `safe_error_category` and `safe_error_operation` instead of only the generic `Admin booking persistence save failed safely.` message.
+- The Supabase adapter labels safe failure stages such as `customer_lookup`, `customer_contact`, `booking_row`, `route_points`, `service_items`, `booking_reload`, and `audit_log`.
+- Dispatch maps those safe labels into plain operator messages beside `Save Booking + CRM`, so a failed save can show whether the blocker is schema, table reachability, permission/RLS, configuration, or an unexpected route failure without exposing raw DB text, secrets, tokens, pricing, payout, billing, provider, GPS, parser/debug, or mock archive details.
+- The admin booking adapter contract guard was refreshed to include the current calendar-safe booking fields (`flight_no`, driver name/contact/plate) and to load the current customer request notification helper dependencies in its temporary harness.
+- This pass did not use Vercel CLI, change env, change DB schema, send email, activate Stripe/payment, send providers, create payouts, or change GPS/live-location behavior.
+- Checks passed: admin booking Supabase adapter mocked contract, dispatch action feedback compact guard, core booking persistence safe path guard, full preactivation verification suite, `npx tsc --noEmit --pretty false`, `npm run lint` with only existing `loadBookings` dependency warnings, `npm run build`, and `git diff --check`.
 
 ### Load Bookings Guard Marker Refresh
 

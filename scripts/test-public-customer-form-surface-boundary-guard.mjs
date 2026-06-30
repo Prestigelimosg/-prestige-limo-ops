@@ -59,6 +59,8 @@ const portalRequiredFields = [
   "passengerName",
   "pickupDate",
   "pickupTime",
+  "pickupLocation",
+  "dropoffLocation",
 ];
 
 const portalRequestFieldAttributes = publicCustomerFormFields;
@@ -381,7 +383,8 @@ for (const forbiddenPattern of [
 for (const fragment of [
   "data-customer-portal-request-form=\"true\"",
   "Admin will review and confirm your booking shortly. Thank you",
-  "Booking request received for review. This is not confirmed yet. Our staff will reply to confirm availability.",
+  "Booking request received for review. This is not confirmed yet.",
+  "${companyName} staff will reply to confirm availability.",
 ]) {
   assertIncludes(portalPage, fragment, `/my-bookings form surface ${fragment}`);
 }

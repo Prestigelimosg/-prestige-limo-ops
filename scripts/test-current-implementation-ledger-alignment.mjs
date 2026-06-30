@@ -33,23 +33,23 @@ function parseCheckpointLine(checkpointLine, label) {
 
 const verifiedLine = lines
   .map((line, index) => ({ line: line.trim(), index }))
-  .find(({ line }) => /^Latest verified clean checkpoint before .+:$/.test(line));
+  .find(({ line }) => line === "Latest verified clean runtime checkpoint:");
 
-assert.ok(verifiedLine, "Ledger must contain latest verified clean checkpoint marker.");
+assert.ok(verifiedLine, "Ledger must contain latest verified clean runtime checkpoint marker.");
 
 const verifiedCheckpoint = parseCheckpointLine(
   lines[verifiedLine.index + 1]?.trim() || "",
-  "Latest verified clean checkpoint",
+  "Latest verified clean runtime checkpoint",
 );
-const stagingCheckpoint = parseCheckpointLine(
-  lineAfterMarker("Latest staging-smoked app checkpoint:", "latest staging-smoked app checkpoint"),
-  "Latest staging-smoked app checkpoint",
+const pushedRuntimeCheckpoint = parseCheckpointLine(
+  lineAfterMarker("Latest pushed main/staging runtime checkpoint:", "latest pushed main/staging runtime checkpoint"),
+  "Latest pushed main/staging runtime checkpoint",
 );
 
 assert.equal(
   `${verifiedCheckpoint.checkpointHash} ${verifiedCheckpoint.checkpointTitle}`,
-  `${stagingCheckpoint.checkpointHash} ${stagingCheckpoint.checkpointTitle}`,
-  "Latest verified clean checkpoint and staging-smoked app checkpoint must stay aligned.",
+  `${pushedRuntimeCheckpoint.checkpointHash} ${pushedRuntimeCheckpoint.checkpointTitle}`,
+  "Latest verified clean runtime checkpoint and pushed main/staging runtime checkpoint must stay aligned.",
 );
 assert.ok(
   ledger.includes("This file is the repo source of truth for Codex and future work."),
@@ -63,8 +63,8 @@ const gitLog = execFileSync("git", ["log", "--oneline", "--all"], {
 assert.ok(
   gitLog
     .split(/\r?\n/)
-    .some((line) => line.startsWith(`${stagingCheckpoint.checkpointHash} `)),
-  "Ledger staging-smoked checkpoint hash must exist in git log --oneline.",
+    .some((line) => line.startsWith(`${pushedRuntimeCheckpoint.checkpointHash} `)),
+  "Ledger pushed runtime checkpoint hash must exist in git log --oneline.",
 );
 
 console.log("current implementation ledger alignment guard passed");

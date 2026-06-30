@@ -133,6 +133,10 @@ function assertExcludes(source, fragmentOrPattern, label) {
   assert.equal(matches, false, `${label} must not include ${fragmentOrPattern}.`);
 }
 
+function countMatches(source, fragment) {
+  return source.split(fragment).length - 1;
+}
+
 function sectionBetween(source, startHeading, nextHeadingPrefix = "\n### ") {
   const start = source.indexOf(startHeading);
   assert.notEqual(start, -1, `Missing section heading: ${startHeading}`);
@@ -390,6 +394,30 @@ for (const path of publicClientPaths) {
 
   for (const fragment of publicClientForbiddenFragments) {
     if (path === "app/driver-job/[token]/page.tsx" && driverJobApprovedLiveLocationFragments.has(fragment)) {
+      continue;
+    }
+
+    if (path === "app/my-bookings/page.tsx" && fragment === "URL.createObjectURL") {
+      assertIncludes(
+        source,
+        "function downloadBrowserBlob(blob: Blob, filename: string)",
+        "customer portal invoice PDF blob download helper",
+      );
+      assertIncludes(
+        source,
+        "const url = window.URL.createObjectURL(blob);",
+        "customer portal invoice PDF blob object URL",
+      );
+      assertIncludes(
+        source,
+        "window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);",
+        "customer portal invoice PDF blob object URL cleanup",
+      );
+      assert.equal(
+        countMatches(source, "URL.createObjectURL"),
+        1,
+        "customer portal must only use one object URL for invoice PDF download",
+      );
       continue;
     }
 

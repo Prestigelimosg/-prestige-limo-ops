@@ -119,14 +119,21 @@ for (const forbiddenFragment of [
 
 const customerRenderedSurface = customerPortalPage.slice(customerPortalPage.indexOf("<main"));
 const driverRenderedSurface = driverJobPage.slice(driverJobPage.indexOf("<main"));
-const publicAppSurface = `${customerRenderedSurface}\n${driverRenderedSurface}`;
+
+for (const forbiddenPattern of [
+  /driver_payout_rules|customer_rates|PayNow payout|payout comparisons|mock QA|dev archive/i,
+  /internal finance notes|internal admin notes/i,
+  /api\.telegram\.org|whatsapp|twilio|sendMail|new\s+Resend|maps\.googleapis|onemap/i,
+]) {
+  assertExcludes(customerRenderedSurface, forbiddenPattern, "customer app compact public surface");
+}
 
 for (const forbiddenPattern of [
   /driver_payout_rules|customer_rates|PayNow|payout comparisons|mock QA|dev archive/i,
-  /customer price|billing|invoice\/payment|payment\/PDF|internal finance notes/i,
+  /customer price|billing|invoice|payment|PDF|internal finance notes|internal admin notes/i,
   /api\.telegram\.org|whatsapp|twilio|sendMail|new\s+Resend|maps\.googleapis|onemap/i,
 ]) {
-  assertExcludes(publicAppSurface, forbiddenPattern, "customer/driver app compact public surface");
+  assertExcludes(driverRenderedSurface, forbiddenPattern, "driver app compact public surface");
 }
 
 console.log("Customer/Driver app compact surface guard passed");

@@ -12,6 +12,25 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Load Bookings Guard Marker Refresh
+
+- The Load Bookings typed-read admin display exposure guard now matches the current Dispatch memo order: `activeAdminDriverJobLink` is declared before Customer Copy, and the Driver Dispatch copy boundary now ends at `driverJobLinkMessage`.
+- The selected-booking guard now separates the `BookingRecord` form source from the display-only typed operational card refresh. `loadSelectedBooking` must still load the editable booking form through `bookingRecordToForm(bookingRecord)`, while the typed refresh may only update `setLoadBookingsTypedOperationalCardsById` and `setLoadBookingsTypedOperationalCardOrder`.
+- The admin Load Bookings CRM fallback compact guard now recognizes the current Dashboard default through `Home({ initialTab = "dashboard" })`, `useState<AppTab>(initialTab)`, and `useRef<AppTab>(initialTab)`.
+- The public API source privacy guard allowlist now recognizes the existing customer booking request route's guarded admin app notification import path, matching the ledger-approved admin notification helper while keeping payment, billing, payout, parser/debug, provider-send, GPS/photo/calendar, and mock archive imports blocked.
+- The public customer form surface guard now recognizes that `/my-bookings` portal booking requests require pickup and drop-off locations, matching the current portal form and the main `/book` request route requirement.
+- The same public customer form surface guard now checks the current dynamic portal success copy: the request is received for review, is not confirmed yet, and `{companyName} staff` will reply to confirm availability.
+- The customer portal saved-bookings read evidence guard now recognizes the current safe select indirection: `readCustomerSavedBookingRowsForSchema` selects `selectedColumns`, with current and foundation safe schemas supplied by `customerSavedBookingsCurrentSelect` and `customerSavedBookingsFoundationSelect`.
+- The same saved-bookings read guard now recognizes `customerAccountBookingFilter`: UUID account references stay scoped by `customer_id = reference`, while named account references stay scoped by `customer_display_name ilike reference`.
+- The customer driver status visibility guard now checks the same current/foundation customer saved-bookings safe select block instead of the removed single `customerSavedBookingsSelect` marker.
+- The public OTS photo proof surface guard now allows exactly one `/my-bookings` `URL.createObjectURL` use inside the invoice PDF blob download helper, requires the paired `revokeObjectURL`, and continues to block public camera, file upload, storage, and photo proof activation fragments.
+- The ledger checkpoint source-of-truth guard now validates the current top header format: latest verified clean runtime checkpoint, latest pushed main/staging runtime checkpoint, and latest remote main/staging deployment checkpoint.
+- The current implementation ledger alignment guard now compares the current verified clean runtime checkpoint with the pushed main/staging runtime checkpoint and verifies that hash exists in git history.
+- The customer/driver app compact surface guard now treats customer invoice/PDF folders as an approved customer portal surface while keeping billing, invoice, payment, PDF, customer price, PayNow, and payout language blocked from driver job pages.
+- The controlled customer runtime activation contract guard now recognizes the same `customerAccountBookingFilter` customer saved-bookings isolation shape as the portal read guards.
+- This is a test/ledger guard repair only. It does not change the live app runtime, Load Bookings button behavior, Vercel/env/DB schema, provider sends, email, Stripe/payment, GPS/live-location, billing, payout, or customer/driver-visible data.
+- Focused checks passed: Load Bookings typed-read admin display exposure guard, admin Load Bookings CRM fallback compact guard, public API source privacy boundary guard, public customer form surface boundary guard, typed-read detail isolation guard, typed-read gated API contract, typed operational display merge guard, primary-list source boundary guard, and typed-read admin boundary order guard.
+
 ### Google Calendar Stable Event Identity
 
 - Google Calendar live sync now builds deterministic Google event IDs from the Prestige booking reference only, not from `booking_reference + starts_at_local`.
@@ -118,7 +137,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The live `Credit` action created stored credit note `CN-20260630-0001` linked to original paid invoice `INV-20260629-0002`; admin API read-back confirmed the credit note is `documentType: credit_note`, `documentState: issued`, `status: Unpaid`, `storageSource: server`, and `originalInvoiceNumber: INV-20260629-0002`, while the original invoice remained `Paid`.
 - Live customer portal access for `hourly-test-customer` opened `/my-bookings`, and the Invoices tab showed compact monthly folders for `Unpaid Invoices`, `Paid Invoices`, and `Credit Notes`, including `INV-20260629-0003`, `INV-20260629-0002`, and `CN-20260630-0001`.
 - The live customer-visible portal text scan for that invoice view found no driver payout, PayNow payout, internal admin/finance notes, parser/debug/mock archive fragments, payout comparisons, secrets, Stripe checkout, or payment-intent fragments.
-- Full `scripts/test-preactivation-verification-suite.mjs` still fails before this new guard on a pre-existing Load Bookings typed-read admin display exposure marker mismatch in untouched `app/page.tsx` / `scripts/test-load-bookings-typed-read-admin-display-exposure-guard.mjs`.
+- The previously recorded Load Bookings typed-read admin display exposure marker mismatch was repaired in the Load Bookings Guard Marker Refresh. The billing lifecycle lane itself remains unchanged by that guard-only repair.
 
 ### Customer Invoice Card Payment Toggle Live Proof
 
@@ -2932,8 +2951,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Ledger checkpoint source-of-truth consistency is guarded.
 - This is a docs/test-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.
 - Checkpoint state must be recorded by commit hash and task name, not counters.
-- The top latest staging-smoked app checkpoint must match the Next GPT Lock staging-smoked or implementation checkpoint line.
-- The latest staging smoke section for the top app checkpoint must name the same app short hash and the current full 40-character `origin/staging` branch-head hash, including docs-only smoke records pushed after the app smoke.
+- The top latest verified clean runtime checkpoint must match the latest pushed main/staging runtime checkpoint line.
+- The top latest remote main/staging deployment checkpoint must remain recorded as the most recent verified deployed reference by commit hash and task name; it can differ from the runtime checkpoint when docs-only or non-deployed commits exist.
 - No inconsistent checkpoint counters are approved.
 - This lock adds `scripts/test-ledger-checkpoint-source-of-truth-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 

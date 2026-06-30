@@ -346,7 +346,7 @@ assertIncludes(customerCopyBlock, "booking.driverName", "Customer Copy driver di
 const driverDispatchBlock = sliceBetween(
   appPage,
   "const draftDriverDispatchCard = useMemo(() => {",
-  "const activeAdminDriverJobLink =",
+  "const driverJobLinkMessage = useMemo(() => {",
 );
 assertNoTypedReadExposure(driverDispatchBlock, "Driver Dispatch copy");
 assertIncludes(driverDispatchBlock, "booking.driverIncludePayout && driverPayout", "Driver Dispatch payout gating remains booking state");
@@ -380,6 +380,16 @@ const loadSelectedBookingBlock = sliceBetween(
   "function loadSelectedBooking",
   "async function saveAdminBookingOperationalSnapshot",
 );
+const loadSelectedBookingFormSourceBlock = sliceBetween(
+  appPage,
+  "function loadSelectedBooking",
+  'const typedDisplaySearchParams = new URLSearchParams({ limit: "25" });',
+);
+const loadSelectedBookingTypedDisplayRefreshBlock = sliceBetween(
+  loadSelectedBookingBlock,
+  'const typedDisplaySearchParams = new URLSearchParams({ limit: "25" });',
+  ".catch(() => null);",
+);
 assertIncludes(loadSelectedBookingBlock, "bookingRecordToForm(bookingRecord)", "selected booking form source");
 for (const fragment of [
   "const bookingReference =",
@@ -389,7 +399,32 @@ for (const fragment of [
 ]) {
   assertIncludes(loadSelectedBookingBlock, fragment, `selected booking legacy id source ${fragment}`);
 }
-assertNoTypedReadExposure(loadSelectedBookingBlock, "selected booking form load");
+assertNoTypedReadExposure(loadSelectedBookingFormSourceBlock, "selected booking form load");
+assertIncludes(
+  loadSelectedBookingTypedDisplayRefreshBlock,
+  "fetchLoadBookingsTypedOperationalDisplayResult(typedDisplaySearchParams)",
+  "selected booking typed display refresh fetch",
+);
+assertIncludes(
+  loadSelectedBookingTypedDisplayRefreshBlock,
+  "setLoadBookingsTypedOperationalCardsById(typedOperationalDisplay.cardsById)",
+  "selected booking typed display refresh card state",
+);
+assertIncludes(
+  loadSelectedBookingTypedDisplayRefreshBlock,
+  "setLoadBookingsTypedOperationalCardOrder(typedOperationalDisplay.orderedCardIds)",
+  "selected booking typed display refresh order state",
+);
+assertExcludes(
+  loadSelectedBookingTypedDisplayRefreshBlock,
+  "bookingRecordToForm",
+  "selected booking typed display refresh form mapping",
+);
+assertExcludes(
+  loadSelectedBookingTypedDisplayRefreshBlock,
+  "setBooking(",
+  "selected booking typed display refresh form state",
+);
 
 const saveBookingBlock = sliceBetween(appPage, "async function saveBooking", "async function loadBookings");
 assertIncludes(saveBookingBlock, 'fetch("/api/admin-bookings"', "Save Booking + CRM endpoint");

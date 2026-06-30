@@ -158,7 +158,12 @@ assertIncludes(
   "rememberHandledCustomerBookingRequest(bookingRecord);",
   "Load this booking marks customer request handled",
 );
-assertIncludes(appPage, 'useState<AppTab>("dashboard")', "Dashboard default tab");
+assertIncludes(
+  appPage,
+  'export default function Home({ initialTab = "dashboard" }: HomeProps = {})',
+  "Dashboard default tab prop",
+);
+assertIncludes(appPage, "useState<AppTab>(initialTab)", "Dashboard default tab state");
 assertIncludes(
   appPage,
   "dashboardBookingsInitialLoadAttemptedRef",
@@ -202,7 +207,7 @@ assertIncludes(
 );
 assertIncludes(appPage, 'void loadBookings("Bookings loaded.");', "Bookings tab visible auto-load");
 assertIncludes(appPage, 'void loadBookings("Bookings loaded.", { messageTab: "dashboard" });', "Dashboard tab-scoped initial load");
-assertIncludes(appPage, 'const activeTabRef = useRef<AppTab>("dashboard");', "Active tab async message ref");
+assertIncludes(appPage, "const activeTabRef = useRef<AppTab>(initialTab);", "Active tab async message ref");
 assertIncludes(appPage, "activeTabRef.current === options.messageTab", "Load bookings tab-scoped message guard");
 
 for (const customerRequestFragment of [

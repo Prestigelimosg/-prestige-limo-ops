@@ -154,7 +154,13 @@ for (const fragment of [
   '.from("customer_access_accounts")',
   '.eq("account_status", "active")',
   '.from("bookings")',
-  '.eq("customer_id", customerAccountReference)',
+  "function customerAccountBookingFilter",
+  'column: "customer_id"',
+  'method: "eq"',
+  'column: "customer_display_name"',
+  'method: "ilike"',
+  "bookingQuery.eq(customerFilter.column, customerFilter.value)",
+  "bookingQuery.ilike(customerFilter.column, customerFilter.value)",
 ]) {
   assertIncludes(customerSavedBookingsRead, fragment, `customer saved-bookings auth/isolation fragment ${fragment}`);
 }

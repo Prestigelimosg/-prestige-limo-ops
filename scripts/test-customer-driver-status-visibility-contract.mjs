@@ -251,7 +251,7 @@ assertSameList(
 
 const customerSavedBookingsSelectBlock = blockBetween(
   customerSavedBookingsRead,
-  "const customerSavedBookingsSelect =",
+  "const customerSavedBookingsCurrentSelect =",
   "const customerSavedBookingsAuthRequiredError =",
 );
 assertIncludes(customerSavedBookingsSelectBlock, "customer_facing_status", "customer saved-bookings select status");

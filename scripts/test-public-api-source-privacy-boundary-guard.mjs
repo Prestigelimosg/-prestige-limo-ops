@@ -77,6 +77,7 @@ const helperDenyListChecks = [
 const allowedAdminImports = new Set([
   "../../../lib/admin-device-push-notification",
   "../../../lib/admin-new-booking-email-alert",
+  "../../../lib/admin-app-notification-persistence",
   "../../../lib/admin-booking-persistence",
   "../../../lib/admin-booking-supabase-adapter",
   "../../../../../lib/admin-app-notification-persistence.ts",

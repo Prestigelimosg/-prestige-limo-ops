@@ -169,7 +169,7 @@ for (const fragment of [
   "customerInvoiceLineDescriptionForPreview",
   "amountEdited",
   "approved customer amount",
-  "Preview ready. Review the details below, then issue only when the PDF details are correct.",
+  "preview ready. Review the details below before creating any PDF.",
 ]) {
   assertIncludes(previewFunction, fragment, `invoice override preview guard fragment ${fragment}`);
 }

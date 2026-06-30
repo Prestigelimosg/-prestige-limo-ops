@@ -12,6 +12,24 @@ Latest remote staging branch head:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Customer Billing Document Lifecycle And PDF Notes Order
+
+- Admin Customers invoice workbench now has a document selector for `Invoice` or `Quotation`.
+- `Invoice` remains the default and keeps the existing stored invoice/PDF/email/paid-unpaid path.
+- `Quotation` can be previewed and downloaded as a local `QUO-YYYYMMDD-####` PDF with the PDF title `QUOTATION`; it does not write the current invoice DB or email provider path while the live DB still accepts only `INV-...` stored records.
+- `Save Draft` saves the reviewed workbench details into a compact local draft list without creating an invoice number, PDF record, email, payment, provider, bank, payout, GPS, or DB write.
+- Local quotation rows show `Convert to Invoice` instead of `Pay`, so a quote is not treated as a payable invoice.
+- Paid invoice rows can create a separate local `CN-YYYYMMDD-####` credit-note PDF; the original paid invoice is not edited or deleted.
+- Customer portal invoice folders are future-proofed into compact monthly `Quotations`, `Unpaid Invoices`, `Paid Invoices`, and `Credit Notes` folders while existing stored invoice records still map to paid/unpaid folders.
+- Invoice PDFs now render the lower sections in this order: sign-off, bank information, `Notes`, then `Terms & Conditions`; the Notes block is immediately above Terms instead of above the sign-off/bank section.
+- `supabase/migrations/202606300001_customer_billing_document_lifecycle.sql` scaffolds the future DB columns/checks for `document_type`, `document_state`, `original_invoice_number`, `INV/QUO/CN` number prefixes, and credit-note linkage. This migration was not applied from Codex.
+- Server-backed quotation/email, server-backed draft persistence, and server-backed credit-note portal records should only be activated after the DB migration is explicitly approved/applied and the persistence adapter is upgraded to read/write those columns.
+- This pass does not create Stripe checkout/payment links, card charges, bank debit, payout records, provider sends, GPS/live-location records, automatic reconciliation, or customer/driver-visible internal/admin/debug/mock/payout data.
+- Guard coverage lives in `scripts/test-customer-billing-document-lifecycle-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+- Focused checks passed: customer billing document lifecycle guard, customer stored invoice PDF portal guard, customer trust path invoice portal guard, customer invoice driver JC timing/override guard, customer hourly invoice calculation guard, `npx tsc --noEmit --pretty false`, targeted ESLint, and `git diff --check`.
+- A sample invoice PDF was rendered to PNG with Poppler and visually checked; Notes sits above Terms & Conditions with no overlap or clipping.
+- Full `scripts/test-preactivation-verification-suite.mjs` still fails before this new guard on a pre-existing Load Bookings typed-read admin display exposure marker mismatch in untouched `app/page.tsx` / `scripts/test-load-bookings-typed-read-admin-display-exposure-guard.mjs`.
+
 ### Customer Invoice Card Payment Toggle Live Proof
 
 - Source-of-truth commit for the card-payment checkbox: `5118f697 Add invoice card payment toggle`.

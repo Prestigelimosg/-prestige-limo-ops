@@ -27,7 +27,7 @@ import {
 import { loadPublicCompanyProfile } from "../../lib/public-company-profile-adapter";
 
 type BookingFilter = "Cancelled" | "Completed" | "Upcoming";
-type InvoiceFolder = "Paid" | "Unpaid";
+type InvoiceFolder = "Credit Notes" | "Paid Invoices" | "Quotations" | "Unpaid Invoices";
 type InvoiceDownloadState = "downloaded" | "downloading" | "failed";
 type PortalSection = "New Booking Request" | "Invoices" | BookingFilter;
 type PortalBookingsLoadState = "blocked" | "loading" | "ready";
@@ -92,7 +92,12 @@ const monthNames = [
 
 const bookingFilters: BookingFilter[] = ["Upcoming", "Completed", "Cancelled"];
 const bookingFilterSet = new Set<PortalSection>(bookingFilters);
-const invoiceFolders: InvoiceFolder[] = ["Unpaid", "Paid"];
+const invoiceFolders: InvoiceFolder[] = [
+  "Quotations",
+  "Unpaid Invoices",
+  "Paid Invoices",
+  "Credit Notes",
+];
 const portalSections: PortalSection[] = ["New Booking Request", "Invoices", ...bookingFilters];
 
 const initialBookingPages: Record<BookingFilter, number> = {
@@ -235,6 +240,42 @@ function canRequestBookingReview(booking: CustomerPortalBooking) {
   return booking.status !== "Completed" && booking.status !== "Cancelled";
 }
 
+function customerPortalInvoiceFolder(invoice: CustomerPortalInvoiceRecord): InvoiceFolder {
+  if (invoice.documentType === "quotation") {
+    return "Quotations";
+  }
+
+  if (invoice.documentType === "credit_note") {
+    return "Credit Notes";
+  }
+
+  return invoice.status === "Paid" ? "Paid Invoices" : "Unpaid Invoices";
+}
+
+function invoiceFolderSlug(folder: InvoiceFolder) {
+  return folder.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+}
+
+function invoiceFolderDateHeading(folder: InvoiceFolder) {
+  if (folder === "Paid Invoices") {
+    return "Paid date";
+  }
+
+  if (folder === "Quotations") {
+    return "Quote date";
+  }
+
+  if (folder === "Credit Notes") {
+    return "Credit date";
+  }
+
+  return "Due date";
+}
+
+function invoiceFolderRowDate(folder: InvoiceFolder, invoice: CustomerPortalInvoiceRecord) {
+  return folder === "Unpaid Invoices" ? invoice.dueDateLabel : invoice.issueDateLabel;
+}
+
 function splitPickupTime(value: string) {
   const [hour = "", minute = ""] = value.split(":");
 
@@ -301,12 +342,14 @@ export default function CustomerPortalPage() {
   const currentPortalMonth = useMemo(() => getCurrentPortalMonthInfo(), []);
   const customerInvoiceRecordsByFolder = useMemo(() => {
     const byFolder: Record<InvoiceFolder, CustomerPortalInvoiceRecord[]> = {
-      Paid: [],
-      Unpaid: [],
+      "Credit Notes": [],
+      "Paid Invoices": [],
+      Quotations: [],
+      "Unpaid Invoices": [],
     };
 
     customerInvoiceRecords.forEach((invoice) => {
-      byFolder[invoice.status].push(invoice);
+      byFolder[customerPortalInvoiceFolder(invoice)].push(invoice);
     });
 
     invoiceFolders.forEach((folder) => {
@@ -1129,7 +1172,7 @@ export default function CustomerPortalPage() {
                 Invoices
               </h2>
               <p className="text-sm leading-6 text-slate-600">
-                Invoice folders are grouped by month and separated by unpaid and paid status.
+                Billing documents are grouped by month into quotations, unpaid invoices, paid invoices, and credit notes.
               </p>
               <p
                 className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold leading-5 text-slate-700"
@@ -1142,7 +1185,7 @@ export default function CustomerPortalPage() {
 
             <div className="mt-3 grid gap-3">
               {invoiceFolders.map((folder) => {
-                const folderKey = folder.toLowerCase();
+                const folderKey = invoiceFolderSlug(folder);
                 const folderRecords = customerInvoiceRecordsByFolder[folder];
                 const monthLabels = Array.from(
                   new Set(folderRecords.map((invoice) => invoice.billingMonthLabel)),
@@ -1156,7 +1199,7 @@ export default function CustomerPortalPage() {
                   >
                     <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2">
                       <div>
-                        <h3 className="text-sm font-bold text-slate-950">{folder} Invoices</h3>
+                        <h3 className="text-sm font-bold text-slate-950">{folder}</h3>
                         <p className="text-xs text-slate-600">Grouped monthly</p>
                       </div>
                       <span
@@ -1178,7 +1221,7 @@ export default function CustomerPortalPage() {
                           <tr className="border-b border-slate-100">
                             <th className="px-3 py-2 font-bold">Invoice</th>
                             <th className="px-3 py-2 font-bold">Amount</th>
-                            <th className="px-3 py-2 font-bold">{folder === "Paid" ? "Paid date" : "Due date"}</th>
+                            <th className="px-3 py-2 font-bold">{invoiceFolderDateHeading(folder)}</th>
                             <th className="px-3 py-2 text-right font-bold">Action</th>
                           </tr>
                         </thead>
@@ -1201,7 +1244,7 @@ export default function CustomerPortalPage() {
                                 </td>
                                 <td className="px-3 py-2 font-semibold text-slate-950">{invoice.amountLabel}</td>
                                 <td className="px-3 py-2 text-slate-700">
-                                  {folder === "Paid" ? invoice.issueDateLabel : invoice.dueDateLabel}
+                                  {invoiceFolderRowDate(folder, invoice)}
                                 </td>
                                 <td className="px-3 py-2 text-right">
                                   <button
@@ -1235,7 +1278,7 @@ export default function CustomerPortalPage() {
                           ) : (
                             <tr data-customer-portal-invoice-empty-row={folderKey}>
                               <td className="px-3 py-3 text-sm text-slate-600" colSpan={4}>
-                                No {folder.toLowerCase()} invoice PDFs are available in this customer folder yet.
+                                No {folder.toLowerCase()} PDFs are available in this customer folder yet.
                               </td>
                             </tr>
                           )}

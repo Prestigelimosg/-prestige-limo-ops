@@ -18,6 +18,7 @@ import {
   hourlyBillingUnitMinutes,
 } from "../../lib/hourly-billing";
 import {
+  createCustomerLocalInvoiceRecord,
   downloadCustomerInvoicePdf,
   formatInvoiceAmount,
   formatInvoiceDate,
@@ -26,6 +27,7 @@ import {
   parseInvoiceAmountToCents,
   readCustomerLocalInvoices,
   saveCustomerLocalInvoice,
+  type CustomerBillingDocumentType,
   type CustomerLocalInvoiceRecord,
   type CustomerLocalInvoiceStatus,
 } from "../../lib/customer-local-invoices";
@@ -282,6 +284,7 @@ type CustomerInvoicePreview = {
   cardFeeApplies: boolean;
   cardPaymentEnabled: boolean;
   customerName: string;
+  documentType: CustomerBillingDocumentType;
   dueDateIso: string;
   dueDateLabel: string;
   folder: CustomerLocalInvoiceStatus;
@@ -299,6 +302,24 @@ type CustomerDisplayedInvoiceRecord = CustomerLocalInvoiceRecord & {
   emailSentAt?: string | null;
   pdfFilename?: string;
   storageSource?: "local" | "server";
+};
+
+type CustomerInvoiceDraftRecord = {
+  amountCents: number;
+  amountLabel: string;
+  cardFeeApplies: boolean;
+  cardPaymentEnabled: boolean;
+  createdAtLabel: string;
+  customerName: string;
+  documentType: CustomerBillingDocumentType;
+  draftId: string;
+  dueDateIso: string;
+  dueDateLabel: string;
+  folder: CustomerLocalInvoiceStatus;
+  lineDescription: string;
+  reference: string;
+  route: string;
+  service: string;
 };
 
 type RegularCustomerBookingForm = typeof initialRegularCustomerBookingForm;
@@ -537,6 +558,26 @@ function customerInvoiceCardPaymentPreviewLabel(
   }
 
   return cardFeeApplies ? "Enabled, 10% fee note included" : "Enabled, no fee note";
+}
+
+function customerBillingDocumentLabel(documentType: CustomerBillingDocumentType) {
+  if (documentType === "credit_note") {
+    return "Credit Note";
+  }
+
+  if (documentType === "quotation") {
+    return "Quotation";
+  }
+
+  return "Invoice";
+}
+
+function customerBillingDocumentActionLabel(documentType: CustomerBillingDocumentType) {
+  if (documentType === "quotation") {
+    return "Create Quotation PDF";
+  }
+
+  return "Issue Invoice + PDF";
 }
 
 function getCustomerInvoiceRowCalculatedAmount(
@@ -1071,6 +1112,8 @@ export default function MockCustomerDashboardPage() {
   );
   const [customerInvoiceIssueStatus, setCustomerInvoiceIssueStatus] =
     useState<CustomerLocalInvoiceStatus>("Unpaid");
+  const [customerInvoiceDocumentType, setCustomerInvoiceDocumentType] =
+    useState<CustomerBillingDocumentType>("invoice");
   const [customerInvoiceRecipientEmail, setCustomerInvoiceRecipientEmail] = useState("");
   const [customerInvoiceCardPaymentEnabled, setCustomerInvoiceCardPaymentEnabled] = useState(false);
   const [customerInvoiceCardFeeApplies, setCustomerInvoiceCardFeeApplies] = useState(false);
@@ -1079,6 +1122,7 @@ export default function MockCustomerDashboardPage() {
   );
   const [customerInvoicePreview, setCustomerInvoicePreview] =
     useState<CustomerInvoicePreview | null>(null);
+  const [customerInvoiceDrafts, setCustomerInvoiceDrafts] = useState<CustomerInvoiceDraftRecord[]>([]);
   const [customerInvoiceCalculatedAmountCents, setCustomerInvoiceCalculatedAmountCents] =
     useState<number | null>(null);
   const [customerInvoiceCalculatedBillingBreakdown, setCustomerInvoiceCalculatedBillingBreakdown] =
@@ -1478,6 +1522,7 @@ export default function MockCustomerDashboardPage() {
 
     return [
       customerInvoicePrepRow.key,
+      customerInvoiceDocumentType,
       customerInvoiceApprovedAmountCents,
       customerInvoiceIssueDueDate,
       customerInvoiceIssueStatus,
@@ -1495,6 +1540,7 @@ export default function MockCustomerDashboardPage() {
     customerInvoiceCardPaymentEnabled,
     customerInvoiceCalculatedAmountCents,
     customerInvoiceCalculatedLineDescription,
+    customerInvoiceDocumentType,
     customerInvoiceIssueDueDate,
     customerInvoiceIssueStatus,
     customerInvoicePrepRow,
@@ -1963,6 +2009,7 @@ export default function MockCustomerDashboardPage() {
     setCustomerInvoiceIssueAmount(suggestedAmountCents ? row.amount.replace(/^\$/, "") : "");
     setCustomerInvoiceIssueDueDate(invoiceDateInputDaysFromNow(7));
     setCustomerInvoiceIssueStatus("Unpaid");
+    setCustomerInvoiceDocumentType("invoice");
     setCustomerInvoiceRecipientEmail("");
     setCustomerInvoiceCardPaymentEnabled(false);
     setCustomerInvoiceCardFeeApplies(false);
@@ -2072,6 +2119,7 @@ export default function MockCustomerDashboardPage() {
     setCustomerInvoiceIssueAmount("");
     setCustomerInvoiceIssueDueDate(invoiceDateInputDaysFromNow(7));
     setCustomerInvoiceIssueStatus("Unpaid");
+    setCustomerInvoiceDocumentType("invoice");
     setCustomerInvoiceRecipientEmail("");
     setCustomerInvoiceCardPaymentEnabled(false);
     setCustomerInvoiceCardFeeApplies(false);
@@ -2117,7 +2165,11 @@ export default function MockCustomerDashboardPage() {
 
   function previewPreparedCustomerInvoice() {
     if (!customerInvoicePrepRow) {
-      setCustomerInvoiceIssueFeedback("Choose Prepare from Unbilled Customers before previewing an invoice.");
+      setCustomerInvoiceIssueFeedback(
+        `Choose Prepare from Unbilled Customers before previewing a ${customerBillingDocumentLabel(
+          customerInvoiceDocumentType,
+        ).toLowerCase()}.`,
+      );
       return;
     }
 
@@ -2132,7 +2184,9 @@ export default function MockCustomerDashboardPage() {
 
     if (customerInvoiceAmountEdited && !customerInvoiceAdjustmentReason.trim()) {
       setCustomerInvoiceIssueFeedback(
-        "Enter adjustment reason before previewing an invoice with an edited amount.",
+        `Enter adjustment reason before previewing a ${customerBillingDocumentLabel(
+          customerInvoiceDocumentType,
+        ).toLowerCase()} with an edited amount.`,
       );
       document
         .querySelector<HTMLElement>("[data-customer-invoice-override-reason='true']")
@@ -2155,6 +2209,7 @@ export default function MockCustomerDashboardPage() {
       cardFeeApplies: customerInvoiceCardFeeApplies,
       cardPaymentEnabled: customerInvoiceCardPaymentEnabled,
       customerName: customerInvoicePrepRow.customerName,
+      documentType: customerInvoiceDocumentType,
       dueDateIso: customerInvoiceIssueDueDate,
       dueDateLabel,
       folder: customerInvoiceIssueStatus,
@@ -2168,7 +2223,9 @@ export default function MockCustomerDashboardPage() {
         : customerInvoiceCalculatedSourceLabel || "Prepared unbilled row",
     });
     setCustomerInvoiceIssueFeedback(
-      "Preview ready. Review the details below, then issue only when the PDF details are correct.",
+      `${customerBillingDocumentLabel(
+        customerInvoiceDocumentType,
+      )} preview ready. Review the details below before creating any PDF.`,
     );
     window.setTimeout(() => {
       document
@@ -2206,6 +2263,88 @@ export default function MockCustomerDashboardPage() {
     await downloadCustomerInvoicePdf(invoice);
   }
 
+  function saveCustomerInvoiceDraft() {
+    if (!customerInvoicePrepRow) {
+      setCustomerInvoiceIssueFeedback("Choose Prepare from Unbilled Customers before saving a draft.");
+      return;
+    }
+
+    if (!customerInvoicePreview || !isCustomerInvoicePreviewCurrent) {
+      setCustomerInvoiceIssueFeedback("Preview first, then save the draft so the saved details match the screen.");
+      document
+        .querySelector<HTMLElement>("[data-customer-invoice-preview-action='true']")
+        ?.focus();
+      return;
+    }
+
+    const draftId = `DRAFT-${new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14)}`;
+    const draft = {
+      amountCents: customerInvoicePreview.amountCents,
+      amountLabel: customerInvoicePreview.amountLabel,
+      cardFeeApplies: customerInvoicePreview.cardFeeApplies,
+      cardPaymentEnabled: customerInvoicePreview.cardPaymentEnabled,
+      createdAtLabel: formatInvoiceDate(new Date()),
+      customerName: customerInvoicePreview.customerName,
+      documentType: customerInvoicePreview.documentType,
+      draftId,
+      dueDateIso: customerInvoicePreview.dueDateIso,
+      dueDateLabel: customerInvoicePreview.dueDateLabel,
+      folder: customerInvoicePreview.folder,
+      lineDescription: customerInvoicePreview.lineDescription,
+      reference: customerInvoicePreview.reference,
+      route: customerInvoicePreview.route,
+      service: customerInvoicePreview.service,
+    } satisfies CustomerInvoiceDraftRecord;
+
+    setCustomerInvoiceDrafts((drafts) => [draft, ...drafts].slice(0, 10));
+    setCustomerInvoiceIssueFeedback(
+      `${customerBillingDocumentLabel(
+        draft.documentType,
+      )} draft saved locally as ${draft.draftId}. No invoice number, email, payment, or DB write was created.`,
+    );
+  }
+
+  async function createLocalCustomerBillingDocumentPdf(documentType: CustomerBillingDocumentType) {
+    if (!customerInvoicePrepRow || !customerInvoicePreview || !isCustomerInvoicePreviewCurrent) {
+      setCustomerInvoiceIssueFeedback("Preview first, then create the PDF from the current reviewed details.");
+      return;
+    }
+
+    const documentRecord = createCustomerLocalInvoiceRecord(
+      {
+        amountCents: customerInvoicePreview.amountCents,
+        billingMonthLabel: formatInvoiceMonth(new Date()),
+        customerId: customerInvoicePrepRow.customerId,
+        customerName: customerInvoicePrepRow.customerName,
+        documentType,
+        dueDateIso: customerInvoicePreview.dueDateIso,
+        lineItems: [
+          {
+            amountLabel: customerInvoicePreview.amountLabel,
+            description: customerInvoicePreview.lineDescription,
+          },
+        ],
+        reference: customerInvoicePreview.reference,
+        route: customerInvoicePreview.route,
+        service: customerInvoicePreview.service,
+        status: "Unpaid",
+      },
+      readCustomerLocalInvoices(),
+    );
+
+    const displayedDocument = {
+      ...documentRecord,
+      storageSource: "local" as const,
+    };
+
+    saveCustomerLocalInvoice(documentRecord);
+    updateIssuedInvoiceState(displayedDocument);
+    await downloadCustomerInvoicePdf(documentRecord);
+    setCustomerInvoiceIssueFeedback(
+      `${customerBillingDocumentLabel(documentType)} ${documentRecord.invoiceNumber} PDF created locally. It was not written to the current invoice DB or sent by email.`,
+    );
+  }
+
   async function issuePreparedCustomerInvoice() {
     if (!customerInvoicePrepRow) {
       setCustomerInvoiceIssueFeedback("Choose Prepare from Unbilled Customers before issuing an invoice.");
@@ -2238,6 +2377,11 @@ export default function MockCustomerDashboardPage() {
       document
         .querySelector<HTMLElement>("[data-customer-invoice-preview-action='true']")
         ?.focus();
+      return;
+    }
+
+    if (customerInvoicePreview.documentType === "quotation") {
+      await createLocalCustomerBillingDocumentPdf("quotation");
       return;
     }
 
@@ -2488,6 +2632,69 @@ export default function MockCustomerDashboardPage() {
       `${invoice.invoiceNumber} marked Unpaid locally. No bank, Stripe, payment provider, or Supabase record was changed.`,
     );
     window.setTimeout(() => setUpdatingCustomerInvoiceStatusNumber(""), 700);
+  }
+
+  async function createCreditNoteFromPaidInvoice(invoice: CustomerDisplayedInvoiceRecord) {
+    if (invoice.status !== "Paid") {
+      setCustomerInvoiceIssueFeedback("Credit notes are available only after an invoice is marked Paid.");
+      return;
+    }
+
+    const creditNote = createCustomerLocalInvoiceRecord(
+      {
+        amountCents: invoice.amountCents,
+        billingMonthLabel: invoice.billingMonthLabel,
+        customerId: invoice.customerId,
+        customerName: invoice.customerName,
+        documentType: "credit_note",
+        dueDateIso: new Date().toISOString().slice(0, 10),
+        lineItems: [
+          {
+            amountLabel: invoice.amountLabel,
+            description: `Credit note for ${invoice.invoiceNumber}. Admin correction for overpayment or invoice reversal.`,
+          },
+        ],
+        originalInvoiceNumber: invoice.invoiceNumber,
+        reference: invoice.reference,
+        route: invoice.route,
+        service: "Credit Note",
+        status: "Unpaid",
+      },
+      readCustomerLocalInvoices(),
+    );
+    const displayedCreditNote = {
+      ...creditNote,
+      storageSource: "local" as const,
+    };
+
+    saveCustomerLocalInvoice(creditNote);
+    updateIssuedInvoiceState(displayedCreditNote);
+    await downloadCustomerInvoicePdf(creditNote);
+    setCustomerInvoiceIssueFeedback(
+      `${creditNote.invoiceNumber} created from ${invoice.invoiceNumber}. The paid invoice was not edited or deleted.`,
+    );
+  }
+
+  function convertQuotationToInvoice(invoice: CustomerDisplayedInvoiceRecord) {
+    if ((invoice.documentType || "invoice") !== "quotation") {
+      setCustomerInvoiceIssueFeedback("Only quotations can be converted into an invoice draft.");
+      return;
+    }
+
+    if (!customerInvoicePrepRow) {
+      setCustomerInvoiceIssueFeedback(
+        "Prepare the customer/job again, then convert the quotation into an invoice draft.",
+      );
+      return;
+    }
+
+    setCustomerInvoiceDocumentType("invoice");
+    setCustomerInvoiceIssueStatus("Unpaid");
+    setCustomerInvoiceIssueAmount(invoice.amountLabel.replace(/^\$/, ""));
+    setCustomerInvoicePreview(null);
+    setCustomerInvoiceIssueFeedback(
+      `${invoice.invoiceNumber} copied into the invoice workbench. Preview Invoice before issuing the final invoice number.`,
+    );
   }
 
   function clearRegularCustomerBookingListFilters() {
@@ -3523,7 +3730,26 @@ export default function MockCustomerDashboardPage() {
                   className="mt-3 border-t border-slate-200 pt-3"
                   data-customer-invoice-issue-panel="true"
                 >
-                  <div className="grid gap-2 md:grid-cols-[minmax(8rem,0.7fr)_minmax(8rem,0.7fr)_minmax(8rem,0.6fr)_minmax(12rem,1fr)_auto_auto] md:items-end">
+                  <div className="grid gap-2 md:grid-cols-[minmax(8rem,0.7fr)_minmax(8rem,0.7fr)_minmax(8rem,0.7fr)_minmax(8rem,0.6fr)_minmax(12rem,1fr)_auto_auto_auto] md:items-end">
+                    <label className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
+                      Document
+                      <select
+                        className="mt-1 min-h-9 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950 outline-none focus:border-slate-700"
+                        data-customer-invoice-document-type="true"
+                        onChange={(event) => {
+                          const nextType = event.target.value as CustomerBillingDocumentType;
+                          setCustomerInvoiceDocumentType(nextType);
+
+                          if (nextType === "quotation") {
+                            setCustomerInvoiceIssueStatus("Unpaid");
+                          }
+                        }}
+                        value={customerInvoiceDocumentType}
+                      >
+                        <option value="invoice">Invoice</option>
+                        <option value="quotation">Quotation</option>
+                      </select>
+                    </label>
                     <label className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
                       Approved amount
                       <input
@@ -3550,10 +3776,11 @@ export default function MockCustomerDashboardPage() {
                       />
                     </label>
                     <label className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
-                      Folder
+                      Status
                       <select
                         className="mt-1 min-h-9 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950 outline-none focus:border-slate-700"
                         data-customer-invoice-issue-status="true"
+                        disabled={customerInvoiceDocumentType === "quotation"}
                         onChange={(event) => {
                           setCustomerInvoiceIssueStatus(event.target.value as CustomerLocalInvoiceStatus);
                         }}
@@ -3644,7 +3871,20 @@ export default function MockCustomerDashboardPage() {
                         ? "Previewed"
                         : customerInvoicePreview
                           ? "Refresh Preview"
-                          : "Preview Invoice"}
+                          : `Preview ${customerBillingDocumentLabel(customerInvoiceDocumentType)}`}
+                    </button>
+                    <button
+                      className={`min-h-9 rounded-md border px-3 py-2 text-sm font-bold transition ${
+                        isCustomerInvoicePreviewCurrent
+                          ? "border-slate-300 bg-white text-slate-800 hover:border-slate-600"
+                          : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                      }`}
+                      aria-disabled={!isCustomerInvoicePreviewCurrent}
+                      data-customer-invoice-save-draft="true"
+                      onClick={saveCustomerInvoiceDraft}
+                      type="button"
+                    >
+                      Save Draft
                     </button>
                     <button
                       className={`min-h-9 rounded-md border px-3 py-2 text-sm font-bold transition ${
@@ -3662,7 +3902,7 @@ export default function MockCustomerDashboardPage() {
                       {issuingCustomerInvoiceKey === customerInvoicePrepRow.key
                         ? "Issued"
                         : isCustomerInvoicePreviewCurrent
-                          ? "Issue Invoice + PDF"
+                          ? customerBillingDocumentActionLabel(customerInvoiceDocumentType)
                           : "Preview first"}
                     </button>
                   </div>
@@ -3677,7 +3917,8 @@ export default function MockCustomerDashboardPage() {
                     >
                       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                         <p className="font-bold uppercase tracking-[0.08em]">
-                          Invoice Preview {isCustomerInvoicePreviewCurrent ? "Ready" : "Needs Refresh"}
+                          {customerBillingDocumentLabel(customerInvoicePreview.documentType)} Preview{" "}
+                          {isCustomerInvoicePreviewCurrent ? "Ready" : "Needs Refresh"}
                         </p>
                         <p className="font-semibold" data-customer-invoice-preview-amount="true">
                           {customerInvoicePreview.amountLabel} / {customerInvoicePreview.folder}
@@ -3688,6 +3929,12 @@ export default function MockCustomerDashboardPage() {
                           <dt className="font-bold text-slate-600">Customer</dt>
                           <dd className="font-semibold" data-customer-invoice-preview-customer="true">
                             {customerInvoicePreview.customerName}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="font-bold text-slate-600">Document</dt>
+                          <dd className="font-semibold" data-customer-invoice-preview-document-type="true">
+                            {customerBillingDocumentLabel(customerInvoicePreview.documentType)}
                           </dd>
                         </div>
                         <div>
@@ -3738,10 +3985,48 @@ export default function MockCustomerDashboardPage() {
                     className="mt-2 rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-950"
                     data-customer-invoice-issue-local-boundary="true"
                   >
-                    Stored invoice record with PDF download. Email sends only when the approved email provider gate is
-                    configured. Card checkbox only changes invoice wording. It does not create a Stripe checkout,
-                    payment link, card charge, bank debit, payout, provider job send, or automatic payment action.
+                    Invoice creates a stored invoice record with PDF download. Quotation, draft, and credit note
+                    controls are separated so a quote cannot be mistaken for an issued invoice. Card checkbox only
+                    changes invoice wording. No Stripe checkout, payment link, card charge, bank debit, payout,
+                    provider job send, or automatic payment action is created here.
                   </p>
+                </div>
+              ) : null}
+              {customerInvoiceDrafts.length > 0 ? (
+                <div
+                  className="mt-3 border-t border-slate-200 pt-3"
+                  data-customer-invoice-draft-list="true"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
+                      Drafts
+                    </p>
+                    <p className="text-xs font-bold text-slate-600">
+                      {customerInvoiceDrafts.length} local draft
+                      {customerInvoiceDrafts.length === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                  <div className="mt-2 overflow-x-auto">
+                    <table className="w-full min-w-[620px] text-left text-xs">
+                      <tbody>
+                        {customerInvoiceDrafts.map((draft) => (
+                          <tr
+                            className="border-t border-slate-100"
+                            data-customer-invoice-draft-row={draft.draftId}
+                            key={draft.draftId}
+                          >
+                            <td className="py-2 pr-3 font-bold text-slate-950">{draft.draftId}</td>
+                            <td className="py-2 pr-3 text-slate-700">
+                              {customerBillingDocumentLabel(draft.documentType)}
+                            </td>
+                            <td className="py-2 pr-3 text-slate-700">{draft.customerName}</td>
+                            <td className="py-2 pr-3 font-semibold text-slate-950">{draft.amountLabel}</td>
+                            <td className="py-2 pr-3 text-slate-700">{draft.dueDateLabel}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               ) : null}
               {issuedCustomerInvoices.length > 0 ? (
@@ -3758,25 +4043,31 @@ export default function MockCustomerDashboardPage() {
                     </p>
                   </div>
                   <div className="mt-2 overflow-x-auto">
-                    <table className="w-full min-w-[620px] text-left text-xs">
+                    <table className="w-full min-w-[720px] text-left text-xs">
                       <tbody>
-                        {issuedCustomerInvoices.slice(0, 5).map((invoice) => (
-                          <tr
-                            className="border-t border-slate-100"
-                            data-customer-invoice-issued-local-row={invoice.invoiceNumber}
-                            key={invoice.id}
-                          >
-                            <td className="py-2 pr-3 font-bold text-slate-950">{invoice.invoiceNumber}</td>
-                            <td className="py-2 pr-3 text-slate-700">{invoice.customerName}</td>
-                            <td className="py-2 pr-3 font-semibold text-slate-950">{invoice.amountLabel}</td>
-                            <td className="py-2 pr-3 text-slate-700">
-                              <span>{invoice.status}</span>
-                              <span className="ml-2 text-slate-400">
-                                {invoice.storageSource === "server" ? "Stored" : "Local"}
-                              </span>
-                            </td>
-                            <td className="py-2 text-right">
-                              <div className="inline-flex flex-wrap justify-end gap-1">
+                        {issuedCustomerInvoices.slice(0, 5).map((invoice) => {
+                          const invoiceDocumentType = invoice.documentType || "invoice";
+
+                          return (
+                            <tr
+                              className="border-t border-slate-100"
+                              data-customer-invoice-issued-local-row={invoice.invoiceNumber}
+                              key={invoice.id}
+                            >
+                              <td className="py-2 pr-3 font-bold text-slate-950">{invoice.invoiceNumber}</td>
+                              <td className="py-2 pr-3 text-slate-700">
+                                {customerBillingDocumentLabel(invoiceDocumentType)}
+                              </td>
+                              <td className="py-2 pr-3 text-slate-700">{invoice.customerName}</td>
+                              <td className="py-2 pr-3 font-semibold text-slate-950">{invoice.amountLabel}</td>
+                              <td className="py-2 pr-3 text-slate-700">
+                                <span>{invoiceDocumentType === "credit_note" ? "Credit note" : invoice.status}</span>
+                                <span className="ml-2 text-slate-400">
+                                  {invoice.storageSource === "server" ? "Stored" : "Local"}
+                                </span>
+                              </td>
+                              <td className="py-2 text-right">
+                                <div className="inline-flex flex-wrap justify-end gap-1">
                                 <button
                                   className={`rounded-md border px-2 py-1 font-bold transition ${
                                     downloadingCustomerInvoiceNumber === invoice.invoiceNumber
@@ -3809,9 +4100,37 @@ export default function MockCustomerDashboardPage() {
                                     ? "Emailing"
                                     : invoice.emailDeliveryStatus === "sent"
                                       ? "Emailed"
-                                      : "Email Invoice"}
+                                      : invoiceDocumentType === "quotation"
+                                        ? "Email Quotation"
+                                        : invoiceDocumentType === "credit_note"
+                                          ? "Email Credit Note"
+                                          : "Email Invoice"}
                                 </button>
-                                {invoice.status === "Paid" ? (
+                                {invoiceDocumentType === "quotation" ? (
+                                  <>
+                                    <span
+                                      className="rounded-md border border-sky-300 bg-sky-50 px-2 py-1 font-bold text-sky-900"
+                                      data-customer-invoice-issued-local-quotation={invoice.invoiceNumber}
+                                    >
+                                      Quotation
+                                    </span>
+                                    <button
+                                      className="rounded-md border border-slate-300 bg-white px-2 py-1 font-bold text-slate-800 transition hover:border-slate-600"
+                                      data-customer-invoice-issued-local-convert-quote={invoice.invoiceNumber}
+                                      onClick={() => convertQuotationToInvoice(invoice)}
+                                      type="button"
+                                    >
+                                      Convert to Invoice
+                                    </button>
+                                  </>
+                                ) : invoiceDocumentType === "credit_note" ? (
+                                  <span
+                                    className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 font-bold text-amber-900"
+                                    data-customer-invoice-issued-local-credit-note={invoice.invoiceNumber}
+                                  >
+                                    Credit Note
+                                  </span>
+                                ) : invoice.status === "Paid" ? (
                                   <>
                                     <span
                                       className="rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 font-bold text-emerald-800"
@@ -3833,6 +4152,14 @@ export default function MockCustomerDashboardPage() {
                                         ? "Unpaid"
                                         : "Mark Unpaid"}
                                     </button>
+                                    <button
+                                      className="rounded-md border border-amber-300 bg-white px-2 py-1 font-bold text-amber-800 transition hover:border-amber-600"
+                                      data-customer-invoice-issued-local-credit-action={invoice.invoiceNumber}
+                                      onClick={() => createCreditNoteFromPaidInvoice(invoice)}
+                                      type="button"
+                                    >
+                                      Credit Note
+                                    </button>
                                   </>
                                 ) : (
                                   <button
@@ -3849,10 +4176,11 @@ export default function MockCustomerDashboardPage() {
                                     {updatingCustomerInvoiceStatusNumber === invoice.invoiceNumber ? "Paid" : "Pay"}
                                   </button>
                                 )}
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

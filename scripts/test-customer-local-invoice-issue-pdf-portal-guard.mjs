@@ -101,7 +101,10 @@ for (const fragment of [
   "companyProfilePaymentSummary",
   "function pdfRightTextAt(",
   "function pdfRect(",
-  'pdfRightTextAt("INVOICE"',
+  "const documentTitle =",
+  '"INVOICE"',
+  '"QUOTATION"',
+  '"CREDIT NOTE"',
   "Item & Description",
   "Balance Due",
   "Sub Total",
@@ -248,10 +251,10 @@ for (const fragment of [
   "method: \"PATCH\"",
   "fetch(adminCustomerInvoiceEmailApiPath",
   "downloadStoredCustomerInvoicePdf(issuedInvoice)",
-  "Stored invoice record with PDF download.",
-  "Card checkbox only changes invoice wording.",
-  "It does not create a Stripe checkout,",
-  "payment link, card charge, bank debit, payout, provider job send, or automatic payment action.",
+  "Invoice creates a stored invoice record with PDF download.",
+  "Quotation, draft, and credit note",
+  "changes invoice wording. No Stripe checkout, payment link, card charge, bank debit, payout,",
+  "provider job send, or automatic payment action is created here.",
 ]) {
   assertIncludes(customersPage, fragment, `customers stored invoice UI ${fragment}`);
 }

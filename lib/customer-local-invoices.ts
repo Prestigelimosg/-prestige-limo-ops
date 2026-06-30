@@ -5,6 +5,7 @@ import {
   type PublicCompanyProfile,
 } from "./company-profile-shared";
 
+export type CustomerBillingDocumentType = "credit_note" | "invoice" | "quotation";
 export type CustomerLocalInvoiceStatus = "Paid" | "Unpaid";
 
 export type CustomerLocalInvoiceLineItem = {
@@ -18,6 +19,8 @@ export type CustomerLocalInvoiceRecord = {
   billingMonthLabel: string;
   customerId: string;
   customerName: string;
+  documentState?: "draft" | "issued";
+  documentType?: CustomerBillingDocumentType;
   dueDateLabel: string;
   id: string;
   invoiceNumber: string;
@@ -29,6 +32,7 @@ export type CustomerLocalInvoiceRecord = {
   service: string;
   source: "local-admin-issued-invoice-v1";
   status: CustomerLocalInvoiceStatus;
+  originalInvoiceNumber?: string;
 };
 
 export type CustomerLocalInvoiceCreateInput = {
@@ -38,6 +42,8 @@ export type CustomerLocalInvoiceCreateInput = {
   customerName: string;
   dueDateIso: string;
   lineItems?: CustomerLocalInvoiceLineItem[];
+  documentType?: CustomerBillingDocumentType;
+  originalInvoiceNumber?: string;
   reference: string;
   route: string;
   service: string;
@@ -71,6 +77,22 @@ function browserStorage() {
 
 function isInvoiceStatus(value: unknown): value is CustomerLocalInvoiceStatus {
   return value === "Paid" || value === "Unpaid";
+}
+
+function isBillingDocumentType(value: unknown): value is CustomerBillingDocumentType {
+  return value === "credit_note" || value === "invoice" || value === "quotation";
+}
+
+function inferBillingDocumentType(value: string): CustomerBillingDocumentType {
+  if (value.startsWith("CN-")) {
+    return "credit_note";
+  }
+
+  if (value.startsWith("QUO-")) {
+    return "quotation";
+  }
+
+  return "invoice";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -125,6 +147,10 @@ function sanitizeInvoiceRecord(value: unknown): CustomerLocalInvoiceRecord | nul
     billingMonthLabel: text(value.billingMonthLabel, "Current month"),
     customerId: text(value.customerId, customerName),
     customerName,
+    documentState: value.documentState === "draft" ? "draft" : "issued",
+    documentType: isBillingDocumentType(value.documentType)
+      ? value.documentType
+      : inferBillingDocumentType(invoiceNumber),
     dueDateLabel: text(value.dueDateLabel, "Due date to confirm"),
     id,
     invoiceNumber,
@@ -136,6 +162,7 @@ function sanitizeInvoiceRecord(value: unknown): CustomerLocalInvoiceRecord | nul
     service: text(value.service, "Service"),
     source: "local-admin-issued-invoice-v1",
     status,
+    originalInvoiceNumber: text(value.originalInvoiceNumber),
   };
 }
 
@@ -215,13 +242,30 @@ export function invoiceDateInputDaysFromNow(days: number) {
   return date.toISOString().slice(0, 10);
 }
 
-function nextInvoiceNumber(existingRecords: CustomerLocalInvoiceRecord[], issueDate: Date) {
+function documentPrefix(documentType: CustomerBillingDocumentType) {
+  if (documentType === "credit_note") {
+    return "CN";
+  }
+
+  if (documentType === "quotation") {
+    return "QUO";
+  }
+
+  return "INV";
+}
+
+function nextInvoiceNumber(
+  existingRecords: CustomerLocalInvoiceRecord[],
+  issueDate: Date,
+  documentType: CustomerBillingDocumentType,
+) {
   const dateKey = issueDate.toISOString().slice(0, 10).replace(/-/g, "");
+  const prefix = documentPrefix(documentType);
   const sameDayCount = existingRecords.filter((record) =>
-    record.invoiceNumber.startsWith(`INV-${dateKey}-`),
+    record.invoiceNumber.startsWith(`${prefix}-${dateKey}-`),
   ).length;
 
-  return `INV-${dateKey}-${String(sameDayCount + 1).padStart(4, "0")}`;
+  return `${prefix}-${dateKey}-${String(sameDayCount + 1).padStart(4, "0")}`;
 }
 
 export function createCustomerLocalInvoiceRecord(
@@ -230,7 +274,8 @@ export function createCustomerLocalInvoiceRecord(
 ) {
   const issueDate = new Date();
   const dueDate = new Date(`${input.dueDateIso}T00:00:00+08:00`);
-  const invoiceNumber = nextInvoiceNumber(existingRecords, issueDate);
+  const documentType = input.documentType || "invoice";
+  const invoiceNumber = nextInvoiceNumber(existingRecords, issueDate, documentType);
   const amountLabel = formatInvoiceAmount(input.amountCents);
   const lineItems =
     input.lineItems?.length
@@ -248,6 +293,8 @@ export function createCustomerLocalInvoiceRecord(
     billingMonthLabel: input.billingMonthLabel || formatInvoiceMonth(issueDate),
     customerId: input.customerId,
     customerName: input.customerName,
+    documentState: "issued",
+    documentType,
     dueDateLabel: Number.isNaN(dueDate.getTime()) ? "Due date to confirm" : formatInvoiceDate(dueDate),
     id: `${invoiceNumber}:${input.customerId}:${input.reference}`,
     invoiceNumber,
@@ -259,6 +306,7 @@ export function createCustomerLocalInvoiceRecord(
     service: input.service,
     source: "local-admin-issued-invoice-v1",
     status: input.status,
+    originalInvoiceNumber: input.originalInvoiceNumber,
   } satisfies CustomerLocalInvoiceRecord;
 }
 
@@ -465,6 +513,25 @@ export function createCustomerInvoicePdfBytes(
   companyProfile: PublicCompanyProfile = defaultCompanyProfile,
   logoImage: CustomerInvoicePdfLogoImage | null = null,
 ) {
+  const documentType = invoice.documentType || inferBillingDocumentType(invoice.invoiceNumber);
+  const documentTitle =
+    documentType === "credit_note"
+      ? "CREDIT NOTE"
+      : documentType === "quotation"
+        ? "QUOTATION"
+        : "INVOICE";
+  const documentNumberLabel =
+    documentType === "credit_note"
+      ? "Credit Note#"
+      : documentType === "quotation"
+        ? "Quotation#"
+        : "Invoice#";
+  const balanceLabel =
+    documentType === "credit_note"
+      ? "Credit Amount"
+      : documentType === "quotation"
+        ? "Quoted Amount"
+        : "Balance Due";
   const companyName = companyProfile.company_name || defaultCompanyProfile.company_name;
   const contactLine = companyProfileContactLines(companyProfile).join(" | ");
   const companyAddressLines = splitInvoiceAddressLines(
@@ -557,14 +624,15 @@ export function createCustomerInvoicePdfBytes(
   });
 
   const totalsY = Math.max(360, rowY - 8);
-  const notesY = 300;
-  const paymentY = 166;
-  const termsY = 64;
+  const signoffY = 320;
+  const paymentY = 260;
+  const notesY = 135;
+  const termsY = 55;
   const streamLines = [
     ...logoStreamLines,
-    pdfRightTextAt("INVOICE", 562, 725, 30),
-    pdfRightTextAt(`Invoice# ${invoice.invoiceNumber}`, 562, 700, 9),
-    pdfRightTextAt("Balance Due", 562, 672, 8),
+    pdfRightTextAt(documentTitle, 562, 725, 30),
+    pdfRightTextAt(`${documentNumberLabel} ${invoice.invoiceNumber}`, 562, 700, 9),
+    pdfRightTextAt(balanceLabel, 562, 672, 8),
     pdfRightTextAt(sgdAmount, 562, 654, 12),
     ...companyHeaderCommands,
     ...billToCommands,
@@ -575,17 +643,17 @@ export function createCustomerInvoicePdfBytes(
     pdfRightTextAt("Total", 495, totalsY - 24, 9),
     pdfRightTextAt(sgdAmount, 562, totalsY - 24, 9),
     pdfRect(338, totalsY - 58, 224, 26, "0.94 g"),
-    pdfRightTextAt("Balance Due", 495, totalsY - 50, 9),
+    pdfRightTextAt(balanceLabel, 495, totalsY - 50, 9),
     pdfRightTextAt(sgdAmount, 562, totalsY - 50, 9),
     pdfLinePath(50, totalsY + 22, 562, totalsY + 22, 0.8, "0.75 G"),
-    pdfTextAt("Notes", 50, notesY, 8, "0.35 g"),
-    ...noteLines.map((line, index) => pdfTextAt(line, 50, notesY - 15 - index * 12, 7)),
-    pdfTextAt("Thank you for your business", 50, 225, 8),
-    pdfTextAt("Best Regards,", 50, 204, 8),
-    pdfTextAt("Finance Team", 50, 193, 8),
-    pdfTextAt(defaultCompanyProfile.phone, 50, 182, 8),
+    pdfTextAt("Thank you for your business", 50, signoffY, 8),
+    pdfTextAt("Best Regards,", 50, signoffY - 21, 8),
+    pdfTextAt("Finance Team", 50, signoffY - 32, 8),
+    pdfTextAt(defaultCompanyProfile.phone, 50, signoffY - 43, 8),
     pdfTextAt("Bank information", 50, paymentY, 8, "0.35 g"),
     ...paymentLines.map((line, index) => pdfTextAt(line, 50, paymentY - 15 - index * 8, 7)),
+    pdfTextAt("Notes", 50, notesY, 8, "0.35 g"),
+    ...noteLines.map((line, index) => pdfTextAt(line, 50, notesY - 15 - index * 12, 7)),
     pdfTextAt("Terms & Conditions:", 50, termsY, 8, "0.35 g"),
     ...termsLines.map((line, index) => pdfTextAt(line, 50, termsY - 13 - index * 9, 6.5)),
   ];

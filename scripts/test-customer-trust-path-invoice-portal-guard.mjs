@@ -109,13 +109,17 @@ assertIncludes(
 );
 
 for (const fragment of [
-  'type InvoiceFolder = "Paid" | "Unpaid";',
+  'type InvoiceFolder = "Credit Notes" | "Paid Invoices" | "Quotations" | "Unpaid Invoices";',
   'type PortalSection = "New Booking Request" | "Invoices" | BookingFilter;',
-  'const invoiceFolders: InvoiceFolder[] = ["Unpaid", "Paid"];',
+  '"Quotations"',
+  '"Unpaid Invoices"',
+  '"Paid Invoices"',
+  '"Credit Notes"',
   'const portalSections: PortalSection[] = ["New Booking Request", "Invoices", ...bookingFilters];',
   "const [customerInvoiceRecords, setCustomerInvoiceRecords] = useState<CustomerPortalInvoiceRecord[]>([]);",
   "const [customerInvoicesLoadState, setCustomerInvoicesLoadState]",
   "const [invoiceDownloadStates, setInvoiceDownloadStates]",
+  "customerPortalInvoiceFolder",
   "loadCustomerPortalInvoiceRecords",
   "fetchCustomerPortalInvoicePdf",
   "Sign in to view stored invoice PDFs for this customer account.",
@@ -150,7 +154,7 @@ for (const fragment of [
   "Downloading",
   "Downloaded",
   "Try again",
-  "No {folder.toLowerCase()} invoice PDFs are available in this customer folder yet.",
+  "No {folder.toLowerCase()} PDFs are available in this customer folder yet.",
   "Download PDF",
   "disabled",
 ]) {

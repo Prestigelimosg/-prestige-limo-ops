@@ -1,4 +1,5 @@
 import {
+  companyProfilePaymentSummary,
   companyProfileContactLines,
   defaultCompanyProfile,
   type PublicCompanyProfile,
@@ -292,8 +293,43 @@ function wrapText(value: string, maxLength = 86) {
   return lines.length > 0 ? lines : [""];
 }
 
-function pdfLine(value: string, fontSize = 10) {
-  return `/${"F1"} ${fontSize} Tf (${escapePdfText(value)}) Tj 0 -15 Td`;
+function pdfTextAt(value: string, x: number, y: number, fontSize = 10, fillColor = "0 g") {
+  return `BT ${fillColor} /F1 ${fontSize} Tf ${x} ${y} Td (${escapePdfText(value)}) Tj ET`;
+}
+
+function pdfTextWidth(value: string, fontSize: number) {
+  return ascii(value).length * fontSize * 0.52;
+}
+
+function pdfRightTextAt(value: string, rightX: number, y: number, fontSize = 10, fillColor = "0 g") {
+  const x = Math.max(36, Math.round(rightX - pdfTextWidth(value, fontSize)));
+
+  return pdfTextAt(value, x, y, fontSize, fillColor);
+}
+
+function pdfLinePath(x1: number, y1: number, x2: number, y2: number, width = 0.6, color = "0.82 G") {
+  return `${color} ${width} w ${x1} ${y1} m ${x2} ${y2} l S`;
+}
+
+function pdfRect(x: number, y: number, width: number, height: number, fillColor = "0.95 g") {
+  return `${fillColor} ${x} ${y} ${width} ${height} re f`;
+}
+
+function invoiceMoneyValue(value: string) {
+  const cleaned = value.replace(/[^0-9.]/g, "");
+
+  return cleaned || "0.00";
+}
+
+function invoiceSgdValue(value: string) {
+  return `SGD${invoiceMoneyValue(value)}`;
+}
+
+function splitInvoiceAddressLines(value: string) {
+  return value
+    .split(",")
+    .map((line) => line.trim())
+    .filter(Boolean);
 }
 
 export type CustomerInvoicePdfLogoImage = {
@@ -431,67 +467,127 @@ export function createCustomerInvoicePdfBytes(
 ) {
   const companyName = companyProfile.company_name || defaultCompanyProfile.company_name;
   const contactLine = companyProfileContactLines(companyProfile).join(" | ");
-  const paymentLines = wrapText(
-    companyProfile.bank_payment_instructions ||
-      defaultCompanyProfile.bank_payment_instructions ||
-      "Payment instructions to confirm.",
-    92,
-  );
+  const companyAddressLines = splitInvoiceAddressLines(
+    companyProfile.address || defaultCompanyProfile.address,
+  ).slice(0, 4);
+  const paymentSummary =
+    companyProfilePaymentSummary(companyProfile) ||
+    defaultCompanyProfile.bank_payment_instructions ||
+    "Payment instructions to confirm.";
+  const paymentLines = paymentSummary
+    .split(/\n+/)
+    .flatMap((line) => wrapText(line, 62))
+    .slice(0, 9);
   const termsLines = wrapText(
     companyProfile.invoice_footer_terms ||
       defaultCompanyProfile.invoice_footer_terms ||
       "Thank you for choosing our service.",
-    92,
-  );
-  const lines = [
-    { size: 18, text: "INVOICE" },
-    { size: 12, text: invoice.invoiceNumber },
-    { size: 10, text: companyName },
-    { size: 9, text: contactLine },
-    { size: 9, text: companyProfile.address || "" },
-    { size: 9, text: companyProfile.uen || "" },
-    { size: 10, text: "" },
-    { size: 11, text: `Bill to: ${invoice.customerName}` },
-    { size: 10, text: `Issue date: ${invoice.issueDateLabel}` },
-    { size: 10, text: `Due date: ${invoice.dueDateLabel}` },
-    { size: 10, text: `Status: ${invoice.status}` },
-    { size: 10, text: `Billing month: ${invoice.billingMonthLabel}` },
-    { size: 10, text: "" },
-    { size: 12, text: "Trip / Service" },
-    ...invoice.lineItems.flatMap((item) =>
-      wrapText(`${item.description} - ${item.amountLabel}`, 90).map((textLine) => ({
-        size: 10,
-        text: textLine,
-      })),
-    ),
-    { size: 10, text: "" },
-    { size: 13, text: `Total: ${invoice.amountLabel}` },
-    { size: 10, text: "" },
-    { size: 12, text: "Payment Instructions" },
-    ...paymentLines.map((textLine) => ({ size: 9, text: textLine })),
-    { size: 10, text: "" },
-    { size: 12, text: "Terms" },
-    ...termsLines.slice(0, 8).map((textLine) => ({ size: 8, text: textLine })),
+    116,
+  ).slice(0, 4);
+  const noteLines = [
+    "Midnight surcharge: $15 applies from 11:00 PM to 6:59 AM.",
+    "Waiting time: 15 minutes grace; airport arrivals include 60 minutes grace.",
+    "Additional waiting time: $15 per 15-minute block.",
+    "Hourly jobs: 15 minutes grace; 16 minutes onward counts as the next hour.",
   ];
+  const amountValue = invoiceMoneyValue(invoice.amountLabel);
+  const sgdAmount = invoiceSgdValue(invoice.amountLabel);
   const logoDisplayWidth = 150;
   const logoDisplayHeight = logoImage
-    ? Math.max(44, Math.min(92, Math.round((logoDisplayWidth * logoImage.height) / logoImage.width)))
+    ? Math.max(40, Math.min(76, Math.round((logoDisplayWidth * logoImage.height) / logoImage.width)))
     : 0;
   const logoStreamLines = logoImage
     ? [
         "q",
-        `${logoDisplayWidth} 0 0 ${logoDisplayHeight} 410 ${764 - logoDisplayHeight} cm`,
+        `${logoDisplayWidth} 0 0 ${logoDisplayHeight} 50 ${728 - logoDisplayHeight} cm`,
         "/Im1 Do",
         "Q",
       ]
     : [];
+  const companyHeaderStartY = logoImage ? 660 : 720;
+  const companyHeaderCommands = [
+    pdfTextAt(companyName, 50, companyHeaderStartY, 9),
+    ...companyAddressLines.map((line, index) => pdfTextAt(line, 50, companyHeaderStartY - 12 - index * 11, 8)),
+    ...(companyProfile.uen ? [pdfTextAt(`UEN: ${companyProfile.uen}`, 50, companyHeaderStartY - 58, 8)] : []),
+    ...(contactLine ? [pdfTextAt(contactLine, 50, companyHeaderStartY - 70, 8)] : []),
+  ];
+  const billToY = 565;
+  const billToCommands = [
+    pdfTextAt("Bill To", 50, billToY, 9, "0.35 g"),
+    pdfTextAt(invoice.customerName, 50, billToY - 17, 9),
+    pdfTextAt(invoice.customerId, 50, billToY - 30, 8, "0.25 g"),
+    pdfTextAt(`Reference: ${invoice.reference}`, 50, billToY - 43, 8, "0.25 g"),
+  ];
+  const dateX = 390;
+  const dateValueRightX = 562;
+  const dateCommands = [
+    pdfTextAt("Invoice Date:", dateX, billToY - 3, 8, "0.25 g"),
+    pdfRightTextAt(invoice.issueDateLabel, dateValueRightX, billToY - 3, 8),
+    pdfTextAt("Terms:", dateX, billToY - 24, 8, "0.25 g"),
+    pdfRightTextAt("Due by date shown", dateValueRightX, billToY - 24, 8),
+    pdfTextAt("Due Date:", dateX, billToY - 45, 8, "0.25 g"),
+    pdfRightTextAt(invoice.dueDateLabel, dateValueRightX, billToY - 45, 8),
+  ];
+  const tableTopY = 492;
+  const tableHeaderY = tableTopY - 20;
+  const lineItemCommands: string[] = [
+    pdfRect(50, tableHeaderY, 512, 22, "0.18 g"),
+    pdfTextAt("#", 62, tableHeaderY + 7, 8, "1 g"),
+    pdfTextAt("Item & Description", 90, tableHeaderY + 7, 8, "1 g"),
+    pdfRightTextAt("Qty", 435, tableHeaderY + 7, 8, "1 g"),
+    pdfRightTextAt("Rate", 495, tableHeaderY + 7, 8, "1 g"),
+    pdfRightTextAt("Amount", 552, tableHeaderY + 7, 8, "1 g"),
+  ];
+  let rowY = tableHeaderY - 18;
+
+  invoice.lineItems.slice(0, 4).forEach((item, index) => {
+    const descriptionLines = wrapText(item.description, 60).slice(0, 7);
+    const rowHeight = Math.max(42, 18 + descriptionLines.length * 11);
+    const itemAmountValue = invoiceMoneyValue(item.amountLabel);
+
+    lineItemCommands.push(pdfTextAt(String(index + 1), 62, rowY, 8));
+    descriptionLines.forEach((line, lineIndex) => {
+      lineItemCommands.push(pdfTextAt(line, 90, rowY - lineIndex * 10, lineIndex === 0 ? 8 : 7));
+    });
+    lineItemCommands.push(pdfRightTextAt("1.00", 435, rowY, 8));
+    lineItemCommands.push(pdfRightTextAt(itemAmountValue, 495, rowY, 8));
+    lineItemCommands.push(pdfRightTextAt(itemAmountValue, 552, rowY, 8));
+    rowY -= rowHeight;
+    lineItemCommands.push(pdfLinePath(50, rowY + 11, 562, rowY + 11));
+  });
+
+  const totalsY = Math.max(360, rowY - 8);
+  const notesY = 300;
+  const paymentY = 166;
+  const termsY = 64;
   const streamLines = [
     ...logoStreamLines,
-    "BT",
-    "/F1 18 Tf",
-    "50 790 Td",
-    ...lines.map((line) => pdfLine(line.text, line.size)),
-    "ET",
+    pdfRightTextAt("INVOICE", 562, 725, 30),
+    pdfRightTextAt(`Invoice# ${invoice.invoiceNumber}`, 562, 700, 9),
+    pdfRightTextAt("Balance Due", 562, 672, 8),
+    pdfRightTextAt(sgdAmount, 562, 654, 12),
+    ...companyHeaderCommands,
+    ...billToCommands,
+    ...dateCommands,
+    ...lineItemCommands,
+    pdfRightTextAt("Sub Total", 495, totalsY, 8),
+    pdfRightTextAt(amountValue, 562, totalsY, 8),
+    pdfRightTextAt("Total", 495, totalsY - 24, 9),
+    pdfRightTextAt(sgdAmount, 562, totalsY - 24, 9),
+    pdfRect(338, totalsY - 58, 224, 26, "0.94 g"),
+    pdfRightTextAt("Balance Due", 495, totalsY - 50, 9),
+    pdfRightTextAt(sgdAmount, 562, totalsY - 50, 9),
+    pdfLinePath(50, totalsY + 22, 562, totalsY + 22, 0.8, "0.75 G"),
+    pdfTextAt("Notes", 50, notesY, 8, "0.35 g"),
+    ...noteLines.map((line, index) => pdfTextAt(line, 50, notesY - 15 - index * 12, 7)),
+    pdfTextAt("Thank you for your business", 50, 225, 8),
+    pdfTextAt("Best Regards,", 50, 204, 8),
+    pdfTextAt("Finance Team", 50, 193, 8),
+    pdfTextAt(defaultCompanyProfile.phone, 50, 182, 8),
+    pdfTextAt("Bank information", 50, paymentY, 8, "0.35 g"),
+    ...paymentLines.map((line, index) => pdfTextAt(line, 50, paymentY - 15 - index * 8, 7)),
+    pdfTextAt("Terms & Conditions:", 50, termsY, 8, "0.35 g"),
+    ...termsLines.map((line, index) => pdfTextAt(line, 50, termsY - 13 - index * 9, 6.5)),
   ];
   const stream = streamLines.join("\n");
   const streamBytes = bytesForPdfText(stream);

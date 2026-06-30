@@ -59,6 +59,21 @@ assertIncludes(
 );
 assertIncludes(
   shared,
+  "DBS Bank account no: 0721478960",
+  "Default company profile bank payment fallback must include the DBS account number.",
+);
+assertIncludes(
+  shared,
+  "PayNow UEN no: 53387257W",
+  "Default company profile bank payment fallback must include the PayNow UEN.",
+);
+assertIncludes(
+  shared,
+  "Payment is due upon completion unless otherwise agreed in writing.",
+  "Default company profile invoice footer terms must stay short and essential.",
+);
+assertIncludes(
+  shared,
   'export const defaultCompanyLogoPath = "/prestige-limo-sg-logo.jpg";',
   "Default company logo asset path must be locked.",
 );

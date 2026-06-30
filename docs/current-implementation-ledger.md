@@ -12,6 +12,15 @@ Latest remote staging branch head:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Customer Invoice PDF Layout Refresh
+
+- Stored customer invoice PDFs now render in a compact professional invoice layout: company logo/details top-left, `INVOICE` and balance due top-right, bill-to/date summary, item table with Qty/Rate/Amount, subtotal/total/balance due block, notes, finance sign-off, bank information, and short essential terms.
+- Default company profile fallback bank instructions now include the DBS bank account, bank code, branch code, SWIFT code, bank address, and PayNow UEN, so invoices do not render a blank payment section when saved company settings omit bank text.
+- Default invoice footer terms are shortened to essential payment/charge language; live saved company terms can still override them through Company Profile.
+- A sample invoice PDF was generated and rendered to PNG with Poppler for visual inspection; the layout showed no overlap, clipping, or missing table/totals/footer sections.
+- This is invoice PDF presentation and safe payment-instruction fallback only. It does not create invoices by itself, send emails, send payment links, charge Stripe/cards, call providers, activate GPS/live location, expose payout/customer pricing, or print secrets/env values.
+- Guard coverage was extended in `scripts/test-customer-local-invoice-issue-pdf-portal-guard.mjs` and `scripts/test-company-profile-settings-guard.mjs`.
+
 ### Customer Invoice Email Production Activation And Live Send
 
 - Production Vercel env for stored customer invoice email sending is enabled without printing or recording secret values.

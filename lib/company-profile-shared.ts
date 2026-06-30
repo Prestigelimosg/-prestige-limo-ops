@@ -46,11 +46,12 @@ const maxFieldLengths: Record<keyof PublicCompanyProfile, number> = {
 
 export const defaultCompanyProfile: PublicCompanyProfile = {
   address: "10 Anson Rd, #10-11 Prestige Limo SG, International Plaza, Singapore 079903",
-  bank_payment_instructions: "",
+  bank_payment_instructions:
+    "Bank Details\nPrestige Limo SG\nDBS Bank account no: 0721478960\nBank Name: DBS Bank Limited\nBank Code: 7171\nBranch Code: 072\nSwift Code: DBSSSGSG\nBank Address: 12 Marina Boulevard, Floor 1, Singapore 018982\nPayNow UEN no: 53387257W",
   company_name: "Prestige Limo SG",
   email: "acc@prestigelimo.sg",
   invoice_footer_terms:
-    "Thank you for choosing our service. Bookings are confirmed upon receipt of the required payment or deposit. Waiting time includes a 15-minute grace period; additional waiting time may be chargeable. Requests made less than 12 hours before pickup may incur a SGD $50 change fee.",
+    "Thank you for choosing our service. Payment is due upon completion unless otherwise agreed in writing. Waiting time, surcharge, amendment, cancellation, damage, and excess luggage charges may apply where relevant.",
   logo_image_url: defaultCompanyLogoPath,
   phone: "+65 9655 0807",
   stripe_card_fee_percent: 10,

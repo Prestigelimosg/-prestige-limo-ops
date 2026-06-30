@@ -124,12 +124,28 @@ type AdminSavedBookingReadResult<T> =
 
 type UnknownRecord = Record<string, unknown>;
 type SavedBookingClient = Pick<SupabaseClient, "from">;
+type SavedBookingSelectResult<T> = {
+  data: T | null;
+  error: unknown;
+};
 
 const allowedAdapterActorRoles = new Set(["admin", "dispatcher", "system"]);
 const allowedSingleReadQueryParams = new Set(["booking_id", "id"]);
 const allowedListReadQueryParams = new Set(["limit"]);
-const adminSavedBookingReadSelect =
+const adminSavedBookingLegacyReadSelect =
   "id, booking_reference, source_channel, source_surface, company_id, booker_id, traveler_id, booking_type, service_type, route_type, vehicle, vehicle_type, vehicle_type_or_category, pickup_time, pickup_at, pickup_datetime, pickup_address, pickup_location, dropoff_address, dropoff_location, flight_no, route, route_summary, pax, pax_count, passenger_name, passenger_phone, customer_display_name, contact_display_name, contact_phone, contact_email, job_card, status, driver_id, driver_name, driver_contact, driver_plate_number, customer_rate, customer_rate_unit, customer_price_amount, customer_rate_override, customer_price_override_reason, driver_payout_min, driver_payout_max, driver_payout_amount, driver_payout_override, driver_payout_reason, driver_payout_unit, driver_notes, driver_dispatch_include_payout, midnight_surcharge, midnight_payout, extra_stop_count, extra_stop_surcharge, extra_stop_payout, child_seat_required, child_seat_count, child_seat_type, child_seat_customer_surcharge, child_seat_driver_payout, pricing_source, created_at, updated_at, companies(company_name, domain), bookers(booker_name, email, phone), travelers(traveler_name)";
+const adminSavedBookingCurrentReadSelect =
+  "id, booking_reference, source_surface, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, flight_no, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, admin_internal_status, customer_facing_status, created_at, updated_at";
+const adminSavedBookingCurrentMinimalReadSelect =
+  "id, booking_reference, source_surface, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, admin_internal_status, customer_facing_status, created_at, updated_at";
+const adminSavedBookingFoundationScalarReadSelect =
+  "id, booking_reference, source_channel, booking_type, vehicle, pickup_time, pickup_address, dropoff_address, flight_no, route, pax, job_card, status, driver_id, driver_name, driver_contact, driver_plate_number, created_at, updated_at";
+const adminSavedBookingReadSelects = [
+  adminSavedBookingLegacyReadSelect,
+  adminSavedBookingCurrentReadSelect,
+  adminSavedBookingCurrentMinimalReadSelect,
+  adminSavedBookingFoundationScalarReadSelect,
+] as const;
 const defaultListLimit = 25;
 const maxListLimit = 100;
 const malformedParamsError =
@@ -314,6 +330,33 @@ function safeDatabaseFailure<T>(
     ok: false,
     status,
   };
+}
+
+function isColumnMissingFailure(error: unknown) {
+  return classifyDatabaseFailure(error) === "column_missing";
+}
+
+async function loadAdminSavedBookingsWithSchemaFallback<T>(
+  buildQuery: (selectedColumns: string) => PromiseLike<SavedBookingSelectResult<T>>,
+): Promise<SavedBookingSelectResult<T>> {
+  let lastResult: SavedBookingSelectResult<T> | null = null;
+
+  for (const selectedColumns of adminSavedBookingReadSelects) {
+    const result = await buildQuery(selectedColumns);
+
+    if (!result.error || !isColumnMissingFailure(result.error)) {
+      return result;
+    }
+
+    lastResult = result;
+  }
+
+  return (
+    lastResult ?? {
+      data: null,
+      error: { message: safeReadError },
+    }
+  );
 }
 
 function validateActor(
@@ -527,7 +570,10 @@ function toSavedBookingRecord(value: unknown): AdminSavedBookingRecord | null {
     route_summary: textOrNull(row.route_summary, 1000),
     route_type: textOrNull(row.route_type, 120),
     service_type: textOrNull(row.service_type, 120),
-    status: textOrNull(row.status, 80),
+    status:
+      textOrNull(row.status, 80) ||
+      textOrNull(row.admin_internal_status, 80) ||
+      textOrNull(row.customer_facing_status, 80),
     traveler_id: integerOrNull(row.traveler_id),
     travelers: nestedTraveler(row.travelers),
     updated_at: textOrNull(row.updated_at, 80),
@@ -625,12 +671,14 @@ export async function loadAdminSavedBookingById(
     return clientResult;
   }
 
-  const { data, error } = await clientResult.data
-    .from("bookings")
-    .select(adminSavedBookingReadSelect)
-    .eq("id", parsed.data.id)
-    .limit(1)
-    .maybeSingle();
+  const { data, error } = await loadAdminSavedBookingsWithSchemaFallback((selectedColumns) =>
+    clientResult.data
+      .from("bookings")
+      .select(selectedColumns)
+      .eq("id", parsed.data.id)
+      .limit(1)
+      .maybeSingle(),
+  );
 
   if (error) {
     return safeDatabaseFailure(safeReadError, 500, error);
@@ -661,11 +709,13 @@ export async function loadAdminSavedBookingList(
     return clientResult;
   }
 
-  const { data, error } = await clientResult.data
-    .from("bookings")
-    .select(adminSavedBookingReadSelect)
-    .order("created_at", { ascending: false })
-    .limit(parsed.data.limit);
+  const { data, error } = await loadAdminSavedBookingsWithSchemaFallback((selectedColumns) =>
+    clientResult.data
+      .from("bookings")
+      .select(selectedColumns)
+      .order("created_at", { ascending: false })
+      .limit(parsed.data.limit),
+  );
 
   if (error) {
     return safeDatabaseFailure(safeReadError, 500, error);

@@ -43,6 +43,7 @@ const safeSelectedColumns = new Set([
   "contact_phone",
   "created_at",
   "customer_display_name",
+  "customer_facing_status",
   "driver_contact",
   "driver_id",
   "driver_name",
@@ -75,6 +76,7 @@ const safeSelectedColumns = new Set([
   "vehicle",
   "vehicle_type",
   "vehicle_type_or_category",
+  "admin_internal_status",
 ]);
 
 const quarantinedLegacyColumns = new Set([
@@ -189,10 +191,15 @@ function splitSelect(selectSource) {
 }
 
 function selectedColumnsFrom(source) {
-  const match = source.match(/const adminSavedBookingReadSelect =\n\s+"([^"]+)";/);
-  assert.ok(match, "adminSavedBookingReadSelect must remain a string constant.");
+  const matches = [
+    ...source.matchAll(
+      /const adminSavedBooking(?:Legacy|Current|CurrentMinimal|FoundationScalar)ReadSelect =\n\s+"([^"]+)";/g,
+    ),
+  ];
+  assert.equal(matches.length, 4, "admin saved booking read fallback selects must remain explicit string constants.");
+  assertIncludes(source, "const adminSavedBookingReadSelects = [", "saved booking read fallback select list");
 
-  return splitSelect(match[1]);
+  return [...new Set(matches.flatMap((match) => splitSelect(match[1])))];
 }
 
 const [
@@ -234,7 +241,7 @@ for (const phrase of [
   "Raw saved-booking rows must not be returned from `GET /api/admin-load-bookings-typed-read`.",
   "Load Bookings still keeps `GET /api/admin-saved-bookings` as the booking/form/detail source and fallback.",
   "Save Booking + CRM remains on `POST /api/admin-bookings`.",
-  "No `/api/admin-saved-bookings` route/helper change.",
+  "No `/api/admin-saved-bookings` route endpoint swap is approved; the read helper may use the approved schema fallback only.",
   "No parser or `/api/ai-parse` change.",
   "No DB write, provider send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/card addition, or new shim is approved by this lock.",
   "This lock adds `scripts/test-load-bookings-typed-read-query-shape-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.",
@@ -294,7 +301,9 @@ assertIncludes(savedBookingRead, "const defaultListLimit = 25;", "typed list def
 assertIncludes(savedBookingRead, "const maxListLimit = 100;", "typed list max limit");
 assertIncludes(savedBookingRead, ".from(\"bookings\")", "typed read bookings table");
 assertExcludes(savedBookingRead, /\.from\((?!["']bookings["'])/i, "typed read non-bookings table");
-assertIncludes(savedBookingRead, ".select(adminSavedBookingReadSelect)", "typed read explicit select");
+assertIncludes(savedBookingRead, "loadAdminSavedBookingsWithSchemaFallback", "typed read schema fallback helper");
+assertIncludes(savedBookingRead, "isColumnMissingFailure", "typed read fallback scope");
+assertIncludes(savedBookingRead, ".select(selectedColumns)", "typed read explicit fallback select");
 assertIncludes(savedBookingRead, ".eq(\"id\", parsed.data.id)", "typed detail id filter");
 assertIncludes(savedBookingRead, ".order(\"created_at\", { ascending: false })", "typed list order");
 assertIncludes(savedBookingRead, ".limit(1)", "typed detail limit");

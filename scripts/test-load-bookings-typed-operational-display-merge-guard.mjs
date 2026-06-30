@@ -72,7 +72,7 @@ for (const phrase of [
   "Load Bookings still keeps `GET /api/admin-saved-bookings` as the booking/form/detail source and fallback.",
   "No blind endpoint swap is approved.",
   "No Save Booking + CRM change.",
-  "No `/api/admin-saved-bookings` route/helper change.",
+  "No `/api/admin-saved-bookings` route endpoint swap is approved; the read helper may use the approved schema fallback only.",
   "No parser or `/api/ai-parse` change.",
   "No DB write, provider send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/card addition, or new shim is approved by this lock.",
   "This lock adds `scripts/test-load-bookings-typed-operational-display-merge-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.",

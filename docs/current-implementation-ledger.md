@@ -530,7 +530,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Dispatch action buttons now reuse a common completed-state style so finished actions shade green and switch to result wording.
 - Customer Copy, Job Card, Driver Dispatch, Driver Job Link, Email/WhatsApp/SMS checks, and in-app send controls use result labels only when their existing local state confirms success.
 - The Driver Job Link card no longer renders the active-link status pill, copied success box, or loaded-active-link banner shown below the buttons; only errors remain as separate feedback.
-- The Job Card Preview action toolbar is compact, wrapped, and separated from Manual Extra Charges so Save Booking + CRM stays easier to hit without changing the save or calendar handlers.
+- The Job Card Preview action toolbar is compact and wrapped; Save + CRM now sits in its own primary save group, separated from Calendar/Edit/Copy utility buttons and Manual Extra Charges, without changing the save or calendar handlers.
 - Save Booking + CRM now preflights Booker WhatsApp / Contact before calling `/api/admin-bookings`, matching the admin persistence `contact_phone` contract.
 - Job Card Preview now shows Save Booking + CRM feedback beside the compact toolbar, so failed/saved state is visible where the operator clicks instead of only in the lower persistence panel.
 - Job Card extra charges, Job Card preview, Driver Dispatch preview, Driver Job Link preview, and admin readiness chips are collapsed behind compact disclosure rows.
@@ -1357,7 +1357,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Typed read safe-card order is display-only and must not replace the legacy `BookingRecord` action/form/detail source.
 - The typed endpoint remains GET-only and read-only.
 - No Save Booking + CRM change.
-- No `/api/admin-saved-bookings` route/helper change.
+- No `/api/admin-saved-bookings` route endpoint swap is approved; the read helper may use the approved schema fallback only.
 - No parser or `/api/ai-parse` change.
 - No DB write, provider send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/card addition, or new shim is approved by this lock.
 - This lock adds `scripts/test-load-bookings-typed-read-rollback-boundary.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
@@ -1372,7 +1372,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Raw saved-booking rows must not be returned from `GET /api/admin-load-bookings-typed-read`.
 - Load Bookings still keeps `GET /api/admin-saved-bookings` as the booking/form/detail source and fallback.
 - Save Booking + CRM remains on `POST /api/admin-bookings`.
-- No `/api/admin-saved-bookings` route/helper change.
+- No `/api/admin-saved-bookings` route endpoint swap is approved; the read helper may use the approved schema fallback only.
 - No parser or `/api/ai-parse` change.
 - No DB write, provider send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/card addition, or new shim is approved by this lock.
 - This lock adds `scripts/test-load-bookings-typed-read-query-shape-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
@@ -1388,7 +1388,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The read helper must not use insert, update, upsert, delete, rpc, storage, provider send, payment/PDF, auth, location/photo/calendar, parser/debug, internal/admin notes, secret/token fields, or legacy shim paths.
 - Load Bookings still keeps `GET /api/admin-saved-bookings` as booking/form/detail source and fallback.
 - Save Booking + CRM remains on `POST /api/admin-bookings`.
-- No `/api/admin-saved-bookings` route/helper change.
+- No `/api/admin-saved-bookings` route endpoint swap is approved; the read helper may use the approved schema fallback only.
 - No parser or `/api/ai-parse` change.
 - No UI sector/card addition or new shim is approved by this lock.
 - This lock adds `scripts/test-load-bookings-db-read-env-table-policy-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
@@ -1488,7 +1488,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Load Bookings still keeps `GET /api/admin-saved-bookings` as the booking/form/detail source and fallback.
 - No blind endpoint swap is approved.
 - No Save Booking + CRM change.
-- No `/api/admin-saved-bookings` route/helper change.
+- No `/api/admin-saved-bookings` route endpoint swap is approved; the read helper may use the approved schema fallback only.
 - No parser or `/api/ai-parse` change.
 - No DB write, provider send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/card addition, or new shim is approved by this lock.
 - This lock adds `scripts/test-load-bookings-typed-operational-display-merge-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.

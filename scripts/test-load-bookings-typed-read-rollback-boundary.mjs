@@ -78,7 +78,7 @@ for (const phrase of [
   "Typed read safe-card order is display-only and must not replace the legacy `BookingRecord` action/form/detail source.",
   "The typed endpoint remains GET-only and read-only.",
   "No Save Booking + CRM change.",
-  "No `/api/admin-saved-bookings` route/helper change.",
+  "No `/api/admin-saved-bookings` route endpoint swap is approved; the read helper may use the approved schema fallback only.",
   "No parser or `/api/ai-parse` change.",
   "No DB write, provider send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/card addition, or new shim is approved by this lock.",
   "This lock adds `scripts/test-load-bookings-typed-read-rollback-boundary.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.",

@@ -34,7 +34,7 @@ const requiredLedgerPhrases = [
   "The read helper must not use insert, update, upsert, delete, rpc, storage, provider send, payment/PDF, auth, location/photo/calendar, parser/debug, internal/admin notes, secret/token fields, or legacy shim paths.",
   "Load Bookings still keeps `GET /api/admin-saved-bookings` as booking/form/detail source and fallback.",
   "Save Booking + CRM remains on `POST /api/admin-bookings`.",
-  "No `/api/admin-saved-bookings` route/helper change.",
+  "No `/api/admin-saved-bookings` route endpoint swap is approved; the read helper may use the approved schema fallback only.",
   "No parser or `/api/ai-parse` change.",
   "No UI sector/card addition or new shim is approved by this lock.",
   "This lock adds `scripts/test-load-bookings-db-read-env-table-policy-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.",
@@ -60,6 +60,7 @@ const allowedSelectedColumns = new Set([
   "contact_phone",
   "created_at",
   "customer_display_name",
+  "customer_facing_status",
   "customer_price_amount",
   "customer_price_override_reason",
   "customer_rate",
@@ -110,6 +111,7 @@ const allowedSelectedColumns = new Set([
   "vehicle",
   "vehicle_type",
   "vehicle_type_or_category",
+  "admin_internal_status",
 ]);
 
 function assertIncludes(source, fragment, label = fragment) {
@@ -186,10 +188,15 @@ function splitSelect(selectSource) {
 }
 
 function selectedColumnsFrom(source) {
-  const match = source.match(/const adminSavedBookingReadSelect =\n\s+"([^"]+)";/);
-  assert.ok(match, "adminSavedBookingReadSelect must remain an explicit string constant.");
+  const matches = [
+    ...source.matchAll(
+      /const adminSavedBooking(?:Legacy|Current|CurrentMinimal|FoundationScalar)ReadSelect =\n\s+"([^"]+)";/g,
+    ),
+  ];
+  assert.equal(matches.length, 4, "admin saved booking read fallback selects must remain explicit string constants.");
+  assertIncludes(source, "const adminSavedBookingReadSelects = [", "saved booking read fallback select list");
 
-  return splitSelect(match[1]);
+  return [...new Set(matches.flatMap((match) => splitSelect(match[1])))];
 }
 
 const [
@@ -323,7 +330,9 @@ assert.equal(
   "typed read helper must use exactly the two bookings list/detail table reads.",
 );
 assertExcludes(savedBookingRead, /\.from\((?!["']bookings["'])/i, "typed read non-bookings table");
-assertIncludes(savedBookingRead, ".select(adminSavedBookingReadSelect)", "typed read explicit select");
+assertIncludes(savedBookingRead, "loadAdminSavedBookingsWithSchemaFallback", "typed read schema fallback helper");
+assertIncludes(savedBookingRead, "isColumnMissingFailure", "typed read fallback scope");
+assertIncludes(savedBookingRead, ".select(selectedColumns)", "typed read explicit fallback select");
 assertIncludes(savedBookingRead, ".eq(\"id\", parsed.data.id)", "typed detail id filter");
 assertIncludes(savedBookingRead, ".order(\"created_at\", { ascending: false })", "typed list order");
 assertIncludes(savedBookingRead, ".limit(1)", "typed detail limit");

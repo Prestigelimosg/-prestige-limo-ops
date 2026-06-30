@@ -233,7 +233,18 @@ class MockSupabaseClient {
   }
 
   selectRows(table, filters, orderBy, resultLimit, resultMode, selectedColumns) {
-    const failure = this.failures[`select:${table}`] || this.failures[table] || null;
+    const configuredFailure = this.failures[`select:${table}`] || this.failures[table] || null;
+    const failure =
+      typeof configuredFailure === "function"
+        ? configuredFailure({
+            filters,
+            orderBy,
+            resultLimit,
+            resultMode,
+            selectedColumns,
+            table,
+          })
+        : configuredFailure;
 
     this.selectHistory.push({
       filters: clone(filters),
@@ -543,6 +554,152 @@ try {
   assert.equal(listMock.client.selectHistory[0].selectedColumns.includes("parser_debug"), false);
   assertNoWrites(listMock, "valid list read");
   assertNoUnsafeResponse(listResult, "valid list response");
+
+  setEnv(enabledEnv());
+
+  const currentFallbackMock = installMockClient(
+    {
+      bookings: [
+        {
+          id: "current-schema-booking",
+          admin_internal_status: "draft",
+          booking_reference: "ADM-20260630160450",
+          contact_display_name: "Codex Booker",
+          contact_email: "william@prestigelimo.sg",
+          contact_phone: "+6599999999",
+          created_at: "2026-06-30T16:04:50.000Z",
+          customer_display_name: "Codex Calendar Test",
+          customer_facing_status: "pending_review",
+          dropoff_location: "Changi Airport Terminal 3",
+          driver_contact: "+6598888888",
+          driver_name: "Codex Driver",
+          driver_plate_number: "SCDX1T",
+          flight_no: "SQ123",
+          passenger_name: "Codex Calendar Test",
+          passenger_phone: "+6599999999",
+          pickup_at: "2026-07-03T03:00:00+00:00",
+          pickup_location: "10 Anson Road",
+          route_summary: "10 Anson Road > Changi Airport Terminal 3",
+          service_type: "TRF",
+          source_surface: "admin_dashboard",
+          updated_at: "2026-06-30T16:05:00.000Z",
+          vehicle_type_or_category: "AVF",
+          internal_admin_note: "SHOULD_NOT_LEAK",
+          parser_debug: "SHOULD_NOT_LEAK",
+        },
+      ],
+    },
+    {
+      failures: {
+        "select:bookings": ({ selectedColumns }) =>
+          selectedColumns.includes("companies(")
+            ? {
+                code: "PGRST200",
+                message: `Relationship cache miss with ${serviceRoleSentinel} SHOULD_NOT_LEAK`,
+              }
+            : null,
+      },
+    },
+  );
+  const currentFallbackResult = await routeJson(
+    await route.GET(
+      new Request("http://localhost/api/admin-saved-bookings?id=current-schema-booking", {
+        headers: sessionHeaders(),
+      }),
+    ),
+  );
+
+  assert.equal(currentFallbackResult.status, 200);
+  assert.equal(currentFallbackResult.body.ok, true);
+  assert.equal(currentFallbackResult.body.booking.id, "current-schema-booking");
+  assert.equal(currentFallbackResult.body.booking.booking_reference, "ADM-20260630160450");
+  assert.equal(currentFallbackResult.body.booking.pickup_at, "2026-07-03T03:00:00+00:00");
+  assert.equal(currentFallbackResult.body.booking.service_type, "TRF");
+  assert.equal(currentFallbackResult.body.booking.contact_display_name, "Codex Booker");
+  assert.equal(currentFallbackResult.body.booking.flight_no, "SQ123");
+  assert.equal(currentFallbackResult.body.booking.driver_name, "Codex Driver");
+  assert.equal(currentFallbackResult.body.booking.driver_contact, "+6598888888");
+  assert.equal(currentFallbackResult.body.booking.driver_plate_number, "SCDX1T");
+  assert.equal(currentFallbackResult.body.booking.status, "draft");
+  assert.equal(currentFallbackResult.body.booking.internal_admin_note, undefined);
+  assert.equal(currentFallbackResult.body.booking.parser_debug, undefined);
+  assert.equal(currentFallbackMock.client.selectHistory.length, 2);
+  assert.equal(currentFallbackMock.client.selectHistory[0].selectedColumns.includes("companies("), true);
+  assert.equal(currentFallbackMock.client.selectHistory[1].selectedColumns.includes("companies("), false);
+  assert.equal(currentFallbackMock.client.selectHistory[1].selectedColumns.includes("contact_display_name"), true);
+  assert.equal(currentFallbackMock.client.selectHistory[1].selectedColumns.includes("driver_plate_number"), true);
+  assertNoWrites(currentFallbackMock, "current schema fallback read");
+  assertNoUnsafeResponse(currentFallbackResult, "current schema fallback response");
+
+  setEnv(enabledEnv());
+
+  const foundationFallbackMock = installMockClient(
+    {
+      bookings: [
+        {
+          id: "foundation-schema-booking",
+          booking_reference: "LEGACY-FOUNDATION-1",
+          booking_type: "DEP",
+          created_at: "2026-06-30T15:00:00.000Z",
+          driver_contact: "+6511111111",
+          driver_name: "Foundation Driver",
+          driver_plate_number: "SOLD1",
+          dropoff_address: "Changi Airport Terminal 3",
+          flight_no: "SQ999",
+          job_card: "Legacy job card",
+          pax: 3,
+          pickup_address: "10 Anson Road",
+          pickup_time: "1100",
+          route: "10 Anson Road > Changi Airport Terminal 3",
+          source_channel: "admin_dashboard",
+          status: "assigned",
+          updated_at: "2026-06-30T15:05:00.000Z",
+          vehicle: "AVF",
+          internal_admin_note: "SHOULD_NOT_LEAK",
+          parser_debug: "SHOULD_NOT_LEAK",
+        },
+      ],
+    },
+    {
+      failures: {
+        "select:bookings": ({ selectedColumns }) =>
+          selectedColumns.includes("companies(") || selectedColumns.includes("contact_display_name")
+            ? {
+                code: "42703",
+                message: `Column cache miss with ${serviceRoleSentinel} SHOULD_NOT_LEAK`,
+              }
+            : null,
+      },
+    },
+  );
+  const foundationFallbackResult = await routeJson(
+    await route.GET(
+      new Request("http://localhost/api/admin-saved-bookings?id=foundation-schema-booking", {
+        headers: sessionHeaders(),
+      }),
+    ),
+  );
+
+  assert.equal(foundationFallbackResult.status, 200);
+  assert.equal(foundationFallbackResult.body.ok, true);
+  assert.equal(foundationFallbackResult.body.booking.id, "foundation-schema-booking");
+  assert.equal(foundationFallbackResult.body.booking.booking_reference, "LEGACY-FOUNDATION-1");
+  assert.equal(foundationFallbackResult.body.booking.booking_type, "DEP");
+  assert.equal(foundationFallbackResult.body.booking.pickup_time, "1100");
+  assert.equal(foundationFallbackResult.body.booking.pickup_address, "10 Anson Road");
+  assert.equal(foundationFallbackResult.body.booking.dropoff_address, "Changi Airport Terminal 3");
+  assert.equal(foundationFallbackResult.body.booking.flight_no, "SQ999");
+  assert.equal(foundationFallbackResult.body.booking.driver_name, "Foundation Driver");
+  assert.equal(foundationFallbackResult.body.booking.driver_contact, "+6511111111");
+  assert.equal(foundationFallbackResult.body.booking.driver_plate_number, "SOLD1");
+  assert.equal(foundationFallbackResult.body.booking.status, "assigned");
+  assert.equal(foundationFallbackResult.body.booking.internal_admin_note, undefined);
+  assert.equal(foundationFallbackResult.body.booking.parser_debug, undefined);
+  assert.equal(foundationFallbackMock.client.selectHistory.length, 4);
+  assert.equal(foundationFallbackMock.client.selectHistory[3].selectedColumns.includes("contact_display_name"), false);
+  assert.equal(foundationFallbackMock.client.selectHistory[3].selectedColumns.includes("pickup_time"), true);
+  assertNoWrites(foundationFallbackMock, "foundation schema fallback read");
+  assertNoUnsafeResponse(foundationFallbackResult, "foundation schema fallback response");
 
   setEnv(enabledEnv());
 

@@ -22036,7 +22036,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     ? "Saving..."
     : bookingSaveSucceededForCurrentDraft
       ? "Saved"
-      : "Save Booking + CRM";
+      : "Save + CRM";
   const jobCardFeedback = copyFeedback?.target === "jobCard" ? copyFeedback : null;
   const customerCopyFeedback = copyFeedback?.target === "customerCopy" ? copyFeedback : null;
   const driverDispatchFeedback = copyFeedback?.target === "driverDispatch" ? copyFeedback : null;
@@ -33223,100 +33223,110 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                 </div>
                 <div className="flex flex-col items-start gap-1.5 sm:items-end">
                   <div
-                    className="flex max-w-full flex-wrap items-center justify-end gap-1 rounded-md border border-slate-200 bg-slate-50/80 p-1"
-                    data-job-card-action-toolbar="compact"
+                    className="flex max-w-full flex-wrap items-center justify-end gap-2"
+                    data-job-card-action-toolbar="separated"
                   >
-                    {parsedDebugBooking ? (
+                    <div
+                      className="flex items-center rounded-md border border-red-100 bg-red-50/70 p-1"
+                      data-job-card-save-toolbar="primary"
+                    >
                       <button
-                        className="h-8 whitespace-nowrap rounded border border-slate-300 bg-white px-2.5 text-[11px] font-semibold leading-none text-slate-700 transition hover:bg-slate-50"
-                        onClick={() => setShowParserDebug((current) => !current)}
+                        className={`h-8 whitespace-nowrap rounded px-2.5 text-[11px] font-semibold leading-none transition disabled:cursor-not-allowed disabled:bg-slate-400 ${
+                          actionFeedbackButtonClass(
+                            bookingSaveButtonTone,
+                            "bg-slate-950 text-white hover:bg-slate-800",
+                          )
+                        }`}
+                        disabled={saving}
+                        onClick={saveBooking}
                         type="button"
                       >
-                        {showParserDebug ? "Hide parser debug" : "Show parser debug"}
+                        {bookingSaveButtonLabel}
                       </button>
-                    ) : null}
-                    <button
-                      className={`h-8 whitespace-nowrap rounded px-2.5 text-[11px] font-semibold leading-none transition disabled:cursor-not-allowed disabled:bg-slate-400 ${
-                        actionFeedbackButtonClass(
-                          bookingSaveButtonTone,
-                          "bg-slate-950 text-white hover:bg-slate-800",
-                        )
-                      }`}
-                      disabled={saving}
-                      onClick={saveBooking}
-                      type="button"
+                    </div>
+                    <div
+                      className="flex max-w-full flex-wrap items-center justify-end gap-1 rounded-md border border-slate-200 bg-slate-50/80 p-1"
+                      data-job-card-utility-toolbar="compact"
                     >
-                      {bookingSaveButtonLabel}
-                    </button>
-                    <button
-                      className={`h-8 whitespace-nowrap rounded border px-2.5 text-[11px] font-semibold leading-none transition disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${
-                        actionFeedbackButtonClass(
-                          jobCardCalendarButtonTone,
-                          "border-sky-300 bg-white text-sky-900 hover:bg-sky-50",
-                        )
-                      }`}
-                      data-job-card-calendar-action="true"
-                      disabled={
-                        saving ||
-                        jobCardCalendarAction !== null ||
-                        Boolean(bookingCalendarDownloadId)
-                      }
-                      onClick={downloadJobCardCalendarEvent}
-                      type="button"
-                    >
-                      {jobCardCalendarAction === "download-calendar"
-                        ? "Calendar..."
-                        : jobCardCalendarCreated
-                          ? "Calendar Created"
-                          : "Create Calendar Event"}
-                    </button>
-                    {jobCardCopyEditState.isEditing ? (
-                      <>
-                        <button
-                          className="h-8 whitespace-nowrap rounded border border-emerald-300 bg-white px-2.5 text-[11px] font-semibold leading-none text-emerald-900 transition hover:bg-emerald-50"
-                          data-copy-save-edit="jobCard"
-                          onClick={() => saveCopyEdit("jobCard")}
-                          type="button"
-                        >
-                          Save Edit
-                        </button>
+                      {parsedDebugBooking ? (
                         <button
                           className="h-8 whitespace-nowrap rounded border border-slate-300 bg-white px-2.5 text-[11px] font-semibold leading-none text-slate-700 transition hover:bg-slate-50"
-                          data-copy-cancel-edit="jobCard"
-                          onClick={() => cancelCopyEdit("jobCard")}
+                          onClick={() => setShowParserDebug((current) => !current)}
                           type="button"
                         >
-                          Cancel Edit
+                          {showParserDebug ? "Hide parser debug" : "Show parser debug"}
                         </button>
-                      </>
-                    ) : (
+                      ) : null}
+                      <button
+                        className={`h-8 whitespace-nowrap rounded border px-2.5 text-[11px] font-semibold leading-none transition disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${
+                          actionFeedbackButtonClass(
+                            jobCardCalendarButtonTone,
+                            "border-sky-300 bg-white text-sky-900 hover:bg-sky-50",
+                          )
+                        }`}
+                        data-job-card-calendar-action="true"
+                        disabled={
+                          saving ||
+                          jobCardCalendarAction !== null ||
+                          Boolean(bookingCalendarDownloadId)
+                        }
+                        onClick={downloadJobCardCalendarEvent}
+                        type="button"
+                      >
+                        {jobCardCalendarAction === "download-calendar"
+                          ? "Calendar..."
+                          : jobCardCalendarCreated
+                            ? "Calendar Created"
+                            : "Calendar"}
+                      </button>
+                      {jobCardCopyEditState.isEditing ? (
+                        <>
+                          <button
+                            className="h-8 whitespace-nowrap rounded border border-emerald-300 bg-white px-2.5 text-[11px] font-semibold leading-none text-emerald-900 transition hover:bg-emerald-50"
+                            data-copy-save-edit="jobCard"
+                            onClick={() => saveCopyEdit("jobCard")}
+                            type="button"
+                          >
+                            Save Edit
+                          </button>
+                          <button
+                            className="h-8 whitespace-nowrap rounded border border-slate-300 bg-white px-2.5 text-[11px] font-semibold leading-none text-slate-700 transition hover:bg-slate-50"
+                            data-copy-cancel-edit="jobCard"
+                            onClick={() => cancelCopyEdit("jobCard")}
+                            type="button"
+                          >
+                            Cancel Edit
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          className={`h-8 whitespace-nowrap rounded border px-2.5 text-[11px] font-semibold leading-none transition ${
+                            actionFeedbackButtonClass(
+                              jobCardEdited ? "success" : null,
+                              "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
+                            )
+                          }`}
+                          data-copy-edit-button="jobCard"
+                          onClick={() => startCopyEdit("jobCard")}
+                          type="button"
+                        >
+                          {jobCardEdited ? "Edited" : "Edit"}
+                        </button>
+                      )}
                       <button
                         className={`h-8 whitespace-nowrap rounded border px-2.5 text-[11px] font-semibold leading-none transition ${
                           actionFeedbackButtonClass(
-                            jobCardEdited ? "success" : null,
+                            jobCardCopied ? "success" : jobCardFeedback?.tone === "error" ? "error" : null,
                             "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
                           )
                         }`}
-                        data-copy-edit-button="jobCard"
-                        onClick={() => startCopyEdit("jobCard")}
+                        data-copy-copy-button="jobCard"
+                        onClick={copyJobCard}
                         type="button"
                       >
-                        {jobCardEdited ? "Edited" : "Edit"}
+                        {jobCardCopied ? "Copied" : "Copy"}
                       </button>
-                    )}
-                    <button
-                      className={`h-8 whitespace-nowrap rounded border px-2.5 text-[11px] font-semibold leading-none transition ${
-                        actionFeedbackButtonClass(
-                          jobCardCopied ? "success" : jobCardFeedback?.tone === "error" ? "error" : null,
-                          "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
-                        )
-                      }`}
-                      data-copy-copy-button="jobCard"
-                      onClick={copyJobCard}
-                      type="button"
-                    >
-                      {jobCardCopied ? "Copied" : "Copy"}
-                    </button>
+                    </div>
                   </div>
                   {jobCardFeedback?.tone === "error" ? (
                     <div

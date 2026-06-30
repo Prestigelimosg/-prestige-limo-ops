@@ -7,15 +7,15 @@ import ts from "typescript";
 
 const routeBlockedMessage =
   "Admin booking persistence is available only from the internal admin dashboard.";
-const serverSessionToken = "mock-admin-booking-calendar-event-session-token";
+const serverSessionToken = "mock-admin-booking-calendar-agenda-session-token";
 const unsafeLeakPattern =
   /customer_price|customer_rate|quoted_price|rate_amount|driver_payout|driver_notes|paynow|pay_now|invoice|payment|pdf|billing|payout|finance|parser_debug|raw_ai|parser_prompt|live_location|proof|photo|telegram|whatsapp|sms|email_payload|notification|mock_archive|mock_qa|dev_workbench|internal_admin_note|admin_note|server_secret|token_hash|raw_token|service_role/i;
 const safeApiLeakPattern =
-  /mock-admin-booking-calendar-event-session-token|server-only|server_only|stack|sql|secret|api_key|createClient/i;
+  /mock-admin-booking-calendar-agenda-session-token|server-only|server_only|stack|sql|secret|api_key|createClient/i;
 const sourceFiles = [
   "lib/admin-booking-calendar-event.ts",
   "lib/admin-dispatcher-auth-boundary.ts",
-  "app/api/admin-booking-calendar-events/route.ts",
+  "app/api/admin-booking-calendar-agenda/route.ts",
 ];
 const originalEnv = {
   NODE_ENV: process.env.NODE_ENV,
@@ -58,7 +58,7 @@ function validEnv() {
   return {
     NODE_ENV: "test",
     PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED: "true",
-    PRESTIGE_ADMIN_DISPATCHER_ACTOR_LABEL: "Calendar event contract admin",
+    PRESTIGE_ADMIN_DISPATCHER_ACTOR_LABEL: "Calendar agenda contract admin",
     PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE: "server-session-token",
     PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE: "admin",
     PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN: serverSessionToken,
@@ -104,7 +104,7 @@ async function writeMockModules(tempDir) {
 }
 
 async function loadHarness() {
-  const tempDir = await mkdtemp(path.join(os.tmpdir(), "prestige-admin-booking-calendar-event-"));
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "prestige-admin-booking-calendar-agenda-"));
 
   await writeMockModules(tempDir);
 
@@ -116,41 +116,50 @@ async function loadHarness() {
 
   return {
     cleanup: () => rm(tempDir, { force: true, recursive: true }),
-    route: require(path.join(tempDir, "app/api/admin-booking-calendar-events/route.js")),
+    route: require(path.join(tempDir, "app/api/admin-booking-calendar-agenda/route.js")),
   };
 }
 
-function safePayload(overrides = {}) {
+function safeBooking(overrides = {}) {
   return {
     booking_reference: "PL-2026-0615-001",
     booking_type: "MNG",
-    bookers: {
-      booker_name: "Safe Booker",
-    },
-    companies: {
-      company_name: "Safe Corporate",
-    },
+    booker_name: "Safe Booker",
+    company_name: "Safe Corporate",
+    date: "2026-06-15",
     driver_contact: "+65 9000 0000",
     driver_name: "Safe Driver",
     driver_plate_number: "SLV1234",
     dropoff_address: "Marina Bay Sands",
     flight_no: "SQ 318",
-    job_card: "Booking\n15 Jun 2026\nSafe operational text",
     pax: 2,
     pickup_address: "Changi Airport Terminal 3",
     pickup_time: "1530hrs",
     route: "Changi Airport Terminal 3 > Marina Bay Sands",
     status: "confirmed",
-    travelers: {
-      traveler_name: "Safe Traveler",
-    },
+    traveler_name: "Safe Traveler",
     vehicle: "Mercedes V-Class",
     ...overrides,
   };
 }
 
+function safePayload(overrides = {}) {
+  return {
+    bookings: [
+      safeBooking(),
+      safeBooking({
+        booking_reference: "PL-2026-0615-002",
+        pickup_time: "1800hrs",
+        traveler_name: "Second Safe Traveler",
+      }),
+    ],
+    date_label: "2026-06-15",
+    ...overrides,
+  };
+}
+
 function requestWithJson(payload, headers = validAdminHeaders()) {
-  return new Request("http://localhost/api/admin-booking-calendar-events", {
+  return new Request("http://localhost/api/admin-booking-calendar-agenda", {
     body: JSON.stringify(payload),
     headers,
     method: "POST",
@@ -189,35 +198,34 @@ async function main() {
 
       assert.equal(status, 200);
       assert.equal(body.ok, true);
-      assert.equal(body.version, "admin-booking-calendar-event-v1");
-      assert.equal(body.calendar_event.booking_reference, "PL-2026-0615-001");
-      assert.equal(body.calendar_event.starts_at_local, "2026-06-15T15:30:00");
-      assert.equal(body.calendar_event.ends_at_local, "2026-06-15T17:00:00");
-      assert.equal(body.calendar_event.timezone, "Asia/Singapore");
-      assert.equal(body.calendar_event.filename, "prestige-booking-pl-2026-0615-001.ics");
-      assert.match(body.calendar_event.title, /Prestige - MNG - Safe Traveler/);
-      assert.match(body.calendar_event.description, /Booking: PL-2026-0615-001/);
-      assert.match(body.calendar_event.description, /Pickup: Changi Airport Terminal 3/);
-      assert.match(body.calendar_event.description, /Driver: Safe Driver \/ SLV1234 \/ \+65 9000 0000/);
+      assert.equal(body.version, "admin-booking-calendar-agenda-v1");
+      assert.equal(body.agenda.event_count, 2);
+      assert.equal(body.agenda.connection_mode, "ics_file_only");
+      assert.equal(body.agenda.provider_connection, "not_connected");
+      assert.equal(body.agenda.live_calendar_provider, "none");
+      assert.equal(body.agenda.live_calendar_write_performed, false);
+      assert.equal(body.agenda.source_of_truth, "prestige_loaded_bookings");
+      assert.match(body.agenda.filename, /^prestige-ops-calendar-2026-06-15\.ics$/);
       assert.match(body.ics, /BEGIN:VCALENDAR/);
-      assert.match(body.ics, /BEGIN:VEVENT/);
-      assert.match(body.ics, /DTSTART:20260615T153000/);
-      assert.match(body.ics, /DTEND:20260615T170000/);
-      assert.match(body.ics, /SUMMARY:Prestige - MNG - Safe Traveler/);
-      assert.equal((body.ics.match(/BEGIN:VALARM/g) || []).length, 2);
-      assert.match(body.ics, /ACTION:DISPLAY/);
+      assert.equal((body.ics.match(/BEGIN:VEVENT/g) || []).length, 2);
+      assert.equal((body.ics.match(/BEGIN:VALARM/g) || []).length, 4);
       assert.match(body.ics, /TRIGGER:-PT2H/);
       assert.match(body.ics, /TRIGGER:-PT30M/);
       assert.match(body.ics, /Prestige booking reminder/);
-      assert.match(body.ics, /END:VCALENDAR/);
-      assertNoLeaks(body, "safe calendar event response must not leak unsafe fields");
+      assert.match(body.ics, /SUMMARY:Prestige - MNG - Safe Traveler/);
+      assert.match(body.ics, /SUMMARY:Prestige - MNG - Second Safe Traveler/);
+      assertNoLeaks(body, "safe calendar agenda response must not leak unsafe fields");
     }
 
     {
       const response = await harness.route.POST(
         requestWithJson(
           safePayload({
-            driver_payout_amount: 90,
+            bookings: [
+              safeBooking({
+                driver_payout_amount: 90,
+              }),
+            ],
           }),
         ),
       );
@@ -225,67 +233,32 @@ async function main() {
 
       assert.equal(status, 400);
       assert.equal(body.ok, false);
-      assertNoLeaks(body, "unsafe payout field rejection must not leak payload details");
+      assertNoLeaks(body, "unsafe agenda booking field rejection must not leak payload details");
     }
 
     {
+      const response = await harness.route.POST(requestWithJson({ bookings: [] }));
+      const { body, status } = await readRouteResponse(response);
+
+      assert.equal(status, 400);
+      assert.equal(body.ok, false);
+      assertNoLeaks(body, "empty agenda rejection must not leak payload details");
+    }
+
+    {
+      const tooManyBookings = Array.from({ length: 26 }, (_, index) =>
+        safeBooking({
+          booking_reference: `PL-2026-0615-${String(index + 1).padStart(3, "0")}`,
+        }),
+      );
       const response = await harness.route.POST(
-        requestWithJson(
-          safePayload({
-            bookers: {
-              booker_name: "Safe Booker",
-              email: "safe@example.test",
-            },
-          }),
-        ),
+        requestWithJson(safePayload({ bookings: tooManyBookings })),
       );
       const { body, status } = await readRouteResponse(response);
 
       assert.equal(status, 400);
       assert.equal(body.ok, false);
-      assertNoLeaks(body, "nested contact fields must be rejected safely");
-    }
-
-    {
-      const payload = safePayload();
-      delete payload.booking_reference;
-      const response = await harness.route.POST(requestWithJson(payload));
-      const { body, status } = await readRouteResponse(response);
-
-      assert.equal(status, 400);
-      assert.equal(body.ok, false);
-      assertNoLeaks(body, "missing saved booking reference rejection must be safe");
-    }
-
-    {
-      const response = await harness.route.POST(
-        requestWithJson(
-          safePayload({
-            job_card: "Booking without a date",
-            pickup_time: "",
-          }),
-        ),
-      );
-      const { body, status } = await readRouteResponse(response);
-
-      assert.equal(status, 400);
-      assert.equal(body.ok, false);
-      assertNoLeaks(body, "missing pickup date/time rejection must be safe");
-    }
-
-    {
-      const response = await harness.route.POST(
-        requestWithJson(
-          safePayload({
-            calendar_provider: "google",
-          }),
-        ),
-      );
-      const { body, status } = await readRouteResponse(response);
-
-      assert.equal(status, 400);
-      assert.equal(body.ok, false);
-      assertNoLeaks(body, "unknown provider field must be rejected safely");
+      assertNoLeaks(body, "agenda limit rejection must not leak payload details");
     }
 
     for (const [label, request] of [
@@ -299,7 +272,7 @@ async function main() {
         "customer referer",
         requestWithJson(safePayload(), {
           ...validAdminHeaders(),
-          referer: "http://localhost/customers/ubs",
+          referer: "http://localhost/my-bookings",
         }),
       ],
       [
@@ -324,4 +297,4 @@ async function main() {
 
 await main();
 
-console.log("Admin booking calendar event API contract passed.");
+console.log("Admin booking calendar agenda API contract passed.");

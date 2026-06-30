@@ -1,6 +1,7 @@
 import "server-only";
 
 export const adminBookingCalendarEventVersion = "admin-booking-calendar-event-v1";
+export const adminBookingCalendarAgendaVersion = "admin-booking-calendar-agenda-v1";
 export const adminBookingCalendarTimezone = "Asia/Singapore";
 
 export type AdminBookingCalendarEventData = {
@@ -29,6 +30,34 @@ export type BuildAdminBookingCalendarEventResult =
       status: 400;
     };
 
+export type AdminBookingCalendarAgendaData = {
+  calendar_events: AdminBookingCalendarEventData[];
+  connection_mode: "ics_file_only";
+  date_label: string | null;
+  event_count: number;
+  filename: string;
+  live_calendar_provider: "none";
+  live_calendar_write_performed: false;
+  provider_connection: "not_connected";
+  source_of_truth: "prestige_loaded_bookings";
+  sync_method: "ics_file_download";
+};
+
+export type BuildAdminBookingCalendarAgendaResult =
+  | {
+      data: {
+        agenda: AdminBookingCalendarAgendaData;
+        ics: string;
+        version: typeof adminBookingCalendarAgendaVersion;
+      };
+      ok: true;
+    }
+  | {
+      error: string;
+      ok: false;
+      status: 400;
+    };
+
 type CalendarDateTimeParts = {
   day: number;
   hour: number;
@@ -37,15 +66,40 @@ type CalendarDateTimeParts = {
   year: number;
 };
 
+type AdminBookingCalendarEventParts = {
+  calendar_event: AdminBookingCalendarEventData;
+  endsAt: CalendarDateTimeParts;
+  startsAt: CalendarDateTimeParts;
+  version: typeof adminBookingCalendarEventVersion;
+};
+
+type BuildAdminBookingCalendarEventPartsResult =
+  | {
+      data: AdminBookingCalendarEventParts;
+      ok: true;
+    }
+  | {
+      error: string;
+      ok: false;
+      status: 400;
+    };
+
 const defaultDurationMinutes = 90;
+const maxAgendaBookings = 25;
 const genericPayloadError =
   "Calendar event payload must contain only supported saved booking fields.";
+const genericAgendaPayloadError =
+  "Calendar agenda payload must contain only supported loaded booking fields.";
 const savedBookingRequiredError =
   "A saved booking reference or id is required before creating a calendar event payload.";
 const pickupDateTimeRequiredError =
   "A saved booking pickup date and time are required before creating a calendar event payload.";
 const pickupLocationRequiredError =
   "A saved booking pickup or dropoff location is required before creating a calendar event payload.";
+const agendaBookingsRequiredError =
+  "At least one loaded booking is required before creating a calendar agenda file.";
+const agendaBookingsLimitError =
+  "Calendar agenda export supports up to 25 loaded bookings at a time.";
 
 const forbiddenFieldFragments = [
   "admin_finance",
@@ -125,6 +179,7 @@ const allowedNestedFields: Record<string, Set<string>> = {
   companies: new Set(["company_name", "name"]),
   travelers: new Set(["name", "traveler_name"]),
 };
+const allowedAgendaRootFields = new Set(["bookings", "date", "date_label"]);
 
 const monthNumbers: Record<string, number> = {
   apr: 4,
@@ -157,6 +212,119 @@ export function buildAdminBookingCalendarEvent(
   input: unknown,
   options: { now?: Date } = {},
 ): BuildAdminBookingCalendarEventResult {
+  const eventParts = buildAdminBookingCalendarEventParts(input);
+
+  if (!eventParts.ok) {
+    return eventParts;
+  }
+
+  return {
+    data: {
+      calendar_event: eventParts.data.calendar_event,
+      ics: buildIcs(
+        eventParts.data.calendar_event,
+        eventParts.data.startsAt,
+        eventParts.data.endsAt,
+        options.now || new Date(),
+      ),
+      version: adminBookingCalendarEventVersion,
+    },
+    ok: true,
+  };
+}
+
+export function buildAdminBookingCalendarAgenda(
+  input: unknown,
+  options: { now?: Date } = {},
+): BuildAdminBookingCalendarAgendaResult {
+  const payload = asRecord(input);
+
+  if (!payload) {
+    return {
+      error: genericAgendaPayloadError,
+      ok: false,
+      status: 400,
+    };
+  }
+
+  for (const key of Object.keys(payload)) {
+    const normalizedKey = normalizeFieldKey(key);
+
+    if (isForbiddenField(normalizedKey) || !allowedAgendaRootFields.has(normalizedKey)) {
+      return {
+        error: genericAgendaPayloadError,
+        ok: false,
+        status: 400,
+      };
+    }
+  }
+
+  const bookings = payload.bookings;
+
+  if (!Array.isArray(bookings) || bookings.length === 0) {
+    return {
+      error: agendaBookingsRequiredError,
+      ok: false,
+      status: 400,
+    };
+  }
+
+  if (bookings.length > maxAgendaBookings) {
+    return {
+      error: agendaBookingsLimitError,
+      ok: false,
+      status: 400,
+    };
+  }
+
+  const eventParts: AdminBookingCalendarEventParts[] = [];
+
+  for (const booking of bookings) {
+    const result = buildAdminBookingCalendarEventParts(booking);
+
+    if (!result.ok) {
+      return result;
+    }
+
+    eventParts.push(result.data);
+  }
+
+  eventParts.sort((firstEvent, secondEvent) =>
+    firstEvent.calendar_event.starts_at_local.localeCompare(
+      secondEvent.calendar_event.starts_at_local,
+    ),
+  );
+
+  const dateLabel =
+    safeAgendaLabel(payload.date_label ?? payload.date) ||
+    eventParts[0]?.calendar_event.starts_at_local.slice(0, 10) ||
+    null;
+  const filename = `prestige-ops-calendar-${slugify(dateLabel || "loaded-bookings")}.ics`;
+
+  return {
+    data: {
+      agenda: {
+        calendar_events: eventParts.map((eventPart) => eventPart.calendar_event),
+        connection_mode: "ics_file_only",
+        date_label: dateLabel,
+        event_count: eventParts.length,
+        filename,
+        live_calendar_provider: "none",
+        live_calendar_write_performed: false,
+        provider_connection: "not_connected",
+        source_of_truth: "prestige_loaded_bookings",
+        sync_method: "ics_file_download",
+      },
+      ics: buildIcsCalendar(eventParts, options.now || new Date()),
+      version: adminBookingCalendarAgendaVersion,
+    },
+    ok: true,
+  };
+}
+
+function buildAdminBookingCalendarEventParts(
+  input: unknown,
+): BuildAdminBookingCalendarEventPartsResult {
   const parsedPayload = validateCalendarPayload(input);
 
   if (!parsedPayload.ok) {
@@ -249,7 +417,8 @@ export function buildAdminBookingCalendarEvent(
   return {
     data: {
       calendar_event: calendarEvent,
-      ics: buildIcs(calendarEvent, startsAt, endsAt, options.now || new Date()),
+      endsAt,
+      startsAt,
       version: adminBookingCalendarEventVersion,
     },
     ok: true,
@@ -556,6 +725,20 @@ function buildIcs(
   endsAt: CalendarDateTimeParts,
   now: Date,
 ) {
+  return buildIcsCalendar(
+    [
+      {
+        calendar_event: calendarEvent,
+        endsAt,
+        startsAt,
+        version: adminBookingCalendarEventVersion,
+      },
+    ],
+    now,
+  );
+}
+
+function buildIcsCalendar(events: AdminBookingCalendarEventParts[], now: Date) {
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
@@ -563,19 +746,38 @@ function buildIcs(
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     `X-WR-TIMEZONE:${adminBookingCalendarTimezone}`,
-    "BEGIN:VEVENT",
-    `UID:${slugify(calendarEvent.booking_reference)}-${formatIcsDateTime(startsAt)}@prestige-limo-ops`,
-    `DTSTAMP:${formatUtcDateTime(now)}`,
-    `DTSTART:${formatIcsDateTime(startsAt)}`,
-    `DTEND:${formatIcsDateTime(endsAt)}`,
-    `SUMMARY:${escapeIcsText(calendarEvent.title)}`,
-    `LOCATION:${escapeIcsText(calendarEvent.location)}`,
-    `DESCRIPTION:${escapeIcsText(calendarEvent.description)}`,
-    "END:VEVENT",
+    ...events.flatMap((eventPart) => buildIcsEventLines(eventPart, now)),
     "END:VCALENDAR",
   ];
 
   return `${lines.flatMap(foldIcsLine).join("\r\n")}\r\n`;
+}
+
+function buildIcsEventLines(eventPart: AdminBookingCalendarEventParts, now: Date) {
+  const calendarEvent = eventPart.calendar_event;
+
+  return [
+    "BEGIN:VEVENT",
+    `UID:${slugify(calendarEvent.booking_reference)}-${formatIcsDateTime(eventPart.startsAt)}@prestige-limo-ops`,
+    `DTSTAMP:${formatUtcDateTime(now)}`,
+    `DTSTART:${formatIcsDateTime(eventPart.startsAt)}`,
+    `DTEND:${formatIcsDateTime(eventPart.endsAt)}`,
+    `SUMMARY:${escapeIcsText(calendarEvent.title)}`,
+    `LOCATION:${escapeIcsText(calendarEvent.location)}`,
+    `DESCRIPTION:${escapeIcsText(calendarEvent.description)}`,
+    ...buildIcsEventAlertLines(calendarEvent),
+    "END:VEVENT",
+  ];
+}
+
+function buildIcsEventAlertLines(calendarEvent: AdminBookingCalendarEventData) {
+  return ["-PT2H", "-PT30M"].flatMap((trigger) => [
+    "BEGIN:VALARM",
+    "ACTION:DISPLAY",
+    `DESCRIPTION:${escapeIcsText(`Prestige booking reminder: ${calendarEvent.title}`)}`,
+    `TRIGGER:${trigger}`,
+    "END:VALARM",
+  ]);
 }
 
 function foldIcsLine(line: string) {
@@ -672,6 +874,16 @@ function clean(value: unknown) {
 
 function limitText(value: string, maxLength: number) {
   return value.length > maxLength ? value.slice(0, maxLength).trim() : value;
+}
+
+function safeAgendaLabel(value: unknown) {
+  const cleaned = clean(value);
+
+  if (!cleaned || cleaned.length > 80 || isForbiddenField(normalizeFieldKey(cleaned))) {
+    return null;
+  }
+
+  return cleaned;
 }
 
 function normalizeFieldKey(value: string) {

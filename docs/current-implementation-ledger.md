@@ -12,6 +12,21 @@ Latest remote staging branch head:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Admin Operations Calendar Agenda Export
+
+- The Dashboard now has an `Operations Calendar` panel in the live operations command centre.
+- The panel summarizes loaded active bookings by `Today` and `Upcoming`, shows the next loaded agenda rows, and keeps the existing per-booking `Calendar` buttons available in booking lists.
+- `Export Today` downloads one `.ics` file for today's loaded active bookings.
+- `Export Loaded` downloads one `.ics` file for up to 25 loaded active bookings from the current dashboard set.
+- The new guarded route is `POST /api/admin-booking-calendar-agenda`; it reuses the same safe saved-booking calendar payload contract as the single-booking calendar export and returns a multi-event calendar file.
+- Each exported calendar event includes calendar-native display reminders 2 hours and 30 minutes before pickup, so the imported calendar can alert the operator from the same event without app push/email/provider delivery.
+- Calendar agenda export is file-only: `connection_mode: ics_file_only`, `provider_connection: not_connected`, `live_calendar_provider: none`, and `live_calendar_write_performed: false`.
+- The app remains the source of truth. Calendar edits in Google/Apple/Outlook do not update Prestige Limo Ops, and booking changes require regenerating/exporting the `.ics` file until a separately approved live provider sync lane exists.
+- The route rejects unsafe calendar payload fields such as pricing, payout, billing/payment/invoice/PDF, finance/internal/admin notes, parser/debug/mock archive, provider payloads, secrets/tokens, live location, proof/photo, and notification fragments.
+- This does not create Google Calendar, Apple/iCloud, Outlook, or provider events; does not read/write DB rows; does not apply migrations; does not change Vercel/env; does not send email/push/Telegram/WhatsApp/SMS; does not activate Stripe/payment, GPS/live location, payout, billing, customer auth, driver auth, or notification runtime.
+- Guard coverage lives in `scripts/test-admin-booking-calendar-agenda-api-contract.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+- Focused checks passed: admin booking calendar event API contract, admin booking calendar sync status API contract, admin booking calendar agenda API contract, calendar event lifecycle no-live guard, `npx tsc --noEmit --pretty false`, `npm run lint` with only the existing `loadBookings` dependency warnings, `npm run build`, and `git diff --check`.
+
 ### Customer Billing Document Lifecycle And PDF Notes Order
 
 - Admin Customers invoice workbench now has a document selector for `Invoice` or `Quotation`.

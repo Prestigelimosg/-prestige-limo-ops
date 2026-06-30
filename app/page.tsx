@@ -101,6 +101,7 @@ const adminHandledCustomerBookingRequestsStorageKey =
   "prestige-admin-handled-customer-booking-requests";
 const adminLoadBookingsTypedReadApiPath = "/api/admin-load-bookings-typed-read";
 const adminSavedBookingStatusesApiPath = "/api/admin-saved-booking-statuses";
+const adminBookingCalendarAgendaApiPath = "/api/admin-booking-calendar-agenda";
 const adminBookingCalendarEventsApiPath = "/api/admin-booking-calendar-events";
 const adminBookingCalendarSyncStatusesApiPath =
   "/api/admin-booking-calendar-sync-statuses";
@@ -809,6 +810,22 @@ type AdminBookingCalendarSyncStatusResponse = {
   error?: string;
   ok?: boolean;
   sync_status?: AdminBookingCalendarSyncStatus | null;
+};
+
+type AdminBookingCalendarAgendaResponse = {
+  agenda?: {
+    connection_mode?: "ics_file_only" | string;
+    event_count?: number | null;
+    filename?: string | null;
+    live_calendar_provider?: "none" | string;
+    live_calendar_write_performed?: boolean;
+    provider_connection?: "not_connected" | string;
+    source_of_truth?: "prestige_loaded_bookings" | string;
+    sync_method?: "ics_file_download" | string;
+  } | null;
+  error?: string;
+  ics?: string;
+  ok?: boolean;
 };
 
 type SavedBookingCalendarDownloadResult = {
@@ -9254,6 +9271,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   const [bookingCalendarMessages, setBookingCalendarMessages] =
     useState<Record<string, Message>>({});
   const [bookingCalendarDownloadId, setBookingCalendarDownloadId] = useState<string | null>(null);
+  const [calendarAgendaAction, setCalendarAgendaAction] =
+    useState<"loaded" | "today" | null>(null);
+  const [calendarAgendaMessage, setCalendarAgendaMessage] = useState<Message | null>(null);
   const [jobCardCalendarMessage, setJobCardCalendarMessage] = useState<Message | null>(null);
   const [jobCardCalendarAction, setJobCardCalendarAction] =
     useState<"download-calendar" | null>(null);
@@ -12126,8 +12146,13 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   const upcomingBookings = activeDashboardBookings.filter(
     (bookingRecord) => getBookingDateKey(bookingRecord) > todayKey,
   );
+  const calendarExportableBookings = activeDashboardBookings
+    .filter((bookingRecord) => getBookingDateKey(bookingRecord) !== "1970-01-01")
+    .slice(0, 25);
+  const calendarPreviewBookings = [...todayBookings, ...upcomingBookings].slice(0, 6);
   const todayBookingDisplayItems = buildLoadBookingsOperationalDisplayItems(todayBookings);
   const upcomingBookingDisplayItems = buildLoadBookingsOperationalDisplayItems(upcomingBookings);
+  const calendarPreviewDisplayItems = buildLoadBookingsOperationalDisplayItems(calendarPreviewBookings);
   const customerBookingRequestDisplayItems =
     buildLoadBookingsOperationalDisplayItems(visibleCustomerBookingRequestBookings, {
       useTypedOperationalOrder: true,
@@ -15727,6 +15752,83 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     bookingRecord: BookingRecord,
   ): Promise<SavedBookingCalendarDownloadResult> {
     return createAndDownloadCalendarEventPayload(buildSavedBookingCalendarEventPayload(bookingRecord));
+  }
+
+  async function createAndDownloadCalendarAgenda(
+    agendaBookings: BookingRecord[],
+    dateLabel: string,
+  ) {
+    const response = await fetch(adminBookingCalendarAgendaApiPath, {
+      body: JSON.stringify({
+        bookings: agendaBookings.map(buildSavedBookingCalendarEventPayload),
+        date_label: dateLabel,
+      }),
+      headers: {
+        "Content-Type": "application/json",
+        "x-prestige-admin-purpose": adminLegacyDataPurpose,
+      },
+      method: "POST",
+    });
+    const result = (await response.json().catch(() => null)) as AdminBookingCalendarAgendaResponse | null;
+
+    if (!response.ok || !result?.ok || !result.ics) {
+      throw new Error(result?.error || "Calendar agenda file could not be created.");
+    }
+
+    downloadIcsFile(result.agenda?.filename || "prestige-ops-calendar.ics", result.ics);
+
+    return {
+      connectionMode: result.agenda?.connection_mode || "ics_file_only",
+      eventCount: Number(result.agenda?.event_count) || agendaBookings.length,
+      liveCalendarProvider: result.agenda?.live_calendar_provider || "none",
+      liveCalendarWritePerformed: result.agenda?.live_calendar_write_performed === true,
+      providerConnection: result.agenda?.provider_connection || "not_connected",
+    };
+  }
+
+  async function downloadCalendarAgenda(
+    agendaBookings: BookingRecord[],
+    action: "loaded" | "today",
+    dateLabel: string,
+  ) {
+    if (agendaBookings.length === 0) {
+      setCalendarAgendaMessage({
+        tone: "info",
+        text: "No loaded bookings available for calendar export.",
+      });
+      return;
+    }
+
+    setCalendarAgendaAction(action);
+    setCalendarAgendaMessage({
+      tone: "info",
+      text: "Preparing operations calendar...",
+    });
+
+    try {
+      const result = await createAndDownloadCalendarAgenda(agendaBookings, dateLabel);
+      const fileOnly =
+        result.connectionMode === "ics_file_only" &&
+        result.providerConnection === "not_connected" &&
+        result.liveCalendarProvider === "none" &&
+        !result.liveCalendarWritePerformed;
+
+      setCalendarAgendaMessage({
+        tone: "success",
+        text: `Operations calendar exported with ${result.eventCount} event${
+          result.eventCount === 1 ? "" : "s"
+        }. ${fileOnly ? "File-only; app stays source of truth." : "Review calendar connection status."}`,
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown calendar agenda error.";
+
+      setCalendarAgendaMessage({
+        tone: "error",
+        text: `Calendar export failed: ${errorMessage}`,
+      });
+    } finally {
+      setCalendarAgendaAction(null);
+    }
   }
 
   async function downloadSavedBookingCalendarEvent(bookingRecord: BookingRecord) {
@@ -34613,6 +34715,120 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             ) : (
               <p className="mt-3 rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-slate-600">
                 No urgent booking requests inside 24 hours loaded.
+              </p>
+            )}
+          </section>
+
+          <section
+            aria-label="Operations Calendar"
+            className="mb-4 rounded-md border border-cyan-200 bg-cyan-50/70 p-2 sm:p-3"
+            data-operations-calendar-panel="true"
+          >
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-base font-semibold text-cyan-950">Operations Calendar</h3>
+                  <span
+                    className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold uppercase text-cyan-900 ring-1 ring-cyan-200"
+                    data-operations-calendar-loaded-count={String(calendarExportableBookings.length)}
+                  >
+                    {calendarExportableBookings.length} loaded
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-cyan-900 sm:text-sm">
+                  Today {todayBookings.length} / Upcoming {upcomingBookings.length}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  className="h-9 rounded-md border border-cyan-300 bg-white px-3 text-sm font-semibold text-cyan-950 transition hover:bg-cyan-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                  data-operations-calendar-export-today="true"
+                  disabled={
+                    todayBookings.length === 0 ||
+                    calendarAgendaAction !== null ||
+                    Boolean(bookingCalendarDownloadId)
+                  }
+                  onClick={() => downloadCalendarAgenda(todayBookings, "today", todayKey)}
+                  type="button"
+                >
+                  {calendarAgendaAction === "today" ? "Exporting..." : "Export Today"}
+                </button>
+                <button
+                  className="h-9 rounded-md border border-cyan-300 bg-white px-3 text-sm font-semibold text-cyan-950 transition hover:bg-cyan-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                  data-operations-calendar-export-loaded="true"
+                  disabled={
+                    calendarExportableBookings.length === 0 ||
+                    calendarAgendaAction !== null ||
+                    Boolean(bookingCalendarDownloadId)
+                  }
+                  onClick={() =>
+                    downloadCalendarAgenda(calendarExportableBookings, "loaded", `loaded-${todayKey}`)
+                  }
+                  type="button"
+                >
+                  {calendarAgendaAction === "loaded" ? "Exporting..." : "Export Loaded"}
+                </button>
+              </div>
+            </div>
+
+            {calendarAgendaMessage ? (
+              <div
+                className={`mt-2 rounded-md border px-2 py-1.5 text-xs sm:text-sm ${statusClass(
+                  calendarAgendaMessage.tone,
+                )}`}
+                data-operations-calendar-feedback="true"
+              >
+                {calendarAgendaMessage.text}
+              </div>
+            ) : null}
+
+            {calendarPreviewDisplayItems.length > 0 ? (
+              <div className="mt-3 grid gap-2" data-operations-calendar-agenda-rows="true">
+                {calendarPreviewDisplayItems.map(({ bookingRecord, operationalCard }) => {
+                  const bookingId = String(bookingRecord.id);
+                  const routePoints = getRoutePoints(bookingRecord);
+                  const pickup = operationalCard.pickup_address || routePoints[0] || "Pickup";
+                  const dropoff =
+                    operationalCard.dropoff_address ||
+                    routePoints[routePoints.length - 1] ||
+                    "Drop-off";
+                  const routeText =
+                    operationalCard.route_points_summary ||
+                    (routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`);
+
+                  return (
+                    <div
+                      className="grid gap-1 rounded-md border border-cyan-100 bg-white px-3 py-2 text-sm md:grid-cols-[minmax(8rem,0.7fr)_minmax(10rem,0.8fr)_minmax(12rem,1.2fr)_auto] md:items-center"
+                      data-operations-calendar-agenda-row={bookingId}
+                      key={`operations-calendar-${bookingRecord.id}`}
+                    >
+                      <span className="truncate font-semibold text-cyan-950">
+                        {operationalCard.pickup_datetime ||
+                          formatPickupDateTime(getBookingDateKey(bookingRecord), bookingRecord.pickup_time)}
+                      </span>
+                      <span className="truncate text-slate-800">
+                        {operationalCard.traveler_display_name ||
+                          operationalCard.customer_display_name ||
+                          "Unknown"}
+                      </span>
+                      <span className="truncate text-slate-700">{routeText}</span>
+                      <span
+                        className={`w-fit rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${bookingStatusClass(
+                          bookingRecord.status,
+                        )}`}
+                      >
+                        {bookingStatusLabel(bookingRecord.status)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p
+                className="mt-3 rounded-md border border-cyan-100 bg-white px-3 py-2 text-sm text-slate-600"
+                data-operations-calendar-empty="true"
+              >
+                Load bookings to build the operations calendar.
               </p>
             )}
           </section>

@@ -967,6 +967,10 @@ const guardChecks = [
     script: "scripts/test-customer-amendment-no-live-guard.mjs",
   },
   {
+    label: "admin booking calendar agenda API contract guard",
+    script: "scripts/test-admin-booking-calendar-agenda-api-contract.mjs",
+  },
+  {
     label: "calendar event lifecycle no-live guard",
     script: "scripts/test-admin-calendar-event-lifecycle-no-live-guard.mjs",
   },

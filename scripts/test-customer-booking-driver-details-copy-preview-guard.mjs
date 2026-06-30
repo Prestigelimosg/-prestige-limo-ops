@@ -71,19 +71,29 @@ for (const fragment of [
   "`Service: ${serviceType}`",
   "`Pickup date: ${formatDate(booking.date)}`",
   "`Pickup time: ${formatPickupTime(booking.time)}`",
-  "`Pickup location: ${clean(booking.pickup)}`",
-  "`Drop-off location: ${clean(booking.dropoff)}`",
+  "const flightLocationParts = dispatchCopyLocationFlightParts(booking);",
+  "`Pickup location: ${flightLocationParts.pickup}`",
+  "`Drop-off location: ${flightLocationParts.dropoff}`",
   "`Pax: ${Number(clean(booking.pax)) || 1}`",
-  "`Flight: ${clean(booking.flight)}`",
-  "`Driver: ${clean(booking.driverName)}`",
-  "`Driver contact: ${clean(booking.driverContact)}`",
-  "`Car plate: ${assignedDriverPlate}`",
+  "flightLocationParts.standaloneFlightLine",
+  "`Driver: ${bookingDriverName}`",
+  "`Driver contact: ${bookingDriverContact}`",
+  "`Car plate: ${customerCopyDriverPlate}`",
   "`Car type: ${carType}`",
 ]) {
   assertIncludes(customerCopyGenerator, fragment, `Customer Copy generator field ${fragment}`);
 }
 
 for (const forbidden of [
+  "customerCopyTermsText",
+  "customerTermsAndSurchargeSummary",
+  "Customer notes included:",
+  "NOTES",
+  "Midnight surcharge",
+  "Waiting time:",
+  "Hourly bookings include",
+  "amendment fee",
+  "Your booking is confirmed once",
   "customerLiveLocation.copyLine",
   "Route:",
   "Itinerary:",
@@ -121,6 +131,7 @@ for (const forbidden of [
   "Telegram API",
   "WhatsApp API",
   "Resend API",
+  "data-customer-copy-terms-note",
 ]) {
   assertExcludes(customerCopyUi, forbidden, "Customer Copy UI provider-send wording");
 }

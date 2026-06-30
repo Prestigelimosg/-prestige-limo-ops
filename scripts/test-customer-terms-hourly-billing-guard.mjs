@@ -9,6 +9,10 @@ function assertIncludes(source, expected, message = `Missing required text: ${ex
   assert.ok(source.includes(expected), message);
 }
 
+function assertExcludes(source, forbidden, message = `Unexpected text found: ${forbidden}`) {
+  assert.equal(source.includes(forbidden), false, message);
+}
+
 const appPage = await read("app/page.tsx");
 const bookPage = await read("app/book/page.tsx");
 const termsHelper = await read("lib/customer-facing-booking-terms.ts");
@@ -62,11 +66,21 @@ assertIncludes(
   "Please accept the booking terms, surcharges, and waiting-time policy before submitting.",
   "Public booking submit must require terms acceptance.",
 );
-assertIncludes(appPage, "customerCopyTermsText.split", "Customer Copy must include customer terms text.");
-assertIncludes(
+assertExcludes(
+  termsHelper,
+  "customerCopyTermsText",
+  "Customer-facing terms helper must not expose a Customer Copy notes export.",
+);
+assertExcludes(appPage, "customerCopyTermsText.split", "Dispatch Customer Copy must not append customer terms text.");
+assertExcludes(
   appPage,
   "data-customer-copy-terms-note",
-  "Customer Copy must show a compact visual terms note.",
+  "Dispatch Customer Copy must not show a duplicate terms helper note.",
+);
+assertExcludes(
+  appPage,
+  "Customer notes included: midnight surcharge, waiting time, hourly grace, and amendment policy.",
+  "Dispatch Customer Copy must not show the removed terms helper wording.",
 );
 assertIncludes(
   appPage,

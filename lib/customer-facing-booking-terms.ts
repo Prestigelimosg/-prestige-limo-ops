@@ -9,9 +9,3 @@ export const customerTermsAndSurchargeSummary = [
 
 export const customerTermsAndConditionsSummary =
   "Your booking is confirmed once full payment or the required deposit has been received. By proceeding, you agree to Prestige Limo booking terms, surcharges, waiting-time policy, passenger conduct, luggage, liability, and amendment conditions.";
-
-export const customerCopyTermsText = [
-  "NOTES",
-  ...customerTermsAndSurchargeSummary,
-  customerTermsAndConditionsSummary,
-].join("\n");

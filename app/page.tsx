@@ -29,7 +29,7 @@ import {
   type RateRules,
   type RateSettings,
 } from "../lib/pricing";
-import { customerCopyTermsText, customerTermsAndSurchargeSummary } from "../lib/customer-facing-booking-terms";
+import { customerTermsAndSurchargeSummary } from "../lib/customer-facing-booking-terms";
 import {
   calculateHourlyBillableMinutes,
   hourlyBillingGraceMinutes,
@@ -11866,7 +11866,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         flightLocationParts.standaloneFlightLine,
       ],
       ["DRIVER DETAILS", ...driverLines],
-      customerCopyTermsText.split("\n"),
     ];
 
     return sections
@@ -33638,12 +33637,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   {customerCopyText}
                 </pre>
               )}
-              <p
-                className="mt-1 text-[10px] leading-4 text-slate-500"
-                data-customer-copy-terms-note="true"
-              >
-                Customer notes included: midnight surcharge, waiting time, hourly grace, and amendment policy.
-              </p>
             </div>
 
             <div

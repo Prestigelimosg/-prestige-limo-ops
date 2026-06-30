@@ -15958,7 +15958,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   }
 
   async function downloadSavedBookingCalendarEvent(bookingRecord: BookingRecord) {
-    const bookingId = String(bookingRecord.id);
+    const bookingId = getBookingCalendarReference(bookingRecord);
 
     setBookingCalendarDownloadId(bookingId);
     setBookingCalendarMessage(bookingId, {
@@ -16202,7 +16202,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     bookingRecord: BookingRecord,
     surface: "completed" | "dashboard" | "recent",
   ) {
-    const bookingId = String(bookingRecord.id);
+    const bookingId = getBookingCalendarReference(bookingRecord);
     const calendarMessage = bookingCalendarMessages[bookingId] ?? null;
     const isDownloading = bookingCalendarDownloadId === bookingId;
     const downloadInProgress = Boolean(bookingCalendarDownloadId);

@@ -200,6 +200,14 @@ async function main() {
 
     assert.match(routeSource, /allowServerSessionRoleMethodsWithoutRequestToken:\s*\["POST"\]/);
     assert.match(appSource, /function getBookingCalendarReference\(bookingRecord: BookingRecord\)/);
+    assert.match(
+      appSource,
+      /async function downloadSavedBookingCalendarEvent\([\s\S]*?const bookingId = getBookingCalendarReference\(bookingRecord\);/,
+    );
+    assert.match(
+      appSource,
+      /function renderBookingCalendarDownloadAction\([\s\S]*?const bookingId = getBookingCalendarReference\(bookingRecord\);/,
+    );
     assert.match(calendarPayloadSource, /booking_reference: bookingReference/);
     assert.match(calendarPayloadSource, /id: cleanReferenceText\(bookingRecord\.id\) \|\| bookingReference/);
     assert.doesNotMatch(calendarPayloadSource, /booking_reference: String\(bookingRecord\.id\)/);

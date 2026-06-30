@@ -1,13 +1,13 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
-Latest verified clean checkpoint before this Load Bookings typed primary display source staging smoke record:
-a682e97 Implement Load Bookings typed primary display source
+Latest verified clean checkpoint:
+91868f7a Record live billing document proof
 
-Latest staging-smoked app checkpoint:
-a682e97 Implement Load Bookings typed primary display source
+Latest pushed main/staging checkpoint:
+91868f7a Record live billing document proof
 
 Latest remote staging branch head:
-4798066 Record staging smoke for Load Bookings typed display
+91868f7a Record live billing document proof
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.

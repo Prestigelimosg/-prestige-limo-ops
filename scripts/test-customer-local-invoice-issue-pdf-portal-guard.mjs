@@ -233,14 +233,25 @@ for (const fragment of [
   "const adminCustomerInvoiceEmailApiPath = \"/api/admin-customer-invoice-email\";",
   "type CustomerDisplayedInvoiceRecord = CustomerLocalInvoiceRecord & {",
   "const [customerInvoiceRecipientEmail, setCustomerInvoiceRecipientEmail] = useState(\"\");",
+  "const [customerInvoiceCardPaymentEnabled, setCustomerInvoiceCardPaymentEnabled] = useState(false);",
+  "const [customerInvoiceCardFeeApplies, setCustomerInvoiceCardFeeApplies] = useState(false);",
+  "function customerInvoiceCardPaymentNote(",
+  "appendCustomerInvoiceCardPaymentNote(",
   "data-customer-invoice-recipient-email=\"true\"",
+  "data-customer-invoice-card-payment-enabled=\"true\"",
+  "data-customer-invoice-card-fee-applies=\"true\"",
+  "data-customer-invoice-preview-card-payment=\"true\"",
+  "Card payment available on request.",
+  "A 10% card processing fee applies when the customer chooses card payment.",
   "fetch(adminCustomerInvoicesApiPath",
   "method: \"POST\"",
   "method: \"PATCH\"",
   "fetch(adminCustomerInvoiceEmailApiPath",
   "downloadStoredCustomerInvoicePdf(issuedInvoice)",
   "Stored invoice record with PDF download.",
-  "No Stripe charge, bank debit, payout, provider job send, or automatic payment action.",
+  "Card checkbox only changes invoice wording.",
+  "It does not create a Stripe checkout,",
+  "payment link, card charge, bank debit, payout, provider job send, or automatic payment action.",
 ]) {
   assertIncludes(customersPage, fragment, `customers stored invoice UI ${fragment}`);
 }
@@ -329,9 +340,11 @@ for (const phrase of [
   "The issue action creates a unique `INV-YYYYMMDD-####` invoice number only at click time, writes one `customer_invoice_records` row with the generated PDF bytes, and starts a PDF download from the stored server record.",
   "The customer portal `Invoices` tab reads only server-stored invoice records under compact `Unpaid` and `Paid` monthly folders when the secure portal session is active; browser-local invoice fallback is not rendered in the customer portal.",
   "The customer portal invoice/PDF reads explicitly send same-origin credentials, keep the secure account session invisible to the page, and show stored/sign-in state plus Downloading/Downloaded/Try again button feedback.",
+  "The per-invoice Card payment checkbox is off by default; when enabled it appends customer-facing card payment wording to that invoice line item, with an optional 10% card processing fee note.",
+  "Changing the card payment checkbox or card fee note makes the invoice preview stale and blocks issue until admin refreshes the preview.",
   "`Email Invoice` is wired behind `PRESTIGE_CUSTOMER_INVOICE_EMAIL_SEND_ENABLED`, `PRESTIGE_EMAIL_PROVIDER=resend`, `PRESTIGE_CUSTOMER_INVOICE_EMAIL_FROM`, optional `PRESTIGE_CUSTOMER_INVOICE_EMAIL_RECIPIENT_ALLOWLIST`, and `RESEND_API_KEY`; closed gates mark the invoice email status blocked and do not call Resend.",
   "The `customer_invoice_records` migration scaffold is service-role only with RLS enabled and no anon/authenticated grants.",
-  "This pass does not activate Stripe/payment links, bank debit, payout, provider job sending, GPS/live location, automatic payment reconciliation, or customer-visible internal/mock/debug data.",
+  "This pass does not activate Stripe checkout/payment links, card charges, bank debit, payout, provider job sending, GPS/live location, automatic payment reconciliation, or customer-visible internal/mock/debug data.",
 ]) {
   assertIncludes(ledgerSection, phrase, `ledger phrase ${phrase}`);
 }

@@ -159,7 +159,7 @@ for (const fragment of [
   "Enter adjustment reason before issuing an invoice with an edited amount.",
   "[data-customer-invoice-override-reason='true']",
   "if (!customerInvoicePreview || !isCustomerInvoicePreviewCurrent)",
-  "Click Preview Invoice first. If you changed amount, due date, folder, or adjustment reason, refresh the preview before issuing.",
+  "Click Preview Invoice first. If you changed amount, due date, folder, adjustment reason, or card payment option, refresh the preview before issuing.",
   "customerInvoicePreview.lineDescription",
 ]) {
   assertIncludes(issueFunction, fragment, `invoice override issue guard fragment ${fragment}`);

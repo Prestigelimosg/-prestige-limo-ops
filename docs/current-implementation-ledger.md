@@ -420,12 +420,14 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The customer portal invoice/PDF reads explicitly send same-origin credentials, keep the secure account session invisible to the page, and show stored/sign-in state plus Downloading/Downloaded/Try again button feedback.
 - Downloaded invoice PDFs embed the safe Company Profile JPEG logo when available and keep company name, contact, accounting email, address, bank/payment instructions, and footer terms in the same customer-facing profile path.
 - Admin must click `Preview Invoice` before `Issue Invoice + PDF`; changing amount, due date, folder, or adjustment reason makes the preview stale and blocks issue until refreshed.
+- The per-invoice Card payment checkbox is off by default; when enabled it appends customer-facing card payment wording to that invoice line item, with an optional 10% card processing fee note.
+- Changing the card payment checkbox or card fee note makes the invoice preview stale and blocks issue until admin refreshes the preview.
 - The amount input is required before issue so admin must review the charge before invoice number/PDF creation.
 - Issued invoices show `Pay` for unpaid invoices, then `Paid` plus `Mark Unpaid` so an accidental paid click can be reversed before any payment reconciliation exists.
 - Paid/Unpaid status changes refresh the stored PDF bytes/hash in the same server update so the customer portal folder status and downloaded invoice PDF status cannot disagree.
 - `Email Invoice` is wired behind `PRESTIGE_CUSTOMER_INVOICE_EMAIL_SEND_ENABLED`, `PRESTIGE_EMAIL_PROVIDER=resend`, `PRESTIGE_CUSTOMER_INVOICE_EMAIL_FROM`, optional `PRESTIGE_CUSTOMER_INVOICE_EMAIL_RECIPIENT_ALLOWLIST`, and `RESEND_API_KEY`; closed gates mark the invoice email status blocked and do not call Resend.
 - The `customer_invoice_records` migration scaffold is service-role only with RLS enabled and no anon/authenticated grants.
-- This pass does not activate Stripe/payment links, bank debit, payout, provider job sending, GPS/live location, automatic payment reconciliation, or customer-visible internal/mock/debug data.
+- This pass does not activate Stripe checkout/payment links, card charges, bank debit, payout, provider job sending, GPS/live location, automatic payment reconciliation, or customer-visible internal/mock/debug data.
 - Guard coverage lives in `scripts/test-customer-local-invoice-issue-pdf-portal-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Customer Hourly Invoice Auto Calculation Lock

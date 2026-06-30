@@ -279,6 +279,8 @@ type CustomerInvoiceCalculatedAmount = {
 type CustomerInvoicePreview = {
   amountCents: number;
   amountLabel: string;
+  cardFeeApplies: boolean;
+  cardPaymentEnabled: boolean;
   customerName: string;
   dueDateIso: string;
   dueDateLabel: string;
@@ -486,6 +488,55 @@ function validCustomerInvoiceDriverTimingReference(reference: string) {
   return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(trimmedReference)
     ? trimmedReference
     : "";
+}
+
+const customerInvoiceLineDescriptionMaxLength = 500;
+
+function customerInvoiceCardPaymentNote(cardPaymentEnabled: boolean, cardFeeApplies: boolean) {
+  if (!cardPaymentEnabled) {
+    return "";
+  }
+
+  return cardFeeApplies
+    ? "Card payment available on request. A 10% card processing fee applies when the customer chooses card payment."
+    : "Card payment available on request.";
+}
+
+function appendCustomerInvoiceCardPaymentNote(
+  description: string,
+  cardPaymentEnabled: boolean,
+  cardFeeApplies: boolean,
+) {
+  const note = customerInvoiceCardPaymentNote(cardPaymentEnabled, cardFeeApplies);
+
+  if (!note) {
+    return description;
+  }
+
+  const suffix = ` ${note}`;
+  const fullDescription = `${description}${suffix}`;
+
+  if (fullDescription.length <= customerInvoiceLineDescriptionMaxLength) {
+    return fullDescription;
+  }
+
+  const availableDescriptionLength = Math.max(
+    40,
+    customerInvoiceLineDescriptionMaxLength - suffix.length - 4,
+  );
+
+  return `${description.slice(0, availableDescriptionLength).trim()}...${suffix}`;
+}
+
+function customerInvoiceCardPaymentPreviewLabel(
+  cardPaymentEnabled: boolean,
+  cardFeeApplies: boolean,
+) {
+  if (!cardPaymentEnabled) {
+    return "Off";
+  }
+
+  return cardFeeApplies ? "Enabled, 10% fee note included" : "Enabled, no fee note";
 }
 
 function getCustomerInvoiceRowCalculatedAmount(
@@ -1021,6 +1072,8 @@ export default function MockCustomerDashboardPage() {
   const [customerInvoiceIssueStatus, setCustomerInvoiceIssueStatus] =
     useState<CustomerLocalInvoiceStatus>("Unpaid");
   const [customerInvoiceRecipientEmail, setCustomerInvoiceRecipientEmail] = useState("");
+  const [customerInvoiceCardPaymentEnabled, setCustomerInvoiceCardPaymentEnabled] = useState(false);
+  const [customerInvoiceCardFeeApplies, setCustomerInvoiceCardFeeApplies] = useState(false);
   const [customerInvoiceIssueFeedback, setCustomerInvoiceIssueFeedback] = useState(
     "Review the amount and due date before issuing. Invoice number is created only when you click issue.",
   );
@@ -1431,11 +1484,15 @@ export default function MockCustomerDashboardPage() {
       customerInvoiceCalculatedAmountCents ?? "",
       customerInvoiceCalculatedLineDescription,
       customerInvoiceAmountEdited ? customerInvoiceAdjustmentReason.trim() : "",
+      customerInvoiceCardPaymentEnabled ? "card-on" : "card-off",
+      customerInvoiceCardFeeApplies ? "card-fee-on" : "card-fee-off",
     ].join("|");
   }, [
     customerInvoiceAdjustmentReason,
     customerInvoiceAmountEdited,
     customerInvoiceApprovedAmountCents,
+    customerInvoiceCardFeeApplies,
+    customerInvoiceCardPaymentEnabled,
     customerInvoiceCalculatedAmountCents,
     customerInvoiceCalculatedLineDescription,
     customerInvoiceIssueDueDate,
@@ -1907,6 +1964,8 @@ export default function MockCustomerDashboardPage() {
     setCustomerInvoiceIssueDueDate(invoiceDateInputDaysFromNow(7));
     setCustomerInvoiceIssueStatus("Unpaid");
     setCustomerInvoiceRecipientEmail("");
+    setCustomerInvoiceCardPaymentEnabled(false);
+    setCustomerInvoiceCardFeeApplies(false);
     setCustomerInvoicePreview(null);
     setCustomerInvoiceAdjustmentReason("");
     setCustomerInvoiceCalculatedAmountCents(baseCalculation?.amountCents ?? null);
@@ -2014,6 +2073,8 @@ export default function MockCustomerDashboardPage() {
     setCustomerInvoiceIssueDueDate(invoiceDateInputDaysFromNow(7));
     setCustomerInvoiceIssueStatus("Unpaid");
     setCustomerInvoiceRecipientEmail("");
+    setCustomerInvoiceCardPaymentEnabled(false);
+    setCustomerInvoiceCardFeeApplies(false);
     setCustomerInvoicePreview(null);
     setCustomerInvoiceAdjustmentReason("");
     setCustomerInvoiceCalculatedAmountCents(null);
@@ -2041,11 +2102,17 @@ export default function MockCustomerDashboardPage() {
     row: UnbilledCustomerRow,
     amountEdited: boolean,
   ) {
-    return amountEdited
+    const baseDescription = amountEdited
       ? `${row.service} - approved customer amount - ${row.reference}`
       : customerInvoiceCalculatedLineDescription ||
           row.invoiceLineDescription ||
           `${row.service} - ${row.reference} - ${row.route}`;
+
+    return appendCustomerInvoiceCardPaymentNote(
+      baseDescription,
+      customerInvoiceCardPaymentEnabled,
+      customerInvoiceCardFeeApplies,
+    );
   }
 
   function previewPreparedCustomerInvoice() {
@@ -2085,6 +2152,8 @@ export default function MockCustomerDashboardPage() {
     setCustomerInvoicePreview({
       amountCents,
       amountLabel: formatInvoiceAmount(amountCents),
+      cardFeeApplies: customerInvoiceCardFeeApplies,
+      cardPaymentEnabled: customerInvoiceCardPaymentEnabled,
       customerName: customerInvoicePrepRow.customerName,
       dueDateIso: customerInvoiceIssueDueDate,
       dueDateLabel,
@@ -2164,7 +2233,7 @@ export default function MockCustomerDashboardPage() {
 
     if (!customerInvoicePreview || !isCustomerInvoicePreviewCurrent) {
       setCustomerInvoiceIssueFeedback(
-        "Click Preview Invoice first. If you changed amount, due date, folder, or adjustment reason, refresh the preview before issuing.",
+        "Click Preview Invoice first. If you changed amount, due date, folder, adjustment reason, or card payment option, refresh the preview before issuing.",
       );
       document
         .querySelector<HTMLElement>("[data-customer-invoice-preview-action='true']")
@@ -3508,6 +3577,42 @@ export default function MockCustomerDashboardPage() {
                         value={customerInvoiceRecipientEmail}
                       />
                     </label>
+                    <label className="flex min-h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 md:mt-5">
+                      <input
+                        checked={customerInvoiceCardPaymentEnabled}
+                        className="h-4 w-4 rounded border-slate-400 text-slate-900"
+                        data-customer-invoice-card-payment-enabled="true"
+                        onChange={(event) => {
+                          const isEnabled = event.target.checked;
+                          setCustomerInvoiceCardPaymentEnabled(isEnabled);
+
+                          if (!isEnabled) {
+                            setCustomerInvoiceCardFeeApplies(false);
+                          }
+                        }}
+                        type="checkbox"
+                      />
+                      <span>Card payment</span>
+                    </label>
+                    <label
+                      className={`flex min-h-9 items-center gap-2 rounded-md border px-3 py-2 text-xs font-bold md:mt-5 ${
+                        customerInvoiceCardPaymentEnabled
+                          ? "border-slate-300 bg-white text-slate-700"
+                          : "border-slate-200 bg-slate-50 text-slate-400"
+                      }`}
+                    >
+                      <input
+                        checked={customerInvoiceCardFeeApplies}
+                        className="h-4 w-4 rounded border-slate-400 text-slate-900 disabled:border-slate-300"
+                        data-customer-invoice-card-fee-applies="true"
+                        disabled={!customerInvoiceCardPaymentEnabled}
+                        onChange={(event) => {
+                          setCustomerInvoiceCardFeeApplies(event.target.checked);
+                        }}
+                        type="checkbox"
+                      />
+                      <span>10% card fee</span>
+                    </label>
                     {customerInvoiceAmountEdited ? (
                       <label className="text-xs font-bold uppercase tracking-[0.08em] text-amber-700 md:col-span-4">
                         Adjustment reason
@@ -3597,6 +3702,18 @@ export default function MockCustomerDashboardPage() {
                           <dt className="font-bold text-slate-600">Source</dt>
                           <dd className="font-semibold">{customerInvoicePreview.sourceLabel}</dd>
                         </div>
+                        <div>
+                          <dt className="font-bold text-slate-600">Card payment</dt>
+                          <dd
+                            className="font-semibold"
+                            data-customer-invoice-preview-card-payment="true"
+                          >
+                            {customerInvoiceCardPaymentPreviewLabel(
+                              customerInvoicePreview.cardPaymentEnabled,
+                              customerInvoicePreview.cardFeeApplies,
+                            )}
+                          </dd>
+                        </div>
                       </dl>
                       <p className="mt-2 font-semibold" data-customer-invoice-preview-line="true">
                         {customerInvoicePreview.lineDescription}
@@ -3604,7 +3721,8 @@ export default function MockCustomerDashboardPage() {
                       <p className="mt-1 text-slate-700">{customerInvoicePreview.route}</p>
                       {!isCustomerInvoicePreviewCurrent ? (
                         <p className="mt-2 font-bold text-amber-800" data-customer-invoice-preview-stale="true">
-                          Amount, due date, folder, or adjustment reason changed. Refresh preview before issuing.
+                          Amount, due date, folder, adjustment reason, or card payment option changed. Refresh
+                          preview before issuing.
                         </p>
                       ) : null}
                     </div>
@@ -3621,7 +3739,8 @@ export default function MockCustomerDashboardPage() {
                     data-customer-invoice-issue-local-boundary="true"
                   >
                     Stored invoice record with PDF download. Email sends only when the approved email provider gate is
-                    configured. No Stripe charge, bank debit, payout, provider job send, or automatic payment action.
+                    configured. Card checkbox only changes invoice wording. It does not create a Stripe checkout,
+                    payment link, card charge, bank debit, payout, provider job send, or automatic payment action.
                   </p>
                 </div>
               ) : null}

@@ -350,6 +350,10 @@ const guardChecks = [
     script: "scripts/test-dispatch-action-feedback-compact-guard.mjs",
   },
   {
+    label: "admin operational snapshot apply guard",
+    script: "scripts/test-admin-operational-snapshot-apply-guard.mjs",
+  },
+  {
     label: "admin dashboard live follow-up fixes guard",
     script: "scripts/test-admin-dashboard-live-followup-fixes-guard.mjs",
   },

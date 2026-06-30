@@ -4715,27 +4715,54 @@ function formatPickupDateTime(dateValue: string, timeValue: string | null | unde
   return `${formatDate(dateValue)}, ${formatPickupTime(timeValue)}`;
 }
 
-function formatPickupTimeFromTimestamp(value: string | null | undefined) {
-  const text = clean(value);
+function singaporePickupDateTimePartsFromTimestamp(value: string | null | undefined) {
+  const rawValue = clean(value);
+  const localDateTimeMatch = rawValue.match(
+    /^(\d{4}-\d{2}-\d{2})[T\s](\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/,
+  );
 
-  if (!text) {
-    return "";
+  if (localDateTimeMatch) {
+    return {
+      date: localDateTimeMatch[1],
+      time: `${localDateTimeMatch[2]}${localDateTimeMatch[3]}`,
+    };
   }
 
-  const parsed = new Date(text);
+  const parsed = new Date(rawValue);
 
   if (Number.isNaN(parsed.getTime())) {
-    return "";
+    return null;
   }
 
   const parts = new Intl.DateTimeFormat("en-SG", {
+    day: "2-digit",
     hour: "2-digit",
     hour12: false,
     minute: "2-digit",
+    month: "2-digit",
     timeZone: "Asia/Singapore",
+    year: "numeric",
   }).formatToParts(parsed);
-  const hour = parts.find((part) => part.type === "hour")?.value || "";
-  const minute = parts.find((part) => part.type === "minute")?.value || "";
+  const partValue = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value || "";
+  const year = partValue("year");
+  const month = partValue("month");
+  const day = partValue("day");
+  const hour = partValue("hour");
+  const minute = partValue("minute");
+
+  return year && month && day && hour && minute
+    ? {
+        date: `${year}-${month}-${day}`,
+        time: `${hour}${minute}`,
+      }
+    : null;
+}
+
+function formatPickupTimeFromTimestamp(value: string | null | undefined) {
+  const parts = singaporePickupDateTimePartsFromTimestamp(value);
+  const hour = parts?.time.slice(0, 2) || "";
+  const minute = parts?.time.slice(2, 4) || "";
 
   return hour && minute ? `${hour}${minute}hrs` : "";
 }
@@ -9191,45 +9218,7 @@ function adminMonthlyInvoicePaymentRecordStatusLabel(
 }
 
 function adminSnapshotPickupDateTimeParts(value: string | null | undefined) {
-  const rawValue = clean(value);
-  const directMatch = rawValue.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/);
-
-  if (directMatch) {
-    return {
-      date: directMatch[1],
-      time: `${directMatch[2]}${directMatch[3]}`,
-    };
-  }
-
-  const parsedDate = new Date(rawValue);
-
-  if (Number.isNaN(parsedDate.getTime())) {
-    return null;
-  }
-
-  const parts = new Intl.DateTimeFormat("en-SG", {
-    day: "2-digit",
-    hour: "2-digit",
-    hour12: false,
-    minute: "2-digit",
-    month: "2-digit",
-    timeZone: "Asia/Singapore",
-    year: "numeric",
-  }).formatToParts(parsedDate);
-  const partValue = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((part) => part.type === type)?.value || "";
-  const year = partValue("year");
-  const month = partValue("month");
-  const day = partValue("day");
-  const hour = partValue("hour");
-  const minute = partValue("minute");
-
-  return year && month && day && hour && minute
-    ? {
-        date: `${year}-${month}-${day}`,
-        time: `${hour}${minute}`,
-      }
-    : null;
+  return singaporePickupDateTimePartsFromTimestamp(value);
 }
 
 function adminSnapshotSortedRoutePoints(record: AdminBookingPersistenceRecord) {
@@ -9312,7 +9301,7 @@ function adminOperationalSnapshotToBookingForm(
   return {
     booking: {
       ...createInitialBooking(),
-      booker: customerDisplayName,
+      booker: clean(record.contact_display_name) || customerDisplayName,
       bookerContact: contactPhone,
       bookerEmail: clean(record.contact_email),
       bookingType: routeType,
@@ -9321,9 +9310,12 @@ function adminOperationalSnapshotToBookingForm(
       company: customerDisplayName,
       date: dateTimeParts.date,
       dropoff: dropoffLocation,
+      driverContact: clean(record.driver_contact),
+      driverName: clean(record.driver_name),
+      driverPlate: clean(record.driver_plate_number),
       extraStopCount: extraStopCount > 0 ? String(extraStopCount) : "",
       extraStopLocation: stopLocations.join(" > "),
-      flight: adminSnapshotFlightReference(record),
+      flight: clean(record.flight_no) || adminSnapshotFlightReference(record),
       name: passengerDisplayName,
       pax: Number.isInteger(paxCount) && paxCount > 0 ? String(paxCount) : "1",
       pickup: pickupLocation,

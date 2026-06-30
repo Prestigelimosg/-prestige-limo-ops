@@ -32,6 +32,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Live Mac Chrome verification on `https://app.prestigelimo.sg/customers` prepared the Ritz Carlton unbilled row, switched the document selector to `Quotation`, previewed the quotation, and downloaded `QUO-20260630-0001.pdf` without issuing an invoice, sending email, taking payment, calling providers, writing DB rows, or changing payment status.
 - The live-downloaded quotation PDF rendered cleanly to PNG; bank information, `Notes`, and `Terms & Conditions` appeared in that order with no overlap. A patched local render also verified the document-specific `Quotation Date:` label.
 - The issued invoice action row is compact: stored invoices show `PDF`, `Email`, and a single `Paid`/`Unpaid` status toggle; local quotation/credit rows do not show a dead email button while server-backed quotation/credit-note email is not activated.
+- Live Mac Chrome verification after deployment of `139c793d` confirmed the issued invoice section shows compact `PDF`, `Email`, `Paid`, `Unpaid`, `Quote`, `Convert`, and `Credit` controls and no longer shows the noisy `Download PDF`, `Email Invoice`, `Email Quotation`, `Mark Unpaid`, or `Convert to Invoice` action labels.
 - Full `scripts/test-preactivation-verification-suite.mjs` still fails before this new guard on a pre-existing Load Bookings typed-read admin display exposure marker mismatch in untouched `app/page.tsx` / `scripts/test-load-bookings-typed-read-admin-display-exposure-guard.mjs`.
 
 ### Customer Invoice Card Payment Toggle Live Proof

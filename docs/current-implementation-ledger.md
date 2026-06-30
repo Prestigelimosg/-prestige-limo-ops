@@ -12,6 +12,20 @@ Latest remote staging branch head:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Customer Invoice Card Payment Toggle Live Proof
+
+- Source-of-truth commit for the card-payment checkbox: `5118f697 Add invoice card payment toggle`.
+- Vercel Deployments UI showed staging commit `5118f69` as `Ready` and `Production` on `https://app.prestigelimo.sg`.
+- Live Mac Chrome verification on `https://app.prestigelimo.sg/customers` loaded the Ritz Carlton unbilled row into the Send Invoice Workbench.
+- `Card payment` was off by default, and `10% card fee` was disabled while card payment was off.
+- Turning `Card payment` on enabled the `10% card fee` checkbox; turning the fee checkbox on and clicking `Preview Invoice` showed `Enabled, 10% fee note included` and appended the customer-facing card payment / 10% card processing fee note to the invoice line item.
+- The live UI proof used Preview only and did not click `Issue Invoice + PDF`; the prepared row was cleared afterward so no accidental live issue button remained armed.
+- Approved live email proof created stored test invoice `INV-20260630-0001` for customer account `codexed` / `Codexed Pte Ltd`, reference `CODEXED-20260630011037`, amount `$130.00`, status `Unpaid`, with card-payment wording in the line item.
+- The live stored PDF downloaded successfully and rendered cleanly to PNG for visual inspection: logo/company block, `INVOICE` header, bill-to/date summary, item table, totals, notes, bank details, and short terms were visible without overlap.
+- One approved real invoice email was sent successfully to `willsglimo@gmail.com`; the stored row recorded `emailDeliveryStatus: sent`.
+- A signed customer portal access proof for `codexed` read back the same invoice as `$130.00`, `Unpaid`, and `sent`; the forbidden-fragment scan did not detect driver payout, PayNow payout, internal admin/finance notes, parser/debug/mock archive fragments, Stripe checkout/payment intent fragments, secrets, or payout comparison fragments.
+- This proof did not create a Stripe checkout, payment link, card charge, bank debit, payout, provider job send, GPS/live location record, or automatic payment reconciliation.
+
 ### Customer Invoice PDF Layout Refresh
 
 - Stored customer invoice PDFs now render in a compact professional invoice layout: company logo/details top-left, `INVOICE` and balance due top-right, bill-to/date summary, item table with Qty/Rate/Amount, subtotal/total/balance due block, notes, finance sign-off, bank information, and short essential terms.

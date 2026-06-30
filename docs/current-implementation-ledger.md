@@ -1,13 +1,13 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean checkpoint:
-ea12f713 Fix calendar row download identity
+d9893757 Auto-sync saved bookings to Google Calendar
 
 Latest pushed main/staging checkpoint:
-ea12f713 Fix calendar row download identity
+d9893757 Auto-sync saved bookings to Google Calendar
 
 Latest remote staging branch head:
-ea12f713 Fix calendar row download identity
+d9893757 Auto-sync saved bookings to Google Calendar
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.

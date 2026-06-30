@@ -3942,7 +3942,7 @@ export default function MockCustomerDashboardPage() {
                         value={customerInvoiceRecipientEmail}
                       />
                     </label>
-                    <label className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-md border border-slate-300 bg-white px-2 text-[11px] font-bold text-slate-700 xl:mt-5">
+                    <label className="inline-flex h-8 w-fit items-center gap-1.5 self-end justify-self-start whitespace-nowrap rounded-md border border-slate-300 bg-white px-2 text-[11px] font-bold text-slate-700 xl:mt-5">
                       <input
                         checked={customerInvoiceCardPaymentEnabled}
                         className="h-3.5 w-3.5 rounded border-slate-400 text-slate-900"
@@ -3960,7 +3960,7 @@ export default function MockCustomerDashboardPage() {
                       <span>Card</span>
                     </label>
                     <label
-                      className={`inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-md border px-2 text-[11px] font-bold xl:mt-5 ${
+                      className={`inline-flex h-8 w-fit items-center gap-1.5 self-end justify-self-start whitespace-nowrap rounded-md border px-2 text-[11px] font-bold xl:mt-5 ${
                         customerInvoiceCardPaymentEnabled
                           ? "border-slate-300 bg-white text-slate-700"
                           : "border-slate-200 bg-slate-50 text-slate-400"

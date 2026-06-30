@@ -1,10 +1,10 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-617de3b9 Stabilize Google Calendar event identity
+3dc37f3e Compact job card action buttons
 
 Latest pushed main/staging runtime checkpoint:
-617de3b9 Stabilize Google Calendar event identity
+3dc37f3e Compact job card action buttons
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
 95967da2 Record customer copy staging promotion

@@ -1,16 +1,26 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-a22873c8 Remove dispatch customer copy notes
+617de3b9 Stabilize Google Calendar event identity
 
 Latest pushed main/staging runtime checkpoint:
-a22873c8 Remove dispatch customer copy notes
+617de3b9 Stabilize Google Calendar event identity
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-811d7a1e Record customer copy notes removal checkpoint
+95967da2 Record customer copy staging promotion
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Google Calendar Stable Event Identity
+
+- Google Calendar live sync now builds deterministic Google event IDs from the Prestige booking reference only, not from `booking_reference + starts_at_local`.
+- Future app-side booking edits, including pickup date/time changes, sync to the same Google Calendar event ID for that booking reference instead of creating a second calendar event.
+- Save Booking + CRM, Save Operational Snapshot, and Update Applied Snapshot continue to auto-sync through the existing guarded Google Calendar route after the app save/update succeeds.
+- Prestige remains the source of truth. Google Calendar edits still do not sync back into Prestige; make changes in the app and save/update again.
+- Existing old Google Calendar events created before this fix used the previous time-based ID. New/future saves use the stable ID; any already duplicated old event may need one-time manual cleanup only if it was created before this fix.
+- The Google provider write remains `sendUpdates=none`, no attendees, and calendar-native popup reminders only. This pass did not change Vercel/env/DB schema, send email, activate Stripe/payment, create payouts, send provider jobs, or change GPS/live-location behavior.
+- Focused checks passed: admin booking Google Calendar sync API contract, dashboard urgent requests/active monitor guard, `npx tsc --noEmit --pretty false`, `npm run lint` with only the existing `loadBookings` dependency warnings, `npm run build`, and `git diff --check`.
 
 ### Dispatch Customer Copy Notes Removed
 

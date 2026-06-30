@@ -33149,16 +33149,19 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               className="order-[40] min-w-0 rounded-md border border-stone-200 bg-white p-3"
               data-dispatch-workflow-step="job-card-preview"
             >
-              <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-lg font-semibold">Job Card Preview</h2>
                   <p className="text-xs text-slate-500">Driver message preview.</p>
                 </div>
-                <div className="flex flex-col items-start gap-2 sm:items-end">
-                  <div className="flex flex-col gap-2 sm:flex-row">
+                <div className="flex flex-col items-start gap-1.5 sm:items-end">
+                  <div
+                    className="flex max-w-full flex-wrap items-center justify-end gap-1 rounded-md border border-slate-200 bg-slate-50/80 p-1"
+                    data-job-card-action-toolbar="compact"
+                  >
                     {parsedDebugBooking ? (
                       <button
-                        className="min-h-9 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                        className="h-8 whitespace-nowrap rounded border border-slate-300 bg-white px-2.5 text-[11px] font-semibold leading-none text-slate-700 transition hover:bg-slate-50"
                         onClick={() => setShowParserDebug((current) => !current)}
                         type="button"
                       >
@@ -33166,7 +33169,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                       </button>
                     ) : null}
                     <button
-                      className={`min-h-10 rounded-md px-4 py-1.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:bg-slate-400 ${
+                      className={`h-8 whitespace-nowrap rounded px-2.5 text-[11px] font-semibold leading-none transition disabled:cursor-not-allowed disabled:bg-slate-400 ${
                         actionFeedbackButtonClass(
                           bookingSaveButtonTone,
                           "bg-slate-950 text-white hover:bg-slate-800",
@@ -33179,7 +33182,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                       {bookingSaveButtonLabel}
                     </button>
                     <button
-                      className={`min-h-9 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${
+                      className={`h-8 whitespace-nowrap rounded border px-2.5 text-[11px] font-semibold leading-none transition disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${
                         actionFeedbackButtonClass(
                           jobCardCalendarButtonTone,
                           "border-sky-300 bg-white text-sky-900 hover:bg-sky-50",
@@ -33203,7 +33206,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                     {jobCardCopyEditState.isEditing ? (
                       <>
                         <button
-                          className="min-h-9 rounded-md border border-emerald-300 px-2.5 py-1.5 text-xs font-semibold text-emerald-900 transition hover:bg-emerald-50"
+                          className="h-8 whitespace-nowrap rounded border border-emerald-300 bg-white px-2.5 text-[11px] font-semibold leading-none text-emerald-900 transition hover:bg-emerald-50"
                           data-copy-save-edit="jobCard"
                           onClick={() => saveCopyEdit("jobCard")}
                           type="button"
@@ -33211,7 +33214,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                           Save Edit
                         </button>
                         <button
-                          className="min-h-9 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                          className="h-8 whitespace-nowrap rounded border border-slate-300 bg-white px-2.5 text-[11px] font-semibold leading-none text-slate-700 transition hover:bg-slate-50"
                           data-copy-cancel-edit="jobCard"
                           onClick={() => cancelCopyEdit("jobCard")}
                           type="button"
@@ -33221,10 +33224,10 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                       </>
                     ) : (
                       <button
-                        className={`min-h-9 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition ${
+                        className={`h-8 whitespace-nowrap rounded border px-2.5 text-[11px] font-semibold leading-none transition ${
                           actionFeedbackButtonClass(
                             jobCardEdited ? "success" : null,
-                            "border-slate-300 text-slate-700 hover:bg-slate-50",
+                            "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
                           )
                         }`}
                         data-copy-edit-button="jobCard"
@@ -33235,10 +33238,10 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                       </button>
                     )}
                     <button
-                      className={`min-h-9 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition ${
+                      className={`h-8 whitespace-nowrap rounded border px-2.5 text-[11px] font-semibold leading-none transition ${
                         actionFeedbackButtonClass(
                           jobCardCopied ? "success" : jobCardFeedback?.tone === "error" ? "error" : null,
-                          "border-slate-300 text-slate-700 hover:bg-slate-50",
+                          "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
                         )
                       }`}
                       data-copy-copy-button="jobCard"
@@ -33250,7 +33253,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   </div>
                   {jobCardFeedback?.tone === "error" ? (
                     <div
-                      className={`rounded-md border px-2 py-1 text-xs font-medium ${statusClass(jobCardFeedback.tone)}`}
+                      className={`rounded-md border px-2 py-1 text-[11px] font-medium leading-4 ${statusClass(jobCardFeedback.tone)}`}
                       data-copy-feedback="job-card"
                     >
                       {jobCardFeedback.text}
@@ -33258,7 +33261,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   ) : null}
                   {jobCardCalendarMessage?.tone === "error" ? (
                     <div
-                      className={`rounded-md border px-2 py-1 text-xs font-medium ${statusClass(
+                      className={`rounded-md border px-2 py-1 text-[11px] font-medium leading-4 ${statusClass(
                         jobCardCalendarMessage.tone,
                       )}`}
                       data-job-card-calendar-feedback="true"

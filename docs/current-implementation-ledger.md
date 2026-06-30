@@ -1,16 +1,26 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-89b2201b Fix operational snapshot apply time
+385b308c Tolerate unsafe optional typed traveler label
 
 Latest pushed main/staging runtime checkpoint:
-89b2201b Fix operational snapshot apply time
+385b308c Tolerate unsafe optional typed traveler label
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-95967da2 Record customer copy staging promotion
+385b308c Tolerate unsafe optional typed traveler label
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Job Card Button Separation And Typed Read Tolerance
+
+- Live Mac Chrome inspection on `https://app.prestigelimo.sg/` confirmed the Job Card Preview actions are separated and compact as `Save + CRM`, `Calendar`, `Edit`, and `Copy`.
+- DevTools console was cleared and showed `0 messages in console` at inspection time after the live typed-read fix was deployed.
+- The live typed Load Bookings read route previously returned `422` with `rejected_fields: ["traveler_display_name"]` when one optional traveler label contained an unsafe/too-long admin-only display fragment.
+- The mapper now treats `traveler_display_name` as an optional safe display label: unsafe optional traveler text is omitted from the typed card instead of rejecting the full booking list, while required/unsafe displayed fields continue to fail closed.
+- Live read-back from `/api/admin-load-bookings-typed-read?limit=25` returned `200` after deployment, confirming the app no longer needs the legacy fallback for this safe optional traveler-label case.
+- This pass did not use Vercel CLI, change env, change DB schema, send email, activate Stripe/payment, send providers, create payouts, or change GPS/live-location behavior.
+- Checks passed: focused Load Bookings typed-read and operational mapper guards, dispatch compact button guard, full preactivation verification suite, `npx tsc --noEmit --pretty false`, `npm run lint` with only existing `loadBookings` warnings, `npm run build`, and `git diff --check`.
 
 ### Admin Operational Snapshot Apply Safety
 

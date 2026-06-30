@@ -1,16 +1,28 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-4afe1e57 Allow live admin booking saves
+89b2201b Fix operational snapshot apply time
 
 Latest pushed main/staging runtime checkpoint:
-4afe1e57 Allow live admin booking saves
+89b2201b Fix operational snapshot apply time
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
 95967da2 Record customer copy staging promotion
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Admin Operational Snapshot Apply Safety
+
+- Live Mac Chrome testing on `https://app.prestigelimo.sg/` confirmed `Save Booking + CRM` now persisted the test booking `ADM-20260630160450` and auto-synced it to Google Calendar with reminders and no guest email sent.
+- Google Calendar showed the event in `Prestige Ops Calendar` as `11:00 to 12:30, Prestige - TRF - Codex Calendar Test`, with reference, passenger, booker, route, flight, and pax in the event details.
+- Before testing the edit/update click, applying the saved operational snapshot exposed a real bug: the app changed the saved `1100hrs` pickup into `0300hrs` because the DB returned the timestamp in UTC and the apply helper copied the UTC clock face instead of converting it back to Singapore time.
+- The same apply path also failed to restore saved `flight_no` and assigned driver name/contact/plate, and used the customer/company display name as the Booker even when a saved contact display name existed.
+- The apply path now uses one Singapore-time parser for timestamp display and saved-snapshot apply. Bare local timestamps stay direct; timezone-bearing DB/provider timestamps are converted to `Asia/Singapore`.
+- Applying a saved operational snapshot now restores Booker from `contact_display_name`, flight from `flight_no`, and driver assignment from `driver_name`, `driver_contact`, and `driver_plate_number`.
+- A new guard `scripts/test-admin-operational-snapshot-apply-guard.mjs` executes the exact failure shape (`2026-07-03T03:00:00+00:00`) and requires it to apply/display as `1100hrs` Singapore time. It also locks flight and driver restoration and is registered in the full preactivation suite.
+- This pass did not change Vercel/env/DB schema, send email, activate Stripe/payment, create payouts, send providers, or change GPS/live-location behavior.
+- Checks passed: admin operational snapshot apply guard, admin booking Google Calendar sync API contract, admin booking Supabase adapter mocked contract, dispatch action feedback compact guard, core booking persistence safe path guard, full preactivation verification suite, `npx tsc --noEmit --pretty false`, `npm run lint` with only existing `loadBookings` warnings, `npm run build`, and `git diff --check`.
 
 ### Live Admin Booking Save Boundary
 

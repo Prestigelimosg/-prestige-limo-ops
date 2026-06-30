@@ -5065,6 +5065,8 @@ function buildSavedBookingCalendarEventPayload(bookingRecord: BookingRecord) {
   const dropoff =
     clean(bookingRecord.dropoff_address) || routePoints[routePoints.length - 1] || "";
   const route = routePoints.length >= 2 ? routePoints.join(" > ") : [pickup, dropoff].filter(Boolean).join(" > ");
+  const pickupDateTime = clean(bookingRecord.pickup_at) || clean(bookingRecord.pickup_datetime);
+  const pickupTime = formatPickupTimeFromRecord(bookingRecord);
 
   return {
     booking_reference: String(bookingRecord.id),
@@ -5080,7 +5082,9 @@ function buildSavedBookingCalendarEventPayload(bookingRecord: BookingRecord) {
     id: bookingRecord.id,
     pax: bookingRecord.pax || 1,
     pickup_address: pickup,
-    pickup_time: formatPickupTime(bookingRecord.pickup_time),
+    pickup_at: pickupDateTime,
+    pickup_datetime: pickupDateTime,
+    pickup_time: pickupTime,
     route,
     status: clean(bookingRecord.status),
     traveler_name: getBookingName(bookingRecord),
@@ -11507,6 +11511,8 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     }
 
     const bookingReference = currentFormCalendarReference();
+    const formattedPickupTime = formatPickupTime(pickupTime);
+    const pickupDateTime = `${pickupDate} ${formattedPickupTime}`;
 
     return {
       booking_reference: bookingReference,
@@ -11523,7 +11529,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       job_card: jobCard,
       pax: Number(clean(booking.pax)) || 1,
       pickup_address: pickup,
-      pickup_time: formatPickupTime(pickupTime),
+      pickup_at: pickupDateTime,
+      pickup_datetime: pickupDateTime,
+      pickup_time: formattedPickupTime,
       route,
       status: clean(booking.driverName) ? "assigned" : "draft",
       traveler_name: clean(booking.name),

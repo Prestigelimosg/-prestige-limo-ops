@@ -337,6 +337,12 @@ try {
   assert.match(routeSource, /allowServerSessionRoleMethodsWithoutRequestToken:\s*\["POST"\]/);
   assert.match(appSource, /adminBookingCalendarGoogleSyncApiPath/);
   assert.match(appSource, /data-operations-calendar-sync-google-loaded="true"/);
+  assert.match(appSource, /const pickupDateTime = clean\(bookingRecord\.pickup_at\) \|\| clean\(bookingRecord\.pickup_datetime\);/);
+  assert.match(appSource, /const pickupTime = formatPickupTimeFromRecord\(bookingRecord\);/);
+  assert.match(appSource, /pickup_at: pickupDateTime/);
+  assert.match(appSource, /pickup_datetime: pickupDateTime/);
+  assert.match(appSource, /pickup_time: pickupTime/);
+  assert.doesNotMatch(appSource, /pickup_time: formatPickupTime\(bookingRecord\.pickup_time\)/);
   assert.doesNotMatch(appSource, /PRESTIGE_GOOGLE_CALENDAR_PRIVATE_KEY|PRESTIGE_GOOGLE_CALENDAR_CLIENT_EMAIL/);
 
   {

@@ -28,6 +28,18 @@ function sliceBetween(source, startFragment, endFragment) {
   return source.slice(start, end);
 }
 
+function assertSourceOrder(source, fragments, label) {
+  let previousIndex = -1;
+
+  for (const fragment of fragments) {
+    const index = source.indexOf(fragment);
+
+    assert.notEqual(index, -1, `${label} missing ordered fragment ${fragment}.`);
+    assert.ok(index > previousIndex, `${label} expected ${fragment} after prior fragment.`);
+    previousIndex = index;
+  }
+}
+
 const [appPage, ledger, preactivationSuite] = await Promise.all([
   readFile(appPagePath, "utf8"),
   readFile(ledgerPath, "utf8"),
@@ -58,6 +70,11 @@ const activeMonitorPanel = sliceBetween(
   appPage,
   "const activeJobsMonitorPanel = (",
   "const dayOfTripExceptionEscalationClosed =",
+);
+const dashboardCommandCentrePanel = sliceBetween(
+  appPage,
+  'data-operations-dashboard="true"',
+  '<div className="grid gap-3 border-y border-stone-200 py-4 text-center sm:grid-cols-3">',
 );
 const dashboardUrgentPanel = sliceBetween(
   appPage,
@@ -118,6 +135,22 @@ for (const fragment of [
 ]) {
   assertIncludes(dashboardUrgentPanel, fragment, `dashboard urgent panel fragment ${fragment}`);
 }
+
+assertSourceOrder(
+  dashboardCommandCentrePanel,
+  [
+    'aria-label="Urgent Booking Requests"',
+    'aria-label="Admin App Notifications"',
+    'aria-label="Operations Calendar"',
+    "{activeJobsMonitorPanel}",
+  ],
+  "dashboard live-ops order",
+);
+assertIncludes(
+  dashboardCommandCentrePanel,
+  "auto-syncs; Sync Google is backup.",
+  "calendar panel auto-sync operator copy",
+);
 
 for (const forbidden of [
   "customerBookingRequestDisplayItems.slice(0, 3)",

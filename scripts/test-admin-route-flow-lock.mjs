@@ -117,6 +117,11 @@ assertIncludes(
   '"x-prestige-admin-purpose": "admin-booking-persistence"',
   "Save Booking + CRM purpose header",
 );
+assertIncludes(
+  saveBookingBlock,
+  "await autoSyncSavedBookingGoogleCalendar(savedBooking);",
+  "Save Booking + CRM Google Calendar auto-sync",
+);
 assertExcludes(saveBookingBlock, "adminSavedBookingsApiPath", "Save Booking + CRM path");
 assertExcludes(saveBookingBlock, "/api/admin-saved-bookings", "Save Booking + CRM path");
 
@@ -355,7 +360,8 @@ for (const phrase of [
   "Save Booking + CRM uses `POST /api/admin-bookings` with `x-prestige-admin-purpose=admin-booking-persistence`.",
   "Save Booking + CRM does not POST to `/api/admin-saved-bookings`.",
   "Load Bookings legacy read remains separate at `GET /api/admin-saved-bookings`.",
-  "Create Calendar Event builds an ICS/calendar payload only; no external calendar sync is active.",
+  "Save Booking + CRM and Update Applied Snapshot auto-sync the saved booking one-way to Google Calendar through the guarded Google sync route; Prestige remains the source of truth.",
+  "Create Calendar Event remains the manual ICS/calendar file export path.",
   "Driver assignment display uses `GET /api/admin-driver-assignment-display`.",
   "Driver Database display/search uses typed display-only state.",
   "Full driver profile save/delete remains parked on the legacy `drivers` shim path.",

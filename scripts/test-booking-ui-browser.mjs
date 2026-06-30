@@ -1232,9 +1232,6 @@ const forbiddenAdminBookingRequestKeyFragments = [
   "customer_rate",
   "customer_rates",
   "driver_id",
-  "driver_name",
-  "driver_contact",
-  "driver_plate_number",
   "driver_notes",
   "driver_dispatch",
   "driver_payout",
@@ -18286,6 +18283,7 @@ async function runChromeTest() {
       window.__prestigeFetchCalls = [];
       window.__prestigeCrmSaveCalendarRequests = [];
       window.__prestigeCrmSaveCalendarSyncStatusRequests = [];
+      window.__prestigeCrmSaveGoogleCalendarSyncRequests = [];
       window.__prestigeCrmSaveCalendarDownloads = [];
       window.__prestigeCrmSaveCalendarBlobTypes = [];
       window.URL.createObjectURL = (blob) => {
@@ -18327,6 +18325,39 @@ async function runChromeTest() {
           } catch {
             window.__prestigeSaveRequestBodies.push({ method, url, body: bodyText });
           }
+        }
+
+        if (url.includes("/api/admin-booking-calendar-google-sync")) {
+          let parsedBody = null;
+
+          try {
+            parsedBody = bodyText ? JSON.parse(bodyText) : null;
+          } catch {}
+
+          window.__prestigeCrmSaveGoogleCalendarSyncRequests.push({
+            body: parsedBody,
+            headers: Object.fromEntries(new Headers(args[1]?.headers || {}).entries()),
+            method,
+            url,
+          });
+
+          return jsonResponse({
+            ok: true,
+            sync: {
+              calendar_provider: "google_calendar",
+              connection_mode: "live_provider_sync",
+              event_count: parsedBody?.bookings?.length || 1,
+              events_synced: parsedBody?.bookings?.length || 1,
+              live_calendar_provider: "google_calendar",
+              live_calendar_write_performed: true,
+              notification_delivery: "calendar_native_reminders_only",
+              provider_connection: "connected",
+              send_updates: "none",
+              source_of_truth: "prestige_loaded_bookings",
+              sync_method: "google_calendar_events_upsert",
+            },
+            version: "crm-save-google-calendar-sync-mock",
+          });
         }
 
         if (url.includes("/api/admin-booking-calendar-sync-statuses")) {
@@ -18569,14 +18600,18 @@ async function runChromeTest() {
           const bookingInsert = (window.__prestigeSaveRequestBodies || []).find(
             (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-bookings"),
           );
+          const googleCalendarSyncRequests = window.__prestigeCrmSaveGoogleCalendarSyncRequests || [];
 
-          return bodyText.includes("Operational booking saved:") && bookingInsert
+          return bodyText.includes("Google Calendar auto-synced") &&
+            bookingInsert &&
+            googleCalendarSyncRequests.length === 1
             ? {
                 bodyText,
                 calendarDownloads: window.__prestigeCrmSaveCalendarDownloads || [],
                 calendarBlobTypes: window.__prestigeCrmSaveCalendarBlobTypes || [],
                 calendarRequests: window.__prestigeCrmSaveCalendarRequests || [],
                 calendarSyncStatusRequests: window.__prestigeCrmSaveCalendarSyncStatusRequests || [],
+                googleCalendarSyncRequests,
                 fetchCalls: window.__prestigeFetchCalls || [],
                 requestBodies: window.__prestigeSaveRequestBodies || [],
                 savedBookingReadRequests: window.__prestigeAdminSavedBookingReadRequests || [],
@@ -18645,15 +18680,64 @@ async function runChromeTest() {
       "Expected Save Booking + CRM not to download a calendar file",
     );
     assert.deepEqual(crmSaveState.calendarBlobTypes, []);
+    assert.equal(
+      crmSaveState.googleCalendarSyncRequests.length,
+      1,
+      "Expected Save Booking + CRM to auto-sync one saved booking to Google Calendar",
+    );
+    const crmSaveGoogleCalendarSyncRequest = crmSaveState.googleCalendarSyncRequests[0];
+    const crmSaveGoogleCalendarBooking = crmSaveGoogleCalendarSyncRequest?.body?.bookings?.[0] || null;
+    assert.equal(crmSaveGoogleCalendarSyncRequest?.method, "POST");
+    assert.equal(
+      crmSaveGoogleCalendarSyncRequest?.headers?.["x-prestige-admin-purpose"],
+      "admin-booking-persistence",
+    );
+    assert.equal(crmSaveGoogleCalendarSyncRequest?.body?.bookings?.length, 1);
+    assert.equal(
+      crmSaveGoogleCalendarBooking?.booking_reference,
+      crmSaveState.bookingInsert?.booking?.booking_reference,
+    );
+    assert.equal(crmSaveGoogleCalendarBooking?.booking_type, "MNG");
+    assert.equal(crmSaveGoogleCalendarBooking?.service_type, "MNG");
+    assert.equal(crmSaveGoogleCalendarBooking?.pickup_address, "Changi Airport T3");
+    assert.equal(crmSaveGoogleCalendarBooking?.dropoff_address, "Raffles Hotel Singapore");
+    assert.equal(
+      crmSaveGoogleCalendarBooking?.route,
+      "Changi Airport T3 > Marina Bay Sands > Raffles Hotel Singapore",
+    );
+    assert.equal(
+      crmSaveGoogleCalendarBooking?.route_summary,
+      "Changi Airport T3 > Marina Bay Sands > Raffles Hotel Singapore",
+    );
+    assert.equal(crmSaveGoogleCalendarBooking?.pickup_time, "1530hrs");
+    assert.equal(crmSaveGoogleCalendarBooking?.traveler_name, "BROWSER UI TEST TRAVELER");
+    assert.equal(crmSaveGoogleCalendarBooking?.flight_no, "SQ333");
+    assert.equal(crmSaveGoogleCalendarBooking?.driver_name, "TEST DRIVER CRM 20260516");
+    assert.equal(
+      /customer_price|customer_rate|billing|invoice|payment|paynow|driver_payout|payout|driver_notes|internal_admin_note|admin_note|parser|raw_ai|token|secret/i.test(
+        JSON.stringify(crmSaveGoogleCalendarSyncRequest?.body),
+      ),
+      false,
+      "Expected Save Booking + CRM Google Calendar auto-sync payload to omit private finance, parser, notes, and secret fields",
+    );
     assertNoForbiddenAdminBookingRequestFields(crmSaveState.bookingInsert, "safe Save Booking + CRM request");
     assert.equal(crmSaveState.bookingInsert?.booking?.source_channel, "admin-dashboard");
     assert.equal(crmSaveState.bookingInsert?.booking?.route_type, "MNG");
+    assert.equal(crmSaveState.bookingInsert?.booking?.service_type, "MNG");
+    assert.equal(
+      crmSaveState.bookingInsert?.booking?.route_summary,
+      "Changi Airport T3 > Marina Bay Sands > Raffles Hotel Singapore",
+    );
     assert.equal(crmSaveState.bookingInsert?.booking?.vehicle_type_or_category, "AVF");
     assert.equal(crmSaveState.bookingInsert?.booking?.pickup_location, "Changi Airport T3");
     assert.equal(crmSaveState.bookingInsert?.booking?.dropoff_location, "Raffles Hotel Singapore");
     assert.equal(crmSaveState.bookingInsert?.booking?.pax_count, 2);
+    assert.equal(crmSaveState.bookingInsert?.booking?.contact_display_name, "BROWSER UI TEST BOOKER");
     assert.equal(crmSaveState.bookingInsert?.booking?.contact_phone, "+65 9000 0333");
     assert.equal(crmSaveState.bookingInsert?.booking?.contact_email, "browserui@example.com");
+    assert.equal(crmSaveState.bookingInsert?.booking?.passenger_name, "BROWSER UI TEST TRAVELER");
+    assert.equal(crmSaveState.bookingInsert?.booking?.flight_no, "SQ333");
+    assert.equal(crmSaveState.bookingInsert?.booking?.driver_name, "TEST DRIVER CRM 20260516");
     assert.ok(
       crmSaveState.bookingInsert?.route_points?.some(
         (routePoint) =>
@@ -18746,7 +18830,7 @@ async function runChromeTest() {
     assert.deepEqual(
       disallowedCalendarOrSendCalls,
       [],
-      `Expected separated save/calendar flow not to call calendar providers, messaging, invoice, payment, or PDF APIs, got ${crmCalendarState.fetchCalls.join(", ")}`,
+      `Expected manual calendar file flow not to call messaging, invoice, payment, PDF, or unapproved provider APIs, got ${crmCalendarState.fetchCalls.join(", ")}`,
     );
     const crmCalendarDraftReference = "draft-2026-05-27-1530-browser-ui-test-traveler";
     assert.deepEqual(crmCalendarState.calendarRequest?.body, {
@@ -18772,6 +18856,8 @@ async function runChromeTest() {
         "Child seat: 2 x booster seat",
       pax: 2,
       pickup_address: "Changi Airport T3",
+      pickup_at: "2026-05-27 1530hrs",
+      pickup_datetime: "2026-05-27 1530hrs",
       pickup_time: "1530hrs",
       route: "Changi Airport T3 > Marina Bay Sands > Raffles Hotel Singapore",
       status: "assigned",
@@ -19381,6 +19467,7 @@ async function runChromeTest() {
 
       window.__prestigeFetchCalls = [];
       window.__prestigeMrLeeSaveRequestBodies = [];
+      window.__prestigeMrLeeSaveGoogleCalendarSyncRequests = [];
       window.__prestigeAdminSavedBookingReadRequests = [];
       window.__prestigeUnhandledSupabaseCalls = [];
       window.__prestigeOriginalFetch = window.__prestigeOriginalFetch || window.fetch.bind(window);
@@ -19401,6 +19488,39 @@ async function runChromeTest() {
           } catch {
             window.__prestigeMrLeeSaveRequestBodies.push({ method, url, body: bodyText });
           }
+        }
+
+        if (url.includes("/api/admin-booking-calendar-google-sync")) {
+          let parsedBody = null;
+
+          try {
+            parsedBody = bodyText ? JSON.parse(bodyText) : null;
+          } catch {}
+
+          window.__prestigeMrLeeSaveGoogleCalendarSyncRequests.push({
+            body: parsedBody,
+            headers: Object.fromEntries(new Headers(args[1]?.headers || {}).entries()),
+            method,
+            url,
+          });
+
+          return jsonResponse({
+            ok: true,
+            sync: {
+              calendar_provider: "google_calendar",
+              connection_mode: "live_provider_sync",
+              event_count: parsedBody?.bookings?.length || 1,
+              events_synced: parsedBody?.bookings?.length || 1,
+              live_calendar_provider: "google_calendar",
+              live_calendar_write_performed: true,
+              notification_delivery: "calendar_native_reminders_only",
+              provider_connection: "connected",
+              send_updates: "none",
+              source_of_truth: "prestige_loaded_bookings",
+              sync_method: "google_calendar_events_upsert",
+            },
+            version: "mr-lee-save-google-calendar-sync-mock",
+          });
         }
 
         if (url.includes("/api/admin-bookings")) {
@@ -19512,17 +19632,21 @@ async function runChromeTest() {
     assert.equal(clickedMrLeeNoCompanySave, true, "Expected Mr Lee no-company save button to be clickable");
 
     const mrLeeNoCompanySaveState = await waitForCondition(
-	      async () => {
-	        const candidateState = await evaluate(`(() => {
-	          const bodyText = document.body.innerText;
-	          const bookingInsert = (window.__prestigeMrLeeSaveRequestBodies || []).find(
-	            (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-bookings"),
-	          );
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const bodyText = document.body.innerText;
+          const bookingInsert = (window.__prestigeMrLeeSaveRequestBodies || []).find(
+            (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-bookings"),
+          );
+          const googleCalendarSyncRequests = window.__prestigeMrLeeSaveGoogleCalendarSyncRequests || [];
 
-	          return bodyText.includes("Operational booking saved:")
-	            ? {
-	                bodyText,
-	                fetchCalls: window.__prestigeFetchCalls || [],
+          return bodyText.includes("Google Calendar auto-synced") &&
+            bookingInsert &&
+            googleCalendarSyncRequests.length === 1
+            ? {
+                bodyText,
+                fetchCalls: window.__prestigeFetchCalls || [],
+                googleCalendarSyncRequests,
                 requestBodies: window.__prestigeMrLeeSaveRequestBodies || [],
                 savedBookingReadRequests: window.__prestigeAdminSavedBookingReadRequests || [],
                 unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
@@ -19542,11 +19666,11 @@ async function runChromeTest() {
       [],
       `Expected Mr Lee no-company save to mock every Supabase call, got ${mrLeeNoCompanySaveState.unhandledSupabaseCalls.join(", ")}`,
     );
-	    assert.deepEqual(
-	      mrLeeNoCompanySaveState.savedBookingReadRequests.map(({ id, method }) => ({ id, method })),
-	      [],
-	      "Expected Mr Lee no-company safe save not to reload through the legacy saved booking API",
-	    );
+    assert.deepEqual(
+      mrLeeNoCompanySaveState.savedBookingReadRequests.map(({ id, method }) => ({ id, method })),
+      [],
+      "Expected Mr Lee no-company safe save not to reload through the legacy saved booking API",
+    );
     assert.deepEqual(
       mrLeeNoCompanySaveState.fetchCalls.filter((call) => call.startsWith("GET ") && call.includes("/rest/v1/bookings")),
       [],
@@ -19557,24 +19681,31 @@ async function runChromeTest() {
       [],
       "Expected Mr Lee no-company save not to create bookings through the legacy admin data shim",
     );
-	    assert.deepEqual(
-	      mrLeeNoCompanySaveState.fetchCalls.filter((call) => call.startsWith("POST ") && call.includes("/api/admin-saved-bookings")),
-	      [],
-	      "Expected Mr Lee no-company save not to POST to the legacy admin saved booking API",
-	    );
-	    assertNoForbiddenAdminBookingRequestFields(
-	      mrLeeNoCompanySaveState.bookingInsert,
-	      "safe Mr Lee no-company Save Booking + CRM request",
-	    );
-	    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.route_type, "DEP");
-	    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.vehicle_type_or_category, "AVF");
-	    assert.ok(
-	      String(mrLeeNoCompanySaveState.bookingInsert?.booking?.pickup_datetime || "").includes("2026-05-20"),
-	      "Expected safe Mr Lee browser fixture to preserve pickup date in the operational payload",
-	    );
-	    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.pickup_location, "10 Scotts Road");
-	    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.dropoff_location, "Changi Airport");
-	    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.pax_count, 2);
+    assert.deepEqual(
+      mrLeeNoCompanySaveState.fetchCalls.filter((call) => call.startsWith("POST ") && call.includes("/api/admin-saved-bookings")),
+      [],
+      "Expected Mr Lee no-company save not to POST to the legacy admin saved booking API",
+    );
+    assertNoForbiddenAdminBookingRequestFields(
+      mrLeeNoCompanySaveState.bookingInsert,
+      "safe Mr Lee no-company Save Booking + CRM request",
+    );
+    assert.equal(mrLeeNoCompanySaveState.googleCalendarSyncRequests.length, 1);
+    assert.equal(
+      mrLeeNoCompanySaveState.googleCalendarSyncRequests[0]?.headers?.["x-prestige-admin-purpose"],
+      "admin-booking-persistence",
+    );
+    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.route_type, "DEP");
+    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.service_type, "DEP");
+    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.vehicle_type_or_category, "AVF");
+    assert.ok(
+      String(mrLeeNoCompanySaveState.bookingInsert?.booking?.pickup_datetime || "").includes("2026-05-20"),
+      "Expected safe Mr Lee browser fixture to preserve pickup date in the operational payload",
+    );
+    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.pickup_location, "10 Scotts Road");
+    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.dropoff_location, "Changi Airport");
+    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.passenger_name, mrLeeSaveTravelerName);
+    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.pax_count, 2);
     assert.equal(
       mrLeeNoCompanySaveState.fetchCalls.some(
         (call) => call.includes("/rest/v1/companies") && call.startsWith("POST "),
@@ -19595,10 +19726,10 @@ async function runChromeTest() {
     assert.doesNotMatch(mrLeeNoCompanySaveState.bodyText, /Booking saved, but CRM update failed/i);
     assert.doesNotMatch(mrLeeNoCompanySaveState.bodyText, /Company:\s*(?:Mr Lee|Internal Account|Draft)/i);
 
-	    assert.doesNotMatch(
-	      mrLeeNoCompanySaveState.bodyText,
-	      /CRM update failed|Booking saved successfully:/i,
-	    );
+    assert.doesNotMatch(
+      mrLeeNoCompanySaveState.bodyText,
+      /CRM update failed|Booking saved successfully:/i,
+    );
 
     await evaluate(`window.fetch = window.__prestigeOriginalFetch || window.fetch`);
 

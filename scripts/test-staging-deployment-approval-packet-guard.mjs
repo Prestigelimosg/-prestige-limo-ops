@@ -131,7 +131,7 @@ for (const fragment of [
   "Open staging admin route",
   "without horizontal overflow",
   "Customer Copy channel buttons remain setup-only/disabled",
-  "Save Booking + CRM and Create Calendar Event remain separate behaviors",
+  "Save Booking + CRM auto-syncs Google Calendar, while Create Calendar Event remains the manual ICS export",
   "/book",
   "/my-bookings",
   "/customers",

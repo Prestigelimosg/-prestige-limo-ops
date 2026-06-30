@@ -12,6 +12,17 @@ ea12f713 Fix calendar row download identity
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Admin Calendar Save Auto-Sync
+
+- Save Booking + CRM now preserves safe operational fields needed for dispatch calendar entries: service type, route summary, passenger name, flight number, and assigned driver name/contact/plate.
+- Save Booking + CRM, the operational snapshot save action, and Update Applied Snapshot auto-sync the saved booking one-way to Google Calendar through the existing guarded Google sync route after the admin booking save/update succeeds.
+- Prestige Limo Ops remains the source of truth. Google Calendar edits do not update the app; booking amendments must be made in Prestige, then saved/updated again.
+- The Dashboard command centre now shows Admin App Notifications before Operations Calendar, and Operations Calendar states that save/update auto-syncs while Sync Google remains the loaded-bookings backup.
+- Create Calendar Event remains the manual ICS/calendar-file export path and does not become a provider send path.
+- Auto-sync uses the same safe calendar payload boundary as loaded-booking Google sync and continues to exclude customer pricing/rates, driver payout, billing/payment/invoice/PDF fields, internal admin/finance notes, parser/debug/mock archive fragments, provider payloads, secrets/tokens, live location, proof/photo, and unsafe notification fragments.
+- This pass did not change Vercel/env/DB schema, send email, activate Stripe/payment, create payouts, send provider jobs, or change GPS/live-location behavior.
+- Focused checks passed: dashboard urgent requests/active monitor guard, admin booking Google Calendar sync API contract, admin booking calendar agenda/event/sync-status API contracts, admin route flow lock guard, staging deployment approval packet guard, `node --check scripts/test-booking-ui-browser.mjs`, `npx tsc --noEmit --pretty false`, `npm run lint` with only the existing `loadBookings` dependency warnings, `npm run build`, and `git diff --check`.
+
 ### Admin Calendar Wired Path Live Proof
 
 - Source-of-truth fix commits for the live calendar path are `7243c614` (saved-booking pickup time payload), `558f04cf` (same-origin browser calendar download route access), and `ea12f713` (Bookings row calendar identity).
@@ -915,7 +926,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Save Booking + CRM does not POST to `/api/admin-saved-bookings`.
 - Load Bookings legacy read remains separate at `GET /api/admin-saved-bookings`.
 - Disabled typed admin booking read/list/detail contract setup exists at `GET /api/admin-booking-read-contract-disabled-setup`; Load Bookings runtime wiring is not active.
-- Create Calendar Event builds an ICS/calendar payload only; no external calendar sync is active.
+- Save Booking + CRM and Update Applied Snapshot auto-sync the saved booking one-way to Google Calendar through the guarded Google sync route; Prestige remains the source of truth.
+- Create Calendar Event remains the manual ICS/calendar file export path.
 - Driver assignment display uses `GET /api/admin-driver-assignment-display`.
 - Driver Database display/search uses typed display-only state.
 - Full driver profile save/delete remains parked on the legacy `drivers` shim path.

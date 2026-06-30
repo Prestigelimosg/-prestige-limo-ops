@@ -1906,6 +1906,7 @@ type AdminBookingPersistenceRecord = {
   contact_email?: string | null;
   passenger_name?: string | null;
   passenger_phone?: string | null;
+  flight_no?: string | null;
   driver_contact?: string | null;
   driver_name?: string | null;
   driver_plate_number?: string | null;
@@ -1948,9 +1949,18 @@ type AdminBookingPersistenceRequestBody = {
     pickup_location: string | null;
     dropoff_location: string | null;
     route_type: string | null;
+    service_type: string | null;
+    route_summary: string | null;
     customer_display_name: string | null;
+    contact_display_name: string | null;
     contact_phone: string | null;
     contact_email: string | null;
+    passenger_name: string | null;
+    passenger_phone: string | null;
+    flight_no: string | null;
+    driver_contact: string | null;
+    driver_name: string | null;
+    driver_plate_number: string | null;
     pax_count: number | null;
     luggage_count: number | null;
     vehicle_type_or_category: string | null;
@@ -5750,6 +5760,11 @@ function buildAdminBookingPersistencePayload(
     clean(bookingValue.booker) ||
     clean(bookingValue.name) ||
     null;
+  const routeSummary =
+    routePoints
+      .map((routePoint) => clean(routePoint.location_text))
+      .filter(Boolean)
+      .join(" > ") || null;
 
   return {
     booking: {
@@ -5760,9 +5775,18 @@ function buildAdminBookingPersistencePayload(
       pickup_location: pickupLocation,
       dropoff_location: dropoffLocation,
       route_type: clean(bookingValue.bookingType) || null,
+      service_type: clean(bookingValue.bookingType) || null,
+      route_summary: routeSummary,
       customer_display_name: customerDisplayName,
+      contact_display_name: clean(bookingValue.booker) || null,
       contact_phone: clean(bookingValue.bookerContact) || null,
       contact_email: clean(bookingValue.bookerEmail) || null,
+      passenger_name: clean(bookingValue.name) || null,
+      passenger_phone: null,
+      flight_no: clean(bookingValue.flight) || null,
+      driver_contact: clean(bookingValue.driverContact) || null,
+      driver_name: clean(bookingValue.driverName) || null,
+      driver_plate_number: clean(bookingValue.driverPlate) || null,
       pax_count: Number(clean(bookingValue.pax)) || null,
       luggage_count: null,
       vehicle_type_or_category: clean(bookingValue.vehicle) || null,
@@ -5942,6 +5966,11 @@ function buildAdminCustomerRequestDecisionPayload(
   }
 
   const statuses = adminCustomerRequestDecisionStatuses(record, decision, currentTimeMs);
+  const routeSummary =
+    routePoints
+      .map((routePoint) => clean(routePoint.location_text))
+      .filter(Boolean)
+      .join(" > ") || null;
 
   return {
     booking: {
@@ -5952,9 +5981,18 @@ function buildAdminCustomerRequestDecisionPayload(
       pickup_location: resolvedPickupLocation,
       dropoff_location: resolvedDropoffLocation,
       route_type: routeType,
+      service_type: routeType,
+      route_summary: routeSummary,
       customer_display_name: customerDisplayName,
+      contact_display_name: clean(record.contact_display_name) || null,
       contact_phone: contactPhone,
       contact_email: clean(record.contact_email) || null,
+      passenger_name: clean(record.passenger_name) || null,
+      passenger_phone: clean(record.passenger_phone) || null,
+      flight_no: clean(record.flight_no) || null,
+      driver_contact: null,
+      driver_name: null,
+      driver_plate_number: null,
       pax_count: safeAdminBookingPersistenceCount(record.pax_count),
       luggage_count: safeAdminBookingPersistenceCount(record.luggage_count),
       vehicle_type_or_category: clean(record.vehicle_type_or_category) || null,
@@ -6153,6 +6191,77 @@ function adminBookingPersistencePrimaryStatus(record: AdminBookingPersistenceRec
     clean(record.short_notice_review_status) ||
     clean(record.customer_facing_status) ||
     "Draft";
+}
+
+function adminBookingPersistenceRecordToCalendarBookingRecord(
+  record: AdminBookingPersistenceRecord,
+): BookingRecord {
+  const routePoints = adminSnapshotSortedRoutePoints(record);
+  const routePointLocations = routePoints
+    .map((routePoint) => adminBookingPersistenceRoutePointLocation(routePoint))
+    .filter(Boolean);
+  const pickupLocation =
+    clean(record.pickup_location) ||
+    adminBookingPersistenceRoutePointLocation(
+      routePoints.find((routePoint) => routePoint.point_type === "pickup"),
+    ) ||
+    routePointLocations[0] ||
+    "";
+  const dropoffLocation =
+    clean(record.dropoff_location) ||
+    adminBookingPersistenceRoutePointLocation(
+      routePoints.find((routePoint) => routePoint.point_type === "dropoff"),
+    ) ||
+    routePointLocations[routePointLocations.length - 1] ||
+    "";
+  const routeSummary =
+    routePointLocations.length >= 2
+      ? routePointLocations.join(" > ")
+      : adminBookingPersistenceRouteSummary(record);
+  const pickupDateTime = adminBookingPersistencePickupDateTime(record);
+  const vehicle = clean(record.vehicle_type_or_category);
+  const paxCount = safeAdminBookingPersistenceCount(record.pax_count) || 1;
+  const bookingReference = clean(record.booking_reference);
+
+  return {
+    booking_reference: bookingReference,
+    booking_type: adminBookingPersistenceServiceType(record) || null,
+    booker_id: null,
+    company_id: null,
+    contact_display_name: clean(record.contact_display_name) || null,
+    contact_email: clean(record.contact_email) || null,
+    contact_phone: clean(record.contact_phone) || null,
+    created_at: clean(record.created_at) || null,
+    customer_display_name: adminBookingPersistenceCustomerDisplayName(record) || null,
+    dropoff_address: dropoffLocation,
+    dropoff_location: dropoffLocation,
+    driver_contact: clean(record.driver_contact) || null,
+    driver_name: clean(record.driver_name) || null,
+    driver_plate_number: clean(record.driver_plate_number) || null,
+    flight_no: clean(record.flight_no) || adminSnapshotFlightReference(record) || null,
+    id: bookingReference || "saved-booking",
+    job_card: null,
+    passenger_name: adminBookingPersistencePassengerDisplayName(record) || null,
+    passenger_phone: clean(record.passenger_phone) || null,
+    pax: paxCount,
+    pax_count: paxCount,
+    pickup_address: pickupLocation,
+    pickup_at: pickupDateTime || null,
+    pickup_datetime: pickupDateTime || null,
+    pickup_location: pickupLocation,
+    pickup_time: formatPickupTimeFromTimestamp(pickupDateTime) || null,
+    route: routeSummary,
+    route_summary: routeSummary,
+    route_type: clean(record.route_type) || null,
+    service_type: clean(record.service_type) || null,
+    source_channel: clean(record.source_channel) || null,
+    source_surface: clean(record.source_surface) || null,
+    status: adminBookingPersistencePrimaryStatus(record),
+    traveler_id: null,
+    updated_at: clean(record.updated_at) || null,
+    vehicle,
+    vehicle_type_or_category: vehicle || null,
+  };
 }
 
 function adminBookingPersistenceSourceLabel(record: AdminBookingPersistenceRecord) {
@@ -14096,20 +14205,31 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           (record) => clean(record.booking_reference) !== savedBookingReference,
         ),
       ]);
-      const saveMessage = {
-        tone: "success",
-        text: `Operational booking saved: ${savedBookingReference}. CRM-safe operational persistence only.`,
+      const savedMessage = {
+        tone: "info",
+        text: `Operational booking saved: ${savedBookingReference}. Syncing Google Calendar...`,
       } satisfies Message;
 
-      setMessage(saveMessage);
-      setBookingSaveMessage(saveMessage);
-      setAdminBookingPersistenceMessage(saveMessage);
+      setMessage(savedMessage);
+      setBookingSaveMessage(savedMessage);
+      setAdminBookingPersistenceMessage(savedMessage);
       setAcceptedReviewWarningKey("");
       lastSuccessfulBookingSaveRef.current = {
         bookingId: savedBookingReference,
         key: bookingSaveGuardKey,
         record: savedBooking,
       };
+      const calendarSyncResult = await autoSyncSavedBookingGoogleCalendar(savedBooking);
+      const saveMessage = {
+        tone: calendarSyncResult.ok ? "success" : "error",
+        text: calendarSyncResult.ok
+          ? `Operational booking saved: ${savedBookingReference}. Google Calendar auto-synced; reminders included; no guest email sent.`
+          : `Operational booking saved: ${savedBookingReference}. ${calendarSyncResult.message}`,
+      } satisfies Message;
+
+      setMessage(saveMessage);
+      setBookingSaveMessage(saveMessage);
+      setAdminBookingPersistenceMessage(saveMessage);
       return savedBooking;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown save error.";
@@ -14607,8 +14727,16 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         ),
       ]);
       setAdminBookingPersistenceMessage({
-        tone: "success",
-        text: `Operational booking saved: ${savedBooking.booking_reference}`,
+        tone: "info",
+        text: `Operational booking saved: ${savedBooking.booking_reference}. Syncing Google Calendar...`,
+      });
+      const calendarSyncResult = await autoSyncSavedBookingGoogleCalendar(savedBooking);
+
+      setAdminBookingPersistenceMessage({
+        tone: calendarSyncResult.ok ? "success" : "error",
+        text: calendarSyncResult.ok
+          ? `Operational booking saved: ${savedBooking.booking_reference}. Google Calendar auto-synced; reminders included; no guest email sent.`
+          : `Operational booking saved: ${savedBooking.booking_reference}. ${calendarSyncResult.message}`,
       });
     } catch (error) {
       setAdminBookingPersistenceMessage({
@@ -15212,12 +15340,20 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       ]);
       setAppliedAdminBookingSnapshotReference(updatedBookingReference);
       setAdminBookingPersistenceMessage({
-        tone: "success",
+        tone: "info",
         text: `Operational booking updated: ${updatedBookingReference}${
           updatedBooking.short_notice_review_status === "Admin Review Required"
             ? ". Admin Review Required."
             : "."
-        }`,
+        } Syncing Google Calendar...`,
+      });
+      const calendarSyncResult = await autoSyncSavedBookingGoogleCalendar(updatedBooking);
+
+      setAdminBookingPersistenceMessage({
+        tone: calendarSyncResult.ok ? "success" : "error",
+        text: calendarSyncResult.ok
+          ? `Operational booking updated: ${updatedBookingReference}. Google Calendar auto-synced; reminders included; no guest email sent.`
+          : `Operational booking updated: ${updatedBookingReference}. ${calendarSyncResult.message}`,
       });
     } catch (error) {
       setAdminBookingPersistenceMessage({
@@ -15862,6 +15998,60 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       providerConnection: result.sync.provider_connection || "connected",
       sendUpdates: result.sync.send_updates || "none",
     };
+  }
+
+  async function autoSyncSavedBookingGoogleCalendar(savedBooking: AdminBookingPersistenceRecord) {
+    const calendarBooking = adminBookingPersistenceRecordToCalendarBookingRecord(savedBooking);
+    const bookingReference = getBookingCalendarReference(calendarBooking);
+
+    setCalendarAgendaAction("google-loaded");
+    setCalendarAgendaMessage({
+      tone: "info",
+      text: `Auto-syncing Google Calendar for ${bookingReference}...`,
+    });
+
+    try {
+      const result = await createGoogleCalendarSyncAgenda(
+        [calendarBooking],
+        bookingReference || `saved-${todayKey}`,
+      );
+      const synced =
+        result.providerConnection === "connected" &&
+        result.liveCalendarProvider === "google_calendar" &&
+        result.liveCalendarWritePerformed &&
+        result.sendUpdates === "none";
+      const eventCount = result.eventsSynced || result.eventCount;
+      const message = synced
+        ? `Google Calendar auto-synced for ${bookingReference}. Google reminders included; no guest email sent.`
+        : `Google Calendar auto-sync needs review for ${bookingReference}. Load this booking and use Sync Google as backup.`;
+
+      setCalendarAgendaMessage({
+        tone: synced ? "success" : "info",
+        text: message,
+      });
+
+      return {
+        eventCount,
+        message,
+        ok: synced,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown Google Calendar error.";
+      const message = `Google Calendar auto-sync failed for ${bookingReference}: ${errorMessage}. Booking is saved; load this booking and use Sync Google as backup.`;
+
+      setCalendarAgendaMessage({
+        tone: "error",
+        text: message,
+      });
+
+      return {
+        eventCount: 0,
+        message,
+        ok: false,
+      };
+    } finally {
+      setCalendarAgendaAction(null);
+    }
   }
 
   async function downloadCalendarAgenda(
@@ -34846,137 +35036,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           </section>
 
           <section
-            aria-label="Operations Calendar"
-            className="mb-4 rounded-md border border-cyan-200 bg-cyan-50/70 p-2 sm:p-3"
-            data-operations-calendar-panel="true"
-          >
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="text-base font-semibold text-cyan-950">Operations Calendar</h3>
-                  <span
-                    className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold uppercase text-cyan-900 ring-1 ring-cyan-200"
-                    data-operations-calendar-loaded-count={String(calendarExportableBookings.length)}
-                  >
-                    {calendarExportableBookings.length} loaded
-                  </span>
-                </div>
-                <p className="mt-1 text-xs text-cyan-900 sm:text-sm">
-                  Today {todayBookings.length} / Upcoming {upcomingBookings.length}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  className="h-9 rounded-md border border-cyan-300 bg-white px-3 text-sm font-semibold text-cyan-950 transition hover:bg-cyan-50 disabled:cursor-not-allowed disabled:text-slate-400"
-                  data-operations-calendar-export-today="true"
-                  disabled={
-                    todayBookings.length === 0 ||
-                    calendarAgendaAction !== null ||
-                    Boolean(bookingCalendarDownloadId)
-                  }
-                  onClick={() => downloadCalendarAgenda(todayBookings, "today", todayKey)}
-                  type="button"
-                >
-                  {calendarAgendaAction === "today" ? "Exporting..." : "Export Today"}
-                </button>
-                <button
-                  className="h-9 rounded-md border border-cyan-300 bg-white px-3 text-sm font-semibold text-cyan-950 transition hover:bg-cyan-50 disabled:cursor-not-allowed disabled:text-slate-400"
-                  data-operations-calendar-export-loaded="true"
-                  disabled={
-                    calendarExportableBookings.length === 0 ||
-                    calendarAgendaAction !== null ||
-                    Boolean(bookingCalendarDownloadId)
-                  }
-                  onClick={() =>
-                    downloadCalendarAgenda(calendarExportableBookings, "loaded", `loaded-${todayKey}`)
-                  }
-                  type="button"
-                >
-                  {calendarAgendaAction === "loaded" ? "Exporting..." : "Export Loaded"}
-                </button>
-                <button
-                  className="h-9 rounded-md border border-cyan-700 bg-cyan-900 px-3 text-sm font-semibold text-white transition hover:bg-cyan-800 disabled:cursor-not-allowed disabled:border-cyan-200 disabled:bg-white disabled:text-slate-400"
-                  data-operations-calendar-sync-google-loaded="true"
-                  disabled={
-                    calendarExportableBookings.length === 0 ||
-                    calendarAgendaAction !== null ||
-                    Boolean(bookingCalendarDownloadId)
-                  }
-                  onClick={() =>
-                    syncGoogleCalendarAgenda(calendarExportableBookings, `loaded-${todayKey}`)
-                  }
-                  type="button"
-                >
-                  {calendarAgendaAction === "google-loaded" ? "Syncing..." : "Sync Google"}
-                </button>
-              </div>
-            </div>
-
-            {calendarAgendaMessage ? (
-              <div
-                className={`mt-2 rounded-md border px-2 py-1.5 text-xs sm:text-sm ${statusClass(
-                  calendarAgendaMessage.tone,
-                )}`}
-                data-operations-calendar-feedback="true"
-              >
-                {calendarAgendaMessage.text}
-              </div>
-            ) : null}
-
-            {calendarPreviewDisplayItems.length > 0 ? (
-              <div className="mt-3 grid gap-2" data-operations-calendar-agenda-rows="true">
-                {calendarPreviewDisplayItems.map(({ bookingRecord, operationalCard }) => {
-                  const bookingId = String(bookingRecord.id);
-                  const routePoints = getRoutePoints(bookingRecord);
-                  const pickup = operationalCard.pickup_address || routePoints[0] || "Pickup";
-                  const dropoff =
-                    operationalCard.dropoff_address ||
-                    routePoints[routePoints.length - 1] ||
-                    "Drop-off";
-                  const routeText =
-                    operationalCard.route_points_summary ||
-                    (routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`);
-
-                  return (
-                    <div
-                      className="grid gap-1 rounded-md border border-cyan-100 bg-white px-3 py-2 text-sm md:grid-cols-[minmax(8rem,0.7fr)_minmax(10rem,0.8fr)_minmax(12rem,1.2fr)_auto] md:items-center"
-                      data-operations-calendar-agenda-row={bookingId}
-                      key={`operations-calendar-${bookingRecord.id}`}
-                    >
-                      <span className="truncate font-semibold text-cyan-950">
-                        {operationalCard.pickup_datetime ||
-                          formatPickupDateTime(getBookingDateKey(bookingRecord), bookingRecord.pickup_time)}
-                      </span>
-                      <span className="truncate text-slate-800">
-                        {operationalCard.traveler_display_name ||
-                          operationalCard.customer_display_name ||
-                          "Unknown"}
-                      </span>
-                      <span className="truncate text-slate-700">{routeText}</span>
-                      <span
-                        className={`w-fit rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${bookingStatusClass(
-                          bookingRecord.status,
-                        )}`}
-                      >
-                        {bookingStatusLabel(bookingRecord.status)}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p
-                className="mt-3 rounded-md border border-cyan-100 bg-white px-3 py-2 text-sm text-slate-600"
-                data-operations-calendar-empty="true"
-              >
-                Load bookings to build the operations calendar.
-              </p>
-            )}
-          </section>
-
-          <div className="mb-4">{activeJobsMonitorPanel}</div>
-
-          <section
             aria-label="Admin App Notifications"
             className="mb-4 rounded-md border border-sky-200 bg-sky-50/70 p-2"
             data-admin-app-notification-feed="true"
@@ -35177,6 +35236,138 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               or driver auth.
             </p>
           </section>
+
+          <section
+            aria-label="Operations Calendar"
+            className="mb-4 rounded-md border border-cyan-200 bg-cyan-50/70 p-2 sm:p-3"
+            data-operations-calendar-panel="true"
+          >
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-base font-semibold text-cyan-950">Operations Calendar</h3>
+                  <span
+                    className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold uppercase text-cyan-900 ring-1 ring-cyan-200"
+                    data-operations-calendar-loaded-count={String(calendarExportableBookings.length)}
+                  >
+                    {calendarExportableBookings.length} loaded
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-cyan-900 sm:text-sm">
+                  Today {todayBookings.length} / Upcoming {upcomingBookings.length}. Save/update
+                  auto-syncs; Sync Google is backup.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  className="h-9 rounded-md border border-cyan-300 bg-white px-3 text-sm font-semibold text-cyan-950 transition hover:bg-cyan-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                  data-operations-calendar-export-today="true"
+                  disabled={
+                    todayBookings.length === 0 ||
+                    calendarAgendaAction !== null ||
+                    Boolean(bookingCalendarDownloadId)
+                  }
+                  onClick={() => downloadCalendarAgenda(todayBookings, "today", todayKey)}
+                  type="button"
+                >
+                  {calendarAgendaAction === "today" ? "Exporting..." : "Export Today"}
+                </button>
+                <button
+                  className="h-9 rounded-md border border-cyan-300 bg-white px-3 text-sm font-semibold text-cyan-950 transition hover:bg-cyan-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                  data-operations-calendar-export-loaded="true"
+                  disabled={
+                    calendarExportableBookings.length === 0 ||
+                    calendarAgendaAction !== null ||
+                    Boolean(bookingCalendarDownloadId)
+                  }
+                  onClick={() =>
+                    downloadCalendarAgenda(calendarExportableBookings, "loaded", `loaded-${todayKey}`)
+                  }
+                  type="button"
+                >
+                  {calendarAgendaAction === "loaded" ? "Exporting..." : "Export Loaded"}
+                </button>
+                <button
+                  className="h-9 rounded-md border border-cyan-700 bg-cyan-900 px-3 text-sm font-semibold text-white transition hover:bg-cyan-800 disabled:cursor-not-allowed disabled:border-cyan-200 disabled:bg-white disabled:text-slate-400"
+                  data-operations-calendar-sync-google-loaded="true"
+                  disabled={
+                    calendarExportableBookings.length === 0 ||
+                    calendarAgendaAction !== null ||
+                    Boolean(bookingCalendarDownloadId)
+                  }
+                  onClick={() =>
+                    syncGoogleCalendarAgenda(calendarExportableBookings, `loaded-${todayKey}`)
+                  }
+                  type="button"
+                >
+                  {calendarAgendaAction === "google-loaded" ? "Syncing..." : "Sync Google"}
+                </button>
+              </div>
+            </div>
+
+            {calendarAgendaMessage ? (
+              <div
+                className={`mt-2 rounded-md border px-2 py-1.5 text-xs sm:text-sm ${statusClass(
+                  calendarAgendaMessage.tone,
+                )}`}
+                data-operations-calendar-feedback="true"
+              >
+                {calendarAgendaMessage.text}
+              </div>
+            ) : null}
+
+            {calendarPreviewDisplayItems.length > 0 ? (
+              <div className="mt-3 grid gap-2" data-operations-calendar-agenda-rows="true">
+                {calendarPreviewDisplayItems.map(({ bookingRecord, operationalCard }) => {
+                  const bookingId = String(bookingRecord.id);
+                  const routePoints = getRoutePoints(bookingRecord);
+                  const pickup = operationalCard.pickup_address || routePoints[0] || "Pickup";
+                  const dropoff =
+                    operationalCard.dropoff_address ||
+                    routePoints[routePoints.length - 1] ||
+                    "Drop-off";
+                  const routeText =
+                    operationalCard.route_points_summary ||
+                    (routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`);
+
+                  return (
+                    <div
+                      className="grid gap-1 rounded-md border border-cyan-100 bg-white px-3 py-2 text-sm md:grid-cols-[minmax(8rem,0.7fr)_minmax(10rem,0.8fr)_minmax(12rem,1.2fr)_auto] md:items-center"
+                      data-operations-calendar-agenda-row={bookingId}
+                      key={`operations-calendar-${bookingRecord.id}`}
+                    >
+                      <span className="truncate font-semibold text-cyan-950">
+                        {operationalCard.pickup_datetime ||
+                          formatPickupDateTime(getBookingDateKey(bookingRecord), bookingRecord.pickup_time)}
+                      </span>
+                      <span className="truncate text-slate-800">
+                        {operationalCard.traveler_display_name ||
+                          operationalCard.customer_display_name ||
+                          "Unknown"}
+                      </span>
+                      <span className="truncate text-slate-700">{routeText}</span>
+                      <span
+                        className={`w-fit rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${bookingStatusClass(
+                          bookingRecord.status,
+                        )}`}
+                      >
+                        {bookingStatusLabel(bookingRecord.status)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p
+                className="mt-3 rounded-md border border-cyan-100 bg-white px-3 py-2 text-sm text-slate-600"
+                data-operations-calendar-empty="true"
+              >
+                Load bookings to build the operations calendar.
+              </p>
+            )}
+          </section>
+
+          <div className="mb-4">{activeJobsMonitorPanel}</div>
 
           <div className="grid gap-3 border-y border-stone-200 py-4 text-center sm:grid-cols-3">
             <div>

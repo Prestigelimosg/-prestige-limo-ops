@@ -1,16 +1,25 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-8daed205 Expose safe booking save failure reasons
+4afe1e57 Allow live admin booking saves
 
 Latest pushed main/staging runtime checkpoint:
-8daed205 Expose safe booking save failure reasons
+4afe1e57 Allow live admin booking saves
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
 95967da2 Record customer copy staging promotion
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Live Admin Booking Save Boundary
+
+- Live Mac Chrome verification on `https://app.prestigelimo.sg/` found that a filled `Save Booking + CRM` click reached `POST /api/admin-bookings` but was blocked at `403 Forbidden` before booking persistence.
+- `/api/admin-bookings` now uses the same server-session admin boundary shape as other live admin write routes: same-origin admin dashboard `POST` and `PATCH` are allowed through the server-side admin/dispatcher role without exposing the private session token to the browser.
+- Public/customer/non-dashboard surfaces remain blocked by the existing `x-prestige-admin-purpose` and same-origin `/` referer boundary before any write logic runs.
+- The admin booking Supabase adapter contract now asserts the no-browser-token live-admin write path, so this exact `403` blocker cannot silently return.
+- This pass did not change Vercel/env/DB schema, send email, activate Stripe/payment, create payouts, send providers, or change GPS/live-location behavior.
+- Checks passed: admin booking Supabase adapter mocked contract, dispatch action feedback compact guard, core booking persistence safe path guard, full preactivation verification suite, `npx tsc --noEmit --pretty false`, `npm run lint` with only existing `loadBookings` dependency warnings, `npm run build`, and `git diff --check`.
 
 ### Admin Booking Save Safe Failure Diagnostics
 

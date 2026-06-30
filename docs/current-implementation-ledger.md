@@ -1,13 +1,13 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
-Latest verified clean checkpoint:
+Latest verified clean runtime checkpoint:
 a22873c8 Remove dispatch customer copy notes
 
-Latest pushed main runtime checkpoint:
+Latest pushed main/staging runtime checkpoint:
 a22873c8 Remove dispatch customer copy notes
 
-Latest remote staging branch head:
-91868f7a Record live billing document proof
+Latest remote main/staging deployment checkpoint verified before this docs note:
+811d7a1e Record customer copy notes removal checkpoint
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -17,6 +17,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer Copy in Dispatch now renders only `CUSTOMER BOOKING DETAILS` and `DRIVER DETAILS`; the previous `NOTES` block with surcharge, waiting-time, hourly grace, amendment, and confirmation/terms text has been removed from the generated copy.
 - The small Customer Copy helper sentence `Customer notes included: midnight surcharge, waiting time, hourly grace, and amendment policy.` has also been removed from the Customer Copy UI.
 - The Customer Copy-specific terms export was removed from `lib/customer-facing-booking-terms.ts` so future code cannot accidentally reattach those notes to the dispatch copy.
+- After live still showed the old notes, remote `staging` was fast-forwarded from `91868f7a` to `811d7a1e` because the live deployment lane has been staging-based. `git ls-remote` verified both `origin/main` and `origin/staging` at `811d7a1e`.
 - Public booking-request terms acceptance, customer-facing booking terms details, and invoice/monthly-billing footer note helpers remain intact; this change is limited to the admin Dispatch Customer Copy section.
 - This pass did not change Vercel/env/DB schema, send email, activate Stripe/payment, create payouts, send provider jobs, or change GPS/live-location behavior.
 - Focused checks passed: customer booking driver details copy preview guard, customer terms/hourly billing guard, `npx tsc --noEmit --pretty false`, `npm run lint` with only the existing `loadBookings` dependency warnings, `npm run build`, and `git diff --check`.

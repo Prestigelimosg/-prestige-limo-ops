@@ -3191,22 +3191,22 @@ export default function MockCustomerDashboardPage() {
                   Search all customer folders, scan 10 at a time, then open the correct account before invoice work.
                 </p>
               </div>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center lg:justify-end">
+              <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                 <p
-                  className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700"
+                  className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-700"
                   data-customer-folder-finder-count="true"
                 >
-                  Showing {customerFolderFinderShowingStart}-{customerFolderFinderShowingEnd} of{" "}
-                  {filteredCustomers.length} customer folders
+                  {customerFolderFinderShowingStart}-{customerFolderFinderShowingEnd} of{" "}
+                  {filteredCustomers.length} folders
                 </p>
                 <button
-                  className="min-h-10 rounded-md border border-slate-900 bg-slate-900 px-3 py-2 text-sm font-bold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="min-h-8 whitespace-nowrap rounded-md border border-slate-900 bg-slate-900 px-2.5 py-1 text-xs font-bold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
                   data-customer-folder-finder-load-accounts="true"
                   disabled={regularCustomerAccountReadState.status === "loading"}
                   onClick={loadRegularCustomerAccounts}
                   type="button"
                 >
-                  {regularCustomerAccountReadState.status === "loading" ? "Loading..." : "Load Saved Accounts"}
+                  {regularCustomerAccountReadState.status === "loading" ? "Loading" : "Load Accounts"}
                 </button>
               </div>
             </div>

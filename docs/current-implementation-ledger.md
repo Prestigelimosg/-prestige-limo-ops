@@ -428,7 +428,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 - Customers page now has a visible Customer Folder Finder that searches all loaded customer folders and paginates the compact folder rows 10 per page by default.
 - The finder uses a visible `All customers` dropdown for direct folder selection; it shows 10 customer folders at a time and keeps numbered page buttons inside the dropdown for larger 200-plus account lists.
-- The finder keeps the existing guarded Load Saved Accounts control visible, but it does not auto-load or create a new route/API.
+- The finder keeps the existing guarded `Load Accounts` control visible as a compact one-line button, with the folder count shown as a small `1-10 of N folders` chip; it does not auto-load or create a new route/API.
 - A new Unbilled Customers checkpoint sits before the invoice workspace so unbilled draft rows and statement-needed account rows are visible before invoice work starts.
 - Each unbilled row has a compact `Prepare` action that changes through `Preparing` to `Prepared`, loads that exact customer/job into the Send Invoice Workbench prep strip, opens the Statements tab, narrows the Outstanding search to that customer, and focuses the next workbench action.
 - The finder no longer shows a separate page-size dropdown or separate previous/next buttons; the Unbilled Customers list keeps one dropdown plus a compact scrollable row/table, with the duplicate selected-label wording below the dropdown removed.

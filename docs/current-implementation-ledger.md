@@ -1,16 +1,29 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean checkpoint:
-d2a16ddf Add Google Calendar booking sync
+ea12f713 Fix calendar row download identity
 
 Latest pushed main/staging checkpoint:
-d2a16ddf Add Google Calendar booking sync
+ea12f713 Fix calendar row download identity
 
 Latest remote staging branch head:
-d2a16ddf Add Google Calendar booking sync
+ea12f713 Fix calendar row download identity
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Admin Calendar Wired Path Live Proof
+
+- Source-of-truth fix commits for the live calendar path are `7243c614` (saved-booking pickup time payload), `558f04cf` (same-origin browser calendar download route access), and `ea12f713` (Bookings row calendar identity).
+- Production deployment `dpl_3AYsi2t2QBePo4wut3a17gHQzYeW` completed `READY` and was aliased to `https://app.prestigelimo.sg`.
+- Live Mac Chrome verification on `https://app.prestigelimo.sg` confirmed the Dashboard `Operations Calendar` `Sync Google` action succeeded for 3 loaded events with Google reminders included and no guest email sent.
+- Live Mac Chrome verification confirmed the Dashboard `Export Loaded` action downloaded a 3-event calendar file and kept the file-only source-of-truth warning.
+- Live Mac Chrome verification confirmed the Bookings row calendar action used real booking reference `CUST-20260629234245-ZPJ85L`, downloaded the calendar file, showed success only on the clicked row, and no longer displayed `booking undefined`.
+- Live Mac Chrome verification confirmed loading `CUST-20260629234245-ZPJ85L` into Dispatch and clicking the Job Card calendar action changed the button to `Calendar Created`.
+- The browser calendar routes now allow same-origin admin dashboard `POST` access through the verified server-session admin/dispatcher role without exposing the private admin session token to the browser; customer/driver referers remain blocked.
+- This pass did not send email, create payment links, activate Stripe/card charges, call transport providers, change GPS/live-location behavior, create payouts, change DB schema, or print/commit Google service-account secrets.
+- No customer or driver surfaces were changed by this wired-path pass; the calendar payload guards continue to reject payout, payment, billing/invoice/PDF, internal admin/finance notes, parser/debug/mock archive, provider payload, secret/token, live-location, proof/photo, and unsafe notification fragments.
+- Focused checks passed: admin booking Google Calendar sync API contract, admin booking calendar agenda API contract, admin booking calendar event API contract, admin booking calendar sync-status API contract, `npm run build`, `npm run lint` with only the existing `loadBookings` dependency warnings, `npx tsc --noEmit --pretty false`, and `git diff --check`.
 
 ### Admin Google Calendar Live Sync
 

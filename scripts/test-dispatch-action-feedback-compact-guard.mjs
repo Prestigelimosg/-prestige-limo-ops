@@ -59,6 +59,11 @@ const saveBookingBlock = sectionBetween(
   "async function saveBooking",
   "function bookingRecordReferenceCandidates",
 );
+const updateAppliedSnapshotBlock = sectionBetween(
+  appPage,
+  "async function updateAppliedAdminBookingOperationalSnapshot",
+  "async function updateAdminCustomerRequestReviewDecision",
+);
 const driverJobLinkLoadBlock = sectionBetween(
   appPage,
   "async function refreshAdminDriverJobLinkForReference",
@@ -77,6 +82,10 @@ for (const fragment of [
 for (const fragment of [
   'bookingSaveButtonLabel',
   '"Saved"',
+  '"Update + Cal"',
+  'bookingUpdateInFlight',
+  'handleJobCardPrimaryBookingAction',
+  'void updateAppliedAdminBookingOperationalSnapshot();',
   'jobCardEdited ? "Edited" : "Edit"',
   'customerCopyEdited ? "Edited" : "Edit"',
   'driverDispatchEdited ? "Edited" : "Edit"',
@@ -137,8 +146,18 @@ for (const fragment of [
   "adminBookingPersistenceFailureDetail",
   "safe_error_category",
   "safe_error_operation",
+  "markAdminBookingAsActiveForUpdates(savedBookingReference, savedBooking);",
+  "key: getBookingSaveGuardKey(savedBookingReference)",
 ]) {
   assertIncludes(saveBookingBlock, fragment, `Save Booking + CRM preflight fragment ${fragment}`);
+}
+
+for (const fragment of [
+  "markAdminBookingAsActiveForUpdates(updatedBookingReference, updatedBooking);",
+  "setBookingSaveMessage(updateMessage);",
+  "key: getBookingSaveGuardKey(updatedBookingReference)",
+]) {
+  assertIncludes(updateAppliedSnapshotBlock, fragment, `Update applied snapshot feedback fragment ${fragment}`);
 }
 
 for (const [source, label] of [

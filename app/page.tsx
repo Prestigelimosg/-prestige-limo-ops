@@ -11650,18 +11650,43 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     };
   }, [booking, drivers, rateCompanies, rateSettings, rateTravelers]);
 
-  function getBookingSaveGuardKey() {
+  function getBookingSaveGuardKey(appliedReferenceOverride = appliedAdminBookingSnapshotReference) {
     const normalizedBooking = Object.fromEntries(
       Object.entries(booking).map(([key, value]) => [key, clean(value)]),
     );
 
     return JSON.stringify({
-      appliedSnapshotReference: clean(appliedAdminBookingSnapshotReference),
+      appliedSnapshotReference: clean(appliedReferenceOverride),
       booking: normalizedBooking,
       jobCard,
       pricing: draftPricing,
       route,
     });
+  }
+
+  function markAdminBookingAsActiveForUpdates(
+    bookingReference: string,
+    savedRecord?: AdminBookingPersistenceRecord | null,
+  ) {
+    const safeBookingReference = clean(bookingReference);
+
+    if (!safeBookingReference) {
+      return;
+    }
+
+    appliedAdminBookingSnapshotReferenceRef.current = safeBookingReference;
+    loadedBookingIdRef.current = safeBookingReference;
+    setAppliedAdminBookingSnapshotReference(safeBookingReference);
+    setLoadedBookingId(safeBookingReference);
+
+    if (savedRecord) {
+      setAdminBookingPersistenceRecords((current) => [
+        savedRecord,
+        ...current.filter(
+          (record) => clean(record.booking_reference) !== safeBookingReference,
+        ),
+      ]);
+    }
   }
 
   function currentFormCalendarReference() {
@@ -14271,12 +14296,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         return null;
       }
 
-      setAdminBookingPersistenceRecords((current) => [
-        savedBooking,
-        ...current.filter(
-          (record) => clean(record.booking_reference) !== savedBookingReference,
-        ),
-      ]);
+      markAdminBookingAsActiveForUpdates(savedBookingReference, savedBooking);
       const savedMessage = {
         tone: "info",
         text: `Operational booking saved: ${savedBookingReference}. Syncing Google Calendar...`,
@@ -14288,7 +14308,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       setAcceptedReviewWarningKey("");
       lastSuccessfulBookingSaveRef.current = {
         bookingId: savedBookingReference,
-        key: bookingSaveGuardKey,
+        key: getBookingSaveGuardKey(savedBookingReference),
         record: savedBooking,
       };
       const calendarSyncResult = await autoSyncSavedBookingGoogleCalendar(savedBooking);
@@ -14792,24 +14812,32 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       }
 
       const savedBooking = result.booking as AdminBookingPersistenceRecord;
-      setAdminBookingPersistenceRecords((current) => [
-        savedBooking,
-        ...current.filter(
-          (record) => record.booking_reference !== savedBooking.booking_reference,
-        ),
-      ]);
+      const savedBookingReference = clean(savedBooking.booking_reference);
+
+      markAdminBookingAsActiveForUpdates(savedBookingReference, savedBooking);
       setAdminBookingPersistenceMessage({
         tone: "info",
-        text: `Operational booking saved: ${savedBooking.booking_reference}. Syncing Google Calendar...`,
+        text: `Operational booking saved: ${savedBookingReference}. Syncing Google Calendar...`,
       });
       const calendarSyncResult = await autoSyncSavedBookingGoogleCalendar(savedBooking);
 
-      setAdminBookingPersistenceMessage({
+      const saveMessage = {
         tone: calendarSyncResult.ok ? "success" : "error",
         text: calendarSyncResult.ok
-          ? `Operational booking saved: ${savedBooking.booking_reference}. Google Calendar auto-synced; reminders included; no guest email sent.`
-          : `Operational booking saved: ${savedBooking.booking_reference}. ${calendarSyncResult.message}`,
-      });
+          ? `Operational booking saved: ${savedBookingReference}. Google Calendar auto-synced; reminders included; no guest email sent.`
+          : `Operational booking saved: ${savedBookingReference}. ${calendarSyncResult.message}`,
+      } satisfies Message;
+
+      setAdminBookingPersistenceMessage(saveMessage);
+      setMessage(saveMessage);
+      setBookingSaveMessage(saveMessage);
+      if (savedBookingReference) {
+        lastSuccessfulBookingSaveRef.current = {
+          bookingId: savedBookingReference,
+          key: getBookingSaveGuardKey(savedBookingReference),
+          record: savedBooking,
+        };
+      }
     } catch (error) {
       setAdminBookingPersistenceMessage({
         tone: "error",
@@ -15404,13 +15432,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
 
       const updatedBooking = result.booking as AdminBookingPersistenceRecord;
       const updatedBookingReference = clean(updatedBooking.booking_reference) || targetBookingReference;
-      setAdminBookingPersistenceRecords((current) => [
-        updatedBooking,
-        ...current.filter(
-          (record) => record.booking_reference !== updatedBookingReference,
-        ),
-      ]);
-      setAppliedAdminBookingSnapshotReference(updatedBookingReference);
+      markAdminBookingAsActiveForUpdates(updatedBookingReference, updatedBooking);
       setAdminBookingPersistenceMessage({
         tone: "info",
         text: `Operational booking updated: ${updatedBookingReference}${
@@ -15421,12 +15443,23 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       });
       const calendarSyncResult = await autoSyncSavedBookingGoogleCalendar(updatedBooking);
 
-      setAdminBookingPersistenceMessage({
+      const updateMessage = {
         tone: calendarSyncResult.ok ? "success" : "error",
         text: calendarSyncResult.ok
           ? `Operational booking updated: ${updatedBookingReference}. Google Calendar auto-synced; reminders included; no guest email sent.`
           : `Operational booking updated: ${updatedBookingReference}. ${calendarSyncResult.message}`,
-      });
+      } satisfies Message;
+
+      setAdminBookingPersistenceMessage(updateMessage);
+      setMessage(updateMessage);
+      setBookingSaveMessage(updateMessage);
+      if (calendarSyncResult.ok) {
+        lastSuccessfulBookingSaveRef.current = {
+          bookingId: updatedBookingReference,
+          key: getBookingSaveGuardKey(updatedBookingReference),
+          record: updatedBooking,
+        };
+      }
     } catch (error) {
       setAdminBookingPersistenceMessage({
         tone: "error",
@@ -22023,10 +22056,13 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     ? "Midnight Charge shown under Extra Charges - Mock Only"
     : "No Midnight Charge shown - Mock Only";
   const showLegacyExtraChargeQaSections = false;
+  const activeAppliedBookingReference = clean(appliedAdminBookingSnapshotReference);
   const currentBookingSaveGuardKey = getBookingSaveGuardKey();
   const bookingSaveSucceededForCurrentDraft =
     bookingSaveMessage?.tone === "success" &&
     lastSuccessfulBookingSaveRef.current?.key === currentBookingSaveGuardKey;
+  const bookingUpdateInFlight =
+    Boolean(activeAppliedBookingReference) && adminBookingPersistenceAction === "update";
   const bookingSaveButtonTone: Message["tone"] | null = bookingSaveSucceededForCurrentDraft
     ? "success"
     : bookingSaveMessage?.tone === "error"
@@ -22034,9 +22070,21 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       : null;
   const bookingSaveButtonLabel = saving
     ? "Saving..."
+    : bookingUpdateInFlight
+      ? "Updating..."
     : bookingSaveSucceededForCurrentDraft
       ? "Saved"
+      : activeAppliedBookingReference
+        ? "Update + Cal"
       : "Save + CRM";
+  function handleJobCardPrimaryBookingAction() {
+    if (activeAppliedBookingReference) {
+      void updateAppliedAdminBookingOperationalSnapshot();
+      return;
+    }
+
+    void saveBooking();
+  }
   const jobCardFeedback = copyFeedback?.target === "jobCard" ? copyFeedback : null;
   const customerCopyFeedback = copyFeedback?.target === "customerCopy" ? copyFeedback : null;
   const driverDispatchFeedback = copyFeedback?.target === "driverDispatch" ? copyFeedback : null;
@@ -33237,8 +33285,8 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                             "bg-slate-950 text-white hover:bg-slate-800",
                           )
                         }`}
-                        disabled={saving}
-                        onClick={saveBooking}
+                        disabled={saving || bookingUpdateInFlight}
+                        onClick={handleJobCardPrimaryBookingAction}
                         type="button"
                       >
                         {bookingSaveButtonLabel}

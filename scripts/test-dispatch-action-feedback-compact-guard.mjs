@@ -49,6 +49,16 @@ const dispatchCopyUiBlock = sectionBetween(
   'data-dispatch-workflow-step="job-card-preview"',
   'data-dispatch-workflow-step="admin-lower-status"',
 );
+const validateBookingBlock = sectionBetween(
+  appPage,
+  "function validateBooking",
+  "function applyNameMemory",
+);
+const saveBookingBlock = sectionBetween(
+  appPage,
+  "async function saveBooking",
+  "function bookingRecordReferenceCandidates",
+);
 const driverJobLinkLoadBlock = sectionBetween(
   appPage,
   "async function refreshAdminDriverJobLinkForReference",
@@ -96,6 +106,7 @@ for (const fragment of [
   'data-dispatch-compact-panel="driver-job-link-preview"',
   'data-driver-job-link-preview-disclosure="true"',
   'data-job-card-action-toolbar="compact"',
+  'data-booking-save-feedback="job-card"',
   'className="flex max-w-full flex-wrap items-center justify-end gap-1 rounded-md border border-slate-200 bg-slate-50/80 p-1"',
   "h-8 whitespace-nowrap rounded px-2.5 text-[11px]",
   'className="mb-2 inline-flex max-w-full rounded-full',
@@ -108,6 +119,20 @@ for (const fragment of [
   'adminDriverJobLinkState.message?.tone === "error"',
 ]) {
   assertIncludes(dispatchCopyUiBlock, fragment, `driver job link error-only feedback fragment ${fragment}`);
+}
+
+for (const fragment of [
+  "Save Booking + CRM needs Booker WhatsApp / Contact before saving.",
+  "setBookingSaveMessage(saveMessage);",
+]) {
+  assertIncludes(validateBookingBlock, fragment, `Save Booking + CRM validation fragment ${fragment}`);
+}
+
+for (const fragment of [
+  "setAdminBookingPersistenceMessage(null);",
+  "Please review warnings before saving. Tick the review checkbox above, then save again.",
+]) {
+  assertIncludes(saveBookingBlock, fragment, `Save Booking + CRM preflight fragment ${fragment}`);
 }
 
 for (const [source, label] of [
@@ -139,8 +164,10 @@ for (const phrase of [
   "Customer Copy, Job Card, Driver Dispatch, Driver Job Link, Email/WhatsApp/SMS checks, and in-app send controls use result labels only when their existing local state confirms success.",
   "The Driver Job Link card no longer renders the active-link status pill, copied success box, or loaded-active-link banner shown below the buttons; only errors remain as separate feedback.",
   "The Job Card Preview action toolbar is compact, wrapped, and separated from Manual Extra Charges so Save Booking + CRM stays easier to hit without changing the save or calendar handlers.",
+  "Save Booking + CRM now preflights Booker WhatsApp / Contact before calling `/api/admin-bookings`, matching the admin persistence `contact_phone` contract.",
+  "Job Card Preview now shows Save Booking + CRM feedback beside the compact toolbar, so failed/saved state is visible where the operator clicks instead of only in the lower persistence panel.",
   "Job Card extra charges, Job Card preview, Driver Dispatch preview, Driver Job Link preview, and admin readiness chips are collapsed behind compact disclosure rows.",
-  "This is Dispatch UI-only; it does not change booking saves, driver job link API payloads, provider sends, DB writes, env values, GPS/live location, billing/payment/PDF/invoice/payout, parser behavior, or deploy behavior.",
+  "This keeps Save Booking + CRM on `POST /api/admin-bookings`; it does not change driver job link API payloads, provider sends, DB schema, env values, GPS/live location, billing/payment/PDF/invoice/payout, parser behavior, or deploy behavior.",
   "Guard coverage lives in `scripts/test-dispatch-action-feedback-compact-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {
   assertIncludes(ledgerSection, phrase, `ledger phrase: ${phrase}`);

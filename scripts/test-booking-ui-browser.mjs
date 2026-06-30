@@ -16,6 +16,7 @@ const chromeBinary =
 const chromeDebugPort = Number(process.env.CHROME_DEBUG_PORT || 9227);
 const incompleteNeedsReviewSample = `Arrival for NEEDS REVIEW TEST TRAVELER
 Pickup: Changi Airport Terminal 3
+Booker WhatsApp: +65 9000 0444
 Pax 1`;
 const bookingSample = `Company: BROWSER UI TEST COMPANY
 Booking type: MNG

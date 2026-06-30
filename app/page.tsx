@@ -2795,6 +2795,10 @@ function getNeedsReviewWarnings(booking: BookingForm) {
     warnings.push("Missing traveler / name");
   }
 
+  if (!clean(booking.bookerContact)) {
+    warnings.push("Missing Booker WhatsApp / Contact");
+  }
+
   if (bookingType === "MNG" && !clean(booking.flight)) {
     warnings.push("Missing flight for arrival");
   }
@@ -12662,11 +12666,25 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   }
 
   function validateBooking() {
+    if (!clean(booking.bookerContact)) {
+      const saveMessage = {
+        tone: "error",
+        text: "Save Booking + CRM needs Booker WhatsApp / Contact before saving.",
+      } satisfies Message;
+
+      setMessage(saveMessage);
+      setBookingSaveMessage(saveMessage);
+      return false;
+    }
+
     if (clean(booking.bookerEmail) && !isValidEmail(booking.bookerEmail)) {
-      setMessage({
+      const saveMessage = {
         tone: "error",
         text: "Booker email must be valid when provided.",
-      });
+      } satisfies Message;
+
+      setMessage(saveMessage);
+      setBookingSaveMessage(saveMessage);
       return false;
     }
 
@@ -14099,6 +14117,12 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   }
 
   async function saveBooking(): Promise<AdminBookingPersistenceRecord | null> {
+    setAdminBookingPersistenceMessage(null);
+
+    if (!validateBooking()) {
+      return null;
+    }
+
     const currentNeedsReviewWarnings = getNeedsReviewWarnings(booking);
     const currentReviewAcceptanceKey = getReviewAcceptanceKey(booking, currentNeedsReviewWarnings);
 
@@ -14108,7 +14132,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     ) {
       const reviewMessage = {
         tone: "error",
-        text: "Please review warnings before saving.",
+        text: "Please review warnings before saving. Tick the review checkbox above, then save again.",
       } satisfies Message;
 
       setMessage(reviewMessage);
@@ -14117,10 +14141,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     }
 
     setBookingSaveMessage(null);
-
-    if (!validateBooking()) {
-      return null;
-    }
 
     if (typeof fetch !== "function") {
       const saveMessage = {
@@ -30080,12 +30100,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               </div>
             ) : null}
 
-            {bookingSaveMessage ? (
-              <div className={`order-[100] rounded-md border px-4 py-3 text-sm ${statusClass(bookingSaveMessage.tone)}`}>
-                {bookingSaveMessage.text}
-              </div>
-            ) : null}
-
             <section
               className="order-[78] rounded-md border border-emerald-200 bg-emerald-50/60 p-2.5"
               data-dispatch-workflow-step="admin-lower-persistence"
@@ -33257,6 +33271,16 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                       data-copy-feedback="job-card"
                     >
                       {jobCardFeedback.text}
+                    </div>
+                  ) : null}
+                  {bookingSaveMessage ? (
+                    <div
+                      className={`max-w-full rounded-md border px-2 py-1 text-[11px] font-semibold leading-4 ${statusClass(
+                        bookingSaveMessage.tone,
+                      )}`}
+                      data-booking-save-feedback="job-card"
+                    >
+                      {bookingSaveMessage.text}
                     </div>
                   ) : null}
                   {jobCardCalendarMessage?.tone === "error" ? (

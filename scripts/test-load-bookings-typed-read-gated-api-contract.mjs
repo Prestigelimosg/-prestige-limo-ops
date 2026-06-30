@@ -182,6 +182,14 @@ function safeSavedBookingRecord(id = "BK-TYPED-001") {
   };
 }
 
+function savedBookingRecordWithUnsafeOptionalTraveler(id = "BK-TYPED-UNSAFE-TRAVELER") {
+  return {
+    ...safeSavedBookingRecord(id),
+    companies: { company_name: "Safe Company" },
+    travelers: { traveler_name: "Payment team traveler" },
+  };
+}
+
 function transpileTypescript(source, filename) {
   return ts.transpileModule(source, {
     compilerOptions: {
@@ -511,6 +519,30 @@ try {
     JSON.stringify(detailBody),
     /812\.35|64\.20|driver payout should stay parked|internal admin note should never expose|manual override|pay\.example/i,
     "Mocked typed read detail response",
+  );
+
+  mock.listData = [savedBookingRecordWithUnsafeOptionalTraveler("BK-TYPED-LIST-UNSAFE-TRAVELER")];
+
+  const unsafeOptionalTravelerListResponse = await harness.route.GET(
+    new Request(routeUrl(routePathFragment, { limit: 2 }), { headers: adminHeaders() }),
+  );
+  const unsafeOptionalTravelerListBody = await unsafeOptionalTravelerListResponse.json();
+  assert.equal(
+    unsafeOptionalTravelerListResponse.status,
+    200,
+    "Mocked open typed read list must not reject an unsafe optional traveler display label.",
+  );
+  assertOpenSafeRead(unsafeOptionalTravelerListBody, "Mocked typed read list with unsafe optional traveler");
+  assert.equal(
+    unsafeOptionalTravelerListBody.bookings[0].safe_dto.booking_reference,
+    "BK-TYPED-LIST-UNSAFE-TRAVELER",
+  );
+  assert.equal(unsafeOptionalTravelerListBody.bookings[0].safe_dto.company_display_name, "Safe Company");
+  assert.equal(unsafeOptionalTravelerListBody.bookings[0].safe_dto.traveler_display_name, null);
+  assertExcludes(
+    JSON.stringify(unsafeOptionalTravelerListBody),
+    /Payment team traveler/i,
+    "Mocked typed read list with unsafe optional traveler response",
   );
 } finally {
   restoreEnv();

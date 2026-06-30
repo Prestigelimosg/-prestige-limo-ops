@@ -364,6 +364,18 @@ try {
     "Safe mapper output values",
   );
 
+  const optionalUnsafeTravelerResult = buildAdminLoadBookingsOperationalRecordMapper({
+    id: "BK-100B",
+    booking_reference: "BK-REF-100B",
+    status: "assigned",
+    companies: { company_name: "Safe Company" },
+    travelers: { traveler_name: "Payment team traveler" },
+  });
+  assertMappedNoLive(optionalUnsafeTravelerResult, "Unsafe optional traveler display mapper payload");
+  assert.equal(optionalUnsafeTravelerResult.safe_dto.company_display_name, "Safe Company");
+  assert.equal(optionalUnsafeTravelerResult.safe_dto.traveler_display_name, null);
+  assertNoUnsafeSafeOutput(optionalUnsafeTravelerResult, "Unsafe optional traveler display mapper payload");
+
   const rejectedResult = buildAdminLoadBookingsOperationalRecordMapper({
     id: "BK-101",
     companies: { company_name: "Admin finance account" },

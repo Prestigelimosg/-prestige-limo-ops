@@ -153,6 +153,28 @@ const forbiddenFieldFragments = [
   "token",
 ] as const;
 
+const forbiddenValueFragments = [
+  "admin finance",
+  "admin note",
+  "billing",
+  "customer price",
+  "customer rate",
+  "debug",
+  "driver payout",
+  "internal admin",
+  "internal note",
+  "invoice",
+  "parser",
+  "payment",
+  "paynow",
+  "payout",
+  "pricing",
+  "rate override",
+  "secret",
+  "service role",
+  "token",
+] as const;
+
 function disabledFields() {
   return {
     appPageRuntimeWiringEnabled: false,
@@ -206,6 +228,12 @@ function hasForbiddenFieldFragment(key: string) {
   return forbiddenFieldFragments.some((fragment) => normalized.includes(fragment));
 }
 
+function hasForbiddenValueFragment(value: string) {
+  const normalized = value.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+
+  return forbiddenValueFragments.some((fragment) => normalized.includes(fragment));
+}
+
 function cleanText(value: unknown) {
   if (value === null || value === undefined) {
     return null;
@@ -218,6 +246,16 @@ function cleanText(value: unknown) {
   const cleaned = String(value).replace(/\s+/g, " ").trim();
 
   return cleaned || null;
+}
+
+function optionalSafeDisplayText(value: unknown, maxLength: number) {
+  const cleaned = cleanText(value);
+
+  if (!cleaned || cleaned.length > maxLength || hasForbiddenValueFragment(cleaned)) {
+    return null;
+  }
+
+  return cleaned;
 }
 
 function nestedText(source: Record<string, unknown>, objectKey: string, fieldKey: string) {
@@ -344,7 +382,7 @@ function sourceToSafeFields(input: unknown): Record<(typeof safeOperationalField
     route_points_summary: routePointsSummary || null,
     route_summary: cleanText(source.route_summary) || routePointsSummary || null,
     service_display: serviceType,
-    traveler_display_name: passengerName || customerName,
+    traveler_display_name: optionalSafeDisplayText(passengerName || customerName, 220),
     updated_at: cleanText(source.updated_at),
     vehicle_display: vehicleDisplay,
   };

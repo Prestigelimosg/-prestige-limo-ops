@@ -1,16 +1,29 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean checkpoint:
-91868f7a Record live billing document proof
+e47b9937 Add operations calendar agenda export
 
 Latest pushed main/staging checkpoint:
-91868f7a Record live billing document proof
+e47b9937 Add operations calendar agenda export
 
 Latest remote staging branch head:
-91868f7a Record live billing document proof
+e47b9937 Add operations calendar agenda export
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Admin Google Calendar Live Sync
+
+- A new guarded route `POST /api/admin-booking-calendar-google-sync` can sync loaded Dashboard booking agenda rows into Google Calendar when the provider gate is configured.
+- The Dashboard `Operations Calendar` panel now keeps the existing file export controls and adds a compact `Sync Google` action for loaded active bookings.
+- Google sync reuses the same safe loaded-booking calendar payload contract as the `.ics` agenda export, with the same 25-booking limit and the same forbidden-field rejection for pricing, payout, billing/payment/invoice/PDF, finance/internal/admin notes, parser/debug/mock archive, provider payloads, secrets/tokens, live location, proof/photo, and unsafe notification fragments.
+- The provider integration is default-closed and requires `PRESTIGE_ADMIN_GOOGLE_CALENDAR_SYNC_ENABLED=true`, `PRESTIGE_GOOGLE_CALENDAR_ID`, `PRESTIGE_GOOGLE_CALENDAR_CLIENT_EMAIL`, and `PRESTIGE_GOOGLE_CALENDAR_PRIVATE_KEY` before any Google request can happen. Optional test/override env names are `PRESTIGE_GOOGLE_CALENDAR_TOKEN_URI` and `PRESTIGE_GOOGLE_CALENDAR_API_BASE_URL`.
+- Credentials remain server-only. No downloaded JSON key, private key, access token, service account secret, or provider response body is committed, printed, exposed to the browser, or returned by the API.
+- The route uses the admin dashboard same-origin boundary plus verified server-session admin/dispatcher role; local-dev admin surface is not enough for live Google provider writes.
+- Sync uses service-account OAuth on the server and writes Google Calendar events with deterministic Prestige event IDs, so repeating the same loaded-booking sync updates the existing Google event instead of creating duplicates.
+- Google event writes use `sendUpdates=none`, no attendees, and Google Calendar popup reminders at 2 hours and 30 minutes before pickup. This is calendar-native reminder delivery only; it does not send customer/driver email, push, WhatsApp, Telegram, SMS, Stripe/payment, provider job dispatch, GPS/live location, payout, DB schema, or Vercel/env changes.
+- The app remains the source of truth. Google Calendar edits do not update Prestige Limo Ops, and booking amendments should be made in the app then synced again.
+- Guard coverage lives in `scripts/test-admin-booking-google-calendar-sync-api-contract.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Admin Operations Calendar Agenda Export
 

@@ -971,6 +971,10 @@ const guardChecks = [
     script: "scripts/test-admin-booking-calendar-agenda-api-contract.mjs",
   },
   {
+    label: "admin booking Google Calendar sync API contract guard",
+    script: "scripts/test-admin-booking-google-calendar-sync-api-contract.mjs",
+  },
+  {
     label: "calendar event lifecycle no-live guard",
     script: "scripts/test-admin-calendar-event-lifecycle-no-live-guard.mjs",
   },

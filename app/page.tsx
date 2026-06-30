@@ -103,6 +103,8 @@ const adminLoadBookingsTypedReadApiPath = "/api/admin-load-bookings-typed-read";
 const adminSavedBookingStatusesApiPath = "/api/admin-saved-booking-statuses";
 const adminBookingCalendarAgendaApiPath = "/api/admin-booking-calendar-agenda";
 const adminBookingCalendarEventsApiPath = "/api/admin-booking-calendar-events";
+const adminBookingCalendarGoogleSyncApiPath =
+  "/api/admin-booking-calendar-google-sync";
 const adminBookingCalendarSyncStatusesApiPath =
   "/api/admin-booking-calendar-sync-statuses";
 const adminMapLocationSearchApiPath = "/api/admin-map-location-search";
@@ -826,6 +828,24 @@ type AdminBookingCalendarAgendaResponse = {
   error?: string;
   ics?: string;
   ok?: boolean;
+};
+
+type AdminBookingGoogleCalendarSyncResponse = {
+  error?: string;
+  ok?: boolean;
+  sync?: {
+    calendar_provider?: "google_calendar" | string;
+    connection_mode?: "live_provider_sync" | string;
+    event_count?: number | null;
+    events_synced?: number | null;
+    live_calendar_provider?: "google_calendar" | string;
+    live_calendar_write_performed?: boolean;
+    notification_delivery?: "calendar_native_reminders_only" | string;
+    provider_connection?: "connected" | string;
+    send_updates?: "none" | string;
+    source_of_truth?: "prestige_loaded_bookings" | string;
+    sync_method?: "google_calendar_events_upsert" | string;
+  } | null;
 };
 
 type SavedBookingCalendarDownloadResult = {
@@ -9272,7 +9292,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     useState<Record<string, Message>>({});
   const [bookingCalendarDownloadId, setBookingCalendarDownloadId] = useState<string | null>(null);
   const [calendarAgendaAction, setCalendarAgendaAction] =
-    useState<"loaded" | "today" | null>(null);
+    useState<"google-loaded" | "loaded" | "today" | null>(null);
   const [calendarAgendaMessage, setCalendarAgendaMessage] = useState<Message | null>(null);
   const [jobCardCalendarMessage, setJobCardCalendarMessage] = useState<Message | null>(null);
   const [jobCardCalendarAction, setJobCardCalendarAction] =
@@ -15786,6 +15806,38 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     };
   }
 
+  async function createGoogleCalendarSyncAgenda(
+    agendaBookings: BookingRecord[],
+    dateLabel: string,
+  ) {
+    const response = await fetch(adminBookingCalendarGoogleSyncApiPath, {
+      body: JSON.stringify({
+        bookings: agendaBookings.map(buildSavedBookingCalendarEventPayload),
+        date_label: dateLabel,
+      }),
+      headers: {
+        "Content-Type": "application/json",
+        "x-prestige-admin-purpose": adminLegacyDataPurpose,
+      },
+      method: "POST",
+    });
+    const result = (await response.json().catch(() => null)) as AdminBookingGoogleCalendarSyncResponse | null;
+
+    if (!response.ok || !result?.ok || !result.sync) {
+      throw new Error(result?.error || "Google Calendar sync could not be completed.");
+    }
+
+    return {
+      eventCount: Number(result.sync.event_count) || agendaBookings.length,
+      eventsSynced: Number(result.sync.events_synced) || 0,
+      liveCalendarProvider: result.sync.live_calendar_provider || "google_calendar",
+      liveCalendarWritePerformed: result.sync.live_calendar_write_performed === true,
+      notificationDelivery: result.sync.notification_delivery || "calendar_native_reminders_only",
+      providerConnection: result.sync.provider_connection || "connected",
+      sendUpdates: result.sync.send_updates || "none",
+    };
+  }
+
   async function downloadCalendarAgenda(
     agendaBookings: BookingRecord[],
     action: "loaded" | "today",
@@ -15825,6 +15877,54 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       setCalendarAgendaMessage({
         tone: "error",
         text: `Calendar export failed: ${errorMessage}`,
+      });
+    } finally {
+      setCalendarAgendaAction(null);
+    }
+  }
+
+  async function syncGoogleCalendarAgenda(
+    agendaBookings: BookingRecord[],
+    dateLabel: string,
+  ) {
+    if (agendaBookings.length === 0) {
+      setCalendarAgendaMessage({
+        tone: "info",
+        text: "No loaded bookings available for Google Calendar sync.",
+      });
+      return;
+    }
+
+    setCalendarAgendaAction("google-loaded");
+    setCalendarAgendaMessage({
+      tone: "info",
+      text: "Syncing Google Calendar...",
+    });
+
+    try {
+      const result = await createGoogleCalendarSyncAgenda(agendaBookings, dateLabel);
+      const synced =
+        result.providerConnection === "connected" &&
+        result.liveCalendarProvider === "google_calendar" &&
+        result.liveCalendarWritePerformed &&
+        result.sendUpdates === "none";
+
+      setCalendarAgendaMessage({
+        tone: "success",
+        text: `Google Calendar synced with ${result.eventsSynced || result.eventCount} event${
+          (result.eventsSynced || result.eventCount) === 1 ? "" : "s"
+        }. ${
+          synced
+            ? "Google reminders included; no guest email sent."
+            : "Review Google Calendar sync status."
+        }`,
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown Google Calendar error.";
+
+      setCalendarAgendaMessage({
+        tone: "error",
+        text: `Google Calendar sync failed: ${errorMessage}`,
       });
     } finally {
       setCalendarAgendaAction(null);
@@ -34767,6 +34867,21 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   type="button"
                 >
                   {calendarAgendaAction === "loaded" ? "Exporting..." : "Export Loaded"}
+                </button>
+                <button
+                  className="h-9 rounded-md border border-cyan-700 bg-cyan-900 px-3 text-sm font-semibold text-white transition hover:bg-cyan-800 disabled:cursor-not-allowed disabled:border-cyan-200 disabled:bg-white disabled:text-slate-400"
+                  data-operations-calendar-sync-google-loaded="true"
+                  disabled={
+                    calendarExportableBookings.length === 0 ||
+                    calendarAgendaAction !== null ||
+                    Boolean(bookingCalendarDownloadId)
+                  }
+                  onClick={() =>
+                    syncGoogleCalendarAgenda(calendarExportableBookings, `loaded-${todayKey}`)
+                  }
+                  type="button"
+                >
+                  {calendarAgendaAction === "google-loaded" ? "Syncing..." : "Sync Google"}
                 </button>
               </div>
             </div>

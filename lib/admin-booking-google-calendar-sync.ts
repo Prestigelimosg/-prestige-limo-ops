@@ -344,7 +344,7 @@ function base32HexFromBuffer(buffer: Buffer) {
 
 function buildGoogleCalendarEventId(event: AdminBookingCalendarEventData) {
   const hash = createHash("sha256")
-    .update(`${event.booking_reference}|${event.starts_at_local}`)
+    .update(event.booking_reference.trim().toUpperCase())
     .digest();
 
   return `prestige${base32HexFromBuffer(hash).slice(0, 44)}`;

@@ -326,6 +326,10 @@ try {
   const helperSource = await readFile("lib/admin-booking-google-calendar-sync.ts", "utf8");
   const routeSource = await readFile("app/api/admin-booking-calendar-google-sync/route.ts", "utf8");
   const appSource = await readFile("app/page.tsx", "utf8");
+  const eventIdSource = helperSource.slice(
+    helperSource.indexOf("function buildGoogleCalendarEventId"),
+    helperSource.indexOf("function buildGoogleCalendarEventResource"),
+  );
   const calendarPayloadSource = appSource.slice(
     appSource.indexOf("function buildSavedBookingCalendarEventPayload"),
     appSource.indexOf("function hasSavedCustomerBillingAmountSource"),
@@ -338,6 +342,16 @@ try {
   assert.match(helperSource, /sendUpdates", "none"/);
   assert.match(helperSource, /minutes: 120/);
   assert.match(helperSource, /minutes: 30/);
+  assert.match(
+    eventIdSource,
+    /\.update\(event\.booking_reference\.trim\(\)\.toUpperCase\(\)\)/,
+    "Google Calendar event IDs must be stable by booking reference.",
+  );
+  assert.doesNotMatch(
+    eventIdSource,
+    /starts_at_local|event\.starts|event\.ends/,
+    "Google Calendar event IDs must not change when pickup date/time changes.",
+  );
   assert.match(routeSource, /allowServerSessionRoleMethodsWithoutRequestToken:\s*\["POST"\]/);
   assert.match(appSource, /adminBookingCalendarGoogleSyncApiPath/);
   assert.match(appSource, /data-operations-calendar-sync-google-loaded="true"/);
@@ -436,6 +450,55 @@ try {
     assert.equal(firstEvent.extendedProperties.private.prestigeBookingReference, "PL-2026-0615-001");
     assert.equal(firstEvent.extendedProperties.private.prestigeSource, "prestige_limo_ops");
     assertNoLeaks(firstEvent, "Google Calendar event request must not include forbidden booking fields");
+  }
+
+  {
+    setEnv(validEnv());
+    const calls = installFetchMock({ eventStatuses: [200, 409, 200] });
+    const response = await route.POST(
+      requestWithJson({
+        bookings: [
+          safeBooking({
+            booking_reference: "PL-EDIT-STABLE-001",
+            pickup_time: "1530hrs",
+            traveler_name: "Stable Calendar Traveler",
+          }),
+          safeBooking({
+            booking_reference: "PL-EDIT-STABLE-001",
+            pickup_time: "1800hrs",
+            traveler_name: "Stable Calendar Traveler Updated",
+          }),
+        ],
+        date_label: "stable-edit-check",
+      }),
+    );
+    const { body, status } = await readRouteResponse(response);
+
+    assert.equal(status, 200);
+    assert.equal(body.ok, true);
+    assert.equal(body.sync.events_synced, 2);
+
+    const providerCalls = calendarCalls(calls);
+    assert.equal(providerCalls.length, 3);
+    assert.equal(providerCalls[0].method, "POST");
+    assert.equal(providerCalls[1].method, "POST");
+    assert.equal(providerCalls[2].method, "PUT");
+
+    const originalEvent = parseJsonBody(providerCalls[0]);
+    const duplicateInsertEvent = parseJsonBody(providerCalls[1]);
+    const updatedEvent = parseJsonBody(providerCalls[2]);
+
+    assert.equal(originalEvent.id, duplicateInsertEvent.id);
+    assert.equal(originalEvent.id, updatedEvent.id);
+    assert.match(providerCalls[2].url, new RegExp(`/events/${originalEvent.id}$`));
+    assert.equal(originalEvent.start.dateTime, "2026-06-15T15:30:00");
+    assert.equal(updatedEvent.start.dateTime, "2026-06-15T18:00:00");
+    assert.equal(updatedEvent.summary, "Prestige - MNG - Stable Calendar Traveler Updated");
+    assert.equal(
+      updatedEvent.extendedProperties.private.prestigeBookingReference,
+      "PL-EDIT-STABLE-001",
+    );
+    assertNoLeaks(updatedEvent, "Google Calendar stable edit update must not include forbidden booking fields");
   }
 
   {

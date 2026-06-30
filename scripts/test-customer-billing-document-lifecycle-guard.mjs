@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 const customersPage = readFileSync("app/customers/page.tsx", "utf8");
 const customerPortalPage = readFileSync("app/my-bookings/page.tsx", "utf8");
 const localInvoices = readFileSync("lib/customer-local-invoices.ts", "utf8");
+const invoicePersistence = readFileSync("lib/customer-invoice-record-persistence.ts", "utf8");
+const invoiceEmailRoute = readFileSync("app/api/admin-customer-invoice-email/route.ts", "utf8");
 const migration = readFileSync(
   "supabase/migrations/202606300001_customer_billing_document_lifecycle.sql",
   "utf8",
@@ -52,7 +54,8 @@ assertIncludes(customersPage, 'data-customer-invoice-document-type="true"', "doc
 assertIncludes(customersPage, '<option value="quotation">Quotation</option>', "quotation option");
 assertIncludes(customersPage, 'data-customer-invoice-save-draft="true"', "save draft action");
 assertIncludes(customersPage, 'data-customer-invoice-draft-list="true"', "draft list");
-assertIncludes(customersPage, 'createLocalCustomerBillingDocumentPdf("quotation")', "quotation local PDF path");
+assertIncludes(customersPage, 'documentState: "issued"', "issued billing document request body");
+assertIncludes(customersPage, 'customerInvoiceRequestBodyFromPreview("draft")', "draft billing document request body");
 assertIncludes(customersPage, "convertQuotationToInvoice", "quotation convert handoff");
 assertIncludes(
   customersPage,
@@ -65,8 +68,8 @@ assertIncludes(customersPage, '"Email"', "compact email button label");
 assertIncludes(customersPage, "Convert", "compact convert button label");
 assertIncludes(
   customersPage,
-  'customerInvoicePreview.documentType === "quotation"',
-  "quotation avoids stored invoice issue path",
+  'documentType: "credit_note"',
+  "credit note stored request body",
 );
 assertIncludes(customersPage, "createCreditNoteFromPaidInvoice", "credit note action");
 assertIncludes(
@@ -81,8 +84,18 @@ assertIncludes(
 );
 assertIncludes(
   customersPage,
-  "No invoice number, email, payment, or DB write was created.",
-  "draft no-write feedback",
+  "admin-only, not emailed, and not shown in the customer portal until issued",
+  "draft admin-only feedback",
+);
+assertIncludes(
+  customersPage,
+  'if ((invoice.documentType || "invoice") !== "invoice")',
+  "only real invoices remove unbilled rows",
+);
+assertIncludes(
+  customersPage,
+  "Stored credit notes require a stored paid invoice.",
+  "credit note requires stored invoice",
 );
 
 assertIncludes(customerPortalPage, '"Quotations"', "portal quotations folder");
@@ -114,6 +127,15 @@ assertIncludes(
   "Paid invoices should not be edited or deleted.",
   "credit note accounting comment",
 );
+
+assertIncludes(invoicePersistence, "const invoiceNumberPattern = /^(INV|QUO|CN)-", "stored INV/QUO/CN number validation");
+assertIncludes(invoicePersistence, "document_type: sanitized.data.documentType", "stored document type insert");
+assertIncludes(invoicePersistence, "document_state: sanitized.data.documentState", "stored document state insert");
+assertIncludes(invoicePersistence, ".eq(\"document_state\", \"issued\")", "customer portal issued-only invoice records");
+assertIncludes(invoicePersistence, "inferBillingDocumentType(invoiceNumber) !== \"invoice\"", "status toggle invoice-only guard");
+assertIncludes(invoicePersistence, "original_invoice_number: sanitized.data.originalInvoiceNumber", "stored credit note original invoice link");
+assertIncludes(invoiceEmailRoute, "safeDraftDocumentError", "draft email block");
+assertIncludes(invoiceEmailRoute, "Prestige Limo SG ${input.documentLabel}", "document-aware email subject");
 
 const forbiddenCustomerPortalFragments = [
   "driver_payout",

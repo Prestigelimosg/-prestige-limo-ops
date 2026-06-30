@@ -13,6 +13,7 @@ const selectedProvider = "resend";
 const safeProviderConfigError = "Customer invoice email sending is not configured.";
 const safeProviderFailureError = "Customer invoice email failed safely.";
 const safeRecipientError = "Customer invoice email recipient is invalid or not allowlisted.";
+const safeDraftDocumentError = "Customer invoice email can only send issued documents.";
 
 function safeErrorResponse(result: { error: string; status: number }) {
   return Response.json(
@@ -96,6 +97,7 @@ async function normalizedMessageId(response: Response) {
 
 function buildProviderBody(input: {
   contentBase64: string;
+  documentLabel: string;
   filename: string;
   from: string;
   invoiceNumber: string;
@@ -112,20 +114,32 @@ function buildProviderBody(input: {
     from: input.from,
     html: [
       "<p>Dear Customer,</p>",
-      `<p>Please find attached invoice <strong>${input.invoiceNumber}</strong> from Prestige Limo SG.</p>`,
+      `<p>Please find attached ${input.documentLabel.toLowerCase()} <strong>${input.invoiceNumber}</strong> from Prestige Limo SG.</p>`,
       "<p>Thank you for choosing Prestige Limo SG.</p>",
     ].join(""),
     reply_to: input.replyTo || undefined,
-    subject: `Prestige Limo SG Invoice ${input.invoiceNumber}`,
+    subject: `Prestige Limo SG ${input.documentLabel} ${input.invoiceNumber}`,
     text: [
       "Dear Customer,",
       "",
-      `Please find attached invoice ${input.invoiceNumber} from Prestige Limo SG.`,
+      `Please find attached ${input.documentLabel.toLowerCase()} ${input.invoiceNumber} from Prestige Limo SG.`,
       "",
       "Thank you for choosing Prestige Limo SG.",
     ].join("\n"),
     to: input.recipient,
   });
+}
+
+function documentEmailLabel(documentType: string) {
+  if (documentType === "credit_note") {
+    return "Credit Note";
+  }
+
+  if (documentType === "quotation") {
+    return "Quotation";
+  }
+
+  return "Invoice";
 }
 
 export async function POST(request: Request) {
@@ -151,6 +165,24 @@ export async function POST(request: Request) {
 
     if (!pdfResult.ok) {
       return safeErrorResponse(pdfResult);
+    }
+
+    if (pdfResult.data.documentState !== "issued") {
+      const updated = await updateCustomerInvoiceEmailStatus(
+        pdfResult.data.invoiceNumber,
+        "blocked",
+        null,
+        boundary.actor,
+      );
+
+      return Response.json(
+        {
+          error: safeDraftDocumentError,
+          invoice: updated.ok ? updated.data : null,
+          ok: false,
+        },
+        { status: 400 },
+      );
     }
 
     const provider = cleanConfigValue(process.env.PRESTIGE_EMAIL_PROVIDER)?.toLowerCase() || null;
@@ -209,6 +241,7 @@ export async function POST(request: Request) {
       const response = await fetch(resendEmailApiUrl, {
         body: buildProviderBody({
           contentBase64: Buffer.from(pdfResult.data.bytes).toString("base64"),
+          documentLabel: documentEmailLabel(pdfResult.data.documentType),
           filename: pdfResult.data.filename,
           from: from as string,
           invoiceNumber: pdfResult.data.invoiceNumber,

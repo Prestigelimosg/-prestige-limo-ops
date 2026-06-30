@@ -21,6 +21,7 @@ import {
   formatInvoiceDate,
   formatInvoiceMonth,
   pdfLogoFromJpegBytes,
+  type CustomerBillingDocumentType,
   type CustomerLocalInvoiceLineItem,
   type CustomerLocalInvoiceRecord,
   type CustomerLocalInvoiceStatus,
@@ -33,6 +34,7 @@ export const customerInvoiceRecordTableName = "customer_invoice_records";
 export type CustomerInvoiceEmailDeliveryStatus = "blocked" | "failed" | "not_sent" | "sent";
 
 export type CustomerInvoiceStoredRecord = CustomerLocalInvoiceRecord & {
+  creditNoteReason?: string;
   customerEmail?: string;
   emailDeliveryStatus: CustomerInvoiceEmailDeliveryStatus;
   emailSentAt?: string | null;
@@ -43,11 +45,15 @@ export type CustomerInvoiceStoredRecord = CustomerLocalInvoiceRecord & {
 export type CustomerInvoiceCreateInput = {
   amountCents?: unknown;
   billingMonthLabel?: unknown;
+  creditNoteReason?: unknown;
   customerEmail?: unknown;
   customerId?: unknown;
   customerName?: unknown;
+  documentState?: unknown;
+  documentType?: unknown;
   dueDateIso?: unknown;
   lineItems?: unknown;
+  originalInvoiceNumber?: unknown;
   reference?: unknown;
   route?: unknown;
   service?: unknown;
@@ -56,6 +62,7 @@ export type CustomerInvoiceCreateInput = {
 
 type UnknownRecord = Record<string, unknown>;
 type CustomerInvoiceClient = Pick<SupabaseClient, "from">;
+type CustomerBillingDocumentState = "draft" | "issued";
 
 type CustomerInvoiceResult<T> =
   | {
@@ -73,11 +80,13 @@ type CustomerInvoiceResult<T> =
 type CustomerInvoicePdfResult = CustomerInvoiceResult<{
   bytes: Uint8Array;
   contentType: "application/pdf";
+  documentState: CustomerBillingDocumentState;
+  documentType: CustomerBillingDocumentType;
   filename: string;
   invoiceNumber: string;
 }>;
 
-const customerInvoiceSelect = [
+const customerInvoiceLegacySelect = [
   "id",
   "invoice_number",
   "customer_id",
@@ -100,8 +109,10 @@ const customerInvoiceSelect = [
   "created_at",
   "updated_at",
 ].join(", ");
-const customerInvoicePdfSelect =
+const customerInvoiceSelect = `${customerInvoiceLegacySelect}, document_type, document_state, original_invoice_number, credit_note_reason`;
+const customerInvoiceLegacyPdfSelect =
   "invoice_number, customer_id, pdf_base64, pdf_content_type, pdf_filename";
+const customerInvoicePdfSelect = `${customerInvoiceLegacyPdfSelect}, document_type, document_state`;
 const maxTextLength = 1000;
 const maxEmailLength = 180;
 const safePersistenceConfigError = "Customer invoice persistence is not ready.";
@@ -135,7 +146,8 @@ const forbiddenCustomerInvoiceFragments = [
   "token_hash",
 ];
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const invoiceNumberPattern = /^INV-\d{8}-\d{4}$/;
+const invoiceNumberPattern = /^(INV|QUO|CN)-\d{8}-\d{4}$/;
+const originalInvoiceNumberPattern = /^INV-\d{8}-\d{4}$/;
 const localJpegLogoPattern = /^\/[a-z0-9][a-z0-9/_-]*\.jpe?g$/i;
 
 function createServerClient() {
@@ -194,6 +206,44 @@ function safeInvoiceNumber(value: unknown) {
   const cleaned = safeText(value, 40);
 
   return cleaned && invoiceNumberPattern.test(cleaned) ? cleaned : null;
+}
+
+function safeOriginalInvoiceNumber(value: unknown) {
+  const cleaned = safeText(value, 40);
+
+  return cleaned && originalInvoiceNumberPattern.test(cleaned) ? cleaned : null;
+}
+
+function inferBillingDocumentType(invoiceNumber: string): CustomerBillingDocumentType {
+  if (invoiceNumber.startsWith("CN-")) {
+    return "credit_note";
+  }
+
+  if (invoiceNumber.startsWith("QUO-")) {
+    return "quotation";
+  }
+
+  return "invoice";
+}
+
+function safeDocumentType(value: unknown): CustomerBillingDocumentType | null {
+  return value === "credit_note" || value === "invoice" || value === "quotation" ? value : null;
+}
+
+function safeDocumentState(value: unknown): CustomerBillingDocumentState | null {
+  return value === "draft" || value === "issued" ? value : null;
+}
+
+function documentPrefix(documentType: CustomerBillingDocumentType) {
+  if (documentType === "credit_note") {
+    return "CN";
+  }
+
+  if (documentType === "quotation") {
+    return "QUO";
+  }
+
+  return "INV";
 }
 
 function safeStatus(value: unknown): CustomerLocalInvoiceStatus | null {
@@ -266,7 +316,7 @@ function sha256Hex(bytes: Uint8Array) {
 }
 
 function toStoredRecord(row: UnknownRecord): CustomerInvoiceStoredRecord | null {
-  const invoiceNumber = safeText(row.invoice_number, 40);
+  const invoiceNumber = safeInvoiceNumber(row.invoice_number);
   const customerName = safeText(row.customer_name, 180);
   const amountCents = safeAmountCents(row.amount_cents);
   const status = safeStatus(row.status);
@@ -275,6 +325,9 @@ function toStoredRecord(row: UnknownRecord): CustomerInvoiceStoredRecord | null 
     return null;
   }
 
+  const documentType = safeDocumentType(row.document_type) || inferBillingDocumentType(invoiceNumber);
+  const documentState = safeDocumentState(row.document_state) || "issued";
+
   return {
     amountCents,
     amountLabel: safeText(row.amount_label, 40) || formatInvoiceAmount(amountCents),
@@ -282,6 +335,9 @@ function toStoredRecord(row: UnknownRecord): CustomerInvoiceStoredRecord | null 
     customerEmail: safeEmail(row.customer_email) || undefined,
     customerId: safeText(row.customer_id, 160) || customerName,
     customerName,
+    creditNoteReason: safeText(row.credit_note_reason, 240) || undefined,
+    documentState,
+    documentType,
     dueDateLabel: safeText(row.due_date_label, 80) || "Due date to confirm",
     emailDeliveryStatus:
       row.email_delivery_status === "sent" ||
@@ -295,6 +351,7 @@ function toStoredRecord(row: UnknownRecord): CustomerInvoiceStoredRecord | null 
     issueDateIso: safeText(row.issue_date_iso, 80) || new Date().toISOString(),
     issueDateLabel: safeText(row.issue_date_label, 80) || formatInvoiceDate(new Date()),
     lineItems: safeLineItems(row.line_items) || [],
+    originalInvoiceNumber: safeOriginalInvoiceNumber(row.original_invoice_number) || undefined,
     pdfFilename: safeText(row.pdf_filename, 180) || `${invoiceNumber}.pdf`,
     reference: safeText(row.reference, 160) || invoiceNumber,
     route: safeText(row.route, 600) || "Route to confirm",
@@ -308,11 +365,15 @@ function toStoredRecord(row: UnknownRecord): CustomerInvoiceStoredRecord | null 
 function sanitizeCreateInput(input: CustomerInvoiceCreateInput): CustomerInvoiceResult<{
   amountCents: number;
   billingMonthLabel: string;
+  creditNoteReason: string | null;
   customerEmail: string | null;
   customerId: string;
   customerName: string;
+  documentState: CustomerBillingDocumentState;
+  documentType: CustomerBillingDocumentType;
   dueDate: Date;
   lineItems: CustomerLocalInvoiceLineItem[];
+  originalInvoiceNumber: string | null;
   reference: string;
   route: string;
   service: string;
@@ -327,6 +388,9 @@ function sanitizeCreateInput(input: CustomerInvoiceCreateInput): CustomerInvoice
   const service = safeText(input.service, 160);
   const status = safeStatus(input.status);
   const lineItems = safeLineItems(input.lineItems);
+  const documentType = safeDocumentType(input.documentType) || "invoice";
+  const documentState = safeDocumentState(input.documentState) || "issued";
+  const originalInvoiceNumber = safeOriginalInvoiceNumber(input.originalInvoiceNumber);
 
   if (
     !amountCents ||
@@ -347,15 +411,28 @@ function sanitizeCreateInput(input: CustomerInvoiceCreateInput): CustomerInvoice
     };
   }
 
+  if (documentType === "credit_note" && !originalInvoiceNumber) {
+    return {
+      error: safeValidationError,
+      ok: false,
+      status: 400,
+      version: customerInvoiceRecordVersion,
+    };
+  }
+
   return {
     data: {
       amountCents,
       billingMonthLabel: safeText(input.billingMonthLabel, 80) || formatInvoiceMonth(new Date()),
+      creditNoteReason: safeText(input.creditNoteReason, 240),
       customerEmail: safeEmail(input.customerEmail),
       customerId,
       customerName,
+      documentState,
+      documentType,
       dueDate,
       lineItems,
+      originalInvoiceNumber,
       reference,
       route,
       service,
@@ -389,6 +466,30 @@ function duplicateInvoiceError(error: unknown) {
   return code === "23505" || message.includes("duplicate key");
 }
 
+function lifecycleColumnUnavailableError(error: unknown) {
+  const record = asRecord(error);
+  const code = safeText(record.code, 40)?.toLowerCase();
+  const message = Object.values(record)
+    .filter((value) => typeof value === "string" || typeof value === "number")
+    .join(" ")
+    .toLowerCase();
+  const referencesLifecycleColumn =
+    message.includes("document_type") ||
+    message.includes("document_state") ||
+    message.includes("original_invoice_number") ||
+    message.includes("credit_note_reason");
+
+  return (
+    code === "42703" ||
+    code === "pgrst204" ||
+    code === "pgrst200" ||
+    (referencesLifecycleColumn &&
+      (message.includes("could not find") ||
+        message.includes("does not exist") ||
+        message.includes("schema cache")))
+  );
+}
+
 async function loadServerLogoImage() {
   const profileResult = await loadPublicCompanyProfile();
   const profile = profileResult.profile || defaultCompanyProfile;
@@ -417,14 +518,21 @@ async function loadServerLogoImage() {
   }
 }
 
-async function nextInvoiceNumber(client: CustomerInvoiceClient, dateKey: string, attempt: number) {
+async function nextInvoiceNumber(
+  client: CustomerInvoiceClient,
+  dateKey: string,
+  attempt: number,
+  documentType: CustomerBillingDocumentType,
+) {
+  const prefix = documentPrefix(documentType);
   const { count } = await client
     .from(customerInvoiceRecordTableName)
     .select("id", { count: "exact", head: true })
-    .eq("invoice_date_key", dateKey);
+    .eq("invoice_date_key", dateKey)
+    .like("invoice_number", `${prefix}-${dateKey}-%`);
   const sequence = Math.max(1, (count || 0) + 1 + attempt);
 
-  return `INV-${dateKey}-${String(sequence).padStart(4, "0")}`;
+  return `${prefix}-${dateKey}-${String(sequence).padStart(4, "0")}`;
 }
 
 export async function createCustomerInvoiceRecord(
@@ -463,13 +571,20 @@ export async function createCustomerInvoiceRecord(
   const { logoImage, profile } = await loadServerLogoImage();
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const invoiceNumber = await nextInvoiceNumber(client, invoiceDateKey, attempt);
+    const invoiceNumber = await nextInvoiceNumber(
+      client,
+      invoiceDateKey,
+      attempt,
+      sanitized.data.documentType,
+    );
     const invoiceForPdf: CustomerLocalInvoiceRecord = {
       amountCents: sanitized.data.amountCents,
       amountLabel,
       billingMonthLabel: sanitized.data.billingMonthLabel,
       customerId: sanitized.data.customerId,
       customerName: sanitized.data.customerName,
+      documentState: sanitized.data.documentState,
+      documentType: sanitized.data.documentType,
       dueDateLabel: formatInvoiceDate(sanitized.data.dueDate),
       id: `${invoiceNumber}:${sanitized.data.customerId}:${sanitized.data.reference}`,
       invoiceNumber,
@@ -481,40 +596,46 @@ export async function createCustomerInvoiceRecord(
       service: sanitized.data.service,
       source: "local-admin-issued-invoice-v1",
       status: sanitized.data.status,
+      originalInvoiceNumber: sanitized.data.originalInvoiceNumber || undefined,
     };
     const pdfBytes = createCustomerInvoicePdfBytes(invoiceForPdf, profile, logoImage);
     const pdfBase64 = base64FromBytes(pdfBytes);
     const pdfSha256 = sha256Hex(pdfBytes);
     const pdfFilename = `${invoiceNumber}.pdf`;
+    const insertPayload = {
+      actor_label: actor.actor_label,
+      actor_role: actor.actor_role,
+      amount_cents: invoiceForPdf.amountCents,
+      amount_label: invoiceForPdf.amountLabel,
+      billing_month_label: invoiceForPdf.billingMonthLabel,
+      credit_note_reason: sanitized.data.creditNoteReason,
+      customer_email: sanitized.data.customerEmail,
+      customer_id: invoiceForPdf.customerId,
+      customer_name: invoiceForPdf.customerName,
+      document_state: sanitized.data.documentState,
+      document_type: sanitized.data.documentType,
+      due_date_label: invoiceForPdf.dueDateLabel,
+      email_delivery_status: "not_sent",
+      invoice_date_key: invoiceDateKey,
+      invoice_number: invoiceNumber,
+      issue_date_iso: invoiceForPdf.issueDateIso,
+      issue_date_label: invoiceForPdf.issueDateLabel,
+      line_items: lineItems,
+      original_invoice_number: sanitized.data.originalInvoiceNumber,
+      pdf_base64: pdfBase64,
+      pdf_content_type: "application/pdf",
+      pdf_filename: pdfFilename,
+      pdf_sha256: pdfSha256,
+      reference: invoiceForPdf.reference,
+      route: invoiceForPdf.route,
+      service: invoiceForPdf.service,
+      source_surface: "admin_api",
+      status: invoiceForPdf.status,
+      updated_at: new Date().toISOString(),
+    };
     const { data, error } = await client
       .from(customerInvoiceRecordTableName)
-      .insert({
-        actor_label: actor.actor_label,
-        actor_role: actor.actor_role,
-        amount_cents: invoiceForPdf.amountCents,
-        amount_label: invoiceForPdf.amountLabel,
-        billing_month_label: invoiceForPdf.billingMonthLabel,
-        customer_email: sanitized.data.customerEmail,
-        customer_id: invoiceForPdf.customerId,
-        customer_name: invoiceForPdf.customerName,
-        due_date_label: invoiceForPdf.dueDateLabel,
-        email_delivery_status: "not_sent",
-        invoice_date_key: invoiceDateKey,
-        invoice_number: invoiceNumber,
-        issue_date_iso: invoiceForPdf.issueDateIso,
-        issue_date_label: invoiceForPdf.issueDateLabel,
-        line_items: lineItems,
-        pdf_base64: pdfBase64,
-        pdf_content_type: "application/pdf",
-        pdf_filename: pdfFilename,
-        pdf_sha256: pdfSha256,
-        reference: invoiceForPdf.reference,
-        route: invoiceForPdf.route,
-        service: invoiceForPdf.service,
-        source_surface: "admin_api",
-        status: invoiceForPdf.status,
-        updated_at: new Date().toISOString(),
-      })
+      .insert(insertPayload)
       .select(customerInvoiceSelect)
       .single();
 
@@ -526,6 +647,61 @@ export async function createCustomerInvoiceRecord(
         ok: true,
         version: customerInvoiceRecordVersion,
       } : safeFailure(safeWriteError, 500);
+    }
+
+    if (lifecycleColumnUnavailableError(error)) {
+      if (sanitized.data.documentType !== "invoice" || sanitized.data.documentState !== "issued") {
+        return safeFailure(safeWriteError, 503);
+      }
+
+      const legacyPayload = {
+        actor_label: insertPayload.actor_label,
+        actor_role: insertPayload.actor_role,
+        amount_cents: insertPayload.amount_cents,
+        amount_label: insertPayload.amount_label,
+        billing_month_label: insertPayload.billing_month_label,
+        customer_email: insertPayload.customer_email,
+        customer_id: insertPayload.customer_id,
+        customer_name: insertPayload.customer_name,
+        due_date_label: insertPayload.due_date_label,
+        email_delivery_status: insertPayload.email_delivery_status,
+        invoice_date_key: insertPayload.invoice_date_key,
+        invoice_number: insertPayload.invoice_number,
+        issue_date_iso: insertPayload.issue_date_iso,
+        issue_date_label: insertPayload.issue_date_label,
+        line_items: insertPayload.line_items,
+        pdf_base64: insertPayload.pdf_base64,
+        pdf_content_type: insertPayload.pdf_content_type,
+        pdf_filename: insertPayload.pdf_filename,
+        pdf_sha256: insertPayload.pdf_sha256,
+        reference: insertPayload.reference,
+        route: insertPayload.route,
+        service: insertPayload.service,
+        source_surface: insertPayload.source_surface,
+        status: insertPayload.status,
+        updated_at: insertPayload.updated_at,
+      };
+      const { data: legacyData, error: legacyError } = await client
+        .from(customerInvoiceRecordTableName)
+        .insert(legacyPayload)
+        .select(customerInvoiceLegacySelect)
+        .single();
+
+      if (!legacyError && legacyData) {
+        const record = toStoredRecord(asRecord(legacyData));
+
+        return record ? {
+          data: record,
+          ok: true,
+          version: customerInvoiceRecordVersion,
+        } : safeFailure(safeWriteError, 500);
+      }
+
+      if (!duplicateInvoiceError(legacyError)) {
+        return safeFailure(safeWriteError, 500);
+      }
+
+      continue;
     }
 
     if (!duplicateInvoiceError(error)) {
@@ -557,7 +733,28 @@ export async function loadAdminCustomerInvoiceRecords(
     .limit(50);
 
   if (error) {
-    return safeFailure(safeReadError, 500);
+    if (!lifecycleColumnUnavailableError(error)) {
+      return safeFailure(safeReadError, 500);
+    }
+
+    const { data: legacyData, error: legacyError } = await client
+      .from(customerInvoiceRecordTableName)
+      .select(customerInvoiceLegacySelect)
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (legacyError) {
+      return safeFailure(safeReadError, 500);
+    }
+
+    return {
+      data: asArray(legacyData)
+        .map(asRecord)
+        .map(toStoredRecord)
+        .filter((record): record is CustomerInvoiceStoredRecord => Boolean(record)),
+      ok: true,
+      version: customerInvoiceRecordVersion,
+    };
   }
 
   return {
@@ -586,11 +783,11 @@ export async function updateAdminCustomerInvoiceStatus(
   const invoiceNumber = safeInvoiceNumber(invoiceNumberInput);
   const status = safeStatus(statusInput);
 
-  if (!invoiceNumber || !status) {
+  if (!invoiceNumber || !status || inferBillingDocumentType(invoiceNumber) !== "invoice") {
     return safeFailure(safeValidationError, 400);
   }
 
-  const { data, error } = await client
+  let { data, error } = await client
     .from(customerInvoiceRecordTableName)
     .update({
       actor_label: actor.actor_label,
@@ -603,7 +800,28 @@ export async function updateAdminCustomerInvoiceStatus(
     .maybeSingle();
 
   if (error) {
-    return safeFailure(safeWriteError, 500);
+    if (!lifecycleColumnUnavailableError(error)) {
+      return safeFailure(safeWriteError, 500);
+    }
+
+    const legacyResult = await client
+      .from(customerInvoiceRecordTableName)
+      .update({
+        actor_label: actor.actor_label,
+        actor_role: actor.actor_role,
+        status,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("invoice_number", invoiceNumber)
+      .select(customerInvoiceLegacySelect)
+      .maybeSingle();
+
+    data = legacyResult.data;
+    error = legacyResult.error;
+
+    if (error) {
+      return safeFailure(safeWriteError, 500);
+    }
   }
 
   const record = toStoredRecord(asRecord(data));
@@ -614,7 +832,7 @@ export async function updateAdminCustomerInvoiceStatus(
 
   const { logoImage, profile } = await loadServerLogoImage();
   const pdfBytes = createCustomerInvoicePdfBytes(record, profile, logoImage);
-  const { data: refreshedData, error: refreshedError } = await client
+  let { data: refreshedData, error: refreshedError } = await client
     .from(customerInvoiceRecordTableName)
     .update({
       pdf_base64: base64FromBytes(pdfBytes),
@@ -628,7 +846,29 @@ export async function updateAdminCustomerInvoiceStatus(
     .maybeSingle();
 
   if (refreshedError) {
-    return safeFailure(safeWriteError, 500);
+    if (!lifecycleColumnUnavailableError(refreshedError)) {
+      return safeFailure(safeWriteError, 500);
+    }
+
+    const legacyRefreshResult = await client
+      .from(customerInvoiceRecordTableName)
+      .update({
+        pdf_base64: base64FromBytes(pdfBytes),
+        pdf_content_type: "application/pdf",
+        pdf_filename: `${record.invoiceNumber}.pdf`,
+        pdf_sha256: sha256Hex(pdfBytes),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("invoice_number", record.invoiceNumber)
+      .select(customerInvoiceLegacySelect)
+      .maybeSingle();
+
+    refreshedData = legacyRefreshResult.data;
+    refreshedError = legacyRefreshResult.error;
+
+    if (refreshedError) {
+      return safeFailure(safeWriteError, 500);
+    }
   }
 
   const refreshedRecord = toStoredRecord(asRecord(refreshedData));
@@ -661,24 +901,45 @@ export async function loadAdminCustomerInvoicePdf(
     return safeFailure(safeValidationError, 400);
   }
 
-  const { data, error } = await client
+  const pdfResult = await client
     .from(customerInvoiceRecordTableName)
     .select(customerInvoicePdfSelect)
     .eq("invoice_number", invoiceNumber)
     .maybeSingle();
+  let data: unknown = pdfResult.data;
+  let error = pdfResult.error;
 
   if (error) {
-    return safeFailure(safeReadError, 500);
+    if (!lifecycleColumnUnavailableError(error)) {
+      return safeFailure(safeReadError, 500);
+    }
+
+    const legacyResult = await client
+      .from(customerInvoiceRecordTableName)
+      .select(customerInvoiceLegacyPdfSelect)
+      .eq("invoice_number", invoiceNumber)
+      .maybeSingle();
+
+    data = legacyResult.data;
+    error = legacyResult.error;
+
+    if (error) {
+      return safeFailure(safeReadError, 500);
+    }
   }
 
   const row = asRecord(data);
   const bytes = bytesFromBase64(row.pdf_base64);
+  const documentType = safeDocumentType(row.document_type) || inferBillingDocumentType(invoiceNumber);
+  const documentState = safeDocumentState(row.document_state) || "issued";
   const filename = safeText(row.pdf_filename, 180) || `${invoiceNumber}.pdf`;
 
   return bytes ? {
     data: {
       bytes,
       contentType: "application/pdf",
+      documentState,
+      documentType,
       filename,
       invoiceNumber,
     },
@@ -702,15 +963,32 @@ export async function loadCustomerInvoiceRecordsForPortal(
     return safeFailure(safeCustomerAuthError, 403);
   }
 
-  const { data, error } = await client
+  let { data, error } = await client
     .from(customerInvoiceRecordTableName)
     .select(customerInvoiceSelect)
     .eq("customer_id", customerAccountReference)
+    .eq("document_state", "issued")
     .order("created_at", { ascending: false })
     .limit(100);
 
   if (error) {
-    return safeFailure(safeReadError, 500);
+    if (!lifecycleColumnUnavailableError(error)) {
+      return safeFailure(safeReadError, 500);
+    }
+
+    const legacyResult = await client
+      .from(customerInvoiceRecordTableName)
+      .select(customerInvoiceLegacySelect)
+      .eq("customer_id", customerAccountReference)
+      .order("created_at", { ascending: false })
+      .limit(100);
+
+    data = legacyResult.data;
+    error = legacyResult.error;
+
+    if (error) {
+      return safeFailure(safeReadError, 500);
+    }
   }
 
   return {
@@ -741,25 +1019,48 @@ export async function loadCustomerInvoicePdfForPortal(
     return safeFailure(safeValidationError, 400);
   }
 
-  const { data, error } = await client
+  const pdfResult = await client
     .from(customerInvoiceRecordTableName)
     .select(customerInvoicePdfSelect)
     .eq("customer_id", customerAccountReference)
     .eq("invoice_number", invoiceNumber)
+    .eq("document_state", "issued")
     .maybeSingle();
+  let data: unknown = pdfResult.data;
+  let error = pdfResult.error;
 
   if (error) {
-    return safeFailure(safeReadError, 500);
+    if (!lifecycleColumnUnavailableError(error)) {
+      return safeFailure(safeReadError, 500);
+    }
+
+    const legacyResult = await client
+      .from(customerInvoiceRecordTableName)
+      .select(customerInvoiceLegacyPdfSelect)
+      .eq("customer_id", customerAccountReference)
+      .eq("invoice_number", invoiceNumber)
+      .maybeSingle();
+
+    data = legacyResult.data;
+    error = legacyResult.error;
+
+    if (error) {
+      return safeFailure(safeReadError, 500);
+    }
   }
 
   const row = asRecord(data);
   const bytes = bytesFromBase64(row.pdf_base64);
+  const documentType = safeDocumentType(row.document_type) || inferBillingDocumentType(invoiceNumber);
+  const documentState = safeDocumentState(row.document_state) || "issued";
   const filename = safeText(row.pdf_filename, 180) || `${invoiceNumber}.pdf`;
 
   return bytes ? {
     data: {
       bytes,
       contentType: "application/pdf",
+      documentState,
+      documentType,
       filename,
       invoiceNumber,
     },
@@ -785,7 +1086,7 @@ export async function updateCustomerInvoiceEmailStatus(
     return safeFailure(safeValidationError, 400);
   }
 
-  const { data, error } = await client
+  let { data, error } = await client
     .from(customerInvoiceRecordTableName)
     .update({
       actor_label: actor.actor_label,
@@ -800,7 +1101,30 @@ export async function updateCustomerInvoiceEmailStatus(
     .maybeSingle();
 
   if (error) {
-    return safeFailure(safeWriteError, 500);
+    if (!lifecycleColumnUnavailableError(error)) {
+      return safeFailure(safeWriteError, 500);
+    }
+
+    const legacyResult = await client
+      .from(customerInvoiceRecordTableName)
+      .update({
+        actor_label: actor.actor_label,
+        actor_role: actor.actor_role,
+        email_delivery_status: emailDeliveryStatus,
+        email_message_id: emailMessageId,
+        email_sent_at: emailDeliveryStatus === "sent" ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("invoice_number", invoiceNumber)
+      .select(customerInvoiceLegacySelect)
+      .maybeSingle();
+
+    data = legacyResult.data;
+    error = legacyResult.error;
+
+    if (error) {
+      return safeFailure(safeWriteError, 500);
+    }
   }
 
   const record = toStoredRecord(asRecord(data));

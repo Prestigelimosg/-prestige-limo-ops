@@ -251,10 +251,11 @@ for (const fragment of [
   "method: \"PATCH\"",
   "fetch(adminCustomerInvoiceEmailApiPath",
   "downloadStoredCustomerInvoicePdf(issuedInvoice)",
-  "Invoice creates a stored invoice record with PDF download.",
-  "Quotation, draft, and credit note",
-  "changes invoice wording. No Stripe checkout, payment link, card charge, bank debit, payout,",
-  "provider job send, or automatic payment action is created here.",
+  "Invoice, quotation, and credit note actions create separated stored billing documents with PDF",
+  "Draft stays admin-only until issued.",
+  "Card checkbox only changes document wording. No",
+  "Stripe checkout, payment link, card charge, bank debit, payout, provider job send, or automatic",
+  "payment action is created here.",
 ]) {
   assertIncludes(customersPage, fragment, `customers stored invoice UI ${fragment}`);
 }

@@ -59,12 +59,17 @@ const issueFunction = sectionBetween(
   "async function issuePreparedCustomerInvoice()",
   "async function downloadIssuedCustomerInvoice(invoice: CustomerDisplayedInvoiceRecord)",
 );
+const requestBodyHelper = sectionBetween(
+  customersPage,
+  "function customerInvoiceRequestBodyFromPreview(documentState: CustomerBillingDocumentState)",
+  "async function saveCustomerInvoiceDraft()",
+);
 const previewFunction = sectionBetween(
   customersPage,
   "function customerInvoiceLineDescriptionForPreview(",
   "function issuePreparedCustomerInvoice()",
 );
-const issueLineItem = sectionBetween(issueFunction, "lineItems: [", "reference:");
+const issueLineItem = sectionBetween(requestBodyHelper, "lineItems: [", "reference:");
 const invoicePrepWorkspace = sectionBetween(
   customersPage,
   'data-customer-invoice-prep-panel="true"',
@@ -160,10 +165,15 @@ for (const fragment of [
   "[data-customer-invoice-override-reason='true']",
   "if (!customerInvoicePreview || !isCustomerInvoicePreviewCurrent)",
   "Click Preview Invoice first. If you changed amount, due date, folder, adjustment reason, or card payment option, refresh the preview before issuing.",
-  "customerInvoicePreview.lineDescription",
 ]) {
   assertIncludes(issueFunction, fragment, `invoice override issue guard fragment ${fragment}`);
 }
+
+assertIncludes(
+  requestBodyHelper,
+  "customerInvoicePreview.lineDescription",
+  "invoice request body line description",
+);
 
 for (const fragment of [
   "customerInvoiceLineDescriptionForPreview",

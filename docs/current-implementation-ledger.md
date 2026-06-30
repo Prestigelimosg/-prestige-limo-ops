@@ -15,16 +15,17 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Customer Billing Document Lifecycle And PDF Notes Order
 
 - Admin Customers invoice workbench now has a document selector for `Invoice` or `Quotation`.
-- `Invoice` remains the default and keeps the existing stored invoice/PDF/email/paid-unpaid path.
-- `Quotation` can be previewed and downloaded as a local `QUO-YYYYMMDD-####` PDF with the PDF title `QUOTATION`; it does not write the current invoice DB or email provider path while the live DB still accepts only `INV-...` stored records.
+- `Invoice` remains the default and keeps the stored invoice/PDF/email/paid-unpaid path.
+- `Quotation` now uses the same stored billing-document route as invoices when the DB lifecycle columns are present, with `QUO-YYYYMMDD-####` numbering, PDF title `QUOTATION`, and document-aware email subject/body.
 - Quotation and credit-note PDFs now use document-specific date labels (`Quotation Date:` and `Credit Note Date:`) instead of carrying `Invoice Date:` on every document type.
-- `Save Draft` saves the reviewed workbench details into a compact local draft list without creating an invoice number, PDF record, email, payment, provider, bank, payout, GPS, or DB write.
-- Local quotation rows show compact `Quote` / `Convert` actions instead of payment actions, so a quote is not treated as a payable invoice.
-- Paid invoice rows can create a separate local `CN-YYYYMMDD-####` credit-note PDF; the original paid invoice is not edited or deleted.
-- Customer portal invoice folders are future-proofed into compact monthly `Quotations`, `Unpaid Invoices`, `Paid Invoices`, and `Credit Notes` folders while existing stored invoice records still map to paid/unpaid folders.
+- `Save Draft` stores the reviewed workbench details as a server draft billing document when lifecycle columns are present; drafts stay admin-only, cannot be emailed, and are filtered out of the customer portal until issued.
+- Stored quotation rows show compact `Quote` / `Convert` actions instead of payment actions, so a quote is not treated as a payable invoice. Converting a stored quotation creates a new stored invoice/PDF without mutating the original quotation.
+- Paid stored invoice rows can create a separate stored `CN-YYYYMMDD-####` credit-note PDF linked to the original `INV-...`; the original paid invoice is not edited or deleted.
+- Customer portal invoice folders are compact monthly `Quotations`, `Unpaid Invoices`, `Paid Invoices`, and `Credit Notes` folders, and the customer API filters to issued documents only.
+- The unbilled checkpoint only treats real invoices as billed; quotations and credit notes no longer remove jobs from the unbilled list.
 - Invoice PDFs now render the lower sections in this order: sign-off, bank information, `Notes`, then `Terms & Conditions`; the Notes block is immediately above Terms instead of above the sign-off/bank section.
 - `supabase/migrations/202606300001_customer_billing_document_lifecycle.sql` scaffolds the future DB columns/checks for `document_type`, `document_state`, `original_invoice_number`, `INV/QUO/CN` number prefixes, and credit-note linkage. This migration was not applied from Codex.
-- Server-backed quotation/email, server-backed draft persistence, and server-backed credit-note portal records should only be activated after the DB migration is explicitly approved/applied and the persistence adapter is upgraded to read/write those columns.
+- The persistence adapter now reads/writes lifecycle columns and falls back safely for legacy `INV-...` issued invoices if an environment is still on the old invoice-only schema. Server-backed quote/draft/credit-note runtime still requires the lifecycle migration to be applied in that environment.
 - This pass does not create Stripe checkout/payment links, card charges, bank debit, payout records, provider sends, GPS/live-location records, automatic reconciliation, or customer/driver-visible internal/admin/debug/mock/payout data.
 - Guard coverage lives in `scripts/test-customer-billing-document-lifecycle-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 - Focused checks passed: customer billing document lifecycle guard, customer stored invoice PDF portal guard, customer trust path invoice portal guard, customer invoice driver JC timing/override guard, customer hourly invoice calculation guard, `npx tsc --noEmit --pretty false`, targeted ESLint, and `git diff --check`.

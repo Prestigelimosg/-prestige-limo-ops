@@ -1,10 +1,10 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-3dc37f3e Compact job card action buttons
+3ad6ea36 Fix job card save preflight feedback
 
 Latest pushed main/staging runtime checkpoint:
-3dc37f3e Compact job card action buttons
+3ad6ea36 Fix job card save preflight feedback
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
 95967da2 Record customer copy staging promotion

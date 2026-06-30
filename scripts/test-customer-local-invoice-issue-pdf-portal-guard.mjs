@@ -264,7 +264,6 @@ for (const fragment of [
   "Preview",
   "Previewed",
   "Refresh",
-  "Preview first",
   "Draft",
   "Issue",
   "PDF",
@@ -277,6 +276,23 @@ for (const fragment of [
 ]) {
   assertIncludes(customersPage, fragment, `customers invoice action ${fragment}`);
 }
+
+for (const fragment of [
+  "const customerBillingDocumentPageSize = 5;",
+  "const [customerBillingDocumentPage, setCustomerBillingDocumentPage] = useState(1);",
+  "visibleIssuedCustomerInvoices.map",
+  'data-customer-invoice-issued-local-pagination="true"',
+  'data-customer-invoice-issued-local-prev-page="true"',
+  'data-customer-invoice-issued-local-next-page="true"',
+]) {
+  assertIncludes(customersPage, fragment, `compact billing document pagination ${fragment}`);
+}
+
+assertExcludes(
+  issuedInvoiceTable,
+  "issuedCustomerInvoices.slice(0, 5)",
+  "billing documents must not hide older invoices without pager",
+);
 
 for (const noisyIssuedActionFragment of [
   "Download PDF",

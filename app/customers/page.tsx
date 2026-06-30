@@ -142,6 +142,7 @@ const outstandingReviewSortOptions: Array<{ label: string; value: OutstandingRev
 const outstandingReviewPageSizeOptions = [10, 25];
 const customerQueuePageSizeOptions = [10, 25];
 const customerFolderFinderPageSize = 10;
+const customerBillingDocumentPageSize = 5;
 const customerInvoiceWorkspaceTabs = [
   { label: "Statements", value: "statements" },
   { label: "Outstanding", value: "outstanding" },
@@ -1192,6 +1193,7 @@ export default function MockCustomerDashboardPage() {
   const [issuedCustomerInvoices, setIssuedCustomerInvoices] = useState<CustomerDisplayedInvoiceRecord[]>(() =>
     readCustomerLocalInvoices().map(displayLocalInvoice),
   );
+  const [customerBillingDocumentPage, setCustomerBillingDocumentPage] = useState(1);
   const [customerInvoiceWorkspaceTab, setCustomerInvoiceWorkspaceTab] =
     useState<CustomerInvoiceWorkspaceTab>("statements");
   const [mockFollowUpSectionFeedback, setMockFollowUpSectionFeedback] = useState(
@@ -1594,6 +1596,28 @@ export default function MockCustomerDashboardPage() {
   const isCustomerInvoicePreviewCurrent =
     Boolean(customerInvoicePreview) &&
     customerInvoicePreview?.previewKey === customerInvoiceCurrentPreviewKey;
+  const customerBillingDocumentTotalPages = Math.max(
+    1,
+    Math.ceil(issuedCustomerInvoices.length / customerBillingDocumentPageSize),
+  );
+  const currentCustomerBillingDocumentPage = Math.min(
+    customerBillingDocumentPage,
+    customerBillingDocumentTotalPages,
+  );
+  const customerBillingDocumentStartIndex =
+    issuedCustomerInvoices.length === 0
+      ? 0
+      : (currentCustomerBillingDocumentPage - 1) * customerBillingDocumentPageSize;
+  const visibleIssuedCustomerInvoices = issuedCustomerInvoices.slice(
+    customerBillingDocumentStartIndex,
+    customerBillingDocumentStartIndex + customerBillingDocumentPageSize,
+  );
+  const customerBillingDocumentShowingStart =
+    issuedCustomerInvoices.length === 0 ? 0 : customerBillingDocumentStartIndex + 1;
+  const customerBillingDocumentShowingEnd = Math.min(
+    customerBillingDocumentStartIndex + customerBillingDocumentPageSize,
+    issuedCustomerInvoices.length,
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -2293,6 +2317,7 @@ export default function MockCustomerDashboardPage() {
   }
 
   function updateIssuedInvoiceState(invoice: CustomerDisplayedInvoiceRecord) {
+    setCustomerBillingDocumentPage(1);
     setIssuedCustomerInvoices((currentInvoices) =>
       mergeDisplayedInvoices([invoice], currentInvoices),
     );
@@ -3816,7 +3841,7 @@ export default function MockCustomerDashboardPage() {
                   <div className="flex gap-2 lg:justify-end">
                     {customerInvoicePrepRow.customerFolderHref ? (
                       <Link
-                        className="inline-flex h-8 items-center justify-center whitespace-nowrap rounded-md border border-slate-900 bg-slate-900 px-2.5 text-xs font-bold text-white transition hover:bg-slate-700"
+                        className="inline-flex h-7 items-center justify-center whitespace-nowrap rounded-md border border-slate-900 bg-slate-900 px-2 text-[11px] font-bold leading-none text-white transition hover:bg-slate-700"
                         data-customer-invoice-prep-open-folder="true"
                         href={customerInvoicePrepRow.customerFolderHref}
                         title="Open customer folder"
@@ -3825,7 +3850,7 @@ export default function MockCustomerDashboardPage() {
                       </Link>
                     ) : null}
                     <button
-                      className="inline-flex h-8 items-center justify-center whitespace-nowrap rounded-md border border-slate-300 bg-white px-2.5 text-xs font-bold text-slate-800 transition hover:border-slate-500"
+                      className="inline-flex h-7 items-center justify-center whitespace-nowrap rounded-md border border-slate-300 bg-white px-2 text-[11px] font-bold leading-none text-slate-800 transition hover:border-slate-500"
                       data-customer-invoice-prep-clear="true"
                       onClick={clearCustomerInvoicePrep}
                       type="button"
@@ -3942,7 +3967,7 @@ export default function MockCustomerDashboardPage() {
                         value={customerInvoiceRecipientEmail}
                       />
                     </label>
-                    <label className="inline-flex h-8 w-fit items-center gap-1.5 self-end justify-self-start whitespace-nowrap rounded-md border border-slate-300 bg-white px-2 text-[11px] font-bold text-slate-700 xl:mt-5">
+                    <label className="inline-flex h-7 w-fit items-center gap-1.5 self-end justify-self-start whitespace-nowrap rounded-md border border-slate-300 bg-white px-2 text-[11px] font-bold leading-none text-slate-700 xl:mt-5">
                       <input
                         checked={customerInvoiceCardPaymentEnabled}
                         className="h-3.5 w-3.5 rounded border-slate-400 text-slate-900"
@@ -3960,7 +3985,7 @@ export default function MockCustomerDashboardPage() {
                       <span>Card</span>
                     </label>
                     <label
-                      className={`inline-flex h-8 w-fit items-center gap-1.5 self-end justify-self-start whitespace-nowrap rounded-md border px-2 text-[11px] font-bold xl:mt-5 ${
+                      className={`inline-flex h-7 w-fit items-center gap-1.5 self-end justify-self-start whitespace-nowrap rounded-md border px-2 text-[11px] font-bold leading-none xl:mt-5 ${
                         customerInvoiceCardPaymentEnabled
                           ? "border-slate-300 bg-white text-slate-700"
                           : "border-slate-200 bg-slate-50 text-slate-400"
@@ -3995,7 +4020,7 @@ export default function MockCustomerDashboardPage() {
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5">
                     <button
-                      className={`inline-flex h-8 items-center justify-center whitespace-nowrap rounded-md border px-2.5 text-xs font-bold transition ${
+                      className={`inline-flex h-7 items-center justify-center whitespace-nowrap rounded-md border px-2 text-[11px] font-bold leading-none transition ${
                         isCustomerInvoicePreviewCurrent
                           ? "border-emerald-300 bg-emerald-50 text-emerald-800"
                           : customerInvoicePreview
@@ -4015,7 +4040,7 @@ export default function MockCustomerDashboardPage() {
                           : "Preview"}
                     </button>
                     <button
-                      className={`inline-flex h-8 items-center justify-center whitespace-nowrap rounded-md border px-2.5 text-xs font-bold transition ${
+                      className={`inline-flex h-7 items-center justify-center whitespace-nowrap rounded-md border px-2 text-[11px] font-bold leading-none transition ${
                         isCustomerInvoicePreviewCurrent
                           ? "border-slate-300 bg-white text-slate-800 hover:border-slate-600"
                           : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
@@ -4029,7 +4054,7 @@ export default function MockCustomerDashboardPage() {
                       Draft
                     </button>
                     <button
-                      className={`inline-flex h-8 items-center justify-center whitespace-nowrap rounded-md border px-2.5 text-xs font-bold transition ${
+                      className={`inline-flex h-7 items-center justify-center whitespace-nowrap rounded-md border px-2 text-[11px] font-bold leading-none transition ${
                         issuingCustomerInvoiceKey === customerInvoicePrepRow.key
                           ? "border-emerald-300 bg-emerald-50 text-emerald-800"
                           : !isCustomerInvoicePreviewCurrent
@@ -4046,7 +4071,7 @@ export default function MockCustomerDashboardPage() {
                         ? "Issued"
                         : isCustomerInvoicePreviewCurrent
                           ? customerBillingDocumentActionLabel()
-                          : "Preview first"}
+                          : customerBillingDocumentActionLabel()}
                     </button>
                     </div>
                   </div>
@@ -4185,18 +4210,54 @@ export default function MockCustomerDashboardPage() {
                   className="mt-3 border-t border-slate-200 pt-3"
                   data-customer-invoice-issued-local-list="true"
                 >
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
                       Billing documents
                     </p>
-                    <p className="text-xs font-bold text-slate-600">
-                      {issuedCustomerInvoices.length} document{issuedCustomerInvoices.length === 1 ? "" : "s"}
-                    </p>
+                    <div
+                      className="flex flex-wrap items-center justify-end gap-1.5"
+                      data-customer-invoice-issued-local-pagination="true"
+                    >
+                      <p className="text-xs font-bold text-slate-600">
+                        {customerBillingDocumentShowingStart}-{customerBillingDocumentShowingEnd} of{" "}
+                        {issuedCustomerInvoices.length}
+                      </p>
+                      {customerBillingDocumentTotalPages > 1 ? (
+                        <>
+                          <button
+                            className="inline-flex h-7 items-center justify-center rounded-md border border-slate-300 bg-white px-2 text-[11px] font-bold leading-none text-slate-700 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400"
+                            data-customer-invoice-issued-local-prev-page="true"
+                            disabled={currentCustomerBillingDocumentPage <= 1}
+                            onClick={() => {
+                              setCustomerBillingDocumentPage((currentPage) =>
+                                Math.max(1, currentPage - 1),
+                              );
+                            }}
+                            type="button"
+                          >
+                            Prev
+                          </button>
+                          <button
+                            className="inline-flex h-7 items-center justify-center rounded-md border border-slate-300 bg-white px-2 text-[11px] font-bold leading-none text-slate-700 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400"
+                            data-customer-invoice-issued-local-next-page="true"
+                            disabled={currentCustomerBillingDocumentPage >= customerBillingDocumentTotalPages}
+                            onClick={() => {
+                              setCustomerBillingDocumentPage((currentPage) =>
+                                Math.min(customerBillingDocumentTotalPages, currentPage + 1),
+                              );
+                            }}
+                            type="button"
+                          >
+                            Next
+                          </button>
+                        </>
+                      ) : null}
+                    </div>
                   </div>
                   <div className="mt-2 overflow-x-auto">
                     <table className="w-full min-w-[720px] text-left text-xs">
                       <tbody>
-                        {issuedCustomerInvoices.slice(0, 5).map((invoice) => {
+                        {visibleIssuedCustomerInvoices.map((invoice) => {
                           const invoiceDocumentType = invoice.documentType || "invoice";
 
                           return (
@@ -4220,7 +4281,7 @@ export default function MockCustomerDashboardPage() {
                               <td className="py-2 text-right">
                                 <div className="inline-flex flex-wrap justify-end gap-1">
                                 <button
-                                  className={`rounded-md border px-2 py-1 font-bold transition ${
+                                  className={`inline-flex h-7 items-center justify-center rounded-md border px-2 text-[11px] font-bold leading-none transition ${
                                     downloadingCustomerInvoiceNumber === invoice.invoiceNumber
                                       ? "border-emerald-300 bg-emerald-50 text-emerald-800"
                                       : "border-slate-300 bg-white text-slate-800 hover:border-slate-600"
@@ -4235,7 +4296,7 @@ export default function MockCustomerDashboardPage() {
                                 </button>
                                 {invoice.storageSource === "server" ? (
                                   <button
-                                    className={`rounded-md border px-2 py-1 font-bold transition ${
+                                    className={`inline-flex h-7 items-center justify-center rounded-md border px-2 text-[11px] font-bold leading-none transition ${
                                       emailingCustomerInvoiceNumber === invoice.invoiceNumber ||
                                       invoice.emailDeliveryStatus === "sent"
                                         ? "border-emerald-300 bg-emerald-50 text-emerald-800"
@@ -4259,13 +4320,13 @@ export default function MockCustomerDashboardPage() {
                                 {invoiceDocumentType === "quotation" ? (
                                   <>
                                     <span
-                                      className="rounded-md border border-sky-300 bg-sky-50 px-2 py-1 font-bold text-sky-900"
+                                      className="inline-flex h-7 items-center justify-center rounded-md border border-sky-300 bg-sky-50 px-2 text-[11px] font-bold leading-none text-sky-900"
                                       data-customer-invoice-issued-local-quotation={invoice.invoiceNumber}
                                     >
                                       Quote
                                     </span>
                                     <button
-                                      className="rounded-md border border-slate-300 bg-white px-2 py-1 font-bold text-slate-800 transition hover:border-slate-600"
+                                      className="inline-flex h-7 items-center justify-center rounded-md border border-slate-300 bg-white px-2 text-[11px] font-bold leading-none text-slate-800 transition hover:border-slate-600"
                                       data-customer-invoice-issued-local-convert-quote={invoice.invoiceNumber}
                                       onClick={() => convertQuotationToInvoice(invoice)}
                                       title="Convert quotation to invoice"
@@ -4276,7 +4337,7 @@ export default function MockCustomerDashboardPage() {
                                   </>
                                 ) : invoiceDocumentType === "credit_note" ? (
                                   <span
-                                    className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 font-bold text-amber-900"
+                                    className="inline-flex h-7 items-center justify-center rounded-md border border-amber-300 bg-amber-50 px-2 text-[11px] font-bold leading-none text-amber-900"
                                     data-customer-invoice-issued-local-credit-note={invoice.invoiceNumber}
                                   >
                                     Credit
@@ -4284,7 +4345,7 @@ export default function MockCustomerDashboardPage() {
                                 ) : invoice.status === "Paid" ? (
                                   <>
                                     <button
-                                      className={`rounded-md border px-2 py-1 font-bold transition ${
+                                      className={`inline-flex h-7 items-center justify-center rounded-md border px-2 text-[11px] font-bold leading-none transition ${
                                         updatingCustomerInvoiceStatusNumber === invoice.invoiceNumber
                                           ? "border-emerald-300 bg-emerald-50 text-emerald-800"
                                           : "border-amber-300 bg-white text-amber-800 hover:border-amber-600"
@@ -4298,7 +4359,7 @@ export default function MockCustomerDashboardPage() {
                                       Unpaid
                                     </button>
                                     <button
-                                      className="rounded-md border border-amber-300 bg-white px-2 py-1 font-bold text-amber-800 transition hover:border-amber-600"
+                                      className="inline-flex h-7 items-center justify-center rounded-md border border-amber-300 bg-white px-2 text-[11px] font-bold leading-none text-amber-800 transition hover:border-amber-600"
                                       data-customer-invoice-issued-local-credit-action={invoice.invoiceNumber}
                                       onClick={() => createCreditNoteFromPaidInvoice(invoice)}
                                       title="Create credit note"
@@ -4309,7 +4370,7 @@ export default function MockCustomerDashboardPage() {
                                   </>
                                 ) : (
                                   <button
-                                    className={`rounded-md border px-2 py-1 font-bold transition ${
+                                    className={`inline-flex h-7 items-center justify-center rounded-md border px-2 text-[11px] font-bold leading-none transition ${
                                       updatingCustomerInvoiceStatusNumber === invoice.invoiceNumber
                                         ? "border-emerald-300 bg-emerald-50 text-emerald-800"
                                         : "border-emerald-300 bg-white text-emerald-800 hover:border-emerald-600"

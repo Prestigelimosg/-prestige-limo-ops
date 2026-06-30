@@ -76,6 +76,15 @@ function validAdminHeaders(extra = {}) {
   };
 }
 
+function validAdminBrowserHeaders(extra = {}) {
+  return {
+    "content-type": "application/json",
+    referer: "http://localhost/",
+    "x-prestige-admin-purpose": "admin-booking-persistence",
+    ...extra,
+  };
+}
+
 function transpileTypescript(source, filename) {
   return ts.transpileModule(source, {
     compilerOptions: {
@@ -187,10 +196,13 @@ function assertBlockedResponse(body, label) {
 }
 
 async function main() {
+  const routeSource = await readFile("app/api/admin-booking-calendar-agenda/route.ts", "utf8");
   const harness = await loadHarness();
 
   try {
     setEnv(validEnv());
+
+    assert.match(routeSource, /allowServerSessionRoleMethodsWithoutRequestToken:\s*\["POST"\]/);
 
     {
       const response = await harness.route.POST(requestWithJson(safePayload()));
@@ -215,6 +227,18 @@ async function main() {
       assert.match(body.ics, /SUMMARY:Prestige - MNG - Safe Traveler/);
       assert.match(body.ics, /SUMMARY:Prestige - MNG - Second Safe Traveler/);
       assertNoLeaks(body, "safe calendar agenda response must not leak unsafe fields");
+    }
+
+    {
+      const response = await harness.route.POST(
+        requestWithJson(safePayload(), validAdminBrowserHeaders()),
+      );
+      const { body, status } = await readRouteResponse(response);
+
+      assert.equal(status, 200);
+      assert.equal(body.ok, true);
+      assert.equal(body.agenda.event_count, 2);
+      assertNoLeaks(body, "browser calendar agenda response must not leak unsafe fields");
     }
 
     {

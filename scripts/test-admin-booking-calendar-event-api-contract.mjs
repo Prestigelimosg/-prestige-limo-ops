@@ -76,6 +76,15 @@ function validAdminHeaders(extra = {}) {
   };
 }
 
+function validAdminBrowserHeaders(extra = {}) {
+  return {
+    "content-type": "application/json",
+    referer: "http://localhost/",
+    "x-prestige-admin-purpose": "admin-booking-persistence",
+    ...extra,
+  };
+}
+
 function transpileTypescript(source, filename) {
   return ts.transpileModule(source, {
     compilerOptions: {
@@ -178,10 +187,22 @@ function assertBlockedResponse(body, label) {
 }
 
 async function main() {
+  const routeSource = await readFile("app/api/admin-booking-calendar-events/route.ts", "utf8");
+  const appSource = await readFile("app/page.tsx", "utf8");
+  const calendarPayloadSource = appSource.slice(
+    appSource.indexOf("function buildSavedBookingCalendarEventPayload"),
+    appSource.indexOf("function hasSavedCustomerBillingAmountSource"),
+  );
   const harness = await loadHarness();
 
   try {
     setEnv(validEnv());
+
+    assert.match(routeSource, /allowServerSessionRoleMethodsWithoutRequestToken:\s*\["POST"\]/);
+    assert.match(appSource, /function getBookingCalendarReference\(bookingRecord: BookingRecord\)/);
+    assert.match(calendarPayloadSource, /booking_reference: bookingReference/);
+    assert.match(calendarPayloadSource, /id: cleanReferenceText\(bookingRecord\.id\) \|\| bookingReference/);
+    assert.doesNotMatch(calendarPayloadSource, /booking_reference: String\(bookingRecord\.id\)/);
 
     {
       const response = await harness.route.POST(requestWithJson(safePayload()));
@@ -211,6 +232,18 @@ async function main() {
       assert.match(body.ics, /Prestige booking reminder/);
       assert.match(body.ics, /END:VCALENDAR/);
       assertNoLeaks(body, "safe calendar event response must not leak unsafe fields");
+    }
+
+    {
+      const response = await harness.route.POST(
+        requestWithJson(safePayload(), validAdminBrowserHeaders()),
+      );
+      const { body, status } = await readRouteResponse(response);
+
+      assert.equal(status, 200);
+      assert.equal(body.ok, true);
+      assert.equal(body.calendar_event.booking_reference, "PL-2026-0615-001");
+      assertNoLeaks(body, "browser calendar event response must not leak unsafe fields");
     }
 
     {

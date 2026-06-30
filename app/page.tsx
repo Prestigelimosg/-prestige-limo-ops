@@ -4870,6 +4870,23 @@ function getBookingDriverJobStatusReference(bookingRecord: BookingRecord) {
   return cleanReferenceText(bookingRecord.booking_reference) || cleanReferenceText(bookingRecord.id);
 }
 
+function getBookingCalendarReference(bookingRecord: BookingRecord) {
+  return (
+    cleanReferenceText(bookingRecord.booking_reference) ||
+    cleanReferenceText(bookingRecord.id) ||
+    [
+      getBookingDateKey(bookingRecord),
+      formatPickupTimeFromRecord(bookingRecord),
+      getBookingName(bookingRecord),
+      getBookingCompanyName(bookingRecord),
+    ]
+      .map(cleanReferenceText)
+      .filter(Boolean)
+      .join("|") ||
+    "loaded-booking"
+  );
+}
+
 function bookingRecordIsEarlierJob(bookingRecord: BookingRecord, todayKey: string) {
   const dateKey = getBookingDateKey(bookingRecord);
 
@@ -5067,9 +5084,10 @@ function buildSavedBookingCalendarEventPayload(bookingRecord: BookingRecord) {
   const route = routePoints.length >= 2 ? routePoints.join(" > ") : [pickup, dropoff].filter(Boolean).join(" > ");
   const pickupDateTime = clean(bookingRecord.pickup_at) || clean(bookingRecord.pickup_datetime);
   const pickupTime = formatPickupTimeFromRecord(bookingRecord);
+  const bookingReference = getBookingCalendarReference(bookingRecord);
 
   return {
-    booking_reference: String(bookingRecord.id),
+    booking_reference: bookingReference,
     booking_type: clean(bookingRecord.booking_type),
     booker_name: getBookerName(bookingRecord),
     company_name: getBookingCompanyName(bookingRecord),
@@ -5079,7 +5097,7 @@ function buildSavedBookingCalendarEventPayload(bookingRecord: BookingRecord) {
     driver_plate_number: clean(bookingRecord.driver_plate_number),
     dropoff_address: dropoff,
     flight_no: clean(bookingRecord.flight_no),
-    id: bookingRecord.id,
+    id: cleanReferenceText(bookingRecord.id) || bookingReference,
     pax: bookingRecord.pax || 1,
     pickup_address: pickup,
     pickup_at: pickupDateTime,

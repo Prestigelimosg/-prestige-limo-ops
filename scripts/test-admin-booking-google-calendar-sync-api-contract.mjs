@@ -326,6 +326,10 @@ try {
   const helperSource = await readFile("lib/admin-booking-google-calendar-sync.ts", "utf8");
   const routeSource = await readFile("app/api/admin-booking-calendar-google-sync/route.ts", "utf8");
   const appSource = await readFile("app/page.tsx", "utf8");
+  const calendarPayloadSource = appSource.slice(
+    appSource.indexOf("function buildSavedBookingCalendarEventPayload"),
+    appSource.indexOf("function hasSavedCustomerBillingAmountSource"),
+  );
 
   assert.doesNotMatch(
     helperSource,
@@ -337,12 +341,16 @@ try {
   assert.match(routeSource, /allowServerSessionRoleMethodsWithoutRequestToken:\s*\["POST"\]/);
   assert.match(appSource, /adminBookingCalendarGoogleSyncApiPath/);
   assert.match(appSource, /data-operations-calendar-sync-google-loaded="true"/);
-  assert.match(appSource, /const pickupDateTime = clean\(bookingRecord\.pickup_at\) \|\| clean\(bookingRecord\.pickup_datetime\);/);
-  assert.match(appSource, /const pickupTime = formatPickupTimeFromRecord\(bookingRecord\);/);
-  assert.match(appSource, /pickup_at: pickupDateTime/);
-  assert.match(appSource, /pickup_datetime: pickupDateTime/);
-  assert.match(appSource, /pickup_time: pickupTime/);
-  assert.doesNotMatch(appSource, /pickup_time: formatPickupTime\(bookingRecord\.pickup_time\)/);
+  assert.match(calendarPayloadSource, /const pickupDateTime = clean\(bookingRecord\.pickup_at\) \|\| clean\(bookingRecord\.pickup_datetime\);/);
+  assert.match(calendarPayloadSource, /const pickupTime = formatPickupTimeFromRecord\(bookingRecord\);/);
+  assert.match(calendarPayloadSource, /const bookingReference = getBookingCalendarReference\(bookingRecord\);/);
+  assert.match(calendarPayloadSource, /booking_reference: bookingReference/);
+  assert.match(calendarPayloadSource, /id: cleanReferenceText\(bookingRecord\.id\) \|\| bookingReference/);
+  assert.match(calendarPayloadSource, /pickup_at: pickupDateTime/);
+  assert.match(calendarPayloadSource, /pickup_datetime: pickupDateTime/);
+  assert.match(calendarPayloadSource, /pickup_time: pickupTime/);
+  assert.doesNotMatch(calendarPayloadSource, /booking_reference: String\(bookingRecord\.id\)/);
+  assert.doesNotMatch(calendarPayloadSource, /pickup_time: formatPickupTime\(bookingRecord\.pickup_time\)/);
   assert.doesNotMatch(appSource, /PRESTIGE_GOOGLE_CALENDAR_PRIVATE_KEY|PRESTIGE_GOOGLE_CALENDAR_CLIENT_EMAIL/);
 
   {

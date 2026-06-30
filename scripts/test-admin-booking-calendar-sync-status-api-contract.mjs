@@ -77,6 +77,15 @@ function validAdminHeaders(extra = {}) {
   };
 }
 
+function validAdminBrowserHeaders(extra = {}) {
+  return {
+    "content-type": "application/json",
+    referer: "http://localhost/",
+    "x-prestige-admin-purpose": "admin-booking-persistence",
+    ...extra,
+  };
+}
+
 function transpileTypescript(source, filename) {
   return ts.transpileModule(source, {
     compilerOptions: {
@@ -195,10 +204,13 @@ function assertBlockedResponse(body, label) {
 }
 
 async function main() {
+  const routeSource = await readFile("app/api/admin-booking-calendar-sync-statuses/route.ts", "utf8");
   const harness = await loadHarness();
 
   try {
     setEnv(validEnv());
+
+    assert.match(routeSource, /allowServerSessionRoleMethodsWithoutRequestToken:\s*\["POST"\]/);
 
     {
       const response = await harness.route.POST(requestWithJson(safePayload()));
@@ -220,6 +232,18 @@ async function main() {
       assert.deepEqual(body.sync_status.mismatched_fields, []);
       assert.match(body.sync_status.safe_message, /calendar edits will not update the app/i);
       assertNoLeaks(body, "safe calendar sync status response must not leak unsafe fields");
+    }
+
+    {
+      const response = await harness.route.POST(
+        requestWithJson(safePayload(), validAdminBrowserHeaders()),
+      );
+      const { body, status } = await readRouteResponse(response);
+
+      assert.equal(status, 200);
+      assert.equal(body.ok, true);
+      assert.equal(body.sync_status.booking_reference, "PL-2026-0615-001");
+      assertNoLeaks(body, "browser calendar sync status response must not leak unsafe fields");
     }
 
     {

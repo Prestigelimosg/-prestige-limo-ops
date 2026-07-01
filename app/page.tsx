@@ -3349,7 +3349,7 @@ function AdminActiveJobsBrowserMap({
       </div>
       <div
         ref={mapSlotRef}
-        className="relative h-48 w-full overflow-hidden bg-slate-200 sm:h-56"
+        className="relative h-48 w-full overflow-hidden bg-transparent sm:h-56"
         data-admin-active-jobs-map-google-slot="true"
       >
         {renderState === "ready"

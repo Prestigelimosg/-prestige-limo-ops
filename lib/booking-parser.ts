@@ -2837,6 +2837,23 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
   return detectedFields > 0 ? parsedBooking : null;
 }
 
+export function parsedBookingForJobCard(parsedBooking: ParsedBooking | null | undefined) {
+  if (!parsedBooking) {
+    return parsedBooking ?? null;
+  }
+
+  const jobCardBooking = { ...parsedBooking };
+
+  delete jobCardBooking.customerPriceOverride;
+  delete jobCardBooking.customerPriceOverrideReason;
+
+  return jobCardBooking;
+}
+
+export function parseJobCardBookingMessage(text: string, options: ParseBookingOptions = {}) {
+  return parsedBookingForJobCard(parseBookingMessage(text, options));
+}
+
 export function formatParsedPickupTime(value: string | undefined) {
   const digits = (value ?? "").trim().replace(/\D/g, "");
 

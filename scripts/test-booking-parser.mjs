@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import {
   alsonSq377Sample,
   mergeParsedBookingState,
+  parseJobCardBookingMessage,
   parseBookingMessage,
 } from '../lib/booking-parser.ts';
 
@@ -1306,6 +1307,64 @@ const parsedExactPastedWaypointSingleDigitHour =
   ) ?? {};
 assert.equal(parsedExactPastedWaypointSingleDigitHour.date, '2026-05-17');
 assert.equal(parsedExactPastedWaypointSingleDigitHour.time, '0705hrs');
+
+const exactPastedPickupWaypointAirportDepartureJobCardMessage = `Title	Prestige Transport 15724
+Booking form name	Prestige Transport
+Status	Completed (finished)
+Service type	Airport transfer
+Transfer type	One Way
+Pickup date and time	02-07-2026 7:05
+Order total amount	S$120.00
+Taxes	S$0.00 (0%)
+Distance	12.7 km
+Duration	24 minutes
+Comment	1st Pick-up: Ms. Chan (26 Newton Road), 2nd Pick-up: Ms. Kwok (28 Alexandra View) Trip Organizer: Mr. Kim, Hyun Soo (Tel. No.: +65 98156017)
+ROUTE
+Route name	Airport Departure
+ROUTE LOCATIONS
+28 Alexandra View, 싱가포르 28 Alexandra View, Singapore 158744
+PICK UP LOCATION
+26 Newton Rd, 싱가포르 307957
+VEHICLE
+Vehicle name	Toyota Alphard 2.5
+Bag count	3
+Passengers count	4
+EXTRA
+1 x Waypoint 1 - S$25.00
+CLIENT DETAILS
+First name	Pui Yu
+Last name	Chan
+E-mail address	hyunsoostar@hotmail.com
+Phone number	+6596389322
+Passangers	2
+Flight No.	SQ892.`;
+const parsedExactPastedPickupWaypointAirportDepartureJobCard =
+  parseJobCardBookingMessage(exactPastedPickupWaypointAirportDepartureJobCardMessage, {
+    referenceDate,
+  }) ?? {};
+assert.equal(parsedExactPastedPickupWaypointAirportDepartureJobCard.company ?? '', '');
+assert.equal(parsedExactPastedPickupWaypointAirportDepartureJobCard.booker, 'Mr Kim, Hyun Soo');
+assert.equal(parsedExactPastedPickupWaypointAirportDepartureJobCard.bookerContact, '+65 98156017');
+assert.equal(
+  parsedExactPastedPickupWaypointAirportDepartureJobCard.bookerEmail,
+  'hyunsoostar@hotmail.com',
+);
+assert.equal(parsedExactPastedPickupWaypointAirportDepartureJobCard.bookingType, 'DEP');
+assert.equal(parsedExactPastedPickupWaypointAirportDepartureJobCard.vehicle, 'AVF');
+assert.equal(parsedExactPastedPickupWaypointAirportDepartureJobCard.date, '2026-07-02');
+assert.equal(parsedExactPastedPickupWaypointAirportDepartureJobCard.time, '0705hrs');
+assert.equal(parsedExactPastedPickupWaypointAirportDepartureJobCard.flight, 'SQ892');
+assert.equal(parsedExactPastedPickupWaypointAirportDepartureJobCard.pickup, '26 Newton Rd, 307957');
+assert.equal(parsedExactPastedPickupWaypointAirportDepartureJobCard.dropoff, 'Changi Airport');
+assert.equal(parsedExactPastedPickupWaypointAirportDepartureJobCard.name, 'Pui Yu Chan');
+assert.equal(parsedExactPastedPickupWaypointAirportDepartureJobCard.pax, '2');
+assert.equal(parsedExactPastedPickupWaypointAirportDepartureJobCard.extraStopCount, '1');
+assert.equal(
+  parsedExactPastedPickupWaypointAirportDepartureJobCard.extraStopLocation,
+  '28 Alexandra View, Singapore 158744',
+);
+assert.equal(parsedExactPastedPickupWaypointAirportDepartureJobCard.customerPriceOverride ?? '', '');
+assert.equal(parsedExactPastedPickupWaypointAirportDepartureJobCard.customerPriceOverrideReason ?? '', '');
 
 const exactPastedWaypointAirportDepartureFormMessage = `Pickup date and time	06-05-2026 8:00
 Order total amount	S$110.00

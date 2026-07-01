@@ -4,7 +4,7 @@ import Link from "next/link";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   mergeParsedBookingState,
-  parseBookingMessage,
+  parseJobCardBookingMessage,
 } from "../lib/booking-parser";
 import {
   sanitizeAiParseResult,
@@ -3446,7 +3446,7 @@ function compactParsedBooking(parsedBooking: ParsedBooking | null | undefined) {
 }
 
 function parseBookingMessageForState(messageText: string): ParsedBooking {
-  return compactParsedBooking(parseBookingMessage(messageText));
+  return compactParsedBooking(parseJobCardBookingMessage(messageText));
 }
 
 function mergeParsedBookingIntoForm(

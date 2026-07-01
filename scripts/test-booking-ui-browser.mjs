@@ -1573,8 +1573,7 @@ function assertBookingUiState(state) {
   assert.equal(state.fields.childSeatCount, "2");
   assert.match(state.fields.childSeatType, /booster seat/);
   assert.match(state.visibleText, /Customer Price Override/);
-  assert.equal(state.fields.customerPriceOverride, "160");
-  assert.ok(combinedUiText.includes("160.00"), "Expected parsed quoted price text 160.00");
+  assert.equal(state.fields.customerPriceOverride, "");
   assert.match(state.visibleText, /Job Card Preview/);
   assert.doesNotMatch(state.jobCardPreview, /Guest details hidden for privacy/);
   assert.doesNotMatch(state.jobCardPreview, /BROWSER UI TEST BOOKER/);
@@ -19924,7 +19923,7 @@ async function runChromeTest() {
     assert.equal(exactDepartureState.fields.pax, "2");
     assert.equal(exactDepartureState.fields.extraStopCount, "1");
     assert.equal(exactDepartureState.fields.extraStopLocation, "351C Canberra Rd, Singapore 753351");
-    assert.equal(exactDepartureState.fields.customerPriceOverride, "110");
+    assert.equal(exactDepartureState.fields.customerPriceOverride, "");
 
     const focusedRouteNameAirportTextarea = await evaluate(`(() => {
       const textarea = document.querySelector("textarea");
@@ -20017,7 +20016,7 @@ async function runChromeTest() {
     assert.equal(routeNameAirportState.fields.dropoff, "333 Orchard Rd, Singapore 238867");
     assert.equal(routeNameAirportState.fields.name, "Peter Dynan");
     assert.equal(routeNameAirportState.fields.pax, "1");
-    assert.equal(routeNameAirportState.fields.customerPriceOverride, "95");
+    assert.equal(routeNameAirportState.fields.customerPriceOverride, "");
     assert.doesNotMatch(routeNameAirportState.visibleText, /Missing pickup/);
 
     const focusedRouteNameAirportDepartureTextarea = await evaluate(`(() => {
@@ -20117,7 +20116,7 @@ async function runChromeTest() {
     assert.equal(routeNameAirportDepartureState.fields.extraStopCount, "2");
     assert.match(routeNameAirportDepartureState.fields.extraStopLocation, /Sin Ming/);
     assert.match(routeNameAirportDepartureState.fields.extraStopLocation, /Bedok South/);
-    assert.equal(routeNameAirportDepartureState.fields.customerPriceOverride, "160");
+    assert.equal(routeNameAirportDepartureState.fields.customerPriceOverride, "");
     assert.match(
       routeNameAirportDepartureState.jobCardPreview,
       /Watten Estate Rd > Sin Ming Ave > Bedok South Avenue 2 > Changi Airport/,

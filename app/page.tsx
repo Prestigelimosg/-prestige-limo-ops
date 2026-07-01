@@ -2956,7 +2956,14 @@ function adminActiveJobsBrowserMapDomRendered(mapElement: HTMLElement) {
 function adminActiveJobsBrowserMapHasLayout(mapElement: HTMLElement) {
   const rect = mapElement.getBoundingClientRect();
 
-  return rect.width >= 1 && rect.height >= 1;
+  return (
+    rect.width >= 1 &&
+    rect.height >= 1 &&
+    rect.bottom > 0 &&
+    rect.right > 0 &&
+    rect.left < window.innerWidth &&
+    rect.top < window.innerHeight
+  );
 }
 
 function waitForAdminActiveJobsBrowserMapLayout(mapElement: HTMLElement) {
@@ -2972,7 +2979,7 @@ function waitForAdminActiveJobsBrowserMapLayout(mapElement: HTMLElement) {
         return;
       }
 
-      if (Date.now() - startedAt > 5000) {
+      if (Date.now() - startedAt > 15000) {
         reject(new Error("Google Maps container did not receive layout safely."));
         return;
       }

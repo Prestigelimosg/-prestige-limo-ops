@@ -1,10 +1,10 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-cea7b6ca Parse pickup-only WhatsApp timing safely
+284766a3 Classify pickup-only parser drafts as transfer
 
 Latest pushed main/staging runtime checkpoint:
-cea7b6ca Parse pickup-only WhatsApp timing safely
+284766a3 Classify pickup-only parser drafts as transfer
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
 9392372b Record pickup time parser checkpoint
@@ -16,7 +16,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 - Dispatch job-card parsing now recognizes short pickup-only WhatsApp timing such as `the time for pickup on Sunday 5 July is at 8.30pm from Great World Service apartment`.
 - Locked sample: `Hi William, the time for pickup on Sunday 5 July is at 8.30pm from Great World Service apartment. They have 6 x 23kg luggage. mr denis`.
-- The sample parses as date `2026-07-05`, pickup time `2030hrs`, pickup `Great World Service apartment`, no invented drop-off, no invented booking type, and pax remains `1` instead of treating `6 x 23kg luggage` as passenger count.
+- The sample parses as `TRF`, date `2026-07-05`, pickup time `2030hrs`, pickup `Great World Service apartment`, no invented drop-off, and pax remains `1` instead of treating `6 x 23kg luggage` as passenger count. This prevents the Dispatch form from falling back to the default `MNG`/arrival lane and showing a wrong missing-flight warning.
 - This pass did not save a booking, sync calendar, touch live app data, use Vercel CLI, change env/DB schema, send email, activate Stripe/payment, send providers, create payouts, or change GPS/live-location behavior.
 - Checks passed: `npm run test:parser`, `node --check scripts/test-booking-ui-browser.mjs`, `npx tsc --noEmit --pretty false`, `npm run lint` with only existing `loadBookings` warnings, `npm run build`, and `git diff --check`.
 

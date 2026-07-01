@@ -106,6 +106,7 @@ for (const fragment of [
   "resolveAdminActiveJobsBrowserGoogleMapsLibraries",
   'maps.importLibrary("maps")',
   'maps.importLibrary("marker")',
+  "waitForAdminActiveJobsBrowserMapLayout",
   "waitForAdminActiveJobsBrowserMapDom",
   ".gm-style",
   'StaticMapService.GetMapImage',

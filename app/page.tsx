@@ -2953,6 +2953,37 @@ function adminActiveJobsBrowserMapDomRendered(mapElement: HTMLElement) {
   );
 }
 
+function adminActiveJobsBrowserMapHasLayout(mapElement: HTMLElement) {
+  const rect = mapElement.getBoundingClientRect();
+
+  return rect.width >= 1 && rect.height >= 1;
+}
+
+function waitForAdminActiveJobsBrowserMapLayout(mapElement: HTMLElement) {
+  if (adminActiveJobsBrowserMapHasLayout(mapElement)) {
+    return Promise.resolve();
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    const startedAt = Date.now();
+    const check = () => {
+      if (adminActiveJobsBrowserMapHasLayout(mapElement)) {
+        resolve();
+        return;
+      }
+
+      if (Date.now() - startedAt > 5000) {
+        reject(new Error("Google Maps container did not receive layout safely."));
+        return;
+      }
+
+      window.requestAnimationFrame(check);
+    };
+
+    window.requestAnimationFrame(check);
+  });
+}
+
 function waitForAdminActiveJobsBrowserMapDom(mapElement: HTMLElement) {
   if (adminActiveJobsBrowserMapDomRendered(mapElement)) {
     return Promise.resolve();
@@ -3118,6 +3149,12 @@ function AdminActiveJobsBrowserMap({
         const MarkerConstructor = maps.Marker;
         const LatLngBoundsConstructor = maps.LatLngBounds;
 
+        await waitForAdminActiveJobsBrowserMapLayout(mapElement);
+
+        if (cancelled) {
+          return;
+        }
+
         if (!mapRef.current) {
           mapRef.current = new MapConstructor(mapElement, {
             center: activeMarkerJobs[0].position,
@@ -3190,7 +3227,7 @@ function AdminActiveJobsBrowserMap({
       <div className="relative h-48 w-full overflow-hidden sm:h-56">
         <div
           ref={mapElementRef}
-          className="absolute inset-0"
+          className="absolute inset-0 h-full w-full"
           data-admin-active-jobs-map-google-base="true"
         />
         {renderState === "ready"

@@ -1,10 +1,10 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-957c4c45 Open one-booking live location control
+b2fec648 Allow multi-driver live location list
 
 Latest pushed main/staging runtime checkpoint:
-957c4c45 Open one-booking live location control
+b2fec648 Allow multi-driver live location list
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
 36ce3935 Avoid parsing job headers as passengers

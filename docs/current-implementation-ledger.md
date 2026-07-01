@@ -1,10 +1,10 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-d0781e87 Compact live ops rows and driver pin action
+ee1ce3f8 Add admin active jobs browser map canvas
 
 Latest pushed main/staging runtime checkpoint:
-d0781e87 Compact live ops rows and driver pin action
+ee1ce3f8 Add admin active jobs browser map canvas
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
 cb91a3b7 Record live location Chrome proof

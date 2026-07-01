@@ -32,6 +32,16 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This lane does not change driver GPS capture, driver share/stop behavior, customer live maps, customer portal, public booking, billing/payment/PDF/invoice/payout, provider messaging, parser, Save Booking, `/api/admin-saved-bookings`, calendar, Vercel/env values, or DB schema.
 - No `NEXT_PUBLIC_` map key is introduced; browser key values must never be committed, printed, logged, or pasted into docs.
 
+### Admin Active Jobs Browser Map Environment Activation
+
+- On 2026-07-01 21:30 SGT, Google Cloud project `Prestige Limo Ops Maps` / `prestige-limo-ops-maps` was used for the browser map key setup.
+- The existing `Maps Platform API Key` was inspected and left unchanged because it is used for non-browser Maps APIs and should not be repurposed as the browser key.
+- A separate browser-safe Google Maps key was created externally for the active jobs browser map, restricted to website referrer `https://app.prestigelimo.sg/*` and Maps JavaScript API only.
+- Vercel production env was configured externally with `PRESTIGE_ADMIN_ACTIVE_JOBS_MAP_BROWSER_PROVIDER=google_maps_javascript`, `PRESTIGE_GOOGLE_MAPS_BROWSER_API_KEY`, and `PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS=https://app.prestigelimo.sg`.
+- Production was redeployed from the current deployment through the Vercel web UI so the new env values are available to `https://app.prestigelimo.sg`.
+- Redacted live config proof on `https://app.prestigelimo.sg/api/admin-active-jobs-map-browser-config` with the same-origin dashboard referer returned status `200`, `ok: true`, `enabled: true`, provider `google_maps_javascript`, and `apiKeyPresent: true`.
+- The proof did not print, log, commit, or paste the API key value. No code, DB schema, driver GPS capture, customer live maps, booking save/load, calendar, billing/payment/PDF/invoice/payout, provider messaging, parser, or customer/driver notification behavior changed.
+
 ### Admin Dispatch Map Location Lookup
 
 - The visible `Suggest` controls under Admin Dispatch Pickup, Drop-off, and Extra stop location fields were removed after live proof showed the production route was safely disabled by env. This avoids a visible button that can only return "not enabled or configured" during real operations.

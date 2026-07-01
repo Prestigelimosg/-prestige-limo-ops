@@ -512,7 +512,7 @@ for (const [label, start, end, expectedDisplayItemMap, requiresVehiclePax] of [
     "completed operational cards",
     "const completedBookingsPanel",
     "const jobCardCopyEditState",
-    "filteredCompletedBookingDisplayItems.map(({ bookingRecord: savedBooking, operationalCard })",
+    "monthGroup.displayItems.map(({ bookingRecord: savedBooking, operationalCard })",
     true,
   ],
 ]) {

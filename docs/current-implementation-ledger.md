@@ -1,13 +1,13 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-36ce3935 Avoid parsing job headers as passengers
+55c376d2 Group completed jobs by month
 
 Latest pushed main/staging runtime checkpoint:
-36ce3935 Avoid parsing job headers as passengers
+55c376d2 Group completed jobs by month
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-36ce3935 Avoid parsing job headers as passengers
+55c376d2 Group completed jobs by month
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -409,7 +409,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Bookings Earlier Jobs Completed History Compact
 
 - Past pickup-date jobs now leave Current / Upcoming and move into Completed / History alongside completed jobs.
-- Completed / History is searchable by passenger/company/flight/route/driver/status and sorted newest first.
+- Completed / History defaults to the latest available pickup month, can switch to `All months`, and keeps search available by passenger/company/flight/route/driver/status.
+- Completed / History rows are grouped under compact monthly headers such as `June 2026`, with known-date months sorted newest first and unknown dates grouped under `Date to confirm`.
 - The Dashboard no longer renders earlier booking cards; it shows a compact count plus an `Open Completed / History` handoff.
 - Expanded Current / Upcoming and Completed / History rows use compact detail strips instead of large mini-cards.
 - Earlier non-completed rows do not show `Undo completed` or `Delete` because they are history rows, not completed-status rows.

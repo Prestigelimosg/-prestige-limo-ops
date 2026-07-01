@@ -119,8 +119,18 @@ assertIncludes(
 );
 assertIncludes(
   saveBookingBlock,
-  "await autoSyncSavedBookingGoogleCalendar(savedBooking);",
-  "Save Booking + CRM Google Calendar auto-sync",
+  "const calendarSyncResult = adminBookingCalendarReadyForRealSync(booking)",
+  "Save Booking + CRM Google Calendar readiness gate",
+);
+assertIncludes(
+  saveBookingBlock,
+  "? await autoSyncSavedBookingGoogleCalendar(savedBooking)",
+  "Save Booking + CRM Google Calendar auto-sync after readiness",
+);
+assertIncludes(
+  saveBookingBlock,
+  "Google Calendar auto-sync skipped because the saved admin draft still has date/time or route details to confirm.",
+  "Save Booking + CRM Google Calendar draft skip message",
 );
 assertExcludes(saveBookingBlock, "adminSavedBookingsApiPath", "Save Booking + CRM path");
 assertExcludes(saveBookingBlock, "/api/admin-saved-bookings", "Save Booking + CRM path");

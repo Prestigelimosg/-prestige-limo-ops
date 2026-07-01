@@ -4890,6 +4890,58 @@ function bookingRecordBelongsInCompletedHistory(bookingRecord: BookingRecord, to
   return bookingRecordIsCompletedStatus(bookingRecord) || bookingRecordIsEarlierJob(bookingRecord, todayKey);
 }
 
+const completedHistoryUnknownMonthKey = "date-tbc";
+
+function bookingRecordCompletedHistoryMonthKey(bookingRecord: BookingRecord) {
+  const dateKey = getBookingDateKey(bookingRecord);
+
+  if (!dateKey || dateKey === "1970-01-01") {
+    return completedHistoryUnknownMonthKey;
+  }
+
+  return dateKey.slice(0, 7);
+}
+
+function completedHistoryMonthLabel(monthKey: string) {
+  if (monthKey === completedHistoryUnknownMonthKey) {
+    return "Date to confirm";
+  }
+
+  if (!/^\d{4}-\d{2}$/.test(monthKey)) {
+    return "Month unavailable";
+  }
+
+  const date = new Date(`${monthKey}-01T00:00:00`);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Month unavailable";
+  }
+
+  return new Intl.DateTimeFormat("en-SG", {
+    month: "long",
+    year: "numeric",
+  }).format(date);
+}
+
+function sortCompletedHistoryMonthKeysNewestFirst(firstMonthKey: string, secondMonthKey: string) {
+  const firstKnown = /^\d{4}-\d{2}$/.test(firstMonthKey);
+  const secondKnown = /^\d{4}-\d{2}$/.test(secondMonthKey);
+
+  if (firstKnown && secondKnown) {
+    return secondMonthKey.localeCompare(firstMonthKey);
+  }
+
+  if (firstKnown) {
+    return -1;
+  }
+
+  if (secondKnown) {
+    return 1;
+  }
+
+  return firstMonthKey.localeCompare(secondMonthKey);
+}
+
 function adminDriverJobStatusReadStateIsCompleted(
   readState: AdminDriverJobStatusReadState | null | undefined,
 ) {
@@ -9575,6 +9627,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   const dashboardDriverJobStatusAutoRequestedRef = useRef<Set<string>>(new Set());
   const [bookingsSearchTerm, setBookingsSearchTerm] = useState("");
   const [completedSearchTerm, setCompletedSearchTerm] = useState("");
+  const [completedMonthFilter, setCompletedMonthFilter] = useState("");
   const [driverSearchTerm, setDriverSearchTerm] = useState("");
   const [saving, setSaving] = useState(false);
   const bookingSaveInFlightKeyRef = useRef<string | null>(null);
@@ -12306,6 +12359,44 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       ),
     [completedBookings, completedSearchTerm],
   );
+  const completedHistoryMonthOptions = useMemo(() => {
+    const monthCounts = new Map<string, number>();
+
+    completedBookings.forEach((bookingRecord) => {
+      const monthKey = bookingRecordCompletedHistoryMonthKey(bookingRecord);
+      monthCounts.set(monthKey, (monthCounts.get(monthKey) || 0) + 1);
+    });
+
+    return Array.from(monthCounts.entries())
+      .map(([monthKey, count]) => ({
+        count,
+        label: completedHistoryMonthLabel(monthKey),
+        monthKey,
+      }))
+      .sort((firstOption, secondOption) =>
+        sortCompletedHistoryMonthKeysNewestFirst(firstOption.monthKey, secondOption.monthKey),
+      );
+  }, [completedBookings]);
+  const latestCompletedHistoryMonthKey = completedHistoryMonthOptions[0]?.monthKey || "all";
+  const selectedCompletedHistoryMonthKey =
+    completedMonthFilter === "all" ||
+    completedHistoryMonthOptions.some((monthOption) => monthOption.monthKey === completedMonthFilter)
+      ? completedMonthFilter || latestCompletedHistoryMonthKey
+      : latestCompletedHistoryMonthKey;
+  const selectedCompletedHistoryMonthLabel =
+    selectedCompletedHistoryMonthKey === "all"
+      ? "All months"
+      : completedHistoryMonthLabel(selectedCompletedHistoryMonthKey);
+  const visibleCompletedBookings = useMemo(
+    () =>
+      selectedCompletedHistoryMonthKey === "all"
+        ? filteredCompletedBookings
+        : filteredCompletedBookings.filter(
+            (bookingRecord) =>
+              bookingRecordCompletedHistoryMonthKey(bookingRecord) === selectedCompletedHistoryMonthKey,
+          ),
+    [filteredCompletedBookings, selectedCompletedHistoryMonthKey],
+  );
   const hasBookingsSearch = Boolean(clean(bookingsSearchTerm));
   const hasCompletedSearch = Boolean(clean(completedSearchTerm));
   const loadedBookingIds = new Set(operationalBookings.map((bookingRecord) => String(bookingRecord.id)));
@@ -12437,7 +12528,66 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   const filteredRecentBookingDisplayItems =
     buildLoadBookingsOperationalDisplayItems(filteredRecentBookings, { useTypedOperationalOrder: true });
   const filteredCompletedBookingDisplayItems =
-    buildLoadBookingsOperationalDisplayItems(filteredCompletedBookings, { useTypedOperationalOrder: true });
+    buildLoadBookingsOperationalDisplayItems(visibleCompletedBookings, { useTypedOperationalOrder: true });
+  const completedHistoryMonthGroups = useMemo(() => {
+    const groups = new Map<
+      string,
+      {
+        completedCount: number;
+        displayItems: LoadBookingsOperationalDisplayItem[];
+        driverCompletedCount: number;
+        earlierCount: number;
+        monthKey: string;
+        monthLabel: string;
+        totalCount: number;
+      }
+    >();
+
+    filteredCompletedBookingDisplayItems.forEach((displayItem) => {
+      const monthKey = bookingRecordCompletedHistoryMonthKey(displayItem.bookingRecord);
+      const existingGroup =
+        groups.get(monthKey) ||
+        {
+          completedCount: 0,
+          displayItems: [],
+          driverCompletedCount: 0,
+          earlierCount: 0,
+          monthKey,
+          monthLabel: completedHistoryMonthLabel(monthKey),
+          totalCount: 0,
+        };
+
+      const isCompletedStatus = bookingRecordIsCompletedStatus(displayItem.bookingRecord);
+      const isDriverCompletedHistoryJob =
+        !isCompletedStatus && bookingRecordHasCompletedDriverReport(displayItem.bookingRecord);
+      const isEarlierHistoryJob = bookingRecordIsEarlierJob(displayItem.bookingRecord, todayKey);
+
+      existingGroup.displayItems.push(displayItem);
+      existingGroup.totalCount += 1;
+
+      if (isCompletedStatus) {
+        existingGroup.completedCount += 1;
+      }
+
+      if (isDriverCompletedHistoryJob) {
+        existingGroup.driverCompletedCount += 1;
+      }
+
+      if (!isCompletedStatus && isEarlierHistoryJob) {
+        existingGroup.earlierCount += 1;
+      }
+
+      groups.set(monthKey, existingGroup);
+    });
+
+    return Array.from(groups.values()).sort((firstGroup, secondGroup) =>
+      sortCompletedHistoryMonthKeysNewestFirst(firstGroup.monthKey, secondGroup.monthKey),
+    );
+  }, [
+    bookingRecordHasCompletedDriverReport,
+    filteredCompletedBookingDisplayItems,
+    todayKey,
+  ]);
 
   function update(field: keyof BookingForm, value: string) {
     setCustomerMatchFeedback(null);
@@ -17178,24 +17328,44 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             <div>
               <h3 className="text-sm font-semibold text-slate-800">Completed / Earlier Jobs</h3>
               <p className="text-xs text-slate-500">
-                Completed jobs and earlier pickup dates live here, newest first.
+                Monthly archive by pickup date. Latest month opens first; choose All months for a full search.
+              </p>
+              <p className="mt-1 text-xs font-medium text-slate-600">
+                Showing {visibleCompletedBookings.length} of {filteredCompletedBookings.length} matching jobs in{" "}
+                {selectedCompletedHistoryMonthLabel}.
               </p>
             </div>
-            <div className="flex flex-col gap-2 sm:flex-row lg:min-w-[460px]">
-              <label className="flex-1">
+            <div className="grid gap-2 sm:grid-cols-[minmax(10rem,14rem)_minmax(14rem,1fr)_auto] lg:min-w-[620px]">
+              <label>
+                <span className="sr-only">Completed month</span>
+                <select
+                  className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                  data-completed-month-filter="true"
+                  onChange={(event) => setCompletedMonthFilter(event.target.value)}
+                  value={selectedCompletedHistoryMonthKey}
+                >
+                  <option value="all">All months</option>
+                  {completedHistoryMonthOptions.map((monthOption) => (
+                    <option key={monthOption.monthKey} value={monthOption.monthKey}>
+                      {monthOption.label} ({monthOption.count})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
                 <span className="sr-only">Search completed and earlier jobs</span>
                 <input
-                  className="h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-base outline-none transition placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                  className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
                   data-completed-search-input="true"
                   onChange={(event) => setCompletedSearchTerm(event.target.value)}
-                  placeholder="Search completed/earlier passenger, company, flight, route, driver, status"
+                  placeholder="Search passenger, company, flight, route, driver, status"
                   type="search"
                   value={completedSearchTerm}
                 />
               </label>
               {hasCompletedSearch ? (
                 <button
-                  className="h-11 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                  className="h-10 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
                   onClick={() => setCompletedSearchTerm("")}
                   type="button"
                 >
@@ -17204,20 +17374,47 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               ) : null}
             </div>
           </div>
-          {hasCompletedSearch && filteredCompletedBookings.length === 0 ? (
+          {visibleCompletedBookings.length === 0 ? (
             <p
               className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
               data-completed-search-empty="true"
             >
-              No matching completed/earlier jobs found.
+              No completed/earlier jobs found for this month/search.
             </p>
           ) : null}
-          {filteredCompletedBookings.length > 0 ? (
+          {visibleCompletedBookings.length > 0 ? (
           <div
-            className="mt-3 max-h-[32rem] space-y-2 overflow-auto"
+            className="mt-3 max-h-[32rem] space-y-3 overflow-auto rounded-md border border-stone-200 bg-white p-2"
             data-completed-history-list="true"
+            data-completed-history-monthly-list="true"
           >
-            {filteredCompletedBookingDisplayItems.map(({ bookingRecord: savedBooking, operationalCard }) => {
+            {completedHistoryMonthGroups.map((monthGroup) => (
+              <section
+                className="rounded-md border border-stone-200 bg-stone-50"
+                data-completed-history-month-group={monthGroup.monthKey}
+                key={`completed-month-${monthGroup.monthKey}`}
+              >
+                <div className="sticky top-0 z-10 flex flex-col gap-1 rounded-t-md border-b border-stone-200 bg-stone-100 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-900">{monthGroup.monthLabel}</h4>
+                    <p className="text-xs text-slate-500">{monthGroup.totalCount} jobs in this month group.</p>
+                  </div>
+                  <div className="flex flex-wrap gap-1 text-[11px] font-semibold text-slate-600">
+                    {monthGroup.completedCount > 0 ? (
+                      <span className="rounded-full bg-slate-200 px-2 py-0.5">Completed {monthGroup.completedCount}</span>
+                    ) : null}
+                    {monthGroup.earlierCount > 0 ? (
+                      <span className="rounded-full bg-white px-2 py-0.5 ring-1 ring-stone-200">Earlier {monthGroup.earlierCount}</span>
+                    ) : null}
+                    {monthGroup.driverCompletedCount > 0 ? (
+                      <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700 ring-1 ring-emerald-200">
+                        Driver completed {monthGroup.driverCompletedCount}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="space-y-2 p-2" data-completed-history-month-jobs={monthGroup.monthKey}>
+            {monthGroup.displayItems.map(({ bookingRecord: savedBooking, operationalCard }) => {
               const routePoints = getRoutePoints(savedBooking);
               const pickup = operationalCard.pickup_address || routePoints[0] || "Pickup";
               const dropoff =
@@ -17401,6 +17598,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                 </article>
               );
             })}
+                </div>
+              </section>
+            ))}
           </div>
           ) : null}
         </div>

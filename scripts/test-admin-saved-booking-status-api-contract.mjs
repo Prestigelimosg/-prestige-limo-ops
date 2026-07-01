@@ -389,6 +389,30 @@ try {
 
   setEnv(enabledEnv());
 
+  const dashboardNoTokenMock = installMockClient(seed);
+  const dashboardNoTokenResult = await routeJson(
+    await route.PATCH(
+      jsonRequest("http://localhost/api/admin-saved-booking-statuses", {
+        booking_id: "status-booking-1",
+        status: "completed",
+      }, {
+        referer: "http://localhost/",
+        "content-type": "application/json",
+        "x-prestige-admin-purpose": "admin-booking-persistence",
+      }),
+    ),
+  );
+
+  assert.equal(dashboardNoTokenResult.status, 200);
+  assert.equal(dashboardNoTokenResult.body.ok, true);
+  assert.equal(dashboardNoTokenResult.body.booking.id, "status-booking-1");
+  assert.equal(dashboardNoTokenResult.body.booking.status, "completed");
+  assert.equal(dashboardNoTokenMock.createdClients.length, 1);
+  assert.equal(dashboardNoTokenMock.client.updateHistory.length, 1);
+  assertNoUnsafeResponse(dashboardNoTokenResult, "dashboard no-token response");
+
+  setEnv(enabledEnv());
+
   const invalidPayloadMock = installMockClient(seed);
   const invalidPayloadResult = await routeJson(
     await route.PATCH(

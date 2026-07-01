@@ -41,7 +41,9 @@ function isProductionRuntime() {
 }
 
 function requireAdminDispatcherBoundary(request: Request): AdminDispatcherBoundaryCheck {
-  const boundary = resolveAdminDispatcherBoundary(request, adminBookingPersistencePurpose);
+  const boundary = resolveAdminDispatcherBoundary(request, adminBookingPersistencePurpose, {
+    allowServerSessionRoleMethodsWithoutRequestToken: ["PATCH"],
+  });
 
   if (!boundary.ok) {
     return {

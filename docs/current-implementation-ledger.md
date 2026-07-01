@@ -7,7 +7,7 @@ Latest pushed main/staging runtime checkpoint:
 b2fec648 Allow multi-driver live location list
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-36ce3935 Avoid parsing job headers as passengers
+b78c26d6 Record live multi-driver location proof
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -35,6 +35,10 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No broad driver tracking, no wildcard job tracking, no browser Maps JavaScript key, no Vercel CLI, env value change, DB schema change, provider send, email/WhatsApp/SMS/Telegram send, billing/payment/PDF/invoice/payout, parser, Save Booking, `/api/admin-saved-bookings`, OTS/photo/storage, or calendar behavior changed.
 - Focused guard coverage lives in `scripts/test-driver-live-location-runtime-control-ui-guard.mjs`.
 - Live Mac Chrome proof on `https://app.prestigelimo.sg/` after pushing `71f56f99` confirmed the Active Jobs Map UI shows `Add saved bookings one by one`, `Selected: 0`, `Add`, `Refresh`, `Close all`, and the updated admin-only boundary with `browser map key` blocked. No live `Add`/`Close all` action was clicked, so runtime location settings were not changed during proof.
+- Live Mac Chrome proof on `https://app.prestigelimo.sg/` after pushing `b78c26d6` loaded saved booking `ADM-20260630171930`, opened Active Jobs Map for that one booking, created/copied the driver job link, and confirmed the live driver page route itself loads the driver page and exposes the `Share Location` control.
+- Actual Mac Chrome geolocation was attempted first. Chrome did not grant the browser location permission, the driver page showed `Location permission was not granted`, admin marker count stayed `0`, then `Stop Sharing` and `Close all` were run so no runtime selection was left open.
+- A controlled visible Chrome proof then used a Singapore test coordinate to verify the live wiring without pretending it was the user's physical GPS: admin runtime opened with `selected_count: 1`, driver `Share Location` returned `Location shared for this job only`, the driver page status settled to `Sharing` with permission `Allowed`, admin active-jobs read returned `marker_count: 1`, driver `Stop Sharing` returned `Location sharing stopped for this job`, admin read returned `marker_count: 0`, and `Close all` returned runtime `closed` with `selected_count: 0`.
+- The proof did not print or expose the driver token in the ledger, did not use a browser Maps JavaScript key, did not embed a map, did not send customer/provider/email/WhatsApp/SMS/Telegram messages, did not change env/DB schema, did not create billing/payment/PDF/invoice/payout records, and left the admin live-location runtime closed.
 
 ### Admin Dispatch Draft Save Must-Fill Removal
 

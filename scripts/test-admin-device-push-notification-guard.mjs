@@ -88,6 +88,8 @@ assertIncludes(
     "PRESTIGE_ADMIN_DEVICE_PUSH_VAPID_PRIVATE_KEY",
     "PRESTIGE_ADMIN_DEVICE_PUSH_CONTACT_EMAIL",
     "admin_device_push_subscriptions",
+    "adminDevicePushProviderTimeoutMs",
+    "timeout: adminDevicePushProviderTimeoutMs",
     "New booking request received. Open Dashboard to review.",
     "New booking request",
     "whatsapp_enabled: false",

@@ -20,6 +20,7 @@ const adminDevicePushContactEmailName =
   "PRESTIGE_ADMIN_DEVICE_PUSH_CONTACT_EMAIL";
 const supabaseUrlName = "SUPABASE_URL";
 const supabaseServiceRoleKeyName = "SUPABASE_SERVICE_ROLE_KEY";
+const adminDevicePushProviderTimeoutMs = 5000;
 
 const requiredEnvNames = [
   adminDevicePushNotificationEnvGateName,
@@ -547,6 +548,7 @@ async function sendWebPush(
   );
   await webPush.sendNotification(subscription, JSON.stringify(payload), {
     TTL: 120,
+    timeout: adminDevicePushProviderTimeoutMs,
   });
 }
 

@@ -3632,6 +3632,41 @@ assert.deepEqual(parseJobCardBookingMessage(
   cleanedLines: [pickupTimeDateAddressOnlySample],
 });
 
+const departureRouteRightSideFlightSample = `*2 x VVV - DEP*
+
+2 Jul (Thursday), 2200hrs
+
+Intercontinental Robertson > ET639
+
+Mr. Temitope Taiye Elijah  $55`;
+assert.deepEqual(parseJobCardBookingMessage(
+  departureRouteRightSideFlightSample,
+  { referenceDate: new Date(2026, 6, 1, 10, 0, 0) },
+), {
+  success: true,
+  company: '',
+  bookingType: 'DEP',
+  vehicle: 'VVV',
+  date: '2026-07-02',
+  time: '2200hrs',
+  flight: 'ET639',
+  pickup: 'Intercontinental Robertson',
+  dropoff: 'Changi Airport',
+  booker: '',
+  bookerEmail: '',
+  name: 'Mr Temitope Taiye Elijah',
+  pax: '1',
+  driverName: '',
+  driverContact: '',
+  bookerContact: '',
+  cleanedLines: [
+    '*2 x VVV - DEP*',
+    '2 Jul (Thursday), 2200hrs',
+    'Intercontinental Robertson > ET639',
+    'Mr. Temitope Taiye Elijah  $55',
+  ],
+});
+
 const multiTerminalArrivalChangeMessage = `Hi William, some changes for tomorrow arrival:
 Total 2 pickup from T3 and T4 to Grand Hyatt below:
 T3: MU567 Shanghai - Singapore Arrival 15:45 (1 Passenger - Ye Yueqin)

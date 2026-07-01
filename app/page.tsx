@@ -40,6 +40,7 @@ import {
   defaultCompanyProfile,
   type PublicCompanyProfile,
 } from "../lib/company-profile-shared";
+import { formatWhatsAppJobCard } from "../lib/whatsapp-job-card";
 
 const adminLegacyDataPurpose = "admin-booking-persistence";
 const adminWorkflowStatusApiPath = "/api/admin-booking-workflow-statuses";
@@ -11703,26 +11704,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   }, [booking, route]);
 
   const jobCardPreview = useMemo(() => {
-    const flightLine = clean(booking.flight) ? `Flight: ${clean(booking.flight)}\n` : "";
-    const safeCompany = normalizeCompanyAccount(booking.company, booking.bookerEmail);
-    const companyLine = safeCompany ? `Company: ${safeCompany}\n` : "";
-    const childSeatLine =
-      clean(booking.childSeatRequired) === "yes"
-        ? formatChildSeatNote(booking.childSeatCount, booking.childSeatType)
-        : "";
-
-    return [
-      `${clean(booking.vehicle) || "Vehicle"} ${clean(booking.bookingType) || "Booking"}`,
-      formatPickupDateTime(booking.date, booking.time),
-      "",
-      `${flightLine}${formatPrivacySafeRoute(booking)}`,
-      "",
-      companyLine.trimEnd(),
-      `Pax: ${Number(clean(booking.pax)) || 1}`,
-      childSeatLine,
-    ]
-      .filter(Boolean)
-      .join("\n");
+    return formatWhatsAppJobCard(booking);
   }, [booking]);
 
   const draftPricing = useMemo(() => {

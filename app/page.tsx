@@ -2811,6 +2811,8 @@ const adminActiveJobsBrowserMapScriptLoaders = new Map<
   string,
   Promise<BrowserGoogleMapsNamespace>
 >();
+const adminActiveJobsBrowserMapCallbackName =
+  "__prestigeAdminActiveJobsBrowserMapLoaded";
 
 function readWindowGoogleMaps() {
   const googleRuntime = (window as unknown as {
@@ -2831,13 +2833,14 @@ async function resolveAdminActiveJobsBrowserGoogleMapsLibraries(
 
   if (maps.importLibrary) {
     const mapsLibrary = await maps.importLibrary("maps");
+    const markerLibrary = await maps.importLibrary("marker");
 
     return {
       ...maps,
       ...mapsLibrary,
       LatLngBounds: mapsLibrary.LatLngBounds || maps.LatLngBounds,
       Map: mapsLibrary.Map || maps.Map,
-      Marker: maps.Marker,
+      Marker: markerLibrary.Marker || maps.Marker,
     };
   }
 
@@ -2847,13 +2850,16 @@ async function resolveAdminActiveJobsBrowserGoogleMapsLibraries(
 function loadAdminActiveJobsBrowserGoogleMaps(apiKey: string) {
   const existingMaps = readWindowGoogleMaps();
 
-  if (existingMaps?.Map && existingMaps.Marker && existingMaps.LatLngBounds) {
+  if (
+    existingMaps?.importLibrary ||
+    (existingMaps?.Map && existingMaps.Marker && existingMaps.LatLngBounds)
+  ) {
     return resolveAdminActiveJobsBrowserGoogleMapsLibraries(existingMaps);
   }
 
   const scriptSource = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(
     apiKey,
-  )}&v=weekly&loading=async&libraries=maps,marker`;
+  )}&v=weekly&loading=async&callback=${adminActiveJobsBrowserMapCallbackName}`;
   const existingLoader = adminActiveJobsBrowserMapScriptLoaders.get(scriptSource);
 
   if (existingLoader) {
@@ -2861,29 +2867,57 @@ function loadAdminActiveJobsBrowserGoogleMaps(apiKey: string) {
   }
 
   const loader = new Promise<BrowserGoogleMapsNamespace>((resolve, reject) => {
+    let settled = false;
+    let callbackTimeout: number | null = null;
+    const fail = (message: string) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      if (callbackTimeout !== null) {
+        window.clearTimeout(callbackTimeout);
+      }
+      reject(new Error(message));
+    };
+    callbackTimeout = window.setTimeout(() => {
+      fail("Google Maps JavaScript API did not load safely.");
+    }, 12000);
     const finish = () => {
+      if (settled) {
+        return;
+      }
+
       const maps = readWindowGoogleMaps();
 
       void resolveAdminActiveJobsBrowserGoogleMapsLibraries(maps)
         .then((resolvedMaps) => {
           if (resolvedMaps.Map && resolvedMaps.Marker && resolvedMaps.LatLngBounds) {
+            settled = true;
+            if (callbackTimeout !== null) {
+              window.clearTimeout(callbackTimeout);
+            }
             resolve(resolvedMaps);
             return;
           }
 
-          reject(new Error("Google Maps JavaScript API did not load safely."));
+          fail("Google Maps JavaScript API did not load safely.");
         })
-        .catch(() => reject(new Error("Google Maps JavaScript API did not load safely.")));
+        .catch(() => fail("Google Maps JavaScript API did not load safely."));
+    };
+    const browserWindow = window as typeof window & {
+      [adminActiveJobsBrowserMapCallbackName]?: () => void;
     };
     const existingScript = document.querySelector<HTMLScriptElement>(
       'script[data-admin-active-jobs-browser-map-loader="true"]',
     );
 
+    browserWindow[adminActiveJobsBrowserMapCallbackName] = finish;
+
     if (existingScript) {
-      existingScript.addEventListener("load", finish, { once: true });
       existingScript.addEventListener(
         "error",
-        () => reject(new Error("Google Maps JavaScript API failed to load.")),
+        () => fail("Google Maps JavaScript API failed to load."),
         { once: true },
       );
       return;
@@ -2894,10 +2928,9 @@ function loadAdminActiveJobsBrowserGoogleMaps(apiKey: string) {
     script.dataset.adminActiveJobsBrowserMapLoader = "true";
     script.defer = true;
     script.src = scriptSource;
-    script.addEventListener("load", finish, { once: true });
     script.addEventListener(
       "error",
-      () => reject(new Error("Google Maps JavaScript API failed to load.")),
+      () => fail("Google Maps JavaScript API failed to load."),
       { once: true },
     );
     document.head.appendChild(script);

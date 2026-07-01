@@ -101,9 +101,11 @@ for (const fragment of [
   '"/api/admin-active-jobs-map-browser-config";',
   "loadAdminActiveJobsBrowserGoogleMaps",
   "https://maps.googleapis.com/maps/api/js?key=",
-  "loading=async&libraries=maps,marker",
+  "loading=async&callback=",
+  "adminActiveJobsBrowserMapCallbackName",
   "resolveAdminActiveJobsBrowserGoogleMapsLibraries",
   'maps.importLibrary("maps")',
+  'maps.importLibrary("marker")',
   "waitForAdminActiveJobsBrowserMapDom",
   ".gm-style",
   "Google Maps visual DOM did not render safely.",
@@ -114,6 +116,13 @@ for (const fragment of [
   "Embedded map off. Use Driver Pin",
 ]) {
   assertIncludes(appPage, fragment, `admin browser map UI fragment ${fragment}`);
+}
+
+for (const forbiddenFragment of [
+  "loading=async&libraries=maps,marker",
+  'script.addEventListener("load", finish',
+]) {
+  assertExcludes(appPage, forbiddenFragment, "admin browser map callback readiness");
 }
 
 assertOrder(

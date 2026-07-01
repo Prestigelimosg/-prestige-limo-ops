@@ -3619,74 +3619,18 @@ async function runChromeTest() {
         evaluate(`(() => {
           const bodyText = document.body.innerText;
 
-          return bodyText.includes("Needs review before saving") &&
-            bodyText.includes("Missing pickup date") &&
-            bodyText.includes("Missing pickup time") &&
-            bodyText.includes("Missing drop-off") &&
-            bodyText.includes("Missing flight for arrival");
+          return bodyText.includes("Job Card Preview") &&
+            bodyText.includes("Preview job card copy") &&
+            !bodyText.includes("Needs review before saving") &&
+            !bodyText.includes("Missing pickup date") &&
+            !bodyText.includes("Missing pickup time") &&
+            !bodyText.includes("Missing drop-off") &&
+            !bodyText.includes("Missing flight for arrival") &&
+            !bodyText.includes("I reviewed these warnings and still want to save");
         })()`),
       10000,
-      "Needs Review warning",
+      "admin draft missing-field warnings removed",
     );
-
-    const savedCountBeforeBlockedSave = await evaluate(
-      `document.body.innerText.match(/Saved\\s+(\\d+)/)?.[1] || ""`,
-    );
-    await evaluate(`(() => {
-      window.__prestigeFetchCalls = [];
-      window.__prestigeOriginalFetch = window.__prestigeOriginalFetch || window.fetch.bind(window);
-      window.fetch = (...args) => {
-        const target = args[0]?.url || args[0];
-        window.__prestigeFetchCalls.push(String(target));
-        return window.__prestigeOriginalFetch(...args);
-      };
-    })()`);
-
-    const clickedBlockedSave = await evaluate(`(() => {
-      const saveButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Save Booking + CRM",
-      );
-
-      if (!saveButton || saveButton.disabled) {
-        return false;
-      }
-
-      saveButton.click();
-      return true;
-    })()`);
-    assert.equal(clickedBlockedSave, true, "Expected Save Booking + CRM button to be clickable");
-
-    const blockedSaveState = await waitForCondition(
-      async () => {
-        const candidateState = await evaluate(`(() => {
-          const bodyText = document.body.innerText;
-
-          return {
-            bodyText,
-            fetchCalls: window.__prestigeFetchCalls || [],
-            savedCount: bodyText.match(/Saved\\s+(\\d+)/)?.[1] || "",
-          };
-        })()`);
-
-        return candidateState?.bodyText?.includes("Please review warnings before saving.")
-          ? candidateState
-          : false;
-      },
-      10000,
-      "blocked Needs Review save message",
-    );
-
-    assert.deepEqual(
-      blockedSaveState.fetchCalls,
-      [],
-      `Expected blocked Needs Review save to make no network calls, got ${blockedSaveState.fetchCalls.join(", ")}`,
-    );
-    assert.equal(
-      blockedSaveState.savedCount,
-      savedCountBeforeBlockedSave,
-      "Expected blocked Needs Review save not to change recent booking count",
-    );
-    assert.doesNotMatch(blockedSaveState.bodyText, /Booking saved successfully/);
 
     const clickedClearAfterNeedsReview = await evaluate(`(() => {
       const clearButton = [...document.querySelectorAll("button")].find(
@@ -13090,15 +13034,6 @@ async function runChromeTest() {
       "4",
       "driver profile delete save guard pax change",
     );
-    await evaluate(`(() => {
-      const reviewCheckbox = [...document.querySelectorAll("label")].find((label) =>
-        label.textContent.includes("I reviewed these warnings and still want to save"),
-      )?.querySelector("input[type='checkbox']");
-
-      if (reviewCheckbox && !reviewCheckbox.checked) {
-        reviewCheckbox.click();
-      }
-    })()`);
 
     await evaluate(`(() => {
       window.__prestigeFetchCalls = [];

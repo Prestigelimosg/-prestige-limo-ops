@@ -1,16 +1,26 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-b9b3bf98 Format WhatsApp job card preview
+36ce3935 Avoid parsing job headers as passengers
 
 Latest pushed main/staging runtime checkpoint:
-284766a3 Classify pickup-only parser drafts as transfer
+36ce3935 Avoid parsing job headers as passengers
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-0a41c415 Record pickup-only transfer parser checkpoint
+36ce3935 Avoid parsing job headers as passengers
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Admin Dispatch Draft Save Must-Fill Removal
+
+- Admin Dispatch fields no longer show required asterisks; Save + CRM can save an admin draft even when customer/contact/date/route fields are blank.
+- Blank admin draft values are saved through safe `To Confirm` placeholders where the `/api/admin-bookings` contract requires text, while optional Booker email still validates only when typed.
+- The old Booker WhatsApp / Contact preflight and the old “review warnings before saving” checkbox gate were removed from the admin Save + CRM path.
+- Google Calendar auto-sync is skipped for incomplete admin drafts that do not have real date/time or route details, so placeholder draft saves do not create fake calendar events.
+- Public/customer booking request validation is separate and was not changed by this admin Dispatch draft lane.
+- This keeps Save + CRM on `POST /api/admin-bookings`; it does not use `/api/admin-saved-bookings`, change parser behavior, change env/DB schema, send email/providers, activate Stripe/payment, touch invoice/PDF/payout/pricing, or activate GPS/live-location.
+- Guard coverage lives in `scripts/test-dispatch-action-feedback-compact-guard.mjs`.
 
 ### WhatsApp Job Card Preview Format
 
@@ -630,7 +640,9 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer Copy, Job Card, Driver Dispatch, Driver Job Link, Email/WhatsApp/SMS checks, and in-app send controls use result labels only when their existing local state confirms success.
 - The Driver Job Link card no longer renders the active-link status pill, copied success box, or loaded-active-link banner shown below the buttons; only errors remain as separate feedback.
 - The Job Card Preview action toolbar is compact and wrapped; Save + CRM now sits in its own primary save group, separated from Calendar/Edit/Copy utility buttons and Manual Extra Charges, without changing the save or calendar handlers.
-- Save Booking + CRM now preflights Booker WhatsApp / Contact before calling `/api/admin-bookings`, matching the admin persistence `contact_phone` contract.
+- Admin Dispatch fields no longer show required asterisks; Save + CRM can save an admin draft even when customer/contact/date/route fields are blank.
+- Blank admin draft values are saved through safe `To Confirm` placeholders where the `/api/admin-bookings` contract requires text, while optional Booker email still validates only when typed.
+- Google Calendar auto-sync is skipped for incomplete admin drafts that do not have real date/time or route details, so placeholder draft saves do not create fake calendar events.
 - Job Card Preview now shows Save Booking + CRM feedback beside the compact toolbar, so failed/saved state is visible where the operator clicks instead of only in the lower persistence panel.
 - Job Card extra charges, Job Card preview, Driver Dispatch preview, Driver Job Link preview, and admin readiness chips are collapsed behind compact disclosure rows.
 - This keeps Save Booking + CRM on `POST /api/admin-bookings`; it does not change driver job link API payloads, provider sends, DB schema, env values, GPS/live location, billing/payment/PDF/invoice/payout, parser behavior, or deploy behavior.

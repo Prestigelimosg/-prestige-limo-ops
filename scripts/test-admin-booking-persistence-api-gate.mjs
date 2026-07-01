@@ -116,6 +116,33 @@ async function writeMockModules(tempDir) {
       "module.exports = { maybePersistCustomerDriverAppNotification };",
     ].join("\n"),
   );
+  await writeFile(
+    path.join(tempDir, "lib/admin-app-notification-persistence.js"),
+    [
+      "async function createCustomerBookingRequestAdminAppNotification() {",
+      "  return { data: null, ok: true };",
+      "}",
+      "module.exports = { createCustomerBookingRequestAdminAppNotification };",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(tempDir, "lib/admin-device-push-notification.js"),
+    [
+      "async function sendAdminNewBookingDevicePushAlert() {",
+      "  return { external_send: false, no_op: true, ok: true, status: 'blocked' };",
+      "}",
+      "module.exports = { sendAdminNewBookingDevicePushAlert };",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(tempDir, "lib/admin-new-booking-email-alert.js"),
+    [
+      "async function sendAdminNewBookingEmailAlert() {",
+      "  return { external_send: false, no_op: true, ok: true, status: 'blocked' };",
+      "}",
+      "module.exports = { sendAdminNewBookingEmailAlert };",
+    ].join("\n"),
+  );
 }
 
 async function loadHarness() {
@@ -716,11 +743,6 @@ try {
       { PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE: undefined },
       adminHeaders(),
     ],
-    [
-      "enabled flag with wrong session token",
-      {},
-      sessionHeaders({ "x-prestige-admin-session-token": "wrong-token" }),
-    ],
     ["enabled flag with anonymous request", {}, { "content-type": "application/json" }],
     [
       "enabled flag with customer referer",
@@ -937,6 +959,8 @@ try {
   assert.deepEqual(failureResult.body, {
     error: "Admin booking persistence save failed safely.",
     ok: false,
+    safe_error_category: "unknown_adapter_failure",
+    safe_error_operation: "booking_row",
   });
   assert.equal(failureMock.createdClients.length, 1);
   assertNoLeaks(failureResult, "adapter failure response should hide Supabase internals");

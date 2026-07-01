@@ -2572,13 +2572,7 @@ const internalPrestigeAccountTokens = new Set([
   "prestigetransport",
 ]);
 
-const requiredFields: Array<keyof BookingForm> = [
-  "date",
-  "time",
-  "pickup",
-  "dropoff",
-  "booker",
-];
+const requiredFields: Array<keyof BookingForm> = [];
 
 function createInitialBooking(): BookingForm {
   return {
@@ -2771,60 +2765,12 @@ function isDeleteCompletedJobMessage(message: Message | null | undefined) {
 
 function getNeedsReviewWarnings(booking: BookingForm) {
   const warnings: string[] = [];
-  const bookingType = normalizeBookingType(booking.bookingType);
   const paxValue = Number(clean(booking.pax));
   const customerPriceOverride = clean(booking.customerPriceOverride);
   const customerPriceOverrideValue = Number(customerPriceOverride);
 
-  if (!clean(booking.date)) {
-    warnings.push("Missing pickup date");
-  }
-
-  if (!clean(booking.time)) {
-    warnings.push("Missing pickup time");
-  }
-
-  if (!clean(booking.pickup)) {
-    warnings.push("Missing pickup");
-  }
-
-  if (!clean(booking.dropoff)) {
-    warnings.push("Missing drop-off");
-  }
-
-  if (!clean(booking.bookingType)) {
-    warnings.push("Missing booking type");
-  }
-
-  if (!clean(booking.vehicle)) {
-    warnings.push("Missing vehicle");
-  }
-
-  if (!clean(booking.pax) || !Number.isFinite(paxValue) || paxValue < 1) {
-    warnings.push("Missing or invalid pax");
-  }
-
-  if (!clean(booking.name)) {
-    warnings.push("Missing traveler / name");
-  }
-
-  if (!clean(booking.bookerContact)) {
-    warnings.push("Missing Booker WhatsApp / Contact");
-  }
-
-  if (bookingType === "MNG" && !clean(booking.flight)) {
-    warnings.push("Missing flight for arrival");
-  }
-
-  if (normalizeExtraStopCount(booking.extraStopCount) > 0 && !clean(booking.extraStopLocation)) {
-    warnings.push("Extra stop location missing");
-  }
-
-  if (
-    clean(booking.childSeatRequired) === "yes" &&
-    normalizeChildSeatCount(booking.childSeatRequired, booking.childSeatCount) < 1
-  ) {
-    warnings.push("Child seat count missing");
+  if (clean(booking.pax) && (!Number.isFinite(paxValue) || paxValue < 1)) {
+    warnings.push("Pax value is not valid");
   }
 
   if (
@@ -2890,13 +2836,6 @@ function getDispatchReleaseTripWarnings(booking: BookingForm) {
   }
 
   return warnings;
-}
-
-function getReviewAcceptanceKey(booking: BookingForm, warnings = getNeedsReviewWarnings(booking)) {
-  return JSON.stringify({
-    booking,
-    warnings,
-  });
 }
 
 function formatPrivacySafePlace(value: string | null | undefined, fallback: string) {
@@ -5797,6 +5736,19 @@ function formatAdminBookingPickupDateTime(bookingValue: BookingForm) {
   return `${date}T${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:00+08:00`;
 }
 
+const adminDraftPickupDateTimeFallback = "2099-12-31T00:00:00+08:00";
+const adminDraftPickupFallback = "Pickup To Confirm";
+const adminDraftDropoffFallback = "Drop-off To Confirm";
+const adminDraftCustomerFallback = "Customer To Confirm";
+const adminDraftContactFallback = "Contact To Confirm";
+
+function adminBookingCalendarReadyForRealSync(bookingValue: BookingForm) {
+  return Boolean(
+    formatAdminBookingPickupDateTime(bookingValue) &&
+      (clean(bookingValue.pickup) || clean(bookingValue.dropoff)),
+  );
+}
+
 function isAdminShortNoticeReviewRequired(bookingValue: BookingForm, currentTimeMs: number) {
   const pickupTimeMs = parsePickupDateTimeMs(bookingValue.date, bookingValue.time);
 
@@ -5832,32 +5784,28 @@ function buildAdminBookingPersistencePayload(
   bookingReference = createAdminBookingReference(),
 ): AdminBookingPersistenceRequestBody {
   const shortNoticeReviewRequired = isAdminShortNoticeReviewRequired(bookingValue, currentTimeMs);
-  const pickupLocation = clean(bookingValue.pickup) || null;
-  const dropoffLocation = clean(bookingValue.dropoff) || null;
+  const pickupLocation = clean(bookingValue.pickup) || adminDraftPickupFallback;
+  const dropoffLocation = clean(bookingValue.dropoff) || adminDraftDropoffFallback;
   const extraStopLocations = getAdminExtraStopLocations(bookingValue.extraStopLocation);
   const routePointCandidates: Array<AdminBookingPersistenceRequestBody["route_points"][number] | null> = [
-    pickupLocation
-      ? {
-          point_type: "pickup" as const,
-          sequence_number: 1,
-          location_text: pickupLocation,
-          timing_note: null,
-        }
-      : null,
+    {
+      point_type: "pickup" as const,
+      sequence_number: 1,
+      location_text: pickupLocation,
+      timing_note: null,
+    },
     ...extraStopLocations.map((location, index) => ({
       point_type: "stop" as const,
       sequence_number: index + 2,
       location_text: location,
       timing_note: null,
     })),
-    dropoffLocation
-      ? {
-          point_type: "dropoff" as const,
-          sequence_number: extraStopLocations.length + 2,
-          location_text: dropoffLocation,
-          timing_note: null,
-        }
-      : null,
+    {
+      point_type: "dropoff" as const,
+      sequence_number: extraStopLocations.length + 2,
+      location_text: dropoffLocation,
+      timing_note: null,
+    },
   ];
   const routePoints = routePointCandidates.filter(
     (routePoint): routePoint is AdminBookingPersistenceRequestBody["route_points"][number] =>
@@ -5899,27 +5847,35 @@ function buildAdminBookingPersistencePayload(
     normalizeCompanyAccount(bookingValue.company, bookingValue.bookerEmail) ||
     clean(bookingValue.booker) ||
     clean(bookingValue.name) ||
-    null;
+    adminDraftCustomerFallback;
+  const contactDisplayName =
+    clean(bookingValue.booker) ||
+    clean(bookingValue.name) ||
+    customerDisplayName ||
+    adminDraftContactFallback;
   const routeSummary =
     routePoints
       .map((routePoint) => clean(routePoint.location_text))
       .filter(Boolean)
       .join(" > ") || null;
+  const pickupDateTime =
+    formatAdminBookingPickupDateTime(bookingValue) || adminDraftPickupDateTimeFallback;
+  const serviceType = clean(bookingValue.bookingType) || "TRF";
 
   return {
     booking: {
       booking_reference: bookingReference,
       source_channel: "admin-dashboard",
       customer_id: null,
-      pickup_datetime: formatAdminBookingPickupDateTime(bookingValue),
+      pickup_datetime: pickupDateTime,
       pickup_location: pickupLocation,
       dropoff_location: dropoffLocation,
-      route_type: clean(bookingValue.bookingType) || null,
-      service_type: clean(bookingValue.bookingType) || null,
+      route_type: serviceType,
+      service_type: serviceType,
       route_summary: routeSummary,
       customer_display_name: customerDisplayName,
-      contact_display_name: clean(bookingValue.booker) || null,
-      contact_phone: clean(bookingValue.bookerContact) || null,
+      contact_display_name: contactDisplayName,
+      contact_phone: clean(bookingValue.bookerContact) || adminDraftContactFallback,
       contact_email: clean(bookingValue.bookerEmail) || null,
       passenger_name: clean(bookingValue.name) || null,
       passenger_phone: null,
@@ -9905,7 +9861,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   const [dispatchLoadFocusTarget, setDispatchLoadFocusTarget] = useState<"customerCopy" | null>(
     null,
   );
-  const [acceptedReviewWarningKey, setAcceptedReviewWarningKey] = useState("");
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
   const [message, setMessage] = useState<Message>({
     tone: "info",
@@ -11854,16 +11809,11 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     () => [...getNeedsReviewWarnings(booking), ...pricingReviewWarnings],
     [booking, pricingReviewWarnings],
   );
-  const needsReviewAcceptanceKey = useMemo(
-    () => getReviewAcceptanceKey(booking, needsReviewWarnings),
-    [booking, needsReviewWarnings],
-  );
   const manualExtraChargesAmountPreview = clean(booking.manualExtraCharges)
     ? `$${formatMoney(booking.manualExtraCharges)}`
     : "$0.00";
   const manualExtraChargesNotePreview = clean(booking.manualExtraChargesNote) || "Blank";
   const hasNeedsReviewWarnings = needsReviewWarnings.length > 0;
-  const reviewWarningsAccepted = hasNeedsReviewWarnings && acceptedReviewWarningKey === needsReviewAcceptanceKey;
   const customerMatchSuggestion = useMemo(
     () =>
       parsedDebugBooking && !parsedDebugBooking.multipleBookingsDetected
@@ -12600,7 +12550,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   }
 
   function clearReviewAndSaveState() {
-    setAcceptedReviewWarningKey("");
     setBookingSaveMessage(null);
     setCustomerMatchFeedback(null);
     setJobCardCalendarAction(null);
@@ -12677,7 +12626,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     setParsedDebugBooking(null);
     setShowParserDebug(false);
     setMultiBookingNotice(null);
-    setAcceptedReviewWarningKey("");
     setBookingSaveMessage(null);
     setCustomerMatchFeedback(null);
   }
@@ -12832,17 +12780,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   }
 
   function validateBooking() {
-    if (!clean(booking.bookerContact)) {
-      const saveMessage = {
-        tone: "error",
-        text: "Save Booking + CRM needs Booker WhatsApp / Contact before saving.",
-      } satisfies Message;
-
-      setMessage(saveMessage);
-      setBookingSaveMessage(saveMessage);
-      return false;
-    }
-
     if (clean(booking.bookerEmail) && !isValidEmail(booking.bookerEmail)) {
       const saveMessage = {
         tone: "error",
@@ -14289,23 +14226,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       return null;
     }
 
-    const currentNeedsReviewWarnings = getNeedsReviewWarnings(booking);
-    const currentReviewAcceptanceKey = getReviewAcceptanceKey(booking, currentNeedsReviewWarnings);
-
-    if (
-      currentNeedsReviewWarnings.length > 0 &&
-      acceptedReviewWarningKey !== currentReviewAcceptanceKey
-    ) {
-      const reviewMessage = {
-        tone: "error",
-        text: "Please review warnings before saving. Tick the review checkbox above, then save again.",
-      } satisfies Message;
-
-      setMessage(reviewMessage);
-      setBookingSaveMessage(reviewMessage);
-      return null;
-    }
-
     setBookingSaveMessage(null);
 
     if (typeof fetch !== "function") {
@@ -14398,16 +14318,33 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       setMessage(savedMessage);
       setBookingSaveMessage(savedMessage);
       setAdminBookingPersistenceMessage(savedMessage);
-      setAcceptedReviewWarningKey("");
       lastSuccessfulBookingSaveRef.current = {
         bookingId: savedBookingReference,
         key: getBookingSaveGuardKey(savedBookingReference),
         record: savedBooking,
       };
-      const calendarSyncResult = await autoSyncSavedBookingGoogleCalendar(savedBooking);
+      const calendarSyncResult = adminBookingCalendarReadyForRealSync(booking)
+        ? await autoSyncSavedBookingGoogleCalendar(savedBooking)
+        : {
+            eventCount: 0,
+            message:
+              "Google Calendar auto-sync skipped because the saved admin draft still has date/time or route details to confirm.",
+            ok: true,
+            skipped: true,
+          };
+      const calendarSyncSkipped = "skipped" in calendarSyncResult && calendarSyncResult.skipped;
+
+      if (calendarSyncSkipped) {
+        setCalendarAgendaMessage({
+          tone: "info",
+          text: calendarSyncResult.message,
+        });
+      }
       const saveMessage = {
         tone: calendarSyncResult.ok ? "success" : "error",
-        text: calendarSyncResult.ok
+        text: calendarSyncSkipped
+          ? `Operational booking saved: ${savedBookingReference}. Calendar skipped until date/time or route is confirmed; no guest email sent.`
+          : calendarSyncResult.ok
           ? `Operational booking saved: ${savedBookingReference}. Google Calendar auto-synced; reminders included; no guest email sent.`
           : `Operational booking saved: ${savedBookingReference}. ${calendarSyncResult.message}`,
       } satisfies Message;
@@ -30292,24 +30229,13 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
 
             {hasNeedsReviewWarnings ? (
               <div className="order-[33] rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-                <p className="font-semibold">Needs review before saving</p>
-                <p className="mt-1">Please check these fields before saving this booking.</p>
+                <p className="font-semibold">Review notes</p>
+                <p className="mt-1">Check these data-quality notes when practical. Admin can still save drafts.</p>
                 <ul className="mt-2 list-disc space-y-1 pl-5">
                   {needsReviewWarnings.map((warning) => (
                     <li key={warning}>{warning}</li>
                   ))}
                 </ul>
-                <label className="mt-3 flex items-start gap-2 text-sm font-medium">
-                  <input
-                    checked={reviewWarningsAccepted}
-                    className="mt-0.5 h-4 w-4 rounded border-amber-400 text-slate-950 focus:ring-slate-900"
-                    onChange={(event) =>
-                      setAcceptedReviewWarningKey(event.target.checked ? needsReviewAcceptanceKey : "")
-                    }
-                    type="checkbox"
-                  />
-                  <span>I reviewed these warnings and still want to save</span>
-                </label>
               </div>
             ) : null}
 

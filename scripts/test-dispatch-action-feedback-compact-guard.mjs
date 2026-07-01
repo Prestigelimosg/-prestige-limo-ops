@@ -54,6 +54,11 @@ const validateBookingBlock = sectionBetween(
   "function validateBooking",
   "function applyNameMemory",
 );
+const adminDraftPersistencePayloadBlock = sectionBetween(
+  appPage,
+  "const adminDraftPickupDateTimeFallback",
+  "function safeAdminBookingPersistenceCount",
+);
 const saveBookingBlock = sectionBetween(
   appPage,
   "async function saveBooking",
@@ -133,16 +138,53 @@ for (const fragment of [
   assertIncludes(dispatchCopyUiBlock, fragment, `driver job link error-only feedback fragment ${fragment}`);
 }
 
+assertIncludes(
+  appPage,
+  "const requiredFields: Array<keyof BookingForm> = [];",
+  "admin Dispatch required-field marker list",
+);
+assertIncludes(
+  validateBookingBlock,
+  "Booker email must be valid when provided.",
+  "Save Booking + CRM optional email format validation",
+);
+assertExcludes(
+  validateBookingBlock,
+  "Booker WhatsApp / Contact before saving",
+  "Save Booking + CRM admin contact must-fill validation",
+);
+
+for (const fragment of [
+  'adminDraftPickupDateTimeFallback = "2099-12-31T00:00:00+08:00"',
+  'adminDraftPickupFallback = "Pickup To Confirm"',
+  'adminDraftDropoffFallback = "Drop-off To Confirm"',
+  'adminDraftCustomerFallback = "Customer To Confirm"',
+  'adminDraftContactFallback = "Contact To Confirm"',
+  "adminBookingCalendarReadyForRealSync",
+  "pickupLocation = clean(bookingValue.pickup) || adminDraftPickupFallback",
+  "dropoffLocation = clean(bookingValue.dropoff) || adminDraftDropoffFallback",
+  "contact_phone: clean(bookingValue.bookerContact) || adminDraftContactFallback",
+]) {
+  assertIncludes(
+    adminDraftPersistencePayloadBlock,
+    fragment,
+    `admin draft persistence placeholder fragment ${fragment}`,
+  );
+}
+
 for (const fragment of [
   "Save Booking + CRM needs Booker WhatsApp / Contact before saving.",
-  "setBookingSaveMessage(saveMessage);",
+  "Please review warnings before saving. Tick the review checkbox above, then save again.",
+  "I reviewed these warnings and still want to save",
 ]) {
-  assertIncludes(validateBookingBlock, fragment, `Save Booking + CRM validation fragment ${fragment}`);
+  assertExcludes(appPage, fragment, `removed admin must-fill save gate fragment ${fragment}`);
 }
 
 for (const fragment of [
   "setAdminBookingPersistenceMessage(null);",
-  "Please review warnings before saving. Tick the review checkbox above, then save again.",
+  "adminBookingCalendarReadyForRealSync(booking)",
+  "Google Calendar auto-sync skipped because the saved admin draft still has date/time or route details to confirm.",
+  "Calendar skipped until date/time or route is confirmed; no guest email sent.",
   "adminBookingPersistenceFailureDetail",
   "safe_error_category",
   "safe_error_operation",
@@ -189,7 +231,9 @@ for (const phrase of [
   "Customer Copy, Job Card, Driver Dispatch, Driver Job Link, Email/WhatsApp/SMS checks, and in-app send controls use result labels only when their existing local state confirms success.",
   "The Driver Job Link card no longer renders the active-link status pill, copied success box, or loaded-active-link banner shown below the buttons; only errors remain as separate feedback.",
   "The Job Card Preview action toolbar is compact and wrapped; Save + CRM now sits in its own primary save group, separated from Calendar/Edit/Copy utility buttons and Manual Extra Charges, without changing the save or calendar handlers.",
-  "Save Booking + CRM now preflights Booker WhatsApp / Contact before calling `/api/admin-bookings`, matching the admin persistence `contact_phone` contract.",
+  "Admin Dispatch fields no longer show required asterisks; Save + CRM can save an admin draft even when customer/contact/date/route fields are blank.",
+  "Blank admin draft values are saved through safe `To Confirm` placeholders where the `/api/admin-bookings` contract requires text, while optional Booker email still validates only when typed.",
+  "Google Calendar auto-sync is skipped for incomplete admin drafts that do not have real date/time or route details, so placeholder draft saves do not create fake calendar events.",
   "Job Card Preview now shows Save Booking + CRM feedback beside the compact toolbar, so failed/saved state is visible where the operator clicks instead of only in the lower persistence panel.",
   "Job Card extra charges, Job Card preview, Driver Dispatch preview, Driver Job Link preview, and admin readiness chips are collapsed behind compact disclosure rows.",
   "This keeps Save Booking + CRM on `POST /api/admin-bookings`; it does not change driver job link API payloads, provider sends, DB schema, env values, GPS/live location, billing/payment/PDF/invoice/payout, parser behavior, or deploy behavior.",

@@ -1,13 +1,13 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-55c376d2 Group completed jobs by month
+1c4ae397 Group completed jobs by month
 
 Latest pushed main/staging runtime checkpoint:
-55c376d2 Group completed jobs by month
+1c4ae397 Group completed jobs by month
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-55c376d2 Group completed jobs by month
+36ce3935 Avoid parsing job headers as passengers
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.

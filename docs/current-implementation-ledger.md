@@ -1,13 +1,13 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-ee1ce3f8 Add admin active jobs browser map canvas
+beaaa0c5 Render tile fallback inside map slot
 
 Latest pushed main/staging runtime checkpoint:
-ee1ce3f8 Add admin active jobs browser map canvas
+beaaa0c5 Render tile fallback inside map slot
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-cb91a3b7 Record live location Chrome proof
+beaaa0c5 Render tile fallback inside map slot
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -52,6 +52,9 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - After commit `6873c0ec` was pushed and production redeployed, a second live headed proof still failed the same-window embedded marker test: driver sharing succeeded and the admin marker row loaded, but the compact canvas correctly fell back to `Embedded map could not load. Use Driver Pin.` because Google Maps runtime initialization never reached `importLibrary`, `Map`, `Marker`, or `.gm-style` readiness. After commit `16c53d7e` was pushed and production redeployed, Google runtime readiness passed, but Mac Chrome rendered the embedded Maps JavaScript canvas through Google's static map image DOM and legacy `google.maps.Marker` did not produce a visible marker. After commits `956d37eb` and `d4e3f06e` were pushed and production redeployed, the same panel still did not allow Maps JavaScript to paint its map image inside the compact admin panel ancestry; the attempted Google Maps iframe frame also painted blank in live Chrome and was removed.
 - The visible same-window admin map now first tries Google Maps JavaScript in a body-level fixed map host aligned over the compact Active Jobs Map slot, with same-window admin overlay pins rendered from the guarded active driver marker data. The configured browser-safe map route gates this admin-only feature, and the JavaScript path still waits for real Google Maps DOM before reporting `ready`. If Google Maps JavaScript errors or does not render visual DOM, the same host renders a same-window Google road-tile map centered on the active marker and waits for at least one tile image before reporting `ready`, so the admin can see the Google map and guarded marker in the same window instead of a false gray ready surface. If neither in-window Google map host renders, the compact panel falls back to the existing `Embedded map could not load. Use Driver Pin.` state instead of showing a false `1 pin` ready state.
 - Focused guard coverage now locks this visual readiness boundary in `scripts/test-driver-live-location-browser-map-key-readiness-contract-guard.mjs`.
+- Live headed Mac Chrome proof on 2026-07-02 00:09 SGT after deployed commit `beaaa0c5` used the same safe test booking `ADM-20260630171930` with a fresh one-time driver job link. The driver page opened, browser location permission was granted, and `Share Location` returned `Location shared for this job only.` with sharing state `active`.
+- The production admin map read showed marker count `1`, marker row `ADM-20260630171930`, canvas state `ready`, `Live driver map 1 pin`, Google road tiles loaded from the same window, `Map tiles © Google` attribution, and one visible admin overlay marker inside the compact Active Jobs Map panel. The headed-Chrome screenshot verified the embedded same-window map marker was visible in the panel; the external `Driver Pin` fallback remained available but was not needed.
+- Cleanup was completed: `Stop Sharing` cleared the test marker, the fresh driver job link was revoked, the runtime was closed, and the pre-existing runtime selection `CUST-20260628035919-0NIBST` was restored.
 - This pass did not print, log, screenshot, or commit the browser map key value; did not use Vercel CLI; did not change env, DB schema, provider sends, billing/payment/PDF/invoice/payout, parser, Save Booking, customer messaging, driver messaging, customer live maps, address suggestions, or GPS/live-location scope beyond the bounded same-window driver marker proof.
 - Checks passed: browser map key readiness guard, active jobs map contract guard, live-location runtime control UI guard, `npx tsc --noEmit --pretty false`, `npm run lint` with only existing `loadBookings` warnings, `npm run build`, and `git diff --check`.
 

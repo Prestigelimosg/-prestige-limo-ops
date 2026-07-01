@@ -171,7 +171,8 @@ for (const fragment of [
   "invoicedReferenceSetFrom(issuedCustomerInvoices)",
   "normalizedInvoiceReference(row.reference)",
   ".filter((row) => !invoicedReferences.has(normalizedInvoiceReference(row.reference)))",
-  "[issuedCustomerInvoices, regularCustomerBookingListItems]",
+  "regularCustomerSavedBookingBillingReadinessState.closeoutsByReference",
+  "regularCustomerSavedBookingReadState.savedBookings",
   'data-customer-invoice-workspace="true"',
   "Review-only checkpoint. Opening a folder does not create invoice numbers, generate invoices/PDFs, send",
 ]) {

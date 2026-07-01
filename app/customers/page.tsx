@@ -756,7 +756,7 @@ function savedBookingUnbilledRow(
   }
 
   const mockCustomer = findMockCustomerForSavedBooking(booking);
-  const customerId = savedBookingCustomerId(booking) || mockCustomer?.id || reference;
+  const customerId = mockCustomer?.id || savedBookingCustomerId(booking) || reference;
   const customerName =
     String(booking.customer_account ?? "").trim() ||
     mockCustomer?.companyName ||

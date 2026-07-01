@@ -1888,6 +1888,7 @@ export default function MockCustomerDashboardPage() {
     try {
       const params = new URLSearchParams({
         customer_account: selectedRegularCustomer.companyName,
+        customer_id: selectedRegularCustomer.id,
         limit: "10",
       });
       const response = await fetch(`${adminCustomerSavedBookingsApiPath}?${params.toString()}`, {

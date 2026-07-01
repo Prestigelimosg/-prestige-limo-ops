@@ -244,6 +244,14 @@ function sessionHeaders(overrides = {}) {
   };
 }
 
+function customerSurfaceHeaders(overrides = {}) {
+  return {
+    referer: "http://localhost/customers",
+    "x-prestige-admin-purpose": "admin-booking-persistence",
+    ...overrides,
+  };
+}
+
 async function readRouteResponse(response) {
   return {
     body: await response.json(),
@@ -347,9 +355,9 @@ try {
       }),
     ],
     [
-      "wrong token",
+      "wrong purpose",
       new Request("http://localhost/api/admin-customer-saved-bookings?customer_account=UBS", {
-        headers: sessionHeaders({ "x-prestige-admin-session-token": "wrong-token" }),
+        headers: sessionHeaders({ "x-prestige-admin-purpose": "customer-surface" }),
       }),
     ],
   ]) {
@@ -417,11 +425,38 @@ try {
 
   setEnv(enabledEnv());
 
+  const customerDashboardMock = installMockClient(seed);
+  const customerDashboardReadResult = await readRouteResponse(
+    await route.GET(
+      new Request("http://localhost/api/admin-customer-saved-bookings?customer_id=customer-ubs&limit=10", {
+        headers: customerSurfaceHeaders(),
+      }),
+    ),
+  );
+
+  assert.equal(customerDashboardReadResult.status, 200);
+  assert.equal(customerDashboardReadResult.body.ok, true);
+  assert.deepEqual(customerDashboardReadResult.body.summary, {
+    matched_count: 2,
+    recent_read_count: 3,
+    returned_count: 2,
+  });
+  assert.deepEqual(
+    customerDashboardReadResult.body.saved_bookings.map((booking) => booking.booking_reference),
+    ["UBS-SAFE-002", "UBS-SAFE-001"],
+  );
+  assert.equal(customerDashboardMock.client.operations.length, 0);
+  assert.equal(customerDashboardMock.client.selectHistory.length, 1);
+  assert.equal(customerDashboardMock.client.selectHistory[0].table, "bookings");
+  assertNoLeaks(customerDashboardReadResult, "customer dashboard saved bookings read response should stay safe");
+
+  setEnv(enabledEnv());
+
   const customerFolderMock = installMockClient(seed);
   const customerFolderReadResult = await readRouteResponse(
     await route.GET(
       new Request("http://localhost/api/admin-customer-saved-bookings?customer_id=customer-ubs&limit=10", {
-        headers: sessionHeaders({ referer: "http://localhost/customers/ubs" }),
+        headers: customerSurfaceHeaders({ referer: "http://localhost/customers/ubs" }),
       }),
     ),
   );

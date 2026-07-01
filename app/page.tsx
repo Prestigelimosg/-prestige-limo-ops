@@ -17199,7 +17199,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         }),
         headers: {
           "Content-Type": "application/json",
-          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+          "x-prestige-admin-purpose": "admin-booking-persistence",
         },
         method: "PATCH",
       });
@@ -17667,7 +17667,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         }),
         headers: {
           "Content-Type": "application/json",
-          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+          "x-prestige-admin-purpose": "admin-booking-persistence",
         },
         method: "PATCH",
       });

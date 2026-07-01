@@ -18,6 +18,7 @@ const sourceFiles = [
   "lib/admin-dispatcher-auth-boundary.ts",
   "app/api/admin-saved-booking-statuses/route.ts",
 ];
+const dashboardPath = "app/page.tsx";
 const originalEnv = {
   NODE_ENV: process.env.NODE_ENV,
   PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED:
@@ -304,6 +305,23 @@ const seed = {
     },
   ],
 };
+
+const dashboardSource = await readFile(path.join(process.cwd(), dashboardPath), "utf8");
+const savedBookingStatusFetchBlock = dashboardSource.match(
+  /fetch\(adminSavedBookingStatusesApiPath,[\s\S]*?method: "PATCH",\n\s*\}\);/,
+)?.[0];
+
+assert.ok(savedBookingStatusFetchBlock, "Dashboard must call the saved booking status API.");
+assert.equal(
+  savedBookingStatusFetchBlock.includes('"x-prestige-admin-purpose": "admin-booking-persistence"'),
+  true,
+  "Dashboard saved booking status updates must use the booking-persistence admin boundary.",
+);
+assert.equal(
+  savedBookingStatusFetchBlock.includes("adminLegacyDataPurpose"),
+  false,
+  "Dashboard saved booking status updates must not use the legacy data boundary.",
+);
 
 const harness = await loadHarness();
 

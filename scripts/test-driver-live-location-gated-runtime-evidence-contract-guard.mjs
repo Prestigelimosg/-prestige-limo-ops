@@ -170,7 +170,7 @@ for (const fragment of [
   "Active Jobs Map",
   "Add",
   "Close all",
-  "Google",
+  "Driver Pin",
 ]) {
   assertIncludes(adminActiveJobsUi, fragment, `admin active-jobs runtime UI fragment ${fragment}`);
 }

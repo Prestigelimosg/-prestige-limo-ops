@@ -2757,7 +2757,7 @@ function googleMapsLocationUrl(latitude: number | null | undefined, longitude: n
     return "";
   }
 
-  return `https://www.google.com/maps?q=${encodeURIComponent(`${latitude},${longitude}`)}`;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${latitude},${longitude}`)}`;
 }
 
 function isInactiveDriver(
@@ -31147,21 +31147,26 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                           ) : null}
                         </div>
                         {isCustomerRequest ? (
-                          <div
-                            className="min-w-0 rounded-md border border-amber-200 bg-amber-50/80 px-2 py-1.5"
+                          <details
+                            className="group min-w-0 rounded-md border border-amber-200 bg-amber-50/50 px-2 py-1"
                             data-admin-booking-customer-request-decision={record.booking_reference}
                           >
-                            <p className="font-semibold text-amber-950">
-                              Internal review decision only
-                            </p>
+                            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-[11px] font-semibold text-amber-950 outline-none [&::-webkit-details-marker]:hidden">
+                              <span className="min-w-0 break-words">
+                                Internal review decision only
+                              </span>
+                              <span className="shrink-0 rounded-full bg-white px-1.5 py-0.5 text-[9px] uppercase tracking-[0.06em] text-amber-800">
+                                Review
+                              </span>
+                            </summary>
                             <p
-                              className="mt-0.5 text-[11px] leading-4 text-amber-900"
+                              className="mt-1 text-[10px] leading-3 text-amber-900"
                               data-admin-booking-customer-request-decision-guidance={record.booking_reference}
                             >
                               Status tracking only. It does not contact customers or dispatch drivers.
                             </p>
                             <p
-                              className="mt-1 break-words text-[11px] leading-4 text-amber-950"
+                              className="mt-1 break-words text-[10px] leading-3 text-amber-950"
                               data-admin-booking-customer-request-review-state={record.booking_reference}
                             >
                               Current review state: Admin internal status{" "}
@@ -31181,10 +31186,10 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                                 {clean(record.request_review_status) || "Pending Review"}
                               </span>
                             </p>
-                            <div className="mt-1.5 flex flex-wrap gap-1.5">
+                            <div className="mt-1 flex flex-wrap gap-1">
                               {adminCustomerRequestReviewDecisions.map((decision) => (
                                 <button
-                                  className="min-h-7 rounded-md border border-amber-300 bg-white px-2 py-1 text-left text-[11px] font-semibold text-amber-950 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                                  className="min-h-6 rounded-md border border-amber-300 bg-white px-1.5 py-0.5 text-left text-[10px] font-semibold text-amber-950 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                                   data-admin-booking-customer-request-decision-button={`${record.booking_reference}:${decision.key}`}
                                   disabled={adminBookingPersistenceAction !== null}
                                   key={decision.key}
@@ -31195,7 +31200,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                                 </button>
                               ))}
                             </div>
-                          </div>
+                          </details>
                         ) : (
                           <p className="break-words font-semibold text-slate-500">
                             {primaryStatus}
@@ -31694,7 +31699,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                 </div>
                 <div
                   aria-label="Day-of-trip dispatch progress"
-                  className="grid w-full grid-cols-2 gap-1 rounded-md border border-lime-200 bg-white p-1 min-[360px]:grid-cols-3 sm:w-64 sm:shrink-0 lg:w-72 xl:w-96"
+                  className="flex w-full flex-wrap gap-1 rounded-md border border-lime-200 bg-white/80 p-1 sm:w-auto sm:max-w-[40rem] sm:shrink-0"
                   data-admin-day-of-trip-dispatch-monitor-controls="true"
                   role="group"
                 >
@@ -31707,7 +31712,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
 
                     return (
                       <button
-                        className={`min-h-9 rounded px-2 py-1 text-[11px] font-semibold transition disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${
+                        className={`min-h-8 rounded px-2.5 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${
                           isSelected
                             ? "bg-lime-700 text-white"
                             : "bg-white text-lime-950 hover:bg-lime-100"
@@ -31719,7 +31724,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                         disabled={isDisabled}
                         key={option.value}
                         onClick={() => setDayOfTripDispatchMonitorStatus(option.value)}
-                        style={{ minHeight: 36, minWidth: 72 }}
+                        style={{ minHeight: 32, minWidth: 70 }}
                         type="button"
                       >
                         {option.label}
@@ -31873,7 +31878,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               </div>
               <div
                 aria-label="Admin Active Jobs Map"
-                className="mt-1.5 rounded-md border border-lime-200 bg-white/75 p-1.5 text-[10px] leading-3 text-lime-950 sm:text-[11px] sm:leading-4"
+                className="mt-1.5 rounded-md border border-lime-200 bg-white/75 p-1.5 text-[11px] leading-4 text-lime-950 sm:text-xs"
                 data-admin-active-jobs-map-runtime="true"
               >
                 <div className="flex flex-wrap items-center justify-between gap-1">
@@ -31881,12 +31886,12 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                     <p className="font-semibold leading-3 sm:leading-4">
                       Active Jobs Map
                     </p>
-                    <p className="mt-0.5 break-words text-[9px] leading-3 text-lime-900 sm:text-[10px]">
+                    <p className="mt-0.5 break-words text-[10px] leading-3 text-lime-900 sm:text-[11px]">
                       Add saved bookings one by one, then ask each driver to tap Share Location.
                     </p>
                   </div>
                   <span
-                    className={`rounded-full px-1.5 py-0.5 text-[8px] font-semibold uppercase sm:px-2 sm:text-[9px] ${
+                    className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase sm:px-2 sm:text-[10px] ${
                       adminActiveJobsMapReadState.runtimeStatus === "active"
                         ? "bg-emerald-100 text-emerald-900"
                         : adminActiveJobsMapReadState.runtimeStatus === "error"
@@ -31896,7 +31901,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                     data-admin-active-jobs-map-state={adminActiveJobsMapReadState.runtimeStatus}
                   >
                     {adminActiveJobsMapReadState.runtimeStatus === "active"
-                      ? "Open"
+                      ? "Live On"
                       : adminActiveJobsMapReadState.runtimeStatus === "error"
                         ? "Check"
                         : "Off"}
@@ -31938,7 +31943,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                 </div>
                 <div className="mt-1 flex flex-wrap gap-1" data-admin-active-jobs-map-controls="true">
                   <button
-                    className="rounded border border-lime-300 bg-white px-2 py-0.5 text-[9px] font-semibold text-lime-950 transition hover:bg-lime-50 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[10px]"
+                    className="rounded border border-lime-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-lime-950 transition hover:bg-lime-50 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[11px]"
                     data-admin-active-jobs-map-open="true"
                     disabled={
                       !clean(dispatchReleaseWorkflowBookingReference) ||
@@ -31950,7 +31955,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                     {adminActiveJobsMapReadState.action === "opening" ? "Adding" : "Add"}
                   </button>
                   <button
-                    className="rounded border border-lime-300 bg-white px-2 py-0.5 text-[9px] font-semibold text-lime-950 transition hover:bg-lime-50 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[10px]"
+                    className="rounded border border-lime-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-lime-950 transition hover:bg-lime-50 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[11px]"
                     data-admin-active-jobs-map-refresh="true"
                     disabled={adminActiveJobsMapReadState.action !== "idle"}
                     onClick={() => void refreshAdminActiveJobsMapLocations()}
@@ -31959,7 +31964,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                     {adminActiveJobsMapReadState.action === "refreshing" ? "Refreshing" : "Refresh"}
                   </button>
                   <button
-                    className="rounded border border-red-200 bg-white px-2 py-0.5 text-[9px] font-semibold text-red-800 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[10px]"
+                    className="rounded border border-red-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-red-800 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[11px]"
                     data-admin-active-jobs-map-close="true"
                     disabled={adminActiveJobsMapReadState.action !== "idle"}
                     onClick={closeAdminLiveLocationRuntime}
@@ -31970,7 +31975,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                 </div>
                 {adminActiveJobsMapReadState.message ? (
                   <p
-                    className={`mt-1 rounded border px-1.5 py-1 text-[9px] font-semibold leading-3 sm:text-[10px] ${statusClass(
+                    className={`mt-1 rounded border px-1.5 py-1 text-[10px] font-semibold leading-3 sm:text-[11px] ${statusClass(
                       adminActiveJobsMapReadState.message.tone,
                     )}`}
                     data-admin-active-jobs-map-message="true"
@@ -31985,7 +31990,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   >
                     {adminActiveJobsMapReadState.allowedBookingReferences.map((reference) => (
                       <span
-                        className="rounded bg-white px-1.5 py-0.5 text-[9px] font-semibold text-lime-950"
+                        className="rounded bg-white px-1.5 py-0.5 text-[10px] font-semibold text-lime-950"
                         data-admin-active-jobs-map-selected-reference={reference}
                         key={reference}
                       >
@@ -32013,18 +32018,20 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                               {job.driver_display_label || "Assigned driver"} ·{" "}
                               {compactBookingReference(job.assigned_job_reference || "")}
                             </p>
-                            <p className="break-words text-[9px] leading-3 text-lime-900">
+                            <p className="break-words text-[10px] leading-3 text-lime-900">
                               {job.is_stale ? "Stale" : "Current"} · {formatAdminLiveLocationTimestamp(job.updated_at)}
                             </p>
                           </div>
                           {mapUrl ? (
                             <a
-                              className="rounded border border-lime-300 bg-white px-1.5 py-0.5 text-[9px] font-semibold text-lime-950"
+                              aria-label="Open driver pin in Google Maps"
+                              className="rounded border border-lime-300 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-lime-950 hover:bg-lime-100"
                               href={mapUrl}
                               rel="noreferrer"
                               target="_blank"
+                              title="Open driver pin in Google Maps"
                             >
-                              Google
+                              Driver Pin
                             </a>
                           ) : null}
                         </div>
@@ -32033,7 +32040,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   </div>
                 ) : null}
                 <p
-                  className="mt-1 break-words border-t border-lime-100 pt-1 text-[9px] leading-3 text-lime-900 sm:text-[10px]"
+                  className="mt-1 break-words border-t border-lime-100 pt-1 text-[10px] leading-3 text-lime-900 sm:text-[11px]"
                   data-admin-active-jobs-map-boundary="true"
                 >
                   Admin-only. Selected saved bookings only; no customer message, provider send, billing,

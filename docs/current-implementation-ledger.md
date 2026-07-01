@@ -12,6 +12,15 @@ cb91a3b7 Record live location Chrome proof
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Admin Dispatch Compact Live-Ops Rows
+
+- Loaded operational snapshots now keep customer-review controls inside a compact row disclosure instead of expanding every booking into a large review card.
+- The Day-of-Trip Dispatch Monitor progress controls now render as one compact row/wrap group instead of a large grid block.
+- Active Jobs Map text was increased slightly for readability while keeping the section compact, and the driver location action is labelled `Driver Pin` with an explicit Google Maps search-pin URL.
+- The Active Jobs Map runtime state pill now says `Live On` when active, so it is clearer that it is a status label and not a clickable map button.
+- This is an admin UI wording/layout pass only. It does not activate a browser map key, change live-location/GPS capture behavior, change Vercel/env/DB schema, send customer/driver/provider messages, touch billing/payment/PDF/invoice/payout, change parser behavior, or change Save Booking/calendar behavior.
+- Focused checks passed: driver live-location runtime UI guard, active jobs map contract guard, gated runtime evidence guard, Day-of-Trip Dispatch Monitor existing workflow lock, Day-of-Trip driver acknowledgement boundary guard, Load Bookings primary-list source boundary guard, `npx tsc --noEmit --pretty false`, `npm run lint` with only existing `loadBookings` warnings, `npm run build`, and `git diff --check`.
+
 ### Admin Dispatch Map Location Lookup
 
 - The visible `Suggest` controls under Admin Dispatch Pickup, Drop-off, and Extra stop location fields were removed after live proof showed the production route was safely disabled by env. This avoids a visible button that can only return "not enabled or configured" during real operations.

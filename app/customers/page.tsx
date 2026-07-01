@@ -62,6 +62,18 @@ const customerFolderIndexHandoffRows = mockCustomers.map((customer) => {
   };
 });
 
+type RegularCustomerSavedBookingReadTarget = {
+  customerId: string;
+  customerName: string;
+};
+
+const localCustomerFolderSavedBookingTargets: RegularCustomerSavedBookingReadTarget[] = mockCustomers.map(
+  (customer) => ({
+    customerId: customer.id,
+    customerName: customer.companyName,
+  }),
+);
+
 const regularCustomerRouteTypeOptions = [
   "Airport Arrival",
   "Airport Departure",
@@ -1983,6 +1995,24 @@ export default function MockCustomerDashboardPage() {
         summary: result.summary || null,
         tone: "success",
       });
+      await loadRegularCustomerSavedBookingsForUnbilledQueue(
+        accounts.length > 0
+          ? accounts
+              .map((account) => {
+                const mockCustomer = findMockCustomerForSavedAccount(account);
+                const customerName = String(account.customer_account ?? "").trim() || mockCustomer?.companyName || "";
+                const customerId = String(account.customer_id ?? "").trim() || mockCustomer?.id || customerName;
+
+                return customerName && customerId
+                  ? {
+                      customerId,
+                      customerName,
+                    }
+                  : null;
+              })
+              .filter((target): target is RegularCustomerSavedBookingReadTarget => Boolean(target))
+          : localCustomerFolderSavedBookingTargets,
+      );
     } catch {
       setRegularCustomerAccountReadState({
         accounts: [],
@@ -1991,7 +2021,139 @@ export default function MockCustomerDashboardPage() {
         summary: null,
         tone: "error",
       });
+      await loadRegularCustomerSavedBookingsForUnbilledQueue(localCustomerFolderSavedBookingTargets);
     }
+  }
+
+  async function readRegularCustomerSavedBookingsForTarget(
+    target: RegularCustomerSavedBookingReadTarget,
+  ) {
+    const params = new URLSearchParams({
+      customer_account: target.customerName,
+      customer_id: target.customerId,
+      limit: "10",
+    });
+    const response = await fetch(`${adminCustomerSavedBookingsApiPath}?${params.toString()}`, {
+      headers: {
+        "x-prestige-admin-purpose": "admin-booking-persistence",
+      },
+      method: "GET",
+    });
+    const result = await response.json().catch(() => null);
+
+    if (!response.ok || !result?.ok) {
+      throw new Error(result?.error || "Saved booking read failed safely.");
+    }
+
+    return {
+      savedBookings: Array.isArray(result.saved_bookings)
+        ? (result.saved_bookings as RegularCustomerSavedBookingReadRecord[])
+        : [],
+      summary: result.summary || null,
+      target,
+    };
+  }
+
+  async function loadRegularCustomerSavedBookingsForUnbilledQueue(
+    targets: RegularCustomerSavedBookingReadTarget[],
+  ) {
+    const safeTargets = targets.filter((target) => target.customerId && target.customerName);
+
+    if (safeTargets.length === 0) {
+      setRegularCustomerSavedBookingReadState({
+        message: "No customer folders were available for the Unbilled Customers saved-booking bridge.",
+        savedBookings: [],
+        status: "error",
+        summary: null,
+        tone: "error",
+      });
+      setRegularCustomerSavedBookingBillingReadinessState({
+        closeoutsByReference: {},
+        message: "Closeout billing readiness was not checked because no customer folders were available.",
+        status: "error",
+        tone: "error",
+      });
+      return;
+    }
+
+    setRegularCustomerSavedBookingReadState({
+      message: "Loading saved bookings for the existing Unbilled Customers queue...",
+      savedBookings: [],
+      status: "loading",
+      summary: null,
+      tone: "info",
+    });
+    setRegularCustomerSavedBookingBillingReadinessState({
+      closeoutsByReference: {},
+      message: "Closeout billing readiness will be checked after saved bookings load.",
+      status: "idle",
+      tone: "info",
+    });
+
+    const reads = await Promise.all(
+      safeTargets.map(async (target) => {
+        try {
+          return {
+            ok: true,
+            ...(await readRegularCustomerSavedBookingsForTarget(target)),
+          };
+        } catch {
+          return {
+            ok: false,
+            savedBookings: [] as RegularCustomerSavedBookingReadRecord[],
+            summary: null,
+            target,
+          };
+        }
+      }),
+    );
+    const savedBookingsByReference = new Map<string, RegularCustomerSavedBookingReadRecord>();
+
+    for (const read of reads) {
+      for (const booking of read.savedBookings) {
+        const reference = savedBookingReference(booking);
+
+        if (reference && !savedBookingsByReference.has(reference)) {
+          savedBookingsByReference.set(reference, booking);
+        }
+      }
+    }
+
+    const savedBookings = Array.from(savedBookingsByReference.values());
+    const failedCount = reads.filter((read) => !read.ok).length;
+    const returnedCount = savedBookings.length;
+
+    if (returnedCount === 0 && failedCount === reads.length) {
+      setRegularCustomerSavedBookingReadState({
+        message: "Saved booking read failed safely or is not enabled for the Unbilled Customers queue.",
+        savedBookings: [],
+        status: "error",
+        summary: null,
+        tone: "error",
+      });
+      setRegularCustomerSavedBookingBillingReadinessState({
+        closeoutsByReference: {},
+        message: "Closeout billing readiness was not checked because saved booking reads failed.",
+        status: "error",
+        tone: "error",
+      });
+      return;
+    }
+
+    setRegularCustomerSavedBookingReadState({
+      message:
+        returnedCount > 0
+          ? `Loaded ${returnedCount} saved booking${returnedCount === 1 ? "" : "s"} for the Unbilled Customers queue.`
+          : "No saved bookings returned for the Unbilled Customers queue.",
+      savedBookings,
+      status: "loaded",
+      summary: {
+        matched_count: returnedCount,
+        returned_count: returnedCount,
+      },
+      tone: failedCount > 0 ? "info" : "success",
+    });
+    await loadRegularCustomerSavedBookingBillingReadiness(savedBookings);
   }
 
   async function loadRegularCustomerSavedBookingBillingReadiness(
@@ -2106,26 +2268,11 @@ export default function MockCustomerDashboardPage() {
     });
 
     try {
-      const params = new URLSearchParams({
-        customer_account: selectedRegularCustomer.companyName,
-        customer_id: selectedRegularCustomer.id,
-        limit: "10",
+      const result = await readRegularCustomerSavedBookingsForTarget({
+        customerId: selectedRegularCustomer.id,
+        customerName: selectedRegularCustomer.companyName,
       });
-      const response = await fetch(`${adminCustomerSavedBookingsApiPath}?${params.toString()}`, {
-        headers: {
-          "x-prestige-admin-purpose": "admin-booking-persistence",
-        },
-        method: "GET",
-      });
-      const result = await response.json().catch(() => null);
-
-      if (!response.ok || !result?.ok) {
-        throw new Error(result?.error || "Saved booking read failed safely.");
-      }
-
-      const savedBookings = Array.isArray(result.saved_bookings)
-        ? (result.saved_bookings as RegularCustomerSavedBookingReadRecord[])
-        : [];
+      const savedBookings = result.savedBookings;
       const returnedCount = Number(result.summary?.returned_count ?? savedBookings.length);
 
       setRegularCustomerSavedBookingReadState({
@@ -2135,7 +2282,7 @@ export default function MockCustomerDashboardPage() {
             : `No saved bookings returned for ${selectedRegularCustomer.companyName}.`,
         savedBookings,
         status: "loaded",
-        summary: result.summary || null,
+        summary: result.summary,
         tone: "success",
       });
       await loadRegularCustomerSavedBookingBillingReadiness(savedBookings);

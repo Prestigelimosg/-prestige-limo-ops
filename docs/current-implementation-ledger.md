@@ -1,16 +1,25 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-3df797c8 Split narrated round-trip airport parser choices
+48a2a4b7 Prefer explicit pickup time in departure parser
 
 Latest pushed main/staging runtime checkpoint:
-3df797c8 Split narrated round-trip airport parser choices
+48a2a4b7 Prefer explicit pickup time in departure parser
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
 550ef1ab Record round-trip parser checkpoint
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Departure Pickup Time Beats Flight Schedule
+
+- Dispatch job-card parsing now gives explicit pickup phrases such as `Pick up at 07:00` priority over flight schedule lines such as `Singapore 09:30 to Bangkok 11:00`.
+- Locked sample: `Hi William. Need pick up for Nicole tomorrow - 2 Jul / home to airport - 1 Jalan Buloh Perindu / SQ 708 - Singapore to Bangkok / Singapore 09:30 to Bangkok 11:00 / 1 person / Pick up at 07:00`.
+- The sample now parses as `DEP`, `2026-07-02`, pickup time `0700hrs`, flight `SQ708`, pickup `1 Jalan Buloh Perindu`, drop-off `Changi Airport`, passenger `Nicole`, pax `1`.
+- The route parser also recognizes `home to airport - [address]` as an airport-departure pickup address instead of leaving pickup blank.
+- This pass did not save a booking, sync calendar, touch live app data, use Vercel CLI, change env/DB schema, send email, activate Stripe/payment, send providers, create payouts, or change GPS/live-location behavior.
+- Checks passed: `npm run test:parser`, `node --check scripts/test-booking-ui-browser.mjs`, `npx tsc --noEmit --pretty false`, `npm run lint` with only existing `loadBookings` warnings, `npm run build`, and `git diff --check`.
 
 ### Narrated Round-Trip Airport Parser Choices
 

@@ -456,6 +456,24 @@ export async function updateAdminSavedBookingStatus(
     return safeDatabaseFailure(safeStatusUpdateError, 500, error);
   }
 
+  if (currentSchemaResult === updateResult && data) {
+    const legacyMirrorResult = await updateSavedBookingStatusRow(
+      clientResult.data,
+      targetColumn,
+      parsed.data.booking_id,
+      parsed.data.status,
+      updatedAt,
+      "legacy",
+    );
+
+    if (
+      legacyMirrorResult.error &&
+      classifyDatabaseFailure(legacyMirrorResult.error) !== "column_missing"
+    ) {
+      return safeDatabaseFailure(safeStatusUpdateError, 500, legacyMirrorResult.error);
+    }
+  }
+
   const booking = toStatusRecord(data, targetColumn, parsed.data.status);
 
   if (!booking) {

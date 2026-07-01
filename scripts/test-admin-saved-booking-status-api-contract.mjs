@@ -420,7 +420,7 @@ try {
   assert.equal(dashboardNoTokenResult.body.booking.id, "status-booking-1");
   assert.equal(dashboardNoTokenResult.body.booking.status, "completed");
   assert.equal(dashboardNoTokenMock.createdClients.length, 1);
-  assert.equal(dashboardNoTokenMock.client.updateHistory.length, 1);
+  assert.equal(dashboardNoTokenMock.client.updateHistory.length, 2);
   assertNoUnsafeResponse(dashboardNoTokenResult, "dashboard no-token response");
 
   setEnv(enabledEnv());
@@ -468,7 +468,7 @@ try {
   );
   assert.match(validResult.body.booking.updated_at, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(validMock.createdClients.length, 1);
-  assert.equal(validMock.client.updateHistory.length, 1);
+  assert.equal(validMock.client.updateHistory.length, 2);
   assert.equal(validMock.client.updateHistory[0].table, "bookings");
   assert.deepEqual(validMock.client.updateHistory[0].filters, [
     {
@@ -480,7 +480,40 @@ try {
   assert.deepEqual(Object.keys(validMock.client.updateHistory[0].payload).sort(), ["admin_internal_status", "updated_at"]);
   assert.equal(validMock.client.updateHistory[0].payload.admin_internal_status, "completed");
   assert.equal(validMock.client.updateHistory[0].selectedColumns, "id, booking_reference, admin_internal_status, updated_at");
+  assert.deepEqual(Object.keys(validMock.client.updateHistory[1].payload).sort(), ["status", "updated_at"]);
+  assert.equal(validMock.client.updateHistory[1].payload.status, "completed");
+  assert.equal(validMock.client.updateHistory[1].selectedColumns, "id, booking_reference, status, updated_at");
   assertNoUnsafeResponse(validResult, "valid response");
+
+  setEnv(enabledEnv());
+
+  const missingLegacyMirrorMock = installMockClient(seed, {
+    "update:bookings": [
+      null,
+      {
+        code: "PGRST204",
+        message: "Could not find the 'status' column of 'bookings' in the schema cache",
+        status: 400,
+      },
+    ],
+  });
+  const missingLegacyMirrorResult = await routeJson(
+    await route.PATCH(
+      jsonRequest("http://localhost/api/admin-saved-booking-statuses", {
+        booking_id: "status-booking-1",
+        status: "completed",
+      }),
+    ),
+  );
+
+  assert.equal(missingLegacyMirrorResult.status, 200);
+  assert.equal(missingLegacyMirrorResult.body.ok, true);
+  assert.equal(missingLegacyMirrorResult.body.booking.id, "status-booking-1");
+  assert.equal(missingLegacyMirrorResult.body.booking.status, "completed");
+  assert.equal(missingLegacyMirrorMock.client.updateHistory.length, 2);
+  assert.equal(missingLegacyMirrorMock.client.updateHistory[0].selectedColumns, "id, booking_reference, admin_internal_status, updated_at");
+  assert.equal(missingLegacyMirrorMock.client.updateHistory[1].selectedColumns, "id, booking_reference, status, updated_at");
+  assertNoUnsafeResponse(missingLegacyMirrorResult, "missing legacy mirror response");
 
   setEnv(enabledEnv());
 
@@ -539,7 +572,7 @@ try {
     },
   );
   assert.equal(bookingReferenceMock.createdClients.length, 1);
-  assert.equal(bookingReferenceMock.client.updateHistory.length, 1);
+  assert.equal(bookingReferenceMock.client.updateHistory.length, 2);
   assert.deepEqual(bookingReferenceMock.client.updateHistory[0].filters, [
     {
       column: "booking_reference",
@@ -549,6 +582,8 @@ try {
   ]);
   assert.equal(bookingReferenceMock.client.updateHistory[0].selectedColumns, "id, booking_reference, admin_internal_status, updated_at");
   assert.equal(bookingReferenceMock.client.updateHistory[0].payload.admin_internal_status, "completed");
+  assert.equal(bookingReferenceMock.client.updateHistory[1].selectedColumns, "id, booking_reference, status, updated_at");
+  assert.equal(bookingReferenceMock.client.updateHistory[1].payload.status, "completed");
   assertNoUnsafeResponse(bookingReferenceResult, "booking-reference response");
 
   setEnv(enabledEnv());

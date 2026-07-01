@@ -186,7 +186,7 @@ for (const phrase of [
   "The control adds selected saved bookings one by one through `/api/admin-live-location-runtime` instead of replacing the previous selected booking.",
   "Runtime control keeps existing `driver_live_location_allowed_job_references`, removes duplicates, and caps the selected booking list at 50 references.",
   "Admin marker refresh uses the existing guarded `GET /api/admin-active-jobs-map-locations` route and returns both selected booking references and current driver markers.",
-  "The admin UI renders compact selected-booking chips, marker rows, and a Google Maps link per active driver/job; it does not embed a browser map key or render a map provider widget.",
+  "The admin UI renders compact selected-booking chips, marker rows, Driver Pin fallback links, and an optional browser map canvas that remains off unless the separate browser-safe map config route is enabled.",
   "Customer live-location API remains same-origin/session/booking-boundary gated and no customer message is sent by this lane.",
 ]) {
   assertIncludes(
@@ -220,6 +220,8 @@ for (const fragment of [
   'data-admin-active-jobs-map-close="true"',
   'data-admin-active-jobs-map-selected-list="true"',
   'data-admin-active-jobs-map-marker-list="true"',
+  'data-admin-active-jobs-map-canvas',
+  'data-admin-active-jobs-map-config-message',
   'data-admin-active-jobs-map-boundary="true"',
   "Active Jobs Map",
   "Selected:",
@@ -250,8 +252,7 @@ assertIncludes(
 
 for (const forbiddenPattern of [
   /navigator\.geolocation|getCurrentPosition|watchPosition|clearWatch|GeolocationPosition/i,
-  /google\.maps|maps\.google|new\s+google\.maps\.Map|mapCanvas|map-canvas|<canvas/i,
-  /PRESTIGE_GOOGLE_MAPS|NEXT_PUBLIC/i,
+  /PRESTIGE_GOOGLE_MAPS_API_KEY|PRESTIGE_GOOGLE_MAPS_BROWSER_API_KEY|PRESTIGE_ADMIN_ACTIVE_JOBS_MAP_BROWSER_PROVIDER|NEXT_PUBLIC/i,
   /customerVisible\s*[:=]\s*true|external_send\s*[:=]\s*true/i,
 ]) {
   assertExcludes(

@@ -21,6 +21,17 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This is an admin UI wording/layout pass only. It does not activate a browser map key, change live-location/GPS capture behavior, change Vercel/env/DB schema, send customer/driver/provider messages, touch billing/payment/PDF/invoice/payout, change parser behavior, or change Save Booking/calendar behavior.
 - Focused checks passed: driver live-location runtime UI guard, active jobs map contract guard, gated runtime evidence guard, Day-of-Trip Dispatch Monitor existing workflow lock, Day-of-Trip driver acknowledgement boundary guard, Load Bookings primary-list source boundary guard, `npx tsc --noEmit --pretty false`, `npm run lint` with only existing `loadBookings` warnings, `npm run build`, and `git diff --check`.
 
+### Admin Active Jobs Browser Map JavaScript API
+
+- Admin Dispatch can render an optional same-window Google Maps JavaScript canvas inside the existing compact Active Jobs Map panel.
+- The canvas is default-closed: it only loads after active driver markers exist and `/api/admin-active-jobs-map-browser-config` returns a configured browser-safe provider/key response.
+- The browser config route uses the existing admin dispatcher boundary, same-origin dashboard purpose header, a separate `PRESTIGE_ADMIN_ACTIVE_JOBS_MAP_BROWSER_PROVIDER=google_maps_javascript` gate, `PRESTIGE_GOOGLE_MAPS_BROWSER_API_KEY`, explicit `PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS`, and optional `PRESTIGE_GOOGLE_MAPS_BROWSER_MAP_ID`.
+- The existing server-side `PRESTIGE_GOOGLE_MAPS_API_KEY` remains server-only for admin location search/route estimates and is not read or returned by the browser-map config route.
+- When the browser map config is missing or origin is not allowed, the admin UI stays compact, shows an embedded-map-off message, and keeps the per-driver `Driver Pin` Google Maps fallback links.
+- The browser map canvas is admin-only and shows only active driver marker positions already returned by the guarded active-jobs map route.
+- This lane does not change driver GPS capture, driver share/stop behavior, customer live maps, customer portal, public booking, billing/payment/PDF/invoice/payout, provider messaging, parser, Save Booking, `/api/admin-saved-bookings`, calendar, Vercel/env values, or DB schema.
+- No `NEXT_PUBLIC_` map key is introduced; browser key values must never be committed, printed, logged, or pasted into docs.
+
 ### Admin Dispatch Map Location Lookup
 
 - The visible `Suggest` controls under Admin Dispatch Pickup, Drop-off, and Extra stop location fields were removed after live proof showed the production route was safely disabled by env. This avoids a visible button that can only return "not enabled or configured" during real operations.
@@ -38,10 +49,10 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Runtime control keeps existing `driver_live_location_allowed_job_references`, removes duplicates, and caps the selected booking list at 50 references.
 - Driver `Share Location` first calls `GET /api/driver-job/[token]/live-location` for server readiness; Chrome GPS is requested only after that readiness check passes.
 - Admin marker refresh uses the existing guarded `GET /api/admin-active-jobs-map-locations` route and returns both selected booking references and current driver markers.
-- The admin UI renders compact selected-booking chips, marker rows, and a Google Maps link per active driver/job; it does not embed a browser map key or render a map provider widget.
+- The admin UI renders compact selected-booking chips, marker rows, Driver Pin fallback links, and an optional browser map canvas that remains off unless the separate browser-safe map config route is enabled.
 - Closing the runtime clears the selected list and gates driver/customer map reads off.
 - Customer live-location API remains same-origin/session/booking-boundary gated and no customer message is sent by this lane.
-- No broad driver tracking, no wildcard job tracking, no browser Maps JavaScript key, no Vercel CLI, env value change, DB schema change, provider send, email/WhatsApp/SMS/Telegram send, billing/payment/PDF/invoice/payout, parser, Save Booking, `/api/admin-saved-bookings`, OTS/photo/storage, or calendar behavior changed.
+- No broad driver tracking, no wildcard job tracking, no existing server-side Google key exposure, no Vercel CLI, env value change, DB schema change, provider send, email/WhatsApp/SMS/Telegram send, billing/payment/PDF/invoice/payout, parser, Save Booking, `/api/admin-saved-bookings`, OTS/photo/storage, or calendar behavior changed.
 - Focused guard coverage lives in `scripts/test-driver-live-location-runtime-control-ui-guard.mjs`.
 - Live Mac Chrome proof on `https://app.prestigelimo.sg/` after pushing `71f56f99` confirmed the Active Jobs Map UI shows `Add saved bookings one by one`, `Selected: 0`, `Add`, `Refresh`, `Close all`, and the updated admin-only boundary with `browser map key` blocked. No live `Add`/`Close all` action was clicked, so runtime location settings were not changed during proof.
 - Live Mac Chrome proof on `https://app.prestigelimo.sg/` after pushing `b78c26d6` loaded saved booking `ADM-20260630171930`, opened Active Jobs Map for that one booking, created/copied the driver job link, and confirmed the live driver page route itself loads the driver page and exposes the `Share Location` control.
@@ -6608,15 +6619,15 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This guard adds `scripts/test-driver-live-location-consent-ui-readiness-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Driver Live Location Browser Map Key Readiness Contract Guard Lock
-- This is a docs/test-only guard for any future browser-rendered base map in the Admin Active Jobs Map UI.
-- This lock does not create a browser map key, change Vercel env, expose any key to the browser, render a map, activate admin active-jobs map runtime, activate driver GPS capture, open live-location gates, read/write database rows, call Google Maps/OneMap/FlightAware, deploy, send provider messages, or activate production.
-- Current state remains closed: no browser Google Maps JavaScript loader, no `NEXT_PUBLIC_` map key, no active map canvas, and no customer-visible live map.
+- Superseded by `### Admin Active Jobs Browser Map JavaScript API`.
+- The old docs/test-only future lock is replaced by a default-closed implementation: the admin page can render the optional browser map canvas only after the admin config route returns a separate browser-safe Google Maps JavaScript API key and allowed-origin match.
+- Current production behavior remains closed until separate browser-safe env values are configured. No `NEXT_PUBLIC_` map key is introduced and no customer-visible live map is approved.
 - Future admin active-jobs browser map must use a separate browser-safe key from the existing server-side `PRESTIGE_GOOGLE_MAPS_API_KEY`; the server-side key must never be sent to client code, HTML, logs, errors, or API responses.
 - Future browser key setup requires separate owner approval, Google Cloud key creation, API restriction to browser map rendering APIs only, HTTP referrer/domain restrictions, and names-only ledger recording with no key value.
 - Future names-only env plan must use `PRESTIGE_ADMIN_ACTIVE_JOBS_MAP_BROWSER_PROVIDER`, `PRESTIGE_GOOGLE_MAPS_BROWSER_API_KEY`, `PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS`, and optional `PRESTIGE_GOOGLE_MAPS_BROWSER_MAP_ID`; values must never be printed, logged, committed, or pasted into docs.
 - Future allowed origins must be explicit and limited to approved staging/production app origins; wildcard, unrestricted, localhost-only production, mobile-app, IP-address, or server-key reuse configurations are not approved.
 - Future browser map APIs must remain separate from server-side admin location search/route estimates, driver GPS capture/write routes, customer portal, customer in-app notifications, Driver Details Email, Telegram, WhatsApp, SMS, billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, OTS/photo/storage, calendar, and shim work.
-- Future closed gates must not read `PRESTIGE_GOOGLE_MAPS_BROWSER_API_KEY`, must not render map scripts, must not call `navigator.geolocation`, must not fetch location rows, and must not expose coordinates.
+- Closed gates must not return `PRESTIGE_GOOGLE_MAPS_BROWSER_API_KEY`, must not render map scripts, must not call `navigator.geolocation`, and must not expose coordinates outside the guarded admin active-jobs marker response.
 - Future map UI evidence must prove no key appears in page source, route responses, server logs, normalized evidence, or committed files; it must also prove rollback removes the browser map surface.
 - Future admin map UI remains admin/dispatcher-only and may show only approved operational marker/status fields; customer live map links remain separately blocked.
 - This guard adds `scripts/test-driver-live-location-browser-map-key-readiness-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.

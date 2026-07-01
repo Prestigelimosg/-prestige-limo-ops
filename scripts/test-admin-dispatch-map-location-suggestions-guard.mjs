@@ -35,6 +35,8 @@ assertIncludes(adminHelperSource, "components\", \"country:SG", "server-side Goo
 
 assertExcludes(publicBookSource, /admin-map-location-search|PRESTIGE_GOOGLE_MAPS_API_KEY|maps\.googleapis\.com\/maps\/api\/js|NEXT_PUBLIC_.*MAP/i, "public booking form must not use admin Google map search");
 assertExcludes(customerPortalSource, /admin-map-location-search|PRESTIGE_GOOGLE_MAPS_API_KEY|maps\.googleapis\.com\/maps\/api\/js|NEXT_PUBLIC_.*MAP/i, "customer portal booking form must not use admin Google map search");
-assertExcludes(appSource, /maps\.googleapis\.com\/maps\/api\/js|NEXT_PUBLIC_.*MAP|PRESTIGE_GOOGLE_MAPS_API_KEY/i, "admin Dispatch page must not expose a browser map key");
+assertIncludes(appSource, "adminActiveJobsMapBrowserConfigApiPath", "admin Active Jobs browser map config path");
+assertIncludes(appSource, "data-admin-active-jobs-map-canvas", "admin Active Jobs browser map canvas");
+assertExcludes(appSource, /NEXT_PUBLIC_.*MAP|PRESTIGE_GOOGLE_MAPS_API_KEY|PRESTIGE_GOOGLE_MAPS_BROWSER_API_KEY/i, "admin Dispatch page must not expose map env keys");
 
 console.log("Admin Dispatch map location suggestions guard passed.");

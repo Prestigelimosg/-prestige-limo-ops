@@ -67,10 +67,10 @@ for (const phrase of [
   "Runtime control keeps existing `driver_live_location_allowed_job_references`, removes duplicates, and caps the selected booking list at 50 references.",
   "Driver `Share Location` first calls `GET /api/driver-job/[token]/live-location` for server readiness; Chrome GPS is requested only after that readiness check passes.",
   "Admin marker refresh uses the existing guarded `GET /api/admin-active-jobs-map-locations` route and returns both selected booking references and current driver markers.",
-  "The admin UI renders compact selected-booking chips, marker rows, and a Google Maps link per active driver/job; it does not embed a browser map key or render a map provider widget.",
+  "The admin UI renders compact selected-booking chips, marker rows, Driver Pin fallback links, and an optional browser map canvas that remains off unless the separate browser-safe map config route is enabled.",
   "Closing the runtime clears the selected list and gates driver/customer map reads off.",
   "Customer live-location API remains same-origin/session/booking-boundary gated and no customer message is sent by this lane.",
-  "No broad driver tracking, no wildcard job tracking, no browser Maps JavaScript key, no Vercel CLI, env value change, DB schema change, provider send, email/WhatsApp/SMS/Telegram send, billing/payment/PDF/invoice/payout, parser, Save Booking, `/api/admin-saved-bookings`, OTS/photo/storage, or calendar behavior changed.",
+  "No broad driver tracking, no wildcard job tracking, no existing server-side Google key exposure, no Vercel CLI, env value change, DB schema change, provider send, email/WhatsApp/SMS/Telegram send, billing/payment/PDF/invoice/payout, parser, Save Booking, `/api/admin-saved-bookings`, OTS/photo/storage, or calendar behavior changed.",
 ]) {
   assertIncludes(ledgerSection, phrase, `ledger runtime control phrase ${phrase}`);
 }

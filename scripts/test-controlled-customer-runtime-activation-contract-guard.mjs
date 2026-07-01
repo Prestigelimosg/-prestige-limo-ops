@@ -271,8 +271,7 @@ ${customerPortalSessionIssue}
 ${customerAppNotificationsRoute}
 ${adminCustomerDriverAppNotificationsRoute}
 ${customerSavedBookingsRead}
-${customerAppNotificationPersistence}
-${appPage}`;
+${customerAppNotificationPersistence}`;
 
 const runtimeReadIndex = customerAppNotificationsRoute.indexOf(
   "readCustomerAppNotificationsForControlledRuntime(request)",

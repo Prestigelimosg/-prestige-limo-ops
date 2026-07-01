@@ -111,6 +111,8 @@ const adminBookingCalendarSyncStatusesApiPath =
 const adminMapLocationSearchApiPath = "/api/admin-map-location-search";
 const adminMapRouteEstimatesApiPath = "/api/admin-map-route-estimates";
 const adminActiveJobsMapLocationsApiPath = "/api/admin-active-jobs-map-locations";
+const adminActiveJobsMapBrowserConfigApiPath =
+  "/api/admin-active-jobs-map-browser-config";
 const adminLiveLocationRuntimeApiPath = "/api/admin-live-location-runtime";
 const adminDispatchReleaseWorkflowArea = "dispatch_release";
 const adminDriverAcknowledgementWorkflowArea = "driver_acknowledgement";
@@ -1219,6 +1221,18 @@ type AdminLiveLocationRuntimeControlResponse = {
   runtime_status?: "active" | "closed" | "error" | string;
 };
 
+type AdminActiveJobsMapBrowserConfigResponse = {
+  apiKey?: string;
+  customerVisible?: false;
+  enabled?: boolean;
+  error?: string;
+  external_send?: false;
+  mapId?: string;
+  ok?: boolean;
+  provider?: "google_maps_javascript" | string;
+  reason?: string;
+};
+
 type AdminActiveJobsMapReadState = {
   action: "closing" | "idle" | "opening" | "refreshing";
   activeJobs: AdminActiveJobsMapLocation[];
@@ -1228,6 +1242,13 @@ type AdminActiveJobsMapReadState = {
   message: Message | null;
   runtimeStatus: "active" | "closed" | "error";
   status: "idle" | "loading" | "loaded" | "error";
+};
+
+type AdminActiveJobsBrowserMapConfigState = {
+  apiKey: string;
+  mapId: string;
+  message: Message | null;
+  status: "error" | "idle" | "loading" | "off" | "ready";
 };
 
 type AdminDriverJobDspActualTimeStatus = "complete" | "started" | "not_started";
@@ -2758,6 +2779,246 @@ function googleMapsLocationUrl(latitude: number | null | undefined, longitude: n
   }
 
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${latitude},${longitude}`)}`;
+}
+
+type BrowserGoogleMap = {
+  fitBounds: (bounds: BrowserGoogleLatLngBounds) => void;
+  setCenter: (position: BrowserGoogleLatLngLiteral) => void;
+  setZoom: (zoom: number) => void;
+};
+
+type BrowserGoogleMarker = {
+  setMap: (map: BrowserGoogleMap | null) => void;
+};
+
+type BrowserGoogleLatLngLiteral = {
+  lat: number;
+  lng: number;
+};
+
+type BrowserGoogleLatLngBounds = {
+  extend: (position: BrowserGoogleLatLngLiteral) => void;
+};
+
+type BrowserGoogleMapsNamespace = {
+  LatLngBounds?: new () => BrowserGoogleLatLngBounds;
+  Map?: new (element: HTMLElement, options: Record<string, unknown>) => BrowserGoogleMap;
+  Marker?: new (options: Record<string, unknown>) => BrowserGoogleMarker;
+};
+
+const adminActiveJobsBrowserMapScriptLoaders = new Map<
+  string,
+  Promise<BrowserGoogleMapsNamespace>
+>();
+
+function readWindowGoogleMaps() {
+  const googleRuntime = (window as unknown as {
+    google?: {
+      maps?: BrowserGoogleMapsNamespace;
+    };
+  }).google;
+
+  return googleRuntime?.maps || null;
+}
+
+function loadAdminActiveJobsBrowserGoogleMaps(apiKey: string) {
+  const existingMaps = readWindowGoogleMaps();
+
+  if (existingMaps?.Map && existingMaps.Marker && existingMaps.LatLngBounds) {
+    return Promise.resolve(existingMaps);
+  }
+
+  const scriptSource = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(
+    apiKey,
+  )}&v=weekly`;
+  const existingLoader = adminActiveJobsBrowserMapScriptLoaders.get(scriptSource);
+
+  if (existingLoader) {
+    return existingLoader;
+  }
+
+  const loader = new Promise<BrowserGoogleMapsNamespace>((resolve, reject) => {
+    const finish = () => {
+      const maps = readWindowGoogleMaps();
+
+      if (maps?.Map && maps.Marker && maps.LatLngBounds) {
+        resolve(maps);
+        return;
+      }
+
+      reject(new Error("Google Maps JavaScript API did not load safely."));
+    };
+    const existingScript = document.querySelector<HTMLScriptElement>(
+      'script[data-admin-active-jobs-browser-map-loader="true"]',
+    );
+
+    if (existingScript) {
+      existingScript.addEventListener("load", finish, { once: true });
+      existingScript.addEventListener(
+        "error",
+        () => reject(new Error("Google Maps JavaScript API failed to load.")),
+        { once: true },
+      );
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.async = true;
+    script.dataset.adminActiveJobsBrowserMapLoader = "true";
+    script.defer = true;
+    script.src = scriptSource;
+    script.addEventListener("load", finish, { once: true });
+    script.addEventListener(
+      "error",
+      () => reject(new Error("Google Maps JavaScript API failed to load.")),
+      { once: true },
+    );
+    document.head.appendChild(script);
+  });
+
+  adminActiveJobsBrowserMapScriptLoaders.set(scriptSource, loader);
+
+  return loader;
+}
+
+function validAdminActiveJobMapPosition(job: AdminActiveJobsMapLocation) {
+  const latitude = Number(job.latitude);
+  const longitude = Number(job.longitude);
+
+  if (
+    !Number.isFinite(latitude) ||
+    latitude < -90 ||
+    latitude > 90 ||
+    !Number.isFinite(longitude) ||
+    longitude < -180 ||
+    longitude > 180
+  ) {
+    return null;
+  }
+
+  return {
+    lat: latitude,
+    lng: longitude,
+  };
+}
+
+function AdminActiveJobsBrowserMap({
+  activeJobs,
+  apiKey,
+  mapId,
+}: {
+  activeJobs: AdminActiveJobsMapLocation[];
+  apiKey: string;
+  mapId: string;
+}) {
+  const mapElementRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<BrowserGoogleMap | null>(null);
+  const markersRef = useRef<BrowserGoogleMarker[]>([]);
+  const [renderState, setRenderState] = useState<"error" | "loading" | "ready">("loading");
+  const activeMarkerJobs = useMemo(
+    () =>
+      activeJobs
+        .map((job) => ({
+          job,
+          position: validAdminActiveJobMapPosition(job),
+        }))
+        .filter(
+          (entry): entry is { job: AdminActiveJobsMapLocation; position: BrowserGoogleLatLngLiteral } =>
+            entry.position !== null,
+        ),
+    [activeJobs],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!apiKey || activeMarkerJobs.length === 0) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void loadAdminActiveJobsBrowserGoogleMaps(apiKey)
+      .then((maps) => {
+        if (cancelled || !mapElementRef.current || !maps.Map || !maps.Marker || !maps.LatLngBounds) {
+          return;
+        }
+
+        const MapConstructor = maps.Map;
+        const MarkerConstructor = maps.Marker;
+        const LatLngBoundsConstructor = maps.LatLngBounds;
+
+        if (!mapRef.current) {
+          mapRef.current = new MapConstructor(mapElementRef.current, {
+            center: activeMarkerJobs[0].position,
+            clickableIcons: false,
+            fullscreenControl: false,
+            mapId: mapId || undefined,
+            mapTypeControl: false,
+            streetViewControl: false,
+            zoom: 14,
+          });
+        }
+
+        markersRef.current.forEach((marker) => marker.setMap(null));
+        markersRef.current = [];
+
+        const bounds = new LatLngBoundsConstructor();
+
+        activeMarkerJobs.forEach(({ job, position }) => {
+          bounds.extend(position);
+          markersRef.current.push(
+            new MarkerConstructor({
+              map: mapRef.current,
+              position,
+              title: `${job.driver_display_label || "Driver"} · ${compactBookingReference(
+                job.assigned_job_reference || "",
+              )}`,
+            }),
+          );
+        });
+
+        if (activeMarkerJobs.length === 1) {
+          mapRef.current.setCenter(activeMarkerJobs[0].position);
+          mapRef.current.setZoom(15);
+        } else {
+          mapRef.current.fitBounds(bounds);
+        }
+
+        setRenderState("ready");
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setRenderState("error");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeMarkerJobs, apiKey, mapId]);
+
+  return (
+    <div
+      aria-label="Admin active driver browser map"
+      className="mt-1 overflow-hidden rounded border border-lime-200 bg-lime-50"
+      data-admin-active-jobs-map-canvas="true"
+      data-admin-active-jobs-map-canvas-state={renderState}
+    >
+      <div className="flex items-center justify-between gap-2 border-b border-lime-100 px-1.5 py-1 text-[10px] font-semibold text-lime-950 sm:text-[11px]">
+        <span>Live driver map</span>
+        <span className="rounded-full bg-white px-1.5 py-0.5 text-[9px] uppercase text-lime-900 sm:text-[10px]">
+          {renderState === "ready" ? `${activeMarkerJobs.length} pin${activeMarkerJobs.length === 1 ? "" : "s"}` : "Loading"}
+        </span>
+      </div>
+      <div ref={mapElementRef} className="h-48 w-full sm:h-56" />
+      {renderState === "error" ? (
+        <p className="border-t border-lime-100 px-1.5 py-1 text-[10px] font-semibold text-red-800 sm:text-[11px]">
+          Embedded map could not load. Use Driver Pin.
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
 function isInactiveDriver(
@@ -9787,6 +10048,15 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       status: "idle",
     });
   const [
+    adminActiveJobsBrowserMapConfigState,
+    setAdminActiveJobsBrowserMapConfigState,
+  ] = useState<AdminActiveJobsBrowserMapConfigState>({
+    apiKey: "",
+    mapId: "",
+    message: null,
+    status: "idle",
+  });
+  const [
     adminDriverJobDspActualTimeReadState,
     setAdminDriverJobDspActualTimeReadState,
   ] = useState<AdminDriverJobDspActualTimeReadState>({
@@ -10069,6 +10339,95 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   useEffect(() => {
     appliedAdminBookingSnapshotReferenceRef.current = appliedAdminBookingSnapshotReference;
   }, [appliedAdminBookingSnapshotReference]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (adminActiveJobsMapReadState.activeJobs.length === 0) {
+      setAdminActiveJobsBrowserMapConfigState({
+        apiKey: "",
+        mapId: "",
+        message: null,
+        status: "idle",
+      });
+
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setAdminActiveJobsBrowserMapConfigState((current) => ({
+      ...current,
+      message: {
+        tone: "info",
+        text: "Checking embedded map setup...",
+      },
+      status: "loading",
+    }));
+
+    void (async () => {
+      try {
+        const response = await fetch(adminActiveJobsMapBrowserConfigApiPath, {
+          cache: "no-store",
+          headers: {
+            "x-prestige-admin-purpose": adminLegacyDataPurpose,
+          },
+          method: "GET",
+        });
+        const result = await response.json().catch(() => null) as
+          | AdminActiveJobsMapBrowserConfigResponse
+          | null;
+
+        if (cancelled) {
+          return;
+        }
+
+        if (
+          !response.ok ||
+          !result?.ok ||
+          result.enabled !== true ||
+          result.customerVisible !== false ||
+          result.external_send !== false ||
+          result.provider !== "google_maps_javascript" ||
+          !clean(result.apiKey)
+        ) {
+          setAdminActiveJobsBrowserMapConfigState({
+            apiKey: "",
+            mapId: "",
+            message: {
+              tone: "info",
+              text: "Embedded map off. Use Driver Pin until browser-safe Google Maps setup is enabled.",
+            },
+            status: "off",
+          });
+          return;
+        }
+
+        setAdminActiveJobsBrowserMapConfigState({
+          apiKey: clean(result.apiKey),
+          mapId: clean(result.mapId),
+          message: null,
+          status: "ready",
+        });
+      } catch {
+        if (!cancelled) {
+          setAdminActiveJobsBrowserMapConfigState({
+            apiKey: "",
+            mapId: "",
+            message: {
+              tone: "error",
+              text: "Embedded map setup check failed safely. Use Driver Pin.",
+            },
+            status: "error",
+          });
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [adminActiveJobsMapReadState.activeJobs.length]);
 
   useEffect(() => {
     if (
@@ -31983,6 +32342,26 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                     {adminActiveJobsMapReadState.message.text}
                   </p>
                 ) : null}
+                {adminActiveJobsMapReadState.activeJobs.length > 0 &&
+                adminActiveJobsBrowserMapConfigState.status === "ready" &&
+                adminActiveJobsBrowserMapConfigState.apiKey ? (
+                  <AdminActiveJobsBrowserMap
+                    activeJobs={adminActiveJobsMapReadState.activeJobs}
+                    apiKey={adminActiveJobsBrowserMapConfigState.apiKey}
+                    mapId={adminActiveJobsBrowserMapConfigState.mapId}
+                  />
+                ) : adminActiveJobsMapReadState.activeJobs.length > 0 &&
+                  adminActiveJobsBrowserMapConfigState.message ? (
+                  <p
+                    className={`mt-1 rounded border px-1.5 py-1 text-[10px] font-semibold leading-3 sm:text-[11px] ${statusClass(
+                      adminActiveJobsBrowserMapConfigState.message.tone,
+                    )}`}
+                    data-admin-active-jobs-map-canvas-state={adminActiveJobsBrowserMapConfigState.status}
+                    data-admin-active-jobs-map-config-message="true"
+                  >
+                    {adminActiveJobsBrowserMapConfigState.message.text}
+                  </p>
+                ) : null}
                 {adminActiveJobsMapReadState.allowedBookingReferences.length > 0 ? (
                   <div
                     className="mt-1 flex max-h-16 flex-wrap gap-1 overflow-y-auto border-t border-lime-100 pt-1"
@@ -32044,7 +32423,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   data-admin-active-jobs-map-boundary="true"
                 >
                   Admin-only. Selected saved bookings only; no customer message, provider send, billing,
-                  payment, PDF, payout, browser map key, or parser change.
+                  payment, PDF, payout, server map key, or parser change.
                 </p>
               </div>
               </details>

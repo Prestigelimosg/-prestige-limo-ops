@@ -7,10 +7,11 @@ const guardScript =
   "scripts/test-driver-live-location-browser-map-key-readiness-contract-guard.mjs";
 const appPagePath = "app/page.tsx";
 const driverJobPagePath = "app/driver-job/[token]/page.tsx";
+const publicBookPagePath = "app/book/page.tsx";
+const customerPortalPath = "app/my-bookings/page.tsx";
+const browserConfigRoutePath = "app/api/admin-active-jobs-map-browser-config/route.ts";
 const locationSearchHelperPath = "lib/admin-map-location-search.ts";
 const routeEstimateHelperPath = "lib/admin-map-route-estimates.ts";
-const liveLocationScaffoldPath = "lib/driver-live-location-scaffold.ts";
-const adminActiveJobsRoutePath = "app/api/admin-active-jobs-map-locations/route.ts";
 
 function assertIncludes(source, fragment, label = fragment) {
   assert.equal(source.includes(fragment), true, `${label} must include ${fragment}.`);
@@ -23,6 +24,15 @@ function assertExcludes(source, fragmentOrPattern, label) {
       : source.includes(fragmentOrPattern);
 
   assert.equal(matches, false, `${label} must not include ${fragmentOrPattern}.`);
+}
+
+function assertOrder(source, first, second, label) {
+  const firstIndex = source.indexOf(first);
+  const secondIndex = source.indexOf(second);
+
+  assert.notEqual(firstIndex, -1, `${label} missing first marker ${first}.`);
+  assert.notEqual(secondIndex, -1, `${label} missing second marker ${second}.`);
+  assert.equal(firstIndex < secondIndex, true, `${label} must keep ${first} before ${second}.`);
 }
 
 function sectionBetween(source, startHeading, nextHeadingPrefix = "\n### ") {
@@ -38,119 +48,134 @@ const [
   preactivationSuite,
   appPage,
   driverJobPage,
+  publicBookPage,
+  customerPortal,
+  browserConfigRoute,
   locationSearchHelper,
   routeEstimateHelper,
-  liveLocationScaffold,
-  adminActiveJobsRoute,
 ] = await Promise.all([
   readFile(ledgerPath, "utf8"),
   readFile(preactivationSuitePath, "utf8"),
   readFile(appPagePath, "utf8"),
   readFile(driverJobPagePath, "utf8"),
+  readFile(publicBookPagePath, "utf8"),
+  readFile(customerPortalPath, "utf8"),
+  readFile(browserConfigRoutePath, "utf8"),
   readFile(locationSearchHelperPath, "utf8"),
   readFile(routeEstimateHelperPath, "utf8"),
-  readFile(liveLocationScaffoldPath, "utf8"),
-  readFile(adminActiveJobsRoutePath, "utf8"),
 ]);
 
 const ledgerSection = sectionBetween(
   ledger,
-  "### Driver Live Location Browser Map Key Readiness Contract Guard Lock",
+  "### Admin Active Jobs Browser Map JavaScript API",
 );
 
 for (const phrase of [
-  "This is a docs/test-only guard for any future browser-rendered base map in the Admin Active Jobs Map UI.",
-  "This lock does not create a browser map key, change Vercel env, expose any key to the browser, render a map, activate admin active-jobs map runtime, activate driver GPS capture, open live-location gates, read/write database rows, call Google Maps/OneMap/FlightAware, deploy, send provider messages, or activate production.",
-  "Current state remains closed: no browser Google Maps JavaScript loader, no `NEXT_PUBLIC_` map key, no active map canvas, and no customer-visible live map.",
-  "Future admin active-jobs browser map must use a separate browser-safe key from the existing server-side `PRESTIGE_GOOGLE_MAPS_API_KEY`; the server-side key must never be sent to client code, HTML, logs, errors, or API responses.",
-  "Future browser key setup requires separate owner approval, Google Cloud key creation, API restriction to browser map rendering APIs only, HTTP referrer/domain restrictions, and names-only ledger recording with no key value.",
-  "Future names-only env plan must use `PRESTIGE_ADMIN_ACTIVE_JOBS_MAP_BROWSER_PROVIDER`, `PRESTIGE_GOOGLE_MAPS_BROWSER_API_KEY`, `PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS`, and optional `PRESTIGE_GOOGLE_MAPS_BROWSER_MAP_ID`; values must never be printed, logged, committed, or pasted into docs.",
-  "Future allowed origins must be explicit and limited to approved staging/production app origins; wildcard, unrestricted, localhost-only production, mobile-app, IP-address, or server-key reuse configurations are not approved.",
-  "Future browser map APIs must remain separate from server-side admin location search/route estimates, driver GPS capture/write routes, customer portal, customer in-app notifications, Driver Details Email, Telegram, WhatsApp, SMS, billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, OTS/photo/storage, calendar, and shim work.",
-  "Future closed gates must not read `PRESTIGE_GOOGLE_MAPS_BROWSER_API_KEY`, must not render map scripts, must not call `navigator.geolocation`, must not fetch location rows, and must not expose coordinates.",
-  "Future map UI evidence must prove no key appears in page source, route responses, server logs, normalized evidence, or committed files; it must also prove rollback removes the browser map surface.",
-  "Future admin map UI remains admin/dispatcher-only and may show only approved operational marker/status fields; customer live map links remain separately blocked.",
-  "This guard adds `scripts/test-driver-live-location-browser-map-key-readiness-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.",
+  "Admin Dispatch can render an optional same-window Google Maps JavaScript canvas inside the existing compact Active Jobs Map panel.",
+  "The canvas is default-closed: it only loads after active driver markers exist and `/api/admin-active-jobs-map-browser-config` returns a configured browser-safe provider/key response.",
+  "The browser config route uses the existing admin dispatcher boundary, same-origin dashboard purpose header, a separate `PRESTIGE_ADMIN_ACTIVE_JOBS_MAP_BROWSER_PROVIDER=google_maps_javascript` gate, `PRESTIGE_GOOGLE_MAPS_BROWSER_API_KEY`, explicit `PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS`, and optional `PRESTIGE_GOOGLE_MAPS_BROWSER_MAP_ID`.",
+  "The existing server-side `PRESTIGE_GOOGLE_MAPS_API_KEY` remains server-only for admin location search/route estimates and is not read or returned by the browser-map config route.",
+  "When the browser map config is missing or origin is not allowed, the admin UI stays compact, shows an embedded-map-off message, and keeps the per-driver `Driver Pin` Google Maps fallback links.",
+  "The browser map canvas is admin-only and shows only active driver marker positions already returned by the guarded active-jobs map route.",
+  "This lane does not change driver GPS capture, driver share/stop behavior, customer live maps, customer portal, public booking, billing/payment/PDF/invoice/payout, provider messaging, parser, Save Booking, `/api/admin-saved-bookings`, calendar, Vercel/env values, or DB schema.",
+  "No `NEXT_PUBLIC_` map key is introduced; browser key values must never be committed, printed, logged, or pasted into docs.",
 ]) {
-  assertIncludes(ledgerSection, phrase, `ledger browser map key phrase ${phrase}`);
+  assertIncludes(ledgerSection, phrase, `ledger browser map phrase ${phrase}`);
 }
 
-assertIncludes(preactivationSuite, guardScript, "preactivation browser map key guard registration");
+assertIncludes(preactivationSuite, guardScript, "preactivation browser map guard registration");
 
 for (const forbiddenPhrase of [
-  "browser map key is created",
-  "browser map is live",
-  "active jobs map is live",
-  "GPS capture is active",
-  "customer live map is approved",
   "server-side key may be exposed",
   "PRESTIGE_GOOGLE_MAPS_API_KEY may be used in browser",
   "wildcard origin is approved",
   "unrestricted key is approved",
-  "production activation is approved",
+  "customer live map is approved now",
+  "driver GPS capture changed",
 ]) {
-  assertExcludes(ledgerSection, forbiddenPhrase, "forbidden browser map key activation claim");
-}
-
-const browserFacingSource = `${appPage}\n${driverJobPage}`;
-const serverMapSource = `${locationSearchHelper}\n${routeEstimateHelper}`;
-const liveLocationSource = `${liveLocationScaffold}\n${adminActiveJobsRoute}`;
-
-for (const forbiddenPattern of [
-  /NEXT_PUBLIC_(?:GOOGLE|.*MAP)/i,
-  /PRESTIGE_GOOGLE_MAPS_BROWSER_API_KEY/,
-  /PRESTIGE_ADMIN_ACTIVE_JOBS_MAP_BROWSER_PROVIDER/,
-  /PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS/,
-  /PRESTIGE_GOOGLE_MAPS_BROWSER_MAP_ID/,
-  /maps\.googleapis\.com\/maps\/api\/js/i,
-  /@googlemaps\/js-api-loader|google\.maps|new google/i,
-  /<script[^>]+maps\.googleapis\.com/i,
-  /data-admin-active-jobs-map-canvas|data-driver-live-location-map-canvas/i,
-  /watchPosition|clearWatch|GeolocationPosition/i,
-]) {
-  assertExcludes(browserFacingSource, forbiddenPattern, "current browser-facing app source");
+  assertExcludes(ledgerSection, forbiddenPhrase, "forbidden browser map activation claim");
 }
 
 for (const fragment of [
-  'const driverLiveLocationUiState = pageState.kind === "ready" ? "runtime-check" : "disabled";',
-  "checkDriverLiveLocationReadiness",
-  "navigator.geolocation.getCurrentPosition",
+  "const adminActiveJobsMapBrowserConfigApiPath =",
+  '"/api/admin-active-jobs-map-browser-config";',
+  "loadAdminActiveJobsBrowserGoogleMaps",
+  "https://maps.googleapis.com/maps/api/js?key=",
+  "data-admin-active-jobs-map-canvas",
+  "data-admin-active-jobs-map-config-message",
+  "AdminActiveJobsBrowserMap",
+  "Driver Pin",
+  "Embedded map off. Use Driver Pin",
 ]) {
-  assertIncludes(browserFacingSource, fragment, `approved driver browser live-location gate ${fragment}`);
+  assertIncludes(appPage, fragment, `admin browser map UI fragment ${fragment}`);
 }
 
-assertIncludes(serverMapSource, "PRESTIGE_GOOGLE_MAPS_API_KEY", "server-side Google Maps key remains server helper only");
-assertIncludes(serverMapSource, "PRESTIGE_ADMIN_MAP_LOCATION_SEARCH_ENABLED", "server map search gate");
-assertIncludes(serverMapSource, "PRESTIGE_ADMIN_MAP_ROUTE_ESTIMATES_ENABLED", "server map route gate");
+for (const fragment of [
+  "resolveAdminDispatcherBoundary",
+  "adminBookingPersistencePurpose",
+  "PRESTIGE_ADMIN_ACTIVE_JOBS_MAP_BROWSER_PROVIDER",
+  "PRESTIGE_GOOGLE_MAPS_BROWSER_API_KEY",
+  "PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS",
+  "PRESTIGE_GOOGLE_MAPS_BROWSER_MAP_ID",
+  'const browserMapProvider = "google_maps_javascript";',
+  "allowedOrigins.includes(origin)",
+  "admin_active_jobs_browser_map_not_configured",
+  "Admin active-jobs browser map origin is not allowed.",
+  "customerVisible: false",
+  "external_send: false",
+]) {
+  assertIncludes(browserConfigRoute, fragment, `browser config route fragment ${fragment}`);
+}
+
+assertOrder(
+  browserConfigRoute,
+  "provider !== browserMapProvider || !apiKey",
+  "apiKey,",
+  "browser config route closed gate before key response",
+);
 
 for (const forbiddenPattern of [
+  /PRESTIGE_GOOGLE_MAPS_API_KEY/,
+  /NEXT_PUBLIC_(?:GOOGLE|.*MAP|.*LOCATION)/i,
+  /console\.(?:log|warn|error|info|debug)/,
+  /createClient|@supabase\/supabase-js|\.from\(|\.(?:insert|upsert|update|delete|select)\s*\(/i,
+  /sendMail|sendMessage|sendSms|resend\.|stripe\.|checkout\.sessions/i,
+]) {
+  assertExcludes(browserConfigRoute, forbiddenPattern, "browser config route");
+}
+
+for (const forbiddenPattern of [
+  /PRESTIGE_GOOGLE_MAPS_API_KEY/,
   /PRESTIGE_GOOGLE_MAPS_BROWSER_API_KEY/,
   /PRESTIGE_ADMIN_ACTIVE_JOBS_MAP_BROWSER_PROVIDER/,
   /PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS/,
   /PRESTIGE_GOOGLE_MAPS_BROWSER_MAP_ID/,
   /NEXT_PUBLIC_(?:GOOGLE|.*MAP|.*LOCATION)/i,
 ]) {
-  assertExcludes(serverMapSource, forbiddenPattern, "server-side admin map search/route helpers");
+  assertExcludes(appPage, forbiddenPattern, "admin browser page must not contain map env names");
 }
 
-for (const fragment of [
-  "PRESTIGE_ADMIN_ACTIVE_JOBS_MAP_ENABLED",
-  "liveMapEnabled: false",
-  "active_jobs: []",
-  "map_rendered: false",
-  "marker_count: 0",
+for (const [label, source] of [
+  ["driver job page", driverJobPage],
+  ["public booking page", publicBookPage],
+  ["customer portal page", customerPortal],
 ]) {
-  assertIncludes(liveLocationSource, fragment, `closed active-jobs map scaffold fragment ${fragment}`);
+  for (const forbiddenPattern of [
+    /admin-active-jobs-map-browser-config/,
+    /maps\.googleapis\.com\/maps\/api\/js/i,
+    /data-admin-active-jobs-map-canvas/i,
+    /PRESTIGE_GOOGLE_MAPS_BROWSER|NEXT_PUBLIC_.*MAP/i,
+  ]) {
+    assertExcludes(source, forbiddenPattern, label);
+  }
 }
 
-for (const forbiddenPattern of [
-  /PRESTIGE_GOOGLE_MAPS_API_KEY/,
-  /PRESTIGE_GOOGLE_MAPS_BROWSER_API_KEY/,
-  /maps\.googleapis\.com|google\.maps|@googlemaps\/js-api-loader/i,
-  /createClient|@supabase\/supabase-js|\.from\(|\.(?:insert|upsert|update|delete|select)\s*\(/i,
-  /navigator\.geolocation|getCurrentPosition|watchPosition|clearWatch|GeolocationPosition/i,
-]) {
-  assertExcludes(liveLocationSource, forbiddenPattern, "closed live-location active-jobs scaffold");
-}
+assertIncludes(locationSearchHelper, "PRESTIGE_GOOGLE_MAPS_API_KEY", "server location helper key");
+assertIncludes(routeEstimateHelper, "PRESTIGE_GOOGLE_MAPS_API_KEY", "server route helper key");
+assertExcludes(
+  `${locationSearchHelper}\n${routeEstimateHelper}`,
+  /PRESTIGE_GOOGLE_MAPS_BROWSER_API_KEY|PRESTIGE_ADMIN_ACTIVE_JOBS_MAP_BROWSER_PROVIDER|NEXT_PUBLIC_.*MAP/i,
+  "server-side admin map search/route helpers",
+);
 
 console.log("Driver live-location browser map key readiness contract guard passed");

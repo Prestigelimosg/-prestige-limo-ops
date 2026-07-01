@@ -212,8 +212,7 @@ for (const [label, source] of [
 
 for (const forbiddenPattern of [
   /NEXT_PUBLIC_GOOGLE|NEXT_PUBLIC_.*MAP/i,
-  /google\.maps|new google/i,
-  /<script[^>]+maps\.googleapis\.com/i,
+  /PRESTIGE_GOOGLE_MAPS_API_KEY|PRESTIGE_GOOGLE_MAPS_BROWSER_API_KEY/i,
   /@googlemaps\/js-api-loader/i,
 ]) {
   assertExcludes(appPage, forbiddenPattern, "current admin map UI browser-key surface");

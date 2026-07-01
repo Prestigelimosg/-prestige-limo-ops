@@ -1,10 +1,10 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-1c4ae397 Group completed jobs by month
+957c4c45 Open one-booking live location control
 
 Latest pushed main/staging runtime checkpoint:
-1c4ae397 Group completed jobs by month
+957c4c45 Open one-booking live location control
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
 36ce3935 Avoid parsing job headers as passengers

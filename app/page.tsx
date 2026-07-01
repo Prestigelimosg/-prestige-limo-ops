@@ -1807,6 +1807,7 @@ type AdminMonthlyInvoiceNumberReservationRecord = {
 };
 
 type AdminMapRouteAssistLocationField = "dropoff" | "pickup";
+type AdminMapLocationSuggestionField = AdminMapRouteAssistLocationField | "extraStopLocation";
 
 type AdminMapLocationSearchResultItem = {
   address?: string | null;
@@ -1830,6 +1831,14 @@ type AdminMapRouteAssistAction =
   | "estimate-route"
   | "search-dropoff"
   | "search-pickup";
+
+type AdminMapLocationSuggestionState = {
+  field: AdminMapLocationSuggestionField | null;
+  message: Message | null;
+  query: string;
+  results: AdminMapLocationSearchResultItem[];
+  status: "error" | "idle" | "loaded" | "loading";
+};
 
 type DriverAcknowledgementFollowUpStatus = "pending" | "acknowledged" | "needs-call";
 
@@ -7051,6 +7060,19 @@ function adminMapLocationLabel(location: AdminMapLocationSearchResultItem | null
   return clean(location?.label) || clean(location?.address) || "No map match selected";
 }
 
+function adminMapLocationSuggestionIdleState(
+  overrides: Partial<AdminMapLocationSuggestionState> = {},
+): AdminMapLocationSuggestionState {
+  return {
+    field: null,
+    message: null,
+    query: "",
+    results: [],
+    status: "idle",
+    ...overrides,
+  };
+}
+
 async function loadAdminBookingWorkflowStatusRecord(
   bookingReference: string,
   workflowArea: string,
@@ -7287,10 +7309,21 @@ async function revokeAdminDevicePushSubscription(subscription: PushSubscription)
 }
 
 async function loadAdminMapLocationSearchFirstMatch(query: string) {
+  const matches = await loadAdminMapLocationSearchMatches(query);
+  const firstMatch = matches[0];
+
+  if (!firstMatch) {
+    throw new Error("No map match found.");
+  }
+
+  return firstMatch;
+}
+
+async function loadAdminMapLocationSearchMatches(query: string) {
   const cleanedQuery = clean(query);
 
   if (!cleanedQuery) {
-    throw new Error("Map location search requires a pickup or drop-off value.");
+    throw new Error("Map location search requires a location value.");
   }
 
   const params = new URLSearchParams({
@@ -7313,21 +7346,19 @@ async function loadAdminMapLocationSearchFirstMatch(query: string) {
   const results = Array.isArray(result.location_search?.results)
     ? (result.location_search.results as AdminMapLocationSearchResultItem[])
     : [];
-  const firstMatch = results.find((candidate) =>
-    Number.isFinite(Number(candidate.latitude)) &&
-      Number.isFinite(Number(candidate.longitude)) &&
-      Boolean(adminMapLocationLabel(candidate)),
-  );
 
-  if (!firstMatch) {
-    throw new Error("No map match found.");
-  }
-
-  return {
-    ...firstMatch,
-    latitude: Number(firstMatch.latitude),
-    longitude: Number(firstMatch.longitude),
-  };
+  return results
+    .filter((candidate) =>
+      Number.isFinite(Number(candidate.latitude)) &&
+        Number.isFinite(Number(candidate.longitude)) &&
+        Boolean(adminMapLocationLabel(candidate)),
+    )
+    .slice(0, 6)
+    .map((candidate) => ({
+      ...candidate,
+      latitude: Number(candidate.latitude),
+      longitude: Number(candidate.longitude),
+    }));
 }
 
 async function loadAdminMapRouteEstimate({
@@ -9905,6 +9936,8 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     useState<AdminMapRouteAssistAction | null>(null);
   const [adminMapRouteAssistMessage, setAdminMapRouteAssistMessage] =
     useState<Message | null>(null);
+  const [adminMapLocationSuggestionState, setAdminMapLocationSuggestionState] =
+    useState<AdminMapLocationSuggestionState>(() => adminMapLocationSuggestionIdleState());
   const [dispatchReleaseLocalNote, setDispatchReleaseLocalNote] = useState("");
   const [driverAcknowledgementMessage, setDriverAcknowledgementMessage] = useState<Message | null>(null);
   const [
@@ -12687,9 +12720,122 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       setAdminMapRouteEstimate(null);
       setAdminMapRouteAssistMessage(null);
     }
+    if (field === "pickup" || field === "dropoff" || field === "extraStopLocation") {
+      setAdminMapLocationSuggestionState((current) =>
+        current.field === field ? adminMapLocationSuggestionIdleState() : current,
+      );
+    }
     setBooking((current) => ({
       ...current,
       [field]: value,
+    }));
+  }
+
+  function adminMapLocationSuggestionFieldLabel(field: AdminMapLocationSuggestionField) {
+    if (field === "extraStopLocation") {
+      return "Extra stop";
+    }
+
+    return field === "pickup" ? "Pickup" : "Drop-off";
+  }
+
+  function adminMapLocationSuggestionQuery(field: AdminMapLocationSuggestionField) {
+    if (field === "extraStopLocation") {
+      return booking.extraStopLocation;
+    }
+
+    return field === "pickup" ? booking.pickup : booking.dropoff;
+  }
+
+  async function searchAdminMapLocationSuggestions(field: AdminMapLocationSuggestionField) {
+    const label = adminMapLocationSuggestionFieldLabel(field);
+    const query = clean(adminMapLocationSuggestionQuery(field));
+
+    if (!query) {
+      setAdminMapLocationSuggestionState(adminMapLocationSuggestionIdleState({
+        field,
+        message: {
+          tone: "error",
+          text: `${label} needs text before map suggestions can search.`,
+        },
+        query,
+        status: "error",
+      }));
+      return;
+    }
+
+    setAdminMapLocationSuggestionState({
+      field,
+      message: {
+        tone: "info",
+        text: `Searching ${label.toLowerCase()} suggestions...`,
+      },
+      query,
+      results: [],
+      status: "loading",
+    });
+
+    try {
+      const results = await loadAdminMapLocationSearchMatches(query);
+
+      setAdminMapLocationSuggestionState({
+        field,
+        message: {
+          tone: results.length > 0 ? "success" : "info",
+          text:
+            results.length > 0
+              ? `Select one ${label.toLowerCase()} suggestion.`
+              : `No ${label.toLowerCase()} suggestion found.`,
+        },
+        query,
+        results,
+        status: "loaded",
+      });
+    } catch (error) {
+      setAdminMapLocationSuggestionState(adminMapLocationSuggestionIdleState({
+        field,
+        message: {
+          tone: "error",
+          text: adminMapRouteAssistFailureMessage(error, `${label} suggestions`),
+        },
+        query,
+        status: "error",
+      }));
+    }
+  }
+
+  function applyAdminMapLocationSuggestion(
+    field: AdminMapLocationSuggestionField,
+    location: AdminMapLocationSearchResultItem,
+  ) {
+    const label = adminMapLocationLabel(location);
+
+    setBooking((current) => ({
+      ...current,
+      [field]: label,
+    }));
+
+    if (field === "pickup") {
+      setAdminMapPickupLocation(location);
+      setAdminMapRouteEstimate(null);
+    }
+
+    if (field === "dropoff") {
+      setAdminMapDropoffLocation(location);
+      setAdminMapRouteEstimate(null);
+    }
+
+    if (field === "extraStopLocation") {
+      setAdminMapRouteEstimate(null);
+    }
+
+    setAdminMapLocationSuggestionState(adminMapLocationSuggestionIdleState({
+      field,
+      message: {
+        tone: "success",
+        text: `${adminMapLocationSuggestionFieldLabel(field)} selected: ${label}.`,
+      },
+      query: label,
     }));
   }
 
@@ -17261,43 +17407,113 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       {message.text}
     </div>
   );
+  const renderAdminMapLocationSuggestions = (field: AdminMapLocationSuggestionField) => {
+    const active = adminMapLocationSuggestionState.field === field;
+    const loading = active && adminMapLocationSuggestionState.status === "loading";
+    const results = active ? adminMapLocationSuggestionState.results : [];
+
+    return (
+      <div
+        className="mt-1 rounded-md border border-cyan-100 bg-cyan-50/50 p-1.5"
+        data-admin-map-location-suggestions={field}
+      >
+        <div className="flex flex-wrap items-center gap-1">
+          <button
+            className="min-h-7 rounded border border-cyan-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-cyan-950 transition hover:bg-cyan-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+            data-admin-map-location-suggest-button={field}
+            disabled={loading || !clean(adminMapLocationSuggestionQuery(field))}
+            onClick={() => void searchAdminMapLocationSuggestions(field)}
+            type="button"
+          >
+            {loading ? "Searching" : "Suggest"}
+          </button>
+          {active && adminMapLocationSuggestionState.message ? (
+            <span
+              className={`min-w-0 flex-1 rounded border px-1.5 py-0.5 text-[10px] font-semibold leading-3 ${statusClass(
+                adminMapLocationSuggestionState.message.tone,
+              )}`}
+              data-admin-map-location-suggestion-message={field}
+            >
+              {adminMapLocationSuggestionState.message.text}
+            </span>
+          ) : (
+            <span className="text-[10px] leading-3 text-cyan-900">
+              Admin map suggestions
+            </span>
+          )}
+        </div>
+        {active && results.length > 0 ? (
+          <div
+            className="mt-1 max-h-32 space-y-1 overflow-y-auto"
+            data-admin-map-location-suggestion-results={field}
+          >
+            {results.map((location, index) => (
+              <button
+                className="grid w-full min-w-0 grid-cols-[1fr_auto] gap-1 rounded border border-cyan-200 bg-white px-2 py-1 text-left text-[11px] leading-4 text-slate-800 transition hover:bg-cyan-50"
+                data-admin-map-location-suggestion-result={field}
+                key={`${field}-${adminMapLocationLabel(location)}-${index}`}
+                onClick={() => applyAdminMapLocationSuggestion(field, location)}
+                type="button"
+              >
+                <span className="min-w-0 truncate font-semibold">
+                  {adminMapLocationLabel(location)}
+                </span>
+                <span className="text-cyan-800">Use</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <p
+          className="mt-1 text-[10px] leading-3 text-cyan-900"
+          data-admin-map-location-suggestion-boundary={field}
+        >
+          Admin-only lookup. No save, customer message, live location, billing, payment, payout, or parser change.
+        </p>
+      </div>
+    );
+  };
   const renderDispatchBookingField = (field: keyof BookingForm) => (
-    <label
+    <div
       className={field === "pickup" || field === "dropoff" ? "sm:col-span-2" : ""}
       key={field}
     >
-      <span className="mb-1 block text-sm font-medium text-slate-700">
-        {fieldLabels[field]}
-        {requiredFields.includes(field) ? (
-          <span className="text-red-600"> *</span>
-        ) : null}
-      </span>
-      <input
-        className="h-9 w-full rounded-md border border-stone-300 bg-white px-2.5 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-        inputMode={
-          field === "pax"
-            ? "numeric"
-            : field === "bookerContact" || field === "driverContact"
-              ? "tel"
-              : undefined
-        }
-        min={field === "pax" ? 1 : undefined}
-        onChange={(event) => update(field, event.target.value)}
-        placeholder={fieldLabels[field]}
-        type={
-          field === "date"
-            ? "date"
-            : field === "bookerEmail"
-              ? "email"
+      <label className="block">
+        <span className="mb-1 block text-sm font-medium text-slate-700">
+          {fieldLabels[field]}
+          {requiredFields.includes(field) ? (
+            <span className="text-red-600"> *</span>
+          ) : null}
+        </span>
+        <input
+          className="h-9 w-full rounded-md border border-stone-300 bg-white px-2.5 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+          inputMode={
+            field === "pax"
+              ? "numeric"
               : field === "bookerContact" || field === "driverContact"
                 ? "tel"
-                : field === "pax"
-                  ? "number"
-                  : "text"
-        }
-        value={booking[field]}
-      />
-    </label>
+                : undefined
+          }
+          min={field === "pax" ? 1 : undefined}
+          onChange={(event) => update(field, event.target.value)}
+          placeholder={fieldLabels[field]}
+          type={
+            field === "date"
+              ? "date"
+              : field === "bookerEmail"
+                ? "email"
+                : field === "bookerContact" || field === "driverContact"
+                  ? "tel"
+                  : field === "pax"
+                    ? "number"
+                    : "text"
+          }
+          value={booking[field]}
+        />
+      </label>
+      {field === "pickup" || field === "dropoff"
+        ? renderAdminMapLocationSuggestions(field)
+        : null}
+    </div>
   );
 
   const customerBookingRequestsPanel = customerBookingRequestDisplayItems.length > 0 ? (
@@ -30248,15 +30464,18 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                 <p className="text-sm text-slate-600">Review extra stops and child seat requirements together.</p>
               </div>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-                <label className="sm:col-span-2 lg:col-span-2">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Extra stop location</span>
-                  <input
-                    className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-                    onChange={(event) => update("extraStopLocation", event.target.value)}
-                    placeholder="Marina Bay Sands"
-                    value={booking.extraStopLocation}
-                  />
-                </label>
+                <div className="sm:col-span-2 lg:col-span-2">
+                  <label className="block">
+                    <span className="mb-1 block text-sm font-medium text-slate-700">Extra stop location</span>
+                    <input
+                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                      onChange={(event) => update("extraStopLocation", event.target.value)}
+                      placeholder="Marina Bay Sands"
+                      value={booking.extraStopLocation}
+                    />
+                  </label>
+                  {renderAdminMapLocationSuggestions("extraStopLocation")}
+                </div>
                 <label>
                   <span className="mb-1 block text-sm font-medium text-slate-700">Extra Stops</span>
                   <input

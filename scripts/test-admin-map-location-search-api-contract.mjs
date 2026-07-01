@@ -330,20 +330,6 @@ try {
         }),
       }),
     ],
-    [
-      "missing session token",
-      new Request("http://localhost/api/admin-map-location-search?query=Raffles%20Hotel", {
-        headers: adminHeaders(),
-      }),
-    ],
-    [
-      "wrong session token",
-      new Request("http://localhost/api/admin-map-location-search?query=Raffles%20Hotel", {
-        headers: sessionHeaders({
-          "x-prestige-admin-session-token": "wrong-token",
-        }),
-      }),
-    ],
   ]) {
     setEnv(enabledEnv());
     const blockedFetchCalls = installFetchMock();
@@ -355,6 +341,37 @@ try {
       ok: false,
     });
     assert.equal(blockedFetchCalls.length, 0, `${label}: expected no Google Maps call`);
+    assertNoLeaks(result, `${label}: response should stay safe`);
+  }
+
+  for (const [label, request] of [
+    [
+      "same-origin admin GET without request token",
+      new Request("http://localhost/api/admin-map-location-search?query=Raffles%20Hotel", {
+        headers: adminHeaders(),
+      }),
+    ],
+    [
+      "same-origin admin GET with ignored wrong request token",
+      new Request("http://localhost/api/admin-map-location-search?query=Raffles%20Hotel", {
+        headers: sessionHeaders({
+          "x-prestige-admin-session-token": "wrong-token",
+        }),
+      }),
+    ],
+  ]) {
+    setEnv(enabledEnv());
+    const safeReadFetchCalls = installFetchMock();
+    const result = await readRouteResponse(await route.GET(request));
+
+    assert.equal(result.status, 200, `${label}: expected safe admin read`);
+    assert.equal(result.body.ok, true, `${label}: expected ok response`);
+    assert.equal(
+      result.body.location_search?.safe_route_context?.source,
+      "admin_map_location_search",
+      `${label}: expected admin search context`,
+    );
+    assert.equal(safeReadFetchCalls.length, 1, `${label}: expected one Google Maps call`);
     assertNoLeaks(result, `${label}: response should stay safe`);
   }
 

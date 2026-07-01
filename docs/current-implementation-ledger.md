@@ -12,6 +12,16 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Admin Dispatch Map Location Suggestions
+
+- Admin Dispatch Pickup, Drop-off, and Extra stop location fields now have compact `Suggest` controls that call the existing guarded `/api/admin-map-location-search` server route.
+- Suggestions are selected directly into the active Dispatch field; Pickup and Drop-off selections also update the existing admin map-match state used by `Map Route Assist`.
+- The route remains admin-only through the existing same-origin admin dashboard boundary and `x-prestige-admin-purpose` header. The existing `PRESTIGE_GOOGLE_MAPS_API_KEY` remains server-side only and is not exposed to browser code, customer pages, or driver pages.
+- Public `/book` and customer portal `/my-bookings` booking request forms are intentionally unchanged in this lane. Customer-facing address suggestions require a separate rate-limited customer-safe route or a separate browser-safe Places key plan.
+- This lane does not embed a Google map, does not add a browser Maps JavaScript key, and does not change live-location/GPS behavior. Multi-driver live-location list and same-window embedded map remain separate lanes.
+- No Vercel CLI, env value change, DB schema change, booking save/load behavior, parser behavior, customer message, driver notification, provider send, email, billing, invoice/PDF, payment, payout, calendar, or pricing behavior changed.
+- Focused guard coverage lives in `scripts/test-admin-dispatch-map-location-suggestions-guard.mjs`; the existing map-search API contract was refreshed to match current same-origin admin `GET` read behavior.
+
 ### Driver Live Location One-Booking Runtime Control
 
 - Admin Dispatch now has a compact Active Jobs Map runtime control inside the existing Day-of-Trip Dispatch Monitor.

@@ -7,7 +7,7 @@ Latest pushed main/staging runtime checkpoint:
 3df797c8 Split narrated round-trip airport parser choices
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-1c9a83ab Record live booking calendar and invoice proof
+550ef1ab Record round-trip parser checkpoint
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -22,6 +22,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The multiple-booking chooser now carries child-seat details into the booking form when a draft is selected.
 - The duplicate parser-debug chooser is hidden during daily operation unless the parser debug panel is explicitly opened, so this two-booking message shows exactly two `Use this booking` choices.
 - Local Mac Chrome proof on `http://localhost:3000/` pasted the exact customer sentence into Dispatch, clicked `Create Job Card`, confirmed exactly two choices with `SQ938`, `SQ939`, and `Child seat: 1 x booster seat`, then selected each draft. The first filled the departure fields above; the second filled the arrival/return fields above and left pickup time blank for admin review.
+- Live Mac Chrome proof on `https://app.prestigelimo.sg/` after pushing `550ef1ab` repeated the same no-save flow: Dispatch showed exactly two `Use this booking` choices, the departure draft filled `DEP` / `2026-07-02` / `0600hrs` / `SQ938`, and the return draft filled `MNG` / `2026-07-10` / blank pickup time / `SQ939`; both kept pax `5` and `1 x booster seat`.
 - This pass did not save a booking, sync calendar, touch live app data, use Vercel CLI, change env/DB schema, send email, activate Stripe/payment, send providers, create payouts, or change GPS/live-location behavior.
 - Checks passed: `npm run test:parser`, `node --check scripts/test-booking-ui-browser.mjs`, `npx tsc --noEmit --pretty false`, `npm run lint` with only existing `loadBookings` warnings, `npm run build`, and `git diff --check`.
 

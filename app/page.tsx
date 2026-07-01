@@ -3136,7 +3136,6 @@ function AdminActiveJobsBrowserMap({
     mapElement.setAttribute("data-admin-active-jobs-map-google-base", "true");
     mapElement.style.background = "#e5e7eb";
     mapElement.style.overflow = "hidden";
-    mapElement.style.pointerEvents = "none";
     mapElement.style.position = "fixed";
     mapElement.style.zIndex = "1";
     document.body.appendChild(mapElement);

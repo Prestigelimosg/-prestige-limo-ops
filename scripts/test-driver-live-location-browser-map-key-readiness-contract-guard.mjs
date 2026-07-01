@@ -122,6 +122,8 @@ for (const fragment of [
   "AdminActiveJobsBrowserMap",
   "renderAdminActiveJobsBrowserMapTileFallback",
   "waitForAdminActiveJobsBrowserMapTileFallback",
+  "tileFallbackInline",
+  "mapSlotRef.current?.prepend(mapElement)",
   "https://mt.google.com/vt/lyrs=m",
   "data-admin-active-jobs-map-google-tile",
   "Map tiles © Google",

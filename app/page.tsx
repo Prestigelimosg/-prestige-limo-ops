@@ -3227,6 +3227,7 @@ function AdminActiveJobsBrowserMap({
 
   useEffect(() => {
     let cancelled = false;
+    let tileFallbackInline = false;
 
     if (!apiKey || activeMarkerJobs.length === 0) {
       return () => {
@@ -3248,6 +3249,17 @@ function AdminActiveJobsBrowserMap({
       const portalElement = mapElementRef.current;
 
       if (!portalElement) {
+        return;
+      }
+
+      if (tileFallbackInline) {
+        portalElement.style.display = "block";
+        portalElement.style.height = "100%";
+        portalElement.style.left = "0";
+        portalElement.style.position = "absolute";
+        portalElement.style.top = "0";
+        portalElement.style.width = "100%";
+        portalElement.style.zIndex = "0";
         return;
       }
 
@@ -3351,6 +3363,8 @@ function AdminActiveJobsBrowserMap({
           markersRef.current.forEach((marker) => marker.setMap(null));
           markersRef.current = [];
           mapRef.current = null;
+          tileFallbackInline = true;
+          mapSlotRef.current?.prepend(mapElement);
           renderAdminActiveJobsBrowserMapTileFallback(mapElement, activeMarkerJobs[0].position);
           updateMapPortalRect();
           await waitForAdminActiveJobsBrowserMapTileFallback(mapElement);

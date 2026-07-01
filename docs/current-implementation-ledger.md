@@ -42,6 +42,17 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Redacted live config proof on `https://app.prestigelimo.sg/api/admin-active-jobs-map-browser-config` with the same-origin dashboard referer returned status `200`, `ok: true`, `enabled: true`, provider `google_maps_javascript`, and `apiKeyPresent: true`.
 - The proof did not print, log, commit, or paste the API key value. No code, DB schema, driver GPS capture, customer live maps, booking save/load, calendar, billing/payment/PDF/invoice/payout, provider messaging, parser, or customer/driver notification behavior changed.
 
+### Admin Active Jobs Browser Map Visual Readiness Fix
+
+- Live headed Mac Chrome proof on `https://app.prestigelimo.sg/` used safe test booking `ADM-20260630171930` with a fresh one-time driver job link. The driver page opened, browser location permission was granted, and `Share Location` returned `Location shared for this job only.` with sharing state `active`.
+- The production admin map read showed marker count `1`, marker row `ADM-20260630171930`, canvas state `ready`, and `Live driver map 1 pin`; however, a clipped headed-Chrome screenshot of the embedded map canvas showed only the panel header and a blank map area. DOM proof showed Google Maps runtime functions were present, but the map host had no `.gm-style` visual map DOM, so the embedded same-window map marker was not actually visible.
+- The `Driver Pin` fallback link remained present and would still be needed on that production deployment until the visual map fix is deployed.
+- A pre-existing runtime selection `CUST-20260628035919-0NIBST` had marker count `0` before the test. The test added `ADM-20260630171930` only temporarily, then `Stop Sharing` cleared the test marker, the fresh driver job link was revoked, the runtime was closed, and the pre-existing single selection was restored.
+- The browser-map loader now requests the Maps JavaScript libraries with `loading=async&libraries=maps,marker`, calls `google.maps.importLibrary("maps")` before constructing the map, and only reports the embedded canvas `ready` after the actual Google Maps `.gm-style` visual DOM renders. If the visual map DOM does not materialize, the compact panel falls back to the existing `Embedded map could not load. Use Driver Pin.` state instead of showing a false `1 pin` ready state.
+- Focused guard coverage now locks this visual readiness boundary in `scripts/test-driver-live-location-browser-map-key-readiness-contract-guard.mjs`.
+- This pass did not print, log, screenshot, or commit the browser map key value; did not use Vercel CLI; did not change env, DB schema, provider sends, billing/payment/PDF/invoice/payout, parser, Save Booking, customer messaging, driver messaging, customer live maps, address suggestions, or GPS/live-location scope beyond the bounded same-window driver marker proof.
+- Checks passed: browser map key readiness guard, active jobs map contract guard, live-location runtime control UI guard, `npx tsc --noEmit --pretty false`, `npm run lint` with only existing `loadBookings` warnings, `npm run build`, and `git diff --check`.
+
 ### Admin Dispatch Map Location Lookup
 
 - The visible `Suggest` controls under Admin Dispatch Pickup, Drop-off, and Extra stop location fields were removed after live proof showed the production route was safely disabled by env. This avoids a visible button that can only return "not enabled or configured" during real operations.

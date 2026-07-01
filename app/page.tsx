@@ -2801,6 +2801,7 @@ type BrowserGoogleLatLngBounds = {
 };
 
 type BrowserGoogleMapsNamespace = {
+  importLibrary?: (libraryName: "maps" | "marker") => Promise<BrowserGoogleMapsNamespace>;
   LatLngBounds?: new () => BrowserGoogleLatLngBounds;
   Map?: new (element: HTMLElement, options: Record<string, unknown>) => BrowserGoogleMap;
   Marker?: new (options: Record<string, unknown>) => BrowserGoogleMarker;
@@ -2821,16 +2822,38 @@ function readWindowGoogleMaps() {
   return googleRuntime?.maps || null;
 }
 
+async function resolveAdminActiveJobsBrowserGoogleMapsLibraries(
+  maps: BrowserGoogleMapsNamespace | null,
+) {
+  if (!maps) {
+    throw new Error("Google Maps JavaScript API did not load safely.");
+  }
+
+  if (maps.importLibrary) {
+    const mapsLibrary = await maps.importLibrary("maps");
+
+    return {
+      ...maps,
+      ...mapsLibrary,
+      LatLngBounds: mapsLibrary.LatLngBounds || maps.LatLngBounds,
+      Map: mapsLibrary.Map || maps.Map,
+      Marker: maps.Marker,
+    };
+  }
+
+  return maps;
+}
+
 function loadAdminActiveJobsBrowserGoogleMaps(apiKey: string) {
   const existingMaps = readWindowGoogleMaps();
 
   if (existingMaps?.Map && existingMaps.Marker && existingMaps.LatLngBounds) {
-    return Promise.resolve(existingMaps);
+    return resolveAdminActiveJobsBrowserGoogleMapsLibraries(existingMaps);
   }
 
   const scriptSource = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(
     apiKey,
-  )}&v=weekly`;
+  )}&v=weekly&loading=async&libraries=maps,marker`;
   const existingLoader = adminActiveJobsBrowserMapScriptLoaders.get(scriptSource);
 
   if (existingLoader) {
@@ -2841,12 +2864,16 @@ function loadAdminActiveJobsBrowserGoogleMaps(apiKey: string) {
     const finish = () => {
       const maps = readWindowGoogleMaps();
 
-      if (maps?.Map && maps.Marker && maps.LatLngBounds) {
-        resolve(maps);
-        return;
-      }
+      void resolveAdminActiveJobsBrowserGoogleMapsLibraries(maps)
+        .then((resolvedMaps) => {
+          if (resolvedMaps.Map && resolvedMaps.Marker && resolvedMaps.LatLngBounds) {
+            resolve(resolvedMaps);
+            return;
+          }
 
-      reject(new Error("Google Maps JavaScript API did not load safely."));
+          reject(new Error("Google Maps JavaScript API did not load safely."));
+        })
+        .catch(() => reject(new Error("Google Maps JavaScript API did not load safely.")));
     };
     const existingScript = document.querySelector<HTMLScriptElement>(
       'script[data-admin-active-jobs-browser-map-loader="true"]',
@@ -2879,6 +2906,34 @@ function loadAdminActiveJobsBrowserGoogleMaps(apiKey: string) {
   adminActiveJobsBrowserMapScriptLoaders.set(scriptSource, loader);
 
   return loader;
+}
+
+function waitForAdminActiveJobsBrowserMapDom(mapElement: HTMLElement) {
+  if (mapElement.querySelector(".gm-style")) {
+    return Promise.resolve();
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    let observer: MutationObserver | null = null;
+    const timeout = window.setTimeout(() => {
+      observer?.disconnect();
+      reject(new Error("Google Maps visual DOM did not render safely."));
+    }, 8000);
+    observer = new MutationObserver(() => {
+      if (!mapElement.querySelector(".gm-style")) {
+        return;
+      }
+
+      window.clearTimeout(timeout);
+      observer?.disconnect();
+      resolve();
+    });
+
+    observer.observe(mapElement, {
+      childList: true,
+      subtree: true,
+    });
+  });
 }
 
 function validAdminActiveJobMapPosition(job: AdminActiveJobsMapLocation) {
@@ -2938,18 +2993,26 @@ function AdminActiveJobsBrowserMap({
       };
     }
 
-    void loadAdminActiveJobsBrowserGoogleMaps(apiKey)
-      .then((maps) => {
+    void Promise.resolve()
+      .then(() => {
+        if (!cancelled) {
+          setRenderState("loading");
+        }
+
+        return loadAdminActiveJobsBrowserGoogleMaps(apiKey);
+      })
+      .then(async (maps) => {
         if (cancelled || !mapElementRef.current || !maps.Map || !maps.Marker || !maps.LatLngBounds) {
           return;
         }
 
+        const mapElement = mapElementRef.current;
         const MapConstructor = maps.Map;
         const MarkerConstructor = maps.Marker;
         const LatLngBoundsConstructor = maps.LatLngBounds;
 
         if (!mapRef.current) {
-          mapRef.current = new MapConstructor(mapElementRef.current, {
+          mapRef.current = new MapConstructor(mapElement, {
             center: activeMarkerJobs[0].position,
             clickableIcons: false,
             fullscreenControl: false,
@@ -2983,6 +3046,12 @@ function AdminActiveJobsBrowserMap({
           mapRef.current.setZoom(15);
         } else {
           mapRef.current.fitBounds(bounds);
+        }
+
+        await waitForAdminActiveJobsBrowserMapDom(mapElement);
+
+        if (cancelled) {
+          return;
         }
 
         setRenderState("ready");

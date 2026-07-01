@@ -101,6 +101,12 @@ for (const fragment of [
   '"/api/admin-active-jobs-map-browser-config";',
   "loadAdminActiveJobsBrowserGoogleMaps",
   "https://maps.googleapis.com/maps/api/js?key=",
+  "loading=async&libraries=maps,marker",
+  "resolveAdminActiveJobsBrowserGoogleMapsLibraries",
+  'maps.importLibrary("maps")',
+  "waitForAdminActiveJobsBrowserMapDom",
+  ".gm-style",
+  "Google Maps visual DOM did not render safely.",
   "data-admin-active-jobs-map-canvas",
   "data-admin-active-jobs-map-config-message",
   "AdminActiveJobsBrowserMap",
@@ -109,6 +115,13 @@ for (const fragment of [
 ]) {
   assertIncludes(appPage, fragment, `admin browser map UI fragment ${fragment}`);
 }
+
+assertOrder(
+  appPage,
+  "await waitForAdminActiveJobsBrowserMapDom(mapElement);",
+  'setRenderState("ready");',
+  "admin browser map must wait for rendered Google Maps DOM before ready state",
+);
 
 for (const fragment of [
   "resolveAdminDispatcherBoundary",

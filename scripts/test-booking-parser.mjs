@@ -3607,6 +3607,31 @@ assert.deepEqual(parseJobCardBookingMessage(
   ],
 });
 
+const pickupTimeDateAddressOnlySample =
+  'Hi William, the time for pickup on Sunday 5 July is at 8.30pm from Great World Service apartment. They have 6 x 23kg luggage. mr denis';
+assert.deepEqual(parseJobCardBookingMessage(
+  pickupTimeDateAddressOnlySample,
+  { referenceDate: new Date(2026, 6, 1, 10, 0, 0) },
+), {
+  success: true,
+  company: '',
+  bookingType: '',
+  vehicle: '',
+  date: '2026-07-05',
+  time: '2030hrs',
+  flight: '',
+  pickup: 'Great World Service apartment',
+  dropoff: '',
+  booker: '',
+  bookerEmail: '',
+  name: '',
+  pax: '1',
+  driverName: '',
+  driverContact: '',
+  bookerContact: '',
+  cleanedLines: [pickupTimeDateAddressOnlySample],
+});
+
 const multiTerminalArrivalChangeMessage = `Hi William, some changes for tomorrow arrival:
 Total 2 pickup from T3 and T4 to Grand Hyatt below:
 T3: MU567 Shanghai - Singapore Arrival 15:45 (1 Passenger - Ye Yueqin)

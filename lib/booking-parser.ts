@@ -2714,6 +2714,13 @@ function detectRoute(text: string, flight = "") {
     };
   }
 
+  const pickupOnly = cleanLocation(firstMatch(text, [
+    /\b(?:pick\s*up|pickup)\b.+?\bfrom\s+(.+?)(?=\.|,|\n|$)/i,
+  ]));
+  if (pickupOnly) {
+    return { pickup: pickupOnly, dropoff: "" };
+  }
+
   const homeDestination = cleanLocation(firstMatch(text, [
     /\b(?:go|send|head)\s+home\s+(.+?)(?=\.|,|\n|$)/i,
     /\bto\s+home\s+(?!on\b|today\b|tomorrow\b)(.+?)(?=\.|,|\n|$)/i,

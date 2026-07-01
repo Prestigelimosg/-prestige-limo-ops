@@ -17645,6 +17645,8 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     errorPrefix: string,
   ) {
     const bookingId = String(bookingRecord.id);
+    const bookingStatusReference =
+      cleanReferenceText(bookingRecord.booking_reference) || bookingId;
 
     if (typeof fetch !== "function") {
       const errorMessage = {
@@ -17662,7 +17664,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     try {
       const response = await fetch(adminSavedBookingStatusesApiPath, {
         body: JSON.stringify({
-          booking_id: bookingId,
+          booking_id: bookingStatusReference,
           status: nextStatus,
         }),
         headers: {
@@ -17677,7 +17679,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         !response.ok ||
         responseBody?.ok !== true ||
         !responseBody.booking ||
-        String(responseBody.booking.id) !== bookingId ||
+        String(responseBody.booking.id) !== bookingStatusReference ||
         responseBody.booking.status !== nextStatus ||
         !responseBody.booking.updated_at
       ) {

@@ -325,6 +325,16 @@ const savedBookingStatusFetchBlock = dashboardSource.match(
 
 assert.ok(savedBookingStatusFetchBlock, "Dashboard must call the saved booking status API.");
 assert.equal(
+  dashboardSource.includes("const bookingStatusReference ="),
+  true,
+  "Dashboard saved booking status updates must resolve a stable booking status reference.",
+);
+assert.equal(
+  savedBookingStatusFetchBlock.includes("booking_id: bookingStatusReference"),
+  true,
+  "Dashboard saved booking status updates must send the stable booking reference to the status API.",
+);
+assert.equal(
   savedBookingStatusFetchBlock.includes('"x-prestige-admin-purpose": "admin-booking-persistence"'),
   true,
   "Dashboard saved booking status updates must use the booking-persistence admin boundary.",

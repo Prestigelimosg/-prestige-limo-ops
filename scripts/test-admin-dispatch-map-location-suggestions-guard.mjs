@@ -20,18 +20,12 @@ function assertExcludes(source, pattern, label) {
 }
 
 assertIncludes(appSource, 'const adminMapLocationSearchApiPath = "/api/admin-map-location-search";', "admin Dispatch page");
-assertIncludes(appSource, "type AdminMapLocationSuggestionField", "admin Dispatch page");
-assertIncludes(appSource, '"extraStopLocation"', "admin Dispatch page");
 assertIncludes(appSource, "loadAdminMapLocationSearchMatches", "admin Dispatch page");
-assertIncludes(appSource, "searchAdminMapLocationSuggestions", "admin Dispatch page");
-assertIncludes(appSource, "applyAdminMapLocationSuggestion", "admin Dispatch page");
-assertIncludes(appSource, "data-admin-map-location-suggestions={field}", "admin Dispatch suggestion UI");
-assertIncludes(appSource, "data-admin-map-location-suggest-button={field}", "admin Dispatch suggestion UI");
-assertIncludes(appSource, "data-admin-map-location-suggestion-results={field}", "admin Dispatch suggestion UI");
-assertIncludes(appSource, "data-admin-map-location-suggestion-result={field}", "admin Dispatch suggestion UI");
-assertIncludes(appSource, "renderAdminMapLocationSuggestions(\"extraStopLocation\")", "extra stop suggestion UI");
+assertIncludes(appSource, "resolveAdminMapLocation", "admin Dispatch map route assist");
+assertIncludes(appSource, "data-admin-map-location-search={item.buttonData}", "admin Dispatch map route assist");
 assertIncludes(appSource, "\"x-prestige-admin-purpose\": adminLegacyDataPurpose", "admin Dispatch map search fetch");
-assertIncludes(appSource, "Admin-only lookup. No save, customer message, live location, billing, payment, payout, or parser change.", "suggestion boundary");
+assertIncludes(appSource, "Uses guarded admin map APIs only. No booking save", "map route assist boundary");
+assertExcludes(appSource, /data-admin-map-location-suggestions|data-admin-map-location-suggest-button|data-admin-map-location-suggestion-results|data-admin-map-location-suggestion-result|renderAdminMapLocationSuggestions|searchAdminMapLocationSuggestions|applyAdminMapLocationSuggestion|Admin map suggestions/i, "admin Dispatch visible Suggest UI must stay removed until live env is enabled");
 
 assertIncludes(adminRouteSource, "resolveAdminDispatcherBoundary", "admin location search route");
 assertIncludes(adminRouteSource, "adminBookingPersistencePurpose", "admin location search route");

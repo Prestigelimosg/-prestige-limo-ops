@@ -1807,7 +1807,6 @@ type AdminMonthlyInvoiceNumberReservationRecord = {
 };
 
 type AdminMapRouteAssistLocationField = "dropoff" | "pickup";
-type AdminMapLocationSuggestionField = AdminMapRouteAssistLocationField | "extraStopLocation";
 
 type AdminMapLocationSearchResultItem = {
   address?: string | null;
@@ -1831,14 +1830,6 @@ type AdminMapRouteAssistAction =
   | "estimate-route"
   | "search-dropoff"
   | "search-pickup";
-
-type AdminMapLocationSuggestionState = {
-  field: AdminMapLocationSuggestionField | null;
-  message: Message | null;
-  query: string;
-  results: AdminMapLocationSearchResultItem[];
-  status: "error" | "idle" | "loaded" | "loading";
-};
 
 type DriverAcknowledgementFollowUpStatus = "pending" | "acknowledged" | "needs-call";
 
@@ -7060,19 +7051,6 @@ function adminMapLocationLabel(location: AdminMapLocationSearchResultItem | null
   return clean(location?.label) || clean(location?.address) || "No map match selected";
 }
 
-function adminMapLocationSuggestionIdleState(
-  overrides: Partial<AdminMapLocationSuggestionState> = {},
-): AdminMapLocationSuggestionState {
-  return {
-    field: null,
-    message: null,
-    query: "",
-    results: [],
-    status: "idle",
-    ...overrides,
-  };
-}
-
 async function loadAdminBookingWorkflowStatusRecord(
   bookingReference: string,
   workflowArea: string,
@@ -9936,8 +9914,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     useState<AdminMapRouteAssistAction | null>(null);
   const [adminMapRouteAssistMessage, setAdminMapRouteAssistMessage] =
     useState<Message | null>(null);
-  const [adminMapLocationSuggestionState, setAdminMapLocationSuggestionState] =
-    useState<AdminMapLocationSuggestionState>(() => adminMapLocationSuggestionIdleState());
   const [dispatchReleaseLocalNote, setDispatchReleaseLocalNote] = useState("");
   const [driverAcknowledgementMessage, setDriverAcknowledgementMessage] = useState<Message | null>(null);
   const [
@@ -12720,122 +12696,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       setAdminMapRouteEstimate(null);
       setAdminMapRouteAssistMessage(null);
     }
-    if (field === "pickup" || field === "dropoff" || field === "extraStopLocation") {
-      setAdminMapLocationSuggestionState((current) =>
-        current.field === field ? adminMapLocationSuggestionIdleState() : current,
-      );
-    }
     setBooking((current) => ({
       ...current,
       [field]: value,
-    }));
-  }
-
-  function adminMapLocationSuggestionFieldLabel(field: AdminMapLocationSuggestionField) {
-    if (field === "extraStopLocation") {
-      return "Extra stop";
-    }
-
-    return field === "pickup" ? "Pickup" : "Drop-off";
-  }
-
-  function adminMapLocationSuggestionQuery(field: AdminMapLocationSuggestionField) {
-    if (field === "extraStopLocation") {
-      return booking.extraStopLocation;
-    }
-
-    return field === "pickup" ? booking.pickup : booking.dropoff;
-  }
-
-  async function searchAdminMapLocationSuggestions(field: AdminMapLocationSuggestionField) {
-    const label = adminMapLocationSuggestionFieldLabel(field);
-    const query = clean(adminMapLocationSuggestionQuery(field));
-
-    if (!query) {
-      setAdminMapLocationSuggestionState(adminMapLocationSuggestionIdleState({
-        field,
-        message: {
-          tone: "error",
-          text: `${label} needs text before map suggestions can search.`,
-        },
-        query,
-        status: "error",
-      }));
-      return;
-    }
-
-    setAdminMapLocationSuggestionState({
-      field,
-      message: {
-        tone: "info",
-        text: `Searching ${label.toLowerCase()} suggestions...`,
-      },
-      query,
-      results: [],
-      status: "loading",
-    });
-
-    try {
-      const results = await loadAdminMapLocationSearchMatches(query);
-
-      setAdminMapLocationSuggestionState({
-        field,
-        message: {
-          tone: results.length > 0 ? "success" : "info",
-          text:
-            results.length > 0
-              ? `Select one ${label.toLowerCase()} suggestion.`
-              : `No ${label.toLowerCase()} suggestion found.`,
-        },
-        query,
-        results,
-        status: "loaded",
-      });
-    } catch (error) {
-      setAdminMapLocationSuggestionState(adminMapLocationSuggestionIdleState({
-        field,
-        message: {
-          tone: "error",
-          text: adminMapRouteAssistFailureMessage(error, `${label} suggestions`),
-        },
-        query,
-        status: "error",
-      }));
-    }
-  }
-
-  function applyAdminMapLocationSuggestion(
-    field: AdminMapLocationSuggestionField,
-    location: AdminMapLocationSearchResultItem,
-  ) {
-    const label = adminMapLocationLabel(location);
-
-    setBooking((current) => ({
-      ...current,
-      [field]: label,
-    }));
-
-    if (field === "pickup") {
-      setAdminMapPickupLocation(location);
-      setAdminMapRouteEstimate(null);
-    }
-
-    if (field === "dropoff") {
-      setAdminMapDropoffLocation(location);
-      setAdminMapRouteEstimate(null);
-    }
-
-    if (field === "extraStopLocation") {
-      setAdminMapRouteEstimate(null);
-    }
-
-    setAdminMapLocationSuggestionState(adminMapLocationSuggestionIdleState({
-      field,
-      message: {
-        tone: "success",
-        text: `${adminMapLocationSuggestionFieldLabel(field)} selected: ${label}.`,
-      },
-      query: label,
     }));
   }
 
@@ -17416,71 +17279,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       {message.text}
     </div>
   );
-  const renderAdminMapLocationSuggestions = (field: AdminMapLocationSuggestionField) => {
-    const active = adminMapLocationSuggestionState.field === field;
-    const loading = active && adminMapLocationSuggestionState.status === "loading";
-    const results = active ? adminMapLocationSuggestionState.results : [];
-
-    return (
-      <div
-        className="mt-1 rounded-md border border-cyan-100 bg-cyan-50/50 p-1.5"
-        data-admin-map-location-suggestions={field}
-      >
-        <div className="flex flex-wrap items-center gap-1">
-          <button
-            className="min-h-7 rounded border border-cyan-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-cyan-950 transition hover:bg-cyan-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-            data-admin-map-location-suggest-button={field}
-            disabled={loading || !clean(adminMapLocationSuggestionQuery(field))}
-            onClick={() => void searchAdminMapLocationSuggestions(field)}
-            type="button"
-          >
-            {loading ? "Searching" : "Suggest"}
-          </button>
-          {active && adminMapLocationSuggestionState.message ? (
-            <span
-              className={`min-w-0 flex-1 rounded border px-1.5 py-0.5 text-[10px] font-semibold leading-3 ${statusClass(
-                adminMapLocationSuggestionState.message.tone,
-              )}`}
-              data-admin-map-location-suggestion-message={field}
-            >
-              {adminMapLocationSuggestionState.message.text}
-            </span>
-          ) : (
-            <span className="text-[10px] leading-3 text-cyan-900">
-              Admin map suggestions
-            </span>
-          )}
-        </div>
-        {active && results.length > 0 ? (
-          <div
-            className="mt-1 max-h-32 space-y-1 overflow-y-auto"
-            data-admin-map-location-suggestion-results={field}
-          >
-            {results.map((location, index) => (
-              <button
-                className="grid w-full min-w-0 grid-cols-[1fr_auto] gap-1 rounded border border-cyan-200 bg-white px-2 py-1 text-left text-[11px] leading-4 text-slate-800 transition hover:bg-cyan-50"
-                data-admin-map-location-suggestion-result={field}
-                key={`${field}-${adminMapLocationLabel(location)}-${index}`}
-                onClick={() => applyAdminMapLocationSuggestion(field, location)}
-                type="button"
-              >
-                <span className="min-w-0 truncate font-semibold">
-                  {adminMapLocationLabel(location)}
-                </span>
-                <span className="text-cyan-800">Use</span>
-              </button>
-            ))}
-          </div>
-        ) : null}
-        <p
-          className="mt-1 text-[10px] leading-3 text-cyan-900"
-          data-admin-map-location-suggestion-boundary={field}
-        >
-          Admin-only lookup. No save, customer message, live location, billing, payment, payout, or parser change.
-        </p>
-      </div>
-    );
-  };
   const renderDispatchBookingField = (field: keyof BookingForm) => (
     <div
       className={field === "pickup" || field === "dropoff" ? "sm:col-span-2" : ""}
@@ -17519,9 +17317,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           value={booking[field]}
         />
       </label>
-      {field === "pickup" || field === "dropoff"
-        ? renderAdminMapLocationSuggestions(field)
-        : null}
     </div>
   );
 
@@ -30483,7 +30278,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                       value={booking.extraStopLocation}
                     />
                   </label>
-                  {renderAdminMapLocationSuggestions("extraStopLocation")}
                 </div>
                 <label>
                   <span className="mb-1 block text-sm font-medium text-slate-700">Extra Stops</span>

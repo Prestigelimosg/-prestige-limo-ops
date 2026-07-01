@@ -2796,6 +2796,11 @@ type BrowserGoogleLatLngLiteral = {
   lng: number;
 };
 
+type AdminActiveJobsBrowserMapMarkerEntry = {
+  job: AdminActiveJobsMapLocation;
+  position: BrowserGoogleLatLngLiteral;
+};
+
 type BrowserGoogleLatLngBounds = {
   extend: (position: BrowserGoogleLatLngLiteral) => void;
 };
@@ -2941,8 +2946,15 @@ function loadAdminActiveJobsBrowserGoogleMaps(apiKey: string) {
   return loader;
 }
 
+function adminActiveJobsBrowserMapDomRendered(mapElement: HTMLElement) {
+  return Boolean(
+    mapElement.querySelector(".gm-style") ||
+      mapElement.querySelector('img[src*="StaticMapService.GetMapImage"]'),
+  );
+}
+
 function waitForAdminActiveJobsBrowserMapDom(mapElement: HTMLElement) {
-  if (mapElement.querySelector(".gm-style")) {
+  if (adminActiveJobsBrowserMapDomRendered(mapElement)) {
     return Promise.resolve();
   }
 
@@ -2951,9 +2963,9 @@ function waitForAdminActiveJobsBrowserMapDom(mapElement: HTMLElement) {
     const timeout = window.setTimeout(() => {
       observer?.disconnect();
       reject(new Error("Google Maps visual DOM did not render safely."));
-    }, 8000);
+    }, 15000);
     observer = new MutationObserver(() => {
-      if (!mapElement.querySelector(".gm-style")) {
+      if (!adminActiveJobsBrowserMapDomRendered(mapElement)) {
         return;
       }
 
@@ -2990,6 +3002,18 @@ function validAdminActiveJobMapPosition(job: AdminActiveJobsMapLocation) {
   };
 }
 
+function projectAdminActiveJobsBrowserMapPosition(position: BrowserGoogleLatLngLiteral) {
+  const sinLatitude = Math.max(
+    -0.9999,
+    Math.min(0.9999, Math.sin((position.lat * Math.PI) / 180)),
+  );
+
+  return {
+    x: (position.lng + 180) / 360,
+    y: 0.5 - Math.log((1 + sinLatitude) / (1 - sinLatitude)) / (4 * Math.PI),
+  };
+}
+
 function AdminActiveJobsBrowserMap({
   activeJobs,
   apiKey,
@@ -3011,11 +3035,61 @@ function AdminActiveJobsBrowserMap({
           position: validAdminActiveJobMapPosition(job),
         }))
         .filter(
-          (entry): entry is { job: AdminActiveJobsMapLocation; position: BrowserGoogleLatLngLiteral } =>
+          (entry): entry is AdminActiveJobsBrowserMapMarkerEntry =>
             entry.position !== null,
         ),
     [activeJobs],
   );
+  const overlayMarkers = useMemo(() => {
+    if (activeMarkerJobs.length === 0) {
+      return [];
+    }
+
+    if (activeMarkerJobs.length === 1) {
+      const [{ job }] = activeMarkerJobs;
+      const reference = compactBookingReference(job.assigned_job_reference || "unknown");
+
+      return [
+        {
+          key: `${reference}-0`,
+          label: `${job.driver_display_label || "Driver"} ${reference}`,
+          left: 50,
+          reference,
+          top: 50,
+        },
+      ];
+    }
+
+    const projected = activeMarkerJobs.map((entry) => ({
+      entry,
+      point: projectAdminActiveJobsBrowserMapPosition(entry.position),
+    }));
+    const xValues = projected.map(({ point }) => point.x);
+    const yValues = projected.map(({ point }) => point.y);
+    const minX = Math.min(...xValues);
+    const maxX = Math.max(...xValues);
+    const minY = Math.min(...yValues);
+    const maxY = Math.max(...yValues);
+    const rangeX = Math.max(maxX - minX, 0.000001);
+    const rangeY = Math.max(maxY - minY, 0.000001);
+    const paddingPercent = 14;
+
+    return projected.map(({ entry, point }, index) => {
+      const reference = compactBookingReference(entry.job.assigned_job_reference || "unknown");
+
+      return {
+        key: `${reference}-${index}`,
+        label: `${entry.job.driver_display_label || "Driver"} ${reference}`,
+        left:
+          paddingPercent +
+          ((point.x - minX) / rangeX) * (100 - paddingPercent * 2),
+        reference,
+        top:
+          paddingPercent +
+          ((point.y - minY) / rangeY) * (100 - paddingPercent * 2),
+      };
+    });
+  }, [activeMarkerJobs]);
 
   useEffect(() => {
     let cancelled = false;
@@ -3113,7 +3187,30 @@ function AdminActiveJobsBrowserMap({
           {renderState === "ready" ? `${activeMarkerJobs.length} pin${activeMarkerJobs.length === 1 ? "" : "s"}` : "Loading"}
         </span>
       </div>
-      <div ref={mapElementRef} className="h-48 w-full sm:h-56" />
+      <div className="relative h-48 w-full overflow-hidden sm:h-56">
+        <div
+          ref={mapElementRef}
+          className="absolute inset-0"
+          data-admin-active-jobs-map-google-base="true"
+        />
+        {renderState === "ready"
+          ? overlayMarkers.map((marker) => (
+              <span
+                aria-label={marker.label}
+                className="pointer-events-none absolute z-10 flex h-5 w-5 -translate-x-1/2 -translate-y-full items-center justify-center rounded-full border-2 border-white bg-red-600 shadow"
+                data-admin-active-jobs-map-overlay-marker={marker.reference}
+                key={marker.key}
+                style={{
+                  left: `${marker.left}%`,
+                  top: `${marker.top}%`,
+                }}
+                title={marker.label}
+              >
+                <span className="h-2 w-2 rounded-full bg-white" />
+              </span>
+            ))
+          : null}
+      </div>
       {renderState === "error" ? (
         <p className="border-t border-lime-100 px-1.5 py-1 text-[10px] font-semibold text-red-800 sm:text-[11px]">
           Embedded map could not load. Use Driver Pin.

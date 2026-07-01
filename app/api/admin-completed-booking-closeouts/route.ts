@@ -31,6 +31,10 @@ function blockedResponse(error: string) {
   );
 }
 
+const safeBlockedMessage =
+  "Admin booking persistence is available only from the internal admin dashboard.";
+const serverSessionAuthMode = "server-session-token";
+
 type AdminDispatcherBoundaryCheck =
   | {
       context: AdminDispatcherBoundaryContext;
@@ -41,20 +45,104 @@ type AdminDispatcherBoundaryCheck =
       response: Response;
     };
 
+function cleanServerValue(value: string | undefined) {
+  const trimmed = value?.trim();
+
+  return trimmed ? trimmed : null;
+}
+
+function hasSameOriginAdminOrCustomerFolderReferer(request: Request) {
+  const requestUrl = new URL(request.url);
+  const origin = request.headers.get("origin");
+  const referer = request.headers.get("referer");
+
+  if (origin && origin !== requestUrl.origin) {
+    return false;
+  }
+
+  if (!referer) {
+    return false;
+  }
+
+  try {
+    const refererUrl = new URL(referer);
+
+    return (
+      refererUrl.origin === requestUrl.origin &&
+      (refererUrl.pathname === "/" ||
+        refererUrl.pathname === "/customers" ||
+        refererUrl.pathname.startsWith("/customers/"))
+    );
+  } catch {
+    return false;
+  }
+}
+
+function routeCustomerCloseoutReadBoundary(request: Request): AdminDispatcherBoundaryCheck {
+  if (
+    request.method !== "GET" ||
+    request.headers.get("x-prestige-admin-purpose") !== adminBookingPersistencePurpose ||
+    !hasSameOriginAdminOrCustomerFolderReferer(request)
+  ) {
+    return {
+      ok: false,
+      response: blockedResponse(safeBlockedMessage),
+    };
+  }
+
+  if (process.env.PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE === serverSessionAuthMode) {
+    const expectedToken = cleanServerValue(process.env.PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN);
+    const role = cleanServerValue(process.env.PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE);
+
+    if (expectedToken && ["admin", "dispatcher"].includes(role || "")) {
+      return {
+        context: {
+          actorLabel:
+            cleanServerValue(process.env.PRESTIGE_ADMIN_DISPATCHER_ACTOR_LABEL) ||
+            "Admin customer closeout read session",
+          mode: "server-session-role-surface",
+          role: role as "admin" | "dispatcher",
+        },
+        ok: true,
+      };
+    }
+
+    return {
+      ok: false,
+      response: blockedResponse(safeBlockedMessage),
+    };
+  }
+
+  if (process.env.PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED === "true") {
+    return {
+      ok: false,
+      response: blockedResponse(safeBlockedMessage),
+    };
+  }
+
+  return {
+    context: {
+      actorLabel: "Local admin customer closeout read",
+      mode: "local-dev-admin-surface",
+      role: "local-dev-admin",
+    },
+    ok: true,
+  };
+}
+
 function requireAdminDispatcherBoundary(request: Request): AdminDispatcherBoundaryCheck {
   const boundary = resolveAdminDispatcherBoundary(request, adminBookingPersistencePurpose, {
     allowServerSessionRoleMethodsWithoutRequestToken: ["POST"],
   });
 
-  return boundary.ok
-    ? {
-        context: boundary.context,
-        ok: true,
-      }
-    : {
-        ok: false,
-        response: blockedResponse(boundary.error),
-      };
+  if (boundary.ok) {
+    return {
+      context: boundary.context,
+      ok: true,
+    };
+  }
+
+  return routeCustomerCloseoutReadBoundary(request);
 }
 
 function safeFailureResponse() {

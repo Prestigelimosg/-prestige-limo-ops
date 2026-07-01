@@ -44,6 +44,7 @@ const adminCustomerInvoicesApiPath = "/api/admin-customer-invoices";
 const adminCustomerInvoicePdfApiPath = "/api/admin-customer-invoice-pdf";
 const adminCustomerInvoiceEmailApiPath = "/api/admin-customer-invoice-email";
 const adminCustomerPortalAccessLinksApiPath = "/api/admin-customer-portal-access-links";
+const adminCompletedBookingCloseoutApiPath = "/api/admin-completed-booking-closeouts";
 const adminDriverJobDspActualTimeSummariesApiPath =
   "/api/admin-driver-job-dsp-actual-time-summaries";
 
@@ -390,6 +391,14 @@ type RegularCustomerSavedBookingReadRecord = {
   service_type?: string | null;
 };
 
+type RegularCustomerSavedBookingCloseoutRecord = {
+  billing_prep_readiness?: string | null;
+  closeout_status?: string | null;
+  completed_job_status?: string | null;
+  dsp_actual_hours_readiness?: string | null;
+  extra_charges_readiness?: string | null;
+};
+
 type RegularCustomerAccountReadRecord = {
   completed_count?: number | null;
   customer_account?: string | null;
@@ -422,6 +431,13 @@ type RegularCustomerSavedBookingReadState = {
     recent_read_count?: number | null;
     returned_count?: number | null;
   } | null;
+  tone: RegularCustomerBookingFeedbackTone;
+};
+
+type RegularCustomerSavedBookingBillingReadinessState = {
+  closeoutsByReference: Record<string, RegularCustomerSavedBookingCloseoutRecord>;
+  message: string;
+  status: "idle" | "loading" | "loaded" | "error";
   tone: RegularCustomerBookingFeedbackTone;
 };
 
@@ -661,6 +677,95 @@ function findMockCustomerForSavedAccount(account: RegularCustomerAccountReadReco
         normalizeCustomerFolderMatch(customer.companyName) === accountName,
     ) ?? null
   );
+}
+
+function savedBookingReference(booking: RegularCustomerSavedBookingReadRecord) {
+  return String(booking.booking_reference ?? "").trim();
+}
+
+function savedBookingCustomerId(booking: RegularCustomerSavedBookingReadRecord) {
+  return String(booking.customer_id ?? "").trim();
+}
+
+function findMockCustomerForSavedBooking(booking: RegularCustomerSavedBookingReadRecord) {
+  const bookingCustomerId = normalizeCustomerFolderMatch(booking.customer_id);
+  const bookingCustomerAccount = normalizeCustomerFolderMatch(booking.customer_account);
+
+  return (
+    mockCustomers.find(
+      (customer) =>
+        normalizeCustomerFolderMatch(customer.id) === bookingCustomerId ||
+        normalizeCustomerFolderMatch(customer.companyName) === bookingCustomerAccount,
+    ) ?? null
+  );
+}
+
+function savedBookingCloseoutIsBillingReady(
+  closeout: RegularCustomerSavedBookingCloseoutRecord | undefined,
+) {
+  if (!closeout) {
+    return false;
+  }
+
+  return (
+    (closeout.closeout_status === "ready_for_billing_prep" || closeout.closeout_status === "closed") &&
+    closeout.completed_job_status === "completed" &&
+    (closeout.dsp_actual_hours_readiness === "ready" ||
+      closeout.dsp_actual_hours_readiness === "not_applicable") &&
+    (closeout.extra_charges_readiness === "ready" ||
+      closeout.extra_charges_readiness === "none") &&
+    closeout.billing_prep_readiness === "ready"
+  );
+}
+
+function savedBookingDateLabel(booking: RegularCustomerSavedBookingReadRecord) {
+  const pickupAt = String(booking.pickup_at ?? "").trim();
+  const parsedPickupAt = pickupAt ? new Date(pickupAt) : null;
+
+  if (parsedPickupAt && !Number.isNaN(parsedPickupAt.getTime())) {
+    return formatInvoiceDate(parsedPickupAt);
+  }
+
+  return String(booking.booking_month ?? "").trim() || "Date TBC";
+}
+
+function savedBookingUnbilledRow(
+  booking: RegularCustomerSavedBookingReadRecord,
+  closeout: RegularCustomerSavedBookingCloseoutRecord | undefined,
+): UnbilledCustomerRow | null {
+  if (!savedBookingCloseoutIsBillingReady(closeout)) {
+    return null;
+  }
+
+  const reference = savedBookingReference(booking);
+
+  if (!reference) {
+    return null;
+  }
+
+  const mockCustomer = findMockCustomerForSavedBooking(booking);
+  const customerId = savedBookingCustomerId(booking) || mockCustomer?.id || reference;
+  const customerName =
+    String(booking.customer_account ?? "").trim() ||
+    mockCustomer?.companyName ||
+    "Customer/account to confirm";
+  const service = String(booking.service_type ?? "").trim() || "Completed transfer";
+
+  return {
+    amount: "Draft amount not set",
+    billingBreakdown:
+      "Closeout ready from saved booking. Enter the approved customer amount before previewing or issuing.",
+    customerFolderHref: mockCustomer ? `/customers/${mockCustomer.id}` : "",
+    customerId,
+    customerName,
+    dateLabel: savedBookingDateLabel(booking),
+    invoiceLineDescription: `${service} - ${reference}`,
+    key: `saved-closeout-unbilled:${reference}`,
+    reference,
+    route: "Saved booking route in Dispatch",
+    service,
+    statusLabel: "Closeout ready / amount needed",
+  };
 }
 
 function hasMockBalanceDue(balanceDue: string) {
@@ -1124,6 +1229,15 @@ export default function MockCustomerDashboardPage() {
       summary: null,
       tone: "info",
     });
+  const [
+    regularCustomerSavedBookingBillingReadinessState,
+    setRegularCustomerSavedBookingBillingReadinessState,
+  ] = useState<RegularCustomerSavedBookingBillingReadinessState>({
+    closeoutsByReference: {},
+    message: "Closeout billing readiness loads after saved bookings are loaded.",
+    status: "idle",
+    tone: "info",
+  });
   const [mockPaymentEvents, setMockPaymentEvents] = useState<MockPaymentEvent[]>([]);
   const [mockFollowUpEvents, setMockFollowUpEvents] = useState<MockFollowUpEvent[]>([]);
   const [mockStatementPreviewEvents, setMockStatementPreviewEvents] = useState<MockStatementPreviewEvent[]>([]);
@@ -1524,15 +1638,30 @@ export default function MockCustomerDashboardPage() {
         };
       })
       .filter((row) => !invoicedReferences.has(normalizedInvoiceReference(row.reference)));
+    const closeoutReadySavedBookingRows = regularCustomerSavedBookingReadState.savedBookings
+      .map((booking) =>
+        savedBookingUnbilledRow(
+          booking,
+          regularCustomerSavedBookingBillingReadinessState.closeoutsByReference[
+            savedBookingReference(booking)
+          ],
+        ),
+      )
+      .filter((row): row is UnbilledCustomerRow => Boolean(row));
 
-    return [...localDraftRows, ...getMockUnbilledCustomerRows()]
+    return [...localDraftRows, ...closeoutReadySavedBookingRows, ...getMockUnbilledCustomerRows()]
       .filter((row) => !invoicedReferences.has(normalizedInvoiceReference(row.reference)))
       .sort(
         (firstRow, secondRow) =>
           parseMockDateValue(firstRow.dateLabel) - parseMockDateValue(secondRow.dateLabel) ||
           firstRow.customerName.localeCompare(secondRow.customerName),
       );
-  }, [issuedCustomerInvoices, regularCustomerBookingListItems]);
+  }, [
+    issuedCustomerInvoices,
+    regularCustomerBookingListItems,
+    regularCustomerSavedBookingBillingReadinessState.closeoutsByReference,
+    regularCustomerSavedBookingReadState.savedBookings,
+  ]);
   const selectedUnbilledCustomerRow = useMemo(
     () => unbilledCustomerRows.find((row) => row.key === selectedUnbilledCustomerRowKey) ?? null,
     [selectedUnbilledCustomerRowKey, unbilledCustomerRows],
@@ -1865,6 +1994,85 @@ export default function MockCustomerDashboardPage() {
     }
   }
 
+  async function loadRegularCustomerSavedBookingBillingReadiness(
+    savedBookings: RegularCustomerSavedBookingReadRecord[],
+  ) {
+    const bookingReferences = Array.from(
+      new Set(savedBookings.map(savedBookingReference).filter(Boolean)),
+    );
+
+    if (bookingReferences.length === 0) {
+      setRegularCustomerSavedBookingBillingReadinessState({
+        closeoutsByReference: {},
+        message: "No saved booking references were available for closeout billing readiness.",
+        status: "loaded",
+        tone: "info",
+      });
+      return;
+    }
+
+    setRegularCustomerSavedBookingBillingReadinessState({
+      closeoutsByReference: {},
+      message: "Checking completed closeout billing readiness for the loaded saved bookings...",
+      status: "loading",
+      tone: "info",
+    });
+
+    const closeoutReads = await Promise.all(
+      bookingReferences.map(async (bookingReference) => {
+        try {
+          const params = new URLSearchParams({ booking_reference: bookingReference });
+          const response = await fetch(`${adminCompletedBookingCloseoutApiPath}?${params.toString()}`, {
+            headers: {
+              "x-prestige-admin-purpose": "admin-booking-persistence",
+            },
+            method: "GET",
+          });
+          const result = await response.json().catch(() => null);
+
+          if (!response.ok || !result?.ok) {
+            throw new Error(result?.error || "Completed closeout readiness read failed safely.");
+          }
+
+          return {
+            closeout: result.closeout as RegularCustomerSavedBookingCloseoutRecord | null,
+            ok: true,
+            reference: bookingReference,
+          };
+        } catch {
+          return {
+            closeout: null,
+            ok: false,
+            reference: bookingReference,
+          };
+        }
+      }),
+    );
+    const closeoutsByReference = closeoutReads.reduce<
+      Record<string, RegularCustomerSavedBookingCloseoutRecord>
+    >((records, item) => {
+      if (item.closeout) {
+        records[item.reference] = item.closeout;
+      }
+
+      return records;
+    }, {});
+    const failedCount = closeoutReads.filter((item) => !item.ok).length;
+    const readyCount = Object.values(closeoutsByReference).filter(
+      savedBookingCloseoutIsBillingReady,
+    ).length;
+
+    setRegularCustomerSavedBookingBillingReadinessState({
+      closeoutsByReference,
+      message:
+        failedCount === closeoutReads.length
+          ? "Completed closeout billing readiness could not be verified from Customers."
+          : `Verified ${readyCount} closeout-ready saved booking${readyCount === 1 ? "" : "s"} for the existing Unbilled Customers queue.`,
+      status: failedCount === closeoutReads.length ? "error" : "loaded",
+      tone: failedCount === closeoutReads.length ? "error" : "success",
+    });
+  }
+
   async function loadRegularCustomerSavedBookings() {
     if (!selectedRegularCustomer) {
       setRegularCustomerSavedBookingReadState({
@@ -1872,6 +2080,12 @@ export default function MockCustomerDashboardPage() {
         savedBookings: [],
         status: "error",
         summary: null,
+        tone: "error",
+      });
+      setRegularCustomerSavedBookingBillingReadinessState({
+        closeoutsByReference: {},
+        message: "Select a customer/account before checking closeout billing readiness.",
+        status: "error",
         tone: "error",
       });
       return;
@@ -1882,6 +2096,12 @@ export default function MockCustomerDashboardPage() {
       savedBookings: [],
       status: "loading",
       summary: null,
+      tone: "info",
+    });
+    setRegularCustomerSavedBookingBillingReadinessState({
+      closeoutsByReference: {},
+      message: "Closeout billing readiness will be checked after saved bookings load.",
+      status: "idle",
       tone: "info",
     });
 
@@ -1918,12 +2138,19 @@ export default function MockCustomerDashboardPage() {
         summary: result.summary || null,
         tone: "success",
       });
+      await loadRegularCustomerSavedBookingBillingReadiness(savedBookings);
     } catch {
       setRegularCustomerSavedBookingReadState({
         message: "Saved booking read failed safely or is not enabled for this admin surface.",
         savedBookings: [],
         status: "error",
         summary: null,
+        tone: "error",
+      });
+      setRegularCustomerSavedBookingBillingReadinessState({
+        closeoutsByReference: {},
+        message: "Closeout billing readiness was not checked because saved booking read failed.",
+        status: "error",
         tone: "error",
       });
     }
@@ -6163,6 +6390,16 @@ export default function MockCustomerDashboardPage() {
               >
                 {regularCustomerSavedBookingReadState.message}
               </p>
+              {regularCustomerSavedBookingBillingReadinessState.status !== "idle" ? (
+                <p
+                  className={`mt-2 rounded-md border px-3 py-2 text-sm font-semibold leading-6 ${regularCustomerBookingFeedbackClass(
+                    regularCustomerSavedBookingBillingReadinessState.tone,
+                  )}`}
+                  data-regular-customer-saved-billing-readiness-note="true"
+                >
+                  {regularCustomerSavedBookingBillingReadinessState.message}
+                </p>
+              ) : null}
 
               {regularCustomerSavedBookingReadState.savedBookings.length === 0 ? (
                 <p className="mt-3 rounded-md border border-sky-100 bg-white px-3 py-2 text-sm font-semibold leading-6 text-slate-700">

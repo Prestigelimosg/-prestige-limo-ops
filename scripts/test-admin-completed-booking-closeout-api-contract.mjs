@@ -521,6 +521,14 @@ try {
       ),
     ],
     [
+      "customer folder referer POST",
+      jsonRequest(
+        "http://localhost/api/admin-completed-booking-closeouts",
+        closeoutPayload(),
+        sessionHeaders({ referer: "http://localhost/customers" }),
+      ),
+    ],
+    [
       "customer referer POST",
       jsonRequest(
         "http://localhost/api/admin-completed-booking-closeouts",
@@ -706,6 +714,60 @@ try {
     },
   ]);
   assertNoLeaks(readResult, "GET response should stay safe");
+
+  setEnv(enabledEnv());
+
+  const customerFolderReadMock = installMockClient({
+    completed_booking_closeouts: [
+      {
+        actor_label: "Completed Closeout Test Admin",
+        actor_role: "admin",
+        billing_prep_readiness: "ready",
+        booking_reference: "SAFE-CLOSEOUT-CUSTOMERS",
+        closeout_status: "ready_for_billing_prep",
+        completed_job_status: "completed",
+        created_at: "2026-06-07T00:00:00.000Z",
+        dsp_actual_hours_readiness: "ready",
+        extra_charges_readiness: "none",
+        id: "completed-closeout-row-customers",
+        safe_closeout_context: {
+          closeout_summary: "Loaded safe closeout summary.",
+          next_action: "Keep ready for monthly billing prep.",
+        },
+        safe_closeout_note: "Loaded safe note only.",
+        source_surface: "admin_api",
+        updated_at: "2026-06-07T00:00:00.000Z",
+      },
+    ],
+  });
+  const customerFolderReadResult = await readRouteResponse(
+    await route.GET(
+      new Request(
+        "http://localhost/api/admin-completed-booking-closeouts?booking_reference=SAFE-CLOSEOUT-CUSTOMERS",
+        {
+          headers: adminHeaders({ referer: "http://localhost/customers" }),
+        },
+      ),
+    ),
+  );
+
+  assert.equal(customerFolderReadResult.status, 200);
+  assert.equal(customerFolderReadResult.body.ok, true);
+  assert.equal(
+    customerFolderReadResult.body.closeout.booking_reference,
+    "SAFE-CLOSEOUT-CUSTOMERS",
+  );
+  assert.equal(customerFolderReadResult.body.closeout.closeout_status, "ready_for_billing_prep");
+  assert.equal(customerFolderReadMock.createdClients.length, 1);
+  assert.equal(customerFolderReadMock.client.operations.length, 0);
+  assert.equal(customerFolderReadMock.client.selectHistory.length, 1);
+  assert.deepEqual(customerFolderReadMock.client.selectHistory[0].filters, [
+    {
+      column: "booking_reference",
+      value: "SAFE-CLOSEOUT-CUSTOMERS",
+    },
+  ]);
+  assertNoLeaks(customerFolderReadResult, "Customers closeout GET response should stay safe");
 
   setEnv(enabledEnv());
 

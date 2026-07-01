@@ -83,6 +83,24 @@ function routeLocalCustomerFolderBoundary(request: Request): AdminDispatcherBoun
     );
     const role = cleanServerValue(process.env.PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE);
 
+    if (
+      request.method === "GET" &&
+      !requestToken &&
+      expectedToken &&
+      ["admin", "dispatcher"].includes(role || "")
+    ) {
+      return {
+        context: {
+          actorLabel:
+            cleanServerValue(process.env.PRESTIGE_ADMIN_DISPATCHER_ACTOR_LABEL) ||
+            "Admin customer account read session",
+          mode: "server-session-role-surface",
+          role: role as "admin" | "dispatcher",
+        },
+        ok: true,
+      };
+    }
+
     if (!expectedToken || requestToken !== expectedToken || !["admin", "dispatcher"].includes(role || "")) {
       return {
         ok: false,

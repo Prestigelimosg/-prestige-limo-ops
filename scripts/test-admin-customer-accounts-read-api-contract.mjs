@@ -236,12 +236,12 @@ function enabledEnv(overrides = {}) {
 }
 
 function sessionHeaders(overrides = {}) {
-  return {
+  return Object.fromEntries(Object.entries({
     referer: "http://localhost/customers",
     "x-prestige-admin-purpose": "admin-booking-persistence",
     "x-prestige-admin-session-token": serverSessionToken,
     ...overrides,
-  };
+  }).filter(([, value]) => value !== undefined));
 }
 
 async function readRouteResponse(response) {
@@ -394,7 +394,7 @@ try {
   const readResult = await readRouteResponse(
     await route.GET(
       new Request("http://localhost/api/admin-customer-accounts?limit=10", {
-        headers: sessionHeaders(),
+        headers: sessionHeaders({ "x-prestige-admin-session-token": undefined }),
       }),
     ),
   );
@@ -435,6 +435,23 @@ try {
   assert.equal(readMock.client.selectHistory.length, 1);
   assert.equal(readMock.client.selectHistory[0].table, "bookings");
   assertNoLeaks(readResult, "customer accounts read response should stay safe");
+
+  setEnv(enabledEnv());
+
+  const tokenReadMock = installMockClient(seed);
+  const tokenReadResult = await readRouteResponse(
+    await route.GET(
+      new Request("http://localhost/api/admin-customer-accounts?limit=10", {
+        headers: sessionHeaders(),
+      }),
+    ),
+  );
+
+  assert.equal(tokenReadResult.status, 200);
+  assert.equal(tokenReadResult.body.ok, true);
+  assert.equal(tokenReadMock.client.operations.length, 0);
+  assert.equal(tokenReadMock.client.selectHistory.length, 1);
+  assertNoLeaks(tokenReadResult, "customer accounts token read response should stay safe");
 
   setEnv(enabledEnv());
 

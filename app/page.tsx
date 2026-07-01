@@ -2781,16 +2781,6 @@ function googleMapsLocationUrl(latitude: number | null | undefined, longitude: n
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${latitude},${longitude}`)}`;
 }
 
-type BrowserGoogleMap = {
-  fitBounds: (bounds: BrowserGoogleLatLngBounds) => void;
-  setCenter: (position: BrowserGoogleLatLngLiteral) => void;
-  setZoom: (zoom: number) => void;
-};
-
-type BrowserGoogleMarker = {
-  setMap: (map: BrowserGoogleMap | null) => void;
-};
-
 type BrowserGoogleLatLngLiteral = {
   lat: number;
   lng: number;
@@ -2800,217 +2790,6 @@ type AdminActiveJobsBrowserMapMarkerEntry = {
   job: AdminActiveJobsMapLocation;
   position: BrowserGoogleLatLngLiteral;
 };
-
-type BrowserGoogleLatLngBounds = {
-  extend: (position: BrowserGoogleLatLngLiteral) => void;
-};
-
-type BrowserGoogleMapsNamespace = {
-  importLibrary?: (libraryName: "maps" | "marker") => Promise<BrowserGoogleMapsNamespace>;
-  LatLngBounds?: new () => BrowserGoogleLatLngBounds;
-  Map?: new (element: HTMLElement, options: Record<string, unknown>) => BrowserGoogleMap;
-  Marker?: new (options: Record<string, unknown>) => BrowserGoogleMarker;
-};
-
-const adminActiveJobsBrowserMapScriptLoaders = new Map<
-  string,
-  Promise<BrowserGoogleMapsNamespace>
->();
-const adminActiveJobsBrowserMapCallbackName =
-  "__prestigeAdminActiveJobsBrowserMapLoaded";
-
-function readWindowGoogleMaps() {
-  const googleRuntime = (window as unknown as {
-    google?: {
-      maps?: BrowserGoogleMapsNamespace;
-    };
-  }).google;
-
-  return googleRuntime?.maps || null;
-}
-
-async function resolveAdminActiveJobsBrowserGoogleMapsLibraries(
-  maps: BrowserGoogleMapsNamespace | null,
-) {
-  if (!maps) {
-    throw new Error("Google Maps JavaScript API did not load safely.");
-  }
-
-  if (maps.importLibrary) {
-    const mapsLibrary = await maps.importLibrary("maps");
-    const markerLibrary = await maps.importLibrary("marker");
-
-    return {
-      ...maps,
-      ...mapsLibrary,
-      LatLngBounds: mapsLibrary.LatLngBounds || maps.LatLngBounds,
-      Map: mapsLibrary.Map || maps.Map,
-      Marker: markerLibrary.Marker || maps.Marker,
-    };
-  }
-
-  return maps;
-}
-
-function loadAdminActiveJobsBrowserGoogleMaps(apiKey: string) {
-  const existingMaps = readWindowGoogleMaps();
-
-  if (
-    existingMaps?.importLibrary ||
-    (existingMaps?.Map && existingMaps.Marker && existingMaps.LatLngBounds)
-  ) {
-    return resolveAdminActiveJobsBrowserGoogleMapsLibraries(existingMaps);
-  }
-
-  const scriptSource = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(
-    apiKey,
-  )}&v=weekly&loading=async&callback=${adminActiveJobsBrowserMapCallbackName}`;
-  const existingLoader = adminActiveJobsBrowserMapScriptLoaders.get(scriptSource);
-
-  if (existingLoader) {
-    return existingLoader;
-  }
-
-  const loader = new Promise<BrowserGoogleMapsNamespace>((resolve, reject) => {
-    let settled = false;
-    let callbackTimeout: number | null = null;
-    const fail = (message: string) => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      if (callbackTimeout !== null) {
-        window.clearTimeout(callbackTimeout);
-      }
-      reject(new Error(message));
-    };
-    callbackTimeout = window.setTimeout(() => {
-      fail("Google Maps JavaScript API did not load safely.");
-    }, 12000);
-    const finish = () => {
-      if (settled) {
-        return;
-      }
-
-      const maps = readWindowGoogleMaps();
-
-      void resolveAdminActiveJobsBrowserGoogleMapsLibraries(maps)
-        .then((resolvedMaps) => {
-          if (resolvedMaps.Map && resolvedMaps.Marker && resolvedMaps.LatLngBounds) {
-            settled = true;
-            if (callbackTimeout !== null) {
-              window.clearTimeout(callbackTimeout);
-            }
-            resolve(resolvedMaps);
-            return;
-          }
-
-          fail("Google Maps JavaScript API did not load safely.");
-        })
-        .catch(() => fail("Google Maps JavaScript API did not load safely."));
-    };
-    const browserWindow = window as typeof window & {
-      [adminActiveJobsBrowserMapCallbackName]?: () => void;
-    };
-    const existingScript = document.querySelector<HTMLScriptElement>(
-      'script[data-admin-active-jobs-browser-map-loader="true"]',
-    );
-
-    browserWindow[adminActiveJobsBrowserMapCallbackName] = finish;
-
-    if (existingScript) {
-      existingScript.addEventListener(
-        "error",
-        () => fail("Google Maps JavaScript API failed to load."),
-        { once: true },
-      );
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.async = true;
-    script.dataset.adminActiveJobsBrowserMapLoader = "true";
-    script.defer = true;
-    script.src = scriptSource;
-    script.addEventListener(
-      "error",
-      () => fail("Google Maps JavaScript API failed to load."),
-      { once: true },
-    );
-    document.head.appendChild(script);
-  });
-
-  adminActiveJobsBrowserMapScriptLoaders.set(scriptSource, loader);
-
-  return loader;
-}
-
-function adminActiveJobsBrowserMapDomRendered(mapElement: HTMLElement) {
-  return Boolean(
-    mapElement.querySelector(".gm-style") ||
-      mapElement.querySelector('img[src*="StaticMapService.GetMapImage"]'),
-  );
-}
-
-function adminActiveJobsBrowserMapHasLayout(mapElement: HTMLElement) {
-  const rect = mapElement.getBoundingClientRect();
-
-  return rect.width >= 1 && rect.height >= 1;
-}
-
-function waitForAdminActiveJobsBrowserMapLayout(mapElement: HTMLElement) {
-  if (adminActiveJobsBrowserMapHasLayout(mapElement)) {
-    return Promise.resolve();
-  }
-
-  return new Promise<void>((resolve, reject) => {
-    const startedAt = Date.now();
-    const check = () => {
-      if (adminActiveJobsBrowserMapHasLayout(mapElement)) {
-        resolve();
-        return;
-      }
-
-      if (Date.now() - startedAt > 5000) {
-        reject(new Error("Google Maps container did not receive layout safely."));
-        return;
-      }
-
-      window.requestAnimationFrame(check);
-    };
-
-    window.requestAnimationFrame(check);
-  });
-}
-
-function waitForAdminActiveJobsBrowserMapDom(mapElement: HTMLElement) {
-  if (adminActiveJobsBrowserMapDomRendered(mapElement)) {
-    return Promise.resolve();
-  }
-
-  return new Promise<void>((resolve, reject) => {
-    let observer: MutationObserver | null = null;
-    const timeout = window.setTimeout(() => {
-      observer?.disconnect();
-      reject(new Error("Google Maps visual DOM did not render safely."));
-    }, 15000);
-    observer = new MutationObserver(() => {
-      if (!adminActiveJobsBrowserMapDomRendered(mapElement)) {
-        return;
-      }
-
-      window.clearTimeout(timeout);
-      observer?.disconnect();
-      resolve();
-    });
-
-    observer.observe(mapElement, {
-      childList: true,
-      subtree: true,
-    });
-  });
-}
 
 function validAdminActiveJobMapPosition(job: AdminActiveJobsMapLocation) {
   const latitude = Number(job.latitude);
@@ -3045,19 +2824,36 @@ function projectAdminActiveJobsBrowserMapPosition(position: BrowserGoogleLatLngL
   };
 }
 
+function buildAdminActiveJobsBrowserMapEmbedUrl(
+  activeMarkerJobs: AdminActiveJobsBrowserMapMarkerEntry[],
+) {
+  if (activeMarkerJobs.length === 0) {
+    return "";
+  }
+
+  const latitude =
+    activeMarkerJobs.reduce((sum, { position }) => sum + position.lat, 0) /
+    activeMarkerJobs.length;
+  const longitude =
+    activeMarkerJobs.reduce((sum, { position }) => sum + position.lng, 0) /
+    activeMarkerJobs.length;
+  const zoom = activeMarkerJobs.length === 1 ? 15 : 13;
+
+  return `https://www.google.com/maps?q=${encodeURIComponent(
+    `${latitude.toFixed(6)},${longitude.toFixed(6)}`,
+  )}&z=${zoom}&output=embed`;
+}
+
 function AdminActiveJobsBrowserMap({
   activeJobs,
   apiKey,
-  mapId,
 }: {
   activeJobs: AdminActiveJobsMapLocation[];
   apiKey: string;
   mapId: string;
 }) {
-  const mapElementRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<BrowserGoogleMap | null>(null);
-  const markersRef = useRef<BrowserGoogleMarker[]>([]);
-  const [renderState, setRenderState] = useState<"error" | "loading" | "ready">("loading");
+  const [failedMapEmbedUrl, setFailedMapEmbedUrl] = useState("");
+  const [loadedMapEmbedUrl, setLoadedMapEmbedUrl] = useState("");
   const activeMarkerJobs = useMemo(
     () =>
       activeJobs
@@ -3121,95 +2917,16 @@ function AdminActiveJobsBrowserMap({
       };
     });
   }, [activeMarkerJobs]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    if (!apiKey || activeMarkerJobs.length === 0) {
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    void Promise.resolve()
-      .then(() => {
-        if (!cancelled) {
-          setRenderState("loading");
-        }
-
-        return loadAdminActiveJobsBrowserGoogleMaps(apiKey);
-      })
-      .then(async (maps) => {
-        if (cancelled || !mapElementRef.current || !maps.Map || !maps.Marker || !maps.LatLngBounds) {
-          return;
-        }
-
-        const mapElement = mapElementRef.current;
-        const MapConstructor = maps.Map;
-        const MarkerConstructor = maps.Marker;
-        const LatLngBoundsConstructor = maps.LatLngBounds;
-
-        await waitForAdminActiveJobsBrowserMapLayout(mapElement);
-
-        if (cancelled) {
-          return;
-        }
-
-        if (!mapRef.current) {
-          mapRef.current = new MapConstructor(mapElement, {
-            center: activeMarkerJobs[0].position,
-            clickableIcons: false,
-            fullscreenControl: false,
-            mapId: mapId || undefined,
-            mapTypeControl: false,
-            streetViewControl: false,
-            zoom: 14,
-          });
-        }
-
-        markersRef.current.forEach((marker) => marker.setMap(null));
-        markersRef.current = [];
-
-        const bounds = new LatLngBoundsConstructor();
-
-        activeMarkerJobs.forEach(({ job, position }) => {
-          bounds.extend(position);
-          markersRef.current.push(
-            new MarkerConstructor({
-              map: mapRef.current,
-              position,
-              title: `${job.driver_display_label || "Driver"} · ${compactBookingReference(
-                job.assigned_job_reference || "",
-              )}`,
-            }),
-          );
-        });
-
-        if (activeMarkerJobs.length === 1) {
-          mapRef.current.setCenter(activeMarkerJobs[0].position);
-          mapRef.current.setZoom(15);
-        } else {
-          mapRef.current.fitBounds(bounds);
-        }
-
-        await waitForAdminActiveJobsBrowserMapDom(mapElement);
-
-        if (cancelled) {
-          return;
-        }
-
-        setRenderState("ready");
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setRenderState("error");
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeMarkerJobs, apiKey, mapId]);
+  const mapEmbedUrl = useMemo(
+    () => buildAdminActiveJobsBrowserMapEmbedUrl(activeMarkerJobs),
+    [activeMarkerJobs],
+  );
+  const renderState: "error" | "loading" | "ready" =
+    !apiKey || !mapEmbedUrl || failedMapEmbedUrl === mapEmbedUrl
+      ? "error"
+      : loadedMapEmbedUrl === mapEmbedUrl
+        ? "ready"
+        : "loading";
 
   return (
     <div
@@ -3225,10 +2942,18 @@ function AdminActiveJobsBrowserMap({
         </span>
       </div>
       <div className="relative h-48 w-full overflow-hidden sm:h-56">
-        <div
-          ref={mapElementRef}
-          className="absolute inset-0 h-full w-full"
+        <iframe
+          className="absolute inset-0 h-full w-full border-0"
           data-admin-active-jobs-map-google-base="true"
+          loading="lazy"
+          onError={() => setFailedMapEmbedUrl(mapEmbedUrl)}
+          onLoad={() => {
+            setFailedMapEmbedUrl("");
+            setLoadedMapEmbedUrl(mapEmbedUrl);
+          }}
+          referrerPolicy="no-referrer-when-downgrade"
+          src={mapEmbedUrl}
+          title="Admin active driver embedded Google map"
         />
         {renderState === "ready"
           ? overlayMarkers.map((marker) => (

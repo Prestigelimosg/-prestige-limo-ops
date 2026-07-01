@@ -99,21 +99,14 @@ for (const forbiddenPhrase of [
 for (const fragment of [
   "const adminActiveJobsMapBrowserConfigApiPath =",
   '"/api/admin-active-jobs-map-browser-config";',
-  "loadAdminActiveJobsBrowserGoogleMaps",
-  "https://maps.googleapis.com/maps/api/js?key=",
-  "loading=async&callback=",
-  "adminActiveJobsBrowserMapCallbackName",
-  "resolveAdminActiveJobsBrowserGoogleMapsLibraries",
-  'maps.importLibrary("maps")',
-  'maps.importLibrary("marker")',
-  "waitForAdminActiveJobsBrowserMapLayout",
-  "waitForAdminActiveJobsBrowserMapDom",
-  ".gm-style",
-  'StaticMapService.GetMapImage',
   "projectAdminActiveJobsBrowserMapPosition",
   "data-admin-active-jobs-map-google-base",
   "data-admin-active-jobs-map-overlay-marker",
-  "Google Maps visual DOM did not render safely.",
+  "buildAdminActiveJobsBrowserMapEmbedUrl",
+  "https://www.google.com/maps?q=",
+  "output=embed",
+  "Admin active driver embedded Google map",
+  "setLoadedMapEmbedUrl(mapEmbedUrl);",
   "data-admin-active-jobs-map-canvas",
   "data-admin-active-jobs-map-config-message",
   "AdminActiveJobsBrowserMap",
@@ -124,7 +117,9 @@ for (const fragment of [
 }
 
 for (const forbiddenFragment of [
+  "https://maps.googleapis.com/maps/api/js?key=",
   "loading=async&libraries=maps,marker",
+  "loading=async&callback=",
   'script.addEventListener("load", finish',
 ]) {
   assertExcludes(appPage, forbiddenFragment, "admin browser map callback readiness");
@@ -132,9 +127,9 @@ for (const forbiddenFragment of [
 
 assertOrder(
   appPage,
-  "await waitForAdminActiveJobsBrowserMapDom(mapElement);",
-  'setRenderState("ready");',
-  "admin browser map must wait for rendered Google Maps DOM before ready state",
+  'data-admin-active-jobs-map-google-base="true"',
+  "setLoadedMapEmbedUrl(mapEmbedUrl);",
+  "admin browser map must wait for embedded same-window map load before ready state",
 );
 
 for (const fragment of [

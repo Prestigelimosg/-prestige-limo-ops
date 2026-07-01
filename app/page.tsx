@@ -2097,6 +2097,9 @@ type ParsedBooking = Partial<BookingForm> & {
     pickup?: string;
     dropoff?: string;
     pax?: string;
+    childSeatRequired?: string;
+    childSeatCount?: string;
+    childSeatType?: string;
   }>;
   parserWarning?: string;
   multipleBookingsDetected?: boolean;
@@ -2116,6 +2119,9 @@ type ParsedDebugBooking = BookingForm & {
     pickup?: string;
     dropoff?: string;
     pax?: string;
+    childSeatRequired?: string;
+    childSeatCount?: string;
+    childSeatType?: string;
   }>;
   parserWarning?: string;
   multipleBookingsDetected?: boolean;
@@ -12678,6 +12684,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       pickup: clean(safePreview.pickup),
       dropoff: clean(safePreview.dropoff),
       pax: clean(safePreview.pax) || current.pax,
+      childSeatRequired: clean(safePreview.childSeatRequired),
+      childSeatCount: clean(safePreview.childSeatCount),
+      childSeatType: clean(safePreview.childSeatType),
     }));
     setMessage({
       tone: "success",
@@ -29481,6 +29490,13 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                               <p className="sm:col-span-2">
                                 <strong>Route:</strong> {routeText || "Not detected"}
                               </p>
+                              {clean(preview.childSeatRequired) === "yes" ? (
+                                <p className="sm:col-span-2">
+                                  <strong>Child seat:</strong>{" "}
+                                  {[preview.childSeatCount, preview.childSeatType].filter(Boolean).join(" x ") ||
+                                    "Required"}
+                                </p>
+                              ) : null}
                             </div>
                             <button
                               className="mt-3 h-9 rounded-md bg-amber-900 px-3 text-sm font-semibold text-white transition hover:bg-amber-800"
@@ -30219,7 +30235,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                     {parsedDebugBooking.parserWarning}
                   </div>
                 ) : null}
-                {parsedDebugPreviewItems.length > 0 ? (
+                {showParserDebug && parsedDebugPreviewItems.length > 0 ? (
                   <div className="mb-3 grid gap-2">
                     {parsedDebugPreviewItems.map((preview, index) => {
                       const safePreview = preview ?? {};
@@ -30242,6 +30258,13 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                             Route: {safePreview.pickup || "Pickup TBC"} &gt;{" "}
                             {safePreview.dropoff || "Drop-off TBC"}
                           </p>
+                          {clean(safePreview.childSeatRequired) === "yes" ? (
+                            <p>
+                              Child seat:{" "}
+                              {[safePreview.childSeatCount, safePreview.childSeatType].filter(Boolean).join(" x ") ||
+                                "Required"}
+                            </p>
+                          ) : null}
                           <button
                             className="mt-3 h-9 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800"
                             onClick={() => applyExtractedBooking(safePreview)}
@@ -30253,7 +30276,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                       );
                     })}
                   </div>
-                ) : parsedDebugBooking.multipleBookingsDetected ? (
+                ) : showParserDebug && parsedDebugBooking.multipleBookingsDetected ? (
                   <div className="mb-3 rounded-md border border-amber-200 bg-white p-3 text-sm text-slate-700">
                     No extracted booking preview available. Split the message and parse one booking at a time.
                   </div>

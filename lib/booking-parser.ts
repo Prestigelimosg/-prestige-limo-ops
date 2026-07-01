@@ -37,6 +37,9 @@ export type ParsedBooking = {
     pickup?: string;
     dropoff?: string;
     pax?: string;
+    childSeatRequired?: string;
+    childSeatCount?: string;
+    childSeatType?: string;
     extraStopCount?: string;
     extraStopLocation?: string;
   }>;
@@ -705,6 +708,7 @@ function normalizeNarratedAddress(value: string) {
   const location = cleanLocation(value);
 
   return location
+    .replace(/\blobb(?:y)?\b/gi, "lobby")
     .split(/\s+/)
     .map((word) => {
       if (/^[A-Za-z]$/.test(word)) {
@@ -728,7 +732,7 @@ function detectStayAtTransferContext(text: string) {
   const passengerAddressMatch = text.match(
     /\b((?:mr|mrs|ms|mdm|miss|dr)\.?\s+[A-Za-z][A-Za-z.' -]{1,60}?)\s+stay(?:ing)?\s+at\s+(?:the\s+)?(.+?)(?=\.|,|\n|$)/i,
   );
-  const passenger = passengerAddressMatch?.[1] ? cleanDetectedName(passengerAddressMatch[1]) : "";
+  const passenger = passengerAddressMatch?.[1] ? normalizeNarratedPersonName(passengerAddressMatch[1]) : "";
   const address = normalizeNarratedAddress(
     passengerAddressMatch?.[2] || firstMatch(text, [
       /\bstay(?:ing)?\s+at\s+(?:the\s+)?(.+?)(?=\.|,|\n|$)/i,
@@ -739,6 +743,44 @@ function detectStayAtTransferContext(text: string) {
     passenger: looksLikePersonName(passenger) ? passenger : "",
     address,
   };
+}
+
+function detectNamedAddressTransferContext(text: string) {
+  const namedAddressMatch = text.match(
+    /\b((?:mr|mrs|ms|mdm|miss|dr)\.?\s+[A-Za-z][A-Za-z.' -]{1,60}?)\.?\s+(\d{1,5}\s+[A-Za-z0-9][A-Za-z0-9.' -]{2,120})(?=\.|,|\n|$)/i,
+  );
+  const passenger = namedAddressMatch?.[1] ? normalizeNarratedPersonName(namedAddressMatch[1]) : "";
+  const address = normalizeNarratedAddress(namedAddressMatch?.[2] || "");
+
+  return {
+    passenger: looksLikePersonName(passenger) ? passenger : "",
+    address,
+  };
+}
+
+function normalizeNarratedPersonName(value: string) {
+  const cleanedValue = cleanDetectedName(value);
+  const honorificMatch = cleanedValue.match(/^(mr|mrs|ms|mdm|miss|dr)\b\.?\s*(.*)$/i);
+
+  if (!honorificMatch) {
+    return cleanedValue;
+  }
+
+  const honorifics: Record<string, string> = {
+    mr: "Mr",
+    mrs: "Mrs",
+    ms: "Ms",
+    mdm: "Mdm",
+    miss: "Miss",
+    dr: "Dr",
+  };
+  const honorific = honorifics[honorificMatch[1].toLowerCase()] || honorificMatch[1];
+  const name = clean(honorificMatch[2])
+    .split(/\s+/)
+    .map((word) => word ? word.charAt(0).toUpperCase() + word.slice(1).toLowerCase() : word)
+    .join(" ");
+
+  return clean(`${honorific} ${name}`);
 }
 
 function detectAirportReturnTransferPax(text: string) {
@@ -777,7 +819,7 @@ function firstFlightInSegment(segment: string) {
 
 function buildAirportReturnTransferPreview(text: string, referenceDate: Date) {
   const normalizedText = clean(text.replace(/\n+/g, " "));
-  const returnTransferMatch = normalizedText.match(/\b(?:and\s+the\s+)?return\s+transfer\b/i);
+  const returnTransferMatch = normalizedText.match(/\b(?:and\s+the\s+)?return\s+(?:transfer|flight)\b/i);
   const flights = detectAllFlights(normalizedText);
 
   if (
@@ -792,16 +834,30 @@ function buildAirportReturnTransferPreview(text: string, referenceDate: Date) {
   const returnSegment = clean(normalizedText.slice(returnTransferMatch.index));
   const firstFlight = firstFlightInSegment(firstSegment);
   const returnFlight = firstFlightInSegment(returnSegment);
-  const sharedContext = detectStayAtTransferContext(normalizedText);
+  const stayAtContext = detectStayAtTransferContext(normalizedText);
+  const namedAddressContext = stayAtContext.address ? { passenger: "", address: "" } : detectNamedAddressTransferContext(normalizedText);
+  const sharedContext = {
+    passenger: stayAtContext.passenger || namedAddressContext.passenger,
+    address: stayAtContext.address || namedAddressContext.address,
+  };
 
   if (!firstFlight || !returnFlight || !sharedContext.address) {
     return [];
   }
 
   const pax = detectAirportReturnTransferPax(normalizedText);
+  const childSeatCount = detectChildSeatCount(normalizedText);
+  const childSeatType = detectChildSeatType(normalizedText);
   const sharedFields = {
     passenger: sharedContext.passenger,
     ...(pax ? { pax } : {}),
+    ...(childSeatCount
+      ? {
+          childSeatRequired: "yes",
+          childSeatCount,
+        }
+      : {}),
+    ...(childSeatType ? { childSeatType } : {}),
   };
 
   return [
@@ -1635,15 +1691,15 @@ function detectChildSeatType(text: string) {
 
 function detectChildSeatCount(text: string) {
   const explicitCount = firstMatch(text, [
-    /\b(\d{1,2})\s*x\s*(?:child|baby|booster|infant|toddler)\s+seat(?:s)?\b/i,
-    /\b(\d{1,2})\s+(?:child|baby|booster|infant|toddler)\s+seat(?:s)?\b/i,
+    /\b(\d{1,2})\s*x\s*(?:forward\s+facing\s+|rear\s+facing\s+)?(?:child|baby|booster|infant|toddler)\s+seat(?:s)?\b/i,
+    /\b(\d{1,2})\s+(?:forward\s+facing\s+|rear\s+facing\s+)?(?:child|baby|booster|infant|toddler)\s+seat(?:s)?\b/i,
   ]);
 
   if (explicitCount) {
     return String(Math.max(1, Number(explicitCount)));
   }
 
-  if (/\b(?:a|an|one)\s+(?:child|baby|booster|infant|toddler)\s+seat\b/i.test(text)) {
+  if (/\b(?:a|an|one)\s+(?:forward\s+facing\s+|rear\s+facing\s+)?(?:child|baby|booster|infant|toddler)\s+seat\b/i.test(text)) {
     return "1";
   }
 
@@ -1672,8 +1728,8 @@ function detectAdultChildPax(text: string) {
 
 function detectExplicitPax(text: string) {
   return detectAdultChildPax(text) || firstMatch(text, [
-    /\b(?:pax|passengers?|passangers|persons?)\s*(?:[:=-]|\t)?\s*(\d{1,2})\b/i,
-    /\b(\d{1,2})\s*(?:pax|passengers?|passangers|persons?)\b/i,
+    /\b(?:pax|passengers?|passangers|persons?|people)\s*(?:[:=-]|\t)?\s*(\d{1,2})\b/i,
+    /\b(\d{1,2})\s*(?:pax|passengers?|passangers|persons?|people)\b/i,
   ]) ||
     (detectCoupleCompanion(text) ? "2" : "");
 }

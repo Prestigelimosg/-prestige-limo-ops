@@ -3526,6 +3526,50 @@ function assertMultiBookingDoesNotBlend(sampleInput, label) {
 assertMultiBookingDoesNotBlend(liveBugSamples[0].input, 'multi-case dispatcher list');
 assertMultiBookingDoesNotBlend(liveBugSamples[2].input, 'need 2 cars tomorrow');
 
+const naturalRoundTripAirportBookingSample =
+  'Hi, can I book an airport transfer and pick up - 5 people + bags. We will need one forward facing booster seat. Pick up date 02 July at 6am SQ938. Return flight on the 10th July SQ939. mr. peter. 276 ocean drive lobb o';
+const parsedNaturalRoundTripAirportBooking = parseJobCardBookingMessage(
+  naturalRoundTripAirportBookingSample,
+  { referenceDate: new Date(2026, 6, 1, 9, 0, 0) },
+) ?? {};
+assert.equal(parsedNaturalRoundTripAirportBooking.success, false);
+assert.equal(parsedNaturalRoundTripAirportBooking.multipleBookingsDetected, true);
+assert.equal(
+  parsedNaturalRoundTripAirportBooking.parserWarning,
+  'Multiple bookings detected. Please select one extracted booking.',
+);
+assert.equal(parsedNaturalRoundTripAirportBooking.flight ?? '', '');
+assert.equal(parsedNaturalRoundTripAirportBooking.pickup ?? '', '');
+assert.equal(parsedNaturalRoundTripAirportBooking.dropoff ?? '', '');
+assert.deepEqual(parsedNaturalRoundTripAirportBooking.extractedBookingsPreview, [
+  {
+    passenger: 'Mr Peter',
+    pax: '5',
+    childSeatRequired: 'yes',
+    childSeatCount: '1',
+    childSeatType: 'booster seat',
+    date: '2026-07-02',
+    time: '0600hrs',
+    type: 'DEP',
+    flight: 'SQ938',
+    pickup: '276 Ocean Drive lobby O',
+    dropoff: 'Changi Airport',
+  },
+  {
+    passenger: 'Mr Peter',
+    pax: '5',
+    childSeatRequired: 'yes',
+    childSeatCount: '1',
+    childSeatType: 'booster seat',
+    date: '2026-07-10',
+    time: '',
+    type: 'MNG',
+    flight: 'SQ939',
+    pickup: 'Changi Airport',
+    dropoff: '276 Ocean Drive lobby O',
+  },
+]);
+
 const multiTerminalArrivalChangeMessage = `Hi William, some changes for tomorrow arrival:
 Total 2 pickup from T3 and T4 to Grand Hyatt below:
 T3: MU567 Shanghai - Singapore Arrival 15:45 (1 Passenger - Ye Yueqin)

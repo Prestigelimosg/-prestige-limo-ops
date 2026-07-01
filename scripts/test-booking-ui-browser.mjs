@@ -1082,8 +1082,9 @@ Thank you,
 Jill Van Cook
 EA to Mark Colodny, Co-Head of US Private Equity
 & Chairman of Global Technology
-Warburg Pincus`;
+	Warburg Pincus`;
 const airportTransferReturnTransferSample = "Hi, can I arrange for a airport transfer on 20/05/26, 645 pick for SQ108. And the return transfer on 22/05/26, 8pm SQ121. One person. Mr. Peter stay at 276 ocean drive lobby o";
+const customerRoundTripAirportTransferSample = "Hi, can I book an airport transfer and pick up - 5 people + bags. We will need one forward facing booster seat. Pick up date 02 July at 6am SQ938. Return flight on the 10th July SQ939. mr. peter. 276 ocean drive lobb o";
 const airportDepartureToAirportForFlightSample = "Please arrange Alphard on 20/05/26, 7am pickup Mr Lee from 10 Scotts Road to airport for SQ306. 2 pax.";
 const exactPastedWaypointAirportArrivalSample = `Transfer type	One Way
 Pickup date and time	17-05-2026 7:05
@@ -19080,7 +19081,7 @@ async function runChromeTest() {
               bodyText.includes("extractedBookingsPreview.length: 2") &&
               [...document.querySelectorAll("button")].filter(
                 (button) => button.textContent.trim() === "Use this booking",
-              ).length >= 2;
+              ).length === 2;
           })()`),
         10000,
         "Warburg two-transfer preview choices",
@@ -19335,6 +19336,163 @@ async function runChromeTest() {
     assert.equal(selectedAirportArrivalState.fields.name, "Mr Peter");
     assert.equal(selectedAirportArrivalState.fields.pax, "1");
     assert.doesNotMatch(selectedAirportArrivalState.fieldText, /Changi Airport T[1-4]/);
+
+    const parseCustomerRoundTripPreview = async (
+      previewIndex,
+      expectedFlight,
+      expectedBookingType,
+      expectedDate,
+      expectedTime,
+      expectedPickup,
+      expectedDropoff,
+    ) => {
+      const focusedTextarea = await evaluate(`(() => {
+        const textarea = document.querySelector("textarea");
+        if (!textarea) {
+          return false;
+        }
+
+        textarea.focus();
+        textarea.select();
+        return document.activeElement === textarea;
+      })()`);
+      assert.equal(focusedTextarea, true, "Expected textarea to be focused for customer round-trip airport sample");
+
+      await setBookingMessageValue(customerRoundTripAirportTransferSample, "customer round-trip airport booking message");
+
+      const filledTextarea = await evaluate(
+        `document.querySelector("textarea")?.value === ${JSON.stringify(customerRoundTripAirportTransferSample)}`,
+      );
+      assert.equal(filledTextarea, true, "Expected customer round-trip airport sample textarea to be filled");
+
+      const clickedParse = await evaluate(`(() => {
+        const parseButton = [...document.querySelectorAll("button")].find(
+          (button) => button.textContent.trim() === "Create Job Card",
+        );
+
+        if (!parseButton || parseButton.disabled) {
+          return false;
+        }
+
+        parseButton.click();
+        return true;
+      })()`);
+      assert.equal(clickedParse, true, "Expected Create Job Card button for customer round-trip airport sample");
+
+      await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const bodyText = document.body.innerText;
+
+            return bodyText.includes("Multiple bookings detected. Please select one extracted booking.") &&
+              bodyText.includes("extractedBookingsPreview.length: 2") &&
+              bodyText.includes("SQ938") &&
+              bodyText.includes("SQ939") &&
+              bodyText.includes("Child seat: 1 x booster seat") &&
+              [...document.querySelectorAll("button")].filter(
+                (button) => button.textContent.trim() === "Use this booking",
+              ).length >= 2;
+          })()`),
+        10000,
+        "customer round-trip airport preview choices",
+      );
+
+      const clickedPreview = await evaluate(`(() => {
+        const previewButtons = [...document.querySelectorAll("button")].filter(
+          (button) => button.textContent.trim() === "Use this booking",
+        );
+        const previewButton = previewButtons[${previewIndex}];
+
+        if (!previewButton || previewButton.disabled) {
+          return false;
+        }
+
+        previewButton.click();
+        return true;
+      })()`);
+      assert.equal(clickedPreview, true, `Expected customer round-trip preview ${previewIndex + 1} to be selectable`);
+
+      return waitForCondition(
+        async () => {
+          const candidateState = await evaluate(extractStateScript);
+
+          if (
+            candidateState?.fields?.flight === expectedFlight &&
+            candidateState?.fields?.bookingType === expectedBookingType &&
+            candidateState?.fields?.pickupDate === expectedDate &&
+            candidateState?.fields?.pickupTime === expectedTime &&
+            candidateState?.fields?.pickup === expectedPickup &&
+            candidateState?.fields?.dropoff === expectedDropoff &&
+            candidateState?.fields?.name === "Mr Peter" &&
+            candidateState?.fields?.pax === "5" &&
+            candidateState?.fields?.childSeatCount === "1" &&
+            /booster seat/i.test(candidateState?.fields?.childSeatType || "")
+          ) {
+            return candidateState;
+          }
+
+          return false;
+        },
+        10000,
+        `selected customer round-trip preview ${previewIndex + 1} UI state`,
+      );
+    };
+
+    const selectedCustomerRoundTripDepartureState = await parseCustomerRoundTripPreview(
+      0,
+      "SQ938",
+      "DEP",
+      "2026-07-02",
+      "0600hrs",
+      "276 Ocean Drive lobby O",
+      "Changi Airport",
+    );
+    selectedCustomerRoundTripDepartureState.errors = [
+      ...browserErrors,
+      ...(selectedCustomerRoundTripDepartureState.errors || []),
+    ];
+    selectedCustomerRoundTripDepartureState.consoleErrors = [
+      ...browserConsoleErrors,
+      ...(selectedCustomerRoundTripDepartureState.consoleErrors || []),
+    ];
+    assert.deepEqual(
+      selectedCustomerRoundTripDepartureState.errors,
+      [],
+      `Expected no browser runtime errors, got ${selectedCustomerRoundTripDepartureState.errors.join("\n")}`,
+    );
+    assert.deepEqual(
+      selectedCustomerRoundTripDepartureState.consoleErrors,
+      [],
+      `Expected no browser console errors, got ${selectedCustomerRoundTripDepartureState.consoleErrors.join("\n")}`,
+    );
+
+    const selectedCustomerRoundTripArrivalState = await parseCustomerRoundTripPreview(
+      1,
+      "SQ939",
+      "MNG",
+      "2026-07-10",
+      "",
+      "Changi Airport",
+      "276 Ocean Drive lobby O",
+    );
+    selectedCustomerRoundTripArrivalState.errors = [
+      ...browserErrors,
+      ...(selectedCustomerRoundTripArrivalState.errors || []),
+    ];
+    selectedCustomerRoundTripArrivalState.consoleErrors = [
+      ...browserConsoleErrors,
+      ...(selectedCustomerRoundTripArrivalState.consoleErrors || []),
+    ];
+    assert.deepEqual(
+      selectedCustomerRoundTripArrivalState.errors,
+      [],
+      `Expected no browser runtime errors, got ${selectedCustomerRoundTripArrivalState.errors.join("\n")}`,
+    );
+    assert.deepEqual(
+      selectedCustomerRoundTripArrivalState.consoleErrors,
+      [],
+      `Expected no browser console errors, got ${selectedCustomerRoundTripArrivalState.consoleErrors.join("\n")}`,
+    );
 
     const focusedAirportDepartureTextarea = await evaluate(`(() => {
       const textarea = document.querySelector("textarea");

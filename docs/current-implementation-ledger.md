@@ -1,10 +1,10 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-c44667f7 Remove disabled admin map suggest controls
+d0781e87 Compact live ops rows and driver pin action
 
 Latest pushed main/staging runtime checkpoint:
-c44667f7 Remove disabled admin map suggest controls
+d0781e87 Compact live ops rows and driver pin action
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
 cb91a3b7 Record live location Chrome proof

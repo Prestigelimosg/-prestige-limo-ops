@@ -51,6 +51,7 @@ type AdminSavedBookingStatusResult<T> =
 
 type UnknownRecord = Record<string, unknown>;
 type SavedBookingStatusClient = Pick<SupabaseClient, "from">;
+type SavedBookingStatusStorageShape = "current" | "legacy";
 
 const allowedAdapterActorRoles = new Set(["admin", "dispatcher", "system"]);
 const allowedStatuses = new Set<AdminSavedBookingStatusValue>([
@@ -317,9 +318,22 @@ function validStatus(value: unknown) {
     : null;
 }
 
+function currentSchemaAdminStatus(status: AdminSavedBookingStatusValue) {
+  if (status === "assigned") {
+    return "driver_assigned";
+  }
+
+  if (status === "driver_otw" || status === "pob") {
+    return "in_progress";
+  }
+
+  return status;
+}
+
 function toStatusRecord(
   value: unknown,
   targetColumn: "booking_reference" | "id",
+  requestedStatus: AdminSavedBookingStatusValue,
 ): AdminSavedBookingStatusRecord | null {
   const row = asRecord(value);
   const bookingReference = textOrNull(row.booking_reference, 120);
@@ -329,18 +343,48 @@ function toStatusRecord(
       : typeof row.id === "number" && Number.isSafeInteger(row.id)
       ? row.id
       : textOrNull(row.id, 120);
-  const status = validStatus(row.status);
   const updatedAt = textOrNull(row.updated_at, 80);
 
-  if (id === null || !status || !updatedAt) {
+  if (id === null || !updatedAt) {
     return null;
   }
 
   return {
     id,
-    status,
+    status: requestedStatus,
     updated_at: updatedAt,
   };
+}
+
+async function updateSavedBookingStatusRow(
+  client: SavedBookingStatusClient,
+  targetColumn: "booking_reference" | "id",
+  bookingId: string,
+  status: AdminSavedBookingStatusValue,
+  updatedAt: string,
+  storageShape: SavedBookingStatusStorageShape,
+) {
+  const payload =
+    storageShape === "current"
+      ? {
+          admin_internal_status: currentSchemaAdminStatus(status),
+          updated_at: updatedAt,
+        }
+      : {
+          status,
+          updated_at: updatedAt,
+        };
+  const selectedColumns =
+    storageShape === "current"
+      ? "id, booking_reference, admin_internal_status, updated_at"
+      : "id, booking_reference, status, updated_at";
+
+  return client
+    .from("bookings")
+    .update(payload)
+    .eq(targetColumn, bookingId)
+    .select(selectedColumns)
+    .maybeSingle();
 }
 
 export function parseAdminSavedBookingStatusPayload(
@@ -386,21 +430,33 @@ export async function updateAdminSavedBookingStatus(
 
   const updatedAt = new Date().toISOString();
   const targetColumn = bookingStatusTargetColumn(parsed.data.booking_id);
-  const { data, error } = await clientResult.data
-    .from("bookings")
-    .update({
-      status: parsed.data.status,
-      updated_at: updatedAt,
-    })
-    .eq(targetColumn, parsed.data.booking_id)
-    .select("id, booking_reference, status, updated_at")
-    .maybeSingle();
+  const currentSchemaResult = await updateSavedBookingStatusRow(
+    clientResult.data,
+    targetColumn,
+    parsed.data.booking_id,
+    parsed.data.status,
+    updatedAt,
+    "current",
+  );
+  const updateResult =
+    currentSchemaResult.error &&
+    classifyDatabaseFailure(currentSchemaResult.error) === "column_missing"
+      ? await updateSavedBookingStatusRow(
+          clientResult.data,
+          targetColumn,
+          parsed.data.booking_id,
+          parsed.data.status,
+          updatedAt,
+          "legacy",
+        )
+      : currentSchemaResult;
+  const { data, error } = updateResult;
 
   if (error) {
     return safeDatabaseFailure(safeStatusUpdateError, 500, error);
   }
 
-  const booking = toStatusRecord(data, targetColumn);
+  const booking = toStatusRecord(data, targetColumn, parsed.data.status);
 
   if (!booking) {
     return {

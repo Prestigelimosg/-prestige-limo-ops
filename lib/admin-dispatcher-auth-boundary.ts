@@ -90,7 +90,7 @@ function resolveServerSessionRole(
   if (
     expectedToken &&
     role &&
-    (request.method === "GET" ||
+    ((request.method === "GET" && !requestToken) ||
       (methodAllowedWithoutRequestToken && !requestToken))
   ) {
     return {

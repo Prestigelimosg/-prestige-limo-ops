@@ -220,7 +220,10 @@ class MockSupabaseClient {
   }
 
   updateRows(table, filters, updatePayload, resultMode, selectedColumns) {
-    const failure = this.failures[`update:${table}`] || this.failures[table] || null;
+    const configuredFailure = this.failures[`update:${table}`] || this.failures[table] || null;
+    const failure = Array.isArray(configuredFailure)
+      ? configuredFailure.shift() || null
+      : configuredFailure;
 
     this.updateHistory.push({
       filters: clone(filters),
@@ -295,15 +298,18 @@ const seed = {
   bookings: [
     {
       id: "status-booking-1",
+      admin_internal_status: "driver_assigned",
       status: "assigned",
       updated_at: "2026-05-27T02:30:00.000Z",
     },
     {
       id: "status-booking-2",
+      admin_internal_status: "completed",
       status: "completed",
       updated_at: "2026-05-28T02:30:00.000Z",
     },
     {
+      admin_internal_status: "driver_assigned",
       booking_reference: "CUST-20260701174619-ZO8P2W",
       id: "11111111-1111-4111-8111-111111111111",
       status: "assigned",
@@ -471,10 +477,42 @@ try {
       value: "status-booking-1",
     },
   ]);
-  assert.deepEqual(Object.keys(validMock.client.updateHistory[0].payload).sort(), ["status", "updated_at"]);
-  assert.equal(validMock.client.updateHistory[0].payload.status, "completed");
-  assert.equal(validMock.client.updateHistory[0].selectedColumns, "id, booking_reference, status, updated_at");
+  assert.deepEqual(Object.keys(validMock.client.updateHistory[0].payload).sort(), ["admin_internal_status", "updated_at"]);
+  assert.equal(validMock.client.updateHistory[0].payload.admin_internal_status, "completed");
+  assert.equal(validMock.client.updateHistory[0].selectedColumns, "id, booking_reference, admin_internal_status, updated_at");
   assertNoUnsafeResponse(validResult, "valid response");
+
+  setEnv(enabledEnv());
+
+  const legacyFallbackMock = installMockClient(seed, {
+    "update:bookings": [
+      {
+        code: "PGRST204",
+        message: "Could not find the 'admin_internal_status' column of 'bookings' in the schema cache",
+        status: 400,
+      },
+      null,
+    ],
+  });
+  const legacyFallbackResult = await routeJson(
+    await route.PATCH(
+      jsonRequest("http://localhost/api/admin-saved-booking-statuses", {
+        booking_id: "status-booking-1",
+        status: "completed",
+      }),
+    ),
+  );
+
+  assert.equal(legacyFallbackResult.status, 200);
+  assert.equal(legacyFallbackResult.body.ok, true);
+  assert.equal(legacyFallbackResult.body.booking.id, "status-booking-1");
+  assert.equal(legacyFallbackResult.body.booking.status, "completed");
+  assert.equal(legacyFallbackMock.client.updateHistory.length, 2);
+  assert.equal(legacyFallbackMock.client.updateHistory[0].selectedColumns, "id, booking_reference, admin_internal_status, updated_at");
+  assert.equal(legacyFallbackMock.client.updateHistory[1].selectedColumns, "id, booking_reference, status, updated_at");
+  assert.deepEqual(Object.keys(legacyFallbackMock.client.updateHistory[1].payload).sort(), ["status", "updated_at"]);
+  assert.equal(legacyFallbackMock.client.updateHistory[1].payload.status, "completed");
+  assertNoUnsafeResponse(legacyFallbackResult, "legacy fallback response");
 
   setEnv(enabledEnv());
 
@@ -509,7 +547,8 @@ try {
       value: "CUST-20260701174619-ZO8P2W",
     },
   ]);
-  assert.equal(bookingReferenceMock.client.updateHistory[0].selectedColumns, "id, booking_reference, status, updated_at");
+  assert.equal(bookingReferenceMock.client.updateHistory[0].selectedColumns, "id, booking_reference, admin_internal_status, updated_at");
+  assert.equal(bookingReferenceMock.client.updateHistory[0].payload.admin_internal_status, "completed");
   assertNoUnsafeResponse(bookingReferenceResult, "booking-reference response");
 
   setEnv(enabledEnv());

@@ -1,16 +1,29 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-f22789d1 Keep dispatch parser job-card only
+3df797c8 Split narrated round-trip airport parser choices
 
 Latest pushed main/staging runtime checkpoint:
-f22789d1 Keep dispatch parser job-card only
+3df797c8 Split narrated round-trip airport parser choices
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
 1c9a83ab Record live booking calendar and invoice proof
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Narrated Round-Trip Airport Parser Choices
+
+- Dispatch job-card parsing now treats a casual airport-transfer message with one departure flight plus one `return flight` as two selectable booking drafts instead of one merged draft.
+- Locked sample: `Hi, can I book an airport transfer and pick up - 5 people + bags. We will need one forward facing booster seat. Pick up date 02 July at 6am SQ938. Return flight on the 10th July SQ939. mr. peter. 276 ocean drive lobb o`
+- The first draft is `DEP`, `2026-07-02`, `0600hrs`, `SQ938`, pickup `276 Ocean Drive lobby O`, drop-off `Changi Airport`, passenger `Mr Peter`, pax `5`, child seat `1 x booster seat`.
+- The second draft is `MNG`, `2026-07-10`, no pickup time invented, `SQ939`, pickup `Changi Airport`, drop-off `276 Ocean Drive lobby O`, passenger `Mr Peter`, pax `5`, child seat `1 x booster seat`.
+- The parser warning remains active for this shape: operators must choose one extracted booking before the app fills the form, so the two flights cannot silently merge into one job card.
+- The multiple-booking chooser now carries child-seat details into the booking form when a draft is selected.
+- The duplicate parser-debug chooser is hidden during daily operation unless the parser debug panel is explicitly opened, so this two-booking message shows exactly two `Use this booking` choices.
+- Local Mac Chrome proof on `http://localhost:3000/` pasted the exact customer sentence into Dispatch, clicked `Create Job Card`, confirmed exactly two choices with `SQ938`, `SQ939`, and `Child seat: 1 x booster seat`, then selected each draft. The first filled the departure fields above; the second filled the arrival/return fields above and left pickup time blank for admin review.
+- This pass did not save a booking, sync calendar, touch live app data, use Vercel CLI, change env/DB schema, send email, activate Stripe/payment, send providers, create payouts, or change GPS/live-location behavior.
+- Checks passed: `npm run test:parser`, `node --check scripts/test-booking-ui-browser.mjs`, `npx tsc --noEmit --pretty false`, `npm run lint` with only existing `loadBookings` warnings, `npm run build`, and `git diff --check`.
 
 ### Dispatch Job-Card Parser Boundary
 

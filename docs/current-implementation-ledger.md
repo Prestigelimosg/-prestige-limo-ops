@@ -1,16 +1,27 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-217ce4d0 Arm loaded bookings for calendar updates
+f22789d1 Keep dispatch parser job-card only
 
 Latest pushed main/staging runtime checkpoint:
-217ce4d0 Arm loaded bookings for calendar updates
+f22789d1 Keep dispatch parser job-card only
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-217ce4d0 Arm loaded bookings for calendar updates
+1c9a83ab Record live booking calendar and invoice proof
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Dispatch Job-Card Parser Boundary
+
+- Dispatch `Create Job Card` now uses the job-card-only parser helper instead of the base booking parser directly.
+- The base parser still extracts customer price overrides for parser/billing lanes that already rely on it, but the Dispatch job-card lane strips `customerPriceOverride` and `customerPriceOverrideReason` so pasted supplier/order totals do not pollute the driver job card draft.
+- The exact pasted Prestige Transport airport-departure format with tab-delimited fields, Korean/Singapore route text, first/second pickup comments, Trip Organizer contact, Toyota Alphard vehicle text, and `Flight No. SQ892` is locked in the parser test.
+- That exact job-card parse produces `DEP`, `AVF`, `2026-07-02`, `0705hrs`, `SQ892`, pickup `26 Newton Rd, 307957`, extra stop `28 Alexandra View, Singapore 158744`, drop-off `Changi Airport`, passenger `Pui Yu Chan`, pax `2`, booker `Mr Kim, Hyun Soo`, and no customer price override.
+- Local Mac Chrome form proof on `http://localhost:3010/` pasted the exact supplier booking into Dispatch `Paste Booking Message`, clicked `Create Job Card`, and read back the same field values in the actual form. `Customer Price Override` and override reason stayed empty; the pasted supplier `S$120.00` was not carried into the job-card lane.
+- Browser guard expectations now require Dispatch parsed customer price override fields to stay empty after `Create Job Card`; pricing/invoice work remains separate.
+- This pass did not use Vercel CLI, change env, change DB schema, send email, activate Stripe/payment, send providers, create payouts, or change GPS/live-location behavior.
+- Checks passed: `npm run test:parser`, `npx tsc --noEmit --pretty false`, `npm run lint` with only existing `loadBookings` warnings, `npm run build`, `git diff --check`, and `node --check scripts/test-booking-ui-browser.mjs`.
 
 ### Loaded Booking Calendar Update And Snapshot Finder
 

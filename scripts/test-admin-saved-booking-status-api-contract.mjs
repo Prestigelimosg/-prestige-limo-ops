@@ -303,6 +303,12 @@ const seed = {
       status: "completed",
       updated_at: "2026-05-28T02:30:00.000Z",
     },
+    {
+      booking_reference: "CUST-20260701174619-ZO8P2W",
+      id: "11111111-1111-4111-8111-111111111111",
+      status: "assigned",
+      updated_at: "2026-05-29T02:30:00.000Z",
+    },
   ],
 };
 
@@ -467,8 +473,44 @@ try {
   ]);
   assert.deepEqual(Object.keys(validMock.client.updateHistory[0].payload).sort(), ["status", "updated_at"]);
   assert.equal(validMock.client.updateHistory[0].payload.status, "completed");
-  assert.equal(validMock.client.updateHistory[0].selectedColumns, "id, status, updated_at");
+  assert.equal(validMock.client.updateHistory[0].selectedColumns, "id, booking_reference, status, updated_at");
   assertNoUnsafeResponse(validResult, "valid response");
+
+  setEnv(enabledEnv());
+
+  const bookingReferenceMock = installMockClient(seed);
+  const bookingReferenceResult = await routeJson(
+    await route.PATCH(
+      jsonRequest("http://localhost/api/admin-saved-booking-statuses", {
+        booking_id: "CUST-20260701174619-ZO8P2W",
+        status: "completed",
+      }),
+    ),
+  );
+
+  assert.equal(bookingReferenceResult.status, 200);
+  assert.equal(bookingReferenceResult.body.ok, true);
+  assert.deepEqual(
+    {
+      id: bookingReferenceResult.body.booking.id,
+      status: bookingReferenceResult.body.booking.status,
+    },
+    {
+      id: "CUST-20260701174619-ZO8P2W",
+      status: "completed",
+    },
+  );
+  assert.equal(bookingReferenceMock.createdClients.length, 1);
+  assert.equal(bookingReferenceMock.client.updateHistory.length, 1);
+  assert.deepEqual(bookingReferenceMock.client.updateHistory[0].filters, [
+    {
+      column: "booking_reference",
+      type: "eq",
+      value: "CUST-20260701174619-ZO8P2W",
+    },
+  ]);
+  assert.equal(bookingReferenceMock.client.updateHistory[0].selectedColumns, "id, booking_reference, status, updated_at");
+  assertNoUnsafeResponse(bookingReferenceResult, "booking-reference response");
 
   setEnv(enabledEnv());
 

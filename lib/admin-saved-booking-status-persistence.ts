@@ -303,6 +303,12 @@ function validBookingId(value: unknown) {
     : null;
 }
 
+function bookingStatusTargetColumn(bookingId: string): "booking_reference" | "id" {
+  return /^[A-Z]{2,8}-\d{8,}[A-Z0-9-]*$/.test(bookingId)
+    ? "booking_reference"
+    : "id";
+}
+
 function validStatus(value: unknown) {
   const normalized = textOrNull(value, 40)?.toLowerCase() || "";
 
@@ -311,10 +317,16 @@ function validStatus(value: unknown) {
     : null;
 }
 
-function toStatusRecord(value: unknown): AdminSavedBookingStatusRecord | null {
+function toStatusRecord(
+  value: unknown,
+  targetColumn: "booking_reference" | "id",
+): AdminSavedBookingStatusRecord | null {
   const row = asRecord(value);
+  const bookingReference = textOrNull(row.booking_reference, 120);
   const id =
-    typeof row.id === "number" && Number.isSafeInteger(row.id)
+    targetColumn === "booking_reference" && bookingReference
+      ? bookingReference
+      : typeof row.id === "number" && Number.isSafeInteger(row.id)
       ? row.id
       : textOrNull(row.id, 120);
   const status = validStatus(row.status);
@@ -373,21 +385,22 @@ export async function updateAdminSavedBookingStatus(
   }
 
   const updatedAt = new Date().toISOString();
+  const targetColumn = bookingStatusTargetColumn(parsed.data.booking_id);
   const { data, error } = await clientResult.data
     .from("bookings")
     .update({
       status: parsed.data.status,
       updated_at: updatedAt,
     })
-    .eq("id", parsed.data.booking_id)
-    .select("id, status, updated_at")
+    .eq(targetColumn, parsed.data.booking_id)
+    .select("id, booking_reference, status, updated_at")
     .maybeSingle();
 
   if (error) {
     return safeDatabaseFailure(safeStatusUpdateError, 500, error);
   }
 
-  const booking = toStatusRecord(data);
+  const booking = toStatusRecord(data, targetColumn);
 
   if (!booking) {
     return {

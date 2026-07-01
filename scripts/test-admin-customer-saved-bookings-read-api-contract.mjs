@@ -303,10 +303,10 @@ const seed = {
     },
     {
       admin_internal_status: "confirmed",
-      booking_reference: "RITZ-SAFE-001",
-      customer_display_name: "Ritz Carlton",
+      booking_reference: "HOURLY-SAFE-001",
+      customer_display_name: "hourly-test-customer",
       customer_facing_status: "confirmed",
-      customer_id: "customer-ritz",
+      customer_id: "52",
       pickup_at: "2026-06-18T10:00:00.000Z",
       service_type: "Point-to-Point Transfer",
     },
@@ -476,6 +476,39 @@ try {
   assert.equal(customerFolderMock.client.selectHistory.length, 1);
   assert.equal(customerFolderMock.client.selectHistory[0].table, "bookings");
   assertNoLeaks(customerFolderReadResult, "customer folder saved bookings read response should stay safe");
+
+  setEnv(enabledEnv());
+
+  const customerFolderSlugMock = installMockClient(seed);
+  const customerFolderSlugReadResult = await readRouteResponse(
+    await route.GET(
+      new Request(
+        "http://localhost/api/admin-customer-saved-bookings?customer_account=Hourly+Test+Customer&customer_id=hourly-test-customer&limit=10",
+        {
+          headers: customerSurfaceHeaders({ referer: "http://localhost/customers/hourly-test-customer" }),
+        },
+      ),
+    ),
+  );
+
+  assert.equal(customerFolderSlugReadResult.status, 200);
+  assert.equal(customerFolderSlugReadResult.body.ok, true);
+  assert.deepEqual(customerFolderSlugReadResult.body.summary, {
+    matched_count: 1,
+    recent_read_count: 3,
+    returned_count: 1,
+  });
+  assert.deepEqual(
+    customerFolderSlugReadResult.body.saved_bookings.map((booking) => booking.booking_reference),
+    ["HOURLY-SAFE-001"],
+  );
+  assert.equal(customerFolderSlugMock.client.operations.length, 0);
+  assert.equal(customerFolderSlugMock.client.selectHistory.length, 1);
+  assert.equal(customerFolderSlugMock.client.selectHistory[0].table, "bookings");
+  assertNoLeaks(
+    customerFolderSlugReadResult,
+    "customer folder slug saved bookings read response should stay safe",
+  );
 
   setEnv(enabledEnv());
 

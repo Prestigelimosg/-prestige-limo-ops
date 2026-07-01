@@ -149,7 +149,7 @@ function safeStatus(value: unknown) {
 }
 
 function normalizeForMatch(value: unknown) {
-  return safeText(value)?.toLowerCase() || "";
+  return safeText(value)?.replace(/[^a-z0-9]+/gi, "").toLowerCase() || "";
 }
 
 function bookingMatchesCustomer(

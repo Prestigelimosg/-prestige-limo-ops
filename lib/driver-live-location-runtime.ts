@@ -17,7 +17,7 @@ export const driverLiveLocationRuntimeVersion =
 
 type DriverLiveLocationEnv = Record<string, string | undefined>;
 type UnknownRecord = Record<string, unknown>;
-type DriverLiveLocationAction = "share" | "stop";
+type DriverLiveLocationAction = "readiness" | "share" | "stop";
 type DriverLiveLocationBlockedReason =
   | "admin_active_jobs_map_gate_closed"
   | "driver_live_location_admin_runtime_config_not_ready"
@@ -776,6 +776,91 @@ export async function handleDriverLiveLocationRuntimeRequest({
       ok: true,
       sharing_state: "active",
       stale_after: staleAfter,
+      version: driverLiveLocationRuntimeVersion,
+    },
+    status: 200,
+  };
+}
+
+export async function handleDriverLiveLocationReadinessRuntimeRequest({
+  env = process.env,
+  token,
+}: {
+  env?: DriverLiveLocationEnv;
+  token: string;
+}) {
+  if (!driverLiveLocationRuntimeGateOpen(env)) {
+    return blockedResult(
+      readDriverLiveLocationScaffoldGateState(env).capture_gate_configured
+        ? "driver_live_location_runtime_mode_closed"
+        : "driver_live_location_capture_gate_closed",
+      503,
+    );
+  }
+
+  const clientResult = runtimeClient(env);
+
+  if (!clientResult.ok) {
+    return blockedResult(clientResult.reason, 503);
+  }
+
+  const runtimePolicy = await readAdminControlledRuntimePolicy({
+    client: clientResult.client,
+    env,
+    purpose: "capture",
+  });
+
+  if (!runtimePolicy.ok) {
+    return blockedResult(runtimePolicy.reason, runtimePolicy.status);
+  }
+
+  const resolved = await resolveDriverJobLink({
+    client: clientResult.client,
+    token,
+  });
+
+  if ("status" in resolved) {
+    return resolved;
+  }
+
+  if (
+    !runtimePolicy.policy.allowedJobReferences.includes(
+      resolved.link.booking_reference,
+    )
+  ) {
+    return blockedResult("driver_live_location_job_not_allowlisted", 403);
+  }
+
+  const { data, error } = await clientResult.client
+    .from(latestPositionsTable)
+    .select(
+      "accuracy_meters, assigned_job_label, booking_reference, driver_display_label, driver_job_link_id, heading_degrees, job_status, latitude, longitude, sharing_state, speed_meters_per_second, stale_after, updated_at, vehicle_plate_label",
+    )
+    .eq("driver_job_link_id", resolved.link.id)
+    .maybeSingle();
+
+  if (error) {
+    return blockedResult("driver_live_location_config_not_ready", 503);
+  }
+
+  const latestPosition = normalizeLatestPosition(asRecord(data));
+  const sharingState =
+    latestPosition?.sharing_state === "active" && !latestPosition.is_stale
+      ? "active"
+      : latestPosition?.sharing_state === "active" && latestPosition.is_stale
+        ? "stale"
+        : "inactive";
+
+  return {
+    body: {
+      action: "readiness",
+      booking_reference: resolved.link.booking_reference,
+      customerVisible: false,
+      external_send: false,
+      last_shared_at: latestPosition?.updated_at || null,
+      ok: true,
+      sharing_state: sharingState,
+      stale_after: latestPosition?.stale_after || null,
       version: driverLiveLocationRuntimeVersion,
     },
     status: 200,

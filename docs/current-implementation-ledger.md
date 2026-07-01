@@ -12,6 +12,17 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Driver Live Location One-Booking Runtime Control
+
+- Admin Dispatch now has a compact Active Jobs Map runtime control inside the existing Day-of-Trip Dispatch Monitor.
+- The control opens live location for exactly one saved booking reference at a time through `/api/admin-live-location-runtime`.
+- Driver `Share Location` first calls `GET /api/driver-job/[token]/live-location` for server readiness; Chrome GPS is requested only after that readiness check passes.
+- Admin marker refresh uses the existing guarded `GET /api/admin-active-jobs-map-locations` route.
+- The admin UI renders compact marker rows and a Google Maps link per marker; it does not embed a browser map key or render a map provider widget.
+- Customer live-location API remains same-origin/session/booking-boundary gated and no customer message is sent by this lane.
+- No Vercel CLI, env value change, DB schema change, provider send, email/WhatsApp/SMS/Telegram send, billing/payment/PDF/invoice/payout, parser, Save Booking, `/api/admin-saved-bookings`, OTS/photo/storage, or calendar behavior changed.
+- Focused guard coverage lives in `scripts/test-driver-live-location-runtime-control-ui-guard.mjs`.
+
 ### Admin Dispatch Draft Save Must-Fill Removal
 
 - Admin Dispatch fields no longer show required asterisks; Save + CRM can save an admin draft even when customer/contact/date/route fields are blank.

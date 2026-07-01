@@ -71,6 +71,49 @@ async function runtimeResponse({
   return Response.json(result.body, { status: result.status });
 }
 
+async function readinessResponse(context: DriverLiveLocationRouteContext) {
+  const token = await readToken(context);
+
+  if (!runtimeGateOpen() || !token) {
+    return null;
+  }
+
+  const { handleDriverLiveLocationReadinessRuntimeRequest } = await import(
+    "../../../../../lib/driver-live-location-runtime"
+  );
+  const result = await handleDriverLiveLocationReadinessRuntimeRequest({
+    token,
+  });
+
+  return Response.json(result.body, { status: result.status });
+}
+
+export async function GET(
+  _request: Request,
+  context: DriverLiveLocationRouteContext,
+) {
+  try {
+    const runtime = await readinessResponse(context);
+
+    if (runtime) {
+      return runtime;
+    }
+
+    return Response.json(
+      {
+        ok: false,
+        result: buildDriverLiveLocationCaptureScaffoldResponse({
+          action: "share",
+          tokenPresent: await tokenPresent(context),
+        }),
+      },
+      { status: 503 },
+    );
+  } catch {
+    return safeFailureResponse();
+  }
+}
+
 export async function POST(
   request: Request,
   context: DriverLiveLocationRouteContext,

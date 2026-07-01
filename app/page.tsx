@@ -110,6 +110,8 @@ const adminBookingCalendarSyncStatusesApiPath =
   "/api/admin-booking-calendar-sync-statuses";
 const adminMapLocationSearchApiPath = "/api/admin-map-location-search";
 const adminMapRouteEstimatesApiPath = "/api/admin-map-route-estimates";
+const adminActiveJobsMapLocationsApiPath = "/api/admin-active-jobs-map-locations";
+const adminLiveLocationRuntimeApiPath = "/api/admin-live-location-runtime";
 const adminDispatchReleaseWorkflowArea = "dispatch_release";
 const adminDriverAcknowledgementWorkflowArea = "driver_acknowledgement";
 const adminLegacyTables = {
@@ -1184,6 +1186,48 @@ type AdminDriverJobStatusReadState = {
   message: Message | null;
   status: "idle" | "loading" | "loaded" | "error";
   statuses: AdminDriverJobStatusEvent[];
+};
+
+type AdminActiveJobsMapLocation = {
+  accuracy_meters?: number | null;
+  assigned_job_label?: string | null;
+  assigned_job_reference?: string | null;
+  driver_display_label?: string | null;
+  heading_degrees?: number | null;
+  is_stale?: boolean | null;
+  job_status?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  sharing_state?: string | null;
+  speed_meters_per_second?: number | null;
+  stale_after?: string | null;
+  updated_at?: string | null;
+  vehicle_plate_label?: string | null;
+};
+
+type AdminLiveLocationRuntimeControlResponse = {
+  active_jobs?: AdminActiveJobsMapLocation[];
+  allowed_booking_references?: string[];
+  customerVisible?: false;
+  error?: string;
+  external_send?: false;
+  liveMapEnabled?: boolean;
+  locationStorageEnabled?: boolean;
+  marker_count?: number;
+  ok?: boolean;
+  reason?: string;
+  runtime_status?: "active" | "closed" | "error" | string;
+};
+
+type AdminActiveJobsMapReadState = {
+  action: "closing" | "idle" | "opening" | "refreshing";
+  activeJobs: AdminActiveJobsMapLocation[];
+  allowedBookingReferences: string[];
+  loadedReference: string;
+  markerCount: number;
+  message: Message | null;
+  runtimeStatus: "active" | "closed" | "error";
+  status: "idle" | "loading" | "loaded" | "error";
 };
 
 type AdminDriverJobDspActualTimeStatus = "complete" | "started" | "not_started";
@@ -2683,6 +2727,37 @@ function compactBookingReference(value: string | number | null | undefined) {
   }
 
   return `${reference.slice(0, 6)}...${reference.slice(-6)}`;
+}
+
+function formatAdminLiveLocationTimestamp(value: string | null | undefined) {
+  const cleaned = clean(value);
+  const date = new Date(cleaned);
+
+  if (!cleaned || !Number.isFinite(date.getTime())) {
+    return "No time";
+  }
+
+  return `${date.toLocaleString("en-SG", {
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+    minute: "2-digit",
+    month: "short",
+    timeZone: "Asia/Singapore",
+  })} SGT`;
+}
+
+function googleMapsLocationUrl(latitude: number | null | undefined, longitude: number | null | undefined) {
+  if (
+    typeof latitude !== "number" ||
+    typeof longitude !== "number" ||
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude)
+  ) {
+    return "";
+  }
+
+  return `https://www.google.com/maps?q=${encodeURIComponent(`${latitude},${longitude}`)}`;
 }
 
 function isInactiveDriver(
@@ -9691,6 +9766,17 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       status: "idle",
       statuses: [],
     });
+  const [adminActiveJobsMapReadState, setAdminActiveJobsMapReadState] =
+    useState<AdminActiveJobsMapReadState>({
+      action: "idle",
+      activeJobs: [],
+      allowedBookingReferences: [],
+      loadedReference: "",
+      markerCount: 0,
+      message: null,
+      runtimeStatus: "closed",
+      status: "idle",
+    });
   const [
     adminDriverJobDspActualTimeReadState,
     setAdminDriverJobDspActualTimeReadState,
@@ -15260,6 +15346,250 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         status: "error",
         statuses: [],
       });
+    }
+  }
+
+  function adminLiveLocationFailureMessage(error: unknown) {
+    return error instanceof Error
+      ? error.message
+      : "Live-location request failed safely.";
+  }
+
+  function normalizeAdminActiveJobsMapLocation(value: unknown): AdminActiveJobsMapLocation | null {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return null;
+    }
+
+    const row = value as AdminActiveJobsMapLocation;
+    const latitude = Number(row.latitude);
+    const longitude = Number(row.longitude);
+    const assignedJobReference = cleanReferenceText(row.assigned_job_reference || "");
+
+    if (
+      !assignedJobReference ||
+      !Number.isFinite(latitude) ||
+      latitude < -90 ||
+      latitude > 90 ||
+      !Number.isFinite(longitude) ||
+      longitude < -180 ||
+      longitude > 180
+    ) {
+      return null;
+    }
+
+    return {
+      accuracy_meters: typeof row.accuracy_meters === "number" ? row.accuracy_meters : null,
+      assigned_job_label: clean(row.assigned_job_label),
+      assigned_job_reference: assignedJobReference,
+      driver_display_label: clean(row.driver_display_label) || "Assigned driver",
+      heading_degrees: typeof row.heading_degrees === "number" ? row.heading_degrees : null,
+      is_stale: row.is_stale === true,
+      job_status: clean(row.job_status) || "assigned",
+      latitude,
+      longitude,
+      sharing_state: clean(row.sharing_state) || "active",
+      speed_meters_per_second:
+        typeof row.speed_meters_per_second === "number" ? row.speed_meters_per_second : null,
+      stale_after: clean(row.stale_after),
+      updated_at: clean(row.updated_at),
+      vehicle_plate_label: clean(row.vehicle_plate_label),
+    };
+  }
+
+  function isAdminActiveJobsMapLocation(
+    value: AdminActiveJobsMapLocation | null,
+  ): value is AdminActiveJobsMapLocation {
+    return value !== null;
+  }
+
+  async function refreshAdminActiveJobsMapLocations(options: { silent?: boolean } = {}) {
+    if (!options.silent) {
+      setAdminActiveJobsMapReadState((current) => ({
+        ...current,
+        action: "refreshing",
+        message: {
+          tone: "info",
+          text: "Refreshing active driver markers...",
+        },
+        status: "loading",
+      }));
+    }
+
+    try {
+      const response = await fetch(adminActiveJobsMapLocationsApiPath, {
+        cache: "no-store",
+        headers: {
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "GET",
+      });
+      const result = await response.json().catch(() => null) as AdminLiveLocationRuntimeControlResponse | null;
+
+      if (!response.ok || !result?.ok || result.customerVisible !== false || result.external_send !== false) {
+        throw new Error(result?.error || result?.reason || "Active jobs map is closed.");
+      }
+
+      const activeJobs = Array.isArray(result.active_jobs)
+        ? result.active_jobs
+            .map(normalizeAdminActiveJobsMapLocation)
+            .filter(isAdminActiveJobsMapLocation)
+        : [];
+
+      setAdminActiveJobsMapReadState((current) => ({
+        ...current,
+        action: "idle",
+        activeJobs,
+        markerCount: activeJobs.length,
+        message: {
+          tone: activeJobs.length > 0 ? "success" : "info",
+          text:
+            activeJobs.length > 0
+              ? `Loaded ${activeJobs.length} active driver marker${activeJobs.length === 1 ? "" : "s"}.`
+              : "Live location is open, but no driver marker has been shared yet.",
+        },
+        runtimeStatus: "active",
+        status: "loaded",
+      }));
+    } catch (error) {
+      setAdminActiveJobsMapReadState((current) => ({
+        ...current,
+        action: "idle",
+        activeJobs: [],
+        markerCount: 0,
+        message: {
+          tone: "error",
+          text: adminLiveLocationFailureMessage(error),
+        },
+        runtimeStatus: "closed",
+        status: "error",
+      }));
+    }
+  }
+
+  async function openAdminLiveLocationRuntimeForLoadedBooking() {
+    const bookingReference = cleanReferenceText(dispatchReleaseWorkflowBookingReference);
+
+    if (!bookingReference) {
+      setAdminActiveJobsMapReadState((current) => ({
+        ...current,
+        message: {
+          tone: "error",
+          text: "Load or save one booking before opening live location.",
+        },
+      }));
+      return;
+    }
+
+    setAdminActiveJobsMapReadState((current) => ({
+      ...current,
+      action: "opening",
+      loadedReference: bookingReference,
+      message: {
+        tone: "info",
+        text: `Opening live location for ${bookingReference} only...`,
+      },
+      status: "loading",
+    }));
+
+    try {
+      const response = await fetch(adminLiveLocationRuntimeApiPath, {
+        body: JSON.stringify({ booking_reference: bookingReference }),
+        cache: "no-store",
+        headers: {
+          "content-type": "application/json",
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "POST",
+      });
+      const result = await response.json().catch(() => null) as AdminLiveLocationRuntimeControlResponse | null;
+
+      if (!response.ok || !result?.ok || result.customerVisible !== false || result.external_send !== false) {
+        throw new Error(result?.error || result?.reason || "Live-location open failed safely.");
+      }
+
+      const allowedBookingReferences = Array.isArray(result.allowed_booking_references)
+        ? result.allowed_booking_references.map(cleanReferenceText).filter(Boolean)
+        : [bookingReference];
+
+      setAdminActiveJobsMapReadState((current) => ({
+        ...current,
+        action: "idle",
+        allowedBookingReferences,
+        loadedReference: bookingReference,
+        message: {
+          tone: "success",
+          text: `Live location opened for ${compactBookingReference(bookingReference)} only. Ask driver to tap Share Location.`,
+        },
+        runtimeStatus: "active",
+        status: "loaded",
+      }));
+
+      void refreshAdminActiveJobsMapLocations({ silent: true });
+    } catch (error) {
+      setAdminActiveJobsMapReadState((current) => ({
+        ...current,
+        action: "idle",
+        activeJobs: [],
+        markerCount: 0,
+        message: {
+          tone: "error",
+          text: adminLiveLocationFailureMessage(error),
+        },
+        runtimeStatus: "error",
+        status: "error",
+      }));
+    }
+  }
+
+  async function closeAdminLiveLocationRuntime() {
+    setAdminActiveJobsMapReadState((current) => ({
+      ...current,
+      action: "closing",
+      message: {
+        tone: "info",
+        text: "Closing live location...",
+      },
+      status: "loading",
+    }));
+
+    try {
+      const response = await fetch(adminLiveLocationRuntimeApiPath, {
+        cache: "no-store",
+        headers: {
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "DELETE",
+      });
+      const result = await response.json().catch(() => null) as AdminLiveLocationRuntimeControlResponse | null;
+
+      if (!response.ok || !result?.ok || result.customerVisible !== false || result.external_send !== false) {
+        throw new Error(result?.error || result?.reason || "Live-location close failed safely.");
+      }
+
+      setAdminActiveJobsMapReadState({
+        action: "idle",
+        activeJobs: [],
+        allowedBookingReferences: [],
+        loadedReference: "",
+        markerCount: 0,
+        message: {
+          tone: "success",
+          text: "Live location closed. Driver/customer map reads are gated off.",
+        },
+        runtimeStatus: "closed",
+        status: "loaded",
+      });
+    } catch (error) {
+      setAdminActiveJobsMapReadState((current) => ({
+        ...current,
+        action: "idle",
+        message: {
+          tone: "error",
+          text: adminLiveLocationFailureMessage(error),
+        },
+        runtimeStatus: "error",
+        status: "error",
+      }));
     }
   }
 
@@ -31520,47 +31850,148 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                 </div>
               </div>
               <div
-                aria-label="Admin Active Jobs Map disabled scaffold"
+                aria-label="Admin Active Jobs Map"
                 className="mt-1.5 rounded-md border border-lime-200 bg-white/75 p-1.5 text-[10px] leading-3 text-lime-950 sm:text-[11px] sm:leading-4"
-                data-admin-active-jobs-map-scaffold="disabled"
+                data-admin-active-jobs-map-runtime="true"
               >
                 <div className="flex flex-wrap items-center justify-between gap-1">
-                  <p className="font-semibold leading-3 sm:leading-4">
-                    Active Jobs Map
-                  </p>
+                  <div className="min-w-0">
+                    <p className="font-semibold leading-3 sm:leading-4">
+                      Active Jobs Map
+                    </p>
+                    <p className="mt-0.5 break-words text-[9px] leading-3 text-lime-900 sm:text-[10px]">
+                      Open one saved booking, then ask driver to tap Share Location.
+                    </p>
+                  </div>
                   <span
-                    className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[8px] font-semibold uppercase text-slate-700 sm:px-2 sm:text-[9px]"
-                    data-admin-active-jobs-map-state="disabled"
+                    className={`rounded-full px-1.5 py-0.5 text-[8px] font-semibold uppercase sm:px-2 sm:text-[9px] ${
+                      adminActiveJobsMapReadState.runtimeStatus === "active"
+                        ? "bg-emerald-100 text-emerald-900"
+                        : adminActiveJobsMapReadState.runtimeStatus === "error"
+                          ? "bg-red-100 text-red-800"
+                          : "bg-slate-100 text-slate-700"
+                    }`}
+                    data-admin-active-jobs-map-state={adminActiveJobsMapReadState.runtimeStatus}
                   >
-                    Off
+                    {adminActiveJobsMapReadState.runtimeStatus === "active"
+                      ? "Open"
+                      : adminActiveJobsMapReadState.runtimeStatus === "error"
+                        ? "Check"
+                        : "Off"}
                   </span>
                 </div>
                 <div className="mt-1 grid grid-cols-3 gap-1">
                   <p
                     className="min-w-0 rounded bg-lime-50 px-1 py-0.5 font-semibold"
-                    data-admin-active-jobs-map-marker-count="0"
+                    data-admin-active-jobs-map-marker-count={adminActiveJobsMapReadState.markerCount}
                   >
-                    Markers: 0
+                    Markers: {adminActiveJobsMapReadState.markerCount}
                   </p>
                   <p
                     className="min-w-0 rounded bg-lime-50 px-1 py-0.5 font-semibold"
-                    data-admin-active-jobs-map-sharing-state="inactive"
+                    data-admin-active-jobs-map-sharing-state={
+                      adminActiveJobsMapReadState.markerCount > 0 ? "active" : "inactive"
+                    }
                   >
-                    Sharing: off
+                    Sharing: {adminActiveJobsMapReadState.markerCount > 0 ? "on" : "off"}
                   </p>
                   <p
                     className="min-w-0 rounded bg-lime-50 px-1 py-0.5 font-semibold"
-                    data-admin-active-jobs-map-stale-state="not-active"
+                    data-admin-active-jobs-map-stale-state={
+                      adminActiveJobsMapReadState.activeJobs.some((job) => job.is_stale)
+                        ? "stale"
+                        : "current"
+                    }
                   >
-                    Stale: off
+                    Stale: {adminActiveJobsMapReadState.activeJobs.some((job) => job.is_stale) ? "yes" : "no"}
                   </p>
                 </div>
+                <div className="mt-1 flex flex-wrap gap-1" data-admin-active-jobs-map-controls="true">
+                  <button
+                    className="rounded border border-lime-300 bg-white px-2 py-0.5 text-[9px] font-semibold text-lime-950 transition hover:bg-lime-50 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[10px]"
+                    data-admin-active-jobs-map-open="true"
+                    disabled={
+                      !clean(dispatchReleaseWorkflowBookingReference) ||
+                      adminActiveJobsMapReadState.action !== "idle"
+                    }
+                    onClick={openAdminLiveLocationRuntimeForLoadedBooking}
+                    type="button"
+                  >
+                    {adminActiveJobsMapReadState.action === "opening" ? "Opening" : "Open"}
+                  </button>
+                  <button
+                    className="rounded border border-lime-300 bg-white px-2 py-0.5 text-[9px] font-semibold text-lime-950 transition hover:bg-lime-50 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[10px]"
+                    data-admin-active-jobs-map-refresh="true"
+                    disabled={adminActiveJobsMapReadState.action !== "idle"}
+                    onClick={() => void refreshAdminActiveJobsMapLocations()}
+                    type="button"
+                  >
+                    {adminActiveJobsMapReadState.action === "refreshing" ? "Refreshing" : "Refresh"}
+                  </button>
+                  <button
+                    className="rounded border border-red-200 bg-white px-2 py-0.5 text-[9px] font-semibold text-red-800 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[10px]"
+                    data-admin-active-jobs-map-close="true"
+                    disabled={adminActiveJobsMapReadState.action !== "idle"}
+                    onClick={closeAdminLiveLocationRuntime}
+                    type="button"
+                  >
+                    {adminActiveJobsMapReadState.action === "closing" ? "Closing" : "Close"}
+                  </button>
+                </div>
+                {adminActiveJobsMapReadState.message ? (
+                  <p
+                    className={`mt-1 rounded border px-1.5 py-1 text-[9px] font-semibold leading-3 sm:text-[10px] ${statusClass(
+                      adminActiveJobsMapReadState.message.tone,
+                    )}`}
+                    data-admin-active-jobs-map-message="true"
+                  >
+                    {adminActiveJobsMapReadState.message.text}
+                  </p>
+                ) : null}
+                {adminActiveJobsMapReadState.activeJobs.length > 0 ? (
+                  <div
+                    className="mt-1 max-h-28 space-y-1 overflow-y-auto border-t border-lime-100 pt-1"
+                    data-admin-active-jobs-map-marker-list="true"
+                  >
+                    {adminActiveJobsMapReadState.activeJobs.map((job) => {
+                      const mapUrl = googleMapsLocationUrl(job.latitude, job.longitude);
+
+                      return (
+                        <div
+                          className="grid grid-cols-[1fr_auto] gap-1 rounded bg-lime-50 px-1 py-0.5"
+                          data-admin-active-jobs-map-marker={job.assigned_job_reference || "unknown"}
+                          key={`${job.assigned_job_reference}-${job.updated_at || ""}`}
+                        >
+                          <div className="min-w-0">
+                            <p className="break-words font-semibold leading-3">
+                              {job.driver_display_label || "Assigned driver"} ·{" "}
+                              {compactBookingReference(job.assigned_job_reference || "")}
+                            </p>
+                            <p className="break-words text-[9px] leading-3 text-lime-900">
+                              {job.is_stale ? "Stale" : "Current"} · {formatAdminLiveLocationTimestamp(job.updated_at)}
+                            </p>
+                          </div>
+                          {mapUrl ? (
+                            <a
+                              className="rounded border border-lime-300 bg-white px-1.5 py-0.5 text-[9px] font-semibold text-lime-950"
+                              href={mapUrl}
+                              rel="noreferrer"
+                              target="_blank"
+                            >
+                              Google
+                            </a>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
                 <p
                   className="mt-1 break-words border-t border-lime-100 pt-1 text-[9px] leading-3 text-lime-900 sm:text-[10px]"
                   data-admin-active-jobs-map-boundary="true"
                 >
-                  Disabled until driver consent, location storage, admin map gates, and browser-safe map key are
-                  separately approved.
+                  Admin-only. Opens one booking reference at a time; no customer message, provider send, billing,
+                  payment, PDF, payout, or parser change.
                 </p>
               </div>
               </details>
@@ -31568,10 +31999,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                 className="mt-2 border-t border-lime-200 pt-2 text-[11px] leading-4 text-lime-900 md:text-[10px] md:leading-3"
                 data-admin-day-of-trip-dispatch-monitor-boundary="true"
               >
-                Local UI only. Saved driver status reads use the guarded admin driver-status API only. No
-                Supabase write, direct live database access outside that read path, notification sending, customer
-                message, driver notification, billing, payment, PDF, payout, live location, or parser-learning
-                behavior.
+                Saved driver status reads use the guarded admin driver-status API. Live location uses only the
+                dedicated one-booking admin/driver live-location gates above. No customer message, provider
+                notification, billing, payment, PDF, payout, parser-learning, or broad all-driver tracking behavior.
               </p>
             </section>
 

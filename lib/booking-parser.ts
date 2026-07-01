@@ -1762,10 +1762,46 @@ function cleanDetectedName(value: string) {
     .trim();
 }
 
+function isVehicleServiceHeaderLine(value: string) {
+  const cleanedValue = clean(value)
+    .replace(/^\*+|\*+$/g, "")
+    .replace(/^\d+\s*x\s+/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const serviceCodePattern = "(?:DEP|MNG|TRF|DSP|DWPU)";
+  const vehiclePattern = [
+    "E\\s*(?:/|-)\\s*AVF",
+    "E\\s*-?\\s*Class(?:\\s*/\\s*AVF)?",
+    "S\\s*-?\\s*Class",
+    "Mercedes\\s+V\\s*-?\\s*Class",
+    "V\\s*-?\\s*Class",
+    "Toyota\\s+Alphard(?:\\s*2\\.5)?",
+    "Alphard",
+    "Vellfire",
+    "Combi",
+    "Sedan",
+    "Van",
+    "AVF",
+    "VVV",
+    "S",
+    "E",
+  ].join("|");
+
+  if (new RegExp(`^${serviceCodePattern}$`, "i").test(cleanedValue)) {
+    return true;
+  }
+
+  return new RegExp(`^(?:${vehiclePattern})\\s*(?:-|/)?\\s*${serviceCodePattern}$`, "i").test(cleanedValue);
+}
+
 function looksLikePersonName(value: string) {
   const cleanedValue = cleanDetectedName(value);
 
   if (!cleanedValue || cleanedValue.length < 2) {
+    return false;
+  }
+
+  if (isVehicleServiceHeaderLine(cleanedValue)) {
     return false;
   }
 

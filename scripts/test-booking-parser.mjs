@@ -3667,6 +3667,40 @@ assert.deepEqual(parseJobCardBookingMessage(
   ],
 });
 
+const departureHeaderWithoutPassengerSample = `AVF DEP
+22 Jun 2026, 1100hrs
+Flight: SQ894
+Nassim Road > Changi Airport T3
+Pax: 1`;
+assert.deepEqual(parseJobCardBookingMessage(
+  departureHeaderWithoutPassengerSample,
+  { referenceDate: new Date(2026, 5, 21, 10, 0, 0) },
+), {
+  success: true,
+  company: '',
+  bookingType: 'DEP',
+  vehicle: 'AVF',
+  date: '2026-06-22',
+  time: '1100hrs',
+  flight: 'SQ894',
+  pickup: 'Nassim Road',
+  dropoff: 'Changi Airport T3',
+  booker: '',
+  bookerEmail: '',
+  name: '',
+  pax: '1',
+  driverName: '',
+  driverContact: '',
+  bookerContact: '',
+  cleanedLines: [
+    'AVF DEP',
+    '22 Jun 2026, 1100hrs',
+    'Flight: SQ894',
+    'Nassim Road > Changi Airport T3',
+    'Pax: 1',
+  ],
+});
+
 const multiTerminalArrivalChangeMessage = `Hi William, some changes for tomorrow arrival:
 Total 2 pickup from T3 and T4 to Grand Hyatt below:
 T3: MU567 Shanghai - Singapore Arrival 15:45 (1 Passenger - Ye Yueqin)

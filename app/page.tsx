@@ -3021,7 +3021,7 @@ function waitForAdminActiveJobsBrowserMapDom(mapElement: HTMLElement) {
 
 function waitForAdminActiveJobsBrowserMapEmbedPaintSettle() {
   return new Promise<void>((resolve) => {
-    window.setTimeout(resolve, 25000);
+    window.setTimeout(resolve, 45000);
   });
 }
 

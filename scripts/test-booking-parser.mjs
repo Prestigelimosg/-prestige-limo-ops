@@ -3570,6 +3570,43 @@ assert.deepEqual(parsedNaturalRoundTripAirportBooking.extractedBookingsPreview, 
   },
 ]);
 
+const departureWithFlightScheduleAndPickupAtSample = `Hi William. Need pick up for Nicole tomorrow - 2 Jul
+home to airport - 1 Jalan Buloh Perindu
+SQ 708 - Singapore to Bangkok
+Singapore 09:30 to Bangkok 11:00
+1 person
+
+Pick up at 07:00`;
+assert.deepEqual(parseJobCardBookingMessage(
+  departureWithFlightScheduleAndPickupAtSample,
+  { referenceDate: new Date(2026, 6, 1, 10, 0, 0) },
+), {
+  success: true,
+  company: '',
+  bookingType: 'DEP',
+  vehicle: '',
+  date: '2026-07-02',
+  time: '0700hrs',
+  flight: 'SQ708',
+  pickup: '1 Jalan Buloh Perindu',
+  dropoff: 'Changi Airport',
+  booker: '',
+  bookerEmail: '',
+  name: 'Nicole',
+  pax: '1',
+  driverName: '',
+  driverContact: '',
+  bookerContact: '',
+  cleanedLines: [
+    'Hi William. Need pick up for Nicole tomorrow - 2 Jul',
+    'home to airport - 1 Jalan Buloh Perindu',
+    'SQ 708 - Singapore to Bangkok',
+    'Singapore 09:30 to Bangkok 11:00',
+    '1 person',
+    'Pick up at 07:00',
+  ],
+});
+
 const multiTerminalArrivalChangeMessage = `Hi William, some changes for tomorrow arrival:
 Total 2 pickup from T3 and T4 to Grand Hyatt below:
 T3: MU567 Shanghai - Singapore Arrival 15:45 (1 Passenger - Ye Yueqin)

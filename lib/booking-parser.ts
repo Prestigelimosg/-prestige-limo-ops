@@ -1435,12 +1435,16 @@ function parseTimeFromText(text: string) {
   const labeledDatePipeTime = firstMatch(text, [
     /\b(?:pick\s*up|pickup)\s+time\s*[:=-]?\s*(?:\d{1,2}\s+[A-Za-z]{3,9}\s*\|\s*)?((?:[01]\d|2[0-3])[0-5]\d)\s*(?:LT|SGT|hrs?)?\b/i,
   ]);
+  const explicitPickupTime = firstMatch(text, [
+    /\b(?:pick\s*up|pickup|p\/u|pu)\s*(?:at|by|around)\s*[:=-]?\s*(\d{1,2}(?:(?::|\.)?\d{2})?\s*(?:am|pm|hrs?)?)/i,
+  ]);
   const labeledTime = firstMatch(text, [
     /\b(?:pickup\s*time|time|p\/u\s*time|pu\s*time|eta)\s*[:=-]?\s*(\d{1,2}(?:(?::|\.)?\d{2})?\s*(?:am|pm|hrs?)?)/i,
   ]);
   const rawTime =
     labeledDateTime ||
     labeledDatePipeTime ||
+    explicitPickupTime ||
     labeledTime ||
     firstMatch(text, [
       /\b(\d{1,2}[.:]\d{2}\s*(?:am|pm))\b/i,
@@ -2699,6 +2703,7 @@ function detectRoute(text: string, flight = "") {
 
   if (/\b(?:to\s+(?:changi\s+)?airport|airport\s+drop\s*off|drop\s*off\s+(?:at\s+)?airport)\b/i.test(text)) {
     const pickupBeforeAirport = cleanLocation(firstMatch(text, [
+      /\bhome\s+to\s+(?:changi\s+)?airport\s*[-:]\s*(.+?)(?=\.|,|\n|$)/i,
       /\bfrom\s+(.+?)\s+to\s+(?:changi\s+)?airport\b/i,
       /\bpick\s*up\s+(?:from\s+)?(.+?)\s+to\s+(?:changi\s+)?airport\b/i,
       /\bpick\s*up\s+from\s+(.+?)(?=\s+(?:at|by|around)\s+\d{1,2}(?:(?::|\.)?\d{2})?\s*(?:am|pm|hrs?)?|\s+then\b|\.|,|\n|$)/i,

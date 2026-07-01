@@ -112,6 +112,33 @@ async function writeMockModules(tempDir, options = {}) {
   );
   await mkdir(path.join(tempDir, "lib"), { recursive: true });
   await writeFile(
+    path.join(tempDir, "lib/admin-app-notification-persistence.js"),
+    [
+      "async function createCustomerBookingRequestAdminAppNotification() {",
+      "  return { data: null, ok: true };",
+      "}",
+      "module.exports = { createCustomerBookingRequestAdminAppNotification };",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(tempDir, "lib/admin-device-push-notification.js"),
+    [
+      "async function sendAdminNewBookingDevicePushAlert() {",
+      "  return { data: null, ok: true };",
+      "}",
+      "module.exports = { sendAdminNewBookingDevicePushAlert };",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(tempDir, "lib/admin-new-booking-email-alert.js"),
+    [
+      "async function sendAdminNewBookingEmailAlert() {",
+      "  return { data: null, ok: true };",
+      "}",
+      "module.exports = { sendAdminNewBookingEmailAlert };",
+    ].join("\n"),
+  );
+  await writeFile(
     path.join(tempDir, "lib/customer-driver-app-notification-persistence.js"),
     [
       "async function createCustomerDriverAppNotification() {",

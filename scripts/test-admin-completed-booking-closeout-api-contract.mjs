@@ -585,6 +585,27 @@ try {
   assertNoSupabaseTouched(invalidPayloadMock, "invalid route payload");
   assertNoLeaks(invalidPayloadResult, "invalid route payload response");
 
+  setEnv(enabledEnv());
+
+  const dashboardPostMock = installMockClient();
+  const dashboardPostResult = await readRouteResponse(
+    await route.POST(
+      jsonRequest(
+        "http://localhost/api/admin-completed-booking-closeouts",
+        closeoutPayload({ booking_reference: "SAFE-CLOSEOUT-DASHBOARD" }),
+        adminHeaders(),
+      ),
+    ),
+  );
+
+  assert.equal(dashboardPostResult.status, 200, "same-origin dashboard POST should save without exposing the private session token");
+  assert.equal(dashboardPostResult.body.ok, true);
+  assert.equal(dashboardPostResult.body.closeout.booking_reference, "SAFE-CLOSEOUT-DASHBOARD");
+  assert.equal(dashboardPostResult.body.closeout.actor_role, "admin");
+  assert.equal(dashboardPostResult.body.closeout.source_surface, "admin_api");
+  assert.equal(dashboardPostMock.createdClients.length, 1);
+  assertNoLeaks(dashboardPostResult, "same-origin dashboard POST response should stay safe");
+
   for (const role of ["admin", "dispatcher"]) {
     setEnv(enabledEnv({ PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE: role }));
 

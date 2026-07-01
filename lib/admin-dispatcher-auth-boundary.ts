@@ -82,15 +82,16 @@ function resolveServerSessionRole(
   const expectedToken = cleanServerValue(process.env.PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN);
   const requestToken = cleanServerValue(request.headers.get("x-prestige-admin-session-token") || undefined);
   const role = readServerSessionRole();
+  const methodAllowedWithoutRequestToken = methodIsAllowedWithoutRequestToken(
+    request.method,
+    options.allowServerSessionRoleMethodsWithoutRequestToken,
+  );
 
   if (
     expectedToken &&
     role &&
     (request.method === "GET" ||
-      methodIsAllowedWithoutRequestToken(
-        request.method,
-        options.allowServerSessionRoleMethodsWithoutRequestToken,
-      ))
+      (methodAllowedWithoutRequestToken && !requestToken))
   ) {
     return {
       ok: true,

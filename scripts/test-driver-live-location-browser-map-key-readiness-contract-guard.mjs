@@ -75,6 +75,7 @@ for (const phrase of [
   "The canvas is default-closed: it only loads after active driver markers exist and `/api/admin-active-jobs-map-browser-config` returns a configured browser-safe provider/key response.",
   "The browser config route uses the existing admin dispatcher boundary, same-origin dashboard purpose header, a separate `PRESTIGE_ADMIN_ACTIVE_JOBS_MAP_BROWSER_PROVIDER=google_maps_javascript` gate, `PRESTIGE_GOOGLE_MAPS_BROWSER_API_KEY`, explicit `PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS`, and optional `PRESTIGE_GOOGLE_MAPS_BROWSER_MAP_ID`.",
   "The existing server-side `PRESTIGE_GOOGLE_MAPS_API_KEY` remains server-only for admin location search/route estimates and is not read or returned by the browser-map config route.",
+  "If the configured Google Maps JavaScript renderer errors before producing a visible map DOM, the admin UI may fall back inside the same compact panel to a same-window `maps.google.com` embed centered on the active driver marker, with the marker pin still rendered from the guarded admin live-location data.",
   "When the browser map config is missing or origin is not allowed, the admin UI stays compact, shows an embedded-map-off message, and keeps the per-driver `Driver Pin` Google Maps fallback links.",
   "The browser map canvas is admin-only and shows only active driver marker positions already returned by the guarded active-jobs map route.",
   "This lane does not change driver GPS capture, driver share/stop behavior, customer live maps, customer portal, public booking, billing/payment/PDF/invoice/payout, provider messaging, parser, Save Booking, `/api/admin-saved-bookings`, calendar, Vercel/env values, or DB schema.",
@@ -119,6 +120,10 @@ for (const fragment of [
   "data-admin-active-jobs-map-canvas",
   "data-admin-active-jobs-map-config-message",
   "AdminActiveJobsBrowserMap",
+  "adminActiveJobsBrowserMapEmbedUrl",
+  "https://maps.google.com/maps",
+  'document.createElement("iframe")',
+  "Google Maps embed fallback did not load safely.",
   "Driver Pin",
   "Embedded map off. Use Driver Pin",
 ]) {

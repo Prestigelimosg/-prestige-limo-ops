@@ -3052,6 +3052,12 @@ function projectAdminActiveJobsBrowserMapPosition(position: BrowserGoogleLatLngL
   };
 }
 
+function adminActiveJobsBrowserMapEmbedUrl(position: BrowserGoogleLatLngLiteral) {
+  return `https://maps.google.com/maps?q=${encodeURIComponent(
+    `${position.lat.toFixed(6)},${position.lng.toFixed(6)}`,
+  )}&z=15&output=embed`;
+}
+
 function AdminActiveJobsBrowserMap({
   activeJobs,
   apiKey,
@@ -3062,7 +3068,7 @@ function AdminActiveJobsBrowserMap({
   mapId: string;
 }) {
   const mapSlotRef = useRef<HTMLDivElement | null>(null);
-  const mapElementRef = useRef<HTMLDivElement | null>(null);
+  const mapElementRef = useRef<HTMLElement | null>(null);
   const mapRef = useRef<BrowserGoogleMap | null>(null);
   const markersRef = useRef<BrowserGoogleMarker[]>([]);
   const [renderState, setRenderState] = useState<"error" | "loading" | "ready">("loading");
@@ -3150,19 +3156,24 @@ function AdminActiveJobsBrowserMap({
 
     const updateMapPortalRect = () => {
       const slotElement = mapSlotRef.current;
+      const portalElement = mapElementRef.current;
+
+      if (!portalElement) {
+        return;
+      }
 
       if (!slotElement) {
-        mapElement.style.display = "none";
+        portalElement.style.display = "none";
         return;
       }
 
       const rect = slotElement.getBoundingClientRect();
-      mapElement.style.display =
+      portalElement.style.display =
         rect.width > 0 && rect.height > 0 ? "block" : "none";
-      mapElement.style.height = `${Math.max(0, rect.height)}px`;
-      mapElement.style.left = `${rect.left}px`;
-      mapElement.style.top = `${rect.top}px`;
-      mapElement.style.width = `${Math.max(0, rect.width)}px`;
+      portalElement.style.height = `${Math.max(0, rect.height)}px`;
+      portalElement.style.left = `${rect.left}px`;
+      portalElement.style.top = `${rect.top}px`;
+      portalElement.style.width = `${Math.max(0, rect.width)}px`;
     };
     const resizeObserver =
       typeof ResizeObserver !== "undefined"
@@ -3173,6 +3184,46 @@ function AdminActiveJobsBrowserMap({
     resizeObserver?.observe(mapSlotRef.current || document.body);
     window.addEventListener("resize", updateMapPortalRect);
     window.addEventListener("scroll", updateMapPortalRect, true);
+
+    const renderGoogleMapsEmbedFallback = () =>
+      new Promise<void>((resolve, reject) => {
+        const fallbackFrame = document.createElement("iframe");
+        fallbackFrame.setAttribute("data-admin-active-jobs-map-google-base", "true");
+        fallbackFrame.setAttribute("title", "Active driver Google map");
+        fallbackFrame.loading = "eager";
+        fallbackFrame.referrerPolicy = "no-referrer-when-downgrade";
+        fallbackFrame.src = adminActiveJobsBrowserMapEmbedUrl(activeMarkerJobs[0].position);
+        fallbackFrame.style.background = "#e5e7eb";
+        fallbackFrame.style.border = "0";
+        fallbackFrame.style.overflow = "hidden";
+        fallbackFrame.style.position = "fixed";
+        fallbackFrame.style.zIndex = "1";
+        fallbackFrame.addEventListener(
+          "load",
+          () => {
+            resolve();
+          },
+          { once: true },
+        );
+        const timeout = window.setTimeout(() => {
+          reject(new Error("Google Maps embed fallback did not load safely."));
+        }, 15000);
+        fallbackFrame.addEventListener(
+          "load",
+          () => {
+            window.clearTimeout(timeout);
+          },
+          { once: true },
+        );
+
+        markersRef.current.forEach((marker) => marker.setMap(null));
+        markersRef.current = [];
+        mapRef.current = null;
+        mapElement.remove();
+        document.body.appendChild(fallbackFrame);
+        mapElementRef.current = fallbackFrame;
+        updateMapPortalRect();
+      });
 
     void Promise.resolve()
       .then(() => {
@@ -3242,9 +3293,21 @@ function AdminActiveJobsBrowserMap({
 
         setRenderState("ready");
       })
-      .catch(() => {
-        if (!cancelled) {
-          setRenderState("error");
+      .catch(async () => {
+        if (cancelled) {
+          return;
+        }
+
+        try {
+          await renderGoogleMapsEmbedFallback();
+
+          if (!cancelled) {
+            setRenderState("ready");
+          }
+        } catch {
+          if (!cancelled) {
+            setRenderState("error");
+          }
         }
       });
 
@@ -3256,8 +3319,11 @@ function AdminActiveJobsBrowserMap({
       markersRef.current.forEach((marker) => marker.setMap(null));
       markersRef.current = [];
       mapRef.current = null;
+      mapElementRef.current?.remove();
       mapElementRef.current = null;
-      mapElement.remove();
+      if (mapElement.isConnected) {
+        mapElement.remove();
+      }
     };
   }, [activeMarkerJobs, apiKey, mapId]);
 

@@ -3615,7 +3615,7 @@ assert.deepEqual(parseJobCardBookingMessage(
 ), {
   success: true,
   company: '',
-  bookingType: '',
+  bookingType: 'TRF',
   vehicle: '',
   date: '2026-07-05',
   time: '2030hrs',

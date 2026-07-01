@@ -2450,6 +2450,10 @@ function detectBookingType(text: string, flight = "", route: { pickup: string; d
     return "TRF";
   }
 
+  if (pickup && !dropoff && !flight && /\b(?:pick\s*up|pickup)\b/i.test(text)) {
+    return "TRF";
+  }
+
   return "";
 }
 

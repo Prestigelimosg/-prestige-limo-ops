@@ -979,6 +979,7 @@ export async function handleAdminActiveJobsMapRuntimeRequest({
   return {
     body: {
       active_jobs: activeJobs,
+      allowed_booking_references: allowedReferences,
       customerVisible: false,
       external_send: false,
       map_rendered: false,

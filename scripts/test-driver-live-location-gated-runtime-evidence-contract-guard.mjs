@@ -137,8 +137,9 @@ for (const fragment of [
 }
 
 for (const fragment of [
-  "driverLiveLocationShareStopRuntimeUiEnabled",
-  "driverLiveLocationBrowserGpsEnabled",
+  'const driverLiveLocationUiState = pageState.kind === "ready" ? "runtime-check" : "disabled";',
+  "checkDriverLiveLocationReadiness",
+  "requestDriverLiveLocationPosition",
   "navigator.geolocation.getCurrentPosition",
   "customerVisible !== false",
   "external_send !== false",
@@ -146,32 +147,38 @@ for (const fragment of [
   assertIncludes(driverJobPage, fragment, `driver job gated live-location fragment ${fragment}`);
 }
 
-const adminScaffoldStart = adminPage.indexOf(
-  'aria-label="Admin Active Jobs Map disabled scaffold"',
+const adminRuntimeStart = adminPage.indexOf(
+  'aria-label="Admin Active Jobs Map"',
 );
-assert.notEqual(adminScaffoldStart, -1, "Admin active-jobs disabled scaffold must exist.");
-const adminScaffoldEnd = adminPage.indexOf(
+assert.notEqual(adminRuntimeStart, -1, "Admin active-jobs runtime must exist.");
+const adminRuntimeEnd = adminPage.indexOf(
   'data-admin-day-of-trip-dispatch-monitor-boundary="true"',
-  adminScaffoldStart,
+  adminRuntimeStart,
 );
-assert.notEqual(adminScaffoldEnd, -1, "Admin active-jobs disabled scaffold must end before boundary.");
-const adminActiveJobsUi = adminPage.slice(adminScaffoldStart, adminScaffoldEnd);
+assert.notEqual(adminRuntimeEnd, -1, "Admin active-jobs runtime must end before boundary.");
+const adminActiveJobsUi = adminPage.slice(adminRuntimeStart, adminRuntimeEnd);
 
 for (const fragment of [
-  'data-admin-active-jobs-map-scaffold="disabled"',
-  'data-admin-active-jobs-map-state="disabled"',
-  'data-admin-active-jobs-map-marker-count="0"',
-  'data-admin-active-jobs-map-sharing-state="inactive"',
-  'data-admin-active-jobs-map-stale-state="not-active"',
+  'data-admin-active-jobs-map-runtime="true"',
+  'data-admin-active-jobs-map-state={adminActiveJobsMapReadState.runtimeStatus}',
+  'data-admin-active-jobs-map-selected-count=',
+  'data-admin-active-jobs-map-marker-count={adminActiveJobsMapReadState.markerCount}',
+  'data-admin-active-jobs-map-sharing-state=',
+  'data-admin-active-jobs-map-stale-state=',
+  'data-admin-active-jobs-map-selected-list="true"',
+  'data-admin-active-jobs-map-marker-list="true"',
   "Active Jobs Map",
+  "Add",
+  "Close all",
+  "Google",
 ]) {
-  assertIncludes(adminActiveJobsUi, fragment, `admin active-jobs disabled UI fragment ${fragment}`);
+  assertIncludes(adminActiveJobsUi, fragment, `admin active-jobs runtime UI fragment ${fragment}`);
 }
 
 for (const forbiddenPattern of [
   /\/api\/admin-active-jobs-map-locations/i,
   /watchPosition|clearWatch|GeolocationPosition/i,
-  /google\.maps|maps\.google|Map\(|<canvas|NEXT_PUBLIC|PRESTIGE_GOOGLE_MAPS/i,
+  /google\.maps\.Map|new\s+google|maps\.googleapis|<canvas|NEXT_PUBLIC|PRESTIGE_GOOGLE_MAPS/i,
   /createClient|supabase|\.from\(|\.(?:insert|upsert|update|delete|select)\s*\(/i,
   /customerVisible\s*[:=]\s*true|external_send\s*[:=]\s*true/i,
   /customer_price|driver_payout|customer_rates|driver_payout_rules|paynow|billing|invoice|payment|payout/i,
@@ -181,15 +188,13 @@ for (const forbiddenPattern of [
 }
 
 for (const forbiddenPattern of [
-  /onClick|fetch\(|\/live-location|\/api\/admin-active-jobs-map-locations/i,
   /navigator\.geolocation|getCurrentPosition|watchPosition|clearWatch|GeolocationPosition/i,
-  /google\.maps|maps\.google|Map\(|<canvas|NEXT_PUBLIC|PRESTIGE_GOOGLE_MAPS/i,
-  /createClient|supabase|\.from\(|\.(?:insert|upsert|update|delete|select)\s*\(/i,
-  /latitude|longitude|coords|coordinate/i,
-  /customer_price|driver_payout|customer_rates|driver_payout_rules|paynow|billing|invoice|payment|payout/i,
+  /google\.maps\.Map|new\s+google|maps\.googleapis|<canvas|NEXT_PUBLIC|PRESTIGE_GOOGLE_MAPS/i,
+  /customerVisible\s*[:=]\s*true|external_send\s*[:=]\s*true/i,
+  /customer_price|driver_payout|customer_rates|driver_payout_rules|paynow/i,
   /internal_admin|internal_finance|parser_debug|service_role|server_secret|access_token|api_key/i,
 ]) {
-  assertExcludes(adminActiveJobsUi, forbiddenPattern, "disabled admin active-jobs UI runtime evidence surface");
+  assertExcludes(adminActiveJobsUi, forbiddenPattern, "admin active-jobs UI runtime evidence surface");
 }
 
 const closedRuntimeSource = `${driverRoute}\n${adminActiveJobsRoute}\n${scaffoldHelper}`;

@@ -59,8 +59,8 @@ const serverLiveLocationSourceWithoutDenylist = serverLiveLocationSource.replace
 
 for (const phrase of [
   "This is a docs/test-only guard for the future Driver Live Location driver-consent runtime evidence pass.",
-  "Share/Stop runtime wiring remains disabled by default and browser GPS is behind `NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_BROWSER_GPS_ENABLED` plus an explicit Share Location click.",
-  "Current driver job pages remain closed by default: the production driver job page must not auto-start sharing from page load or status buttons, and it must not call the live-location route unless the Share/Stop UI gate is explicitly open.",
+  "Share/Stop runtime wiring is server-gated by the driver live-location runtime policy plus an explicit Share Location click.",
+  "Current driver job pages must not auto-start sharing from page load or status buttons, and browser GPS is requested only after the server readiness check accepts the current driver job token.",
   "Future evidence must use one fake or staging-safe driver job target only, never a real driver/customer trip, and must not print tokens, booking references, row IDs, coordinates from real users, cookies, env values, API keys, DB URLs, or private customer data.",
   "Future evidence must prove an explicit driver click on Share Location before any browser geolocation request and an explicit driver click on Stop Sharing before the stop route is called.",
   "Future evidence must mock or safely simulate browser geolocation first; real browser GPS, real device location, and silent background location capture are not approved without separate evidence-window approval.",
@@ -124,9 +124,9 @@ for (const fragment of [
 }
 
 for (const fragment of [
-  "NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_SHARE_STOP_UI_ENABLED",
-  "NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_BROWSER_GPS_ENABLED",
-  "driverLiveLocationBrowserGpsEnabled",
+  'const driverLiveLocationUiState = pageState.kind === "ready" ? "runtime-check" : "disabled";',
+  "checkDriverLiveLocationReadiness",
+  "requestDriverLiveLocationPosition",
   "navigator.geolocation.getCurrentPosition",
   "onClick={shareDriverLiveLocation}",
   "onClick={stopDriverLiveLocation}",

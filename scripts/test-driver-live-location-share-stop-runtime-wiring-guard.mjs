@@ -67,10 +67,10 @@ const appRuntimeSafetySourceWithoutDenylist = appRuntimeSafetySource.replace(
 );
 
 for (const phrase of [
-  "This adds disabled-by-default Driver Live Location Share/Stop runtime wiring to the existing driver job link page.",
-  "The browser UI gate is `NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_SHARE_STOP_UI_ENABLED` and defaults closed unless explicitly set to `true` at build time.",
-  "The browser GPS gate is `NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_BROWSER_GPS_ENABLED` and defaults closed unless explicitly set to `true` at build time.",
-  "No browser geolocation request can happen on page load, status updates, app updates, issue reporting, Customer Copy, provider sends, or quick replies; it is reachable only through an explicit driver click on Share Location after both public gates are open.",
+  "This wires Driver Live Location Share/Stop controls to the existing driver job link page.",
+  "The browser UI is controlled by the loaded driver job state and the server runtime readiness check, not a public build-time env flag.",
+  "The browser GPS request is one-time and explicit: it runs only after the driver taps Share Location and `GET /api/driver-job/[token]/live-location` accepts the job.",
+  "No browser geolocation request can happen on page load, status updates, app updates, issue reporting, Customer Copy, provider sends, or quick replies.",
   "Share Location calls only the existing job-token scoped `POST /api/driver-job/[token]/live-location` route with safe browser position fields: latitude, longitude, accuracy_meters, heading_degrees, speed_meters_per_second, and captured_at.",
   "Stop Sharing calls only the existing job-token scoped `DELETE /api/driver-job/[token]/live-location` route.",
   "Both Share and Stop require route responses with `customerVisible: false` and `external_send: false`; customer live map remains blocked.",
@@ -85,10 +85,8 @@ for (const phrase of [
 assertIncludes(preactivationSuite, guardScript, "preactivation share/stop guard registration");
 
 for (const fragment of [
-  "NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_SHARE_STOP_UI_ENABLED",
-  "NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_BROWSER_GPS_ENABLED",
-  "driverLiveLocationShareStopRuntimeUiEnabled",
-  "driverLiveLocationBrowserGpsEnabled",
+  'const driverLiveLocationUiState = pageState.kind === "ready" ? "runtime-check" : "disabled";',
+  "checkDriverLiveLocationReadiness",
   "requestDriverLiveLocationPosition",
   "shareDriverLiveLocation",
   "stopDriverLiveLocation",
@@ -106,23 +104,18 @@ for (const fragment of [
 
 assertMatches(
   driverJobPage,
-  /const driverLiveLocationShareStopRuntimeUiEnabled =\s*\n?\s*process\.env\.NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_SHARE_STOP_UI_ENABLED === "true"/,
-  "share/stop UI gate must default closed",
+  /async function shareDriverLiveLocation\(\)[\s\S]*?const ready = await checkDriverLiveLocationReadiness\(\);[\s\S]*?const position = await requestDriverLiveLocationPosition\(\);/,
+  "share must pass server readiness before browser geolocation",
 );
 assertMatches(
   driverJobPage,
-  /const driverLiveLocationBrowserGpsEnabled =\s*\n?\s*process\.env\.NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_BROWSER_GPS_ENABLED === "true"/,
-  "browser GPS gate must default closed",
+  /async function requestDriverLiveLocationPosition\(\)[\s\S]*?navigator\.geolocation\.getCurrentPosition/,
+  "browser GPS must stay inside explicit position request helper",
 );
 assertMatches(
   driverJobPage,
-  /if \(!driverLiveLocationBrowserGpsEnabled\)[\s\S]{0,500}Browser GPS capture is still disabled/,
-  "browser GPS must fail closed before geolocation",
-);
-assertMatches(
-  driverJobPage,
-  /if \(!driverLiveLocationShareStopRuntimeUiEnabled \|\| !token \|\| pageState\.kind !== "ready"\)/,
-  "share/stop route must fail closed before route calls",
+  /if \(!token \|\| pageState\.kind !== "ready"\)/,
+  "share/stop routes must fail closed before route calls",
 );
 
 for (const fragment of [

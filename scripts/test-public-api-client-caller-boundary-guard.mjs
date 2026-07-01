@@ -247,8 +247,8 @@ for (const [label, source] of [
 }
 
 const driverPage = files[driverPagePath];
-assert.equal(countOccurrences(driverPage, "fetch("), 7, "driver page fetch call count");
-assert.equal(countOccurrences(driverPage, 'cache: "no-store"'), 6, "driver page no-store fetch count");
+assert.equal(countOccurrences(driverPage, "fetch("), 8, "driver page fetch call count");
+assert.equal(countOccurrences(driverPage, 'cache: "no-store"'), 7, "driver page no-store fetch count");
 for (const fragment of [
   "fetch(`/api/driver-job/${encodeURIComponent(token)}`",
   "`/api/driver-job/${encodeURIComponent(token)}/notifications?limit=5&page=1`",
@@ -278,10 +278,12 @@ assertExcludes(driverPage, /credentials\s*:/, "driver page manual credentials");
 assertExcludes(driverPage, forbiddenClientAuthPattern, "driver page manual auth/header/env-token plumbing");
 assertExcludes(sourceWithoutDriverPaymentFilter(driverPage), forbiddenDriverVisiblePattern, "driver page forbidden visible/source fields");
 assertExcludes(driverPage, /localStorage|sessionStorage|document\.cookie|navigator\.credentials/i, "driver page browser credential storage");
+assertIncludes(driverPage, "driverLiveLocationUiState", "driver page live-location UI state gate");
+assertIncludes(driverPage, "checkDriverLiveLocationReadiness", "driver page server readiness gate");
 assertIncludes(
   driverPage,
-  "NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_BROWSER_GPS_ENABLED",
-  "driver page browser GPS gate",
+  "navigator.geolocation.getCurrentPosition",
+  "driver page one-time browser GPS request",
 );
 assertExcludes(
   driverPage,

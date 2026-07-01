@@ -827,6 +827,10 @@ const guardChecks = [
     script: "scripts/test-driver-live-location-admin-runtime-gate-evidence-runner-guard.mjs",
   },
   {
+    label: "Driver Live Location multi-driver admin list guard",
+    script: "scripts/test-driver-live-location-runtime-control-ui-guard.mjs",
+  },
+  {
     label: "Driver Live Location runtime settings migration guard",
     script: "scripts/test-driver-live-location-runtime-settings-migration-guard.mjs",
   },

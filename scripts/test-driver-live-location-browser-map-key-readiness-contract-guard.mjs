@@ -112,8 +112,8 @@ for (const forbiddenPattern of [
 }
 
 for (const fragment of [
-  "NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_SHARE_STOP_UI_ENABLED",
-  "NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_BROWSER_GPS_ENABLED",
+  'const driverLiveLocationUiState = pageState.kind === "ready" ? "runtime-check" : "disabled";',
+  "checkDriverLiveLocationReadiness",
   "navigator.geolocation.getCurrentPosition",
 ]) {
   assertIncludes(browserFacingSource, fragment, `approved driver browser live-location gate ${fragment}`);

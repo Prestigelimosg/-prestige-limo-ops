@@ -303,8 +303,8 @@ for (const forbiddenIssuePattern of [
   assertExcludes(issueChoices, forbiddenIssuePattern, "driver issue choices forbidden fields");
 }
 
-assert.equal(countOccurrences(driverPage, "fetch("), 7, "driver page fetch count");
-assert.equal(countOccurrences(driverPage, 'cache: "no-store"'), 6, "driver page no-store count");
+assert.equal(countOccurrences(driverPage, "fetch("), 8, "driver page fetch count");
+assert.equal(countOccurrences(driverPage, 'cache: "no-store"'), 7, "driver page no-store count");
 assert.equal(countOccurrences(driverPage, 'method: "POST"'), 2, "driver page POST count");
 assert.equal(countOccurrences(driverPage, 'method: "DELETE"'), 1, "driver page DELETE count");
 assert.equal(countOccurrences(driverPage, 'method: "PATCH"'), 2, "driver page PATCH count");

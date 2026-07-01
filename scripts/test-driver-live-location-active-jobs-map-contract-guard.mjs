@@ -176,54 +176,62 @@ for (const forbiddenPattern of [
   );
 }
 
-const adminActiveJobsScaffoldSection = sectionBetween(
+const adminActiveJobsRuntimeSection = sectionBetween(
   ledger,
-  "### Driver Live Location Admin Active Jobs Map Disabled Scaffold Implementation",
+  "### Driver Live Location Multi-Driver Admin List",
 );
 
 for (const phrase of [
-  "This adds a compact disabled Admin Active Jobs Map scaffold inside the existing Day-of-Trip Dispatch Monitor admin surface.",
-  "The scaffold is a local UI status strip only; it shows future admin-only marker count, sharing state, and stale/offline state with all values disabled/off by default.",
-  "The scaffold does not render a base map, map canvas, map script, or provider widget.",
-  "The scaffold does not call `GET /api/admin-active-jobs-map-locations`, does not call `navigator.geolocation`, does not read map/browser keys, does not create a Supabase client, and does not read or write location rows.",
-  "The scaffold does not expose driver coordinates, customer live map links, customer visibility, browser map keys, raw provider payloads, row IDs, tokens, secrets, or env values.",
-  "No driver GPS capture, admin active-jobs map runtime, customer live map, DB read/write, env change, deploy, provider send, Email/Telegram/WhatsApp/SMS, Google Maps/OneMap/FlightAware call, billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, OTS/photo/storage, calendar, auth expansion, or shim work is activated.",
-  "The scaffold remains colocated with the existing Day-of-Trip Dispatch Monitor and does not add a new UI sector/card.",
-  "Next live-location lane remains separately approved gated runtime/evidence with explicit driver consent, table/RLS/retention proof already recorded as prerequisite, wrong-driver/wrong-admin blocked proof, cleanup zero rows, rollback proof, and no customer visibility unless separately approved.",
+  "Admin Dispatch has a compact Active Jobs Map runtime control inside the existing Day-of-Trip Dispatch Monitor.",
+  "The control adds selected saved bookings one by one through `/api/admin-live-location-runtime` instead of replacing the previous selected booking.",
+  "Runtime control keeps existing `driver_live_location_allowed_job_references`, removes duplicates, and caps the selected booking list at 50 references.",
+  "Admin marker refresh uses the existing guarded `GET /api/admin-active-jobs-map-locations` route and returns both selected booking references and current driver markers.",
+  "The admin UI renders compact selected-booking chips, marker rows, and a Google Maps link per active driver/job; it does not embed a browser map key or render a map provider widget.",
+  "Customer live-location API remains same-origin/session/booking-boundary gated and no customer message is sent by this lane.",
 ]) {
   assertIncludes(
-    adminActiveJobsScaffoldSection,
+    adminActiveJobsRuntimeSection,
     phrase,
-    `Driver live-location admin active-jobs scaffold phrase: ${phrase}`,
+    `Driver live-location admin active-jobs runtime phrase: ${phrase}`,
   );
 }
 
-const activeJobsScaffoldStart = adminPage.indexOf(
-  'aria-label="Admin Active Jobs Map disabled scaffold"',
+const activeJobsRuntimeStart = adminPage.indexOf(
+  'aria-label="Admin Active Jobs Map"',
 );
-assert.notEqual(activeJobsScaffoldStart, -1, "Missing disabled admin active-jobs map scaffold.");
-const activeJobsScaffoldEnd = adminPage.indexOf(
+assert.notEqual(activeJobsRuntimeStart, -1, "Missing admin active-jobs map runtime.");
+const activeJobsRuntimeEnd = adminPage.indexOf(
   'data-admin-day-of-trip-dispatch-monitor-boundary="true"',
-  activeJobsScaffoldStart,
+  activeJobsRuntimeStart,
 );
-assert.notEqual(activeJobsScaffoldEnd, -1, "Missing disabled admin active-jobs scaffold end boundary.");
-const activeJobsScaffoldSource = adminPage.slice(activeJobsScaffoldStart, activeJobsScaffoldEnd);
+assert.notEqual(activeJobsRuntimeEnd, -1, "Missing admin active-jobs runtime end boundary.");
+const activeJobsRuntimeSource = adminPage.slice(activeJobsRuntimeStart, activeJobsRuntimeEnd);
 
 for (const fragment of [
-  'aria-label="Admin Active Jobs Map disabled scaffold"',
-  'data-admin-active-jobs-map-scaffold="disabled"',
-  'data-admin-active-jobs-map-state="disabled"',
-  'data-admin-active-jobs-map-marker-count="0"',
-  'data-admin-active-jobs-map-sharing-state="inactive"',
-  'data-admin-active-jobs-map-stale-state="not-active"',
+  'aria-label="Admin Active Jobs Map"',
+  'data-admin-active-jobs-map-runtime="true"',
+  'data-admin-active-jobs-map-state={adminActiveJobsMapReadState.runtimeStatus}',
+  'data-admin-active-jobs-map-selected-count=',
+  'data-admin-active-jobs-map-marker-count={adminActiveJobsMapReadState.markerCount}',
+  'data-admin-active-jobs-map-sharing-state=',
+  'data-admin-active-jobs-map-stale-state=',
+  'data-admin-active-jobs-map-open="true"',
+  'data-admin-active-jobs-map-refresh="true"',
+  'data-admin-active-jobs-map-close="true"',
+  'data-admin-active-jobs-map-selected-list="true"',
+  'data-admin-active-jobs-map-marker-list="true"',
   'data-admin-active-jobs-map-boundary="true"',
   "Active Jobs Map",
-  "Markers: 0",
-  "Sharing: off",
-  "Stale: off",
-  "Disabled until driver consent, location storage, admin map gates, and browser-safe map key are",
+  "Selected:",
+  "Markers:",
+  "Sharing:",
+  "Stale:",
+  "Add",
+  "Refresh",
+  "Close all",
+  "Google",
 ]) {
-  assertIncludes(activeJobsScaffoldSource, fragment, `admin active-jobs disabled UI fragment ${fragment}`);
+  assertIncludes(activeJobsRuntimeSource, fragment, `admin active-jobs runtime UI fragment ${fragment}`);
 }
 
 const dayOfTripMonitorStart = adminPage.indexOf('data-admin-day-of-trip-dispatch-monitor="true"');
@@ -236,24 +244,20 @@ assert.notEqual(dayOfTripExceptionStart, -1, "Missing Day-of-Trip Exception sect
 const dayOfTripMonitorSource = adminPage.slice(dayOfTripMonitorStart, dayOfTripExceptionStart);
 assertIncludes(
   dayOfTripMonitorSource,
-  'data-admin-active-jobs-map-scaffold="disabled"',
-  "admin active-jobs scaffold must remain inside existing Day-of-Trip Dispatch Monitor area",
+  'data-admin-active-jobs-map-runtime="true"',
+  "admin active-jobs runtime must remain inside existing Day-of-Trip Dispatch Monitor area",
 );
 
 for (const forbiddenPattern of [
-  /\/api\/admin-active-jobs-map-locations/i,
   /navigator\.geolocation|getCurrentPosition|watchPosition|clearWatch|GeolocationPosition/i,
-  /google\.maps|maps\.google|Map\(|mapCanvas|map-canvas|<canvas/i,
-  /PRESTIGE_GOOGLE_MAPS|PRESTIGE_ADMIN_ACTIVE_JOBS_MAP|NEXT_PUBLIC/i,
-  /createClient|supabase|\.from\(|insert\s*\(|upsert\s*\(|update\s*\(|delete\s*\(/i,
-  /latitude|longitude|coords|coordinate/i,
-  /driver_payout|customer_rates|PayNow|billing|invoice|payment|payout/i,
-  /internal\/admin|internal admin|parser\/debug|debug internals|service_role|api_key/i,
+  /google\.maps|maps\.google|new\s+google\.maps\.Map|mapCanvas|map-canvas|<canvas/i,
+  /PRESTIGE_GOOGLE_MAPS|NEXT_PUBLIC/i,
+  /customerVisible\s*[:=]\s*true|external_send\s*[:=]\s*true/i,
 ]) {
   assertExcludes(
-    activeJobsScaffoldSource,
+    activeJobsRuntimeSource,
     forbiddenPattern,
-    "disabled admin active-jobs UI scaffold",
+    "admin active-jobs runtime UI",
   );
 }
 
@@ -270,8 +274,10 @@ assertExcludes(
   "production driver job page live-location activation",
 );
 for (const fragment of [
-  "NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_SHARE_STOP_UI_ENABLED",
-  "NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_BROWSER_GPS_ENABLED",
+  'data-driver-live-location-share-button={driverLiveLocationUiState}',
+  'const driverLiveLocationUiState = pageState.kind === "ready" ? "runtime-check" : "disabled";',
+  "Share only when dispatch opens live location for this job.",
+  "Share Location",
   "navigator.geolocation.getCurrentPosition",
   "customerVisible !== false",
   "external_send !== false",
@@ -282,11 +288,6 @@ for (const fragment of [
     `production driver job page gated live-location fragment ${fragment}`,
   );
 }
-assertIncludes(
-  driverJobPage,
-  "Browser GPS capture is still disabled for this build.",
-  "production driver job page default-closed GPS copy",
-);
 assertIncludes(
   driverJobRuntimeSource,
   "Mock live location",

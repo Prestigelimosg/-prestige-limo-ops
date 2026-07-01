@@ -165,9 +165,9 @@ for (const forbiddenPattern of [
   assertExcludes(liveLocationUi, forbiddenPattern, "disabled live-location consent UI");
 }
 for (const fragment of [
-  "NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_SHARE_STOP_UI_ENABLED",
-  "NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_BROWSER_GPS_ENABLED",
-  "driverLiveLocationBrowserGpsEnabled",
+  'const driverLiveLocationUiState = pageState.kind === "ready" ? "runtime-check" : "disabled";',
+  "checkDriverLiveLocationReadiness",
+  "requestDriverLiveLocationPosition",
   "navigator.geolocation.getCurrentPosition",
   "onClick={shareDriverLiveLocation}",
   "onClick={stopDriverLiveLocation}",

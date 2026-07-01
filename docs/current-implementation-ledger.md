@@ -22,15 +22,17 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No Vercel CLI, env value change, DB schema change, booking save/load behavior, parser behavior, customer message, driver notification, provider send, email, billing, invoice/PDF, payment, payout, calendar, or pricing behavior changed.
 - Focused guard coverage lives in `scripts/test-admin-dispatch-map-location-suggestions-guard.mjs`; the existing map-search API contract was refreshed to match current same-origin admin `GET` read behavior.
 
-### Driver Live Location One-Booking Runtime Control
+### Driver Live Location Multi-Driver Admin List
 
-- Admin Dispatch now has a compact Active Jobs Map runtime control inside the existing Day-of-Trip Dispatch Monitor.
-- The control opens live location for exactly one saved booking reference at a time through `/api/admin-live-location-runtime`.
+- Admin Dispatch has a compact Active Jobs Map runtime control inside the existing Day-of-Trip Dispatch Monitor.
+- The control adds selected saved bookings one by one through `/api/admin-live-location-runtime` instead of replacing the previous selected booking.
+- Runtime control keeps existing `driver_live_location_allowed_job_references`, removes duplicates, and caps the selected booking list at 50 references.
 - Driver `Share Location` first calls `GET /api/driver-job/[token]/live-location` for server readiness; Chrome GPS is requested only after that readiness check passes.
-- Admin marker refresh uses the existing guarded `GET /api/admin-active-jobs-map-locations` route.
-- The admin UI renders compact marker rows and a Google Maps link per marker; it does not embed a browser map key or render a map provider widget.
+- Admin marker refresh uses the existing guarded `GET /api/admin-active-jobs-map-locations` route and returns both selected booking references and current driver markers.
+- The admin UI renders compact selected-booking chips, marker rows, and a Google Maps link per active driver/job; it does not embed a browser map key or render a map provider widget.
+- Closing the runtime clears the selected list and gates driver/customer map reads off.
 - Customer live-location API remains same-origin/session/booking-boundary gated and no customer message is sent by this lane.
-- No Vercel CLI, env value change, DB schema change, provider send, email/WhatsApp/SMS/Telegram send, billing/payment/PDF/invoice/payout, parser, Save Booking, `/api/admin-saved-bookings`, OTS/photo/storage, or calendar behavior changed.
+- No broad driver tracking, no wildcard job tracking, no browser Maps JavaScript key, no Vercel CLI, env value change, DB schema change, provider send, email/WhatsApp/SMS/Telegram send, billing/payment/PDF/invoice/payout, parser, Save Booking, `/api/admin-saved-bookings`, OTS/photo/storage, or calendar behavior changed.
 - Focused guard coverage lives in `scripts/test-driver-live-location-runtime-control-ui-guard.mjs`.
 
 ### Admin Dispatch Draft Save Must-Fill Removal
@@ -6507,8 +6509,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Driver Live Location Consent Runtime Evidence Contract Guard Lock
 - This is a docs/test-only guard for the future Driver Live Location driver-consent runtime evidence pass.
-- Share/Stop runtime wiring remains disabled by default and browser GPS is behind `NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_BROWSER_GPS_ENABLED` plus an explicit Share Location click.
-- Current driver job pages remain closed by default: the production driver job page must not auto-start sharing from page load or status buttons, and it must not call the live-location route unless the Share/Stop UI gate is explicitly open.
+- Share/Stop runtime wiring is server-gated by the driver live-location runtime policy plus an explicit Share Location click.
+- Current driver job pages must not auto-start sharing from page load or status buttons, and browser GPS is requested only after the server readiness check accepts the current driver job token.
 - Future evidence must use one fake or staging-safe driver job target only, never a real driver/customer trip, and must not print tokens, booking references, row IDs, coordinates from real users, cookies, env values, API keys, DB URLs, or private customer data.
 - Future evidence must prove an explicit driver click on Share Location before any browser geolocation request and an explicit driver click on Stop Sharing before the stop route is called.
 - Future evidence must mock or safely simulate browser geolocation first; real browser GPS, real device location, and silent background location capture are not approved without separate evidence-window approval.
@@ -6523,10 +6525,10 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This guard adds `scripts/test-driver-live-location-consent-runtime-evidence-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Driver Live Location Share/Stop Runtime Wiring Guard Lock
-- This adds disabled-by-default Driver Live Location Share/Stop runtime wiring to the existing driver job link page.
-- The browser UI gate is `NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_SHARE_STOP_UI_ENABLED` and defaults closed unless explicitly set to `true` at build time.
-- The browser GPS gate is `NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_BROWSER_GPS_ENABLED` and defaults closed unless explicitly set to `true` at build time.
-- No browser geolocation request can happen on page load, status updates, app updates, issue reporting, Customer Copy, provider sends, or quick replies; it is reachable only through an explicit driver click on Share Location after both public gates are open.
+- This wires Driver Live Location Share/Stop controls to the existing driver job link page.
+- The browser UI is controlled by the loaded driver job state and the server runtime readiness check, not a public build-time env flag.
+- The browser GPS request is one-time and explicit: it runs only after the driver taps Share Location and `GET /api/driver-job/[token]/live-location` accepts the job.
+- No browser geolocation request can happen on page load, status updates, app updates, issue reporting, Customer Copy, provider sends, or quick replies.
 - Share Location calls only the existing job-token scoped `POST /api/driver-job/[token]/live-location` route with safe browser position fields: latitude, longitude, accuracy_meters, heading_degrees, speed_meters_per_second, and captured_at.
 - Stop Sharing calls only the existing job-token scoped `DELETE /api/driver-job/[token]/live-location` route.
 - Both Share and Stop require route responses with `customerVisible: false` and `external_send: false`; customer live map remains blocked.

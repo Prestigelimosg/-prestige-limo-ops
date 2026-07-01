@@ -229,12 +229,32 @@ export async function openAdminLiveLocationRuntimeControl({
     });
   }
 
+  const existingRuntimeSetting = await readRuntimeSetting(clientResult.client);
+
+  if (!existingRuntimeSetting.ok) {
+    return result({
+      action: "open",
+      ok: false,
+      reason: existingRuntimeSetting.reason,
+      runtime_status: "error",
+    });
+  }
+
+  const existingAllowedBookingReferences =
+    existingRuntimeSetting.allowed_booking_references.filter(
+      (reference) => reference !== safeReference,
+    );
+  const mergedAllowedBookingReferences = [
+    ...existingAllowedBookingReferences,
+    safeReference,
+  ].slice(-50);
+
   const { data, error } = await clientResult.client
     .from(runtimeSettingsTable)
     .upsert(
       {
         admin_active_jobs_map_enabled: true,
-        driver_live_location_allowed_job_references: [safeReference],
+        driver_live_location_allowed_job_references: mergedAllowedBookingReferences,
         driver_live_location_capture_enabled: true,
         driver_live_location_mode: "runtime",
         driver_live_location_retention_minutes: 120,

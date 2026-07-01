@@ -109,8 +109,10 @@ for (const fragment of [
   'data-admin-driver-job-status-readout="true"',
   'data-admin-day-of-trip-dispatch-monitor-boundary="true"',
   "Local day-of-trip bridge from release to job progress.",
-  "Saved driver status reads use the guarded admin driver-status API only.",
-  "Supabase write, direct live database access outside that read path",
+  "Saved driver status reads use the guarded admin driver-status API.",
+  "Live location uses only the",
+  "selected admin/driver live-location gates above.",
+  "billing, payment, PDF, payout, parser-learning, or broad tracking behavior.",
 ]) {
   assertIncludes(appPage, fragment, `existing app day-of-trip monitor fragment ${fragment}`);
 }

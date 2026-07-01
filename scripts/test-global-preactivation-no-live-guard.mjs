@@ -46,6 +46,12 @@ const separatelyGuardedPostRouteFiles = new Map([
     "scripts/test-admin-customer-driver-details-email-send-action-api-contract.mjs",
   ],
 ]);
+const separatelyGuardedRuntimeRouteFiles = new Map([
+  [
+    "app/api/admin-live-location-runtime/route.ts",
+    "scripts/test-driver-live-location-runtime-control-ui-guard.mjs",
+  ],
+]);
 const requiredMasterModules = [
   "Customer Copy Email/WhatsApp/SMS driver-details messaging",
   "secure customer driver-details link",
@@ -186,6 +192,34 @@ for (const routeFile of routeFiles) {
       `${routeFile} must not contain direct live activation calls.`,
     );
     await fileExists(separatelyGuardedPostRouteFiles.get(routeFile));
+    continue;
+  }
+
+  if (separatelyGuardedRuntimeRouteFiles.has(routeFile)) {
+    assert.match(source, /export async function GET/, `${routeFile} must expose guarded GET read.`);
+    assert.match(source, /export async function POST/, `${routeFile} must expose guarded POST open.`);
+    assert.match(source, /export async function DELETE/, `${routeFile} must expose guarded DELETE close.`);
+    assert.equal(
+      /export async function (PUT|PATCH)/.test(source),
+      false,
+      `${routeFile} must not expose extra live activation verbs.`,
+    );
+    assertIncludes(
+      source,
+      "resolveAdminDispatcherBoundary",
+      `${routeFile} admin dispatcher boundary`,
+    );
+    assertIncludes(
+      source,
+      'allowServerSessionRoleMethodsWithoutRequestToken: ["POST", "DELETE"]',
+      `${routeFile} guarded server-session methods`,
+    );
+    assert.equal(
+      directLiveActivationPattern.test(source),
+      false,
+      `${routeFile} must not contain direct browser/provider live activation calls.`,
+    );
+    await fileExists(separatelyGuardedRuntimeRouteFiles.get(routeFile));
     continue;
   }
 

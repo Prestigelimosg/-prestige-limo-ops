@@ -15580,11 +15580,16 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             .map(normalizeAdminActiveJobsMapLocation)
             .filter(isAdminActiveJobsMapLocation)
         : [];
+      const allowedBookingReferences = Array.isArray(result.allowed_booking_references)
+        ? result.allowed_booking_references.map(cleanReferenceText).filter(Boolean)
+        : null;
 
       setAdminActiveJobsMapReadState((current) => ({
         ...current,
         action: "idle",
         activeJobs,
+        allowedBookingReferences:
+          allowedBookingReferences ?? current.allowedBookingReferences,
         markerCount: activeJobs.length,
         message: {
           tone: activeJobs.length > 0 ? "success" : "info",
@@ -15632,7 +15637,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       loadedReference: bookingReference,
       message: {
         tone: "info",
-        text: `Opening live location for ${bookingReference} only...`,
+        text: `Adding ${bookingReference} to the live location list...`,
       },
       status: "loading",
     }));
@@ -15664,7 +15669,11 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         loadedReference: bookingReference,
         message: {
           tone: "success",
-          text: `Live location opened for ${compactBookingReference(bookingReference)} only. Ask driver to tap Share Location.`,
+          text: `Live location list includes ${compactBookingReference(
+            bookingReference,
+          )}. ${allowedBookingReferences.length} selected booking${
+            allowedBookingReferences.length === 1 ? "" : "s"
+          }. Ask that driver to tap Share Location.`,
         },
         runtimeStatus: "active",
         status: "loaded",
@@ -32079,7 +32088,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                       Active Jobs Map
                     </p>
                     <p className="mt-0.5 break-words text-[9px] leading-3 text-lime-900 sm:text-[10px]">
-                      Open one saved booking, then ask driver to tap Share Location.
+                      Add saved bookings one by one, then ask each driver to tap Share Location.
                     </p>
                   </div>
                   <span
@@ -32099,7 +32108,15 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                         : "Off"}
                   </span>
                 </div>
-                <div className="mt-1 grid grid-cols-3 gap-1">
+                <div className="mt-1 grid grid-cols-2 gap-1 sm:grid-cols-4">
+                  <p
+                    className="min-w-0 rounded bg-lime-50 px-1 py-0.5 font-semibold"
+                    data-admin-active-jobs-map-selected-count={
+                      adminActiveJobsMapReadState.allowedBookingReferences.length
+                    }
+                  >
+                    Selected: {adminActiveJobsMapReadState.allowedBookingReferences.length}
+                  </p>
                   <p
                     className="min-w-0 rounded bg-lime-50 px-1 py-0.5 font-semibold"
                     data-admin-active-jobs-map-marker-count={adminActiveJobsMapReadState.markerCount}
@@ -32136,7 +32153,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                     onClick={openAdminLiveLocationRuntimeForLoadedBooking}
                     type="button"
                   >
-                    {adminActiveJobsMapReadState.action === "opening" ? "Opening" : "Open"}
+                    {adminActiveJobsMapReadState.action === "opening" ? "Adding" : "Add"}
                   </button>
                   <button
                     className="rounded border border-lime-300 bg-white px-2 py-0.5 text-[9px] font-semibold text-lime-950 transition hover:bg-lime-50 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[10px]"
@@ -32154,7 +32171,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                     onClick={closeAdminLiveLocationRuntime}
                     type="button"
                   >
-                    {adminActiveJobsMapReadState.action === "closing" ? "Closing" : "Close"}
+                    {adminActiveJobsMapReadState.action === "closing" ? "Closing" : "Close all"}
                   </button>
                 </div>
                 {adminActiveJobsMapReadState.message ? (
@@ -32166,6 +32183,22 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   >
                     {adminActiveJobsMapReadState.message.text}
                   </p>
+                ) : null}
+                {adminActiveJobsMapReadState.allowedBookingReferences.length > 0 ? (
+                  <div
+                    className="mt-1 flex max-h-16 flex-wrap gap-1 overflow-y-auto border-t border-lime-100 pt-1"
+                    data-admin-active-jobs-map-selected-list="true"
+                  >
+                    {adminActiveJobsMapReadState.allowedBookingReferences.map((reference) => (
+                      <span
+                        className="rounded bg-white px-1.5 py-0.5 text-[9px] font-semibold text-lime-950"
+                        data-admin-active-jobs-map-selected-reference={reference}
+                        key={reference}
+                      >
+                        {compactBookingReference(reference)}
+                      </span>
+                    ))}
+                  </div>
                 ) : null}
                 {adminActiveJobsMapReadState.activeJobs.length > 0 ? (
                   <div
@@ -32209,8 +32242,8 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   className="mt-1 break-words border-t border-lime-100 pt-1 text-[9px] leading-3 text-lime-900 sm:text-[10px]"
                   data-admin-active-jobs-map-boundary="true"
                 >
-                  Admin-only. Opens one booking reference at a time; no customer message, provider send, billing,
-                  payment, PDF, payout, or parser change.
+                  Admin-only. Selected saved bookings only; no customer message, provider send, billing,
+                  payment, PDF, payout, browser map key, or parser change.
                 </p>
               </div>
               </details>
@@ -32219,8 +32252,8 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                 data-admin-day-of-trip-dispatch-monitor-boundary="true"
               >
                 Saved driver status reads use the guarded admin driver-status API. Live location uses only the
-                dedicated one-booking admin/driver live-location gates above. No customer message, provider
-                notification, billing, payment, PDF, payout, parser-learning, or broad all-driver tracking behavior.
+                selected admin/driver live-location gates above. No customer message, provider notification,
+                billing, payment, PDF, payout, parser-learning, or broad tracking behavior.
               </p>
             </section>
 

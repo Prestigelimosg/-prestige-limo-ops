@@ -192,8 +192,9 @@ assertExcludes(
   "production driver job page background GPS/timer",
 );
 for (const fragment of [
-  "NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_SHARE_STOP_UI_ENABLED",
-  "NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_BROWSER_GPS_ENABLED",
+  'const driverLiveLocationUiState = pageState.kind === "ready" ? "runtime-check" : "disabled";',
+  "checkDriverLiveLocationReadiness",
+  "requestDriverLiveLocationPosition",
   "navigator.geolocation.getCurrentPosition",
 ]) {
   assertIncludes(driverJobPage, fragment, `production driver job page gated share-location fragment ${fragment}`);

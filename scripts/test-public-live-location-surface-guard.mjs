@@ -390,13 +390,18 @@ for (const path of publicClientPaths) {
 
 assertIncludes(
   files["app/driver-job/[token]/page.tsx"],
-  "NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_SHARE_STOP_UI_ENABLED",
-  "driver job approved live-location UI gate",
+  'const driverLiveLocationUiState = pageState.kind === "ready" ? "runtime-check" : "disabled";',
+  "driver job approved live-location runtime-check UI gate",
 );
 assertIncludes(
   files["app/driver-job/[token]/page.tsx"],
-  "NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_BROWSER_GPS_ENABLED",
-  "driver job approved browser GPS gate",
+  "checkDriverLiveLocationReadiness",
+  "driver job approved server readiness gate",
+);
+assertIncludes(
+  files["app/driver-job/[token]/page.tsx"],
+  "navigator.geolocation.getCurrentPosition",
+  "driver job approved one-time browser GPS request",
 );
 assertIncludes(
   files["app/driver-job/[token]/page.tsx"],

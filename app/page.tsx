@@ -3150,7 +3150,7 @@ function AdminActiveJobsBrowserMap({
     mapElement.style.background = "#e5e7eb";
     mapElement.style.overflow = "hidden";
     mapElement.style.position = "fixed";
-    mapElement.style.zIndex = "1";
+    mapElement.style.zIndex = "5";
     document.body.appendChild(mapElement);
     mapElementRef.current = mapElement;
 
@@ -3197,7 +3197,7 @@ function AdminActiveJobsBrowserMap({
         fallbackFrame.style.border = "0";
         fallbackFrame.style.overflow = "hidden";
         fallbackFrame.style.position = "fixed";
-        fallbackFrame.style.zIndex = "1";
+        fallbackFrame.style.zIndex = "5";
         fallbackFrame.addEventListener(
           "load",
           () => {

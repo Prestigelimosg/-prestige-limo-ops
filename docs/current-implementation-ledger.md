@@ -34,6 +34,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer live-location API remains same-origin/session/booking-boundary gated and no customer message is sent by this lane.
 - No broad driver tracking, no wildcard job tracking, no browser Maps JavaScript key, no Vercel CLI, env value change, DB schema change, provider send, email/WhatsApp/SMS/Telegram send, billing/payment/PDF/invoice/payout, parser, Save Booking, `/api/admin-saved-bookings`, OTS/photo/storage, or calendar behavior changed.
 - Focused guard coverage lives in `scripts/test-driver-live-location-runtime-control-ui-guard.mjs`.
+- Live Mac Chrome proof on `https://app.prestigelimo.sg/` after pushing `71f56f99` confirmed the Active Jobs Map UI shows `Add saved bookings one by one`, `Selected: 0`, `Add`, `Refresh`, `Close all`, and the updated admin-only boundary with `browser map key` blocked. No live `Add`/`Close all` action was clicked, so runtime location settings were not changed during proof.
 
 ### Admin Dispatch Draft Save Must-Fill Removal
 

@@ -3019,9 +3019,98 @@ function waitForAdminActiveJobsBrowserMapDom(mapElement: HTMLElement) {
   });
 }
 
-function waitForAdminActiveJobsBrowserMapEmbedPaintSettle() {
-  return new Promise<void>((resolve) => {
-    window.setTimeout(resolve, 45000);
+function adminActiveJobsBrowserMapTileX(longitude: number, zoom: number) {
+  return Math.floor(((longitude + 180) / 360) * 2 ** zoom);
+}
+
+function adminActiveJobsBrowserMapTileY(latitude: number, zoom: number) {
+  const latitudeRadians = (latitude * Math.PI) / 180;
+
+  return Math.floor(
+    ((1 - Math.log(Math.tan(latitudeRadians) + 1 / Math.cos(latitudeRadians)) / Math.PI) / 2) *
+      2 ** zoom,
+  );
+}
+
+function renderAdminActiveJobsBrowserMapTileFallback(
+  mapElement: HTMLElement,
+  position: BrowserGoogleLatLngLiteral,
+) {
+  const zoom = 15;
+  const centerTileX = adminActiveJobsBrowserMapTileX(position.lng, zoom);
+  const centerTileY = adminActiveJobsBrowserMapTileY(position.lat, zoom);
+  const tileSize = 256;
+
+  mapElement.innerHTML = "";
+  mapElement.setAttribute("data-admin-active-jobs-map-google-tile-base", "true");
+
+  for (let tileXOffset = -3; tileXOffset <= 3; tileXOffset += 1) {
+    for (let tileYOffset = -2; tileYOffset <= 2; tileYOffset += 1) {
+      const tileImage = document.createElement("img");
+      tileImage.alt = "";
+      tileImage.decoding = "async";
+      tileImage.loading = "eager";
+      tileImage.setAttribute("data-admin-active-jobs-map-google-tile", "true");
+      tileImage.src = `https://mt.google.com/vt/lyrs=m&x=${centerTileX + tileXOffset}&y=${
+        centerTileY + tileYOffset
+      }&z=${zoom}`;
+      tileImage.style.height = `${tileSize}px`;
+      tileImage.style.left = `calc(50% + ${tileXOffset * tileSize - tileSize / 2}px)`;
+      tileImage.style.position = "absolute";
+      tileImage.style.top = `calc(50% + ${tileYOffset * tileSize - tileSize / 2}px)`;
+      tileImage.style.width = `${tileSize}px`;
+      mapElement.appendChild(tileImage);
+    }
+  }
+
+  const attribution = document.createElement("span");
+  attribution.setAttribute("data-admin-active-jobs-map-google-tile-attribution", "true");
+  attribution.textContent = "Map tiles © Google";
+  attribution.style.background = "rgba(255, 255, 255, 0.85)";
+  attribution.style.bottom = "2px";
+  attribution.style.color = "#111827";
+  attribution.style.fontSize = "10px";
+  attribution.style.lineHeight = "1";
+  attribution.style.padding = "2px 3px";
+  attribution.style.position = "absolute";
+  attribution.style.right = "4px";
+  mapElement.appendChild(attribution);
+}
+
+function waitForAdminActiveJobsBrowserMapTileFallback(mapElement: HTMLElement) {
+  const tileImages = [
+    ...mapElement.querySelectorAll<HTMLImageElement>('[data-admin-active-jobs-map-google-tile="true"]'),
+  ];
+
+  if (tileImages.some((tileImage) => tileImage.complete && tileImage.naturalWidth > 0)) {
+    return Promise.resolve();
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      cleanup();
+      reject(new Error("Google map tile fallback did not load safely."));
+    }, 10000);
+    const check = () => {
+      if (!tileImages.some((tileImage) => tileImage.complete && tileImage.naturalWidth > 0)) {
+        return;
+      }
+
+      window.clearTimeout(timeout);
+      cleanup();
+      resolve();
+    };
+    const cleanup = () => {
+      tileImages.forEach((tileImage) => {
+        tileImage.removeEventListener("error", check);
+        tileImage.removeEventListener("load", check);
+      });
+    };
+
+    tileImages.forEach((tileImage) => {
+      tileImage.addEventListener("error", check);
+      tileImage.addEventListener("load", check);
+    });
   });
 }
 
@@ -3056,12 +3145,6 @@ function projectAdminActiveJobsBrowserMapPosition(position: BrowserGoogleLatLngL
     x: (position.lng + 180) / 360,
     y: 0.5 - Math.log((1 + sinLatitude) / (1 - sinLatitude)) / (4 * Math.PI),
   };
-}
-
-function adminActiveJobsBrowserMapEmbedUrl(position: BrowserGoogleLatLngLiteral) {
-  return `https://maps.google.com/maps?q=${encodeURIComponent(
-    `${position.lat.toFixed(6)},${position.lng.toFixed(6)}`,
-  )}&z=15&output=embed`;
 }
 
 function AdminActiveJobsBrowserMap({
@@ -3191,46 +3274,6 @@ function AdminActiveJobsBrowserMap({
     window.addEventListener("resize", updateMapPortalRect);
     window.addEventListener("scroll", updateMapPortalRect, true);
 
-    const renderGoogleMapsEmbedFallback = () =>
-      new Promise<void>((resolve, reject) => {
-        const fallbackFrame = document.createElement("iframe");
-        fallbackFrame.setAttribute("data-admin-active-jobs-map-google-base", "true");
-        fallbackFrame.setAttribute("title", "Active driver Google map");
-        fallbackFrame.loading = "eager";
-        fallbackFrame.referrerPolicy = "no-referrer-when-downgrade";
-        fallbackFrame.src = adminActiveJobsBrowserMapEmbedUrl(activeMarkerJobs[0].position);
-        fallbackFrame.style.background = "#e5e7eb";
-        fallbackFrame.style.border = "0";
-        fallbackFrame.style.overflow = "hidden";
-        fallbackFrame.style.position = "fixed";
-        fallbackFrame.style.zIndex = "5";
-        fallbackFrame.addEventListener(
-          "load",
-          () => {
-            resolve();
-          },
-          { once: true },
-        );
-        const timeout = window.setTimeout(() => {
-          reject(new Error("Google Maps embed fallback did not load safely."));
-        }, 15000);
-        fallbackFrame.addEventListener(
-          "load",
-          () => {
-            window.clearTimeout(timeout);
-          },
-          { once: true },
-        );
-
-        markersRef.current.forEach((marker) => marker.setMap(null));
-        markersRef.current = [];
-        mapRef.current = null;
-        mapElement.remove();
-        document.body.appendChild(fallbackFrame);
-        mapElementRef.current = fallbackFrame;
-        updateMapPortalRect();
-      });
-
     void Promise.resolve()
       .then(() => {
         if (!cancelled) {
@@ -3305,8 +3348,12 @@ function AdminActiveJobsBrowserMap({
         }
 
         try {
-          await renderGoogleMapsEmbedFallback();
-          await waitForAdminActiveJobsBrowserMapEmbedPaintSettle();
+          markersRef.current.forEach((marker) => marker.setMap(null));
+          markersRef.current = [];
+          mapRef.current = null;
+          renderAdminActiveJobsBrowserMapTileFallback(mapElement, activeMarkerJobs[0].position);
+          updateMapPortalRect();
+          await waitForAdminActiveJobsBrowserMapTileFallback(mapElement);
 
           if (!cancelled) {
             setRenderState("ready");

@@ -3019,6 +3019,12 @@ function waitForAdminActiveJobsBrowserMapDom(mapElement: HTMLElement) {
   });
 }
 
+function waitForAdminActiveJobsBrowserMapEmbedPaintSettle() {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, 25000);
+  });
+}
+
 function validAdminActiveJobMapPosition(job: AdminActiveJobsMapLocation) {
   const latitude = Number(job.latitude);
   const longitude = Number(job.longitude);
@@ -3300,6 +3306,7 @@ function AdminActiveJobsBrowserMap({
 
         try {
           await renderGoogleMapsEmbedFallback();
+          await waitForAdminActiveJobsBrowserMapEmbedPaintSettle();
 
           if (!cancelled) {
             setRenderState("ready");

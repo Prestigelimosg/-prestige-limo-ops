@@ -121,6 +121,7 @@ for (const fragment of [
   "data-admin-active-jobs-map-config-message",
   "AdminActiveJobsBrowserMap",
   "adminActiveJobsBrowserMapEmbedUrl",
+  "waitForAdminActiveJobsBrowserMapEmbedPaintSettle",
   "https://maps.google.com/maps",
   'document.createElement("iframe")',
   "Google Maps embed fallback did not load safely.",

@@ -22,6 +22,7 @@ const shared = read("lib/company-profile-shared.ts");
 const persistence = read("lib/company-profile-persistence.ts");
 const publicRoute = read("app/api/company-profile/route.ts");
 const adminRoute = read("app/api/admin-company-profile/route.ts");
+const adminDispatcherBoundary = read("lib/admin-dispatcher-auth-boundary.ts");
 const adminPage = read("app/page.tsx");
 const bookPage = read("app/book/page.tsx");
 const ledger = read("docs/current-implementation-ledger.md");
@@ -130,6 +131,23 @@ assertIncludes(
   "adminDispatcherBoundaryToPersistenceAdapterActor",
   "Admin company profile route must convert boundary context into persistence actor.",
 );
+assertIncludes(
+  adminDispatcherBoundary,
+  'const internalAdminDashboardRefererPathnames = new Set(["/", "/settings/invoice"]);',
+  "Admin dispatcher boundary must allow only the root dashboard and /settings/invoice as internal admin referers.",
+);
+assertIncludes(
+  adminDispatcherBoundary,
+  "internalAdminDashboardRefererPathnames.has(refererUrl.pathname)",
+  "Admin dispatcher boundary must check the internal admin referer allowlist.",
+);
+for (const publicRefererPath of ['"/book"', '"/my-bookings"', '"/customers"', '"/driver-job"']) {
+  assertNotIncludes(
+    adminDispatcherBoundary,
+    publicRefererPath,
+    `Shared admin dispatcher boundary must not allow public/customer/driver referer ${publicRefererPath}.`,
+  );
+}
 
 assertIncludes(
   persistence,

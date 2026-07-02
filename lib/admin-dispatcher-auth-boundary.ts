@@ -27,6 +27,7 @@ const safeBlockedMessage =
   "Admin booking persistence is available only from the internal admin dashboard.";
 const serverSessionAuthMode = "server-session-token";
 const adminDispatcherRoles = new Set<AdminDispatcherBoundaryRole>(["admin", "dispatcher"]);
+const internalAdminDashboardRefererPathnames = new Set(["/", "/settings/invoice"]);
 
 function adminBookingPersistenceWritesEnabled() {
   return process.env.PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED === "true";
@@ -48,7 +49,10 @@ function hasSameOriginAdminDashboardReferer(request: Request) {
   try {
     const refererUrl = new URL(referer);
 
-    return refererUrl.origin === requestUrl.origin && refererUrl.pathname === "/";
+    return (
+      refererUrl.origin === requestUrl.origin &&
+      internalAdminDashboardRefererPathnames.has(refererUrl.pathname)
+    );
   } catch {
     return false;
   }

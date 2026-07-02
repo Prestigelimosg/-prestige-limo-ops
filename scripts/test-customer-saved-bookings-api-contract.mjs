@@ -32,6 +32,7 @@ const unsafeCustomerSavedBookingsLeakPattern =
   /admin_internal_status|admin_status|billing|contact_phone|contact_email|passenger_phone|customer_price|quoted_price|rate_amount|driver_payout|paynow|pay_now|invoice|payment|pdf|payout|finance|parser_debug|parser_learning|raw_ai|parser_prompt|live_location|proof|photo|telegram|whatsapp|sms|email_payload|notification|mock_archive|mock_qa|dev_workbench|internal_admin_note|internal_finance_note|internal_note|admin_note|server_secret|session_token|raw_token|token_hash|driver_token/i;
 const sourceFiles = [
   "lib/customer-portal-access-link.ts",
+  "lib/customer-portal-access-account.ts",
   "lib/customer-runtime-session-map.ts",
   "lib/customer-saved-bookings-read.ts",
   "lib/admin-booking-persistence.ts",
@@ -201,6 +202,12 @@ class MockSupabaseQuery {
     return this;
   }
 
+  gte(column, value) {
+    this.filters.push({ column, method: "gte", value });
+
+    return this;
+  }
+
   ilike(column, value) {
     this.filters.push({ column, method: "ilike", value });
 
@@ -319,6 +326,10 @@ class MockSupabaseClient {
           return String(row[filter.column] || "").toLowerCase() === String(filter.value).toLowerCase();
         }
 
+        if (filter.method === "gte") {
+          return String(row[filter.column] || "") >= String(filter.value);
+        }
+
         return row[filter.column] === filter.value;
       }),
     );
@@ -415,6 +426,17 @@ function seedSavedBookingRows() {
         pickup_location: "Marina Bay Sands",
         service_type: "transfer",
         updated_at: "2026-06-08T01:10:00.000Z",
+      },
+      {
+        booking_reference: "CUST-OLDER-001",
+        customer_facing_status: "completed",
+        customer_id: customerAccountReference,
+        dropoff_location: "Older dropoff",
+        passenger_name: "Older Passenger",
+        pickup_at: "2025-07-01T09:00:00.000Z",
+        pickup_location: "Older pickup",
+        service_type: "transfer",
+        updated_at: "2025-07-01T01:10:00.000Z",
       },
       {
         booking_reference: "CUST-SAVED-003",
@@ -534,6 +556,7 @@ assert.equal(
 );
 
 const harness = await loadHarness();
+const historyWindowStartIso = harness.read.customerPortalHistoryWindowStartIso();
 
 try {
   assert.deepEqual(
@@ -772,6 +795,7 @@ try {
   ]);
   assert.deepEqual(routeMock.client.selectHistory[1].filters, [
     { column: "customer_id", value: customerAccountReference },
+    { column: "pickup_at", method: "gte", value: historyWindowStartIso },
     { column: "booking_reference", value: "CUST-SAVED-001" },
   ]);
   assert.deepEqual(routeMock.client.selectHistory[1].orderBy, {
@@ -811,6 +835,7 @@ try {
   );
   assert.deepEqual(slugCustomerMock.client.selectHistory[1].filters, [
     { column: "customer_display_name", method: "ilike", value: "ubs" },
+    { column: "pickup_at", method: "gte", value: historyWindowStartIso },
     { column: "booking_reference", value: "CUST-UBS-001" },
   ]);
   assert.deepEqual(slugCustomerBody.saved_bookings[0], {
@@ -907,6 +932,7 @@ try {
   );
   assert.deepEqual(wrongCustomerTargetMock.client.selectHistory[1].filters, [
     { column: "customer_id", value: customerAccountReference },
+    { column: "pickup_at", method: "gte", value: historyWindowStartIso },
     { column: "booking_reference", value: "OTHER-CUSTOMER-001" },
   ]);
   assertSafeApiBody(wrongCustomerTargetBody, "wrong-customer targeted booking body");
@@ -948,6 +974,44 @@ try {
   );
 
   validEnv();
+  const revokedPortalMock = installMockClient({
+    ...seedSavedBookingRows(),
+    customer_access_accounts: [
+      {
+        account_status: "revoked",
+        auth_user_id: authUserId,
+        customer_account_reference: customerAccountReference,
+        safe_display_label: "Revoked customer account",
+      },
+    ],
+  });
+  const revokedPortalRead = await harness.read.loadCustomerSavedBookings(
+    new URLSearchParams("limit=1&page=1"),
+    {
+      auth_user_id: authUserId,
+      customer_account_reference: customerAccountReference,
+      mode: "server-session-cookie",
+      runtime_gate: {
+        account_allowlist: new Set([customerAccountReference]),
+        mode: "one-customer",
+      },
+      source_surface: "customer_api",
+    },
+  );
+
+  assert.equal(revokedPortalRead.ok, false, "Revoked customer portal accounts must not read bookings.");
+  assert.equal(revokedPortalRead.status, 403);
+  assert.deepEqual(revokedPortalMock.client.selectHistory[0].filters, [
+    { column: "customer_account_reference", value: customerAccountReference },
+    { column: "account_status", value: "active" },
+  ]);
+  assert.equal(
+    revokedPortalMock.client.selectHistory.length,
+    1,
+    "Revoked portal account reads must stop before booking rows.",
+  );
+
+  validEnv();
   const pageMock = installMockClient(seedSavedBookingRows());
   const pageResponse = await harness.route.GET(
     new Request("http://localhost/api/customer-saved-bookings?limit=1&page=1", {
@@ -961,6 +1025,28 @@ try {
   assert.equal(pageMock.client.selectHistory[1].rangeEnd, 1);
   assertAllowedSavedBookingShape(pageBody.saved_bookings[0], "paged booking response");
   assertSafeApiBody(pageBody, "paged response body");
+
+  validEnv();
+  const historyWindowMock = installMockClient(seedSavedBookingRows());
+  const historyWindowResponse = await harness.route.GET(
+    new Request("http://localhost/api/customer-saved-bookings?limit=10&page=1", {
+      headers: validHeaders(),
+    }),
+  );
+  const historyWindowBody = await json(historyWindowResponse);
+  const historyWindowReferences = historyWindowBody.saved_bookings.map((booking) => booking.booking_reference);
+
+  assert.equal(historyWindowResponse.status, 200);
+  assert.equal(
+    historyWindowReferences.includes("CUST-OLDER-001"),
+    false,
+    "Customer portal booking history must hide rows outside the 12-calendar-month pickup window.",
+  );
+  assert.deepEqual(historyWindowMock.client.selectHistory[1].filters, [
+    { column: "customer_id", value: customerAccountReference },
+    { column: "pickup_at", method: "gte", value: historyWindowStartIso },
+  ]);
+  assertSafeApiBody(historyWindowBody, "12-month history-window response body");
 
   validEnv();
   installMockClient(seedSavedBookingRows());

@@ -12,6 +12,23 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Customer Portal Access Link Lock
+
+- Admin can create a compact customer portal invite link from the Customers finder row.
+- The invite action creates or reactivates one server-side `customer_access_accounts` row for that customer account, then copies a signed portal-account link.
+- The new portal-account link does not carry a link expiry; access is stopped by changing the server-side access account away from `active`.
+- Admin can revoke portal access from the same compact Customers row action without deleting bookings, invoices, PDFs, CRM data, or calendar events.
+- Opening the link sets the existing customer saved-bookings HttpOnly Secure SameSite=Lax Priority=High cookie and redirects to `/my-bookings`.
+- `/my-bookings` still calls only the existing saved-bookings and stored-invoice read adapters with same-origin credentials and purpose headers.
+- Portal reads remain scoped to the signed customer account and require `customer_access_accounts.account_status = active` before booking, invoice, PDF, or amendment reads proceed.
+- Customer portal booking history is read from the existing `bookings` table and filtered to the last 12 calendar months by pickup date; older rows stay admin-side and are not deleted.
+- The public access route verifies the signed account is active before setting the cookie and does not create invoices, generate PDFs, send providers, send email, activate Stripe/payment, expose billing internals, expose customer price, expose driver payout, or expose parser/debug/mock archive data.
+- The customer portal invite UI only copies the link for manual use in an approved channel; it does not send email, WhatsApp, SMS, Telegram, provider messages, payment links, or customer notifications.
+- No Save Booking + CRM change.
+- No `/api/admin-saved-bookings` change.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- Guard coverage lives in `scripts/test-customer-portal-access-link-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Admin Customer Amendment Review Apply Lane
 
 - Admin App Notifications now show compact admin-only `Review`, `Reject`, and `Apply + Cal` actions for queued customer booking change requests.

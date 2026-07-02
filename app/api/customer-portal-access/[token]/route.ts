@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { assertActiveCustomerPortalAccessAccount } from "../../../../lib/customer-portal-access-account";
 import {
   customerPortalAccessCookieHeader,
   resolveCustomerPortalAccessSession,
@@ -32,6 +33,14 @@ export async function GET(
     const session = resolveCustomerPortalAccessSession(token);
 
     if (!session.ok) {
+      return blockedResponse();
+    }
+
+    const activeAccount = await assertActiveCustomerPortalAccessAccount(
+      session.data.customer_account_reference,
+    );
+
+    if (!activeAccount.ok) {
       return blockedResponse();
     }
 

@@ -10,6 +10,7 @@ import {
   isCustomerPortalAccessToken,
   resolveCustomerPortalAccessSession,
 } from "./customer-portal-access-link";
+import { assertActiveCustomerPortalAccessAccount } from "./customer-portal-access-account";
 import { resolveExactTwoCustomerRuntimeSessionMap } from "./customer-runtime-session-map";
 
 export const customerSavedBookingsReadVersion =
@@ -74,6 +75,7 @@ type CustomerSavedBookingsAccountFilter = {
 };
 
 const defaultSavedBookingsLimit = 10;
+const customerPortalHistoryWindowMonths = 12;
 const maxSavedBookingsLimit = 25;
 const maxSavedBookingsPage = 1000;
 const maxBookingReferenceLength = 120;
@@ -363,6 +365,22 @@ function validBookingMonth(value: unknown) {
   const month = Number(match[2]);
 
   return month >= 1 && month <= 12 ? `${match[1]}-${match[2]}` : null;
+}
+
+export function customerPortalHistoryWindowStartIso(now = new Date()) {
+  const start = new Date(
+    Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth() - (customerPortalHistoryWindowMonths - 1),
+      1,
+      0,
+      0,
+      0,
+      0,
+    ),
+  );
+
+  return start.toISOString();
 }
 
 function customerAccountBookingFilter(
@@ -719,20 +737,24 @@ async function readCustomerSavedBookingRowsForSchema({
 }): Promise<AdminBookingResult<unknown[]>> {
   const offset = (parsed.page - 1) * parsed.limit;
   const rangeEnd = offset + parsed.limit;
+  const historyWindowStartIso = customerPortalHistoryWindowStartIso();
   let bookingQuery = client
     .from("bookings")
     .select(selectedColumns)
-    .order(pickupColumn, { ascending: false })
-    .range(offset, rangeEnd);
+    .order(pickupColumn, { ascending: false });
 
   bookingQuery =
     customerFilter.method === "ilike"
       ? bookingQuery.ilike(customerFilter.column, customerFilter.value)
       : bookingQuery.eq(customerFilter.column, customerFilter.value);
 
+  bookingQuery = bookingQuery.gte(pickupColumn, historyWindowStartIso);
+
   if (parsed.booking_reference) {
     bookingQuery = bookingQuery.eq("booking_reference", parsed.booking_reference);
   }
+
+  bookingQuery = bookingQuery.range(offset, rangeEnd);
 
   const { data, error } = await bookingQuery;
 
@@ -896,14 +918,14 @@ export function resolveCustomerSavedBookingsBoundaryForPurpose(
     }
 
     const effectiveRuntimeGate =
-      portalAccessSession.data.access_scope === "stored_document"
-        ? {
+      portalAccessSession.data.access_scope === "allowlisted"
+        ? runtimeGate.data
+        : {
             ...runtimeGate.data,
             account_allowlist: new Set([
               portalAccessSession.data.customer_account_reference,
             ]),
-          }
-        : runtimeGate.data;
+          };
 
     return {
       data: {
@@ -1006,6 +1028,7 @@ export async function loadCustomerSavedBookings(
   }
 
   let customerAccountReference = validBookingReference(context.customer_account_reference);
+  let activeAccessAccountAlreadyResolved = false;
 
   if (!customerAccountReference) {
     const { data: accountRows, error: accountError } = await clientResult.data
@@ -1022,6 +1045,7 @@ export async function loadCustomerSavedBookings(
     customerAccountReference = validBookingReference(
       asRecord(asArray(accountRows)[0]).customer_account_reference,
     );
+    activeAccessAccountAlreadyResolved = Boolean(customerAccountReference);
   }
 
   if (!customerAccountReference) {
@@ -1042,6 +1066,17 @@ export async function loadCustomerSavedBookings(
 
   if (!customerAccountAllowedByControlledRuntime(customerAccountReference, context.runtime_gate)) {
     return customerSavedBookingsAuthRequiredResult();
+  }
+
+  if (!activeAccessAccountAlreadyResolved) {
+    const activeAccessAccount = await assertActiveCustomerPortalAccessAccount(
+      customerAccountReference,
+      clientResult.data,
+    );
+
+    if (!activeAccessAccount.ok) {
+      return customerSavedBookingsAuthRequiredResult();
+    }
   }
 
   const bookingRowsResult = await readCustomerSavedBookingRows(

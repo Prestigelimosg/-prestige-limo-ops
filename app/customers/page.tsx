@@ -375,6 +375,7 @@ type RegularCustomerDraftInvoicePreview = {
 
 type RegularCustomerBookingFeedbackTone = "error" | "info" | "success";
 type CustomerPortalAccessCopyStatus = "copied" | "copying" | "error";
+type CustomerPortalAccessRevokeStatus = "error" | "revoked" | "revoking";
 
 type CustomerPortalAccessFeedback = {
   message: string;
@@ -1162,6 +1163,9 @@ export default function MockCustomerDashboardPage() {
   const [customerFolderFinderDropdownOpen, setCustomerFolderFinderDropdownOpen] = useState(false);
   const [customerPortalAccessCopyStates, setCustomerPortalAccessCopyStates] = useState<
     Record<string, CustomerPortalAccessCopyStatus>
+  >({});
+  const [customerPortalAccessRevokeStates, setCustomerPortalAccessRevokeStates] = useState<
+    Record<string, CustomerPortalAccessRevokeStatus>
   >({});
   const [customerPortalAccessFeedback, setCustomerPortalAccessFeedback] =
     useState<CustomerPortalAccessFeedback | null>(null);
@@ -2327,7 +2331,7 @@ export default function MockCustomerDashboardPage() {
     const status = customerPortalAccessCopyStates[customerId];
 
     if (status === "copying") {
-      return "Copying";
+      return "Inviting";
     }
 
     if (status === "copied") {
@@ -2338,7 +2342,25 @@ export default function MockCustomerDashboardPage() {
       return "Failed";
     }
 
-    return "Portal";
+    return "Invite";
+  }
+
+  function customerPortalRevokeButtonLabel(customerId: string) {
+    const status = customerPortalAccessRevokeStates[customerId];
+
+    if (status === "revoking") {
+      return "Revoking";
+    }
+
+    if (status === "revoked") {
+      return "Revoked";
+    }
+
+    if (status === "error") {
+      return "Failed";
+    }
+
+    return "Revoke";
   }
 
   function safeCustomerPortalAccessReferenceCandidate(value: string) {
@@ -2369,13 +2391,16 @@ export default function MockCustomerDashboardPage() {
       [customerPortalCopyStateKey]: "copying",
     }));
     setCustomerPortalAccessFeedback({
-      message: `Preparing portal link for ${customer.customerName}...`,
+      message: `Preparing portal invite for ${customer.customerName}...`,
       tone: "info",
     });
 
     try {
       const response = await fetch(adminCustomerPortalAccessLinksApiPath, {
-        body: JSON.stringify({ customerAccountReference }),
+        body: JSON.stringify({
+          customerAccountReference,
+          safeDisplayLabel: customer.customerName,
+        }),
         cache: "no-store",
         headers: {
           "Content-Type": "application/json",
@@ -2397,7 +2422,7 @@ export default function MockCustomerDashboardPage() {
         [customerPortalCopyStateKey]: "copied",
       }));
       setCustomerPortalAccessFeedback({
-        message: `Portal link copied for ${customer.customerName}. It opens only this customer folder.`,
+        message: `Portal invite copied for ${customer.customerName}. Access stays active until revoked; send the copied link manually through an approved channel.`,
         tone: "success",
       });
     } catch {
@@ -2407,7 +2432,67 @@ export default function MockCustomerDashboardPage() {
       }));
       setCustomerPortalAccessFeedback({
         message:
-          "Customer portal link was not copied. Check the customer portal access allowlist before sharing.",
+          "Customer portal invite was not copied. Check the customer portal access account before sharing.",
+        tone: "error",
+      });
+    }
+  }
+
+  async function revokeCustomerPortalAccess(customer: (typeof customerFolderIndexRows)[number]) {
+    const customerAccountReference = customerPortalAccessReferenceForFinderRow(customer);
+    const customerPortalStateKey = customer.customerId.trim() || customerAccountReference;
+
+    if (!customerAccountReference) {
+      setCustomerPortalAccessFeedback({
+        message: "Customer portal access needs a saved customer account reference first.",
+        tone: "error",
+      });
+      return;
+    }
+
+    setCustomerPortalAccessRevokeStates((currentStates) => ({
+      ...currentStates,
+      [customerPortalStateKey]: "revoking",
+    }));
+    setCustomerPortalAccessFeedback({
+      message: `Revoking portal access for ${customer.customerName}...`,
+      tone: "info",
+    });
+
+    try {
+      const response = await fetch(adminCustomerPortalAccessLinksApiPath, {
+        body: JSON.stringify({
+          action: "revoke",
+          customerAccountReference,
+        }),
+        cache: "no-store",
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "PATCH",
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || result?.ok !== true || result?.accountStatus !== "revoked") {
+        throw new Error("portal-revoke-blocked");
+      }
+
+      setCustomerPortalAccessRevokeStates((currentStates) => ({
+        ...currentStates,
+        [customerPortalStateKey]: "revoked",
+      }));
+      setCustomerPortalAccessFeedback({
+        message: `Portal access revoked for ${customer.customerName}. Bookings and invoices were not deleted.`,
+        tone: "success",
+      });
+    } catch {
+      setCustomerPortalAccessRevokeStates((currentStates) => ({
+        ...currentStates,
+        [customerPortalStateKey]: "error",
+      }));
+      setCustomerPortalAccessFeedback({
+        message: "Customer portal access was not revoked. Check the account and try again.",
         tone: "error",
       });
     }
@@ -3900,7 +3985,7 @@ export default function MockCustomerDashboardPage() {
                 <div>
                   <div
                     aria-hidden="true"
-                    className="hidden grid-cols-[minmax(12rem,1.4fr)_7rem_8rem_minmax(12rem,1fr)_11rem] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 md:grid"
+                    className="hidden grid-cols-[minmax(12rem,1.4fr)_7rem_8rem_minmax(12rem,1fr)_14rem] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 md:grid"
                   >
                     <span>Customer</span>
                     <span>Jobs</span>
@@ -3911,7 +3996,7 @@ export default function MockCustomerDashboardPage() {
                   <div className="divide-y divide-slate-200" data-customer-folder-finder-list="true">
                     {paginatedCustomerFolderFinderRows.map((customer) => (
                       <article
-                        className="grid gap-2 bg-white px-3 py-2 text-sm leading-5 transition hover:bg-slate-50 md:grid-cols-[minmax(12rem,1.4fr)_7rem_8rem_minmax(12rem,1fr)_11rem] md:items-center md:gap-3"
+                        className="grid gap-2 bg-white px-3 py-2 text-sm leading-5 transition hover:bg-slate-50 md:grid-cols-[minmax(12rem,1.4fr)_7rem_8rem_minmax(12rem,1fr)_14rem] md:items-center md:gap-3"
                         data-customer-folder-finder-row={customer.customerId}
                         data-customer-row={customer.customerId}
                         key={customer.customerId}
@@ -3969,6 +4054,21 @@ export default function MockCustomerDashboardPage() {
                             type="button"
                           >
                             {customerPortalAccessButtonLabel(customer.customerId)}
+                          </button>
+                          <button
+                            className={`inline-flex min-h-9 items-center justify-center rounded-md border px-3 text-center text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-70 ${
+                              customerPortalAccessRevokeStates[customer.customerId] === "revoked"
+                                ? "border-amber-300 bg-amber-50 text-amber-900"
+                                : customerPortalAccessRevokeStates[customer.customerId] === "error"
+                                  ? "border-rose-300 bg-rose-50 text-rose-800"
+                                  : "border-slate-300 bg-white text-slate-700 hover:border-slate-700"
+                            }`}
+                            data-customer-portal-access-revoke={customer.customerId}
+                            disabled={customerPortalAccessRevokeStates[customer.customerId] === "revoking"}
+                            onClick={() => revokeCustomerPortalAccess(customer)}
+                            type="button"
+                          >
+                            {customerPortalRevokeButtonLabel(customer.customerId)}
                           </button>
                         </div>
                       </article>

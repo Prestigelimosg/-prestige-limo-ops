@@ -1,6 +1,9 @@
 import { resolveAdminCustomerInvoiceBoundary } from "../../../lib/admin-customer-invoice-boundary";
+import {
+  ensureAdminCustomerPortalAccessAccount,
+  revokeAdminCustomerPortalAccessAccount,
+} from "../../../lib/customer-portal-access-account";
 import { createCustomerPortalAccessLinkToken } from "../../../lib/customer-portal-access-link";
-import { verifyIssuedCustomerInvoiceAccountForPortalAccess } from "../../../lib/customer-invoice-record-persistence";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -46,20 +49,21 @@ export async function POST(request: Request) {
     }
 
     const body = await readJsonBody(request);
-    let result = createCustomerPortalAccessLinkToken(body.customerAccountReference);
+    const account = await ensureAdminCustomerPortalAccessAccount(
+      {
+        customerAccountReference: body.customerAccountReference,
+        safeDisplayLabel: body.safeDisplayLabel,
+      },
+      boundary.actor,
+    );
 
-    if (!result.ok && result.status === 403) {
-      const eligibility = await verifyIssuedCustomerInvoiceAccountForPortalAccess(
-        body.customerAccountReference,
-        boundary.actor,
-      );
-
-      if (eligibility.ok) {
-        result = createCustomerPortalAccessLinkToken(body.customerAccountReference, {
-          scope: "stored_document",
-        });
-      }
+    if (!account.ok) {
+      return safeErrorResponse(account);
     }
+
+    const result = createCustomerPortalAccessLinkToken(account.data.customer_account_reference, {
+      scope: "portal_account",
+    });
 
     if (!result.ok) {
       return safeErrorResponse(result);
@@ -71,8 +75,10 @@ export async function POST(request: Request) {
     );
 
     return Response.json({
+      accountStatus: account.data.account_status,
       customerAccountReference: result.data.customer_account_reference,
       expiresAt: result.data.expires_at,
+      historyWindowMonths: 12,
       ok: true,
       url: url.toString(),
       version: result.data.version,
@@ -96,11 +102,44 @@ export async function PUT() {
   });
 }
 
-export async function PATCH() {
-  return safeErrorResponse({
-    error: "Customer portal access links are available only from the internal admin dashboard.",
-    status: 403,
-  });
+export async function PATCH(request: Request) {
+  try {
+    const boundary = resolveAdminCustomerInvoiceBoundary(request);
+
+    if (!boundary.ok) {
+      return safeErrorResponse(boundary);
+    }
+
+    const body = await readJsonBody(request);
+    const action = typeof body.action === "string" ? body.action.trim().toLowerCase() : "";
+
+    if (action !== "revoke") {
+      return safeErrorResponse({
+        error: "Customer portal access account action is invalid.",
+        status: 400,
+      });
+    }
+
+    const result = await revokeAdminCustomerPortalAccessAccount(
+      {
+        customerAccountReference: body.customerAccountReference,
+      },
+      boundary.actor,
+    );
+
+    if (!result.ok) {
+      return safeErrorResponse(result);
+    }
+
+    return Response.json({
+      accountStatus: result.data.account_status,
+      customerAccountReference: result.data.customer_account_reference,
+      ok: true,
+      version: result.data.version,
+    });
+  } catch {
+    return safeFailureResponse();
+  }
 }
 
 export async function DELETE() {

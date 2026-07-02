@@ -26,6 +26,7 @@ import {
   type CustomerLocalInvoiceRecord,
   type CustomerLocalInvoiceStatus,
 } from "./customer-local-invoices";
+import { assertActiveCustomerPortalAccessAccount } from "./customer-portal-access-account";
 import type { CustomerSavedBookingsBoundaryContext } from "./customer-saved-bookings-read";
 
 export const customerInvoiceRecordVersion = "customer-invoice-record-v1";
@@ -1019,6 +1020,15 @@ export async function loadCustomerInvoiceRecordsForPortal(
     return safeFailure(safeCustomerAuthError, 403);
   }
 
+  const activeAccount = await assertActiveCustomerPortalAccessAccount(
+    customerAccountReference,
+    client,
+  );
+
+  if (!activeAccount.ok) {
+    return safeFailure(safeCustomerAuthError, 403);
+  }
+
   let { data, error } = await client
     .from(customerInvoiceRecordTableName)
     .select(customerInvoiceSelect)
@@ -1068,6 +1078,15 @@ export async function loadCustomerInvoicePdfForPortal(
   }
 
   if (!customerAccountReference) {
+    return safeFailure(safeCustomerAuthError, 403);
+  }
+
+  const activeAccount = await assertActiveCustomerPortalAccessAccount(
+    customerAccountReference,
+    client,
+  );
+
+  if (!activeAccount.ok) {
     return safeFailure(safeCustomerAuthError, 403);
   }
 

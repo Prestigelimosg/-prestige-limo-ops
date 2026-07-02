@@ -1,16 +1,34 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-03f5c4c5 Archive production test invoice artifact
+d0c5e211 Persist Save CRM driver assignment
 
 Latest pushed main/staging runtime checkpoint:
-03f5c4c5 Archive production test invoice artifact
+d0c5e211 Persist Save CRM driver assignment
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-03f5c4c5 Archive production test invoice artifact
+d0c5e211 Persist Save CRM driver assignment
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Dispatch Operator Mode And Today's Jobs Live Proof
+
+- Dispatch daily-use layout is now operator-focused: intake, booking details, route/vehicle, pricing, assigned driver, customer/driver copy, driver job link, and save actions stay visible while complex readiness, handoff, recovery, exception, and billing-prep panels are grouped under the compact `Advanced Checks` disclosure.
+- Saved booking records are collapsed by default behind a compact `Saved Booking Records` disclosure so the Dispatch page does not open with a large loaded-records sector.
+- Dashboard and Dispatch now share the same `Today's Jobs` monitor. It shows loaded jobs inside the 1-hour pickup window, auto-refreshes driver reports every 10 seconds while open, and includes one compact admin live-map control surface for those active jobs.
+- The previous duplicate active-jobs map/monitor surfaces were consolidated so the operator can use one daily monitor for 1-hour auto-appearance, driver reporting, and same-window live map controls.
+- The shared monitor displays pickup time through the normalized booking time formatter instead of the raw persisted `pickup_time` value, preventing saved production jobs from showing `Time TBC` when their pickup time exists in another saved field.
+- `Save + CRM` now persists manual assigned-driver fields through the admin booking persistence path: `driver_name`, `driver_contact`, and `driver_plate_number`.
+- The Supabase adapter preserves those assigned-driver fields on foundation inserts and reads them back when available, while retaining a legacy no-driver-column fallback for older schemas.
+- Visible Mac Chrome production proof on `https://app.prestigelimo.sg` used safe fake booking `ADM-20260702112134` first. That booking proved the time-label fix after deployment by showing `02 Jul 2026, 2015hrs`; it still showed `Driver TBC` because it had been saved before the driver-persistence fix.
+- Fresh visible Mac Chrome production proof after `d0c5e211` used safe fake booking `ADM-20260702113353` for `Codex Driver Persist Test Pte Ltd`, passenger `Codex Driver Persist Rehearsal`, pickup `02 Jul 2026, 2035hrs`, route `Changi Airport T3 > Marina Bay Sands Tower 1`, and fake assigned driver `Codex Persist Driver`, contact `+65 9000 1932`, plate `SCD1932Z`.
+- The visible `Save + CRM` result for `ADM-20260702113353` was: `Operational booking saved: ADM-20260702113353. Google Calendar auto-synced; reminders included; no guest email sent.`
+- After the 1-hour pickup window opened, visible production `Today's Jobs` showed `2 in window`; the new row `ADM-20260702113353` showed `02 Jul 2026, 2035hrs` and `Codex Persist Driver`.
+- After a visible production browser reload, Dashboard read-back still showed `ADM-20260702113353` in Today Bookings with `Codex Persist Driver | Contact +65 9000 1932 | Plate SCD1932Z`, proving driver assignment persisted through save and reload.
+- No Email, WhatsApp, SMS, Telegram, provider send, payment, payout, Stripe, GPS, or new live-location action occurred in this lane. No customer/driver message was sent. The fresh proof booking did not create a driver job link.
+- Safe fake production artifacts from this proof remain visible until a separately approved action-time cleanup: `ADM-20260702112134` and `ADM-20260702113353`.
+- Focused guard coverage included dashboard urgent/active monitor, driver live-location runtime UI, active-jobs map contract, admin load bookings compact guard, dispatch action feedback compact guard, admin booking Supabase adapter contract, admin booking persistence readiness/API gates, load-bookings typed read gated API contract, TypeScript, lint, build, and `git diff --check`.
 
 ### Customer Portal Access Link Lock
 

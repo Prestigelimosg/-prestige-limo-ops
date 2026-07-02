@@ -1,10 +1,10 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-aea26c31 Link manual invoices to CRM billing accounts
+d9a29f9a Clarify create invoice CRM selector
 
 Latest pushed main/staging runtime checkpoint:
-aea26c31 Link manual invoices to CRM billing accounts
+d9a29f9a Clarify create invoice CRM selector
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
 d0c5e211 Persist Save CRM driver assignment

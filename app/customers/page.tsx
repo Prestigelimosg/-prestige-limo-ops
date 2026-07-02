@@ -5571,8 +5571,10 @@ export default function MockCustomerDashboardPage() {
                       >
                         <option value="">
                           {plainInvoiceCrmAccountOptions.length > 0
-                            ? "Manual bill-to only"
-                            : "Load CRM accounts first"}
+                            ? "Manual bill-to (no CRM link)"
+                            : regularCustomerAccountReadState.status === "loaded"
+                              ? "No CRM accounts found"
+                              : "Load CRM accounts first"}
                         </option>
                         {plainInvoiceCrmAccountOptions.map((account) => (
                           <option key={account.customerId} value={account.customerId}>

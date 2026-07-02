@@ -98,6 +98,8 @@ for (const fragment of [
   'data-plain-invoice-boundary="true"',
   "Create Invoice",
   "Manual bill-to",
+  "Manual bill-to (no CRM link)",
+  "No CRM accounts found",
   "No number yet",
   "ADHOC-",
   "Preview first; Draft or Issue creates the invoice number.",
@@ -124,6 +126,7 @@ for (const fragment of [
   "crmCustomerId: \"\"",
   "plainInvoiceForm.crmCustomerId.trim() ||",
   "regularCustomerAccountReadState.status !== \"loaded\"",
+  "regularCustomerAccountReadState.status === \"loaded\"",
   "documentType: \"invoice\" as CustomerBillingDocumentType",
   "status: plainInvoicePreview.folder",
   "lineItems: plainInvoicePreview.lineItems",
@@ -141,6 +144,12 @@ assertIncludes(
   customersPage,
   "customerId:\n        plainInvoiceForm.crmCustomerId.trim() ||",
   "Create Invoice CRM customer id fallback must prefer selected CRM account before plain-invoice id",
+);
+
+assertExcludes(
+  createInvoiceSection,
+  "Manual bill-to only",
+  "Create Invoice CRM selector default label",
 );
 
 for (const forbiddenFragment of [

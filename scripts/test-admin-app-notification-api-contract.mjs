@@ -378,6 +378,13 @@ function validAdminHeaders(overrides = {}) {
   };
 }
 
+function validAdminBrowserHeaders(overrides = {}) {
+  const headers = validAdminHeaders(overrides);
+  delete headers["x-prestige-admin-session-token"];
+
+  return headers;
+}
+
 function validProductionEnv(overrides = {}) {
   return {
     PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED: "true",
@@ -619,7 +626,7 @@ try {
             notification_id: "queued-update-target",
             notification_status: "read",
           }),
-          headers: validAdminHeaders({
+          headers: validAdminBrowserHeaders({
             "content-type": "application/json",
           }),
           method: "PATCH",
@@ -694,6 +701,11 @@ try {
       unsafeNotificationLeakPattern.test(JSON.stringify(updateMock.client.updateHistory[0].payload)),
       false,
       "Expected PATCH payload not to include external delivery, finance, auth, parser, or secret fields",
+    );
+    assert.match(
+      await readFile("app/api/admin-app-notifications/route.ts", "utf8"),
+      /allowServerSessionRoleMethodsWithoutRequestToken:\s*\["PATCH"\]/,
+      "Expected admin app notification status updates to be allowed from the same-origin dashboard without a browser token",
     );
 
     for (const nextStatus of ["dismissed", "archived"]) {

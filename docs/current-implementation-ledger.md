@@ -19,6 +19,13 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The correction does not change the admin portal access API, signed token/cookie behavior, customer saved-booking reader, invoice PDF/customer portal readers, CRM, calendar, billing, email, SMS, WhatsApp, Telegram, provider, GPS/live-location, payment, or payout behavior.
 - Guard coverage in `scripts/test-customer-portal-access-link-guard.mjs` now locks the safe-label-first portal reference selection.
 
+### Admin App Notification Cleanup Boundary
+
+- Visible production cleanup of a customer booking change request notification found that queued admin app notification status actions loaded on the dashboard but `PATCH` status updates were blocked unless the browser exposed the private admin session token.
+- `/api/admin-app-notifications` now allows only same-origin dashboard `PATCH` status updates through the existing server-session role surface without a browser-visible token, matching other bounded admin action routes while keeping anonymous, public, driver, wrong-purpose, and unsafe payloads blocked.
+- This changes only admin inbox status cleanup (`read`, `dismissed`, `archived`). It does not create notifications from the browser, send external messages, mutate bookings/calendar/CRM/invoices/payments/payouts/providers/GPS, or expose private data to customer/driver routes.
+- Contract coverage in `scripts/test-admin-app-notification-api-contract.mjs` now proves same-origin browser `PATCH` without the private token and keeps the existing safety assertions.
+
 ### Customer Booking Change Request Review Wire
 
 - Customer portal saved bookings now wire the existing `Edit` and `Cancel` row buttons into a compact customer-safe review request form instead of local-only feedback.

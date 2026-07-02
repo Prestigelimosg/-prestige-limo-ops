@@ -60,6 +60,7 @@ export type CustomerPortalAccessRuntimeGate = {
 
 type CustomerPortalAccessTokenPayload = {
   account: string;
+  scope?: "stored_document";
   exp: number;
   iat: number;
   type: typeof customerPortalAccessLinkVersion;
@@ -79,6 +80,7 @@ export type CustomerPortalAccessLinkResult = {
 };
 
 export type CustomerPortalAccessSessionResult = {
+  access_scope: "allowlisted" | "stored_document";
   auth_user_id: string;
   customer_account_reference: string;
   version: typeof customerPortalAccessLinkVersion;
@@ -302,6 +304,10 @@ function accountAllowed(
   return configAllowlist.has(account) && (!runtimeGate || runtimeGate.account_allowlist.has(account));
 }
 
+function portalAccessScope(value: unknown) {
+  return value === "stored_document" ? "stored_document" : "allowlisted";
+}
+
 export function isCustomerPortalAccessToken(value: string | null | undefined) {
   return !!value?.startsWith(`${customerPortalAccessTokenPrefix}.`);
 }
@@ -320,6 +326,7 @@ export function serializeCustomerPortalAccessCookie(name: string, value: string)
 
 export function createCustomerPortalAccessLinkToken(
   customerAccountReference: unknown,
+  options: { scope?: "stored_document" } = {},
 ): AdminBookingResult<CustomerPortalAccessLinkResult> {
   const account = safeCustomerPortalAccessAccountReference(customerAccountReference);
 
@@ -337,7 +344,9 @@ export function createCustomerPortalAccessLinkToken(
     return config;
   }
 
-  if (!accountAllowed(account, config.data.accountAllowlist)) {
+  const scope = options.scope === "stored_document" ? "stored_document" : "allowlisted";
+
+  if (scope !== "stored_document" && !accountAllowed(account, config.data.accountAllowlist)) {
     return {
       error: customerPortalAccessDisabledError,
       ok: false,
@@ -351,6 +360,7 @@ export function createCustomerPortalAccessLinkToken(
     account,
     exp: expiresAtSeconds,
     iat: issuedAtSeconds,
+    ...(scope === "stored_document" ? { scope } : {}),
     type: customerPortalAccessLinkVersion,
   } satisfies CustomerPortalAccessTokenPayload);
   const signatureSegment = signSegment(payloadSegment, config.data.secret);
@@ -420,7 +430,12 @@ export function resolveCustomerPortalAccessSession(
     };
   }
 
-  if (!accountAllowed(payload.account, config.data.accountAllowlist, runtimeGate)) {
+  const scope = portalAccessScope(payload.scope);
+
+  if (
+    scope !== "stored_document" &&
+    !accountAllowed(payload.account, config.data.accountAllowlist, runtimeGate)
+  ) {
     return {
       accessToken: true,
       error: customerPortalAccessDisabledError,
@@ -432,6 +447,7 @@ export function resolveCustomerPortalAccessSession(
   return {
     accessToken: true,
     data: {
+      access_scope: scope,
       auth_user_id: portalAccessAuthUserId,
       customer_account_reference: payload.account,
       version: customerPortalAccessLinkVersion,

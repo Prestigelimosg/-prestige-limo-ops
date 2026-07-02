@@ -410,10 +410,11 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Customer Portal Access Link Lock
 
 - Admin can create a compact customer portal access link from the Customers finder row.
-- The link is signed server-side, account allowlisted, expires after a bounded window, and does not require the customer browser page to know any session token.
+- The default link is signed server-side, account allowlisted, expires after a bounded window, and does not require the customer browser page to know any session token.
+- A non-allowlisted saved customer account can receive a link only after the admin route proves with a read-only server check that the account already has an issued stored customer billing document; that signed stored-document link scopes portal reads to exactly that customer account.
 - Opening the link sets the existing customer saved-bookings HttpOnly Secure SameSite=Lax Priority=High cookie and redirects to `/my-bookings`.
 - `/my-bookings` still calls only the existing saved-bookings and stored-invoice read adapters with same-origin credentials and purpose headers.
-- Portal reads remain scoped to the signed customer account and the controlled customer runtime allowlist.
+- Portal reads remain scoped to the signed customer account and either the controlled customer runtime allowlist or the one-account stored-document scope minted by the admin route after issued-document proof.
 - The public access route does not read or write Supabase, create invoices, generate PDFs, send providers, send email, activate Stripe/payment, expose billing internals, expose customer price, expose driver payout, or expose parser/debug/mock archive data.
 - No Save Booking + CRM change.
 - No `/api/admin-saved-bookings` change.

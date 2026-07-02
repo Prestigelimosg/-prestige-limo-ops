@@ -764,6 +764,62 @@ export async function loadAdminCustomerInvoiceRecords(
   };
 }
 
+export async function verifyIssuedCustomerInvoiceAccountForPortalAccess(
+  customerAccountReferenceInput: unknown,
+  actor: AdminBookingPersistenceAdapterActor,
+  client: CustomerInvoiceClient = createServerClient(),
+): Promise<CustomerInvoiceResult<{ customerId: string }>> {
+  if (!safeActor(actor)) {
+    return safeFailure(safePersistenceConfigError, 403);
+  }
+
+  const readiness = checkAdminBookingPersistenceStagingConfigReadiness();
+
+  if (!readiness.ok) {
+    return safeFailure(safePersistenceConfigError, 503);
+  }
+
+  const customerId = safeText(customerAccountReferenceInput, 160);
+
+  if (!customerId) {
+    return safeFailure(safeValidationError, 400);
+  }
+
+  let { data, error } = await client
+    .from(customerInvoiceRecordTableName)
+    .select("invoice_number")
+    .eq("customer_id", customerId)
+    .eq("document_state", "issued")
+    .limit(1);
+
+  if (error) {
+    if (!lifecycleColumnUnavailableError(error)) {
+      return safeFailure(safeReadError, 500);
+    }
+
+    const legacyResult = await client
+      .from(customerInvoiceRecordTableName)
+      .select("invoice_number")
+      .eq("customer_id", customerId)
+      .limit(1);
+
+    data = legacyResult.data;
+    error = legacyResult.error;
+
+    if (error) {
+      return safeFailure(safeReadError, 500);
+    }
+  }
+
+  return asArray(data).length > 0
+    ? {
+        data: { customerId },
+        ok: true,
+        version: customerInvoiceRecordVersion,
+      }
+    : safeFailure(safeMissingError, 404);
+}
+
 export async function updateAdminCustomerInvoiceStatus(
   invoiceNumberInput: unknown,
   statusInput: unknown,

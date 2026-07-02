@@ -1,5 +1,6 @@
 import { resolveAdminCustomerInvoiceBoundary } from "../../../lib/admin-customer-invoice-boundary";
 import { createCustomerPortalAccessLinkToken } from "../../../lib/customer-portal-access-link";
+import { verifyIssuedCustomerInvoiceAccountForPortalAccess } from "../../../lib/customer-invoice-record-persistence";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -45,7 +46,20 @@ export async function POST(request: Request) {
     }
 
     const body = await readJsonBody(request);
-    const result = createCustomerPortalAccessLinkToken(body.customerAccountReference);
+    let result = createCustomerPortalAccessLinkToken(body.customerAccountReference);
+
+    if (!result.ok && result.status === 403) {
+      const eligibility = await verifyIssuedCustomerInvoiceAccountForPortalAccess(
+        body.customerAccountReference,
+        boundary.actor,
+      );
+
+      if (eligibility.ok) {
+        result = createCustomerPortalAccessLinkToken(body.customerAccountReference, {
+          scope: "stored_document",
+        });
+      }
+    }
 
     if (!result.ok) {
       return safeErrorResponse(result);

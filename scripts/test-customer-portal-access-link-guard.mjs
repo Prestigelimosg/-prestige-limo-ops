@@ -8,6 +8,7 @@ const guardScript = "scripts/test-customer-portal-access-link-guard.mjs";
 const helperPath = "lib/customer-portal-access-link.ts";
 const customerBoundaryPath = "lib/customer-saved-bookings-read.ts";
 const adminRoutePath = "app/api/admin-customer-portal-access-links/route.ts";
+const invoicePersistencePath = "lib/customer-invoice-record-persistence.ts";
 const publicAccessRoutePath = "app/api/customer-portal-access/[token]/route.ts";
 const customersPagePath = "app/customers/page.tsx";
 const portalPagePath = "app/my-bookings/page.tsx";
@@ -63,6 +64,7 @@ const files = Object.fromEntries(
       helperPath,
       customerBoundaryPath,
       adminRoutePath,
+      invoicePersistencePath,
       publicAccessRoutePath,
       customersPagePath,
       portalPagePath,
@@ -77,6 +79,7 @@ const preactivationSuite = files[preactivationSuitePath];
 const helper = files[helperPath];
 const customerBoundary = files[customerBoundaryPath];
 const adminRoute = files[adminRoutePath];
+const invoicePersistence = files[invoicePersistencePath];
 const publicAccessRoute = files[publicAccessRoutePath];
 const customersPage = files[customersPagePath];
 const portalClientSource = [
@@ -90,13 +93,19 @@ const customerBoundaryFunction = sectionBetween(
   "export function resolveCustomerSavedBookingsBoundary",
   "\nexport async function loadCustomerSavedBookings",
 );
+const invoicePortalAccessProofFunction = sectionBetween(
+  invoicePersistence,
+  "export async function verifyIssuedCustomerInvoiceAccountForPortalAccess",
+  "\nexport async function updateAdminCustomerInvoiceStatus",
+);
 
 for (const phrase of [
   "Admin can create a compact customer portal access link from the Customers finder row.",
-  "The link is signed server-side, account allowlisted, expires after a bounded window, and does not require the customer browser page to know any session token.",
+  "The default link is signed server-side, account allowlisted, expires after a bounded window, and does not require the customer browser page to know any session token.",
+  "A non-allowlisted saved customer account can receive a link only after the admin route proves with a read-only server check that the account already has an issued stored customer billing document; that signed stored-document link scopes portal reads to exactly that customer account.",
   "Opening the link sets the existing customer saved-bookings HttpOnly Secure SameSite=Lax Priority=High cookie and redirects to `/my-bookings`.",
   "`/my-bookings` still calls only the existing saved-bookings and stored-invoice read adapters with same-origin credentials and purpose headers.",
-  "Portal reads remain scoped to the signed customer account and the controlled customer runtime allowlist.",
+  "Portal reads remain scoped to the signed customer account and either the controlled customer runtime allowlist or the one-account stored-document scope minted by the admin route after issued-document proof.",
   "The public access route does not read or write Supabase, create invoices, generate PDFs, send providers, send email, activate Stripe/payment, expose billing internals, expose customer price, expose driver payout, or expose parser/debug/mock archive data.",
   "No Save Booking + CRM change.",
   "No `/api/admin-saved-bookings` change.",
@@ -112,6 +121,12 @@ for (const fragment of [
   "createHmac",
   "timingSafeEqual",
   "customerPortalAccessTokenPrefix = \"portal_access_v1\"",
+  'scope?: "stored_document"',
+  'access_scope: "allowlisted" | "stored_document"',
+  'options: { scope?: "stored_document" } = {}',
+  'options.scope === "stored_document" ? "stored_document" : "allowlisted"',
+  'scope !== "stored_document" && !accountAllowed(account, config.data.accountAllowlist)',
+  'scope === "stored_document" ? { scope } : {}',
   "PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_ENABLED",
   "PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_SECRET",
   "PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_ACCOUNT_ALLOWLIST",
@@ -134,6 +149,9 @@ assertIncludes(customerBoundary, 'mode: "server-session-cookie"', "customer boun
 assertIncludes(customerBoundary, "const signedPortalCookieSession =", "customer saved-bookings read signed portal cookie gate");
 assertIncludes(customerBoundary, "!signedPortalCookieSession", "customer saved-bookings read keeps disabled gate for non-portal sessions");
 assertIncludes(customerBoundary, "customer_account_reference: customerAccountReference", "customer boundary scoped account context");
+assertIncludes(customerBoundary, 'portalAccessSession.data.access_scope === "stored_document"', "customer boundary stored-document one-account scope");
+assertIncludes(customerBoundary, "account_allowlist: new Set([", "customer boundary stored-document account narrowing");
+assertIncludes(customerBoundary, "portalAccessSession.data.customer_account_reference", "customer boundary stored-document signed account source");
 assert.equal(
   customerBoundaryFunction.indexOf("isCustomerPortalAccessToken(providedToken.token)") <
     customerBoundaryFunction.indexOf('process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_ENABLED !== "true"'),
@@ -144,7 +162,23 @@ assert.equal(
 assert.deepEqual(exportedMethods(adminRoute), ["DELETE", "GET", "PATCH", "POST", "PUT"], "admin portal access route methods");
 assertIncludes(adminRoute, "resolveAdminCustomerInvoiceBoundary(request)", "admin portal access route boundary");
 assertIncludes(adminRoute, "createCustomerPortalAccessLinkToken(body.customerAccountReference)", "admin portal access route link creation");
+assertIncludes(adminRoute, "verifyIssuedCustomerInvoiceAccountForPortalAccess", "admin portal access route issued-document proof");
+assertIncludes(adminRoute, "result.status === 403", "admin portal access route fallback only after allowlist block");
+assertIncludes(adminRoute, 'scope: "stored_document"', "admin portal access route stored-document scoped token");
 assertExcludes(adminRoute, /Set-Cookie|NextResponse|@supabase\/supabase-js|\bcreateClient\b|\.(?:from|insert|upsert|update|delete|rpc)\s*\(/, "admin portal access route unsafe path");
+
+for (const fragment of [
+  "verifyIssuedCustomerInvoiceAccountForPortalAccess",
+  "safeActor(actor)",
+  ".select(\"invoice_number\")",
+  ".eq(\"customer_id\", customerId)",
+  ".eq(\"document_state\", \"issued\")",
+  ".limit(1)",
+  "safeFailure(safeMissingError, 404)",
+]) {
+  assertIncludes(invoicePortalAccessProofFunction, fragment, `invoice persistence portal access proof ${fragment}`);
+}
+assertExcludes(invoicePortalAccessProofFunction, /\.(?:insert|upsert|update|delete|rpc)\s*\(/, "invoice persistence portal access proof write path");
 
 assert.deepEqual(exportedMethods(publicAccessRoute), ["DELETE", "GET", "PATCH", "POST", "PUT"], "customer portal access route methods");
 assertIncludes(publicAccessRoute, "resolveCustomerPortalAccessSession(token)", "public access route token validation");

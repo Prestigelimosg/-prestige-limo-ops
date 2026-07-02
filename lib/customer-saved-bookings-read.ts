@@ -894,12 +894,22 @@ export function resolveCustomerSavedBookingsBoundary(
         : customerSavedBookingsAuthRequiredResult();
     }
 
+    const effectiveRuntimeGate =
+      portalAccessSession.data.access_scope === "stored_document"
+        ? {
+            ...runtimeGate.data,
+            account_allowlist: new Set([
+              portalAccessSession.data.customer_account_reference,
+            ]),
+          }
+        : runtimeGate.data;
+
     return {
       data: {
         auth_user_id: portalAccessSession.data.auth_user_id,
         customer_account_reference: portalAccessSession.data.customer_account_reference,
         mode: "server-session-cookie",
-        runtime_gate: runtimeGate.data,
+        runtime_gate: effectiveRuntimeGate,
         source_surface: "customer_api",
       },
       ok: true,

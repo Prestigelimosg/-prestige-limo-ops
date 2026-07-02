@@ -101,6 +101,8 @@ for (const fragment of [
   'data-admin-customer-driver-details-driver-in-app-send-no-provider-send="true"',
   'data-admin-customer-driver-details-driver-in-app-send-status="true"',
   "Send Driver In-App",
+  "Queuing Driver In-App",
+  "Driver In-App queued",
 ]) {
   assertIncludes(appPage, fragment, `driver in-app admin button app fragment: ${fragment}`);
 }
@@ -166,6 +168,12 @@ assertExcludes(
   driverInAppAction,
   /resend|sendMail|api\.telegram\.org|whatsapp|twilio|sms|maps\.googleapis|onemap|FlightAware|AeroAPI/i,
   "driver in-app action provider/external-call surface",
+);
+
+assertExcludes(
+  driverDispatchUi,
+  "Driver In-App sent",
+  "Driver In-App queued row must not claim provider-style sent delivery",
 );
 
 assertExcludes(

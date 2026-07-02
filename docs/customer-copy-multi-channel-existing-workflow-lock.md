@@ -3,6 +3,7 @@
 This document is docs/test-only. It does not approve a duplicate UI/API surface, env changes, deployment, bulk sends, payment/PDF/pricing/payout/auth/location/photo/calendar activation, parser changes, customer/driver portal changes, or new shims.
 
 The admin Customer Copy Email/WhatsApp/SMS customer driver-details workflow already exists in the current app. Do not rebuild it as duplicate Email, WhatsApp, or SMS workflow sectors.
+They do not send Email, WhatsApp, SMS, Telegram, push, customer messages, or driver notifications.
 
 ## Existing Surfaces
 
@@ -35,6 +36,7 @@ Approved current lane:
 - Customer In-App and Driver In-App may be triggered only by explicit admin click through the existing in-app notification route.
 - Telegram may be sent only through the existing internal-admin alert route.
 - SMS and WhatsApp remain parked setup-only/no-op for now.
+- Activating live Email, WhatsApp, SMS, Telegram, push, provider/env reads, provider sends, recipient sends, notification sends, customer messages, driver notifications, or any fallback/blast behavior requires a separately approved lane.
 
 Still blocked without separate explicit approval:
 

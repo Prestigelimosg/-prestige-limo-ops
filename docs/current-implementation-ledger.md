@@ -12,6 +12,13 @@ d0c5e211 Persist Save CRM driver assignment
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Notification Surface Wording Audit
+
+- Admin Customer Copy and Driver Dispatch In-App buttons now report successful internal app-notification writes as queued, not sent.
+- Customer In-App and Driver In-App still use the existing `POST /api/admin-customer-driver-app-notifications` route and store only safe queued `customer_app` / `driver_app` notification records.
+- This wording pass does not add provider sends, email sends, Telegram sends, WhatsApp/SMS sends, fallback/blast behavior, DB schema changes, env changes, customer/driver route expansion, payment/payout/GPS/live-location changes, or invoice numbering changes.
+- Focused guards `scripts/test-customer-in-app-notification-admin-button-guard.mjs` and `scripts/test-driver-in-app-notification-admin-button-guard.mjs` now reject provider-style `sent` labels for queued in-app notification rows.
+
 ### Admin Customer Invoice Prefix Settings Lane
 
 - Customer-specific invoice prefix settings are now owner-approved for an admin customer-folder lane only.

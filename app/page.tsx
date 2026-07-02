@@ -21552,7 +21552,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     adminCustomerDriverDetailsCustomerInAppDisplayState.actionStatus !== "loading";
   const adminCustomerDriverDetailsCustomerInAppActionLabel =
     adminCustomerDriverDetailsCustomerInAppDisplayState.actionStatus === "loading"
-      ? "Sending Customer In-App"
+      ? "Queuing Customer In-App"
       : "Send Customer In-App";
   const adminCustomerDriverDetailsCustomerInAppStatusText =
     adminCustomerDriverDetailsCustomerInAppDisplayState.actionStatus === "loading"
@@ -21577,7 +21577,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus !== "loading";
   const adminCustomerDriverDetailsDriverInAppActionLabel =
     adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus === "loading"
-      ? "Sending Driver In-App"
+      ? "Queuing Driver In-App"
       : "Send Driver In-App";
   const adminCustomerDriverDetailsDriverInAppStatusText =
     adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus === "loading"
@@ -25517,9 +25517,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         : null;
   const adminCustomerDriverDetailsCustomerInAppButtonLabel =
     adminCustomerDriverDetailsCustomerInAppDisplayState.actionStatus === "loading"
-      ? "Sending In-App"
+      ? "Queuing In-App"
       : adminCustomerDriverDetailsCustomerInAppSent
-        ? "Sent In-App"
+        ? "In-App queued"
         : "Send In-App";
   const adminCustomerDriverDetailsDriverInAppSent =
     adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus === "loaded";
@@ -25531,9 +25531,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         : null;
   const adminCustomerDriverDetailsDriverInAppButtonLabel =
     adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus === "loading"
-      ? "Sending In-App"
+      ? "Queuing Driver In-App"
       : adminCustomerDriverDetailsDriverInAppSent
-        ? "Driver In-App sent"
+        ? "Driver In-App queued"
         : "Send Driver In-App";
   const driverJobLinkCreated =
     adminDriverJobLinkState.message?.tone === "success" &&

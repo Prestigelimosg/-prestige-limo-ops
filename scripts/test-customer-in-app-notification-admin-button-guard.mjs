@@ -106,6 +106,8 @@ for (const fragment of [
   "Email gate off",
   "Needs copy",
   "Send In-App",
+  "Queuing In-App",
+  "In-App queued",
 ]) {
   assertIncludes(appPage, fragment, `customer in-app admin button app fragment: ${fragment}`);
 }
@@ -177,6 +179,12 @@ assertExcludes(
   customerInAppAction,
   /resend|sendMail|api\.telegram\.org|whatsapp|twilio|sms|maps\.googleapis|onemap|FlightAware|AeroAPI/i,
   "customer in-app action provider/external-call surface",
+);
+
+assertExcludes(
+  customerCopyUi,
+  "Sent In-App",
+  "Customer In-App queued row must not claim provider-style sent delivery",
 );
 
 assertExcludes(

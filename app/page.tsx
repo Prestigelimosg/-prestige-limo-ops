@@ -4088,11 +4088,12 @@ function buildSaveCrmBillingIdentityReview(
     ? uniqueRelatedTravelerNames.filter((name) => !billingIdentityMatches(name, travelerName))
     : uniqueRelatedTravelerNames;
 
-  if (conflictingTravelerNames.length === 0) {
+  const needsTravelerName = !travelerName;
+
+  if (!needsTravelerName && conflictingTravelerNames.length === 0) {
     return null;
   }
 
-  const needsTravelerName = !travelerName;
   const accountLabel = formatTravelerBillingAccountLabel(companyAccount, travelerName || "Traveler To Confirm");
   const key = [
     normalizeBillingIdentityMatch(companyAccount),
@@ -14183,11 +14184,13 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     }
 
     if (review.needsTravelerName) {
+      const relatedTravelerWarning =
+        review.conflictingTravelerNames.length > 0
+          ? ` Same company/booker already has traveler(s): ${review.conflictingTravelerNames.join(", ")}.`
+          : "";
       const message = {
         tone: "error",
-        text: `Billing identity review blocked Save + CRM. Same company/booker already has traveler ${review.conflictingTravelerNames.join(
-          ", ",
-        )}; enter the passenger/traveler name before saving.`,
+        text: `Billing identity review blocked Save + CRM.${relatedTravelerWarning} Enter the passenger/traveler name before saving.`,
       } satisfies Message;
 
       setSaveCrmBillingIdentityReviewMessage(message);
@@ -35437,10 +35440,16 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                       <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                         <div className="min-w-0">
                           <p className="uppercase tracking-wide">Billing Identity Review</p>
-                          <p className="break-words font-medium normal-case tracking-normal">
-                            Same company/booker has other traveler(s):{" "}
-                            {saveCrmBillingIdentityReview.conflictingTravelerNames.join(", ")}.
-                          </p>
+                          {saveCrmBillingIdentityReview.conflictingTravelerNames.length > 0 ? (
+                            <p className="break-words font-medium normal-case tracking-normal">
+                              Same company/booker has other traveler(s):{" "}
+                              {saveCrmBillingIdentityReview.conflictingTravelerNames.join(", ")}.
+                            </p>
+                          ) : (
+                            <p className="break-words font-medium normal-case tracking-normal">
+                              Passenger/traveler name is required before Save + CRM can choose the billing account.
+                            </p>
+                          )}
                           <p className="break-words font-medium normal-case tracking-normal">
                             {saveCrmBillingIdentityReview.needsTravelerName
                               ? "Enter Passenger name before Save + CRM."

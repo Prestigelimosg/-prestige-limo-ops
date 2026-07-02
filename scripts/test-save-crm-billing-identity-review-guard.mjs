@@ -16,6 +16,16 @@ assertIncludes(appSource, "function formatTravelerBillingAccountLabel", "travele
 assertIncludes(appSource, "function resolveSaveCrmBillingIdentityAccountForSave", "save guard resolver");
 assertIncludes(appSource, "fetchRecentAdminBookingPersistenceRecordsForBillingIdentity", "fresh recent booking read before save");
 assertIncludes(appSource, "Same company/booker has other traveler(s)", "visible same company/booker warning");
+assertIncludes(
+  appSource,
+  "Passenger/traveler name is required before Save + CRM can choose the billing account.",
+  "visible blank traveler billing blocker",
+);
+assertIncludes(
+  appSource,
+  "if (!needsTravelerName && conflictingTravelerNames.length === 0)",
+  "blank traveler must create a blocking review even without prior conflicts",
+);
 assertIncludes(appSource, 'data-save-crm-billing-identity-review="true"', "visible review panel");
 assertIncludes(appSource, 'data-save-crm-billing-identity-confirm="true"', "visible admin confirmation button");
 assertIncludes(appSource, "customerDisplayNameOverride", "customer display override option");

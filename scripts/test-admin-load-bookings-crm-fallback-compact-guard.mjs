@@ -59,10 +59,10 @@ for (const phrase of [
   "Loading a customer request into Dispatch now records a bounded browser-local handled-request key so that request leaves the Dashboard urgent queue plus the Bookings `Urgent & New Booking Requests` queue and badge on that admin browser while remaining available in Recent/Active booking lists.",
   "Loading a saved booking into Dispatch refreshes the typed operational display once immediately and pauses one background sync tick, keeping the existing guarded read set stable while Customer Copy focuses for review.",
   "The Dashboard now uses compact read-only booking summaries plus `Open` handoff buttons; single-booking driver assignment, status, copy, job-card, and completion work stays in Dispatch/Bookings so page purposes do not duplicate.",
-  "The loaded active jobs monitor is shown on the Dashboard command centre for multi-driver scanning; the Dispatch day-of-trip monitor remains the selected single-booking workbench.",
-  "The loaded active jobs monitor shows one active job window by default and provides a compact `Show other active jobs` / `Show one job` toggle only when more loaded active jobs are inside the 1-hour pickup monitor window.",
-  "The default active jobs monitor set pins the currently loaded booking when it would otherwise be hidden below the one visible row, so its saved driver report can refresh after OTW/OTS/POB/Completed without expanding the monitor first.",
-  "The Dashboard active jobs monitor now shows a compact saved driver report readout per visible job, using the existing guarded admin `GET /api/admin-driver-job-statuses` path only, with monitor-wide/per-card refresh controls and a read-only dashboard auto-refresh toggle that is off by default.",
+  "The Dashboard `Today's Jobs` sector is shown on the command centre for multi-driver scanning; the Dispatch day-of-trip monitor remains the selected single-booking workbench.",
+  "`Today's Jobs` shows all loaded active jobs inside the 1-hour pickup monitor window without a separate expand/collapse toggle.",
+  "`Today's Jobs` shows a compact saved driver report readout per visible job, using the existing guarded admin `GET /api/admin-driver-job-statuses` path only, with monitor-wide/per-card refresh controls and dashboard auto-refresh on by default.",
+  "`Today's Jobs` includes compact live-map controls that reuse the existing admin-only live-location runtime for the jobs inside the monitor window.",
   "The Dashboard driver report readout is read-only and does not create driver status events, notification rows, provider sends, GPS/live-location records, billing/payment/PDF/invoice/payout records, or a duplicate single-booking Dispatch workflow.",
   "The Bookings tab shows a compact new-request badge/highlight after open customer requests are detected; no sound, browser notification, polling loop, provider send, or new route is added.",
 ]) {
@@ -286,33 +286,33 @@ assert.equal(
   "Active jobs monitor should be rendered in one place only.",
 );
 assertIncludes(appPage, "const activeJobDashboardSearchTerm = clean(searchTerm);", "Active jobs monitor search term");
-assertIncludes(appPage, "const [showAllActiveJobs, setShowAllActiveJobs] = useState(false);", "Active jobs monitor expanded state");
-assertIncludes(appPage, "const activeJobsMonitorCollapsedCount = Math.max", "Active jobs monitor hidden count");
 assertIncludes(appPage, "const bookingAutoSyncPausedUntilRef = useRef(0);", "Loaded booking sync pause ref");
 assertIncludes(appPage, "Date.now() < bookingAutoSyncPausedUntilRef.current", "Loaded booking pauses one auto-sync tick");
 assertIncludes(appPage, "const typedDisplaySearchParams = new URLSearchParams({ limit: \"25\" });", "Loaded booking typed refresh params");
 assertIncludes(appPage, "fetchLoadBookingsTypedOperationalDisplayResult(typedDisplaySearchParams)", "Loaded booking immediate typed refresh");
 assertIncludes(
   appPage,
-  "const activeJobsMonitorDefaultVisibleCount = 1;",
-  "Active jobs monitor default visible rows",
+  "const dayOfTripActiveJobVisibleBookings = dayOfTripActiveJobBookings;",
+  "Active jobs monitor shows all active rows",
 );
 assertIncludes(
   appPage,
-  "const defaultDayOfTripActiveJobVisibleBookings = dayOfTripActiveJobBookings.slice(",
-  "Active jobs monitor default visible slice",
+  "const [dashboardDriverJobAutoRefreshEnabled, setDashboardDriverJobAutoRefreshEnabled] = useState(true);",
+  "Dashboard driver report auto-refresh defaults on",
 );
-assertIncludes(appPage, "const loadedActiveJobReference = cleanReferenceText(loadedBookingId);", "Active jobs monitor selected reference");
-assertIncludes(appPage, "const loadedActiveJobBooking = loadedActiveJobReference", "Active jobs monitor selected booking lookup");
 assertIncludes(
   appPage,
-  "[loadedActiveJobBooking, ...defaultDayOfTripActiveJobVisibleBookings].slice(",
-  "Active jobs monitor pins selected booking without expanding row count",
+  "aria-label=\"Today's Jobs\"",
+  "Dashboard active jobs monitor renamed to Today's Jobs",
 );
-assertIncludes(appPage, "showAllActiveJobs\n    ? dayOfTripActiveJobBookings", "Active jobs monitor expands to all loaded jobs");
-assertIncludes(appPage, 'data-admin-multi-driver-active-jobs-toggle="true"', "Active jobs monitor expand toggle");
-assertIncludes(appPage, '"Show other active jobs"', "Active jobs monitor expand label");
-assertIncludes(appPage, '"Show one job"', "Active jobs monitor collapse label");
+assertIncludes(appPage, 'data-dashboard-live-driver-map="true"', "Dashboard live map panel");
+assertIncludes(appPage, "openAdminLiveLocationRuntimeForActiveJobs", "Dashboard opens active jobs in live map");
+assertIncludes(appPage, 'data-dashboard-live-driver-map-open="true"', "Dashboard live map open action");
+assertIncludes(appPage, 'data-dashboard-live-driver-map-refresh="true"', "Dashboard live map refresh action");
+assertIncludes(appPage, 'data-dashboard-live-driver-map-close="true"', "Dashboard live map close action");
+assertExcludes(appPage, 'data-admin-multi-driver-active-jobs-toggle="true"', "Active jobs monitor expand toggle");
+assertExcludes(appPage, '"Show other active jobs"', "Active jobs monitor expand label");
+assertExcludes(appPage, '"Show one job"', "Active jobs monitor collapse label");
 assertIncludes(appPage, "dashboardDriverJobStatusReadStates", "Dashboard driver report status map");
 assertIncludes(
   appPage,

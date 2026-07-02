@@ -3505,12 +3505,6 @@ function AdminActiveJobsBrowserMap({
       data-admin-active-jobs-map-canvas="true"
       data-admin-active-jobs-map-canvas-state={renderState}
     >
-      <div className="flex items-center justify-between gap-2 border-b border-lime-100 px-1.5 py-1 text-[10px] font-semibold text-lime-950 sm:text-[11px]">
-        <span>Live driver map</span>
-        <span className="rounded-full bg-white px-1.5 py-0.5 text-[9px] uppercase text-lime-900 sm:text-[10px]">
-          {renderState === "ready" ? `${activeMarkerJobs.length} pin${activeMarkerJobs.length === 1 ? "" : "s"}` : "Loading"}
-        </span>
-      </div>
       <div
         ref={mapSlotRef}
         className="relative h-48 w-full overflow-hidden bg-transparent sm:h-56"
@@ -10960,8 +10954,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   const [driverDeleteMessage, setDriverDeleteMessage] = useState<DriverDeleteMessage | null>(null);
   const [completingBookingId, setCompletingBookingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [showAllActiveJobs, setShowAllActiveJobs] = useState(false);
-  const [dashboardDriverJobAutoRefreshEnabled, setDashboardDriverJobAutoRefreshEnabled] = useState(false);
+  const [dashboardDriverJobAutoRefreshEnabled, setDashboardDriverJobAutoRefreshEnabled] = useState(true);
   const [dashboardDriverJobStatusReadStates, setDashboardDriverJobStatusReadStates] =
     useState<Record<string, AdminDriverJobStatusReadState>>({});
   const dashboardDriverJobStatusAutoRequestedRef = useRef<Set<string>>(new Set());
@@ -17631,6 +17624,90 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     }
   }
 
+  async function openAdminLiveLocationRuntimeForActiveJobs() {
+    const bookingReferences = [...new Set(activeJobDriverStatusReferenceList.map(cleanReferenceText).filter(Boolean))];
+
+    if (bookingReferences.length === 0) {
+      setAdminActiveJobsMapReadState((current) => ({
+        ...current,
+        message: {
+          tone: "info",
+          text: "No active jobs are inside the 1-hour monitor window yet.",
+        },
+      }));
+      return;
+    }
+
+    setAdminActiveJobsMapReadState((current) => ({
+      ...current,
+      action: "opening",
+      message: {
+        tone: "info",
+        text: `Opening live map for ${bookingReferences.length} active job${
+          bookingReferences.length === 1 ? "" : "s"
+        }...`,
+      },
+      status: "loading",
+    }));
+
+    try {
+      let allowedBookingReferences = bookingReferences;
+
+      for (const bookingReference of bookingReferences) {
+        const response = await fetch(adminLiveLocationRuntimeApiPath, {
+          body: JSON.stringify({ booking_reference: bookingReference }),
+          cache: "no-store",
+          headers: {
+            "content-type": "application/json",
+            "x-prestige-admin-purpose": adminLegacyDataPurpose,
+          },
+          method: "POST",
+        });
+        const result = await response.json().catch(() => null) as AdminLiveLocationRuntimeControlResponse | null;
+
+        if (!response.ok || !result?.ok || result.customerVisible !== false || result.external_send !== false) {
+          throw new Error(result?.error || result?.reason || "Live-location open failed safely.");
+        }
+
+        if (Array.isArray(result.allowed_booking_references)) {
+          allowedBookingReferences = result.allowed_booking_references
+            .map(cleanReferenceText)
+            .filter(Boolean);
+        }
+      }
+
+      setAdminActiveJobsMapReadState((current) => ({
+        ...current,
+        action: "idle",
+        allowedBookingReferences,
+        loadedReference: cleanReferenceText(dispatchReleaseWorkflowBookingReference),
+        message: {
+          tone: "success",
+          text: `Live map is watching ${allowedBookingReferences.length} active job${
+            allowedBookingReferences.length === 1 ? "" : "s"
+          }. Driver markers refresh automatically while Dashboard is open.`,
+        },
+        runtimeStatus: "active",
+        status: "loaded",
+      }));
+
+      void refreshAdminActiveJobsMapLocations({ silent: true });
+    } catch (error) {
+      setAdminActiveJobsMapReadState((current) => ({
+        ...current,
+        action: "idle",
+        activeJobs: [],
+        markerCount: 0,
+        message: {
+          tone: "error",
+          text: adminLiveLocationFailureMessage(error),
+        },
+        runtimeStatus: "error",
+        status: "error",
+      }));
+    }
+  }
+
   async function closeAdminLiveLocationRuntime() {
     setAdminActiveJobsMapReadState((current) => ({
       ...current,
@@ -21451,33 +21528,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   function getActiveJobBookingReference(bookingRecord: BookingRecord) {
     return getBookingDriverJobStatusReference(bookingRecord);
   }
-  const activeJobsMonitorDefaultVisibleCount = 1;
-  const activeJobsMonitorCollapsedCount = Math.max(
-    dayOfTripActiveJobBookings.length - activeJobsMonitorDefaultVisibleCount,
-    0,
-  );
-  const defaultDayOfTripActiveJobVisibleBookings = dayOfTripActiveJobBookings.slice(
-    0,
-    activeJobsMonitorDefaultVisibleCount,
-  );
-  const loadedActiveJobReference = cleanReferenceText(loadedBookingId);
-  const loadedActiveJobBooking = loadedActiveJobReference
-    ? dayOfTripActiveJobBookings.find(
-        (activeJobBooking) => getActiveJobBookingReference(activeJobBooking) === loadedActiveJobReference,
-      )
-    : null;
-  const dayOfTripActiveJobVisibleBookings = showAllActiveJobs
-    ? dayOfTripActiveJobBookings
-    : loadedActiveJobBooking &&
-        !defaultDayOfTripActiveJobVisibleBookings.some(
-          (activeJobBooking) =>
-            getActiveJobBookingReference(activeJobBooking) === loadedActiveJobReference,
-        )
-      ? [loadedActiveJobBooking, ...defaultDayOfTripActiveJobVisibleBookings].slice(
-          0,
-          activeJobsMonitorDefaultVisibleCount,
-        )
-      : defaultDayOfTripActiveJobVisibleBookings;
+  const dayOfTripActiveJobVisibleBookings = dayOfTripActiveJobBookings;
   const dayOfTripActiveJobGridClass =
     dayOfTripActiveJobVisibleBookings.length >= 4
       ? "grid-cols-1 sm:grid-cols-2 xl:grid-cols-4"
@@ -21490,6 +21541,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     .map(getActiveJobBookingReference)
     .filter(Boolean);
   const activeJobDriverStatusReferenceKey = activeJobDriverStatusReferenceList.join("|");
+  const activeJobsMapAllowedReferenceKey = adminActiveJobsMapReadState.allowedBookingReferences.join("|");
 
   useEffect(() => {
     const bookingReferences = activeJobDriverStatusReferenceKey.split("|").filter(Boolean);
@@ -21528,6 +21580,26 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     return () => window.clearInterval(intervalId);
   }, [activeTab, activeJobDriverStatusReferenceKey, dashboardDriverJobAutoRefreshEnabled]);
 
+  useEffect(() => {
+    if (
+      activeTab !== "dashboard" ||
+      adminActiveJobsMapReadState.runtimeStatus !== "active" ||
+      !activeJobsMapAllowedReferenceKey
+    ) {
+      return;
+    }
+
+    void refreshAdminActiveJobsMapLocations({ silent: true });
+
+    const intervalId = window.setInterval(() => {
+      void refreshAdminActiveJobsMapLocations({ silent: true });
+    }, 10 * 1000);
+
+    return () => window.clearInterval(intervalId);
+    // The polling target is keyed by the active Dashboard/runtime state; the refresh helper is intentionally stable by behavior, not identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, activeJobsMapAllowedReferenceKey, adminActiveJobsMapReadState.runtimeStatus]);
+
   function refreshVisibleDashboardDriverReports() {
     for (const bookingReference of activeJobDriverStatusReferenceList) {
       dashboardDriverJobStatusAutoRequestedRef.current.add(bookingReference);
@@ -21537,15 +21609,16 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
 
   const activeJobsMonitorPanel = (
     <section
-      aria-label="Loaded Active Jobs Monitor"
+      aria-label="Today's Jobs"
       className="rounded-md border border-lime-200 bg-lime-50/70 p-2 sm:p-3"
+      data-dashboard-day-of-trip-operations-monitor="true"
       data-admin-multi-driver-active-jobs-monitor="true"
     >
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h3 className="text-base font-semibold text-lime-950">Active Jobs Monitor</h3>
+          <h3 className="text-base font-semibold text-lime-950">Today&apos;s Jobs</h3>
           <p className="text-xs text-lime-900 sm:text-sm">
-            One job window by default. Jobs appear here 1 hour before pickup; expand only when more are active.
+            All loaded jobs appear here 1 hour before pickup. Driver reports auto-refresh every 10s.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -21583,16 +21656,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           >
             {dayOfTripActiveJobBookings.length} in window
           </span>
-          {dayOfTripActiveJobBookings.length > activeJobsMonitorDefaultVisibleCount ? (
-            <button
-              className="h-8 rounded-md border border-lime-300 bg-white px-3 text-xs font-semibold text-lime-950 transition hover:bg-lime-50"
-              data-admin-multi-driver-active-jobs-toggle="true"
-              onClick={() => setShowAllActiveJobs((currentValue) => !currentValue)}
-              type="button"
-            >
-              {showAllActiveJobs ? "Show one job" : "Show other active jobs"}
-            </button>
-          ) : null}
         </div>
       </div>
       {dayOfTripActiveJobVisibleBookings.length > 0 ? (
@@ -21729,12 +21792,159 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           No active jobs inside the 1-hour pickup monitor window.
         </p>
       )}
-      {!showAllActiveJobs && activeJobsMonitorCollapsedCount > 0 ? (
-        <p className="mt-2 text-xs text-lime-800">
-          {activeJobsMonitorCollapsedCount} more active job
-          {activeJobsMonitorCollapsedCount === 1 ? "" : "s"} inside the 1-hour pickup monitor window. Use Show
-          other active jobs to expand.
-        </p>
+      {dayOfTripActiveJobBookings.length > 0 ? (
+        <div
+          className="mt-2 rounded-md border border-lime-200 bg-white p-1.5 text-[11px] leading-4 text-lime-950 sm:text-xs"
+          data-dashboard-live-driver-map="true"
+        >
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <p className="font-semibold">Live Driver Map</p>
+              <p className="mt-0.5 text-[10px] text-lime-900 sm:text-[11px]">
+                Open once for the active jobs above; shared driver pins refresh automatically while Dashboard is open.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              <span
+                className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase sm:px-2 sm:text-[10px] ${
+                  adminActiveJobsMapReadState.runtimeStatus === "active"
+                    ? "bg-emerald-100 text-emerald-900"
+                    : adminActiveJobsMapReadState.runtimeStatus === "error"
+                      ? "bg-red-100 text-red-800"
+                      : "bg-slate-100 text-slate-700"
+                }`}
+                data-dashboard-live-driver-map-state={adminActiveJobsMapReadState.runtimeStatus}
+              >
+                {adminActiveJobsMapReadState.runtimeStatus === "active"
+                  ? "Live On"
+                  : adminActiveJobsMapReadState.runtimeStatus === "error"
+                    ? "Check"
+                    : "Off"}
+              </span>
+              <span
+                className="rounded-full bg-lime-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-lime-900 sm:px-2 sm:text-[10px]"
+                data-dashboard-live-driver-map-marker-count={adminActiveJobsMapReadState.markerCount}
+              >
+                {adminActiveJobsMapReadState.markerCount} pin
+                {adminActiveJobsMapReadState.markerCount === 1 ? "" : "s"}
+              </span>
+            </div>
+          </div>
+          <div className="mt-1 flex flex-wrap gap-1" data-dashboard-live-driver-map-controls="true">
+            <button
+              className="rounded border border-lime-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-lime-950 transition hover:bg-lime-50 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[11px]"
+              data-dashboard-live-driver-map-open="true"
+              disabled={
+                dayOfTripActiveJobBookings.length === 0 ||
+                adminActiveJobsMapReadState.action !== "idle"
+              }
+              onClick={openAdminLiveLocationRuntimeForActiveJobs}
+              type="button"
+            >
+              {adminActiveJobsMapReadState.action === "opening" ? "Opening" : "Open live map"}
+            </button>
+            <button
+              className="rounded border border-lime-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-lime-950 transition hover:bg-lime-50 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[11px]"
+              data-dashboard-live-driver-map-refresh="true"
+              disabled={
+                adminActiveJobsMapReadState.runtimeStatus !== "active" ||
+                adminActiveJobsMapReadState.action !== "idle"
+              }
+              onClick={() => void refreshAdminActiveJobsMapLocations()}
+              type="button"
+            >
+              {adminActiveJobsMapReadState.action === "refreshing" ? "Refreshing" : "Refresh map"}
+            </button>
+            <button
+              className="rounded border border-red-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-red-800 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[11px]"
+              data-dashboard-live-driver-map-close="true"
+              disabled={
+                adminActiveJobsMapReadState.runtimeStatus !== "active" ||
+                adminActiveJobsMapReadState.action !== "idle"
+              }
+              onClick={closeAdminLiveLocationRuntime}
+              type="button"
+            >
+              {adminActiveJobsMapReadState.action === "closing" ? "Closing" : "Close map"}
+            </button>
+          </div>
+          {adminActiveJobsMapReadState.message ? (
+            <p
+              className={`mt-1 rounded border px-1.5 py-1 text-[10px] font-semibold leading-3 sm:text-[11px] ${statusClass(
+                adminActiveJobsMapReadState.message.tone,
+              )}`}
+              data-dashboard-live-driver-map-message="true"
+            >
+              {adminActiveJobsMapReadState.message.text}
+            </p>
+          ) : null}
+          {adminActiveJobsMapReadState.activeJobs.length > 0 &&
+          adminActiveJobsBrowserMapConfigState.status === "ready" &&
+          adminActiveJobsBrowserMapConfigState.apiKey ? (
+            <AdminActiveJobsBrowserMap
+              activeJobs={adminActiveJobsMapReadState.activeJobs}
+              apiKey={adminActiveJobsBrowserMapConfigState.apiKey}
+              mapId={adminActiveJobsBrowserMapConfigState.mapId}
+            />
+          ) : adminActiveJobsMapReadState.activeJobs.length > 0 &&
+            adminActiveJobsBrowserMapConfigState.message ? (
+            <p
+              className={`mt-1 rounded border px-1.5 py-1 text-[10px] font-semibold leading-3 sm:text-[11px] ${statusClass(
+                adminActiveJobsBrowserMapConfigState.message.tone,
+              )}`}
+              data-dashboard-live-driver-map-config-message="true"
+            >
+              {adminActiveJobsBrowserMapConfigState.message.text}
+            </p>
+          ) : null}
+          {adminActiveJobsMapReadState.activeJobs.length > 0 ? (
+            <div
+              className="mt-1 max-h-24 space-y-1 overflow-y-auto border-t border-lime-100 pt-1"
+              data-dashboard-live-driver-map-marker-list="true"
+            >
+              {adminActiveJobsMapReadState.activeJobs.map((job) => {
+                const mapUrl = googleMapsLocationUrl(job.latitude, job.longitude);
+
+                return (
+                  <div
+                    className="grid grid-cols-[1fr_auto] gap-1 rounded bg-lime-50 px-1 py-0.5"
+                    data-dashboard-live-driver-map-marker={job.assigned_job_reference || "unknown"}
+                    key={`dashboard-${job.assigned_job_reference}-${job.updated_at || ""}`}
+                  >
+                    <div className="min-w-0">
+                      <p className="break-words font-semibold leading-3">
+                        {job.driver_display_label || "Assigned driver"} ·{" "}
+                        {compactBookingReference(job.assigned_job_reference || "")}
+                      </p>
+                      <p className="break-words text-[10px] leading-3 text-lime-900">
+                        {job.is_stale ? "Stale" : "Current"} ·{" "}
+                        {formatAdminLiveLocationTimestamp(job.updated_at)}
+                      </p>
+                    </div>
+                    {mapUrl ? (
+                      <a
+                        aria-label="Open driver pin in Google Maps"
+                        className="rounded border border-lime-300 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-lime-950 hover:bg-lime-100"
+                        href={mapUrl}
+                        rel="noreferrer"
+                        target="_blank"
+                        title="Open driver pin in Google Maps"
+                      >
+                        Driver Pin
+                      </a>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+          <p
+            className="mt-1 border-t border-lime-100 pt-1 text-[10px] leading-3 text-lime-900 sm:text-[11px]"
+            data-dashboard-live-driver-map-boundary="true"
+          >
+            Admin-only. Uses loaded active jobs and driver-shared pins; no external message is sent from here.
+          </p>
+        </div>
       ) : null}
     </section>
   );
@@ -33906,9 +34116,8 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               <details
                 className="mt-1 rounded-md border-0 border-lime-200 bg-white/40 p-0 sm:mt-2 sm:border sm:p-1"
                 data-admin-day-of-trip-selected-detail="true"
-                open
               >
-                <summary className="hidden cursor-pointer list-inside text-[11px] font-semibold text-lime-950 xl:list-item">
+                <summary className="cursor-pointer list-inside text-[11px] font-semibold text-lime-950">
                   Selected booking detail
                 </summary>
                 <div className="mt-1 grid grid-cols-1 gap-1 min-[300px]:grid-cols-2 sm:mt-2 md:grid-cols-3">
@@ -34047,17 +34256,17 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                 </div>
               </div>
               <div
-                aria-label="Admin Active Jobs Map"
+                aria-label="Selected Job Live Map"
                 className="mt-1.5 rounded-md border border-lime-200 bg-white/75 p-1.5 text-[11px] leading-4 text-lime-950 sm:text-xs"
                 data-admin-active-jobs-map-runtime="true"
               >
                 <div className="flex flex-wrap items-center justify-between gap-1">
                   <div className="min-w-0">
                     <p className="font-semibold leading-3 sm:leading-4">
-                      Active Jobs Map
+                      Selected Job Live Map
                     </p>
                     <p className="mt-0.5 break-words text-[10px] leading-3 text-lime-900 sm:text-[11px]">
-                      Add saved bookings one by one, then ask each driver to tap Share Location.
+                      Use Dashboard for all active jobs. Add this loaded booking only when you need selected-job live detail.
                     </p>
                   </div>
                   <span
@@ -34122,7 +34331,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                     onClick={openAdminLiveLocationRuntimeForLoadedBooking}
                     type="button"
                   >
-                    {adminActiveJobsMapReadState.action === "opening" ? "Adding" : "Add"}
+                    {adminActiveJobsMapReadState.action === "opening" ? "Adding" : "Add this job"}
                   </button>
                   <button
                     className="rounded border border-lime-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-lime-950 transition hover:bg-lime-50 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[11px]"
@@ -38070,7 +38279,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             <div>
               <h2 className="text-lg font-semibold">Operations Dashboard</h2>
               <p className="text-xs text-slate-500">
-                Command centre for new requests and loaded active jobs. Open one booking in Dispatch for work.
+                Command centre for urgent requests, day-of-trip jobs, driver reports, and live shared pins.
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row lg:min-w-[520px]">

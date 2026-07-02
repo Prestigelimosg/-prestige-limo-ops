@@ -113,7 +113,7 @@ for (const forbiddenPattern of [
 }
 
 for (const phrase of [
-  "Saved driver `Job Completed` reports now move the loaded booking out of Today/Upcoming and Active Jobs Monitor and into Completed / History.",
+  "Saved driver `Job Completed` reports now move the loaded booking out of Today/Upcoming and `Today's Jobs` and into Completed / History.",
   "The booking row is not overwritten; admin history reads the existing guarded driver status state from the dashboard/dispatch read cache.",
   "Driver-completed rows show a compact `Driver completed` badge and do not expose admin billing, customer pricing, payout, internal notes, parser/debug internals, or mock/dev archive data.",
   "This is UI-only grouping/read behavior; it does not add routes/APIs, DB writes, provider sends, notification sends, GPS/live location, billing/payment/PDF/invoice/payout, calendar sync, env changes, deploy activation, parser changes, or shims.",

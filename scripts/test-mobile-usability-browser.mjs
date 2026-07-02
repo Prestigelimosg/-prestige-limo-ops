@@ -4169,7 +4169,7 @@ async function runChromeTest() {
                   (
                     text.includes("Operations Dashboard") &&
                     text.includes("Urgent Booking Requests") &&
-                    text.includes("Active Jobs Monitor")
+                    text.includes("Today's Jobs")
                   ) ||
                   (
                     text.includes("Dispatcher Intake") &&

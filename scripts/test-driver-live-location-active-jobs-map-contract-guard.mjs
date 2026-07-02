@@ -182,7 +182,7 @@ const adminActiveJobsRuntimeSection = sectionBetween(
 );
 
 for (const phrase of [
-  "Admin Dispatch has a compact Active Jobs Map runtime control inside the existing Day-of-Trip Dispatch Monitor.",
+  "Admin Dispatch has a compact Selected Job Live Map runtime control inside the existing Day-of-Trip Dispatch Monitor.",
   "The control adds selected saved bookings one by one through `/api/admin-live-location-runtime` instead of replacing the previous selected booking.",
   "Runtime control keeps existing `driver_live_location_allowed_job_references`, removes duplicates, and caps the selected booking list at 50 references.",
   "Admin marker refresh uses the existing guarded `GET /api/admin-active-jobs-map-locations` route and returns both selected booking references and current driver markers.",
@@ -197,7 +197,7 @@ for (const phrase of [
 }
 
 const activeJobsRuntimeStart = adminPage.indexOf(
-  'aria-label="Admin Active Jobs Map"',
+  'aria-label="Selected Job Live Map"',
 );
 assert.notEqual(activeJobsRuntimeStart, -1, "Missing admin active-jobs map runtime.");
 const activeJobsRuntimeEnd = adminPage.indexOf(
@@ -208,7 +208,7 @@ assert.notEqual(activeJobsRuntimeEnd, -1, "Missing admin active-jobs runtime end
 const activeJobsRuntimeSource = adminPage.slice(activeJobsRuntimeStart, activeJobsRuntimeEnd);
 
 for (const fragment of [
-  'aria-label="Admin Active Jobs Map"',
+  'aria-label="Selected Job Live Map"',
   'data-admin-active-jobs-map-runtime="true"',
   'data-admin-active-jobs-map-state={adminActiveJobsMapReadState.runtimeStatus}',
   'data-admin-active-jobs-map-selected-count=',
@@ -223,12 +223,12 @@ for (const fragment of [
   'data-admin-active-jobs-map-canvas',
   'data-admin-active-jobs-map-config-message',
   'data-admin-active-jobs-map-boundary="true"',
-  "Active Jobs Map",
+  "Selected Job Live Map",
   "Selected:",
   "Markers:",
   "Sharing:",
   "Stale:",
-  "Add",
+  "Add this job",
   "Refresh",
   "Close all",
   "Driver Pin",

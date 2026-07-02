@@ -161,35 +161,41 @@ for (const forbidden of [
 
 assertIncludes(
   appPage,
-  "const [dashboardDriverJobAutoRefreshEnabled, setDashboardDriverJobAutoRefreshEnabled] = useState(false);",
-  "dashboard auto-refresh off by default state",
+  "const [dashboardDriverJobAutoRefreshEnabled, setDashboardDriverJobAutoRefreshEnabled] = useState(true);",
+  "dashboard auto-refresh on by default state",
 );
 
 for (const fragment of [
   "bookingRecordIsInsideActiveJobMonitorWindow(bookingRecord, currentTimeMs)",
-  "const activeJobsMonitorDefaultVisibleCount = 1;",
-  "dayOfTripActiveJobBookings.length - activeJobsMonitorDefaultVisibleCount",
-  "activeJobsMonitorDefaultVisibleCount,",
+  "const dayOfTripActiveJobVisibleBookings = dayOfTripActiveJobBookings;",
+  "const activeJobsMapAllowedReferenceKey = adminActiveJobsMapReadState.allowedBookingReferences.join(\"|\");",
 ]) {
   assertIncludes(activeMonitorSource, fragment, `active monitor source fragment ${fragment}`);
 }
 
 for (const fragment of [
-  "One job window by default. Jobs appear here 1 hour before pickup; expand only when more are active.",
+  "Today's Jobs",
+  "All loaded jobs appear here 1 hour before pickup. Driver reports auto-refresh every 10s.",
   "{dayOfTripActiveJobBookings.length} in window",
-  "dayOfTripActiveJobBookings.length > activeJobsMonitorDefaultVisibleCount",
-  "Show other active jobs",
-  "Show one job",
   "inside the 1-hour pickup monitor window",
   "Auto-refresh 10s {dashboardDriverJobAutoRefreshEnabled ? \"On\" : \"Off\"}",
+  'data-dashboard-live-driver-map="true"',
+  "Open live map",
+  "Refresh map",
+  "Close map",
+  "shared driver pins refresh automatically while Dashboard is open.",
+  "AdminActiveJobsBrowserMap",
 ]) {
   assertIncludes(activeMonitorPanel, fragment, `active monitor fragment ${fragment}`);
 }
 
 for (const forbidden of [
+  "const activeJobsMonitorDefaultVisibleCount = 1;",
   "slice(0, 4)",
   "first four active jobs",
   "Show all active jobs",
+  "Show other active jobs",
+  "Show one job",
   "Show less",
 ]) {
   assertExcludes(activeMonitorPanel, forbidden, `active monitor one-window boundary ${forbidden}`);
@@ -210,9 +216,10 @@ for (const forbiddenPattern of [
 for (const phrase of [
   "Dashboard request panel is now `Urgent Booking Requests` and only displays open customer requests with pickup under 24 hours.",
   "The Bookings page request panel remains the full queue as `Urgent & New Booking Requests`, with row badges separating urgent under-24h requests from new non-urgent requests.",
-  "Active Jobs Monitor shows one job window by default, auto-includes jobs only when they are inside the 1-hour-before-pickup monitor window, and expands with `Show other active jobs` only when more jobs are inside that window.",
-  "Dashboard driver report auto-refresh remains a manual toggle and is off by default.",
-  "This is UI-only filtering/layout on existing loaded booking data; it does not add routes/APIs, DB writes, env changes, provider sends, notification sends, GPS/live location, billing/payment/PDF/invoice/payout, calendar sync, parser changes, or shims.",
+  "Day-of-trip jobs are now shown as `Today's Jobs`; the sector shows all loaded active jobs inside the 1-hour-before-pickup monitor window in one Dashboard sector.",
+  "Dashboard driver report auto-refresh is on by default, still uses the guarded admin driver-status read path, and can be switched off by the operator.",
+  "The Dashboard live map control opens the existing admin-only live-location runtime for the jobs in the monitor window and refreshes shared markers every 10 seconds while Dashboard is open.",
+  "This reuses existing admin live-location runtime and map read paths; it does not add provider sends, notification sends, customer/driver messages, env changes, DB schema changes, billing/payment/PDF/invoice/payout, calendar sync, parser changes, or shims.",
   "Guard coverage lives in `scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {
   assertIncludes(ledgerSection, phrase, `ledger phrase ${phrase}`);

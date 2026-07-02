@@ -148,7 +148,7 @@ for (const fragment of [
 }
 
 const adminRuntimeStart = adminPage.indexOf(
-  'aria-label="Admin Active Jobs Map"',
+  'aria-label="Selected Job Live Map"',
 );
 assert.notEqual(adminRuntimeStart, -1, "Admin active-jobs runtime must exist.");
 const adminRuntimeEnd = adminPage.indexOf(
@@ -167,8 +167,8 @@ for (const fragment of [
   'data-admin-active-jobs-map-stale-state=',
   'data-admin-active-jobs-map-selected-list="true"',
   'data-admin-active-jobs-map-marker-list="true"',
-  "Active Jobs Map",
-  "Add",
+  "Selected Job Live Map",
+  "Add this job",
   "Close all",
   "Driver Pin",
 ]) {

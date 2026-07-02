@@ -1,16 +1,32 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-beaaa0c5 Render tile fallback inside map slot
+4aaacd88 Normalize service type aliases for pricing
 
 Latest pushed main/staging runtime checkpoint:
-beaaa0c5 Render tile fallback inside map slot
+4aaacd88 Normalize service type aliases for pricing
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-beaaa0c5 Render tile fallback inside map slot
+4aaacd88 Normalize service type aliases for pricing
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Live Billing Rehearsal And Cleanup Closeout
+
+- On 2026-07-02 14:29 SGT, the fresh visible Mac Chrome production billing rehearsal passed on `https://app.prestigelimo.sg` after the service-change price review runtime was live at `4aaacd88`.
+- Successful safe fake booking: `ADM-20260702061357`.
+- Successful safe fake billing account: `Codex Live Ops Account 20260702141102 Pte Ltd [Codex Traveler 20260702141102]`.
+- The visible admin flow confirmed Billing Identity Review first, then `Save + CRM` saved the booking and displayed Google Calendar auto-sync success with no guest email sent.
+- Completed Trip Closeout Review saved `ADM-20260702061357` as ready for billing prep.
+- Customers > Unbilled Customers showed the booking, `Prepare` loaded it into Send Invoice Workbench, the admin entered reviewed amount `$55.00`, and the invoice preview showed the correct account, reference, amount, due date, and no card/payment action.
+- `Issue` created stored invoice `INV-20260702-0001`, started PDF download, and removed the row from Unbilled Customers.
+- The approved invoice email was sent only to `william@prestigelimo.sg`; the visible invoice row changed to `Emailed`, and William confirmed the email arrived.
+- The customer portal access link for the same account opened `/my-bookings` without using the token as proof text. The customer-facing Invoices tab showed `INV-20260702-0001`, reference `ADM-20260702061357`, amount `$55.00`, due date `09 Jul 2026`, one stored PDF ready, and an enabled PDF action. The customer portal PDF download completed in Chrome as `INV-20260702-0001 (1).pdf`.
+- The first attempted safe fake booking `ADM-20260702060846` was not used for invoice proof because its test passenger/account wording included `Invoice`, which the guarded customer account readers intentionally filter as unsafe text. No cleanup write was attempted for that abandoned test artifact.
+- Cleanup decision: do not mark `INV-20260702-0001` Paid, do not create a credit note, and do not direct-delete invoice/booking rows. The current supported stored invoice mutations are Paid/Unpaid only; there is no approved stored void/archive/delete route. Marking a test invoice paid would create a false accounting trail, and creating a credit note would require first marking it paid and would also be misleading.
+- The unpaid safe fake invoice remains in production as live acceptance evidence until a separate exact-reference, admin-gated void/test-cleanup lane is approved and implemented. Future cleanup must be scoped to `ADM-20260702061357`, `INV-20260702-0001`, and clearly linked safe fake records only, with no raw SQL, no Supabase CLI, no Vercel CLI, no secret output, no real customer data touch, and rollback/proof evidence.
+- No Stripe/payment charge, payout, Paid click, SMS, WhatsApp, Telegram, provider dispatch send, GPS/live-location action, env change, DB schema change, Vercel CLI, or customer/driver message outside the approved invoice email occurred in this closeout.
 
 ### Save + CRM Billing Identity Review
 

@@ -15,7 +15,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Save + CRM Billing Identity Review
 
 - `Save + CRM`, lower `Save Operational Snapshot`, and `Update + Cal` now share a billing-identity review guard before writing admin booking persistence.
-- The guard checks recent/loaded admin booking records for the risky EA pattern: the same company/account or same booker/contact already has different passenger/traveler names.
+- The guard checks loaded records plus an admin-only capped `/api/admin-bookings?limit=200` read for the risky EA pattern: the same/similar company/account or same booker/contact already has different passenger/traveler names.
+- Same-company matching ignores common account suffix tokens such as `Pte`, `Ltd`, `LLC`, `Company`, `Group`, `Singapore`, and `SG` before comparing; booker/contact and traveler names still use exact normalized matching.
 - When that pattern is detected, the app shows a compact admin-only `Billing Identity Review` prompt in the Job Card Preview save area and blocks the save until the admin confirms the boss/traveler billing account.
 - Confirmed review uses a distinct customer account label shaped like `Company [Traveler]` as the persisted `customer_display_name`. The existing `/api/admin-bookings` persistence adapter then finds or creates that customer account, and the existing unbilled/monthly invoice grouping path bills by that account label/id.
 - If a conflict is detected but Passenger name is blank, the guard blocks save and asks the admin to enter the passenger/traveler name first.

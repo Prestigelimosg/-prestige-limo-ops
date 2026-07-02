@@ -100,6 +100,7 @@ const adminFullDriverProfileRuntimeWriteActionApiPath =
   "/api/admin-full-driver-profile-runtime-write-action";
 const adminSavedBookingsApiPath = "/api/admin-saved-bookings";
 const adminBookingsApiPath = "/api/admin-bookings";
+const saveCrmBillingIdentityReviewReadLimit = 200;
 const adminHandledCustomerBookingRequestsStorageKey =
   "prestige-admin-handled-customer-booking-requests";
 const adminLoadBookingsTypedReadApiPath = "/api/admin-load-bookings-typed-read";
@@ -3932,6 +3933,45 @@ function billingIdentityMatches(first: string | number | null | undefined, secon
   return Boolean(firstKey && secondKey && firstKey === secondKey);
 }
 
+const billingCompanyIdentityIgnoredTokens = new Set([
+  "company",
+  "co",
+  "corp",
+  "corporation",
+  "gmbh",
+  "group",
+  "inc",
+  "limited",
+  "llc",
+  "llp",
+  "ltd",
+  "pte",
+  "sdn",
+  "sg",
+  "singapore",
+]);
+
+function normalizeBillingCompanyIdentityMatch(value: string | number | null | undefined) {
+  const normalized = normalizeBillingIdentityMatch(billingIdentityBaseAccount(clean(value)));
+  const withoutCompanySuffixes = normalized
+    .split(" ")
+    .filter((token) => token && !billingCompanyIdentityIgnoredTokens.has(token))
+    .join(" ")
+    .trim();
+
+  return withoutCompanySuffixes || normalized;
+}
+
+function billingCompanyIdentityMatches(
+  first: string | number | null | undefined,
+  second: string | number | null | undefined,
+) {
+  const firstKey = normalizeBillingCompanyIdentityMatch(first);
+  const secondKey = normalizeBillingCompanyIdentityMatch(second);
+
+  return Boolean(firstKey && secondKey && firstKey === secondKey);
+}
+
 function formatTravelerBillingAccountLabel(companyAccount: string, travelerName: string) {
   const safeCompany = clean(companyAccount) || "Customer Account";
   const safeTraveler = clean(travelerName) || "Traveler To Confirm";
@@ -4028,8 +4068,8 @@ function buildSaveCrmBillingIdentityReview(
     const recordBaseAccount = billingIdentityBaseAccount(recordAccount);
     const companyMatches =
       Boolean(companyAccount) &&
-      (billingIdentityMatches(recordAccount, companyAccount) ||
-        billingIdentityMatches(recordBaseAccount, companyAccount));
+      (billingCompanyIdentityMatches(recordAccount, companyAccount) ||
+        billingCompanyIdentityMatches(recordBaseAccount, companyAccount));
     const recordBookerTokens = saveCrmBillingRecordBookerTokens(record);
     const bookerMatches = currentBookerTokens.some((token) =>
       recordBookerTokens.some((recordToken) => billingIdentityMatches(token, recordToken)),
@@ -14082,7 +14122,10 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
 
   async function fetchRecentAdminBookingPersistenceRecordsForBillingIdentity() {
     try {
-      const response = await fetch(adminBookingsApiPath, {
+      const searchParams = new URLSearchParams({
+        limit: String(saveCrmBillingIdentityReviewReadLimit),
+      });
+      const response = await fetch(`${adminBookingsApiPath}?${searchParams.toString()}`, {
         headers: {
           "x-prestige-admin-purpose": adminLegacyDataPurpose,
         },
@@ -14116,7 +14159,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           merged.push(record);
         }
 
-        return merged.slice(0, 50);
+        return merged.slice(0, saveCrmBillingIdentityReviewReadLimit);
       });
 
       return recentRecords;

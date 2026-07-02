@@ -4,6 +4,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import type {
   AdminBookingAuditInput,
+  AdminBookingListOptions,
   AdminBookingPersistenceInput,
   AdminBookingPersistenceRecord,
   AdminBookingPersistenceSafeErrorCategory,
@@ -120,6 +121,8 @@ const safeStagingReadinessError =
   "Admin booking persistence staging configuration is not ready.";
 const safeEnableReadinessError =
   "Admin booking persistence enablement readiness gates are not ready.";
+const defaultAdminBookingListLimit = 25;
+const maxAdminBookingListLimit = 200;
 const adminBookingCurrentLoadSelect =
   "id, booking_reference, customer_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, flight_no, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, admin_internal_status, customer_facing_status, short_notice_review_status, request_review_status, change_review_status, cancellation_review_status, source_surface, created_at, updated_at, booking_route_points(point_type, sequence, location, notes), booking_service_items(item_type, quantity, notes)";
 const adminBookingFoundationLoadSelect =
@@ -225,6 +228,20 @@ function safeAdapterFailure<T>(
 
 function isColumnMissingFailure(error: unknown) {
   return classifyAdapterDatabaseFailure(error) === "column_missing";
+}
+
+function adminBookingListLimit(value: AdminBookingListOptions["limit"]) {
+  if (value === null || value === undefined) {
+    return defaultAdminBookingListLimit;
+  }
+
+  const parsed = typeof value === "number" ? value : Number(value);
+
+  if (!Number.isFinite(parsed)) {
+    return defaultAdminBookingListLimit;
+  }
+
+  return Math.min(maxAdminBookingListLimit, Math.max(1, Math.trunc(parsed)));
 }
 
 function dbIdentifierOrNull(value: unknown): DbIdentifier | null {
@@ -1604,6 +1621,7 @@ export async function updateAdminBookingThroughSupabaseAdapter(
 
 export async function listAdminBookingsThroughSupabaseAdapter(
   actor: AdminBookingPersistenceAdapterActor,
+  options: AdminBookingListOptions = {},
 ): Promise<AdminBookingResult<AdminBookingPersistenceRecord[]>> {
   const clientResult = getServerOnlySupabaseClient(actor);
 
@@ -1611,12 +1629,13 @@ export async function listAdminBookingsThroughSupabaseAdapter(
     return clientResult;
   }
 
+  const limit = adminBookingListLimit(options.limit);
   const { data, error } = await loadAdminBookingsWithFoundationFallback((selectedColumns) =>
     clientResult.data
       .from("bookings")
       .select(selectedColumns)
       .order("created_at", { ascending: false })
-      .limit(25),
+      .limit(limit),
   );
 
   if (error) {

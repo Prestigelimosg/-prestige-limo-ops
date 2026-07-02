@@ -133,6 +133,10 @@ export type AdminBookingAuditInput = {
   source_route: string;
 };
 
+export type AdminBookingListOptions = {
+  limit?: number | null;
+};
+
 type UnknownRecord = Record<string, unknown>;
 
 const adminReviewRequiredStatus = "Admin Review Required";
@@ -972,6 +976,7 @@ export async function updateAdminBooking(
 
 export async function listAdminBookings(
   actor: AdminBookingPersistenceAdapterActor,
+  options: AdminBookingListOptions = {},
 ): Promise<AdminBookingResult<AdminBookingPersistenceRecord[]>> {
-  return listAdminBookingsThroughSupabaseAdapter(actor);
+  return listAdminBookingsThroughSupabaseAdapter(actor, options);
 }

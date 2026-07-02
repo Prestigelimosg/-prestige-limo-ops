@@ -107,6 +107,22 @@ function clean(value: unknown) {
   return String(value ?? "").trim().replace(/\s+/g, " ");
 }
 
+function adminBookingListLimitFromRequest(request: Request) {
+  try {
+    const value = new URL(request.url).searchParams.get("limit");
+
+    if (!value) {
+      return null;
+    }
+
+    const parsed = Number(value);
+
+    return Number.isFinite(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 function normalizedToken(value: unknown) {
   return clean(value).replace(/([a-z])([A-Z])/g, "$1_$2").replace(/[^a-z0-9]+/gi, "_").toLowerCase();
 }
@@ -197,7 +213,9 @@ export async function GET(request: Request) {
     }
 
     const actor = adminDispatcherBoundaryToPersistenceAdapterActor(boundary.context);
-    const result = await listAdminBookings(actor);
+    const result = await listAdminBookings(actor, {
+      limit: adminBookingListLimitFromRequest(request),
+    });
 
     if (!result.ok) {
       return adminBookingFailureResponse(result);

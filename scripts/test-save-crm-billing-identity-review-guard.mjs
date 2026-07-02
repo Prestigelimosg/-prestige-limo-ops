@@ -2,22 +2,74 @@ import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 
 const appSource = readFileSync("app/page.tsx", "utf8");
+const adminBookingsRouteSource = readFileSync("app/api/admin-bookings/route.ts", "utf8");
+const adminBookingPersistenceSource = readFileSync("lib/admin-booking-persistence.ts", "utf8");
+const adminBookingAdapterSource = readFileSync("lib/admin-booking-supabase-adapter.ts", "utf8");
 
-function assertIncludes(fragment, label) {
-  assert.ok(appSource.includes(fragment), `Missing ${label}: ${fragment}`);
+function assertIncludes(source, fragment, label) {
+  assert.ok(source.includes(fragment), `Missing ${label}: ${fragment}`);
 }
 
-assertIncludes("type SaveCrmBillingIdentityReview", "billing identity review type");
-assertIncludes("function buildSaveCrmBillingIdentityReview", "billing identity conflict detector");
-assertIncludes("function formatTravelerBillingAccountLabel", "traveler billing account label");
-assertIncludes("function resolveSaveCrmBillingIdentityAccountForSave", "save guard resolver");
-assertIncludes("fetchRecentAdminBookingPersistenceRecordsForBillingIdentity", "fresh recent booking read before save");
-assertIncludes("Same company/booker has other traveler(s)", "visible same company/booker warning");
-assertIncludes('data-save-crm-billing-identity-review="true"', "visible review panel");
-assertIncludes('data-save-crm-billing-identity-confirm="true"', "visible admin confirmation button");
-assertIncludes("customerDisplayNameOverride", "customer display override option");
-assertIncludes("clean(options.customerDisplayNameOverride)", "override applied before default customer account");
-assertIncludes("resolveSaveCrmBillingIdentityAccountForSave();", "save/update calls resolver");
+assertIncludes(appSource, "type SaveCrmBillingIdentityReview", "billing identity review type");
+assertIncludes(appSource, "function buildSaveCrmBillingIdentityReview", "billing identity conflict detector");
+assertIncludes(appSource, "function formatTravelerBillingAccountLabel", "traveler billing account label");
+assertIncludes(appSource, "function resolveSaveCrmBillingIdentityAccountForSave", "save guard resolver");
+assertIncludes(appSource, "fetchRecentAdminBookingPersistenceRecordsForBillingIdentity", "fresh recent booking read before save");
+assertIncludes(appSource, "Same company/booker has other traveler(s)", "visible same company/booker warning");
+assertIncludes(appSource, 'data-save-crm-billing-identity-review="true"', "visible review panel");
+assertIncludes(appSource, 'data-save-crm-billing-identity-confirm="true"', "visible admin confirmation button");
+assertIncludes(appSource, "customerDisplayNameOverride", "customer display override option");
+assertIncludes(appSource, "clean(options.customerDisplayNameOverride)", "override applied before default customer account");
+assertIncludes(appSource, "resolveSaveCrmBillingIdentityAccountForSave();", "save/update calls resolver");
+assertIncludes(appSource, "const saveCrmBillingIdentityReviewReadLimit = 200;", "wide billing review read limit");
+assertIncludes(appSource, "function billingCompanyIdentityMatches", "same-company billing match normalizer");
+assertIncludes(appSource, "billingCompanyIdentityIgnoredTokens", "company suffix token normalization");
+assertIncludes(appSource, "`${adminBookingsApiPath}?${searchParams.toString()}`", "billing review read sends limit query");
+assertIncludes(
+  appSource,
+  "return merged.slice(0, saveCrmBillingIdentityReviewReadLimit);",
+  "billing review source cache keeps the wider read window",
+);
+assertIncludes(
+  adminBookingPersistenceSource,
+  "export type AdminBookingListOptions",
+  "admin booking list options contract",
+);
+assertIncludes(
+  adminBookingsRouteSource,
+  "function adminBookingListLimitFromRequest",
+  "admin booking GET limit parser",
+);
+assertIncludes(
+  adminBookingsRouteSource,
+  "if (!value)",
+  "missing admin booking GET limit keeps the compact default",
+);
+assertIncludes(
+  adminBookingsRouteSource,
+  "limit: adminBookingListLimitFromRequest(request)",
+  "admin booking GET passes parsed list limit",
+);
+assertIncludes(
+  adminBookingAdapterSource,
+  "const defaultAdminBookingListLimit = 25;",
+  "default admin booking list limit remains compact",
+);
+assertIncludes(
+  adminBookingAdapterSource,
+  "value === null || value === undefined",
+  "adapter treats absent list limit as default",
+);
+assertIncludes(
+  adminBookingAdapterSource,
+  "const maxAdminBookingListLimit = 200;",
+  "billing review read is server-capped",
+);
+assertIncludes(
+  adminBookingAdapterSource,
+  ".limit(limit)",
+  "admin booking adapter applies parsed safe limit",
+);
 
 const saveBookingSection = appSource.slice(
   appSource.indexOf("async function saveBooking()"),

@@ -17685,7 +17685,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           tone: "success",
           text: `Live map is watching ${allowedBookingReferences.length} active job${
             allowedBookingReferences.length === 1 ? "" : "s"
-          }. Driver markers refresh automatically while Dashboard is open.`,
+          }. Driver markers refresh automatically while Today's Jobs is open.`,
         },
         runtimeStatus: "active",
         status: "loaded",
@@ -21542,11 +21542,12 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     .filter(Boolean);
   const activeJobDriverStatusReferenceKey = activeJobDriverStatusReferenceList.join("|");
   const activeJobsMapAllowedReferenceKey = adminActiveJobsMapReadState.allowedBookingReferences.join("|");
+  const todayJobsMonitorIsActive = activeTab === "dashboard" || activeTab === "dispatch";
 
   useEffect(() => {
     const bookingReferences = activeJobDriverStatusReferenceKey.split("|").filter(Boolean);
 
-    if (activeTab !== "dashboard" || bookingReferences.length === 0) {
+    if (!todayJobsMonitorIsActive || bookingReferences.length === 0) {
       return;
     }
 
@@ -21558,13 +21559,13 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       dashboardDriverJobStatusAutoRequestedRef.current.add(bookingReference);
       void refreshDashboardDriverJobStatusRead(bookingReference);
     }
-  }, [activeTab, activeJobDriverStatusReferenceKey]);
+  }, [todayJobsMonitorIsActive, activeJobDriverStatusReferenceKey]);
 
   useEffect(() => {
     const bookingReferences = activeJobDriverStatusReferenceKey.split("|").filter(Boolean);
 
     if (
-      activeTab !== "dashboard" ||
+      !todayJobsMonitorIsActive ||
       !dashboardDriverJobAutoRefreshEnabled ||
       bookingReferences.length === 0
     ) {
@@ -21578,11 +21579,11 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     }, 10 * 1000);
 
     return () => window.clearInterval(intervalId);
-  }, [activeTab, activeJobDriverStatusReferenceKey, dashboardDriverJobAutoRefreshEnabled]);
+  }, [todayJobsMonitorIsActive, activeJobDriverStatusReferenceKey, dashboardDriverJobAutoRefreshEnabled]);
 
   useEffect(() => {
     if (
-      activeTab !== "dashboard" ||
+      !todayJobsMonitorIsActive ||
       adminActiveJobsMapReadState.runtimeStatus !== "active" ||
       !activeJobsMapAllowedReferenceKey
     ) {
@@ -21598,7 +21599,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     return () => window.clearInterval(intervalId);
     // The polling target is keyed by the active Dashboard/runtime state; the refresh helper is intentionally stable by behavior, not identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, activeJobsMapAllowedReferenceKey, adminActiveJobsMapReadState.runtimeStatus]);
+  }, [todayJobsMonitorIsActive, activeJobsMapAllowedReferenceKey, adminActiveJobsMapReadState.runtimeStatus]);
 
   function refreshVisibleDashboardDriverReports() {
     for (const bookingReference of activeJobDriverStatusReferenceList) {
@@ -21801,7 +21802,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             <div className="min-w-0">
               <p className="font-semibold">Live Driver Map</p>
               <p className="mt-0.5 text-[10px] text-lime-900 sm:text-[11px]">
-                Open once for the active jobs above; shared driver pins refresh automatically while Dashboard is open.
+                Open once for the active jobs above; shared driver pins refresh automatically while Today&apos;s Jobs is open.
               </p>
             </div>
             <div className="flex flex-wrap gap-1">
@@ -32086,6 +32087,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
 
         {activeTab === "dispatch" ? (
         <section className="flex min-w-0 flex-col gap-2.5" data-dispatch-workflow="true">
+          <div className="order-5">{activeJobsMonitorPanel}</div>
           <div className="contents">
             <section
               className="order-10 min-w-0 rounded-md border border-stone-200 bg-white p-2.5"
@@ -34045,8 +34047,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
 
             <section
               aria-label="Day-of-Trip Dispatch Monitor"
-              className="order-[80] rounded-md border border-lime-200 bg-lime-50/70 p-1 sm:p-2.5"
+              className="hidden"
               data-admin-day-of-trip-dispatch-monitor="true"
+              data-admin-day-of-trip-dispatch-monitor-legacy-hidden="true"
             >
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">

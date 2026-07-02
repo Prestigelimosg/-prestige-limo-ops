@@ -59,9 +59,9 @@ for (const phrase of [
   "Loading a customer request into Dispatch now records a bounded browser-local handled-request key so that request leaves the Dashboard urgent queue plus the Bookings `Urgent & New Booking Requests` queue and badge on that admin browser while remaining available in Recent/Active booking lists.",
   "Loading a saved booking into Dispatch refreshes the typed operational display once immediately and pauses one background sync tick, keeping the existing guarded read set stable while Customer Copy focuses for review.",
   "The Dashboard now uses compact read-only booking summaries plus `Open` handoff buttons; single-booking driver assignment, status, copy, job-card, and completion work stays in Dispatch/Bookings so page purposes do not duplicate.",
-  "The Dashboard `Today's Jobs` sector is shown on the command centre for multi-driver scanning; the Dispatch day-of-trip monitor remains the selected single-booking workbench.",
+  "The shared `Today's Jobs` sector is shown on the Dashboard command centre and at the top of Dispatch for multi-driver scanning.",
   "`Today's Jobs` shows all loaded active jobs inside the 1-hour pickup monitor window without a separate expand/collapse toggle.",
-  "`Today's Jobs` shows a compact saved driver report readout per visible job, using the existing guarded admin `GET /api/admin-driver-job-statuses` path only, with monitor-wide/per-card refresh controls and dashboard auto-refresh on by default.",
+  "`Today's Jobs` shows a compact saved driver report readout per visible job, using the existing guarded admin `GET /api/admin-driver-job-statuses` path only, with monitor-wide/per-card refresh controls and auto-refresh on by default.",
   "`Today's Jobs` includes compact live-map controls that reuse the existing admin-only live-location runtime for the jobs inside the monitor window.",
   "The Dashboard driver report readout is read-only and does not create driver status events, notification rows, provider sends, GPS/live-location records, billing/payment/PDF/invoice/payout records, or a duplicate single-booking Dispatch workflow.",
   "The Bookings tab shows a compact new-request badge/highlight after open customer requests are detected; no sound, browser notification, polling loop, provider send, or new route is added.",
@@ -275,15 +275,16 @@ for (const duplicateDashboardWorkflowFragment of [
   );
 }
 
-assertExcludes(
+assertIncludes(dispatchBlock, "{activeJobsMonitorPanel}", "Dispatch uses shared Today's Jobs monitor");
+assertIncludes(
   dispatchBlock,
-  'data-admin-multi-driver-active-jobs-monitor="true"',
-  "Dispatch duplicate multi-driver active jobs monitor",
+  'data-admin-day-of-trip-dispatch-monitor-legacy-hidden="true"',
+  "Legacy dispatch day-of-trip monitor stays hidden",
 );
 assert.equal(
   (appPage.match(/data-admin-multi-driver-active-jobs-monitor="true"/g) || []).length,
   1,
-  "Active jobs monitor should be rendered in one place only.",
+  "Today's Jobs monitor source should be defined once and reused.",
 );
 assertIncludes(appPage, "const activeJobDashboardSearchTerm = clean(searchTerm);", "Active jobs monitor search term");
 assertIncludes(appPage, "const bookingAutoSyncPausedUntilRef = useRef(0);", "Loaded booking sync pause ref");
@@ -298,12 +299,12 @@ assertIncludes(
 assertIncludes(
   appPage,
   "const [dashboardDriverJobAutoRefreshEnabled, setDashboardDriverJobAutoRefreshEnabled] = useState(true);",
-  "Dashboard driver report auto-refresh defaults on",
+  "Today's Jobs driver report auto-refresh defaults on",
 );
 assertIncludes(
   appPage,
   "aria-label=\"Today's Jobs\"",
-  "Dashboard active jobs monitor renamed to Today's Jobs",
+  "Shared active jobs monitor renamed to Today's Jobs",
 );
 assertIncludes(appPage, 'data-dashboard-live-driver-map="true"', "Dashboard live map panel");
 assertIncludes(appPage, "openAdminLiveLocationRuntimeForActiveJobs", "Dashboard opens active jobs in live map");
@@ -337,7 +338,7 @@ assertIncludes(
 assertIncludes(
   appPage,
   'data-admin-multi-driver-active-jobs-auto-refresh="true"',
-  "Dashboard driver report auto-refresh indicator",
+  "Today's Jobs driver report auto-refresh indicator",
 );
 assertIncludes(
   appPage,

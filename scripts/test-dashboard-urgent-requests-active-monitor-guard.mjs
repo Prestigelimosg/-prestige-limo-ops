@@ -169,6 +169,7 @@ for (const fragment of [
   "bookingRecordIsInsideActiveJobMonitorWindow(bookingRecord, currentTimeMs)",
   "const dayOfTripActiveJobVisibleBookings = dayOfTripActiveJobBookings;",
   "const activeJobsMapAllowedReferenceKey = adminActiveJobsMapReadState.allowedBookingReferences.join(\"|\");",
+  'const todayJobsMonitorIsActive = activeTab === "dashboard" || activeTab === "dispatch";',
 ]) {
   assertIncludes(activeMonitorSource, fragment, `active monitor source fragment ${fragment}`);
 }
@@ -183,7 +184,7 @@ for (const fragment of [
   "Open live map",
   "Refresh map",
   "Close map",
-  "shared driver pins refresh automatically while Dashboard is open.",
+  "shared driver pins refresh automatically while Today&apos;s Jobs is open.",
   "AdminActiveJobsBrowserMap",
 ]) {
   assertIncludes(activeMonitorPanel, fragment, `active monitor fragment ${fragment}`);
@@ -216,9 +217,9 @@ for (const forbiddenPattern of [
 for (const phrase of [
   "Dashboard request panel is now `Urgent Booking Requests` and only displays open customer requests with pickup under 24 hours.",
   "The Bookings page request panel remains the full queue as `Urgent & New Booking Requests`, with row badges separating urgent under-24h requests from new non-urgent requests.",
-  "Day-of-trip jobs are now shown as `Today's Jobs`; the sector shows all loaded active jobs inside the 1-hour-before-pickup monitor window in one Dashboard sector.",
-  "Dashboard driver report auto-refresh is on by default, still uses the guarded admin driver-status read path, and can be switched off by the operator.",
-  "The Dashboard live map control opens the existing admin-only live-location runtime for the jobs in the monitor window and refreshes shared markers every 10 seconds while Dashboard is open.",
+  "Day-of-trip jobs are now shown as `Today's Jobs`; the shared sector shows all loaded active jobs inside the 1-hour-before-pickup monitor window on Dashboard and Dispatch.",
+  "`Today's Jobs` driver report auto-refresh is on by default, still uses the guarded admin driver-status read path, and can be switched off by the operator.",
+  "The `Today's Jobs` live map control opens the existing admin-only live-location runtime for the jobs in the monitor window and refreshes shared markers every 10 seconds while the sector is open.",
   "This reuses existing admin live-location runtime and map read paths; it does not add provider sends, notification sends, customer/driver messages, env changes, DB schema changes, billing/payment/PDF/invoice/payout, calendar sync, parser changes, or shims.",
   "Guard coverage lives in `scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {

@@ -7540,7 +7540,7 @@ async function runChromeTest() {
     assert.equal(
       dashboardCommandCentreState.activeJobCount,
       0,
-      "Expected Dashboard active jobs monitor to stay empty when no job is inside the 1-hour window",
+      "Expected Today's Jobs monitor to stay empty when no job is inside the 1-hour window",
     );
     assert.equal(dashboardCommandCentreState.completedHistoryButtonText, "Open Completed / History");
     assert.equal(

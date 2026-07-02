@@ -971,6 +971,10 @@ const guardChecks = [
     script: "scripts/test-admin-customer-invoice-prefix-settings-guard.mjs",
   },
   {
+    label: "admin Create Invoice manual bill-to guard",
+    script: "scripts/test-admin-create-invoice-manual-bill-to-guard.mjs",
+  },
+  {
     label: "admin monthly invoice saved-prefix precedence guard",
     script: "scripts/test-admin-monthly-invoice-saved-prefix-precedence-guard.mjs",
   },

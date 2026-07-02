@@ -23,6 +23,18 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This lane does not create invoices, execute invoice-number reservations, generate PDFs, send invoice/customer/provider messages, activate payment links, record payments, create payouts, change the running-number digit width, change DB schema, change env, use Vercel CLI, or touch GPS/live-location.
 - Focused guard coverage lives in `scripts/test-admin-customer-invoice-prefix-settings-guard.mjs` and `scripts/test-admin-monthly-invoice-saved-prefix-precedence-guard.mjs`.
 
+### Admin Create Invoice Manual Bill-To Lane
+
+- Admin Customers now has a compact `Create Invoice` entry point inside `/customers` > Invoice Workspace > Send Invoice Workbench.
+- The lane is for ad-hoc/manual bill-to invoices without opening or creating a customer folder.
+- Loading the panel and clicking Preview do not create an invoice number, PDF, customer folder, portal invite, prefix reservation, payment link, provider send, payout, or GPS/live-location action.
+- Only the explicit `Draft`, `Issue`, or `Email` action posts to guarded admin invoice routes with the existing admin booking persistence purpose header.
+- Manual bill-to records use an internal `plain-invoice:` customer id and fixed `invoice` document type; they do not use customer-specific saved prefixes or the monthly invoice number reservation route.
+- The Create Invoice `Email` button requires a current preview and recipient email, issues the invoice through the guarded invoice route, then calls the existing guarded invoice email route.
+- The `Paid` checkbox changes only the stored invoice status label and does not create a payment, bank record, card charge, payout, or reconciliation event.
+- Public booking, customer portal, driver pages, and individual customer folders are not wired to this Create Invoice panel.
+- Focused guard coverage lives in `scripts/test-admin-create-invoice-manual-bill-to-guard.mjs`.
+
 ### No-Show / Late-Cancellation Billing Control
 
 - Completed Trip Closeout Review now reuses the existing compact admin-only closeout control for `No-show Bill`, `Late Cancel Bill`, and `Waive`; no duplicate Dispatch sector, route, table, invoice workbench, or DB schema was added.

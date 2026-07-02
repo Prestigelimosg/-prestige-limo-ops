@@ -349,6 +349,20 @@ type CustomerInvoiceDraftRecord = {
   storageSource?: "local" | "server";
 };
 
+type PlainInvoiceForm = {
+  amount: string;
+  billToEmail: string;
+  billToName: string;
+  cardFeeApplies: boolean;
+  cardPaymentEnabled: boolean;
+  dueDateIso: string;
+  isPaid: boolean;
+  lineDescription: string;
+  reference: string;
+  route: string;
+  service: string;
+};
+
 type RegularCustomerBookingForm = typeof initialRegularCustomerBookingForm;
 
 type RegularCustomerBookingPreview = RegularCustomerBookingForm & {
@@ -621,6 +635,45 @@ function customerBillingDocumentLabel(documentType: CustomerBillingDocumentType)
 
 function customerBillingDocumentActionLabel() {
   return "Issue";
+}
+
+const plainInvoiceDraftActionKey = "plain-invoice-draft";
+const plainInvoiceEmailActionKey = "plain-invoice-email";
+const plainInvoiceIssueActionKey = "plain-invoice-issue";
+
+function plainInvoiceDefaultReference() {
+  return `ADHOC-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`;
+}
+
+function plainInvoiceInitialForm(): PlainInvoiceForm {
+  return {
+    amount: "",
+    billToEmail: "",
+    billToName: "",
+    cardFeeApplies: false,
+    cardPaymentEnabled: false,
+    dueDateIso: invoiceDateInputDaysFromNow(7),
+    isPaid: false,
+    lineDescription: "",
+    reference: plainInvoiceDefaultReference(),
+    route: "",
+    service: "Ad hoc service",
+  };
+}
+
+function plainInvoiceSlug(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 96);
+}
+
+function plainInvoiceCustomerId(reference: string, billToName: string) {
+  const slug = plainInvoiceSlug(reference) || plainInvoiceSlug(billToName) || "manual";
+
+  return `plain-invoice:${slug}`.slice(0, 160);
 }
 
 function getCustomerInvoiceRowCalculatedAmount(
@@ -1225,6 +1278,7 @@ function downloadBrowserBlob(blob: Blob, filename: string) {
 
 export default function MockCustomerDashboardPage() {
   const customerInvoicePrepPanelRef = useRef<HTMLDivElement | null>(null);
+  const plainInvoicePanelRef = useRef<HTMLDivElement | null>(null);
   const customerInvoicePrepRowKeyRef = useRef("");
   const [searchTerm, setSearchTerm] = useState("");
   const [customerFolderFinderPage, setCustomerFolderFinderPage] = useState(1);
@@ -1368,6 +1422,16 @@ export default function MockCustomerDashboardPage() {
   );
   const [customerInvoicePreview, setCustomerInvoicePreview] =
     useState<CustomerInvoicePreview | null>(null);
+  const [plainInvoiceForm, setPlainInvoiceForm] = useState<PlainInvoiceForm>(() =>
+    plainInvoiceInitialForm(),
+  );
+  const [plainInvoicePreview, setPlainInvoicePreview] =
+    useState<CustomerInvoicePreview | null>(null);
+  const [plainInvoiceFeedback, setPlainInvoiceFeedback] = useState(
+    "Create Invoice is ready for manual bill-to. No invoice number is created until Draft or Issue.",
+  );
+  const [plainInvoiceFeedbackTone, setPlainInvoiceFeedbackTone] =
+    useState<RegularCustomerBookingFeedbackTone>("info");
   const [customerInvoiceDrafts, setCustomerInvoiceDrafts] = useState<CustomerInvoiceDraftRecord[]>([]);
   const [customerInvoiceCalculatedAmountCents, setCustomerInvoiceCalculatedAmountCents] =
     useState<number | null>(null);
@@ -1818,6 +1882,50 @@ export default function MockCustomerDashboardPage() {
   const isCustomerInvoicePreviewCurrent =
     Boolean(customerInvoicePreview) &&
     customerInvoicePreview?.previewKey === customerInvoiceCurrentPreviewKey;
+  const plainInvoiceAmountCents = useMemo(
+    () => parseInvoiceAmountToCents(plainInvoiceForm.amount),
+    [plainInvoiceForm.amount],
+  );
+  const plainInvoiceCurrentPreviewKey = useMemo(() => {
+    const billToName = plainInvoiceForm.billToName.trim();
+    const reference = plainInvoiceForm.reference.trim();
+    const service = plainInvoiceForm.service.trim();
+    const lineDescription = plainInvoiceForm.lineDescription.trim();
+
+    if (!billToName || !reference || !service || !lineDescription || !plainInvoiceAmountCents) {
+      return "";
+    }
+
+    return [
+      "plain-invoice",
+      billToName,
+      plainInvoiceForm.billToEmail.trim(),
+      reference,
+      service,
+      plainInvoiceForm.route.trim(),
+      lineDescription,
+      plainInvoiceAmountCents,
+      plainInvoiceForm.dueDateIso,
+      plainInvoiceForm.cardPaymentEnabled ? "card-on" : "card-off",
+      plainInvoiceForm.cardFeeApplies ? "card-fee-on" : "card-fee-off",
+      plainInvoiceForm.isPaid ? "paid" : "unpaid",
+    ].join("|");
+  }, [
+    plainInvoiceAmountCents,
+    plainInvoiceForm.billToEmail,
+    plainInvoiceForm.billToName,
+    plainInvoiceForm.cardFeeApplies,
+    plainInvoiceForm.cardPaymentEnabled,
+    plainInvoiceForm.dueDateIso,
+    plainInvoiceForm.isPaid,
+    plainInvoiceForm.lineDescription,
+    plainInvoiceForm.reference,
+    plainInvoiceForm.route,
+    plainInvoiceForm.service,
+  ]);
+  const isPlainInvoicePreviewCurrent =
+    Boolean(plainInvoicePreview) &&
+    plainInvoicePreview?.previewKey === plainInvoiceCurrentPreviewKey;
   const customerBillingDocumentTotalPages = Math.max(
     1,
     Math.ceil(issuedCustomerInvoices.length / customerBillingDocumentPageSize),
@@ -2789,6 +2897,364 @@ export default function MockCustomerDashboardPage() {
     setCustomerInvoiceIssueFeedback(
       "Review the amount and due date before issuing. Invoice number is created only when you click issue.",
     );
+  }
+
+  function focusPlainInvoicePanel() {
+    setCustomerInvoiceWorkspaceTab("statements");
+    setPlainInvoiceFeedback(
+      "Create Invoice form ready. Preview first; Draft or Issue creates the invoice number.",
+    );
+    setPlainInvoiceFeedbackTone("info");
+    window.setTimeout(() => {
+      plainInvoicePanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      document.querySelector<HTMLElement>("[data-plain-invoice-bill-to-name='true']")?.focus();
+    }, 50);
+  }
+
+  function updatePlainInvoiceForm<K extends keyof PlainInvoiceForm>(
+    field: K,
+    value: PlainInvoiceForm[K],
+  ) {
+    setPlainInvoiceForm((currentForm) => {
+      const nextForm = {
+        ...currentForm,
+        [field]: value,
+      };
+
+      if (field === "cardPaymentEnabled" && value === false) {
+        nextForm.cardFeeApplies = false;
+      }
+
+      return nextForm;
+    });
+  }
+
+  function clearPlainInvoiceForm() {
+    setPlainInvoiceForm(plainInvoiceInitialForm());
+    setPlainInvoicePreview(null);
+    setPlainInvoiceFeedback(
+      "Create Invoice cleared. No invoice number, PDF, email, payment, or customer folder was created.",
+    );
+    setPlainInvoiceFeedbackTone("info");
+  }
+
+  function previewPlainInvoice() {
+    const billToName = plainInvoiceForm.billToName.trim();
+    const reference = plainInvoiceForm.reference.trim();
+    const service = plainInvoiceForm.service.trim();
+    const lineDescription = plainInvoiceForm.lineDescription.trim();
+    const amountCents = plainInvoiceAmountCents;
+    const dueDate = new Date(`${plainInvoiceForm.dueDateIso}T00:00:00+08:00`);
+
+    if (!billToName) {
+      setPlainInvoiceFeedback("Enter the bill-to name before previewing Create Invoice.");
+      setPlainInvoiceFeedbackTone("error");
+      document.querySelector<HTMLElement>("[data-plain-invoice-bill-to-name='true']")?.focus();
+      return;
+    }
+
+    if (!reference) {
+      setPlainInvoiceFeedback("Enter a manual reference before previewing Create Invoice.");
+      setPlainInvoiceFeedbackTone("error");
+      document.querySelector<HTMLElement>("[data-plain-invoice-reference='true']")?.focus();
+      return;
+    }
+
+    if (!service) {
+      setPlainInvoiceFeedback("Enter the service label before previewing Create Invoice.");
+      setPlainInvoiceFeedbackTone("error");
+      document.querySelector<HTMLElement>("[data-plain-invoice-service='true']")?.focus();
+      return;
+    }
+
+    if (!lineDescription) {
+      setPlainInvoiceFeedback("Enter the line item description before previewing Create Invoice.");
+      setPlainInvoiceFeedbackTone("error");
+      document.querySelector<HTMLElement>("[data-plain-invoice-line-description='true']")?.focus();
+      return;
+    }
+
+    if (!amountCents) {
+      setPlainInvoiceFeedback("Enter the invoice amount before previewing Create Invoice.");
+      setPlainInvoiceFeedbackTone("error");
+      document.querySelector<HTMLElement>("[data-plain-invoice-amount='true']")?.focus();
+      return;
+    }
+
+    if (Number.isNaN(dueDate.getTime())) {
+      setPlainInvoiceFeedback("Choose the due date before previewing Create Invoice.");
+      setPlainInvoiceFeedbackTone("error");
+      document.querySelector<HTMLElement>("[data-plain-invoice-due-date='true']")?.focus();
+      return;
+    }
+
+    setPlainInvoicePreview({
+      amountCents,
+      amountLabel: formatInvoiceAmount(amountCents),
+      cardFeeApplies: plainInvoiceForm.cardFeeApplies,
+      cardPaymentEnabled: plainInvoiceForm.cardPaymentEnabled,
+      customerName: billToName,
+      documentType: "invoice",
+      dueDateIso: plainInvoiceForm.dueDateIso,
+      dueDateLabel: formatInvoiceDate(dueDate),
+      folder: plainInvoiceForm.isPaid ? "Paid" : "Unpaid",
+      lineDescription: appendCustomerInvoiceCardPaymentNote(
+        lineDescription,
+        plainInvoiceForm.cardPaymentEnabled,
+        plainInvoiceForm.cardFeeApplies,
+      ),
+      previewKey: plainInvoiceCurrentPreviewKey,
+      reference,
+      route: plainInvoiceForm.route.trim() || "Ad-hoc invoice / no trip route",
+      service,
+      sourceLabel: "Create Invoice manual entry",
+    });
+    setPlainInvoiceFeedback("Create Invoice preview ready. Draft or Issue will create the invoice number.");
+    setPlainInvoiceFeedbackTone("success");
+    window.setTimeout(() => {
+      document.querySelector<HTMLElement>("[data-plain-invoice-issue-action='true']")?.focus();
+    }, 50);
+  }
+
+  function plainInvoiceRequestBodyFromPreview(documentState: CustomerBillingDocumentState) {
+    if (!plainInvoicePreview || !isPlainInvoicePreviewCurrent) {
+      return null;
+    }
+
+    return {
+      amountCents: plainInvoicePreview.amountCents,
+      billingMonthLabel: formatInvoiceMonth(new Date()),
+      customerEmail: plainInvoiceForm.billToEmail,
+      customerId: plainInvoiceCustomerId(
+        plainInvoicePreview.reference,
+        plainInvoicePreview.customerName,
+      ),
+      customerName: plainInvoicePreview.customerName,
+      documentState,
+      documentType: "invoice" as CustomerBillingDocumentType,
+      dueDateIso: plainInvoicePreview.dueDateIso,
+      lineItems: [
+        {
+          amountLabel: plainInvoicePreview.amountLabel,
+          description: plainInvoicePreview.lineDescription,
+        },
+      ],
+      reference: plainInvoicePreview.reference,
+      route: plainInvoicePreview.route,
+      service: plainInvoicePreview.service,
+      status: plainInvoicePreview.folder,
+    };
+  }
+
+  async function savePlainInvoiceDraft() {
+    if (!plainInvoicePreview || !isPlainInvoicePreviewCurrent) {
+      setPlainInvoiceFeedback("Preview first, then save the Create Invoice draft.");
+      setPlainInvoiceFeedbackTone("error");
+      document.querySelector<HTMLElement>("[data-plain-invoice-preview-action='true']")?.focus();
+      return;
+    }
+
+    const requestBody = plainInvoiceRequestBodyFromPreview("draft");
+
+    if (!requestBody) {
+      setPlainInvoiceFeedback("Preview first, then save the Create Invoice draft.");
+      setPlainInvoiceFeedbackTone("error");
+      return;
+    }
+
+    setIssuingCustomerInvoiceKey(plainInvoiceDraftActionKey);
+
+    try {
+      const response = await fetch(adminCustomerInvoicesApiPath, {
+        body: JSON.stringify(requestBody),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "POST",
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.ok || !result.invoice) {
+        throw new Error(result?.error || "Create Invoice draft failed safely.");
+      }
+
+      const draftInvoice = {
+        ...(result.invoice as CustomerDisplayedInvoiceRecord),
+        storageSource: "server" as const,
+      };
+
+      setCustomerInvoiceDrafts((drafts) =>
+        [
+          invoiceDraftRecordFromDisplayedInvoice(draftInvoice),
+          ...drafts.filter((draft) => draft.draftId !== draftInvoice.invoiceNumber),
+        ].slice(0, 10),
+      );
+      setPlainInvoiceFeedback(
+        `Create Invoice draft saved as ${draftInvoice.invoiceNumber}. It is admin-only until issued.`,
+      );
+      setPlainInvoiceFeedbackTone("success");
+    } catch (error) {
+      setPlainInvoiceFeedback(
+        error instanceof Error ? error.message : "Create Invoice draft failed safely.",
+      );
+      setPlainInvoiceFeedbackTone("error");
+    } finally {
+      window.setTimeout(() => setIssuingCustomerInvoiceKey(""), 700);
+    }
+  }
+
+  async function issuePlainInvoice() {
+    if (!plainInvoicePreview || !isPlainInvoicePreviewCurrent) {
+      setPlainInvoiceFeedback("Preview first, then issue Create Invoice.");
+      setPlainInvoiceFeedbackTone("error");
+      document.querySelector<HTMLElement>("[data-plain-invoice-preview-action='true']")?.focus();
+      return;
+    }
+
+    const requestBody = plainInvoiceRequestBodyFromPreview("issued");
+
+    if (!requestBody) {
+      setPlainInvoiceFeedback("Preview first, then issue Create Invoice.");
+      setPlainInvoiceFeedbackTone("error");
+      return;
+    }
+
+    setIssuingCustomerInvoiceKey(plainInvoiceIssueActionKey);
+
+    try {
+      const response = await fetch(adminCustomerInvoicesApiPath, {
+        body: JSON.stringify(requestBody),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "POST",
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.ok || !result.invoice) {
+        throw new Error(result?.error || "Create Invoice issue failed safely.");
+      }
+
+      const issuedInvoice = {
+        ...(result.invoice as CustomerDisplayedInvoiceRecord),
+        storageSource: "server" as const,
+      };
+
+      saveCustomerLocalInvoice(issuedInvoice);
+      updateIssuedInvoiceState(issuedInvoice);
+      setPlainInvoiceFeedback(
+        `Create Invoice ${issuedInvoice.invoiceNumber} stored with PDF. PDF download started.`,
+      );
+      setPlainInvoiceFeedbackTone("success");
+      await downloadStoredCustomerInvoicePdf(issuedInvoice);
+      setPlainInvoicePreview(null);
+    } catch (error) {
+      setPlainInvoiceFeedback(
+        error instanceof Error
+          ? error.message
+          : "Create Invoice issue failed safely. No invoice number was confirmed.",
+      );
+      setPlainInvoiceFeedbackTone("error");
+    } finally {
+      window.setTimeout(() => setIssuingCustomerInvoiceKey(""), 700);
+    }
+  }
+
+  async function emailPlainInvoice() {
+    if (!plainInvoicePreview || !isPlainInvoicePreviewCurrent) {
+      setPlainInvoiceFeedback("Preview first, then email Create Invoice.");
+      setPlainInvoiceFeedbackTone("error");
+      document.querySelector<HTMLElement>("[data-plain-invoice-preview-action='true']")?.focus();
+      return;
+    }
+
+    const recipientEmail = plainInvoiceForm.billToEmail.trim();
+
+    if (!recipientEmail) {
+      setPlainInvoiceFeedback("Enter an email address before emailing Create Invoice.");
+      setPlainInvoiceFeedbackTone("error");
+      document.querySelector<HTMLElement>("[data-plain-invoice-bill-to-email='true']")?.focus();
+      return;
+    }
+
+    const requestBody = plainInvoiceRequestBodyFromPreview("issued");
+
+    if (!requestBody) {
+      setPlainInvoiceFeedback("Preview first, then email Create Invoice.");
+      setPlainInvoiceFeedbackTone("error");
+      return;
+    }
+
+    let issuedInvoiceNumber = "";
+
+    setIssuingCustomerInvoiceKey(plainInvoiceEmailActionKey);
+
+    try {
+      const response = await fetch(adminCustomerInvoicesApiPath, {
+        body: JSON.stringify(requestBody),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "POST",
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.ok || !result.invoice) {
+        throw new Error(result?.error || "Create Invoice email issue failed safely.");
+      }
+
+      const issuedInvoice = {
+        ...(result.invoice as CustomerDisplayedInvoiceRecord),
+        storageSource: "server" as const,
+      };
+
+      issuedInvoiceNumber = issuedInvoice.invoiceNumber;
+      saveCustomerLocalInvoice(issuedInvoice);
+      updateIssuedInvoiceState(issuedInvoice);
+
+      const emailResponse = await fetch(adminCustomerInvoiceEmailApiPath, {
+        body: JSON.stringify({
+          invoiceNumber: issuedInvoice.invoiceNumber,
+          recipientEmail,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "POST",
+      });
+      const emailResult = await emailResponse.json().catch(() => null);
+
+      if (emailResult?.invoice) {
+        updateIssuedInvoiceState({
+          ...(emailResult.invoice as CustomerDisplayedInvoiceRecord),
+          storageSource: "server",
+        });
+      }
+
+      if (!emailResponse.ok || !emailResult?.ok) {
+        throw new Error(emailResult?.error || "Create Invoice email failed safely.");
+      }
+
+      setPlainInvoiceFeedback(`Create Invoice ${issuedInvoice.invoiceNumber} emailed to ${recipientEmail}.`);
+      setPlainInvoiceFeedbackTone("success");
+      setPlainInvoicePreview(null);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Create Invoice email failed safely.";
+
+      setPlainInvoiceFeedback(
+        issuedInvoiceNumber
+          ? `${issuedInvoiceNumber} was issued, but email failed safely: ${message}`
+          : message,
+      );
+      setPlainInvoiceFeedbackTone("error");
+    } finally {
+      window.setTimeout(() => setIssuingCustomerInvoiceKey(""), 700);
+    }
   }
 
   function customerInvoiceLineDescriptionForPreview(
@@ -4398,10 +4864,20 @@ export default function MockCustomerDashboardPage() {
                   click away.
                 </p>
               </div>
-              <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
-                {mockStatementPreviewGroups.length} statement preview
-                {mockStatementPreviewGroups.length === 1 ? "" : "s"}
-              </p>
+              <div className="flex flex-wrap gap-2 lg:justify-end">
+                <button
+                  className="inline-flex min-h-10 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 py-2 text-sm font-bold text-white transition hover:bg-slate-700"
+                  data-plain-invoice-start-action="true"
+                  onClick={focusPlainInvoicePanel}
+                  type="button"
+                >
+                  Create Invoice
+                </button>
+                <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
+                  {mockStatementPreviewGroups.length} statement preview
+                  {mockStatementPreviewGroups.length === 1 ? "" : "s"}
+                </p>
+              </div>
             </div>
             <div className="mt-4 flex flex-wrap gap-2" data-customer-invoice-workspace-tabs="true">
               {customerInvoiceWorkspaceTabs.map((tab) => (
@@ -4803,6 +5279,295 @@ export default function MockCustomerDashboardPage() {
                   </p>
                 </div>
               ) : null}
+              <div
+                className="mt-3 border-t border-slate-200 pt-3"
+                data-plain-invoice-panel="true"
+                ref={plainInvoicePanelRef}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
+                      Create Invoice
+                    </p>
+                    <h3 className="mt-1 text-base font-bold text-slate-950">
+                      Manual bill-to
+                    </h3>
+                  </div>
+                  <p className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-600">
+                    No number yet
+                  </p>
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(9rem,1fr)_minmax(9rem,0.9fr)_minmax(8rem,0.75fr)_minmax(7rem,0.65fr)_minmax(8rem,0.7fr)] xl:items-end">
+                  <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                    Bill to
+                    <input
+                      className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700"
+                      data-plain-invoice-bill-to-name="true"
+                      onChange={(event) => updatePlainInvoiceForm("billToName", event.target.value)}
+                      placeholder="Name / company"
+                      value={plainInvoiceForm.billToName}
+                    />
+                  </label>
+                  <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                    Email
+                    <input
+                      className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700"
+                      data-plain-invoice-bill-to-email="true"
+                      inputMode="email"
+                      onChange={(event) => updatePlainInvoiceForm("billToEmail", event.target.value)}
+                      placeholder="optional"
+                      type="email"
+                      value={plainInvoiceForm.billToEmail}
+                    />
+                  </label>
+                  <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                    Reference
+                    <input
+                      className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700"
+                      data-plain-invoice-reference="true"
+                      onChange={(event) => updatePlainInvoiceForm("reference", event.target.value)}
+                      placeholder="e.g. WALKIN-001"
+                      value={plainInvoiceForm.reference}
+                    />
+                  </label>
+                  <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                    Amount
+                    <input
+                      className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700"
+                      data-plain-invoice-amount="true"
+                      inputMode="decimal"
+                      onChange={(event) => updatePlainInvoiceForm("amount", event.target.value)}
+                      placeholder="e.g. 120.00"
+                      value={plainInvoiceForm.amount}
+                    />
+                  </label>
+                  <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                    Due date
+                    <input
+                      className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700"
+                      data-plain-invoice-due-date="true"
+                      onChange={(event) => updatePlainInvoiceForm("dueDateIso", event.target.value)}
+                      type="date"
+                      value={plainInvoiceForm.dueDateIso}
+                    />
+                  </label>
+                  <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500 sm:col-span-2 xl:col-span-2">
+                    Service
+                    <input
+                      className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700"
+                      data-plain-invoice-service="true"
+                      onChange={(event) => updatePlainInvoiceForm("service", event.target.value)}
+                      value={plainInvoiceForm.service}
+                    />
+                  </label>
+                  <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500 sm:col-span-2 xl:col-span-3">
+                    Line item
+                    <input
+                      className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700"
+                      data-plain-invoice-line-description="true"
+                      onChange={(event) => updatePlainInvoiceForm("lineDescription", event.target.value)}
+                      placeholder="Service description printed on invoice"
+                      value={plainInvoiceForm.lineDescription}
+                    />
+                  </label>
+                  <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500 sm:col-span-2 xl:col-span-3">
+                    Route / notes
+                    <input
+                      className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700"
+                      data-plain-invoice-route="true"
+                      onChange={(event) => updatePlainInvoiceForm("route", event.target.value)}
+                      placeholder="optional"
+                      value={plainInvoiceForm.route}
+                    />
+                  </label>
+                  <div className="flex flex-wrap items-end gap-1.5 sm:col-span-2 xl:col-span-2">
+                    <label className="inline-flex h-7 w-fit items-center gap-1.5 whitespace-nowrap rounded-md border border-slate-300 bg-white px-2 text-[11px] font-bold leading-none text-slate-700">
+                      <input
+                        checked={plainInvoiceForm.cardPaymentEnabled}
+                        className="h-3.5 w-3.5 rounded border-slate-400 text-slate-900"
+                        data-plain-invoice-card-payment-enabled="true"
+                        onChange={(event) =>
+                          updatePlainInvoiceForm("cardPaymentEnabled", event.target.checked)
+                        }
+                        type="checkbox"
+                      />
+                      <span>Card</span>
+                    </label>
+                    <label
+                      className={`inline-flex h-7 w-fit items-center gap-1.5 whitespace-nowrap rounded-md border px-2 text-[11px] font-bold leading-none ${
+                        plainInvoiceForm.cardPaymentEnabled
+                          ? "border-slate-300 bg-white text-slate-700"
+                          : "border-slate-200 bg-slate-50 text-slate-400"
+                      }`}
+                    >
+                      <input
+                        checked={plainInvoiceForm.cardFeeApplies}
+                        className="h-3.5 w-3.5 rounded border-slate-400 text-slate-900 disabled:border-slate-300"
+                        data-plain-invoice-card-fee-applies="true"
+                        disabled={!plainInvoiceForm.cardPaymentEnabled}
+                        onChange={(event) =>
+                          updatePlainInvoiceForm("cardFeeApplies", event.target.checked)
+                        }
+                        type="checkbox"
+                      />
+                      <span>10% fee</span>
+                    </label>
+                    <label className="inline-flex h-7 w-fit items-center gap-1.5 whitespace-nowrap rounded-md border border-slate-300 bg-white px-2 text-[11px] font-bold leading-none text-slate-700">
+                      <input
+                        checked={plainInvoiceForm.isPaid}
+                        className="h-3.5 w-3.5 rounded border-slate-400 text-slate-900"
+                        data-plain-invoice-paid-status="true"
+                        onChange={(event) =>
+                          updatePlainInvoiceForm("isPaid", event.target.checked)
+                        }
+                        type="checkbox"
+                      />
+                      <span>Paid</span>
+                    </label>
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                  <button
+                    className={`inline-flex h-7 items-center justify-center whitespace-nowrap rounded-md border px-2 text-[11px] font-bold leading-none transition ${
+                      isPlainInvoicePreviewCurrent
+                        ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                        : plainInvoicePreview
+                          ? "border-amber-300 bg-amber-50 text-amber-900 hover:border-amber-500"
+                          : "border-slate-300 bg-white text-slate-800 hover:border-slate-600"
+                    }`}
+                    data-plain-invoice-preview-action="true"
+                    onClick={previewPlainInvoice}
+                    type="button"
+                  >
+                    {isPlainInvoicePreviewCurrent ? "Previewed" : plainInvoicePreview ? "Refresh" : "Preview"}
+                  </button>
+                  <button
+                    className={`inline-flex h-7 items-center justify-center whitespace-nowrap rounded-md border px-2 text-[11px] font-bold leading-none transition ${
+                      issuingCustomerInvoiceKey === plainInvoiceDraftActionKey
+                        ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                        : isPlainInvoicePreviewCurrent
+                          ? "border-slate-300 bg-white text-slate-800 hover:border-slate-600"
+                          : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                    }`}
+                    aria-disabled={!isPlainInvoicePreviewCurrent}
+                    data-plain-invoice-draft-action="true"
+                    onClick={savePlainInvoiceDraft}
+                    type="button"
+                  >
+                    {issuingCustomerInvoiceKey === plainInvoiceDraftActionKey ? "Saving" : "Draft"}
+                  </button>
+                  <button
+                    className={`inline-flex h-7 items-center justify-center whitespace-nowrap rounded-md border px-2 text-[11px] font-bold leading-none transition ${
+                      issuingCustomerInvoiceKey === plainInvoiceIssueActionKey
+                        ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                        : isPlainInvoicePreviewCurrent
+                          ? "border-slate-900 bg-slate-900 text-white hover:bg-slate-700"
+                          : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                    }`}
+                    aria-disabled={!isPlainInvoicePreviewCurrent}
+                    data-plain-invoice-issue-action="true"
+                    onClick={issuePlainInvoice}
+                    type="button"
+                  >
+                    {issuingCustomerInvoiceKey === plainInvoiceIssueActionKey ? "Issuing" : "Issue"}
+                  </button>
+                  <button
+                    className={`inline-flex h-7 items-center justify-center whitespace-nowrap rounded-md border px-2 text-[11px] font-bold leading-none transition ${
+                      issuingCustomerInvoiceKey === plainInvoiceEmailActionKey
+                        ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                        : isPlainInvoicePreviewCurrent
+                          ? "border-sky-300 bg-white text-sky-900 hover:border-sky-700"
+                          : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                    }`}
+                    aria-disabled={!isPlainInvoicePreviewCurrent}
+                    data-plain-invoice-email-action="true"
+                    onClick={emailPlainInvoice}
+                    type="button"
+                  >
+                    {issuingCustomerInvoiceKey === plainInvoiceEmailActionKey ? "Emailing" : "Email"}
+                  </button>
+                  <button
+                    className="inline-flex h-7 items-center justify-center whitespace-nowrap rounded-md border border-slate-300 bg-white px-2 text-[11px] font-bold leading-none text-slate-700 transition hover:border-slate-500"
+                    data-plain-invoice-clear-action="true"
+                    onClick={clearPlainInvoiceForm}
+                    type="button"
+                  >
+                    Clear
+                  </button>
+                </div>
+                {plainInvoicePreview ? (
+                  <div
+                    className={`mt-3 rounded-md border px-3 py-2 text-xs leading-5 ${
+                      isPlainInvoicePreviewCurrent
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-950"
+                        : "border-amber-200 bg-amber-50 text-amber-950"
+                    }`}
+                    data-plain-invoice-preview-card="true"
+                  >
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="font-bold uppercase tracking-[0.08em]">
+                        Create Invoice Preview {isPlainInvoicePreviewCurrent ? "Ready" : "Needs Refresh"}
+                      </p>
+                      <p className="font-semibold" data-plain-invoice-preview-amount="true">
+                        {plainInvoicePreview.amountLabel} / {plainInvoicePreview.folder}
+                      </p>
+                    </div>
+                    <dl className="mt-2 grid gap-x-4 gap-y-1 sm:grid-cols-2">
+                      <div>
+                        <dt className="font-bold text-slate-600">Bill to</dt>
+                        <dd className="font-semibold" data-plain-invoice-preview-bill-to="true">
+                          {plainInvoicePreview.customerName}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="font-bold text-slate-600">Reference</dt>
+                        <dd className="font-semibold">{plainInvoicePreview.reference}</dd>
+                      </div>
+                      <div>
+                        <dt className="font-bold text-slate-600">Due date</dt>
+                        <dd className="font-semibold">{plainInvoicePreview.dueDateLabel}</dd>
+                      </div>
+                      <div>
+                        <dt className="font-bold text-slate-600">Card payment</dt>
+                        <dd className="font-semibold">
+                          {customerInvoiceCardPaymentPreviewLabel(
+                            plainInvoicePreview.cardPaymentEnabled,
+                            plainInvoicePreview.cardFeeApplies,
+                          )}
+                        </dd>
+                      </div>
+                    </dl>
+                    <p className="mt-2 font-semibold" data-plain-invoice-preview-line="true">
+                      {plainInvoicePreview.lineDescription}
+                    </p>
+                    <p className="mt-1 text-slate-700">{plainInvoicePreview.route}</p>
+                    {!isPlainInvoicePreviewCurrent ? (
+                      <p className="mt-2 font-bold text-amber-800" data-plain-invoice-preview-stale="true">
+                        Create Invoice fields changed. Refresh preview before Draft or Issue.
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+                <p
+                  aria-live="polite"
+                  className={`mt-2 rounded-md border px-3 py-2 text-sm font-semibold leading-5 ${regularCustomerBookingFeedbackClass(
+                    plainInvoiceFeedbackTone,
+                  )}`}
+                  data-plain-invoice-feedback="true"
+                  data-plain-invoice-feedback-tone={plainInvoiceFeedbackTone}
+                >
+                  {plainInvoiceFeedback}
+                </p>
+                <p
+                  className="mt-2 rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-950"
+                  data-plain-invoice-boundary="true"
+                >
+                  Create Invoice stores an ad-hoc admin billing document only after Draft or Issue. It does not create
+                  a customer folder, portal invite, prefix reservation, payment link, provider send, payout, or
+                  GPS/live-location action. Email issues the invoice first, then uses the existing guarded email
+                  route. Paid only changes invoice status; it does not record a payment.
+                </p>
+              </div>
               {customerInvoiceDrafts.length > 0 ? (
                 <div
                   className="mt-3 border-t border-slate-200 pt-3"

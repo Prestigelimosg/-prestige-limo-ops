@@ -31,7 +31,10 @@ const [adminPage, customerRoute, adminNotification] = await Promise.all([
 for (const fragment of [
   "AdminBookingChangeRequestReviewAction",
   "adminAppNotificationChangeRequestContext",
+  "adminBookingChangeRequestIsCancellation",
+  "adminBookingChangeRequestKindLabel",
   "adminBookingChangeRequestMergeIntoBookingForm",
+  "buildAdminBookingCancellationRequestApplyPayload",
   "handleAdminBookingChangeRequestReview",
   "handleAdminBookingChangeRequestReject",
   "handleAdminBookingChangeRequestApply",
@@ -40,6 +43,7 @@ for (const fragment of [
   'data-admin-booking-change-request-review-action="reject"',
   'data-admin-booking-change-request-review-action="apply"',
   "Apply + Cal",
+  "Cancel + Cal",
 ]) {
   assertIncludes(adminPage, fragment, `admin amendment review UI ${fragment}`);
 }
@@ -62,6 +66,7 @@ for (const fragment of [
   "adminCustomerInvoiceBlocksBookingAmendment",
   "already exists. Use adjustment, credit note, or new invoice review",
   "Booking, invoice, and Google Calendar were not changed.",
+  "Cancellation apply stopped for",
 ]) {
   assertIncludes(adminPage, fragment, `admin amendment invoice safety ${fragment}`);
 }
@@ -73,6 +78,17 @@ for (const fragment of [
   "Amendment notification remains pending.",
 ]) {
   assertIncludes(adminPage, fragment, `admin amendment service-type safety ${fragment}`);
+}
+
+for (const fragment of [
+  'admin_internal_status: "cancelled"',
+  'customer_facing_status: "cancelled"',
+  'cancellation_review_status: "cancelled"',
+  'request_review_status: "approved"',
+  "Cancellation applied to",
+  "Google Calendar auto-synced on the same booking reference as cancelled",
+]) {
+  assertIncludes(adminPage, fragment, `admin cancellation apply safety ${fragment}`);
 }
 
 const customerRoutePostBlock = customerRoute.slice(customerRoute.indexOf("export async function POST"));

@@ -244,6 +244,24 @@ async function main() {
 
     {
       const response = await harness.route.POST(
+        requestWithJson(
+          safePayload({
+            status: "cancelled",
+          }),
+        ),
+      );
+      const { body, status } = await readRouteResponse(response);
+
+      assert.equal(status, 200);
+      assert.equal(body.ok, true);
+      assert.match(body.calendar_event.title, /^CANCELLED - Prestige - MNG - Safe Traveler/);
+      assert.match(body.calendar_event.description, /Status: cancelled/);
+      assert.match(body.ics, /SUMMARY:CANCELLED - Prestige - MNG - Safe Traveler/);
+      assertNoLeaks(body, "cancelled calendar event response must not leak unsafe fields");
+    }
+
+    {
+      const response = await harness.route.POST(
         requestWithJson(safePayload(), validAdminBrowserHeaders()),
       );
       const { body, status } = await readRouteResponse(response);

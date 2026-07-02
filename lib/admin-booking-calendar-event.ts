@@ -389,8 +389,10 @@ function buildAdminBookingCalendarEventParts(
     textField(booking, "company_name") ||
     nestedTextField(booking, "companies", "company_name", "name");
   const titleTarget = travelerName || companyName || bookingReference;
+  const status = textField(booking, "status");
+  const cancelledPrefix = clean(status).toLowerCase() === "cancelled" ? "CANCELLED - " : "";
   const title = limitText(
-    ["Prestige", bookingType, titleTarget].filter(Boolean).join(" - "),
+    `${cancelledPrefix}${["Prestige", bookingType, titleTarget].filter(Boolean).join(" - ")}`,
     120,
   );
   const description = buildDescription({

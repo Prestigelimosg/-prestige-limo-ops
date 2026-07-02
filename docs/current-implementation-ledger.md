@@ -1,10 +1,10 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-d0c5e211 Persist Save CRM driver assignment
+f93dcbee Move todays jobs below assigned driver
 
 Latest pushed main/staging runtime checkpoint:
-d0c5e211 Persist Save CRM driver assignment
+f93dcbee Move todays jobs below assigned driver
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
 d0c5e211 Persist Save CRM driver assignment

@@ -126,6 +126,8 @@ const maxAdminBookingListLimit = 200;
 const adminBookingCurrentLoadSelect =
   "id, booking_reference, customer_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, flight_no, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, admin_internal_status, customer_facing_status, short_notice_review_status, request_review_status, change_review_status, cancellation_review_status, source_surface, created_at, updated_at, booking_route_points(point_type, sequence, location, notes), booking_service_items(item_type, quantity, notes)";
 const adminBookingFoundationLoadSelect =
+  "id, booking_reference, customer_id, source_channel, pickup_datetime, pickup_location, dropoff_location, route_type, customer_display_name, contact_phone, contact_email, flight_no, driver_name, driver_contact, driver_plate_number, pax_count, luggage_count, vehicle_type_or_category, customer_facing_status, admin_internal_status, short_notice_review_status, parser_source_reference, created_at, updated_at, booking_route_points(point_type, sequence_number, location_text, timing_note), booking_service_items(service_item_type, quantity, blocks_count)";
+const adminBookingFoundationLoadSelectWithoutDriver =
   "id, booking_reference, customer_id, source_channel, pickup_datetime, pickup_location, dropoff_location, route_type, customer_display_name, contact_phone, contact_email, flight_no, pax_count, luggage_count, vehicle_type_or_category, customer_facing_status, admin_internal_status, short_notice_review_status, parser_source_reference, created_at, updated_at, booking_route_points(point_type, sequence_number, location_text, timing_note), booking_service_items(service_item_type, quantity, blocks_count)";
 
 const allowedAdapterRoles = new Set(["admin", "dispatcher", "system"]);
@@ -918,6 +920,9 @@ function bookingToFoundationDbRow(
     contact_phone: currentRow.contact_phone,
     contact_email: currentRow.contact_email,
     flight_no: textOrNull(booking.flight_no),
+    driver_contact: currentRow.driver_contact,
+    driver_name: currentRow.driver_name,
+    driver_plate_number: currentRow.driver_plate_number,
     pax_count: integerOrNull(booking.pax_count),
     luggage_count: integerOrNull(booking.luggage_count),
     vehicle_type_or_category: textOrNull(booking.vehicle_type_or_category),
@@ -926,6 +931,25 @@ function bookingToFoundationDbRow(
     short_notice_review_status: currentRow.short_notice_review_status,
     parser_source_reference: textOrNull(booking.parser_source_reference),
   };
+}
+
+function bookingToFoundationDbRowWithoutDriver(
+  booking: AdminBookingRecordInput,
+  customerId: DbIdentifier | null,
+  actor: AdminBookingPersistenceAdapterActor,
+) {
+  const {
+    driver_contact: _driverContact,
+    driver_name: _driverName,
+    driver_plate_number: _driverPlateNumber,
+    ...row
+  } = bookingToFoundationDbRow(booking, customerId, actor);
+
+  void _driverContact;
+  void _driverName;
+  void _driverPlateNumber;
+
+  return row;
 }
 
 type AdminBookingSelectResult<T> = {
@@ -942,7 +966,13 @@ async function loadAdminBookingsWithFoundationFallback<T>(
     return currentResult;
   }
 
-  return buildQuery(adminBookingFoundationLoadSelect);
+  const foundationResult = await buildQuery(adminBookingFoundationLoadSelect);
+
+  if (!foundationResult.error || !isColumnMissingFailure(foundationResult.error)) {
+    return foundationResult;
+  }
+
+  return buildQuery(adminBookingFoundationLoadSelectWithoutDriver);
 }
 
 function toAdminBookingDto(row: UnknownRecord): AdminBookingPersistenceRecord {
@@ -1140,6 +1170,7 @@ async function insertRowAndSelectIdWithFallback(
   table: string,
   currentPayload: UnknownRecord,
   cumulativePayload: UnknownRecord,
+  legacyCumulativePayload: UnknownRecord = cumulativePayload,
 ) {
   const currentResult = await client.from(table).insert(currentPayload).select("id").single();
 
@@ -1147,7 +1178,17 @@ async function insertRowAndSelectIdWithFallback(
     return currentResult;
   }
 
-  return client.from(table).insert(cumulativePayload).select("id").single();
+  const cumulativeResult = await client.from(table).insert(cumulativePayload).select("id").single();
+
+  if (
+    !cumulativeResult.error ||
+    legacyCumulativePayload === cumulativePayload ||
+    !isColumnMissingFailure(cumulativeResult.error)
+  ) {
+    return cumulativeResult;
+  }
+
+  return client.from(table).insert(legacyCumulativePayload).select("id").single();
 }
 
 async function insertRowsWithFallback(
@@ -1448,6 +1489,7 @@ export async function createAdminBookingThroughSupabaseAdapter(
     "bookings",
     bookingRow,
     bookingToFoundationDbRow(input.booking, customerId, actor),
+    bookingToFoundationDbRowWithoutDriver(input.booking, customerId, actor),
   );
   const bookingId = dbIdentifierOrNull(asRecord(insertedBooking).id);
 

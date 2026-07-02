@@ -1142,6 +1142,9 @@ try {
   const foundationSchemaPayload = canonicalAdminPayload({
     booking: {
       booking_reference: "SAFE-FOUNDATION-CREATE-001",
+      driver_contact: "+65 9000 0100",
+      driver_name: "Foundation Safe Driver",
+      driver_plate_number: "SFD100A",
     },
   });
   const parsedFoundationSchemaPayload =
@@ -1170,6 +1173,9 @@ try {
     customer_facing_status: "pending_review",
     customer_id: 1,
     dropoff_location: "Safe Canonical Dropoff",
+    driver_contact: "+65 9000 0100",
+    driver_name: "Foundation Safe Driver",
+    driver_plate_number: "SFD100A",
     flight_no: null,
     luggage_count: null,
     parser_source_reference: null,
@@ -1224,6 +1230,9 @@ try {
           customer_facing_status: "pending_review",
           customer_id: 25,
           dropoff_location: "Foundation Safe Dropoff",
+          driver_contact: "+65 9000 0102",
+          driver_name: "Foundation Read Driver",
+          driver_plate_number: "SFR102A",
           id: 101,
           luggage_count: 1,
           parser_source_reference: "SAFE-PARSER-REFERENCE",
@@ -1266,6 +1275,9 @@ try {
   assert.equal(foundationFallbackRoute.body.ok, true);
   assert.equal(foundationFallbackRoute.body.bookings.length, 1);
   assert.equal(foundationFallbackRoute.body.bookings[0].booking_reference, "SAFE-FOUNDATION-GET-001");
+  assert.equal(foundationFallbackRoute.body.bookings[0].driver_contact, "+65 9000 0102");
+  assert.equal(foundationFallbackRoute.body.bookings[0].driver_name, "Foundation Read Driver");
+  assert.equal(foundationFallbackRoute.body.bookings[0].driver_plate_number, "SFR102A");
   assert.equal(foundationFallbackRoute.body.bookings[0].pickup_at, "2026-06-09T10:30:00+08:00");
   assert.equal(foundationFallbackRoute.body.bookings[0].service_type, "transfer");
   assert.equal(foundationFallbackRoute.body.bookings[0].pax_count, 2);
@@ -1288,9 +1300,88 @@ try {
   assert.equal(foundationReadMock.client.selectFailures[0].calls, 1);
   assert.equal(foundationReadMock.client.selectHistory.length, 2);
   assert.match(foundationReadMock.client.selectHistory[0].selectedColumns, /pickup_at/);
+  assert.match(foundationReadMock.client.selectHistory[1].selectedColumns, /driver_name/);
   assert.match(foundationReadMock.client.selectHistory[1].selectedColumns, /pickup_datetime/);
   assert.doesNotMatch(foundationReadMock.client.selectHistory[1].selectedColumns, /internal_note/);
   assertNoUnsafeKeys(foundationFallbackRoute, "foundation fallback GET response");
+
+  const foundationReadLegacyDriverMock = installMockClient(
+    {
+      bookings: [
+        {
+          admin_internal_status: "needs_review",
+          booking_reference: "SAFE-FOUNDATION-LEGACY-DRIVER-GET-001",
+          contact_email: "foundation-legacy-driver-safe@example.com",
+          contact_phone: "+65 9000 0103",
+          created_at: "2026-06-04T00:00:00.000Z",
+          customer_display_name: "Foundation Legacy Driver Customer",
+          customer_facing_status: "pending_review",
+          customer_id: 26,
+          dropoff_location: "Foundation Legacy Driver Dropoff",
+          id: 102,
+          luggage_count: 1,
+          parser_source_reference: "SAFE-PARSER-REFERENCE",
+          pax_count: 2,
+          pickup_datetime: "2026-06-10T10:30:00+08:00",
+          pickup_location: "Foundation Legacy Driver Pickup",
+          route_type: "transfer",
+          short_notice_review_status: "not_required",
+          source_channel: "admin-dashboard",
+          updated_at: "2026-06-04T00:00:00.000Z",
+          vehicle_type_or_category: "Alphard",
+        },
+      ],
+    },
+    {
+      selectFailures: [
+        {
+          column: "pickup_at",
+          error: {
+            code: "PGRST204",
+            message: "Sanitized mock schema cache column source.",
+          },
+          once: true,
+          table: "bookings",
+        },
+        {
+          column: "driver_name",
+          error: {
+            code: "PGRST204",
+            message: "Sanitized mock legacy driver column source.",
+          },
+          once: true,
+          table: "bookings",
+        },
+      ],
+    },
+  );
+  const foundationLegacyDriverFallbackRoute = await readRouteResponse(
+    await adminRoute.GET(
+      new Request("http://localhost/api/admin-bookings", {
+        headers: adminHeaders({
+          "x-prestige-admin-session-token": serverSessionToken,
+        }),
+      }),
+    ),
+  );
+
+  assert.equal(foundationLegacyDriverFallbackRoute.status, 200);
+  assert.equal(foundationLegacyDriverFallbackRoute.body.ok, true);
+  assert.equal(foundationLegacyDriverFallbackRoute.body.bookings.length, 1);
+  assert.equal(
+    foundationLegacyDriverFallbackRoute.body.bookings[0].booking_reference,
+    "SAFE-FOUNDATION-LEGACY-DRIVER-GET-001",
+  );
+  assert.equal(foundationLegacyDriverFallbackRoute.body.bookings[0].driver_name, null);
+  assert.equal(foundationReadLegacyDriverMock.client.selectFailures[0].calls, 1);
+  assert.equal(foundationReadLegacyDriverMock.client.selectFailures[1].calls, 1);
+  assert.equal(foundationReadLegacyDriverMock.client.selectHistory.length, 3);
+  assert.match(foundationReadLegacyDriverMock.client.selectHistory[1].selectedColumns, /driver_name/);
+  assert.doesNotMatch(foundationReadLegacyDriverMock.client.selectHistory[2].selectedColumns, /driver_name/);
+  assertNoUnsafeKeys(
+    foundationLegacyDriverFallbackRoute,
+    "foundation legacy driver fallback GET response",
+  );
 
   const columnFailureMock = installMockClient(
     {},

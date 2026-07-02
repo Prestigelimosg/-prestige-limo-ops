@@ -2057,6 +2057,35 @@ type AdminBookingPersistenceRequestBody = {
   service_items: NonNullable<AdminBookingPersistenceRecord["service_items"]>;
 };
 
+type SaveCrmBillingIdentityReview = {
+  accountLabel: string;
+  bookerLabel: string;
+  companyAccount: string;
+  conflictingTravelerNames: string[];
+  key: string;
+  matchingRecordCount: number;
+  needsTravelerName: boolean;
+  travelerName: string;
+};
+
+type SaveCrmBillingIdentityConfirmation = {
+  accountLabel: string;
+  companyAccount: string;
+  key: string;
+  reviewedAt: string;
+  travelerName: string;
+};
+
+type SaveCrmBillingIdentityAccountResolution =
+  | {
+      accountLabel: string | null;
+      ok: true;
+    }
+  | {
+      message: Message;
+      ok: false;
+    };
+
 type AdminBookingPersistenceAction = "save" | "load" | "update";
 type AdminCustomerRequestReviewDecisionKey =
   | "needs-review"
@@ -3890,6 +3919,158 @@ function normalizeCompanyAccount(value: string | null | undefined, email: string
   }
 
   return companyName;
+}
+
+function normalizeBillingIdentityMatch(value: string | number | null | undefined) {
+  return clean(value).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function billingIdentityMatches(first: string | number | null | undefined, second: string | number | null | undefined) {
+  const firstKey = normalizeBillingIdentityMatch(first);
+  const secondKey = normalizeBillingIdentityMatch(second);
+
+  return Boolean(firstKey && secondKey && firstKey === secondKey);
+}
+
+function formatTravelerBillingAccountLabel(companyAccount: string, travelerName: string) {
+  const safeCompany = clean(companyAccount) || "Customer Account";
+  const safeTraveler = clean(travelerName) || "Traveler To Confirm";
+
+  return `${safeCompany} [${safeTraveler}]`.slice(0, 220);
+}
+
+function billingIdentityBaseAccount(value: string | null | undefined) {
+  const account = clean(value);
+  const bracketMatch = account.match(/^(.+?)\s+\[[^\]]+\]$/);
+
+  if (bracketMatch?.[1]) {
+    return clean(bracketMatch[1]);
+  }
+
+  const slashMatch = account.match(/^(.+?)\s+\/\s+.+$/);
+
+  if (slashMatch?.[1]) {
+    return clean(slashMatch[1]);
+  }
+
+  return account;
+}
+
+function saveCrmBillingRecordCustomerAccount(
+  record: AdminBookingPersistenceRecord | BookingRecord,
+) {
+  return clean(record.customer_display_name) || clean((record as BookingRecord).companies?.company_name);
+}
+
+function saveCrmBillingRecordTravelerName(
+  record: AdminBookingPersistenceRecord | BookingRecord,
+) {
+  return clean(record.passenger_name) || clean((record as BookingRecord).travelers?.traveler_name);
+}
+
+function saveCrmBillingRecordBookerTokens(
+  record: AdminBookingPersistenceRecord | BookingRecord,
+) {
+  return [
+    clean(record.contact_display_name) || clean((record as BookingRecord).bookers?.booker_name),
+    clean(record.contact_phone) || clean((record as BookingRecord).bookers?.phone),
+    clean(record.contact_email) || clean((record as BookingRecord).bookers?.email),
+  ].filter(Boolean);
+}
+
+function saveCrmCurrentBookerTokens(bookingValue: BookingForm) {
+  return [
+    clean(bookingValue.booker),
+    clean(bookingValue.bookerContact),
+    clean(bookingValue.bookerEmail),
+  ].filter(Boolean);
+}
+
+function saveCrmBillingBookerLabel(bookingValue: BookingForm) {
+  return clean(bookingValue.booker) || clean(bookingValue.bookerContact) || clean(bookingValue.bookerEmail) || "";
+}
+
+function uniqueBillingTravelerNames(names: string[]) {
+  const seen = new Set<string>();
+  const unique: string[] = [];
+
+  for (const name of names) {
+    const cleaned = clean(name);
+    const key = normalizeBillingIdentityMatch(cleaned);
+
+    if (!cleaned || !key || seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    unique.push(cleaned);
+  }
+
+  return unique;
+}
+
+function buildSaveCrmBillingIdentityReview(
+  bookingValue: BookingForm,
+  records: Array<AdminBookingPersistenceRecord | BookingRecord>,
+): SaveCrmBillingIdentityReview | null {
+  const rawCompanyAccount = normalizeCompanyAccount(bookingValue.company, bookingValue.bookerEmail);
+  const bookerLabel = saveCrmBillingBookerLabel(bookingValue);
+  const companyAccount = rawCompanyAccount || bookerLabel || clean(bookingValue.name);
+  const travelerName = clean(bookingValue.name);
+  const currentBookerTokens = saveCrmCurrentBookerTokens(bookingValue);
+
+  if (!companyAccount && currentBookerTokens.length === 0) {
+    return null;
+  }
+
+  const relatedTravelerNames = records.flatMap((record) => {
+    const recordAccount = saveCrmBillingRecordCustomerAccount(record);
+    const recordBaseAccount = billingIdentityBaseAccount(recordAccount);
+    const companyMatches =
+      Boolean(companyAccount) &&
+      (billingIdentityMatches(recordAccount, companyAccount) ||
+        billingIdentityMatches(recordBaseAccount, companyAccount));
+    const recordBookerTokens = saveCrmBillingRecordBookerTokens(record);
+    const bookerMatches = currentBookerTokens.some((token) =>
+      recordBookerTokens.some((recordToken) => billingIdentityMatches(token, recordToken)),
+    );
+
+    if (!companyMatches && !bookerMatches) {
+      return [];
+    }
+
+    const recordTravelerName = saveCrmBillingRecordTravelerName(record);
+
+    return recordTravelerName ? [recordTravelerName] : [];
+  });
+  const uniqueRelatedTravelerNames = uniqueBillingTravelerNames(relatedTravelerNames);
+  const conflictingTravelerNames = travelerName
+    ? uniqueRelatedTravelerNames.filter((name) => !billingIdentityMatches(name, travelerName))
+    : uniqueRelatedTravelerNames;
+
+  if (conflictingTravelerNames.length === 0) {
+    return null;
+  }
+
+  const needsTravelerName = !travelerName;
+  const accountLabel = formatTravelerBillingAccountLabel(companyAccount, travelerName || "Traveler To Confirm");
+  const key = [
+    normalizeBillingIdentityMatch(companyAccount),
+    normalizeBillingIdentityMatch(bookerLabel),
+    normalizeBillingIdentityMatch(travelerName),
+    conflictingTravelerNames.map(normalizeBillingIdentityMatch).sort().join("|"),
+  ].join("::");
+
+  return {
+    accountLabel,
+    bookerLabel,
+    companyAccount,
+    conflictingTravelerNames,
+    key,
+    matchingRecordCount: uniqueRelatedTravelerNames.length,
+    needsTravelerName,
+    travelerName,
+  };
 }
 
 const mockCustomerDomainMatches = new Map([
@@ -6600,6 +6781,7 @@ function buildAdminBookingPersistencePayload(
   bookingValue: BookingForm,
   currentTimeMs: number,
   bookingReference = createAdminBookingReference(),
+  options: { customerDisplayNameOverride?: string | null } = {},
 ): AdminBookingPersistenceRequestBody {
   const shortNoticeReviewRequired = isAdminShortNoticeReviewRequired(bookingValue, currentTimeMs);
   const pickupLocation = clean(bookingValue.pickup) || adminDraftPickupFallback;
@@ -6662,6 +6844,7 @@ function buildAdminBookingPersistencePayload(
       Boolean(serviceItem),
   );
   const customerDisplayName =
+    clean(options.customerDisplayNameOverride) ||
     normalizeCompanyAccount(bookingValue.company, bookingValue.bookerEmail) ||
     clean(bookingValue.booker) ||
     clean(bookingValue.name) ||
@@ -10444,6 +10627,10 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   const [adminCustomerRequestStatusFilter, setAdminCustomerRequestStatusFilter] =
     useState<AdminCustomerRequestStatusFilter>(adminCustomerRequestAllStatusFilter);
   const [customerMatchFeedback, setCustomerMatchFeedback] = useState<CustomerMatchFeedback | null>(null);
+  const [saveCrmBillingIdentityConfirmation, setSaveCrmBillingIdentityConfirmation] =
+    useState<SaveCrmBillingIdentityConfirmation | null>(null);
+  const [saveCrmBillingIdentityMessage, setSaveCrmBillingIdentityMessage] =
+    useState<Message | null>(null);
   const [deletingCompletedBookingId, setDeletingCompletedBookingId] = useState<string | null>(null);
   const [copyEditStates, setCopyEditStates] =
     useState<Record<DispatchCopyTarget, CopyEditState>>(createInitialCopyEditStates);
@@ -12634,6 +12821,25 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     };
   }, [booking, drivers, rateCompanies, rateSettings, rateTravelers]);
 
+  const saveCrmBillingIdentitySourceRecords = useMemo(
+    () => [
+      ...adminBookingPersistenceRecords,
+      ...bookings,
+    ],
+    [adminBookingPersistenceRecords, bookings],
+  );
+  const saveCrmBillingIdentityReview = useMemo(
+    () => buildSaveCrmBillingIdentityReview(booking, saveCrmBillingIdentitySourceRecords),
+    [booking, saveCrmBillingIdentitySourceRecords],
+  );
+  const confirmedSaveCrmBillingIdentity =
+    saveCrmBillingIdentityReview &&
+    saveCrmBillingIdentityConfirmation?.key === saveCrmBillingIdentityReview.key
+      ? saveCrmBillingIdentityConfirmation
+      : null;
+  const saveCrmBillingIdentityAccountOverride =
+    confirmedSaveCrmBillingIdentity?.accountLabel || "";
+
   function getBookingSaveGuardKey(appliedReferenceOverride = appliedAdminBookingSnapshotReference) {
     const normalizedBooking = Object.fromEntries(
       Object.entries(booking).map(([key, value]) => [key, clean(value)]),
@@ -12642,6 +12848,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     return JSON.stringify({
       appliedSnapshotReference: clean(appliedReferenceOverride),
       booking: normalizedBooking,
+      billingIdentityAccount: saveCrmBillingIdentityAccountOverride,
       jobCard,
       pricing: draftPricing,
       route,
@@ -13588,6 +13795,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   function clearReviewAndSaveState() {
     setBookingSaveMessage(null);
     setCustomerMatchFeedback(null);
+    setSaveCrmBillingIdentityMessage(null);
     setJobCardCalendarAction(null);
     setJobCardCalendarMessage(null);
   }
@@ -13828,6 +14036,145 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     }
 
     return true;
+  }
+
+  function scrollToSaveCrmBillingIdentityReview() {
+    window.setTimeout(() => {
+      document
+        .querySelector('[data-save-crm-billing-identity-review="true"]')
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 0);
+  }
+
+  function setSaveCrmBillingIdentityReviewMessage(message: Message) {
+    setSaveCrmBillingIdentityMessage(message);
+    setBookingSaveMessage(message);
+    setMessage(message);
+  }
+
+  function confirmSaveCrmBillingIdentityReview(review = saveCrmBillingIdentityReview) {
+    if (!review) {
+      return;
+    }
+
+    if (review.needsTravelerName) {
+      setSaveCrmBillingIdentityReviewMessage({
+        tone: "error",
+        text: "Enter the passenger/traveler name before confirming the billing account.",
+      });
+      return;
+    }
+
+    const confirmation = {
+      accountLabel: review.accountLabel,
+      companyAccount: review.companyAccount,
+      key: review.key,
+      reviewedAt: new Date().toISOString(),
+      travelerName: review.travelerName,
+    } satisfies SaveCrmBillingIdentityConfirmation;
+
+    setSaveCrmBillingIdentityConfirmation(confirmation);
+    setSaveCrmBillingIdentityReviewMessage({
+      tone: "success",
+      text: `Billing identity reviewed. Save + CRM will use/create customer account ${confirmation.accountLabel}.`,
+    });
+  }
+
+  async function fetchRecentAdminBookingPersistenceRecordsForBillingIdentity() {
+    try {
+      const response = await fetch(adminBookingsApiPath, {
+        headers: {
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "GET",
+      });
+      const body = (await response.json().catch(() => null)) as
+        | {
+            bookings?: AdminBookingPersistenceRecord[];
+            ok?: boolean;
+          }
+        | null;
+
+      if (!response.ok || body?.ok !== true || !Array.isArray(body.bookings)) {
+        return [];
+      }
+
+      const recentRecords = body.bookings;
+
+      setAdminBookingPersistenceRecords((current) => {
+        const seen = new Set<string>();
+        const merged: AdminBookingPersistenceRecord[] = [];
+
+        for (const record of [...recentRecords, ...current]) {
+          const key = cleanReferenceText(record.booking_reference) || JSON.stringify(record);
+
+          if (!key || seen.has(key)) {
+            continue;
+          }
+
+          seen.add(key);
+          merged.push(record);
+        }
+
+        return merged.slice(0, 50);
+      });
+
+      return recentRecords;
+    } catch {
+      return [];
+    }
+  }
+
+  async function resolveSaveCrmBillingIdentityAccountForSave(): Promise<SaveCrmBillingIdentityAccountResolution> {
+    const recentRecords = await fetchRecentAdminBookingPersistenceRecordsForBillingIdentity();
+    const review = buildSaveCrmBillingIdentityReview(booking, [
+      ...recentRecords,
+      ...saveCrmBillingIdentitySourceRecords,
+    ]);
+
+    if (!review) {
+      return {
+        accountLabel: null,
+        ok: true,
+      };
+    }
+
+    if (review.needsTravelerName) {
+      const message = {
+        tone: "error",
+        text: `Billing identity review blocked Save + CRM. Same company/booker already has traveler ${review.conflictingTravelerNames.join(
+          ", ",
+        )}; enter the passenger/traveler name before saving.`,
+      } satisfies Message;
+
+      setSaveCrmBillingIdentityReviewMessage(message);
+      scrollToSaveCrmBillingIdentityReview();
+      return {
+        message,
+        ok: false,
+      };
+    }
+
+    if (saveCrmBillingIdentityConfirmation?.key !== review.key) {
+      const message = {
+        tone: "error",
+        text: `Billing identity review required. Same company/booker has other traveler(s): ${review.conflictingTravelerNames.join(
+          ", ",
+        )}. Confirm ${review.accountLabel}, then Save + CRM again.`,
+      } satisfies Message;
+
+      setSaveCrmBillingIdentityReviewMessage(message);
+      scrollToSaveCrmBillingIdentityReview();
+      return {
+        message,
+        ok: false,
+      };
+    }
+
+    return {
+      accountLabel: saveCrmBillingIdentityConfirmation.accountLabel,
+      ok: true,
+    };
   }
 
   function applyNameMemory(parsedBooking: ParsedBooking, nameMemory: NameMemory) {
@@ -15304,13 +15651,21 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       return lastSuccessfulBookingSave.record;
     }
 
+    const billingIdentityResolution = await resolveSaveCrmBillingIdentityAccountForSave();
+
+    if (!billingIdentityResolution.ok) {
+      return null;
+    }
+
     bookingSaveInFlightKeyRef.current = bookingSaveGuardKey;
     setSaving(true);
     setMessage({ tone: "info", text: "Saving booking + CRM..." });
     setBookingSaveMessage({ tone: "info", text: "Saving booking + CRM..." });
 
     try {
-      const bookingPayload = buildAdminBookingPersistencePayload(booking, currentTimeMs);
+      const bookingPayload = buildAdminBookingPersistencePayload(booking, currentTimeMs, undefined, {
+        customerDisplayNameOverride: billingIdentityResolution.accountLabel,
+      });
       const response = await fetch("/api/admin-bookings", {
         body: JSON.stringify(bookingPayload),
         headers: {
@@ -15859,7 +16214,16 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   }
 
   async function saveAdminBookingOperationalSnapshot() {
-    const payload = buildAdminBookingPersistencePayload(booking, currentTimeMs);
+    const billingIdentityResolution = await resolveSaveCrmBillingIdentityAccountForSave();
+
+    if (!billingIdentityResolution.ok) {
+      setAdminBookingPersistenceMessage(billingIdentityResolution.message);
+      return;
+    }
+
+    const payload = buildAdminBookingPersistencePayload(booking, currentTimeMs, undefined, {
+      customerDisplayNameOverride: billingIdentityResolution.accountLabel,
+    });
 
     setAdminBookingPersistenceAction("save");
     setAdminBookingPersistenceMessage({
@@ -16711,10 +17075,20 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       return;
     }
 
+    const billingIdentityResolution = await resolveSaveCrmBillingIdentityAccountForSave();
+
+    if (!billingIdentityResolution.ok) {
+      setAdminBookingPersistenceMessage(billingIdentityResolution.message);
+      return;
+    }
+
     const payload = buildAdminBookingPersistencePayload(
       booking,
       currentTimeMs,
       targetBookingReference,
+      {
+        customerDisplayNameOverride: billingIdentityResolution.accountLabel,
+      },
     );
     const appliedSnapshot = appliedAdminBookingSnapshot;
 
@@ -35003,6 +35377,51 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                       data-booking-save-feedback="job-card"
                     >
                       {bookingSaveMessage.text}
+                    </div>
+                  ) : null}
+                  {saveCrmBillingIdentityReview ? (
+                    <div
+                      className={`max-w-full rounded-md border px-2 py-1 text-[11px] font-semibold leading-4 ${
+                        confirmedSaveCrmBillingIdentity
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-950"
+                          : "border-amber-200 bg-amber-50 text-amber-950"
+                      }`}
+                      data-save-crm-billing-identity-review="true"
+                      data-save-crm-billing-identity-review-state={
+                        confirmedSaveCrmBillingIdentity ? "reviewed" : "needs-review"
+                      }
+                    >
+                      <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="uppercase tracking-wide">Billing Identity Review</p>
+                          <p className="break-words font-medium normal-case tracking-normal">
+                            Same company/booker has other traveler(s):{" "}
+                            {saveCrmBillingIdentityReview.conflictingTravelerNames.join(", ")}.
+                          </p>
+                          <p className="break-words font-medium normal-case tracking-normal">
+                            {saveCrmBillingIdentityReview.needsTravelerName
+                              ? "Enter Passenger name before Save + CRM."
+                              : `Save will bill/create account ${saveCrmBillingIdentityReview.accountLabel}.`}
+                          </p>
+                        </div>
+                        <button
+                          className="h-8 shrink-0 rounded border border-amber-300 bg-white px-2 text-[11px] font-bold text-amber-950 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+                          data-save-crm-billing-identity-confirm="true"
+                          disabled={
+                            saveCrmBillingIdentityReview.needsTravelerName ||
+                            Boolean(confirmedSaveCrmBillingIdentity)
+                          }
+                          onClick={() => confirmSaveCrmBillingIdentityReview(saveCrmBillingIdentityReview)}
+                          type="button"
+                        >
+                          {confirmedSaveCrmBillingIdentity ? "Reviewed" : "Confirm Account"}
+                        </button>
+                      </div>
+                      {saveCrmBillingIdentityMessage ? (
+                        <p className="mt-1 break-words text-[10px] leading-4">
+                          {saveCrmBillingIdentityMessage.text}
+                        </p>
+                      ) : null}
                     </div>
                   ) : null}
                   {jobCardCalendarMessage?.tone === "error" ? (

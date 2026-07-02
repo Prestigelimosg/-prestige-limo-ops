@@ -12,6 +12,17 @@ beaaa0c5 Render tile fallback inside map slot
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Save + CRM Billing Identity Review
+
+- `Save + CRM`, lower `Save Operational Snapshot`, and `Update + Cal` now share a billing-identity review guard before writing admin booking persistence.
+- The guard checks recent/loaded admin booking records for the risky EA pattern: the same company/account or same booker/contact already has different passenger/traveler names.
+- When that pattern is detected, the app shows a compact admin-only `Billing Identity Review` prompt in the Job Card Preview save area and blocks the save until the admin confirms the boss/traveler billing account.
+- Confirmed review uses a distinct customer account label shaped like `Company [Traveler]` as the persisted `customer_display_name`. The existing `/api/admin-bookings` persistence adapter then finds or creates that customer account, and the existing unbilled/monthly invoice grouping path bills by that account label/id.
+- If a conflict is detected but Passenger name is blank, the guard blocks save and asks the admin to enter the passenger/traveler name first.
+- Normal one-company/one-traveler saves keep the existing customer/account behavior and do not show the prompt.
+- This pass does not change DB schema, invoice/PDF/payment/payout/provider/GPS/live-location behavior, customer/driver public surfaces, parser behavior, or address suggestions.
+- Focused guard coverage lives in `scripts/test-save-crm-billing-identity-review-guard.mjs`.
+
 ### Admin Dispatch Compact Live-Ops Rows
 
 - Loaded operational snapshots now keep customer-review controls inside a compact row disclosure instead of expanding every booking into a large review card.

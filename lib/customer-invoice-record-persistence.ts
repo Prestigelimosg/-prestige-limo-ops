@@ -587,7 +587,7 @@ async function nextInvoiceNumber(
 export async function createCustomerInvoiceRecord(
   input: CustomerInvoiceCreateInput,
   actor: AdminBookingPersistenceAdapterActor,
-  client: CustomerInvoiceClient = createServerClient(),
+  client?: CustomerInvoiceClient,
 ): Promise<CustomerInvoiceResult<CustomerInvoiceStoredRecord>> {
   if (!safeActor(actor)) {
     return safeFailure(safePersistenceConfigError, 403);
@@ -605,6 +605,7 @@ export async function createCustomerInvoiceRecord(
     return sanitized;
   }
 
+  const invoiceClient = client ?? createServerClient();
   const issueDate = new Date();
   const invoiceDateKey = issueDate.toISOString().slice(0, 10).replace(/-/g, "");
   const amountLabel = formatInvoiceAmount(sanitized.data.amountCents);
@@ -621,7 +622,7 @@ export async function createCustomerInvoiceRecord(
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const invoiceNumber = await nextInvoiceNumber(
-      client,
+      invoiceClient,
       invoiceDateKey,
       attempt,
       sanitized.data.documentType,
@@ -682,7 +683,7 @@ export async function createCustomerInvoiceRecord(
       status: invoiceForPdf.status,
       updated_at: new Date().toISOString(),
     };
-    const { data, error } = await client
+    const { data, error } = await invoiceClient
       .from(customerInvoiceRecordTableName)
       .insert(insertPayload)
       .select(customerInvoiceSelect)
@@ -730,7 +731,7 @@ export async function createCustomerInvoiceRecord(
         status: insertPayload.status,
         updated_at: insertPayload.updated_at,
       };
-      const { data: legacyData, error: legacyError } = await client
+      const { data: legacyData, error: legacyError } = await invoiceClient
         .from(customerInvoiceRecordTableName)
         .insert(legacyPayload)
         .select(customerInvoiceLegacySelect)
@@ -763,7 +764,7 @@ export async function createCustomerInvoiceRecord(
 
 export async function loadAdminCustomerInvoiceRecords(
   actor: AdminBookingPersistenceAdapterActor,
-  client: CustomerInvoiceClient = createServerClient(),
+  client?: CustomerInvoiceClient,
 ): Promise<CustomerInvoiceResult<CustomerInvoiceStoredRecord[]>> {
   if (!safeActor(actor)) {
     return safeFailure(safePersistenceConfigError, 403);
@@ -775,7 +776,8 @@ export async function loadAdminCustomerInvoiceRecords(
     return safeFailure(safePersistenceConfigError, 503);
   }
 
-  const { data, error } = await client
+  const invoiceClient = client ?? createServerClient();
+  const { data, error } = await invoiceClient
     .from(customerInvoiceRecordTableName)
     .select(customerInvoiceSelect)
     .order("created_at", { ascending: false })
@@ -786,7 +788,7 @@ export async function loadAdminCustomerInvoiceRecords(
       return safeFailure(safeReadError, 500);
     }
 
-    const { data: legacyData, error: legacyError } = await client
+    const { data: legacyData, error: legacyError } = await invoiceClient
       .from(customerInvoiceRecordTableName)
       .select(customerInvoiceLegacySelect)
       .order("created_at", { ascending: false })
@@ -816,7 +818,7 @@ export async function loadAdminCustomerInvoiceRecords(
 export async function verifyIssuedCustomerInvoiceAccountForPortalAccess(
   customerAccountReferenceInput: unknown,
   actor: AdminBookingPersistenceAdapterActor,
-  client: CustomerInvoiceClient = createServerClient(),
+  client?: CustomerInvoiceClient,
 ): Promise<CustomerInvoiceResult<{ customerId: string }>> {
   if (!safeActor(actor)) {
     return safeFailure(safePersistenceConfigError, 403);
@@ -834,7 +836,8 @@ export async function verifyIssuedCustomerInvoiceAccountForPortalAccess(
     return safeFailure(safeValidationError, 400);
   }
 
-  let { data, error } = await client
+  const invoiceClient = client ?? createServerClient();
+  let { data, error } = await invoiceClient
     .from(customerInvoiceRecordTableName)
     .select("invoice_number")
     .eq("customer_id", customerId)
@@ -846,7 +849,7 @@ export async function verifyIssuedCustomerInvoiceAccountForPortalAccess(
       return safeFailure(safeReadError, 500);
     }
 
-    const legacyResult = await client
+    const legacyResult = await invoiceClient
       .from(customerInvoiceRecordTableName)
       .select("invoice_number")
       .eq("customer_id", customerId)
@@ -873,7 +876,7 @@ export async function updateAdminCustomerInvoiceStatus(
   invoiceNumberInput: unknown,
   statusInput: unknown,
   actor: AdminBookingPersistenceAdapterActor,
-  client: CustomerInvoiceClient = createServerClient(),
+  client?: CustomerInvoiceClient,
 ): Promise<CustomerInvoiceResult<CustomerInvoiceStoredRecord>> {
   if (!safeActor(actor)) {
     return safeFailure(safePersistenceConfigError, 403);
@@ -892,7 +895,8 @@ export async function updateAdminCustomerInvoiceStatus(
     return safeFailure(safeValidationError, 400);
   }
 
-  let { data, error } = await client
+  const invoiceClient = client ?? createServerClient();
+  let { data, error } = await invoiceClient
     .from(customerInvoiceRecordTableName)
     .update({
       actor_label: actor.actor_label,
@@ -909,7 +913,7 @@ export async function updateAdminCustomerInvoiceStatus(
       return safeFailure(safeWriteError, 500);
     }
 
-    const legacyResult = await client
+    const legacyResult = await invoiceClient
       .from(customerInvoiceRecordTableName)
       .update({
         actor_label: actor.actor_label,
@@ -937,7 +941,7 @@ export async function updateAdminCustomerInvoiceStatus(
 
   const { logoImage, profile } = await loadServerLogoImage();
   const pdfBytes = createCustomerInvoicePdfBytes(record, profile, logoImage);
-  let { data: refreshedData, error: refreshedError } = await client
+  let { data: refreshedData, error: refreshedError } = await invoiceClient
     .from(customerInvoiceRecordTableName)
     .update({
       pdf_base64: base64FromBytes(pdfBytes),
@@ -955,7 +959,7 @@ export async function updateAdminCustomerInvoiceStatus(
       return safeFailure(safeWriteError, 500);
     }
 
-    const legacyRefreshResult = await client
+    const legacyRefreshResult = await invoiceClient
       .from(customerInvoiceRecordTableName)
       .update({
         pdf_base64: base64FromBytes(pdfBytes),
@@ -988,7 +992,7 @@ export async function updateAdminCustomerInvoiceStatus(
 export async function archiveAdminCustomerTestInvoiceArtifact(
   input: CustomerInvoiceTestArtifactArchiveInput,
   actor: AdminBookingPersistenceAdapterActor,
-  client: CustomerInvoiceClient = createServerClient(),
+  client?: CustomerInvoiceClient,
 ): Promise<CustomerInvoiceResult<CustomerInvoiceStoredRecord>> {
   if (!safeActor(actor)) {
     return safeFailure(safePersistenceConfigError, 403);
@@ -1014,7 +1018,8 @@ export async function archiveAdminCustomerTestInvoiceArtifact(
     return safeFailure(safeArchiveValidationError, 400);
   }
 
-  const { data: readData, error: readError } = await client
+  const invoiceClient = client ?? createServerClient();
+  const { data: readData, error: readError } = await invoiceClient
     .from(customerInvoiceRecordTableName)
     .select(customerInvoiceSelect)
     .eq("invoice_number", target.invoiceNumber)
@@ -1050,7 +1055,7 @@ export async function archiveAdminCustomerTestInvoiceArtifact(
     return safeFailure(safeArchiveValidationError, 400);
   }
 
-  const { data, error } = await client
+  const { data, error } = await invoiceClient
     .from(customerInvoiceRecordTableName)
     .update({
       actor_label: actor.actor_label,
@@ -1090,7 +1095,7 @@ export async function archiveAdminCustomerTestInvoiceArtifact(
 export async function loadAdminCustomerInvoicePdf(
   invoiceNumberInput: unknown,
   actor: AdminBookingPersistenceAdapterActor,
-  client: CustomerInvoiceClient = createServerClient(),
+  client?: CustomerInvoiceClient,
 ): Promise<CustomerInvoicePdfResult> {
   if (!safeActor(actor)) {
     return safeFailure(safePersistenceConfigError, 403);
@@ -1108,7 +1113,8 @@ export async function loadAdminCustomerInvoicePdf(
     return safeFailure(safeValidationError, 400);
   }
 
-  const pdfResult = await client
+  const invoiceClient = client ?? createServerClient();
+  const pdfResult = await invoiceClient
     .from(customerInvoiceRecordTableName)
     .select(customerInvoicePdfSelect)
     .eq("invoice_number", invoiceNumber)
@@ -1121,7 +1127,7 @@ export async function loadAdminCustomerInvoicePdf(
       return safeFailure(safeReadError, 500);
     }
 
-    const legacyResult = await client
+    const legacyResult = await invoiceClient
       .from(customerInvoiceRecordTableName)
       .select(customerInvoiceLegacyPdfSelect)
       .eq("invoice_number", invoiceNumber)
@@ -1157,7 +1163,7 @@ export async function loadAdminCustomerInvoicePdf(
 
 export async function loadCustomerInvoiceRecordsForPortal(
   context: CustomerSavedBookingsBoundaryContext,
-  client: CustomerInvoiceClient = createServerClient(),
+  client?: CustomerInvoiceClient,
 ): Promise<CustomerInvoiceResult<CustomerInvoiceStoredRecord[]>> {
   const readiness = checkCustomerBookingRequestPersistenceConfigReadiness();
   const customerAccountReference = safeText(context.customer_account_reference, 160);
@@ -1170,16 +1176,17 @@ export async function loadCustomerInvoiceRecordsForPortal(
     return safeFailure(safeCustomerAuthError, 403);
   }
 
+  const invoiceClient = client ?? createServerClient();
   const activeAccount = await assertActiveCustomerPortalAccessAccount(
     customerAccountReference,
-    client,
+    invoiceClient,
   );
 
   if (!activeAccount.ok) {
     return safeFailure(safeCustomerAuthError, 403);
   }
 
-  let { data, error } = await client
+  let { data, error } = await invoiceClient
     .from(customerInvoiceRecordTableName)
     .select(customerInvoiceSelect)
     .eq("customer_id", customerAccountReference)
@@ -1192,7 +1199,7 @@ export async function loadCustomerInvoiceRecordsForPortal(
       return safeFailure(safeReadError, 500);
     }
 
-    const legacyResult = await client
+    const legacyResult = await invoiceClient
       .from(customerInvoiceRecordTableName)
       .select(customerInvoiceLegacySelect)
       .eq("customer_id", customerAccountReference)
@@ -1217,7 +1224,7 @@ export async function loadCustomerInvoiceRecordsForPortal(
 export async function loadCustomerInvoicePdfForPortal(
   invoiceNumberInput: unknown,
   context: CustomerSavedBookingsBoundaryContext,
-  client: CustomerInvoiceClient = createServerClient(),
+  client?: CustomerInvoiceClient,
 ): Promise<CustomerInvoicePdfResult> {
   const readiness = checkCustomerBookingRequestPersistenceConfigReadiness();
   const customerAccountReference = safeText(context.customer_account_reference, 160);
@@ -1231,9 +1238,10 @@ export async function loadCustomerInvoicePdfForPortal(
     return safeFailure(safeCustomerAuthError, 403);
   }
 
+  const invoiceClient = client ?? createServerClient();
   const activeAccount = await assertActiveCustomerPortalAccessAccount(
     customerAccountReference,
-    client,
+    invoiceClient,
   );
 
   if (!activeAccount.ok) {
@@ -1244,7 +1252,7 @@ export async function loadCustomerInvoicePdfForPortal(
     return safeFailure(safeValidationError, 400);
   }
 
-  const pdfResult = await client
+  const pdfResult = await invoiceClient
     .from(customerInvoiceRecordTableName)
     .select(customerInvoicePdfSelect)
     .eq("customer_id", customerAccountReference)
@@ -1259,7 +1267,7 @@ export async function loadCustomerInvoicePdfForPortal(
       return safeFailure(safeReadError, 500);
     }
 
-    const legacyResult = await client
+    const legacyResult = await invoiceClient
       .from(customerInvoiceRecordTableName)
       .select(customerInvoiceLegacyPdfSelect)
       .eq("customer_id", customerAccountReference)
@@ -1299,10 +1307,16 @@ export async function updateCustomerInvoiceEmailStatus(
   emailDeliveryStatus: CustomerInvoiceEmailDeliveryStatus,
   emailMessageId: string | null,
   actor: AdminBookingPersistenceAdapterActor,
-  client: CustomerInvoiceClient = createServerClient(),
+  client?: CustomerInvoiceClient,
 ): Promise<CustomerInvoiceResult<CustomerInvoiceStoredRecord>> {
   if (!safeActor(actor)) {
     return safeFailure(safePersistenceConfigError, 403);
+  }
+
+  const readiness = checkAdminBookingPersistenceStagingConfigReadiness();
+
+  if (!readiness.ok) {
+    return safeFailure(safePersistenceConfigError, 503);
   }
 
   const invoiceNumber = safeInvoiceNumber(invoiceNumberInput);
@@ -1311,7 +1325,8 @@ export async function updateCustomerInvoiceEmailStatus(
     return safeFailure(safeValidationError, 400);
   }
 
-  let { data, error } = await client
+  const invoiceClient = client ?? createServerClient();
+  let { data, error } = await invoiceClient
     .from(customerInvoiceRecordTableName)
     .update({
       actor_label: actor.actor_label,
@@ -1330,7 +1345,7 @@ export async function updateCustomerInvoiceEmailStatus(
       return safeFailure(safeWriteError, 500);
     }
 
-    const legacyResult = await client
+    const legacyResult = await invoiceClient
       .from(customerInvoiceRecordTableName)
       .update({
         actor_label: actor.actor_label,

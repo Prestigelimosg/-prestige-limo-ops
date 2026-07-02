@@ -155,6 +155,28 @@ for (const fragment of [
 
 assertIncludes(persistence, "forbiddenCustomerInvoiceFragments", "persistence forbidden fragment list");
 assertIncludes(persistence, "includesForbiddenFragment", "persistence forbidden sanitizer");
+assertExcludes(
+  persistence,
+  "client: CustomerInvoiceClient = createServerClient()",
+  "customer invoice persistence eager Supabase client defaults",
+);
+assertIncludes(
+  persistence,
+  "const invoiceClient = client ?? createServerClient();",
+  "customer invoice persistence lazy Supabase client creation",
+);
+
+const emailStatusUpdateSection = sectionBetween(
+  persistence,
+  "export async function updateCustomerInvoiceEmailStatus",
+  "\nexport function sanitizeCustomerInvoiceRecipientEmail",
+);
+
+assertIncludes(
+  emailStatusUpdateSection,
+  "checkAdminBookingPersistenceStagingConfigReadiness()",
+  "customer invoice email status persistence readiness guard",
+);
 
 for (const fragment of [
   "resolveAdminCustomerInvoiceBoundary(",

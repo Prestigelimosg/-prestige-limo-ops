@@ -58,6 +58,16 @@ function prefixStatusLabel(setting: CustomerInvoicePrefixSettingRecord | null) {
   return setting.prefix_locked ? "Locked" : "Open";
 }
 
+function lockedPrefixFeedback(prefix: string | null | undefined) {
+  return prefix
+    ? `This customer already has locked prefix ${prefix} and it is not changeable.`
+    : "This customer already has a locked prefix and it is not changeable.";
+}
+
+function errorMessage(value: unknown) {
+  return value instanceof Error ? value.message : "";
+}
+
 export function CustomerInvoicePrefixSettingsPanel({
   customerAccount,
   suggestedPrefix,
@@ -76,6 +86,29 @@ export function CustomerInvoicePrefixSettingsPanel({
 
   function updatePrefixInput(value: string) {
     setPrefixInput(value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12));
+  }
+
+  async function fetchPrefixSetting() {
+    const params = new URLSearchParams({
+      customer_account: account,
+    });
+    const response = await fetch(
+      `${adminCustomerInvoicePrefixSettingsApiPath}?${params.toString()}`,
+      {
+        cache: "no-store",
+        headers: {
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "GET",
+      },
+    );
+    const result = await response.json().catch(() => null);
+
+    if (!response.ok || result?.ok !== true) {
+      throw new Error(result?.error || "prefix-load-blocked");
+    }
+
+    return (result.prefix_setting as CustomerInvoicePrefixSettingRecord | null | undefined) ?? null;
   }
 
   async function loadPrefixSetting() {
@@ -97,27 +130,7 @@ export function CustomerInvoicePrefixSettingsPanel({
     }));
 
     try {
-      const params = new URLSearchParams({
-        customer_account: account,
-      });
-      const response = await fetch(
-        `${adminCustomerInvoicePrefixSettingsApiPath}?${params.toString()}`,
-        {
-          cache: "no-store",
-          headers: {
-            "x-prestige-admin-purpose": "admin-booking-persistence",
-          },
-          method: "GET",
-        },
-      );
-      const result = await response.json().catch(() => null);
-
-      if (!response.ok || result?.ok !== true) {
-        throw new Error(result?.error || "prefix-load-blocked");
-      }
-
-      const prefixSetting =
-        (result.prefix_setting as CustomerInvoicePrefixSettingRecord | null | undefined) ?? null;
+      const prefixSetting = await fetchPrefixSetting();
 
       if (prefixSetting?.invoice_prefix) {
         setPrefixInput(prefixSetting.invoice_prefix);
@@ -148,7 +161,7 @@ export function CustomerInvoicePrefixSettingsPanel({
       setState((current) => ({
         ...current,
         message: prefixLocked
-          ? "Prefix is locked after it is saved or auto-created for this customer/account."
+          ? lockedPrefixFeedback(state.prefixSetting?.invoice_prefix)
           : "Enter a 2-12 character uppercase prefix before saving.",
         status: "error",
         tone: "error",
@@ -193,10 +206,39 @@ export function CustomerInvoicePrefixSettingsPanel({
         status: "loaded",
         tone: "success",
       });
-    } catch {
+    } catch (error) {
+      const message = errorMessage(error).toLowerCase();
+
+      if (message.includes("locked")) {
+        try {
+          const prefixSetting = await fetchPrefixSetting();
+
+          if (prefixSetting?.invoice_prefix) {
+            setPrefixInput(prefixSetting.invoice_prefix);
+          }
+
+          setState((current) => ({
+            ...current,
+            message: lockedPrefixFeedback(prefixSetting?.invoice_prefix),
+            prefixSetting: prefixSetting ?? current.prefixSetting,
+            status: "error",
+            tone: "error",
+          }));
+          return;
+        } catch {
+          setState((current) => ({
+            ...current,
+            message: lockedPrefixFeedback(current.prefixSetting?.invoice_prefix),
+            status: "error",
+            tone: "error",
+          }));
+          return;
+        }
+      }
+
       setState((current) => ({
         ...current,
-        message: "Prefix was not saved. It may already be locked or used by another account.",
+        message: "Prefix was not saved. It may already be used by another account.",
         status: "error",
         tone: "error",
       }));

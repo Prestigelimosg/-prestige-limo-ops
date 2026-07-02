@@ -63,6 +63,7 @@ for (const phrase of [
   "`Today's Jobs` shows all loaded active jobs inside the 1-hour pickup monitor window without a separate expand/collapse toggle.",
   "`Today's Jobs` shows a compact saved driver report readout per visible job, using the existing guarded admin `GET /api/admin-driver-job-statuses` path only, with monitor-wide/per-card refresh controls and auto-refresh on by default.",
   "`Today's Jobs` includes compact live-map controls that reuse the existing admin-only live-location runtime for the jobs inside the monitor window.",
+  "The lower Dispatch saved-record finder is now a compact `Saved Booking Records` disclosure by default. The existing admin-only persistence controls and loaded-record scrollbox are still available after expanding, but they no longer fill the normal Dispatch view.",
   "The Dashboard driver report readout is read-only and does not create driver status events, notification rows, provider sends, GPS/live-location records, billing/payment/PDF/invoice/payout records, or a duplicate single-booking Dispatch workflow.",
   "The Bookings tab shows a compact new-request badge/highlight after open customer requests are detected; no sound, browser notification, polling loop, provider send, or new route is added.",
 ]) {
@@ -276,6 +277,17 @@ for (const duplicateDashboardWorkflowFragment of [
 }
 
 assertIncludes(dispatchBlock, "{activeJobsMonitorPanel}", "Dispatch uses shared Today's Jobs monitor");
+assertIncludes(
+  dispatchBlock,
+  'data-dispatch-compact-panel="saved-booking-records"',
+  "Dispatch saved booking records compact panel",
+);
+assertIncludes(dispatchBlock, "Saved Booking Records", "Dispatch saved booking records summary");
+assertIncludes(
+  dispatchBlock,
+  'data-admin-collapsed-sector-body="admin-booking-persistence"',
+  "Dispatch saved booking records collapsed body",
+);
 assertIncludes(
   dispatchBlock,
   'data-admin-day-of-trip-dispatch-monitor-legacy-hidden="true"',

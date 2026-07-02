@@ -33173,11 +33173,25 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               </div>
             ) : null}
 
-            <section
-              className="order-[78] rounded-md border border-emerald-200 bg-emerald-50/60 p-2.5"
+            <details
+              className="group order-[78] rounded-md border border-emerald-200 bg-emerald-50/60 p-2.5"
               data-dispatch-workflow-step="admin-lower-persistence"
+              data-dispatch-compact-panel="saved-booking-records"
               data-admin-booking-persistence-panel="true"
             >
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-md bg-white/70 px-2 py-1.5 text-sm font-semibold text-emerald-950 outline-none transition hover:bg-white focus-visible:ring-2 focus-visible:ring-emerald-300 [&::-webkit-details-marker]:hidden">
+                <span className="min-w-0 break-words">
+                  Saved Booking Records
+                  <span className="mt-0.5 block text-xs font-medium leading-4 text-emerald-900">
+                    Load or apply saved bookings only when needed.
+                  </span>
+                </span>
+                <span className="shrink-0 rounded-full border border-emerald-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-emerald-700">
+                  <span className="group-open:hidden">Expand</span>
+                  <span className="hidden group-open:inline">Collapse</span>
+                </span>
+              </summary>
+              <div className="mt-2" data-admin-collapsed-sector-body="admin-booking-persistence">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <h3 className="text-sm font-semibold text-emerald-950">
@@ -33604,7 +33618,8 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   })}
                 </div>
               ) : null}
-            </section>
+              </div>
+            </details>
 
             <details
               aria-label="Dispatch Release checklist"

@@ -71,8 +71,8 @@ const adminAppNotificationsApiPath = "/api/admin-app-notifications";
 const adminDevicePushSubscriptionsApiPath = "/api/admin-device-push-subscriptions";
 const adminCustomerDriverDetailsEmailReviewItemApiPath =
   "/api/admin-customer-driver-details-email-review-item-setup";
-const adminCustomerDriverDetailsEmailSendDisabledApiPath =
-  "/api/admin-customer-driver-details-email-send-disabled-setup";
+const adminCustomerDriverDetailsEmailSendActionApiPath =
+  "/api/admin-customer-driver-details-email-send-action";
 const adminWhatsAppCustomerDriverDetailsSendDisabledApiPath =
   "/api/admin-whatsapp-customer-driver-details-send-disabled-setup";
 const adminSmsCustomerDriverDetailsSendDisabledApiPath =
@@ -953,8 +953,14 @@ type AdminCustomerDriverDetailsDisabledSendResponse = {
   status?: string;
 };
 
-type AdminCustomerDriverDetailsEmailDisabledSendResponse =
-  AdminCustomerDriverDetailsDisabledSendResponse;
+type AdminCustomerDriverDetailsEmailSendActionResponse = {
+  email_send_enabled?: boolean;
+  error?: string;
+  external_send?: boolean;
+  ok?: boolean;
+  reason?: string;
+  status?: string;
+};
 
 type AdminEmailActivationPreflightResponse = {
   activationReady?: boolean;
@@ -1074,9 +1080,12 @@ function adminCustomerDriverDetailsDisabledSendFallbackState(
 }
 
 function adminCustomerDriverDetailsEmailDisabledSendFallbackState(
-  message = "Disabled email send is setup-only.",
+  message = "Email send uses the gated driver-details email route.",
 ): AdminCustomerDriverDetailsEmailDisabledSendActionState {
-  return adminCustomerDriverDetailsDisabledSendFallbackState(message);
+  return {
+    ...adminCustomerDriverDetailsDisabledSendFallbackState(message),
+    reason: "email_send_gate_closed",
+  };
 }
 
 function adminCustomerDriverDetailsCustomerInAppFallbackState(
@@ -19340,14 +19349,44 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       ? "Setup-only / send disabled"
       : "Review required";
 
-  async function checkAdminCustomerDriverDetailsEmailDisabledSend() {
+  async function sendAdminCustomerDriverDetailsEmail() {
     const bookingReference = adminCustomerDriverDetailsEmailReviewBookingReference;
     const customerEmail = adminCustomerDriverDetailsEmailReviewCustomerEmail;
+    const driverName = clean(dispatchReleaseDriverName);
+    const driverPhone = clean(dispatchReleaseDriverContact);
+    const flightLocationParts = dispatchCopyLocationFlightParts(booking);
+    const pickupDate = clean(booking.date) ? formatDate(booking.date) : "";
+    const pickupTime = normalizePickupTimeForStorage(booking.time)
+      ? formatPickupTime(booking.time)
+      : "";
+    const pickupLocation = clean(flightLocationParts.pickup) || clean(booking.pickup);
+    const dropOffLocation = clean(flightLocationParts.dropoff) || clean(booking.dropoff);
+    const passengerCount = String(Number(clean(booking.pax)) || 1);
+    const serviceType =
+      customerBookingTypeLabel(booking.bookingType) ||
+      clean(booking.bookingType) ||
+      "Transfer";
+    const vehiclePlate = clean(dispatchReleaseDriverPlate) || clean(assignedDriverRecord?.plate_number);
+    const vehicleType =
+      safeDriverVehicleModelDisplay(booking.driverVehicleModel) ||
+      safeDriverVehicleModelDisplay(customerDriverDetailsEmailReviewVehicleType) ||
+      clean(booking.vehicle);
 
-    if (!bookingReference || !customerEmail) {
+    if (
+      !bookingReference ||
+      !customerEmail ||
+      !pickupDate ||
+      !pickupTime ||
+      !pickupLocation ||
+      !dropOffLocation ||
+      !driverName ||
+      !driverPhone ||
+      !vehiclePlate ||
+      !vehicleType
+    ) {
       setAdminCustomerDriverDetailsEmailDisabledSendActionState({
         ...adminCustomerDriverDetailsEmailDisabledSendFallbackState(
-          "Load a saved booking with a customer email before checking disabled send.",
+          "Load a saved booking with customer email, route, pickup time, and complete assigned driver details before sending Email.",
         ),
         actionStatus: "error",
         loadedReference: bookingReference,
@@ -19357,78 +19396,62 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
 
     setAdminCustomerDriverDetailsEmailDisabledSendActionState({
       ...adminCustomerDriverDetailsEmailDisabledSendFallbackState(
-        `Checking disabled customer driver details email send for ${bookingReference}...`,
+        `Sending customer driver details email for ${bookingReference}...`,
       ),
       actionStatus: "loading",
       loadedReference: bookingReference,
     });
 
     try {
-      const params = new URLSearchParams({
-        booking_reference: bookingReference,
-        customer_email: customerEmail,
-      });
-      const driverName = clean(dispatchReleaseDriverName);
-      const driverPhone = clean(dispatchReleaseDriverContact);
-      const vehiclePlate = clean(dispatchReleaseDriverPlate);
-      const vehicleType = clean(customerDriverDetailsEmailReviewVehicleType);
-      const customerAccountLabel = normalizeCompanyAccount(booking.company, booking.bookerEmail);
-      const pickupTime = formatPickupDateTime(booking.date, booking.time);
-      const safeRoute = formatPrivacySafeRoute(booking);
-
-      if (customerAccountLabel) {
-        params.set("customer_account_label", customerAccountLabel);
-      }
-
-      if (driverName) {
-        params.set("driver_name", driverName);
-      }
-
-      if (driverPhone) {
-        params.set("driver_phone", driverPhone);
-      }
-
-      if (pickupTime) {
-        params.set("pickup_time", pickupTime);
-      }
-
-      if (safeRoute) {
-        params.set("route", safeRoute);
-      }
-
-      if (vehiclePlate) {
-        params.set("vehicle_plate", vehiclePlate);
-      }
-
-      if (vehicleType) {
-        params.set("vehicle_type", vehicleType);
-      }
-
-      const response = await fetch(`${adminCustomerDriverDetailsEmailSendDisabledApiPath}?${params.toString()}`, {
+      const response = await fetch(adminCustomerDriverDetailsEmailSendActionApiPath, {
+        body: JSON.stringify({
+          customer_booking_details: {
+            booking_reference: bookingReference,
+            customer_facing_flight_number: clean(booking.flight) || null,
+            customer_passenger_traveler_name: clean(booking.name) || null,
+            drop_off_location: dropOffLocation,
+            passenger_count: passengerCount,
+            pickup_date: pickupDate,
+            pickup_location: pickupLocation,
+            pickup_time: pickupTime,
+            service_type: serviceType,
+          },
+          driver_details: {
+            car_plate: vehiclePlate,
+            car_type: vehicleType,
+            driver_contact: driverPhone,
+            driver_name: driverName,
+          },
+          recipient_email: customerEmail,
+        }),
         headers: {
+          "Content-Type": "application/json",
           "x-prestige-admin-purpose": adminLegacyDataPurpose,
         },
-        method: "GET",
+        method: "POST",
       });
       const result =
         (await response.json().catch(() => null)) as
-          | AdminCustomerDriverDetailsEmailDisabledSendResponse
+          | AdminCustomerDriverDetailsEmailSendActionResponse
           | null;
 
-      if (!response.ok || !result) {
-        throw new Error("Disabled customer driver details email send check failed safely.");
+      if (!result) {
+        throw new Error("Customer driver details email send failed safely.");
       }
 
-      const sendingEnabled = result.sendingEnabled === true || result.send?.sendingEnabled === true;
-      const externalSend = result.external_send === true || result.send?.external_send === true;
-      const resultStatus = clean(result.status) || clean(result.send?.status) || "blocked";
-      const reason = clean(result.reason) || clean(result.send?.reason) || "setup_only_disabled";
+      const sendingEnabled = result.email_send_enabled === true;
+      const externalSend = result.external_send === true;
+      const resultStatus = clean(result.status) || (response.ok ? "sent" : "blocked");
+      const reason = clean(result.reason) || (response.ok ? "send_succeeded" : "email_send_failed");
+      const sent = response.ok && resultStatus === "sent" && sendingEnabled && externalSend;
 
       setAdminCustomerDriverDetailsEmailDisabledSendActionState({
-        actionStatus: "loaded",
+        actionStatus: sent ? "loaded" : "error",
         external_send: externalSend,
         loadedReference: bookingReference,
-        message: `Disabled customer driver details email send returned ${resultStatus}/no-op for ${bookingReference}.`,
+        message: sent
+          ? `Driver details email sent for ${bookingReference}.`
+          : `Driver details email blocked for ${bookingReference}: ${reason}.`,
         reason,
         sendingEnabled,
         status: resultStatus,
@@ -19437,14 +19460,14 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       const errorText =
         error instanceof Error
           ? error.message
-          : "Disabled customer driver details email send check failed safely.";
+          : "Customer driver details email send failed safely.";
 
       setAdminCustomerDriverDetailsEmailDisabledSendActionState({
         actionStatus: "error",
         external_send: false,
         loadedReference: bookingReference,
         message: errorText,
-        reason: "setup_only_disabled",
+        reason: "email_send_failed",
         sendingEnabled: false,
         status: "blocked",
       });
@@ -19736,12 +19759,14 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     adminCustomerDriverDetailsEmailDisabledSendDisplayState.actionStatus !== "loading";
   const adminCustomerDriverDetailsEmailDisabledSendActionLabel =
     adminCustomerDriverDetailsEmailDisabledSendDisplayState.actionStatus === "loading"
-      ? "Checking disabled send"
-      : clean(adminCustomerDriverDetailsEmailReviewItem.actionLabel) || "Review email to customer";
+      ? "Sending Email"
+      : "Email customer";
   const adminCustomerDriverDetailsEmailDisabledSendStatusText =
     adminCustomerDriverDetailsDisabledSendStatusText(
       adminCustomerDriverDetailsEmailDisabledSendDisplayState,
-      adminCustomerDriverDetailsEmailReviewSendStateLabel,
+      adminCustomerDriverDetailsEmailReviewSendDisabled
+        ? "Email gate off"
+        : adminCustomerDriverDetailsEmailReviewSendStateLabel,
     );
   const adminCustomerDriverDetailsWhatsAppDisabledSendStateMatchesReference =
     adminCustomerDriverDetailsWhatsAppDisabledSendActionState.loadedReference ===
@@ -19836,8 +19861,8 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             ? "Driver In-App ready"
             : "Driver In-App needs link";
   const adminCustomerDriverDetailsMultiChannelDisabledStatusDetail =
-    "Setup-only / send disabled, sendingEnabled false, external_send false";
-  const adminCustomerDriverDetailsMultiChannelDisabledStatusText = "Providers off";
+    "Email uses the gated email route. WhatsApp and SMS are parked setup-only/no-live.";
+  const adminCustomerDriverDetailsMultiChannelDisabledStatusText = "SMS/WA off";
   const adminCustomerDriverDetailsMultiChannelDisabledStatusTitle = [
     adminCustomerDriverDetailsMultiChannelDisabledStatusDetail,
     `Email: ${adminCustomerDriverDetailsEmailDisabledSendStatusText}`,
@@ -23533,18 +23558,19 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     adminCustomerDriverDetailsEmailDisabledSendDisplayState.sendingEnabled &&
     adminCustomerDriverDetailsEmailDisabledSendDisplayState.external_send;
   const adminCustomerDriverDetailsEmailButtonTone: Message["tone"] | null =
-    adminCustomerDriverDetailsEmailLoaded
+    adminCustomerDriverDetailsEmailSent
       ? "success"
       : adminCustomerDriverDetailsEmailDisabledSendDisplayState.actionStatus === "error"
         ? "error"
         : null;
   const adminCustomerDriverDetailsEmailButtonLabel =
     adminCustomerDriverDetailsEmailDisabledSendDisplayState.actionStatus === "loading"
-      ? "Checking Email"
+      ? "Sending Email"
       : adminCustomerDriverDetailsEmailSent
         ? "Emailed"
-        : adminCustomerDriverDetailsEmailLoaded
-          ? "Email checked"
+        : adminCustomerDriverDetailsEmailLoaded ||
+            adminCustomerDriverDetailsEmailDisabledSendDisplayState.actionStatus === "error"
+          ? "Email blocked"
           : "Email";
   const adminCustomerDriverDetailsWhatsAppLoaded =
     adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState.actionStatus === "loaded";
@@ -35190,7 +35216,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                         data-admin-customer-driver-details-email-disabled-send-action="true"
                         data-admin-customer-driver-details-email-review-action="true"
                         disabled={!adminCustomerDriverDetailsEmailDisabledSendCanCall}
-                        onClick={checkAdminCustomerDriverDetailsEmailDisabledSend}
+                        onClick={sendAdminCustomerDriverDetailsEmail}
                         title={adminCustomerDriverDetailsEmailDisabledSendActionLabel}
                         type="button"
                       >

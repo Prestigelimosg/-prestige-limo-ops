@@ -280,6 +280,11 @@ const combined = `${routeSource}\n${helperSource}`;
 assertIncludes(routeSource, "export async function POST", "Driver Details Email send route");
 assertIncludes(routeSource, "resolveAdminDispatcherBoundary", "Driver Details Email send route");
 assertIncludes(routeSource, "adminBookingPersistencePurpose", "Driver Details Email send route");
+assertIncludes(
+  routeSource,
+  'allowServerSessionRoleMethodsWithoutRequestToken: ["POST"]',
+  "Driver Details Email send route dashboard server-session write boundary",
+);
 assertIncludes(routeSource, "adminDispatcherBoundaryToPersistenceAdapterActor", "Driver Details Email send route");
 assertIncludes(routeSource, "adminCustomerDriverDetailsEmailClosedGateResult", "Driver Details Email send route");
 assertIncludes(routeSource, "adminCustomerDriverDetailsEmailSendGateOpen", "Driver Details Email send route");

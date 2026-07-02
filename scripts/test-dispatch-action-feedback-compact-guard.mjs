@@ -99,7 +99,7 @@ for (const fragment of [
   'driverDispatchCopied ? "Copied" : "Copy"',
   'adminCustomerDriverDetailsEmailSent',
   '"Emailed"',
-  '"Email checked"',
+  '"Email blocked"',
   '"WhatsApp checked"',
   '"SMS checked"',
   '"Sent In-App"',

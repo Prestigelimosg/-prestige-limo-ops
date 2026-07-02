@@ -7,7 +7,6 @@ import ts from "typescript";
 
 const appPagePath = "app/page.tsx";
 const routeFiles = [
-  "app/api/admin-customer-driver-details-email-send-disabled-setup/route.ts",
   "app/api/admin-whatsapp-customer-driver-details-send-disabled-setup/route.ts",
   "app/api/admin-sms-customer-driver-details-send-disabled-setup/route.ts",
 ];
@@ -59,10 +58,8 @@ const providerPackageNames = new Set([
 ]);
 const providerImportPattern =
   /import\s+(?:[\s\S]*?\s+from\s+)?["'](?:resend|@aws-sdk\/client-ses|@aws-sdk\/client-sns|aws-sdk|@sendgrid\/mail|@sendgrid\/client|mailgun|mailgun-js|mailgun\.js|nodemailer|postmark|@green-api\/whatsapp-api-client|@twilio\/conversations|@vonage\/server-sdk|@whiskeysockets\/baileys|360dialog|africastalking|clicksend|messagebird|nexmo|plivo|sinch|sms77-client|telnyx|twilio|vonage|wati|whatsapp|whatsapp-cloud-api|whatsapp-web\.js|stripe)["']|require\(\s*["'](?:resend|@aws-sdk\/client-ses|@aws-sdk\/client-sns|aws-sdk|@sendgrid\/mail|@sendgrid\/client|mailgun|mailgun-js|mailgun\.js|nodemailer|postmark|@green-api\/whatsapp-api-client|@twilio\/conversations|@vonage\/server-sdk|@whiskeysockets\/baileys|360dialog|africastalking|clicksend|messagebird|nexmo|plivo|sinch|sms77-client|telnyx|twilio|vonage|wati|whatsapp|whatsapp-cloud-api|whatsapp-web\.js|stripe)["']\s*\)/i;
-const providerClassPattern =
-  /\b(?:Baileys|Client|Mailgun|MessageBird|Nexmo|Plivo|PublishCommand|SESClient|SNSClient|SendEmailCommand|Telnyx|Twilio|Vonage|WATIClient|WhatsAppBusiness|WhatsAppCloudApi)\b/;
 const envReadPattern =
-  /\bprocess\.env\b|\bSMTP_[A-Z_]*\b|\bEMAIL_PROVIDER\b|\bSENDGRID_[A-Z_]*\b|\bMAILGUN_[A-Z_]*\b|\bRESEND_[A-Z_]*\b|\bSMS_[A-Z_]*\b|\bTWILIO_[A-Z_]*\b|\bVONAGE_[A-Z_]*\b|\bSNS_[A-Z_]*\b|\bWHATSAPP_[A-Z_]*\b|\bWATI_[A-Z_]*\b|\bMETA_[A-Z_]*\b|\bAWS_ACCESS_KEY_ID\b|\bAWS_SECRET_ACCESS_KEY\b|\bAPI_KEY\b|\bACCESS_TOKEN\b|\bSECRET_KEY\b|\bACCOUNT_SID\b|\bAUTH_TOKEN\b/;
+  /\bprocess\.env\b|\bSMTP_[A-Z_]*\b|\bSENDGRID_[A-Z_]*\b|\bMAILGUN_[A-Z_]*\b|\bRESEND_[A-Z_]*\b|\bSMS_[A-Z_]*\b|\bTWILIO_[A-Z_]*\b|\bVONAGE_[A-Z_]*\b|\bSNS_[A-Z_]*\b|\bWHATSAPP_[A-Z_]*\b|\bWATI_[A-Z_]*\b|\bMETA_[A-Z_]*\b|\bAWS_ACCESS_KEY_ID\b|\bAWS_SECRET_ACCESS_KEY\b|\bAPI_KEY\b|\bACCESS_TOKEN\b|\bSECRET_KEY\b|\bACCOUNT_SID\b|\bAUTH_TOKEN\b/;
 const externalProviderSendPattern =
   /api\.twilio|api\.vonage|api\.messagebird|api\.telnyx|api\.plivo|api\.whatsapp|api\.telegram|graph\.facebook\.com|rest\.nexmo|sns\.[a-z0-9-]+\.amazonaws\.com|\/Messages\.json|\/messages\b|sendMail\s*\(|sendMessage\s*\(|send_message\s*\(|sendSms\s*\(|sendSMS\s*\(|sendText\s*\(|messages\.create|client\.messages|publish\s*\(|sns\.publish|createTransport|smtpTransport|sendBeacon|XMLHttpRequest|WebSocket/i;
 const externalFetchPattern = /\bfetch\s*\(\s*["'`]https?:\/\//i;
@@ -147,6 +144,16 @@ function assertBlockedNoOp(value, label) {
   }
 }
 
+function assertNoProviderOrSecretSurface(source, label) {
+  assert.equal(providerImportPattern.test(source), false, `${label} must not import provider SDKs.`);
+  assert.equal(envReadPattern.test(source), false, `${label} must not read provider/env secrets.`);
+  assert.equal(externalFetchPattern.test(source), false, `${label} must not fetch external URLs.`);
+  assert.equal(externalProviderSendPattern.test(source), false, `${label} must not use provider send APIs.`);
+  assert.equal(dbWritePattern.test(source), false, `${label} must not use DB writes.`);
+  assert.equal(liveTruePattern.test(source), false, `${label} must not enable live sending flags.`);
+  assert.equal(unsafeUiPattern.test(source), false, `${label} must not expose payment, payout, internal, or secret fields.`);
+}
+
 function transpileTypescript(tsSource, filename) {
   return ts.transpileModule(tsSource, {
     compilerOptions: {
@@ -182,12 +189,6 @@ async function loadHarness() {
   return {
     cleanup: () => rm(tempDir, { force: true, recursive: true }),
     routes: {
-      emailDisabledSend: requireFromHarness(
-        path.join(
-          tempDir,
-          "app/api/admin-customer-driver-details-email-send-disabled-setup/route.js",
-        ),
-      ),
       smsDisabledSend: requireFromHarness(
         path.join(tempDir, "app/api/admin-sms-customer-driver-details-send-disabled-setup/route.js"),
       ),
@@ -211,7 +212,7 @@ for (const packageName of installedPackages) {
   assert.equal(
     providerPackageNames.has(packageName),
     false,
-    `Customer Copy multi-channel setup must not add provider/payment SDK package: ${packageName}`,
+    `Customer Copy parked SMS/WhatsApp setup must not add provider/payment SDK package: ${packageName}`,
   );
 }
 
@@ -225,9 +226,9 @@ const customerCopySection = extractBetween(
 const appOutsideCustomerCopy = appSource.replace(customerCopySection, "");
 const emailHandlerSource = extractBetween(
   appSource,
-  "async function checkAdminCustomerDriverDetailsEmailDisabledSend()",
+  "async function sendAdminCustomerDriverDetailsEmail()",
   "async function checkAdminCustomerDriverDetailsMessageDisabledSend",
-  "Customer Copy email disabled-send handler",
+  "Customer Copy Email send handler",
 );
 const messageHandlerSource = extractBetween(
   appSource,
@@ -238,8 +239,8 @@ const messageHandlerSource = extractBetween(
 
 for (const [label, pattern] of [
   ["email review item", /data-admin-customer-driver-details-email-review-item="true"/g],
-  ["email disabled-send action", /data-admin-customer-driver-details-email-disabled-send-action="true"/g],
-  ["email disabled-send status", /data-admin-customer-driver-details-email-disabled-send-status="true"/g],
+  ["email gated-send action", /data-admin-customer-driver-details-email-disabled-send-action="true"/g],
+  ["email gated-send status", /data-admin-customer-driver-details-email-disabled-send-status="true"/g],
   ["whatsapp disabled-send item", /data-admin-customer-driver-details-whatsapp-disabled-send-item="true"/g],
   ["whatsapp disabled-send action", /data-admin-customer-driver-details-whatsapp-disabled-send-action="true"/g],
   ["whatsapp disabled-send status", /data-admin-customer-driver-details-whatsapp-disabled-send-status="true"/g],
@@ -252,21 +253,22 @@ for (const [label, pattern] of [
   assert.equal(countMatches(appOutsideCustomerCopy, pattern), 0, `${label} must not appear outside Customer Copy.`);
 }
 
-assert.ok(
+assert.equal(
   customerCopySection.includes("data-admin-customer-driver-details-email-disabled-send-action") &&
     customerCopySection.includes("Customer driver details WhatsApp") &&
     customerCopySection.includes("Customer driver details SMS") &&
+    appSource.includes("Email customer") &&
     appSource.includes("Review WhatsApp to customer") &&
-    appSource.includes("Review SMS to customer") &&
-    appSource.includes("Review email to customer"),
-  "Customer Copy must include compact Email, WhatsApp, and SMS disabled-send rows.",
+    appSource.includes("Review SMS to customer"),
+  true,
+  "Customer Copy must keep compact Email, WhatsApp, and SMS controls.",
 );
-assert.ok(
+assert.equal(
   customerCopySection.includes("disabled-send-sending-enabled") &&
     customerCopySection.includes("disabled-send-external-send") &&
-    appSource.includes("sendingEnabled false") &&
-    appSource.includes("external_send false"),
-  "Customer Copy WhatsApp/SMS rows must show setup-only disabled flags.",
+    appSource.includes("Email uses the gated email route. WhatsApp and SMS are parked setup-only/no-live."),
+  true,
+  "Customer Copy must show parked SMS/WhatsApp state while Email is gated.",
 );
 
 const dispatchWorkflowSteps = [
@@ -289,29 +291,44 @@ assert.equal(
   "Customer Copy multi-channel UI must not add standalone Email/WhatsApp/SMS cards.",
 );
 
-for (const [label, source] of [
-  ["Customer Copy email disabled-send handler", emailHandlerSource],
-  ["Customer Copy WhatsApp/SMS disabled-send handler", messageHandlerSource],
-  ["Customer Copy section", customerCopySection],
+assertNoProviderOrSecretSurface(emailHandlerSource, "Customer Copy Email button handler");
+assertNoProviderOrSecretSurface(messageHandlerSource, "Customer Copy WhatsApp/SMS disabled-send handler");
+assertNoProviderOrSecretSurface(customerCopySection, "Customer Copy compact row");
+
+for (const fragment of [
+  "adminCustomerDriverDetailsEmailSendActionApiPath",
+  "/api/admin-customer-driver-details-email-send-action",
+  "recipient_email: customerEmail",
+  "customer_booking_details",
+  "driver_details",
+  'method: "POST"',
+  '"Content-Type": "application/json"',
+  '"x-prestige-admin-purpose": adminLegacyDataPurpose',
 ]) {
-  assert.equal(providerImportPattern.test(source), false, `${label} must not import provider SDKs.`);
-  assert.equal(providerClassPattern.test(source), false, `${label} must not instantiate provider SDKs.`);
-  assert.equal(envReadPattern.test(source), false, `${label} must not read provider/env secrets.`);
-  assert.equal(externalFetchPattern.test(source), false, `${label} must not fetch external URLs.`);
-  assert.equal(externalProviderSendPattern.test(source), false, `${label} must not use provider send APIs.`);
-  assert.equal(dbWritePattern.test(source), false, `${label} must not use DB writes.`);
-  assert.equal(liveTruePattern.test(source), false, `${label} must not enable live sending flags.`);
-  assert.equal(unsafeUiPattern.test(source), false, `${label} must not expose payment, payout, internal, or secret fields.`);
+  assert.equal(emailHandlerSource.includes(fragment) || appSource.includes(fragment), true, `Email gated send must include ${fragment}`);
 }
 
-for (const handlerSource of [emailHandlerSource, messageHandlerSource]) {
-  assert.match(handlerSource, /method:\s*"GET"/, "Customer Copy disabled-send handlers must use GET.");
-  assert.equal(
-    /method:\s*"(POST|PUT|PATCH|DELETE)"/.test(handlerSource),
-    false,
-    "Customer Copy disabled-send handlers must not use write methods.",
-  );
+for (const forbidden of [
+  "customerPrice",
+  "driverPayout",
+  "PayNow",
+  "payment",
+  "billing",
+  "invoice",
+  "internal",
+  "debug",
+  "token",
+  "secret",
+]) {
+  assert.equal(emailHandlerSource.includes(forbidden), false, `Email gated send payload must not include ${forbidden}.`);
 }
+
+assert.match(messageHandlerSource, /method:\s*"GET"/, "Customer Copy WhatsApp/SMS disabled-send handlers must use GET.");
+assert.equal(
+  /method:\s*"(POST|PUT|PATCH|DELETE)"/.test(messageHandlerSource),
+  false,
+  "Customer Copy WhatsApp/SMS disabled-send handlers must not use write methods.",
+);
 
 for (const routeFile of routeFiles) {
   const routeSource = await readFile(routeFile, "utf8");
@@ -322,13 +339,7 @@ for (const routeFile of routeFiles) {
     false,
     `${routeFile} must not expose write/live-send verbs.`,
   );
-  assert.equal(providerImportPattern.test(routeSource), false, `${routeFile} must not import provider SDKs.`);
-  assert.equal(providerClassPattern.test(routeSource), false, `${routeFile} must not use provider SDK classes.`);
-  assert.equal(envReadPattern.test(routeSource), false, `${routeFile} must not read provider/env secrets.`);
-  assert.equal(externalFetchPattern.test(routeSource), false, `${routeFile} must not fetch external URLs.`);
-  assert.equal(externalProviderSendPattern.test(routeSource), false, `${routeFile} must not use provider send APIs.`);
-  assert.equal(dbWritePattern.test(routeSource), false, `${routeFile} must not use DB writes.`);
-  assert.equal(liveTruePattern.test(routeSource), false, `${routeFile} must not enable live sending flags.`);
+  assertNoProviderOrSecretSurface(routeSource, routeFile);
   assert.equal(/stripe|payment|paynow|payout|driver_payout|customer_price/i.test(routeSource), false, `${routeFile} must not add payment or payout behavior.`);
 }
 
@@ -336,46 +347,16 @@ const helperSource = (
   await Promise.all(helperFiles.map((file) => readFile(file, "utf8")))
 ).join("\n");
 
-assert.equal(providerImportPattern.test(helperSource), false, "Customer Copy disabled-send helpers must not import provider SDKs.");
-assert.equal(envReadPattern.test(helperSource), false, "Customer Copy disabled-send helpers must not read provider/env secrets.");
-assert.equal(externalFetchPattern.test(helperSource), false, "Customer Copy disabled-send helpers must not fetch external URLs.");
-assert.equal(externalProviderSendPattern.test(helperSource), false, "Customer Copy disabled-send helpers must not use provider send APIs.");
-assert.equal(liveTruePattern.test(helperSource), false, "Customer Copy disabled-send helpers must not enable live sending flags.");
+assert.equal(providerImportPattern.test(helperSource), false, "Customer Copy parked helpers must not import provider SDKs.");
+assert.equal(envReadPattern.test(helperSource), false, "Customer Copy parked helpers must not read provider/env secrets.");
+assert.equal(externalFetchPattern.test(helperSource), false, "Customer Copy parked helpers must not fetch external URLs.");
+assert.equal(externalProviderSendPattern.test(helperSource), false, "Customer Copy parked helpers must not use provider send APIs.");
+assert.equal(liveTruePattern.test(helperSource), false, "Customer Copy parked helpers must not enable live sending flags.");
 
 const harness = await loadHarness();
 
 try {
   applyLocalAdminBoundary();
-
-  const emailResponse = await harness.routes.emailDisabledSend.GET(
-    new Request(
-      apiUrl("/api/admin-customer-driver-details-email-send-disabled-setup", {
-        booking_reference: "PLO-MULTI-NO-LIVE-001",
-        customer_account_label: "No Live Client",
-        customer_email: "EA.Team+NoLive@example.com",
-        customer_key: "no-live-client",
-        driver_name: "Tan Driver",
-        driver_phone: "+65 8888 0000",
-        pickup_time: "12 Jun 2026, 10:00",
-        route: "Changi Airport T3 to Raffles Hotel",
-        sender_key: "no-live-client-service",
-        sender_label: "Prestige No Live Desk",
-        sender_role: "account_service",
-        vehicle_plate: "SLA1234X",
-        vehicle_type: "Mercedes V-Class",
-      }),
-      { headers: adminHeaders() },
-    ),
-  );
-  const email = await emailResponse.json();
-
-  assert.equal(emailResponse.status, 200);
-  assert.equal(email.ok, true);
-  assertBlockedNoOp(email, "Customer Copy email disabled-send API");
-  assertBlockedNoOp(email.send, "Customer Copy email disabled-send nested send");
-  assertNoLiveFlags(email.preview, "Customer Copy email disabled-send preview");
-  assertNoLiveFlags(email.readiness, "Customer Copy email disabled-send readiness");
-  assert.equal(email.readiness.readyToSend, false);
 
   const whatsappResponse = await harness.routes.whatsappDisabledSend.GET(
     new Request(

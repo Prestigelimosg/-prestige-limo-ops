@@ -104,18 +104,18 @@ const [
 const packetSection = sectionBetween(ledger, "### Email Provider No-Send Approval Packet Lock");
 
 for (const phrase of [
-  "Approval status: pending future Email staging test approval.",
+  "Approval status: superseded for Driver Details Email by the gated send action contract; setup foundations remain setup-only/no-live.",
   "This is a docs/test-only no-send approval packet guarded by `scripts/test-email-provider-no-send-approval-packet.mjs`.",
-  "Current Email routes remain setup-only/no-live:",
+  "Current Email setup routes remain setup-only/no-live:",
   "`GET /api/admin-customer-driver-details-email-preview-readiness-setup`",
   "`GET /api/admin-customer-driver-details-email-send-disabled-setup`",
   "`GET /api/admin-email-provider-readiness-setup`",
   "`GET /api/admin-email-provider-selection-setup`",
   "`GET /api/admin-email-activation-preflight-setup`",
-  "Current Email send surface remains disabled/no-op with `external_send: false`, `sendingEnabled: false`, `liveSendingEnabled: false`, and `providerConfigured: false`.",
+  "The setup-only disabled Email send surface remains available as a no-op audit/setup route with `external_send: false`, `sendingEnabled: false`, `liveSendingEnabled: false`, and `providerConfigured: false`.",
+  "The admin Customer Copy Email button now uses the separate gated Driver Details Email route `POST /api/admin-customer-driver-details-email-send-action`.",
   "No provider env values are printed, required, or read by the current Email setup-only routes/helpers.",
-  "No SMTP/API/provider activation is approved.",
-  "No live Email send is approved.",
+  "No SMTP provider, SMS, WhatsApp, Telegram customer/driver send, automatic fallback, batch send, scheduler, polling, or retry automation is approved by this setup packet.",
   "Future staging Email test requires separate owner approval, secret-safe provider env-name handling, recipient allowlist, content guard, one-message test scope, and rollback/disable plan.",
   "Future Email content must exclude pricing, payout, payment/PDF, auth, location/photo/calendar, parser/debug, internal notes, and secrets.",
   "Future live/provider send wiring must not change Save Booking + CRM.",
@@ -199,15 +199,19 @@ for (const fragment of [
 
 assertIncludes(
   appPage,
-  'const adminCustomerDriverDetailsEmailSendDisabledApiPath =\n  "/api/admin-customer-driver-details-email-send-disabled-setup";',
-  "Customer Copy Email disabled-send route",
+  'const adminCustomerDriverDetailsEmailSendActionApiPath =\n  "/api/admin-customer-driver-details-email-send-action";',
+  "Customer Copy Email gated-send route",
 );
 assertIncludes(
   appPage,
   'const adminEmailActivationPreflightApiPath =\n  "/api/admin-email-activation-preflight-setup";',
   "Email activation preflight route",
 );
-assertIncludes(appPage, "Mock/local only. Does not send Telegram, WhatsApp, SMS, or email.", "Email mock-only UI boundary");
+assertIncludes(
+  appPage,
+  "Email uses the gated email route. WhatsApp and SMS are parked setup-only/no-live.",
+  "Customer Copy Email gated route and parked SMS/WhatsApp boundary",
+);
 assertExcludes(
   appPage,
   "/api/admin-email-provider-readiness-setup",

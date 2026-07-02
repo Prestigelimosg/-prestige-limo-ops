@@ -312,8 +312,8 @@ assertIncludes(
 
 assertIncludes(
   appPage,
-  '"/api/admin-customer-driver-details-email-send-disabled-setup"',
-  "Customer Copy Email disabled send route",
+  '"/api/admin-customer-driver-details-email-send-action"',
+  "Customer Copy Email gated send route",
 );
 assertIncludes(
   appPage,

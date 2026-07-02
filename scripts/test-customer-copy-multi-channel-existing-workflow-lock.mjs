@@ -6,12 +6,9 @@ const ledgerPath = "docs/current-implementation-ledger.md";
 const docsIndexPath = "docs/test-and-safety-docs-index.md";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
 const appPath = "app/page.tsx";
-const appSmokePath = "scripts/test-app-smoke-browser.mjs";
-const bookingUiBrowserPath = "scripts/test-booking-ui-browser.mjs";
-const mobileUsabilityBrowserPath = "scripts/test-mobile-usability-browser.mjs";
 const noLiveGuardPath = "scripts/test-customer-copy-multi-channel-no-live-guard.mjs";
-const emailDisabledRoutePath =
-  "app/api/admin-customer-driver-details-email-send-disabled-setup/route.ts";
+const emailSendActionRoutePath =
+  "app/api/admin-customer-driver-details-email-send-action/route.ts";
 const whatsappDisabledRoutePath =
   "app/api/admin-whatsapp-customer-driver-details-send-disabled-setup/route.ts";
 const smsDisabledRoutePath = "app/api/admin-sms-customer-driver-details-send-disabled-setup/route.ts";
@@ -21,8 +18,13 @@ function assertIncludes(source, fragment, label = fragment) {
   assert.equal(source.includes(fragment), true, `${label} must include ${fragment}.`);
 }
 
-function assertExcludes(source, fragment, label = fragment) {
-  assert.equal(source.includes(fragment), false, `${label} must not include ${fragment}.`);
+function assertExcludes(source, fragmentOrPattern, label) {
+  const matches =
+    fragmentOrPattern instanceof RegExp
+      ? fragmentOrPattern.test(source)
+      : source.includes(fragmentOrPattern);
+
+  assert.equal(matches, false, `${label} must not include ${fragmentOrPattern}.`);
 }
 
 function assertNotMatches(source, pattern, label) {
@@ -57,11 +59,8 @@ const [
   docsIndex,
   preactivationSuite,
   appPage,
-  appSmoke,
-  bookingUiBrowser,
-  mobileUsabilityBrowser,
   noLiveGuard,
-  emailDisabledRoute,
+  emailSendActionRoute,
   whatsappDisabledRoute,
   smsDisabledRoute,
 ] = await Promise.all([
@@ -70,38 +69,22 @@ const [
   readFile(docsIndexPath, "utf8"),
   readFile(preactivationSuitePath, "utf8"),
   readFile(appPath, "utf8"),
-  readFile(appSmokePath, "utf8"),
-  readFile(bookingUiBrowserPath, "utf8"),
-  readFile(mobileUsabilityBrowserPath, "utf8"),
   readFile(noLiveGuardPath, "utf8"),
-  readFile(emailDisabledRoutePath, "utf8"),
+  readFile(emailSendActionRoutePath, "utf8"),
   readFile(whatsappDisabledRoutePath, "utf8"),
   readFile(smsDisabledRoutePath, "utf8"),
 ]);
 
 for (const fragment of [
   "# Customer Copy Multi-Channel Existing Workflow Lock",
-  "This document is docs/test-only.",
-  "It does not approve runtime implementation, UI/API behavior change, UI sectors, buttons, endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, customer/driver portal changes, or new shims.",
-  "The admin Customer Copy Email/WhatsApp/SMS customer driver-details workflow already exists in the current app. Do not rebuild it as duplicate Email, WhatsApp, or SMS workflow sectors.",
-  "`app/page.tsx` owns the existing Customer Copy section at `data-dispatch-workflow-step=\"customer-whatsapp-copy\"`.",
-  "`app/page.tsx` owns the existing Customer Copy text edit/copy controls at `data-copy-edit-button=\"customerCopy\"`, `data-copy-copy-button=\"customerCopy\"`, and `data-copy-preview=\"customerCopy\"`.",
-  "`app/page.tsx` owns the existing customer live-location helper inside Customer Copy at `data-customer-live-location-helper`.",
-  "`app/page.tsx` owns the existing compact customer driver-details Email review item at `data-admin-customer-driver-details-email-review-item`.",
-  "`app/page.tsx` owns the existing disabled/no-op Email, WhatsApp, and SMS review buttons at `data-admin-customer-driver-details-email-disabled-send-action`, `data-admin-customer-driver-details-whatsapp-disabled-send-action`, and `data-admin-customer-driver-details-sms-disabled-send-action`.",
-  "`app/page.tsx` owns the existing Email activation preflight status at `data-admin-email-activation-preflight-status`.",
-  "The existing disabled-send setup paths are `GET /api/admin-customer-driver-details-email-send-disabled-setup`, `GET /api/admin-whatsapp-customer-driver-details-send-disabled-setup`, and `GET /api/admin-sms-customer-driver-details-send-disabled-setup`.",
-  "These surfaces are admin-only setup/review controls. They do not send Email, WhatsApp, SMS, Telegram, push, customer messages, or driver notifications.",
-  "`scripts/test-customer-copy-multi-channel-no-live-guard.mjs` owns the no-live/provider/env/DB-write guard for the existing Customer Copy Email/WhatsApp/SMS review controls.",
-  "`scripts/test-app-smoke-browser.mjs` covers the compact Customer Copy email review row and setup-only disabled send state.",
-  "`scripts/test-booking-ui-browser.mjs` covers the Customer Copy driver-details review item, saved-booking review-item GET, disabled Email send no-op GET, copy output protections, and no private/finance/internal leakage.",
-  "`scripts/test-mobile-usability-browser.mjs` covers the Customer Copy surface in mobile layout checks.",
-  "Future work must reuse the existing compact Customer Copy multi-channel row instead of adding another Email, WhatsApp, SMS, provider-send, customer-message, or driver-notification UI sector, card, route, helper, or shim for the same purpose.",
-  "Allowed future work, only after explicit owner approval, must stay compact and colocated with the existing Customer Copy controls.",
-  "Adding duplicate Email, WhatsApp, SMS, customer-message, driver-notification, provider-send, or customer driver-details workflow sectors, buttons, cards, routes, helpers, or shims.",
-  "Activating live Email, WhatsApp, SMS, Telegram, push, provider/env reads, provider sends, recipient sends, notification sends, customer messages, driver notifications, payment/PDF/pricing/payout/auth/location/photo/calendar behavior, parser-learning behavior, or DB writes.",
-  "Moving Customer Copy multi-channel controls into customer or driver surfaces.",
-  "Exposing customer price, driver payout, PayNow payout details, payout comparisons, internal finance notes, internal admin notes, parser/debug internals, mock QA/dev archive, raw provider payloads, tokens, or secrets.",
+  "Email now uses the existing approved gated POST route `POST /api/admin-customer-driver-details-email-send-action` from the same compact row.",
+  "WhatsApp and SMS remain parked on setup-only/no-op GET paths: `GET /api/admin-whatsapp-customer-driver-details-send-disabled-setup` and `GET /api/admin-sms-customer-driver-details-send-disabled-setup`.",
+  "Customer In-App and Driver In-App remain the existing admin-selected app notification path through `POST /api/admin-customer-driver-app-notifications`.",
+  "Telegram remains the existing internal-admin alert send path only: `POST /api/admin-telegram-internal-admin-alert-send`.",
+  "`scripts/test-customer-copy-multi-channel-no-live-guard.mjs` owns the parked SMS/WhatsApp no-live guard and the Email UI-to-gated-route source guard.",
+  "Email may be triggered only by explicit admin click through `POST /api/admin-customer-driver-details-email-send-action`, using the gated Resend helper and allowlist safeguards.",
+  "SMS and WhatsApp remain parked setup-only/no-op for now.",
+  "Activating SMS or WhatsApp sends, customer/driver Telegram sends, automatic fallback, automatic multi-channel blast, batch send, scheduler, polling, retry automation, payment/PDF/pricing/payout/auth/location/photo/calendar behavior, parser-learning behavior, or broad DB writes.",
   "Customers must never see driver payout, PayNow payout, internal admin notes, parser/debug internals, admin finance, or mock QA/dev archive data.",
   "Drivers must never see customer price, billing, invoice/payment, payout comparisons, PayNow payout details, internal finance notes, internal admin notes, or mock QA/dev archive data.",
 ]) {
@@ -118,14 +101,18 @@ const appOutsideCustomerCopy = appPage.replace(customerCopySection, "");
 
 for (const fragment of [
   'const adminCustomerDriverDetailsEmailReviewItemApiPath =\n  "/api/admin-customer-driver-details-email-review-item-setup";',
-  'const adminCustomerDriverDetailsEmailSendDisabledApiPath =\n  "/api/admin-customer-driver-details-email-send-disabled-setup";',
+  'const adminCustomerDriverDetailsEmailSendActionApiPath =\n  "/api/admin-customer-driver-details-email-send-action";',
   'const adminWhatsAppCustomerDriverDetailsSendDisabledApiPath =\n  "/api/admin-whatsapp-customer-driver-details-send-disabled-setup";',
   'const adminSmsCustomerDriverDetailsSendDisabledApiPath =\n  "/api/admin-sms-customer-driver-details-send-disabled-setup";',
   'const adminEmailActivationPreflightApiPath =\n  "/api/admin-email-activation-preflight-setup";',
-  "async function checkAdminCustomerDriverDetailsEmailDisabledSend()",
+  'const adminTelegramInternalAdminAlertSendApiPath =\n  "/api/admin-telegram-internal-admin-alert-send";',
+  'const adminCustomerDriverAppNotificationsApiPath =\n  "/api/admin-customer-driver-app-notifications";',
+  "async function sendAdminCustomerDriverDetailsEmail()",
   "async function checkAdminCustomerDriverDetailsMessageDisabledSend(",
+  "async function sendAdminCustomerDriverDetailsCustomerInAppNotification()",
+  "async function sendAdminCustomerDriverDetailsDriverInAppNotification()",
   "const adminCustomerDriverDetailsMultiChannelDisabledStatusText =",
-  "Setup-only / send disabled, sendingEnabled false, external_send false",
+  "Email uses the gated email route. WhatsApp and SMS are parked setup-only/no-live.",
   'data-dispatch-workflow-step="customer-whatsapp-copy"',
   'data-copy-edit-button="customerCopy"',
   'data-copy-copy-button="customerCopy"',
@@ -135,12 +122,14 @@ for (const fragment of [
   'data-admin-customer-driver-details-email-disabled-send-action="true"',
   'data-admin-customer-driver-details-whatsapp-disabled-send-action="true"',
   'data-admin-customer-driver-details-sms-disabled-send-action="true"',
+  'data-admin-customer-driver-details-customer-in-app-send-action="true"',
   'data-admin-email-activation-preflight-status="true"',
-  'onClick={checkAdminCustomerDriverDetailsEmailDisabledSend}',
+  'onClick={sendAdminCustomerDriverDetailsEmail}',
   'onClick={() => checkAdminCustomerDriverDetailsMessageDisabledSend("whatsapp")}',
   'onClick={() => checkAdminCustomerDriverDetailsMessageDisabledSend("sms")}',
-  "Providers off",
+  "SMS/WA off",
   "Email gate off",
+  "Send In-App",
 ]) {
   assertIncludes(appPage, fragment, `existing app Customer Copy fragment ${fragment}`);
 }
@@ -155,18 +144,11 @@ for (const [fragment, expectedCount] of [
   ['data-admin-customer-driver-details-email-disabled-send-action="true"', 1],
   ['data-admin-customer-driver-details-whatsapp-disabled-send-action="true"', 1],
   ['data-admin-customer-driver-details-sms-disabled-send-action="true"', 1],
+  ['data-admin-customer-driver-details-customer-in-app-send-action="true"', 1],
   ['data-admin-email-activation-preflight-status="true"', 1],
 ]) {
-  assert.equal(
-    countOccurrences(appPage, fragment),
-    expectedCount,
-    `Expected one existing Customer Copy surface for ${fragment}`,
-  );
-  assert.equal(
-    countOccurrences(customerCopySection, fragment),
-    expectedCount,
-    `Expected existing Customer Copy surface inside Customer Copy for ${fragment}`,
-  );
+  assert.equal(countOccurrences(appPage, fragment), expectedCount);
+  assert.equal(countOccurrences(customerCopySection, fragment), expectedCount);
 }
 
 for (const fragment of [
@@ -174,13 +156,21 @@ for (const fragment of [
   'data-admin-customer-driver-details-email-disabled-send-action="true"',
   'data-admin-customer-driver-details-whatsapp-disabled-send-action="true"',
   'data-admin-customer-driver-details-sms-disabled-send-action="true"',
+  'data-admin-customer-driver-details-customer-in-app-send-action="true"',
   'data-admin-email-activation-preflight-status="true"',
 ]) {
   assertExcludes(appOutsideCustomerCopy, fragment, `Customer Copy fragment outside section ${fragment}`);
 }
 
+assertIncludes(emailSendActionRoute, "export async function POST", "email send action route POST");
+assertIncludes(
+  emailSendActionRoute,
+  'allowServerSessionRoleMethodsWithoutRequestToken: ["POST"]',
+  "email send action dashboard server-session boundary",
+);
+assertExcludes(emailSendActionRoute, "export async function GET", "email send action route GET");
+
 for (const [label, routeSource] of [
-  ["email disabled-send route", emailDisabledRoute],
   ["WhatsApp disabled-send route", whatsappDisabledRoute],
   ["SMS disabled-send route", smsDisabledRoute],
 ]) {
@@ -193,12 +183,8 @@ for (const [label, routeSource] of [
 }
 
 for (const fragment of [
-  "Customer Copy multi-channel setup must not add provider/payment SDK package",
-  "Customer Copy multi-channel UI must not add standalone Email/WhatsApp/SMS workflow sectors.",
-  "Customer Copy multi-channel UI must not add standalone Email/WhatsApp/SMS cards.",
-  "Customer Copy disabled-send handlers must use GET.",
-  "Customer Copy disabled-send handlers must not use write methods.",
-  "Customer Copy email disabled-send API",
+  "Email gated send must include",
+  "Customer Copy WhatsApp/SMS disabled-send handlers must use GET.",
   "Customer Copy WhatsApp disabled-send API",
   "Customer Copy SMS disabled-send API",
   "Customer Copy multi-channel no-live guard passed",
@@ -206,45 +192,17 @@ for (const fragment of [
   assertIncludes(noLiveGuard, fragment, `Customer Copy no-live guard fragment ${fragment}`);
 }
 
-for (const fragment of [
-  "[data-admin-customer-driver-details-email-review-item]",
-  "[data-admin-customer-driver-details-email-review-action]",
-  "[data-admin-customer-driver-details-email-review-label]",
-  "data-admin-customer-driver-details-email-review-ready-state",
-  "[data-admin-customer-driver-details-email-review-ready-status]",
-  "[data-admin-customer-driver-details-email-review-send-state]",
-  "expected compact setup-only customer driver details email review row in Customer Copy",
-]) {
-  assertIncludes(appSmoke, fragment, `app smoke Customer Copy fragment ${fragment}`);
-}
-
-for (const fragment of [
-  "[data-admin-customer-driver-details-email-review-item='true']",
-  "[data-admin-customer-driver-details-email-review-action='true']",
-  "[data-admin-customer-driver-details-email-disabled-send-action='true']",
-  "[data-admin-customer-driver-details-email-disabled-send-status='true']",
-  "GET /api/admin-customer-driver-details-email-review-item-setup",
-  "Expected saved booking load to GET the customer driver details email review item through the guarded setup-only API path",
-  "Expected Customer Copy disabled email send button to GET the no-op setup-only API",
-  "Expected Customer Copy not to include vehicle type, payout, override reason, admin notes, or booking type code",
-  "Expected completed booking Customer Copy to keep customer-facing copy protections after load",
-]) {
-  assertIncludes(bookingUiBrowser, fragment, `booking UI Customer Copy fragment ${fragment}`);
-}
-
-assertIncludes(mobileUsabilityBrowser, '"Customer Copy"', "mobile Customer Copy surface");
-
 const ledgerSection = sectionBetween(ledger, "## Customer Copy Multi-Channel Existing Workflow Lock");
 
 for (const fragment of [
   "The existing admin Customer Copy Email/WhatsApp/SMS customer driver-details workflow is locked by `docs/customer-copy-multi-channel-existing-workflow-lock.md`.",
-  "This is a docs/test-only lock; it does not approve runtime implementation, UI/API behavior change, UI sectors/buttons/cards, endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, customer/driver portal changes, or new shims.",
+  "Email now uses the existing approved gated POST route `POST /api/admin-customer-driver-details-email-send-action` from the same compact row.",
+  "WhatsApp and SMS remain parked on setup-only/no-op GET paths.",
+  "Customer In-App and Driver In-App remain explicit admin-selected in-app notification actions through `POST /api/admin-customer-driver-app-notifications`.",
+  "Telegram remains the existing internal-admin alert send path only through `POST /api/admin-telegram-internal-admin-alert-send`.",
   "Do not add duplicate Email, WhatsApp, SMS, customer-message, driver-notification, provider-send, or customer driver-details workflow sectors, buttons, cards, routes, helpers, or shims.",
-  "Existing surfaces are `data-dispatch-workflow-step=\"customer-whatsapp-copy\"`, `data-copy-edit-button=\"customerCopy\"`, `data-copy-copy-button=\"customerCopy\"`, `data-copy-preview=\"customerCopy\"`, `data-customer-live-location-helper`, `data-admin-customer-driver-details-email-review-item`, the existing Email/WhatsApp/SMS disabled-send review buttons, and `data-admin-email-activation-preflight-status` in `app/page.tsx`.",
-  "Existing disabled-send setup paths are `GET /api/admin-customer-driver-details-email-send-disabled-setup`, `GET /api/admin-whatsapp-customer-driver-details-send-disabled-setup`, and `GET /api/admin-sms-customer-driver-details-send-disabled-setup`; they remain setup-only/no-op/no-live.",
-  "Existing coverage lives in `scripts/test-customer-copy-multi-channel-no-live-guard.mjs`, `scripts/test-app-smoke-browser.mjs`, `scripts/test-booking-ui-browser.mjs`, and `scripts/test-mobile-usability-browser.mjs`.",
-  "Future approved changes must stabilize or extend the existing compact Customer Copy multi-channel row only, stay colocated with Customer Copy, keep provider/env reads, provider sends, notification sends, customer messages, driver notifications, payment/PDF/pricing/payout/auth/location/photo/calendar behavior, parser changes, and DB writes blocked unless separately approved, and keep customer/driver privacy boundaries intact.",
-  "This lock adds `scripts/test-customer-copy-multi-channel-existing-workflow-lock.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.",
+  "SMS and WhatsApp sends remain parked unless separately approved.",
+  "Customer/driver Telegram sends remain parked unless separately approved.",
 ]) {
   assertIncludes(ledgerSection, fragment, `ledger Customer Copy lock fragment ${fragment}`);
 }

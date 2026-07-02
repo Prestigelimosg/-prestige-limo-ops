@@ -6259,10 +6259,10 @@ async function runChromeTest() {
             label: "Customer driver details ready",
             readyState: "blocked",
             readyStatus: "Blocked",
-            sendState: "Providers off",
+            sendState: "SMS/WA off",
             visible: true,
           },
-          `${viewport.label}: expected compact setup-only customer driver details email review row in Customer Copy`,
+          `${viewport.label}: expected compact customer driver details row in Customer Copy`,
         );
         for (const expectedBoundaryText of [
           "UI/local-state",

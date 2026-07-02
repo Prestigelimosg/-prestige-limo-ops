@@ -70,12 +70,21 @@ const ledgerSection = sectionBetween(
 for (const fragment of [
   'data-plain-invoice-start-action="true"',
   'data-plain-invoice-panel="true"',
+  'data-plain-invoice-crm-account="true"',
+  'data-plain-invoice-load-crm-accounts="true"',
   'data-plain-invoice-bill-to-name="true"',
   'data-plain-invoice-bill-to-email="true"',
   'data-plain-invoice-reference="true"',
   'data-plain-invoice-amount="true"',
   'data-plain-invoice-due-date="true"',
   'data-plain-invoice-service="true"',
+  'data-plain-invoice-line-items="true"',
+  'data-plain-invoice-line-items-total="true"',
+  'data-plain-invoice-line-item-row="1"',
+  'data-plain-invoice-add-line-item="true"',
+  "data-plain-invoice-extra-line-description={rowNumber}",
+  "data-plain-invoice-extra-line-amount={rowNumber}",
+  "data-plain-invoice-remove-line-item={rowNumber}",
   'data-plain-invoice-line-description="true"',
   'data-plain-invoice-route="true"',
   'data-plain-invoice-paid-status="true"',
@@ -84,6 +93,8 @@ for (const fragment of [
   'data-plain-invoice-issue-action="true"',
   'data-plain-invoice-email-action="true"',
   'data-plain-invoice-preview-card="true"',
+  'data-plain-invoice-preview-crm-link="true"',
+  'data-plain-invoice-preview-lines="true"',
   'data-plain-invoice-boundary="true"',
   "Create Invoice",
   "Manual bill-to",
@@ -92,8 +103,9 @@ for (const fragment of [
   "Preview first; Draft or Issue creates the invoice number.",
   'data-plain-invoice-feedback-tone={plainInvoiceFeedbackTone}',
   "regularCustomerBookingFeedbackClass(",
-  "Create Invoice stores an ad-hoc admin billing document only after Draft or Issue.",
-  "Email issues the invoice first, then uses the existing guarded email",
+  "Create Invoice stores an admin billing document only after Draft or Issue.",
+  "Select a CRM billing",
+  "guarded email route.",
   "Paid only changes invoice status; it does not record a payment.",
 ]) {
   assertIncludes(createInvoiceSection + customersPage, fragment, `create invoice UI fragment ${fragment}`);
@@ -105,8 +117,16 @@ for (const fragment of [
   "plain-invoice:",
   "plainInvoiceEmailActionKey",
   "plainInvoiceRequestBodyFromPreview(",
+  "plainInvoiceMaxLineItems = 4",
+  "plainInvoiceLineItemsFromForm(",
+  "plainInvoiceTotalAmountCents(",
+  "updatePlainInvoiceCrmBillingAccount(",
+  "crmCustomerId: \"\"",
+  "plainInvoiceForm.crmCustomerId.trim() ||",
+  "regularCustomerAccountReadState.status !== \"loaded\"",
   "documentType: \"invoice\" as CustomerBillingDocumentType",
   "status: plainInvoicePreview.folder",
+  "lineItems: plainInvoicePreview.lineItems",
   "fetch(adminCustomerInvoicesApiPath",
   "fetch(adminCustomerInvoiceEmailApiPath",
   '"x-prestige-admin-purpose": "admin-booking-persistence"',
@@ -116,6 +136,12 @@ for (const fragment of [
 ]) {
   assertIncludes(customersPage, fragment, `create invoice implementation fragment ${fragment}`);
 }
+
+assertIncludes(
+  customersPage,
+  "customerId:\n        plainInvoiceForm.crmCustomerId.trim() ||",
+  "Create Invoice CRM customer id fallback must prefer selected CRM account before plain-invoice id",
+);
 
 for (const forbiddenFragment of [
   "Reserve Number",
@@ -168,10 +194,13 @@ for (const publicSource of [customerBookingPage, customerPortalPage, driverJobPa
 
 for (const phrase of [
   "Admin Customers now has a compact `Create Invoice` entry point inside `/customers` > Invoice Workspace > Send Invoice Workbench.",
-  "The lane is for ad-hoc/manual bill-to invoices without opening or creating a customer folder.",
+  "The lane supports manual bill-to invoices and can explicitly link an invoice to an existing loaded CRM/customer billing account from the guarded saved-account read.",
+  "Create Invoice supports up to four visible manual line items, matching the current stored PDF renderer capacity; Preview sums the rows and Draft/Issue/Email send the reviewed `line_items` array to the existing guarded invoice route.",
   "Loading the panel and clicking Preview do not create an invoice number, PDF, customer folder, portal invite, prefix reservation, payment link, provider send, payout, or GPS/live-location action.",
   "Only the explicit `Draft`, `Issue`, or `Email` action posts to guarded admin invoice routes with the existing admin booking persistence purpose header.",
-  "Manual bill-to records use an internal `plain-invoice:` customer id and fixed `invoice` document type; they do not use customer-specific saved prefixes or the monthly invoice number reservation route.",
+  "Manual bill-to records without a selected CRM account still use an internal `plain-invoice:` customer id and fixed `invoice` document type; selected CRM billing accounts use the existing saved customer/account id/name without creating a new CRM row.",
+  "The CRM link selector reads only from the existing guarded saved customer account read and does not create customer folders, CRM accounts, portal invites, customer auth, bookings, or calendar records.",
+  "Create Invoice records do not use customer-specific saved prefixes or the monthly invoice number reservation route.",
   "The Create Invoice `Email` button requires a current preview and recipient email, issues the invoice through the guarded invoice route, then calls the existing guarded invoice email route.",
   "The `Paid` checkbox changes only the stored invoice status label and does not create a payment, bank record, card charge, payout, or reconciliation event.",
   "Public booking, customer portal, driver pages, and individual customer folders are not wired to this Create Invoice panel.",

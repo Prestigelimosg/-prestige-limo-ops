@@ -33,10 +33,13 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Admin Create Invoice Manual Bill-To Lane
 
 - Admin Customers now has a compact `Create Invoice` entry point inside `/customers` > Invoice Workspace > Send Invoice Workbench.
-- The lane is for ad-hoc/manual bill-to invoices without opening or creating a customer folder.
+- The lane supports manual bill-to invoices and can explicitly link an invoice to an existing loaded CRM/customer billing account from the guarded saved-account read.
+- Create Invoice supports up to four visible manual line items, matching the current stored PDF renderer capacity; Preview sums the rows and Draft/Issue/Email send the reviewed `line_items` array to the existing guarded invoice route.
 - Loading the panel and clicking Preview do not create an invoice number, PDF, customer folder, portal invite, prefix reservation, payment link, provider send, payout, or GPS/live-location action.
 - Only the explicit `Draft`, `Issue`, or `Email` action posts to guarded admin invoice routes with the existing admin booking persistence purpose header.
-- Manual bill-to records use an internal `plain-invoice:` customer id and fixed `invoice` document type; they do not use customer-specific saved prefixes or the monthly invoice number reservation route.
+- Manual bill-to records without a selected CRM account still use an internal `plain-invoice:` customer id and fixed `invoice` document type; selected CRM billing accounts use the existing saved customer/account id/name without creating a new CRM row.
+- The CRM link selector reads only from the existing guarded saved customer account read and does not create customer folders, CRM accounts, portal invites, customer auth, bookings, or calendar records.
+- Create Invoice records do not use customer-specific saved prefixes or the monthly invoice number reservation route.
 - The Create Invoice `Email` button requires a current preview and recipient email, issues the invoice through the guarded invoice route, then calls the existing guarded invoice email route.
 - The `Paid` checkbox changes only the stored invoice status label and does not create a payment, bank record, card charge, payout, or reconciliation event.
 - Public booking, customer portal, driver pages, and individual customer folders are not wired to this Create Invoice panel.

@@ -28,6 +28,7 @@ import {
   removeCustomerLocalInvoice,
   saveCustomerLocalInvoice,
   type CustomerBillingDocumentType,
+  type CustomerLocalInvoiceLineItem,
   type CustomerLocalInvoiceRecord,
   type CustomerLocalInvoiceStatus,
 } from "../../lib/customer-local-invoices";
@@ -311,6 +312,7 @@ type CustomerInvoicePreview = {
   dueDateLabel: string;
   folder: CustomerLocalInvoiceStatus;
   lineDescription: string;
+  lineItems: CustomerLocalInvoiceLineItem[];
   previewKey: string;
   reference: string;
   route: string;
@@ -355,12 +357,20 @@ type PlainInvoiceForm = {
   billToName: string;
   cardFeeApplies: boolean;
   cardPaymentEnabled: boolean;
+  crmCustomerId: string;
+  crmCustomerName: string;
   dueDateIso: string;
   isPaid: boolean;
+  lineItems: PlainInvoiceAdditionalLineItem[];
   lineDescription: string;
   reference: string;
   route: string;
   service: string;
+};
+
+type PlainInvoiceAdditionalLineItem = {
+  amount: string;
+  lineDescription: string;
 };
 
 type RegularCustomerBookingForm = typeof initialRegularCustomerBookingForm;
@@ -610,6 +620,89 @@ function appendCustomerInvoiceCardPaymentNote(
   return `${description.slice(0, availableDescriptionLength).trim()}...${suffix}`;
 }
 
+const plainInvoiceMaxLineItems = 4;
+
+function plainInvoiceLineItemRows(form: PlainInvoiceForm) {
+  return [
+    {
+      amount: form.amount,
+      lineDescription: form.lineDescription,
+      required: true,
+      rowNumber: 1,
+    },
+    ...form.lineItems.slice(0, plainInvoiceMaxLineItems - 1).map((item, index) => ({
+      amount: item.amount,
+      lineDescription: item.lineDescription,
+      required: false,
+      rowNumber: index + 2,
+    })),
+  ];
+}
+
+function plainInvoiceLineItemHasContent(row: {
+  amount: string;
+  lineDescription: string;
+  required: boolean;
+}) {
+  return row.required || Boolean(row.amount.trim()) || Boolean(row.lineDescription.trim());
+}
+
+function plainInvoiceLineItemValidationMessage(form: PlainInvoiceForm) {
+  for (const row of plainInvoiceLineItemRows(form)) {
+    if (!plainInvoiceLineItemHasContent(row)) {
+      continue;
+    }
+
+    if (!row.lineDescription.trim()) {
+      return `Enter line item ${row.rowNumber} description before previewing Create Invoice.`;
+    }
+
+    if (!parseInvoiceAmountToCents(row.amount)) {
+      return `Enter line item ${row.rowNumber} amount before previewing Create Invoice.`;
+    }
+  }
+
+  return "";
+}
+
+function plainInvoiceLineItemsFromForm(
+  form: PlainInvoiceForm,
+  options: { includeCardPaymentNote?: boolean } = {},
+) {
+  const lineItems = plainInvoiceLineItemRows(form)
+    .filter(plainInvoiceLineItemHasContent)
+    .map((row) => {
+      const amountCents = parseInvoiceAmountToCents(row.amount) || 0;
+
+      return {
+        amountCents,
+        amountLabel: formatInvoiceAmount(amountCents),
+        description: row.lineDescription.trim(),
+      };
+    });
+
+  if (options.includeCardPaymentNote && lineItems.length > 0) {
+    const lastLineItem = lineItems[lineItems.length - 1];
+    lineItems[lineItems.length - 1] = {
+      ...lastLineItem,
+      description: appendCustomerInvoiceCardPaymentNote(
+        lastLineItem.description,
+        form.cardPaymentEnabled,
+        form.cardFeeApplies,
+      ),
+    };
+  }
+
+  return lineItems;
+}
+
+function plainInvoiceTotalAmountCents(form: PlainInvoiceForm) {
+  return plainInvoiceLineItemsFromForm(form).reduce(
+    (total, item) => total + item.amountCents,
+    0,
+  );
+}
+
 function customerInvoiceCardPaymentPreviewLabel(
   cardPaymentEnabled: boolean,
   cardFeeApplies: boolean,
@@ -652,8 +745,11 @@ function plainInvoiceInitialForm(): PlainInvoiceForm {
     billToName: "",
     cardFeeApplies: false,
     cardPaymentEnabled: false,
+    crmCustomerId: "",
+    crmCustomerName: "",
     dueDateIso: invoiceDateInputDaysFromNow(7),
     isPaid: false,
+    lineItems: [],
     lineDescription: "",
     reference: plainInvoiceDefaultReference(),
     route: "",
@@ -1586,6 +1682,10 @@ export default function MockCustomerDashboardPage() {
       };
     });
   }, [regularCustomerAccountReadState.accounts, regularCustomerAccountReadState.status]);
+  const plainInvoiceCrmAccountOptions = useMemo(
+    () => customerFolderIndexRows.filter((row) => row.source === "saved-account-read"),
+    [customerFolderIndexRows],
+  );
   const selectedCustomerFolderFinderRow = useMemo(
     () =>
       customerFolderIndexRows.find(
@@ -1965,16 +2065,30 @@ export default function MockCustomerDashboardPage() {
     Boolean(customerInvoicePreview) &&
     customerInvoicePreview?.previewKey === customerInvoiceCurrentPreviewKey;
   const plainInvoiceAmountCents = useMemo(
-    () => parseInvoiceAmountToCents(plainInvoiceForm.amount),
-    [plainInvoiceForm.amount],
+    () => plainInvoiceTotalAmountCents(plainInvoiceForm),
+    [plainInvoiceForm],
   );
   const plainInvoiceCurrentPreviewKey = useMemo(() => {
     const billToName = plainInvoiceForm.billToName.trim();
+    const crmCustomerId = plainInvoiceForm.crmCustomerId.trim();
+    const crmCustomerName = plainInvoiceForm.crmCustomerName.trim();
     const reference = plainInvoiceForm.reference.trim();
     const service = plainInvoiceForm.service.trim();
-    const lineDescription = plainInvoiceForm.lineDescription.trim();
+    const lineItems = plainInvoiceLineItemsFromForm(plainInvoiceForm, {
+      includeCardPaymentNote: true,
+    });
+    const lineItemsKey = lineItems
+      .map((item) => `${item.amountLabel}:${item.description}`)
+      .join(";;");
 
-    if (!billToName || !reference || !service || !lineDescription || !plainInvoiceAmountCents) {
+    if (
+      !billToName ||
+      !reference ||
+      !service ||
+      !lineItemsKey ||
+      !plainInvoiceAmountCents ||
+      plainInvoiceLineItemValidationMessage(plainInvoiceForm)
+    ) {
       return "";
     }
 
@@ -1982,10 +2096,12 @@ export default function MockCustomerDashboardPage() {
       "plain-invoice",
       billToName,
       plainInvoiceForm.billToEmail.trim(),
+      crmCustomerId,
+      crmCustomerName,
       reference,
       service,
       plainInvoiceForm.route.trim(),
-      lineDescription,
+      lineItemsKey,
       plainInvoiceAmountCents,
       plainInvoiceForm.dueDateIso,
       plainInvoiceForm.cardPaymentEnabled ? "card-on" : "card-off",
@@ -1994,16 +2110,7 @@ export default function MockCustomerDashboardPage() {
     ].join("|");
   }, [
     plainInvoiceAmountCents,
-    plainInvoiceForm.billToEmail,
-    plainInvoiceForm.billToName,
-    plainInvoiceForm.cardFeeApplies,
-    plainInvoiceForm.cardPaymentEnabled,
-    plainInvoiceForm.dueDateIso,
-    plainInvoiceForm.isPaid,
-    plainInvoiceForm.lineDescription,
-    plainInvoiceForm.reference,
-    plainInvoiceForm.route,
-    plainInvoiceForm.service,
+    plainInvoiceForm,
   ]);
   const isPlainInvoicePreviewCurrent =
     Boolean(plainInvoicePreview) &&
@@ -3018,8 +3125,85 @@ export default function MockCustomerDashboardPage() {
         nextForm.cardFeeApplies = false;
       }
 
+      if (
+        field === "billToName" &&
+        typeof value === "string" &&
+        currentForm.crmCustomerName &&
+        value.trim() !== currentForm.crmCustomerName
+      ) {
+        nextForm.crmCustomerId = "";
+        nextForm.crmCustomerName = "";
+      }
+
       return nextForm;
     });
+  }
+
+  function updatePlainInvoiceCrmBillingAccount(customerId: string) {
+    const selectedAccount =
+      plainInvoiceCrmAccountOptions.find((account) => account.customerId === customerId) || null;
+
+    setPlainInvoiceForm((currentForm) => ({
+      ...currentForm,
+      billToName: selectedAccount?.customerName || currentForm.billToName,
+      crmCustomerId: selectedAccount?.customerId || "",
+      crmCustomerName: selectedAccount?.customerName || "",
+    }));
+
+    setPlainInvoiceFeedback(
+      selectedAccount
+        ? `Create Invoice linked to CRM billing account ${selectedAccount.customerName}. Refresh preview before Draft, Issue, or Email.`
+        : "Create Invoice switched to manual bill-to. Refresh preview before Draft, Issue, or Email.",
+    );
+    setPlainInvoiceFeedbackTone("info");
+  }
+
+  function updatePlainInvoiceAdditionalLineItem(
+    index: number,
+    field: keyof PlainInvoiceAdditionalLineItem,
+    value: string,
+  ) {
+    setPlainInvoiceForm((currentForm) => ({
+      ...currentForm,
+      lineItems: currentForm.lineItems.map((item, itemIndex) =>
+        itemIndex === index
+          ? {
+              ...item,
+              [field]: value,
+            }
+          : item,
+      ),
+    }));
+  }
+
+  function addPlainInvoiceLineItem() {
+    if (plainInvoiceForm.lineItems.length >= plainInvoiceMaxLineItems - 1) {
+      setPlainInvoiceFeedback(`Create Invoice supports up to ${plainInvoiceMaxLineItems} visible line items.`);
+      setPlainInvoiceFeedbackTone("error");
+      return;
+    }
+
+    setPlainInvoiceForm((currentForm) => ({
+      ...currentForm,
+      lineItems: [
+        ...currentForm.lineItems,
+        {
+          amount: "",
+          lineDescription: "",
+        },
+      ],
+    }));
+    setPlainInvoiceFeedback("Line item added. Refresh preview before Draft, Issue, or Email.");
+    setPlainInvoiceFeedbackTone("info");
+  }
+
+  function removePlainInvoiceLineItem(index: number) {
+    setPlainInvoiceForm((currentForm) => ({
+      ...currentForm,
+      lineItems: currentForm.lineItems.filter((_, itemIndex) => itemIndex !== index),
+    }));
+    setPlainInvoiceFeedback("Line item removed. Refresh preview before Draft, Issue, or Email.");
+    setPlainInvoiceFeedbackTone("info");
   }
 
   function clearPlainInvoiceForm() {
@@ -3033,11 +3217,18 @@ export default function MockCustomerDashboardPage() {
 
   function previewPlainInvoice() {
     const billToName = plainInvoiceForm.billToName.trim();
+    const billingCustomerName = plainInvoiceForm.crmCustomerName.trim() || billToName;
     const reference = plainInvoiceForm.reference.trim();
     const service = plainInvoiceForm.service.trim();
-    const lineDescription = plainInvoiceForm.lineDescription.trim();
     const amountCents = plainInvoiceAmountCents;
     const dueDate = new Date(`${plainInvoiceForm.dueDateIso}T00:00:00+08:00`);
+    const lineItemsValidationMessage = plainInvoiceLineItemValidationMessage(plainInvoiceForm);
+    const lineItems = plainInvoiceLineItemsFromForm(plainInvoiceForm, {
+      includeCardPaymentNote: true,
+    }).map(({ amountLabel, description }) => ({
+      amountLabel,
+      description,
+    }));
 
     if (!billToName) {
       setPlainInvoiceFeedback("Enter the bill-to name before previewing Create Invoice.");
@@ -3060,8 +3251,8 @@ export default function MockCustomerDashboardPage() {
       return;
     }
 
-    if (!lineDescription) {
-      setPlainInvoiceFeedback("Enter the line item description before previewing Create Invoice.");
+    if (lineItemsValidationMessage) {
+      setPlainInvoiceFeedback(lineItemsValidationMessage);
       setPlainInvoiceFeedbackTone("error");
       document.querySelector<HTMLElement>("[data-plain-invoice-line-description='true']")?.focus();
       return;
@@ -3086,23 +3277,26 @@ export default function MockCustomerDashboardPage() {
       amountLabel: formatInvoiceAmount(amountCents),
       cardFeeApplies: plainInvoiceForm.cardFeeApplies,
       cardPaymentEnabled: plainInvoiceForm.cardPaymentEnabled,
-      customerName: billToName,
+      customerName: billingCustomerName,
       documentType: "invoice",
       dueDateIso: plainInvoiceForm.dueDateIso,
       dueDateLabel: formatInvoiceDate(dueDate),
       folder: plainInvoiceForm.isPaid ? "Paid" : "Unpaid",
-      lineDescription: appendCustomerInvoiceCardPaymentNote(
-        lineDescription,
-        plainInvoiceForm.cardPaymentEnabled,
-        plainInvoiceForm.cardFeeApplies,
-      ),
+      lineDescription: lineItems[0]?.description || "",
+      lineItems,
       previewKey: plainInvoiceCurrentPreviewKey,
       reference,
       route: plainInvoiceForm.route.trim() || "Ad-hoc invoice / no trip route",
       service,
-      sourceLabel: "Create Invoice manual entry",
+      sourceLabel: plainInvoiceForm.crmCustomerId
+        ? "Linked CRM billing account"
+        : "Create Invoice manual entry",
     });
-    setPlainInvoiceFeedback("Create Invoice preview ready. Draft or Issue will create the invoice number.");
+    setPlainInvoiceFeedback(
+      `Create Invoice preview ready with ${lineItems.length} line item${
+        lineItems.length === 1 ? "" : "s"
+      }. Draft or Issue will create the invoice number.`,
+    );
     setPlainInvoiceFeedbackTone("success");
     window.setTimeout(() => {
       document.querySelector<HTMLElement>("[data-plain-invoice-issue-action='true']")?.focus();
@@ -3118,20 +3312,17 @@ export default function MockCustomerDashboardPage() {
       amountCents: plainInvoicePreview.amountCents,
       billingMonthLabel: formatInvoiceMonth(new Date()),
       customerEmail: plainInvoiceForm.billToEmail,
-      customerId: plainInvoiceCustomerId(
-        plainInvoicePreview.reference,
-        plainInvoicePreview.customerName,
-      ),
+      customerId:
+        plainInvoiceForm.crmCustomerId.trim() ||
+        plainInvoiceCustomerId(
+          plainInvoicePreview.reference,
+          plainInvoicePreview.customerName,
+        ),
       customerName: plainInvoicePreview.customerName,
       documentState,
       documentType: "invoice" as CustomerBillingDocumentType,
       dueDateIso: plainInvoicePreview.dueDateIso,
-      lineItems: [
-        {
-          amountLabel: plainInvoicePreview.amountLabel,
-          description: plainInvoicePreview.lineDescription,
-        },
-      ],
+      lineItems: plainInvoicePreview.lineItems,
       reference: plainInvoicePreview.reference,
       route: plainInvoicePreview.route,
       service: plainInvoicePreview.service,
@@ -3412,6 +3603,12 @@ export default function MockCustomerDashboardPage() {
       dueDateLabel,
       folder: customerInvoiceIssueStatus,
       lineDescription,
+      lineItems: [
+        {
+          amountLabel: formatInvoiceAmount(amountCents),
+          description: lineDescription,
+        },
+      ],
       previewKey: customerInvoiceCurrentPreviewKey,
       reference: customerInvoicePrepRow.reference,
       route: customerInvoicePrepRow.route,
@@ -3476,12 +3673,7 @@ export default function MockCustomerDashboardPage() {
       documentState,
       documentType: customerInvoicePreview.documentType,
       dueDateIso: customerInvoicePreview.dueDateIso,
-      lineItems: [
-        {
-          amountLabel: customerInvoicePreview.amountLabel,
-          description: customerInvoicePreview.lineDescription,
-        },
-      ],
+      lineItems: customerInvoicePreview.lineItems,
       reference: customerInvoicePrepRow.reference,
       route: customerInvoicePrepRow.route,
       service: customerInvoicePrepRow.service,
@@ -5366,7 +5558,39 @@ export default function MockCustomerDashboardPage() {
                     No number yet
                   </p>
                 </div>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(9rem,1fr)_minmax(9rem,0.9fr)_minmax(8rem,0.75fr)_minmax(7rem,0.65fr)_minmax(8rem,0.7fr)] xl:items-end">
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(9rem,1fr)_minmax(9rem,0.9fr)_minmax(8rem,0.75fr)_minmax(8rem,0.7fr)] xl:items-end">
+                  <div className="grid gap-2 sm:col-span-2 xl:col-span-4 xl:grid-cols-[minmax(12rem,1fr)_auto] xl:items-end">
+                    <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                      CRM billing account
+                      <select
+                        className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
+                        data-plain-invoice-crm-account="true"
+                        disabled={regularCustomerAccountReadState.status === "loading"}
+                        onChange={(event) => updatePlainInvoiceCrmBillingAccount(event.target.value)}
+                        value={plainInvoiceForm.crmCustomerId}
+                      >
+                        <option value="">
+                          {plainInvoiceCrmAccountOptions.length > 0
+                            ? "Manual bill-to only"
+                            : "Load CRM accounts first"}
+                        </option>
+                        {plainInvoiceCrmAccountOptions.map((account) => (
+                          <option key={account.customerId} value={account.customerId}>
+                            {account.customerName}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button
+                      className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-2 text-[11px] font-bold leading-none text-slate-700 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                      data-plain-invoice-load-crm-accounts="true"
+                      disabled={regularCustomerAccountReadState.status === "loading"}
+                      onClick={loadRegularCustomerAccounts}
+                      type="button"
+                    >
+                      {regularCustomerAccountReadState.status === "loading" ? "Loading" : "Load CRM"}
+                    </button>
+                  </div>
                   <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
                     Bill to
                     <input
@@ -5400,17 +5624,6 @@ export default function MockCustomerDashboardPage() {
                     />
                   </label>
                   <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
-                    Amount
-                    <input
-                      className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700"
-                      data-plain-invoice-amount="true"
-                      inputMode="decimal"
-                      onChange={(event) => updatePlainInvoiceForm("amount", event.target.value)}
-                      placeholder="e.g. 120.00"
-                      value={plainInvoiceForm.amount}
-                    />
-                  </label>
-                  <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
                     Due date
                     <input
                       className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700"
@@ -5429,17 +5642,7 @@ export default function MockCustomerDashboardPage() {
                       value={plainInvoiceForm.service}
                     />
                   </label>
-                  <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500 sm:col-span-2 xl:col-span-3">
-                    Line item
-                    <input
-                      className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700"
-                      data-plain-invoice-line-description="true"
-                      onChange={(event) => updatePlainInvoiceForm("lineDescription", event.target.value)}
-                      placeholder="Service description printed on invoice"
-                      value={plainInvoiceForm.lineDescription}
-                    />
-                  </label>
-                  <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500 sm:col-span-2 xl:col-span-3">
+                  <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500 sm:col-span-2 xl:col-span-2">
                     Route / notes
                     <input
                       className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700"
@@ -5449,7 +5652,7 @@ export default function MockCustomerDashboardPage() {
                       value={plainInvoiceForm.route}
                     />
                   </label>
-                  <div className="flex flex-wrap items-end gap-1.5 sm:col-span-2 xl:col-span-2">
+                  <div className="flex flex-wrap items-end gap-1.5 sm:col-span-2 xl:col-span-4">
                     <label className="inline-flex h-7 w-fit items-center gap-1.5 whitespace-nowrap rounded-md border border-slate-300 bg-white px-2 text-[11px] font-bold leading-none text-slate-700">
                       <input
                         checked={plainInvoiceForm.cardPaymentEnabled}
@@ -5494,6 +5697,111 @@ export default function MockCustomerDashboardPage() {
                       <span>Paid</span>
                     </label>
                   </div>
+                </div>
+                <div className="mt-3" data-plain-invoice-line-items="true">
+                  <div className="flex flex-wrap items-end justify-between gap-2">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                      Line items
+                    </p>
+                    <p
+                      className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-700"
+                      data-plain-invoice-line-items-total="true"
+                    >
+                      Total {formatInvoiceAmount(plainInvoiceAmountCents)}
+                    </p>
+                  </div>
+                  <div className="mt-2 space-y-2">
+                    <div
+                      className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_8rem]"
+                      data-plain-invoice-line-item-row="1"
+                    >
+                      <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                        Item 1
+                        <input
+                          className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700"
+                          data-plain-invoice-line-description="true"
+                          onChange={(event) =>
+                            updatePlainInvoiceForm("lineDescription", event.target.value)
+                          }
+                          placeholder="Service description printed on invoice"
+                          value={plainInvoiceForm.lineDescription}
+                        />
+                      </label>
+                      <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                        Amount
+                        <input
+                          className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700"
+                          data-plain-invoice-amount="true"
+                          inputMode="decimal"
+                          onChange={(event) => updatePlainInvoiceForm("amount", event.target.value)}
+                          placeholder="120.00"
+                          value={plainInvoiceForm.amount}
+                        />
+                      </label>
+                    </div>
+                    {plainInvoiceForm.lineItems.map((item, index) => {
+                      const rowNumber = index + 2;
+
+                      return (
+                        <div
+                          className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_8rem_auto]"
+                          data-plain-invoice-line-item-row={rowNumber}
+                          key={`plain-invoice-line-item-${rowNumber}`}
+                        >
+                          <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                            Item {rowNumber}
+                            <input
+                              className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700"
+                              data-plain-invoice-extra-line-description={rowNumber}
+                              onChange={(event) =>
+                                updatePlainInvoiceAdditionalLineItem(
+                                  index,
+                                  "lineDescription",
+                                  event.target.value,
+                                )
+                              }
+                              placeholder="Additional service / return trip"
+                              value={item.lineDescription}
+                            />
+                          </label>
+                          <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                            Amount
+                            <input
+                              className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700"
+                              data-plain-invoice-extra-line-amount={rowNumber}
+                              inputMode="decimal"
+                              onChange={(event) =>
+                                updatePlainInvoiceAdditionalLineItem(index, "amount", event.target.value)
+                              }
+                              placeholder="0.00"
+                              value={item.amount}
+                            />
+                          </label>
+                          <button
+                            className="mt-5 inline-flex h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-2 text-[11px] font-bold leading-none text-slate-700 transition hover:border-slate-500"
+                            data-plain-invoice-remove-line-item={rowNumber}
+                            onClick={() => removePlainInvoiceLineItem(index)}
+                            type="button"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <button
+                    className={`mt-2 inline-flex h-7 items-center justify-center rounded-md border px-2 text-[11px] font-bold leading-none transition ${
+                      plainInvoiceForm.lineItems.length >= plainInvoiceMaxLineItems - 1
+                        ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                        : "border-slate-300 bg-white text-slate-700 hover:border-slate-500"
+                    }`}
+                    data-plain-invoice-add-line-item="true"
+                    disabled={plainInvoiceForm.lineItems.length >= plainInvoiceMaxLineItems - 1}
+                    onClick={addPlainInvoiceLineItem}
+                    type="button"
+                  >
+                    Add item
+                  </button>
                 </div>
                 <div className="mt-3 flex flex-wrap items-center gap-1.5">
                   <button
@@ -5589,6 +5897,14 @@ export default function MockCustomerDashboardPage() {
                         </dd>
                       </div>
                       <div>
+                        <dt className="font-bold text-slate-600">Billing link</dt>
+                        <dd className="font-semibold" data-plain-invoice-preview-crm-link="true">
+                          {plainInvoicePreview.sourceLabel === "Linked CRM billing account"
+                            ? "CRM account"
+                            : "Manual"}
+                        </dd>
+                      </div>
+                      <div>
                         <dt className="font-bold text-slate-600">Reference</dt>
                         <dd className="font-semibold">{plainInvoicePreview.reference}</dd>
                       </div>
@@ -5606,9 +5922,24 @@ export default function MockCustomerDashboardPage() {
                         </dd>
                       </div>
                     </dl>
-                    <p className="mt-2 font-semibold" data-plain-invoice-preview-line="true">
-                      {plainInvoicePreview.lineDescription}
-                    </p>
+                    <div
+                      className="mt-2 divide-y divide-emerald-100 rounded-md border border-emerald-100 bg-white/70"
+                      data-plain-invoice-preview-line="true"
+                      data-plain-invoice-preview-lines="true"
+                    >
+                      {plainInvoicePreview.lineItems.map((item, index) => (
+                        <div
+                          className="grid gap-1 px-2 py-1.5 sm:grid-cols-[minmax(0,1fr)_7rem] sm:items-start"
+                          data-plain-invoice-preview-line-row={index + 1}
+                          key={`${item.description}-${index}`}
+                        >
+                          <p className="font-semibold text-slate-900">
+                            {index + 1}. {item.description}
+                          </p>
+                          <p className="font-bold text-slate-950 sm:text-right">{item.amountLabel}</p>
+                        </div>
+                      ))}
+                    </div>
                     <p className="mt-1 text-slate-700">{plainInvoicePreview.route}</p>
                     {!isPlainInvoicePreviewCurrent ? (
                       <p className="mt-2 font-bold text-amber-800" data-plain-invoice-preview-stale="true">
@@ -5631,10 +5962,11 @@ export default function MockCustomerDashboardPage() {
                   className="mt-2 rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-950"
                   data-plain-invoice-boundary="true"
                 >
-                  Create Invoice stores an ad-hoc admin billing document only after Draft or Issue. It does not create
-                  a customer folder, portal invite, prefix reservation, payment link, provider send, payout, or
-                  GPS/live-location action. Email issues the invoice first, then uses the existing guarded email
-                  route. Paid only changes invoice status; it does not record a payment.
+                  Create Invoice stores an admin billing document only after Draft or Issue. Select a CRM billing
+                  account to link the invoice to an existing customer/account, or leave it as manual bill-to. It does
+                  not create a customer folder, CRM account, portal invite, prefix reservation, payment link, provider
+                  send, payout, or GPS/live-location action. Email issues the invoice first, then uses the existing
+                  guarded email route. Paid only changes invoice status; it does not record a payment.
                 </p>
               </div>
               {customerInvoiceDrafts.length > 0 ? (

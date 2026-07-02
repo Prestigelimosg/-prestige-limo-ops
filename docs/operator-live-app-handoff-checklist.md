@@ -47,7 +47,7 @@ Use this as the daily Prestige admin runbook. It is not a feature approval, not 
 2. Mark the job ready only when closeout/billing readiness is correct. `Ready Locally` means admin has reviewed it for billing prep.
 3. Go to `Customers & Invoices` > `Unbilled Customers`.
 4. Use `Prepare` to load one billable customer/job into Send Invoice Workbench.
-5. Review amount, due date, service, line item, card/fee status, and customer/account before `Preview`.
+5. Review CRM billing account, amount, due date, service, line item(s), card/fee status, and customer/account before `Preview`.
 6. `Preview` is review-only; it does not issue a number.
 7. `Issue` stores the invoice and starts PDF download. Use only when final.
 8. Use row `Email` only after the issued invoice and recipient are approved.

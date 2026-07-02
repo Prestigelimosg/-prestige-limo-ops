@@ -66,6 +66,10 @@ const guardChecks = [
     script: "scripts/test-admin-closeout-billing-preparation-sequencing-guard.mjs",
   },
   {
+    label: "no-show and late-cancellation billing control guard",
+    script: "scripts/test-no-show-late-cancellation-billing-control-guard.mjs",
+  },
+  {
     label: "admin Monthly Billing Queue existing workflow lock guard",
     script: "scripts/test-admin-monthly-billing-queue-existing-workflow-lock.mjs",
   },

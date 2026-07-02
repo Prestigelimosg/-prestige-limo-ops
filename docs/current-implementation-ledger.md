@@ -12,6 +12,14 @@ d0c5e211 Persist Save CRM driver assignment
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### No-Show / Late-Cancellation Billing Control
+
+- Completed Trip Closeout Review now reuses the existing compact admin-only closeout control for `No-show Bill`, `Late Cancel Bill`, and `Waive`; no duplicate Dispatch sector, route, table, invoice workbench, or DB schema was added.
+- The new closeout choices persist through the existing guarded `/api/admin-completed-booking-closeouts` path using existing allowed closeout fields only. Billable no-show and late-cancellation choices save as `completion_exception` with billing readiness `ready`; waived/no-charge saves as a closed exception with billing readiness blocked so it stays out of Unbilled Customers.
+- Customers > Unbilled Customers and the monthly billing grouping/trip-candidate helpers now allow ready `completion_exception` closeouts only when all existing readiness flags are ready. The invoice workbench still requires admin-entered/reviewed amount, current preview, and explicit issue/PDF action; no auto-charge, auto-deduct, payment, payout, provider send, email/SMS/WhatsApp/Telegram, or calendar/GPS/live-location action is created by this lane.
+- Customer/driver public surfaces were not expanded. No customer or driver route receives internal closeout disposition, finance, payout, parser/debug, mock/archive, token, or secret data.
+- Focused guard coverage lives in `scripts/test-no-show-late-cancellation-billing-control-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Dispatch Operator Mode And Today's Jobs Live Proof
 
 - Dispatch daily-use layout is now operator-focused: intake, booking details, route/vehicle, pricing, assigned driver, customer/driver copy, driver job link, and save actions stay visible while complex readiness, handoff, recovery, exception, and billing-prep panels are grouped under the compact `Advanced Checks` disclosure.

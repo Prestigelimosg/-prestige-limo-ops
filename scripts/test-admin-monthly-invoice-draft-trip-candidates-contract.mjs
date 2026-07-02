@@ -732,7 +732,7 @@ try {
     allAcmeResult.body.trip_candidates.find(
       (candidate) => candidate.booking_reference === "TRIP-CANDIDATE-UNBILLED-JUN",
     )?.safe_trip_context?.readiness_reason,
-    "Ready completed booking has no draft trip link yet.",
+    "Ready closeout has no draft trip link yet.",
   );
   assert.equal(allAcmeMock.client.operations.length, 0);
   assertNoLeaks(allAcmeResult, "all Acme trip candidate response should stay safe");

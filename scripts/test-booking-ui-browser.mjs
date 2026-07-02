@@ -2290,6 +2290,9 @@ function assertBookingUiState(state) {
       "Customer Closeout",
       "Exception Reviewed",
       "Billing Note",
+      "No-show Bill",
+      "Late Cancel Bill",
+      "Waive",
       "Ready Locally",
     ],
   );
@@ -2305,6 +2308,9 @@ function assertBookingUiState(state) {
       ["customer-closeout-reviewed", "idle"],
       ["exception-reviewed", "idle"],
       ["billing-note-reviewed", "idle"],
+      ["customer-no-show-billable", "idle"],
+      ["late-cancellation-billable", "idle"],
+      ["waived-no-charge", "idle"],
       ["ready-locally", "idle"],
     ],
   );
@@ -18070,7 +18076,7 @@ async function runChromeTest() {
             safe_closeout_context: {
               closeout_summary:
                 "Ready Locally from the existing Completed Trip Closeout Review control.",
-              next_action: "Continue monthly billing preparation review after closeout.",
+              next_action: "Continue customer billing preparation review after closeout.",
             },
             safe_closeout_note:
               "Admin updated completed closeout from the existing closeout review control.",

@@ -420,6 +420,10 @@ type RegularCustomerSavedBookingCloseoutRecord = {
   completed_job_status?: string | null;
   dsp_actual_hours_readiness?: string | null;
   extra_charges_readiness?: string | null;
+  safe_closeout_context?: {
+    closeout_summary?: string | null;
+    next_action?: string | null;
+  } | null;
 };
 
 type RegularCustomerAccountReadRecord = {
@@ -730,15 +734,37 @@ function savedBookingCloseoutIsBillingReady(
     return false;
   }
 
+  const completedJobStatus = String(closeout.completed_job_status ?? "").trim();
+
   return (
     (closeout.closeout_status === "ready_for_billing_prep" || closeout.closeout_status === "closed") &&
-    closeout.completed_job_status === "completed" &&
+    (completedJobStatus === "completed" || completedJobStatus === "completion_exception") &&
     (closeout.dsp_actual_hours_readiness === "ready" ||
       closeout.dsp_actual_hours_readiness === "not_applicable") &&
     (closeout.extra_charges_readiness === "ready" ||
       closeout.extra_charges_readiness === "none") &&
     closeout.billing_prep_readiness === "ready"
   );
+}
+
+function savedBookingCloseoutBillingDispositionLabel(
+  closeout: RegularCustomerSavedBookingCloseoutRecord | undefined,
+) {
+  if (String(closeout?.completed_job_status ?? "").trim() !== "completion_exception") {
+    return null;
+  }
+
+  const closeoutSummary = String(closeout?.safe_closeout_context?.closeout_summary ?? "").toLowerCase();
+
+  if (/no[-\s]?show/.test(closeoutSummary)) {
+    return "Customer no-show";
+  }
+
+  if (/late\s+cancellation|late\s+cancel/.test(closeoutSummary)) {
+    return "Late cancellation";
+  }
+
+  return "Closeout exception";
 }
 
 function savedBookingDateLabel(booking: RegularCustomerSavedBookingReadRecord) {
@@ -773,21 +799,27 @@ function savedBookingUnbilledRow(
     mockCustomer?.companyName ||
     "Customer/account to confirm";
   const service = String(booking.service_type ?? "").trim() || "Completed transfer";
+  const closeoutDisposition = savedBookingCloseoutBillingDispositionLabel(closeout);
+  const billableServiceLabel = closeoutDisposition || service;
 
   return {
     amount: "Draft amount not set",
     billingBreakdown:
-      "Closeout ready from saved booking. Enter the approved customer amount before previewing or issuing.",
+      closeoutDisposition
+        ? `${closeoutDisposition} closeout ready from saved booking. Enter the approved customer amount before previewing or issuing.`
+        : "Closeout ready from saved booking. Enter the approved customer amount before previewing or issuing.",
     customerFolderHref: mockCustomer ? `/customers/${mockCustomer.id}` : "",
     customerId,
     customerName,
     dateLabel: savedBookingDateLabel(booking),
-    invoiceLineDescription: `${service} - ${reference}`,
+    invoiceLineDescription: `${billableServiceLabel} - ${reference}`,
     key: `saved-closeout-unbilled:${reference}`,
     reference,
     route: "Saved booking route in Dispatch",
-    service,
-    statusLabel: "Closeout ready / amount needed",
+    service: billableServiceLabel,
+    statusLabel: closeoutDisposition
+      ? "Closeout exception ready / amount needed"
+      : "Closeout ready / amount needed",
   };
 }
 

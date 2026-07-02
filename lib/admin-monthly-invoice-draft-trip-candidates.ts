@@ -572,7 +572,7 @@ function closeoutIsReady(row: UnknownRecord) {
 
   return (
     (closeoutStatus === "ready_for_billing_prep" || closeoutStatus === "closed") &&
-    completedJobStatus === "completed" &&
+    (completedJobStatus === "completed" || completedJobStatus === "completion_exception") &&
     (dspReadiness === "ready" || dspReadiness === "not_applicable") &&
     (extraChargesReadiness === "ready" || extraChargesReadiness === "none") &&
     billingPrepReadiness === "ready"
@@ -643,7 +643,7 @@ function buildCandidate(
     safe_trip_context: {
       readiness_reason:
         tripReadinessStatus === "ready"
-          ? "Ready completed booking has no draft trip link yet."
+          ? "Ready closeout has no draft trip link yet."
           : "Needs completed closeout or billing prep review.",
       source: "completed_booking_closeout",
     },

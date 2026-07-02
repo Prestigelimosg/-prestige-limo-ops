@@ -554,7 +554,7 @@ function closeoutIsReady(row: UnknownRecord) {
 
   return (
     (closeoutStatus === "ready_for_billing_prep" || closeoutStatus === "closed") &&
-    completedJobStatus === "completed" &&
+    (completedJobStatus === "completed" || completedJobStatus === "completion_exception") &&
     (dspReadiness === "ready" || dspReadiness === "not_applicable") &&
     (extraChargesReadiness === "ready" || extraChargesReadiness === "none") &&
     billingPrepReadiness === "ready"

@@ -1946,6 +1946,9 @@ type CompletedTripCloseoutReviewStatus =
   | "customer-closeout-reviewed"
   | "exception-reviewed"
   | "billing-note-reviewed"
+  | "customer-no-show-billable"
+  | "late-cancellation-billable"
+  | "waived-no-charge"
   | "ready-locally";
 
 type CloseoutToBillingPreparationReviewStatus =
@@ -9969,12 +9972,33 @@ function completedTripCloseoutReviewStatusFromApi(
   }
 
   const closeoutStatus = clean(closeout.closeout_status);
+  const completedJobStatus = clean(closeout.completed_job_status);
+  const billingPrepReadiness = clean(closeout.billing_prep_readiness);
+  const closeoutSummary = clean(closeout.safe_closeout_context?.closeout_summary).toLowerCase();
+  const closeoutNote = clean(closeout.safe_closeout_note).toLowerCase();
+  const closeoutDispositionText = `${closeoutSummary} ${closeoutNote}`;
+
+  if (completedJobStatus === "completion_exception") {
+    if (/no[-\s]?show/.test(closeoutDispositionText)) {
+      return "customer-no-show-billable";
+    }
+
+    if (/late\s+cancellation|late\s+cancel/.test(closeoutDispositionText)) {
+      return "late-cancellation-billable";
+    }
+
+    if (/waiv|no\s+charge/.test(closeoutDispositionText) || billingPrepReadiness === "blocked") {
+      return "waived-no-charge";
+    }
+
+    return "exception-reviewed";
+  }
 
   if (closeoutStatus === "ready_for_billing_prep" || closeoutStatus === "closed") {
     return "ready-locally";
   }
 
-  if (clean(closeout.completed_job_status) === "completed") {
+  if (completedJobStatus === "completed") {
     return "trip-completed";
   }
 
@@ -18249,17 +18273,62 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     const selectedLabel =
       completedTripCloseoutReviewOptions.find((option) => option.value === nextStatus)?.label ||
       "Completed closeout";
+    const isBillableCloseoutException =
+      nextStatus === "customer-no-show-billable" ||
+      nextStatus === "late-cancellation-billable";
+    const isNoChargeCloseoutException = nextStatus === "waived-no-charge";
     const closeoutStatus =
-      nextStatus === "ready-locally" ? "ready_for_billing_prep" : "needs_review";
+      nextStatus === "ready-locally" || isBillableCloseoutException
+        ? "ready_for_billing_prep"
+        : isNoChargeCloseoutException
+          ? "closed"
+          : "needs_review";
     const completedJobStatus =
-      nextStatus === "review-needed" ? "needs_review" : "completed";
+      isBillableCloseoutException || isNoChargeCloseoutException
+        ? "completion_exception"
+        : nextStatus === "review-needed"
+          ? "needs_review"
+          : "completed";
     const dspActualHoursReadiness =
-      nextStatus === "ready-locally" || nextStatus === "billing-note-reviewed"
-        ? "ready"
-        : "needs_review";
+      isBillableCloseoutException || isNoChargeCloseoutException
+        ? "not_applicable"
+        : nextStatus === "ready-locally" || nextStatus === "billing-note-reviewed"
+          ? "ready"
+          : "needs_review";
     const extraChargesReadiness =
-      nextStatus === "ready-locally" ? "ready" : "needs_review";
-    const billingPrepReadiness = nextStatus === "ready-locally" ? "ready" : "not_ready";
+      nextStatus === "ready-locally" || isBillableCloseoutException
+        ? "ready"
+        : isNoChargeCloseoutException
+          ? "none"
+          : "needs_review";
+    const billingPrepReadiness =
+      nextStatus === "ready-locally" || isBillableCloseoutException
+        ? "ready"
+        : isNoChargeCloseoutException
+          ? "blocked"
+          : "not_ready";
+    const closeoutSummary =
+      nextStatus === "customer-no-show-billable"
+        ? "Customer no-show billing review approved from the existing Completed Trip Closeout Review control."
+        : nextStatus === "late-cancellation-billable"
+          ? "Late cancellation billing review approved from the existing Completed Trip Closeout Review control."
+          : nextStatus === "waived-no-charge"
+            ? "Waived no-charge closeout approved from the existing Completed Trip Closeout Review control."
+            : `${selectedLabel} from the existing Completed Trip Closeout Review control.`;
+    const closeoutNextAction =
+      nextStatus === "ready-locally" || isBillableCloseoutException
+        ? "Continue customer billing preparation review after closeout."
+        : isNoChargeCloseoutException
+          ? "Keep the no-charge closeout archived away from active billing preparation."
+          : "Continue completed trip closeout review before billing preparation.";
+    const fallbackCloseoutNote =
+      nextStatus === "customer-no-show-billable"
+        ? "Admin marked customer no-show as billable after closeout review."
+        : nextStatus === "late-cancellation-billable"
+          ? "Admin marked late cancellation as billable after closeout review."
+          : nextStatus === "waived-no-charge"
+            ? "Admin marked closeout waived with no charge after review."
+            : "Admin updated completed closeout from the existing closeout review control.";
 
     setCompletedBookingCloseoutAction("save-completed-closeout");
     setCompletedTripCloseoutReviewMessage({
@@ -18277,15 +18346,12 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           dsp_actual_hours_readiness: dspActualHoursReadiness,
           extra_charges_readiness: extraChargesReadiness,
           safe_closeout_context: {
-            closeout_summary: `${selectedLabel} from the existing Completed Trip Closeout Review control.`,
-            next_action:
-              nextStatus === "ready-locally"
-                ? "Continue monthly billing preparation review after closeout."
-                : "Continue completed trip closeout review before billing preparation.",
+            closeout_summary: closeoutSummary,
+            next_action: closeoutNextAction,
           },
           safe_closeout_note:
             clean(completedTripCloseoutReviewNote) ||
-            "Admin updated completed closeout from the existing closeout review control.",
+            fallbackCloseoutNote,
         }),
         headers: {
           "Content-Type": "application/json",
@@ -22677,17 +22743,23 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   const completedTripCloseoutReviewStatusLabel =
     completedTripCloseoutReviewStatus === "ready-locally"
       ? "Completed trip closeout ready"
-      : completedTripCloseoutReviewStatus === "billing-note-reviewed"
-        ? "Billing-readiness note reviewed"
-        : completedTripCloseoutReviewStatus === "exception-reviewed"
-          ? "Exception/resolution reviewed"
-          : completedTripCloseoutReviewStatus === "customer-closeout-reviewed"
-            ? "Customer closeout reviewed"
-            : completedTripCloseoutReviewStatus === "driver-reviewed"
-              ? "Driver completion reviewed"
-              : completedTripCloseoutReviewStatus === "trip-completed"
-                ? "Trip completion reviewed"
-                : "Completed trip closeout review needed";
+      : completedTripCloseoutReviewStatus === "customer-no-show-billable"
+        ? "Customer no-show billing review ready"
+        : completedTripCloseoutReviewStatus === "late-cancellation-billable"
+          ? "Late cancellation billing review ready"
+          : completedTripCloseoutReviewStatus === "waived-no-charge"
+            ? "Waived / no charge closeout"
+            : completedTripCloseoutReviewStatus === "billing-note-reviewed"
+              ? "Billing-readiness note reviewed"
+              : completedTripCloseoutReviewStatus === "exception-reviewed"
+                ? "Exception/resolution reviewed"
+                : completedTripCloseoutReviewStatus === "customer-closeout-reviewed"
+                  ? "Customer closeout reviewed"
+                  : completedTripCloseoutReviewStatus === "driver-reviewed"
+                    ? "Driver completion reviewed"
+                    : completedTripCloseoutReviewStatus === "trip-completed"
+                      ? "Trip completion reviewed"
+                      : "Completed trip closeout review needed";
   const completedTripCloseoutReviewOptions: {
     label: string;
     value: CompletedTripCloseoutReviewStatus;
@@ -22698,8 +22770,19 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     { label: "Customer Closeout", value: "customer-closeout-reviewed" },
     { label: "Exception Reviewed", value: "exception-reviewed" },
     { label: "Billing Note", value: "billing-note-reviewed" },
+    { label: "No-show Bill", value: "customer-no-show-billable" },
+    { label: "Late Cancel Bill", value: "late-cancellation-billable" },
+    { label: "Waive", value: "waived-no-charge" },
     { label: "Ready Locally", value: "ready-locally" },
   ];
+  const completedTripCloseoutBillableExceptionReviewed =
+    completedTripCloseoutReviewStatus === "customer-no-show-billable" ||
+    completedTripCloseoutReviewStatus === "late-cancellation-billable";
+  const completedTripCloseoutNoChargeExceptionClosed =
+    completedTripCloseoutReviewStatus === "waived-no-charge";
+  const completedTripCloseoutExceptionBillingDecisionMade =
+    completedTripCloseoutBillableExceptionReviewed ||
+    completedTripCloseoutNoChargeExceptionClosed;
   const completedTripCloseoutReviewReached = (status: CompletedTripCloseoutReviewStatus) => {
     const order: CompletedTripCloseoutReviewStatus[] = [
       "trip-completed",
@@ -22725,16 +22808,23 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     dayOfTripCompletionCustomerCloseoutReady;
   const completedTripCloseoutExceptionResolutionReviewed =
     completedTripCloseoutReviewReached("exception-reviewed") ||
-    dayOfTripCompletionExceptionResolutionReviewed;
+    dayOfTripCompletionExceptionResolutionReviewed ||
+    completedTripCloseoutExceptionBillingDecisionMade;
   const completedTripCloseoutBillingReadinessNoteReviewed =
-    completedTripCloseoutReviewReached("billing-note-reviewed");
+    completedTripCloseoutReviewReached("billing-note-reviewed") ||
+    completedTripCloseoutExceptionBillingDecisionMade;
   const completedTripCloseoutReviewReadyLocally =
-    completedTripCloseoutReviewStatus === "ready-locally";
+    completedTripCloseoutReviewStatus === "ready-locally" ||
+    completedTripCloseoutBillableExceptionReviewed;
+  const completedTripCloseoutNoChargeClosedLocally =
+    completedTripCloseoutNoChargeExceptionClosed;
   const completedTripCloseoutSavedStatusDetail = completedBookingCloseoutRecord
     ? ` Saved API status: ${adminCompletedBookingCloseoutDisplayLabel(completedBookingCloseoutRecord)}.`
     : "";
   const completedTripCloseoutReviewNextAction = completedTripCloseoutReviewReadyLocally
     ? "Completed trip closeout ready locally; keep closeout note current."
+    : completedTripCloseoutNoChargeClosedLocally
+      ? "No-charge closeout saved; keep this out of active billing unless a manager changes the decision."
     : !completedTripCloseoutTripCompleted
       ? "Confirm trip completion locally."
       : !completedTripCloseoutDriverCompletionReviewed
@@ -22791,7 +22881,10 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       detail: completedTripCloseoutReviewNextAction,
       key: "next-admin-closeout-action",
       label: "Next admin closeout action",
-      state: completedTripCloseoutReviewReadyLocally ? "ready" : "needs-action",
+      state:
+        completedTripCloseoutReviewReadyLocally || completedTripCloseoutNoChargeClosedLocally
+          ? "ready"
+          : "needs-action",
     },
     {
       detail: `${completedTripCloseoutReviewStatusLabel}. ${
@@ -22799,7 +22892,10 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       }${completedTripCloseoutSavedStatusDetail}`,
       key: "local-closeout-note-status",
       label: "Local closeout note/status",
-      state: completedTripCloseoutReviewReadyLocally ? "ready" : "needs-action",
+      state:
+        completedTripCloseoutReviewReadyLocally || completedTripCloseoutNoChargeClosedLocally
+          ? "ready"
+          : "needs-action",
     },
   ];
   const closeoutToBillingPreparationReviewStatusLabel =

@@ -124,7 +124,7 @@ for (const fragment of [
   '"x-prestige-admin-purpose": "admin-booking-persistence"',
   'method: "GET"',
   "result.latest_summary",
-  "Driver JC timing read failed safely.",
+  "Driver JC timing read could not be completed.",
 ]) {
   assertIncludes(driverActualTimeReadFunction, fragment, `driver JC read fragment ${fragment}`);
 }

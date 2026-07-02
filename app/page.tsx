@@ -5024,7 +5024,7 @@ async function saveDefaultRateSettingsScalarRuntime(
       ok: false,
       errorMessage: error instanceof Error
         ? error.message
-        : "Default rate scalar save failed before the parked map save could continue.",
+        : "Default rate scalar save could not continue to the guarded legacy map fallback.",
     };
   }
 }
@@ -5228,7 +5228,7 @@ async function saveCompanyTravelerCrmIdentityContactRuntime(
       ok: false,
       errorMessage: error instanceof Error
         ? error.message
-        : "CRM identity/contact write failed before the rate override could continue.",
+        : "CRM identity/contact write could not continue to the guarded rate override flow.",
     };
   }
 }
@@ -5303,7 +5303,7 @@ async function saveCustomerRatesRuntime(
       ok: false,
       errorMessage: error instanceof Error
         ? error.message
-        : "Customer rates write failed before the parked payout save could continue.",
+        : "Customer rates write could not continue to the guarded payout fallback.",
     };
   }
 }
@@ -5382,7 +5382,7 @@ async function saveDriverPayoutRulesRuntime(
       ok: false,
       errorMessage: error instanceof Error
         ? error.message
-        : "Driver payout rules write failed before the parked legacy fallback could continue.",
+        : "Driver payout rules write could not continue to the guarded legacy fallback.",
     };
   }
 }
@@ -5525,7 +5525,7 @@ async function saveFullDriverProfileRuntime(
       ok: false,
       errorMessage: error instanceof Error
         ? error.message
-        : "Full driver profile write failed before the parked legacy fallback could continue.",
+        : "Full driver profile write could not continue to the guarded legacy fallback.",
     };
   }
 }
@@ -7907,11 +7907,11 @@ function adminBookingPersistenceFailureMessage(
   }
 
   if (/unexpected_admin_booking_route_failure|admin booking persistence request failed safely/.test(normalizedError)) {
-    return `${prefix}: admin booking route failed before it could return a saved booking${operationContext}.`;
+    return `${prefix}: admin booking route could not return a saved booking${operationContext}.`;
   }
 
   if (/unknown_adapter_failure|admin booking persistence (save|update|load) failed safely/.test(normalizedError)) {
-    return `${prefix}: database operation failed before the app could confirm the booking${operationContext}.`;
+    return `${prefix}: database operation could not confirm the booking${operationContext}.`;
   }
 
   return `${prefix} safely.`;
@@ -7952,7 +7952,7 @@ function adminBookingWorkflowStatusFailureMessage(rawError: unknown, workflowLab
     return `${workflowLabel} workflow status details need review.`;
   }
 
-  return `${workflowLabel} workflow status request failed safely.`;
+  return `${workflowLabel} workflow status could not be read or saved. Reload the admin dashboard and try again.`;
 }
 
 function adminBookingWorkflowStatusDisplayLabel(
@@ -7985,7 +7985,7 @@ function adminCompletedBookingCloseoutFailureMessage(rawError: unknown) {
     return "Completed closeout details need review.";
   }
 
-  return "Completed closeout request failed safely.";
+  return "Completed closeout could not be read or saved. Reload the admin dashboard and try again.";
 }
 
 function adminCompletedBookingCloseoutDisplayLabel(
@@ -8012,7 +8012,7 @@ function adminDriverJobStatusFailureMessage(rawError: unknown) {
     return "Saved driver job status reference needs review.";
   }
 
-  return "Saved driver job status read failed safely.";
+  return "Saved driver job status could not be read. Reload the admin dashboard and try again.";
 }
 
 function adminDriverJobStatusDisplayLabel(statusValue: string | null | undefined) {
@@ -8083,7 +8083,7 @@ function adminAppNotificationFailureMessage(rawError: unknown) {
     return "Saved admin app notification read details need review.";
   }
 
-  return "Saved admin app notification read failed safely.";
+  return "Saved admin app notifications could not be read. Reload the admin dashboard and try again.";
 }
 
 function adminDevicePushFailureMessage(rawError: unknown) {
@@ -8106,7 +8106,7 @@ function adminDevicePushFailureMessage(rawError: unknown) {
     return "Admin device push requires the approved admin dashboard surface.";
   }
 
-  return "Admin device push setup failed safely.";
+  return "Admin device push setup could not be completed. Reload the admin dashboard and try again.";
 }
 
 function adminDevicePushIsSupported() {
@@ -8395,7 +8395,7 @@ function adminMapRouteAssistFailureMessage(rawError: unknown, label = "Map route
     return `${label} details need review.`;
   }
 
-  return `${label} request failed safely.`;
+  return `${label} request could not be completed. Review the route details and try again.`;
 }
 
 function formatAdminMapDistance(distanceMeters: number | null | undefined) {
@@ -10021,7 +10021,7 @@ function adminMonthlyBillingGroupingFailureMessage(rawError: unknown) {
     return "Saved monthly billing grouping read details need review.";
   }
 
-  return "Saved monthly billing grouping read failed safely.";
+  return "Saved monthly billing grouping could not be read. Reload the monthly invoice workbench and try again.";
 }
 
 function adminCompletedBookingBillingReadinessAuditFailureMessage(rawError: unknown) {
@@ -10040,7 +10040,7 @@ function adminCompletedBookingBillingReadinessAuditFailureMessage(rawError: unkn
     return "Completed booking billing readiness audit details need review.";
   }
 
-  return "Completed booking billing readiness audit failed safely.";
+  return "Completed booking billing readiness audit could not be read. Reload the monthly invoice workbench and try again.";
 }
 
 function adminMonthlyBillingDraftPlanFailureMessage(rawError: unknown) {
@@ -10059,7 +10059,7 @@ function adminMonthlyBillingDraftPlanFailureMessage(rawError: unknown) {
     return "Saved monthly billing draft plan read details need review.";
   }
 
-  return "Saved monthly billing draft plan read failed safely.";
+  return "Saved monthly billing draft plan could not be read. Reload the monthly invoice workbench and try again.";
 }
 
 function adminMonthlyBillingDraftPlanSaveFailureMessage(rawError: unknown) {
@@ -10078,7 +10078,7 @@ function adminMonthlyBillingDraftPlanSaveFailureMessage(rawError: unknown) {
     return "Saved monthly billing draft plan preparation details need review.";
   }
 
-  return "Saved monthly billing draft plan preparation failed safely.";
+  return "Saved monthly billing draft plan could not be prepared. Reload the monthly invoice workbench and try again.";
 }
 
 function adminMonthlyInvoiceDraftFailureMessage(rawError: unknown) {
@@ -10097,7 +10097,7 @@ function adminMonthlyInvoiceDraftFailureMessage(rawError: unknown) {
     return "Saved monthly invoice draft read details need review.";
   }
 
-  return "Saved monthly invoice draft read failed safely.";
+  return "Saved monthly invoice draft could not be read. Reload the monthly invoice workbench and try again.";
 }
 
 function adminMonthlyInvoiceDraftSaveFailureMessage(rawError: unknown) {
@@ -10116,7 +10116,7 @@ function adminMonthlyInvoiceDraftSaveFailureMessage(rawError: unknown) {
     return "Saved monthly invoice draft preparation details need review.";
   }
 
-  return "Saved monthly invoice draft preparation failed safely.";
+  return "Saved monthly invoice draft could not be prepared. Reload the monthly invoice workbench and try again.";
 }
 
 function adminMonthlyInvoiceDraftItemReviewFailureMessage(rawError: unknown) {
@@ -10135,7 +10135,7 @@ function adminMonthlyInvoiceDraftItemReviewFailureMessage(rawError: unknown) {
     return "Saved monthly invoice draft item review details need review.";
   }
 
-  return "Saved monthly invoice draft item review read failed safely.";
+  return "Saved monthly invoice draft item review could not be read. Reload the monthly invoice workbench and try again.";
 }
 
 function adminMonthlyInvoiceDraftItemReviewSaveFailureMessage(rawError: unknown) {
@@ -10154,7 +10154,7 @@ function adminMonthlyInvoiceDraftItemReviewSaveFailureMessage(rawError: unknown)
     return "Saved monthly invoice draft item review details need review.";
   }
 
-  return "Saved monthly invoice draft item review failed safely.";
+  return "Saved monthly invoice draft item review could not be saved. Reload the monthly invoice workbench and try again.";
 }
 
 function adminMonthlyInvoiceBillablePriceReviewFailureMessage(rawError: unknown) {
@@ -10173,7 +10173,7 @@ function adminMonthlyInvoiceBillablePriceReviewFailureMessage(rawError: unknown)
     return "Saved monthly invoice billable item price review details need review.";
   }
 
-  return "Saved monthly invoice billable item price review read failed safely.";
+  return "Saved monthly invoice billable item price review could not be read. Reload the monthly invoice workbench and try again.";
 }
 
 function adminMonthlyInvoiceBillablePriceReviewSaveFailureMessage(rawError: unknown) {
@@ -10196,7 +10196,7 @@ function adminMonthlyInvoiceBillablePriceReviewSaveFailureMessage(rawError: unkn
     return "Saved monthly invoice billable item price review amount or details need review.";
   }
 
-  return "Saved monthly invoice billable item price review failed safely.";
+  return "Saved monthly invoice billable item price review could not be saved. Reload the monthly invoice workbench and try again.";
 }
 
 function adminMonthlyInvoiceIssueReviewFailureMessage(rawError: unknown) {
@@ -10215,7 +10215,7 @@ function adminMonthlyInvoiceIssueReviewFailureMessage(rawError: unknown) {
     return "Saved monthly invoice issue review details need review.";
   }
 
-  return "Saved monthly invoice issue review read failed safely.";
+  return "Saved monthly invoice issue review could not be read. Reload the monthly invoice workbench and try again.";
 }
 
 function adminMonthlyInvoiceIssueReviewSaveFailureMessage(rawError: unknown) {
@@ -10234,7 +10234,7 @@ function adminMonthlyInvoiceIssueReviewSaveFailureMessage(rawError: unknown) {
     return "Saved monthly invoice issue review details need review.";
   }
 
-  return "Saved monthly invoice issue review failed safely.";
+  return "Saved monthly invoice issue review could not be saved. Reload the monthly invoice workbench and try again.";
 }
 
 function adminMonthlyInvoiceIssueRecordFailureMessage(rawError: unknown) {
@@ -10253,7 +10253,7 @@ function adminMonthlyInvoiceIssueRecordFailureMessage(rawError: unknown) {
     return "Saved monthly invoice issue record details need review.";
   }
 
-  return "Saved monthly invoice issue record read failed safely.";
+  return "Saved monthly invoice issue record could not be read. Reload the monthly invoice workbench and try again.";
 }
 
 function adminMonthlyInvoiceIssueRecordSaveFailureMessage(rawError: unknown) {
@@ -10272,7 +10272,7 @@ function adminMonthlyInvoiceIssueRecordSaveFailureMessage(rawError: unknown) {
     return "Saved monthly invoice issue record details need review.";
   }
 
-  return "Saved monthly invoice issue record failed safely.";
+  return "Saved monthly invoice issue record could not be saved. Reload the monthly invoice workbench and try again.";
 }
 
 function adminMonthlyInvoiceNumberReservationFailureMessage(rawError: unknown) {
@@ -10291,7 +10291,7 @@ function adminMonthlyInvoiceNumberReservationFailureMessage(rawError: unknown) {
     return "Monthly invoice number reservation details need review.";
   }
 
-  return "Monthly invoice number reservation failed safely.";
+  return "Monthly invoice number could not be reserved. Reload the monthly invoice workbench and try again.";
 }
 
 function adminMonthlyInvoicePdfReadinessFailureMessage(rawError: unknown) {
@@ -10310,7 +10310,7 @@ function adminMonthlyInvoicePdfReadinessFailureMessage(rawError: unknown) {
     return "Monthly invoice PDF review readiness details need review.";
   }
 
-  return "Monthly invoice PDF review readiness failed safely.";
+  return "Monthly invoice PDF readiness could not be reviewed. Reload the monthly invoice workbench and try again.";
 }
 
 function adminMonthlyBillingGroupingBillingMonthFromDate(value: string | null | undefined) {
@@ -11019,6 +11019,32 @@ function isMockMidnightChargeDetected(value: string) {
   return minutes >= 23 * 60 || minutes <= 6 * 60 + 59;
 }
 
+function companyProfileSettingsFailureMessage(action: "load" | "save", rawError: unknown) {
+  const rawMessage = rawError instanceof Error ? rawError.message : String(rawError || "");
+  const normalizedError = clean(rawMessage).toLowerCase();
+  const actionLabel = action === "load" ? "loaded" : "saved";
+
+  if (/not enabled|configuration|config|client_init/.test(normalizedError)) {
+    return "Company settings are not enabled or configured on this server.";
+  }
+
+  if (/forbidden|internal|admin|dispatcher|referer|origin|purpose|boundary|blocked/.test(normalizedError)) {
+    return "Company settings require the internal admin Company Settings surface. Reload /settings/invoice and try again.";
+  }
+
+  if (/permission|rls|denied/.test(normalizedError)) {
+    return "Company settings were blocked by database permissions. No public company profile data was changed.";
+  }
+
+  if (/missing|required|malformed|invalid|unknown|rejected/.test(normalizedError)) {
+    return action === "load"
+      ? "Company settings could not be loaded because the saved profile needs review."
+      : `Company settings could not be saved. ${rawMessage}`;
+  }
+
+  return `Company settings could not be ${actionLabel}. Reload Company Settings and try again.`;
+}
+
 export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   const [booking, setBooking] = useState<BookingForm>(() => createInitialBooking());
   const [activeTab, setActiveTab] = useState<AppTab>(initialTab);
@@ -11570,7 +11596,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             mapId: "",
             message: {
               tone: "error",
-              text: "Embedded map setup check failed safely. Use Driver Pin.",
+              text: "Embedded map setup check could not be completed. Use Driver Pin.",
             },
             status: "error",
           });
@@ -12153,7 +12179,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         ...current,
         message: {
           tone: "error",
-          text: error instanceof Error ? error.message : "Customer amendment review failed safely.",
+          text: error instanceof Error ? error.message : "Customer amendment review could not be loaded.",
         },
         status: "error",
       }));
@@ -12544,7 +12570,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         text:
           error instanceof Error
             ? error.message
-            : `Approved ${requestKindTitle.toLowerCase()} apply failed safely. Booking and calendar need review.`,
+            : `Approved ${requestKindTitle.toLowerCase()} apply could not be completed. Booking and calendar need review.`,
       } satisfies Message;
 
       setMessage(message);
@@ -12636,7 +12662,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         loadedReference: bookingReference,
         message: {
           tone: "error",
-          text: `Driver job link load failed safely: ${errorText}`,
+          text: `Driver job link could not be loaded: ${errorText}`,
         },
         oneTimeUrl: current.loadedReference === bookingReference ? current.oneTimeUrl : "",
       }));
@@ -13322,7 +13348,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             text:
               error instanceof Error
                 ? error.message
-                : "Driver DSP actual time read failed safely.",
+                : "Driver DSP actual time could not be read.",
           },
           status: "error",
           summaries: [],
@@ -17321,7 +17347,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       setCompanyProfileAction("idle");
       setCompanyProfileMessage({
         tone: "error",
-        text: error instanceof Error ? error.message : "Company settings could not be loaded.",
+        text: companyProfileSettingsFailureMessage("load", error),
       });
     }
   }, []);
@@ -17375,7 +17401,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       setCompanyProfileAction("idle");
       setCompanyProfileMessage({
         tone: "error",
-        text: error instanceof Error ? error.message : "Company settings could not be saved.",
+        text: companyProfileSettingsFailureMessage("save", error),
       });
     }
   }
@@ -17712,7 +17738,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   function adminLiveLocationFailureMessage(error: unknown) {
     return error instanceof Error
       ? error.message
-      : "Live-location request failed safely.";
+      : "Live-location request could not be completed.";
   }
 
   function normalizeAdminActiveJobsMapLocation(value: unknown): AdminActiveJobsMapLocation | null {
@@ -17869,7 +17895,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       const result = await response.json().catch(() => null) as AdminLiveLocationRuntimeControlResponse | null;
 
       if (!response.ok || !result?.ok || result.customerVisible !== false || result.external_send !== false) {
-        throw new Error(result?.error || result?.reason || "Live-location open failed safely.");
+        throw new Error(result?.error || result?.reason || "Live-location open could not be completed.");
       }
 
       const allowedBookingReferences = Array.isArray(result.allowed_booking_references)
@@ -17952,7 +17978,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         const result = await response.json().catch(() => null) as AdminLiveLocationRuntimeControlResponse | null;
 
         if (!response.ok || !result?.ok || result.customerVisible !== false || result.external_send !== false) {
-          throw new Error(result?.error || result?.reason || "Live-location open failed safely.");
+          throw new Error(result?.error || result?.reason || "Live-location open could not be completed.");
         }
 
         if (Array.isArray(result.allowed_booking_references)) {
@@ -18016,7 +18042,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       const result = await response.json().catch(() => null) as AdminLiveLocationRuntimeControlResponse | null;
 
       if (!response.ok || !result?.ok || result.customerVisible !== false || result.external_send !== false) {
-        throw new Error(result?.error || result?.reason || "Live-location close failed safely.");
+        throw new Error(result?.error || result?.reason || "Live-location close could not be completed.");
       }
 
       setAdminActiveJobsMapReadState({
@@ -18571,7 +18597,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           customerNotificationResult?.ok
             ? " Customer in-app notification queued."
             : customerNotificationResult
-              ? " Customer in-app notification queue failed safely."
+              ? " Customer in-app notification could not be queued."
               : " Customer notification not queued for this update."
         }${
           statuses.shortNoticeReviewRequired
@@ -18705,7 +18731,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   function adminDriverJobLinkFailureMessage(error: unknown) {
     const errorText = error instanceof Error ? error.message : "Unknown driver job link error.";
 
-    return `Driver job link request failed safely: ${errorText}`;
+    return `Driver job link request could not be completed: ${errorText}`;
   }
 
   function buildAdminDriverJobLinkCreatePayload() {
@@ -19031,7 +19057,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       }
     } catch {
       setTelegramAlertPreviewFeedback({
-        text: "Telegram internal admin test failed safely.",
+        text: "Telegram internal admin test could not be completed.",
         tone: "error",
       });
     } finally {
@@ -20842,7 +20868,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             | null;
 
         if (!response.ok || result?.ok !== true) {
-          throw new Error("Email activation preflight read failed safely.");
+          throw new Error("Email activation preflight could not be read.");
         }
 
         if (cancelled) {
@@ -20877,7 +20903,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         const errorText =
           error instanceof Error
             ? error.message
-            : "Email activation preflight read failed safely.";
+            : "Email activation preflight could not be read.";
 
         setAdminEmailActivationPreflightReadState({
           ...adminEmailActivationPreflightFallbackState(errorText),
@@ -20970,7 +20996,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             | null;
 
         if (!response.ok || result?.ok !== true || !result.reviewItem) {
-          throw new Error("Customer driver details email review item read failed safely.");
+          throw new Error("Customer driver details email review item could not be read.");
         }
 
         if (cancelled) {
@@ -20991,7 +21017,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         const errorText =
           error instanceof Error
             ? error.message
-            : "Customer driver details email review item read failed safely.";
+            : "Customer driver details email review item could not be read.";
         setAdminCustomerDriverDetailsEmailReviewItemState({
           item: adminCustomerDriverDetailsEmailReviewFallbackItem(),
           loadedReference: bookingReference,
@@ -21139,7 +21165,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           | null;
 
       if (!result) {
-        throw new Error("Customer driver details email send failed safely.");
+        throw new Error("Customer driver details email could not be sent.");
       }
 
       const sendingEnabled = result.email_send_enabled === true;
@@ -21163,7 +21189,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       const errorText =
         error instanceof Error
           ? error.message
-          : "Customer driver details email send failed safely.";
+          : "Customer driver details email could not be sent.";
 
       setAdminCustomerDriverDetailsEmailDisabledSendActionState({
         actionStatus: "error",
@@ -21257,7 +21283,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           | null;
 
       if (!response.ok || result?.ok !== true) {
-        throw new Error(`Disabled customer driver details ${channelLabel} send check failed safely.`);
+        throw new Error(`Disabled customer driver details ${channelLabel} send check could not be completed.`);
       }
 
       const sendingEnabled = result.sendingEnabled === true || result.send?.sendingEnabled === true;
@@ -21278,7 +21304,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       const errorText =
         error instanceof Error
           ? error.message
-          : `Disabled customer driver details ${channelLabel} send check failed safely.`;
+          : `Disabled customer driver details ${channelLabel} send check could not be completed.`;
 
       setActionState({
         actionStatus: "error",
@@ -21344,7 +21370,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       const result = await response.json().catch(() => null);
 
       if (!response.ok || result?.ok !== true) {
-        throw new Error(result?.error || "Customer In-App update failed safely.");
+        throw new Error(result?.error || "Customer In-App update could not be completed.");
       }
 
       setAdminCustomerDriverDetailsCustomerInAppActionState({
@@ -21361,7 +21387,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       const errorText =
         error instanceof Error
           ? error.message
-          : "Customer In-App update failed safely.";
+          : "Customer In-App update could not be completed.";
 
       setAdminCustomerDriverDetailsCustomerInAppActionState({
         ...adminCustomerDriverDetailsCustomerInAppFallbackState(errorText),
@@ -21423,7 +21449,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       const result = await response.json().catch(() => null);
 
       if (!response.ok || result?.ok !== true) {
-        throw new Error(result?.error || "Driver In-App update failed safely.");
+        throw new Error(result?.error || "Driver In-App update could not be completed.");
       }
 
       setAdminCustomerDriverDetailsDriverInAppActionState({
@@ -21440,7 +21466,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       const errorText =
         error instanceof Error
           ? error.message
-          : "Driver In-App update failed safely.";
+          : "Driver In-App update could not be completed.";
 
       setAdminCustomerDriverDetailsDriverInAppActionState({
         ...adminCustomerDriverDetailsDriverInAppFallbackState(errorText),

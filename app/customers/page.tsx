@@ -746,6 +746,88 @@ function normalizeCustomerFolderMatch(value: string | null | undefined) {
     .toLowerCase();
 }
 
+function customerAdminFailureText(rawError: unknown) {
+  return rawError instanceof Error
+    ? String(rawError.message || "").trim().toLowerCase()
+    : String(rawError ?? "").trim().toLowerCase();
+}
+
+function customerAdminReadFailureMessage(label: string, rawError: unknown) {
+  const errorText = customerAdminFailureText(rawError);
+
+  if (/not enabled|configuration|config|client_init|supabaseurl/.test(errorText)) {
+    return `${label} is not enabled or configured on this server.`;
+  }
+
+  if (/failed safely|request failed|could not be completed/.test(errorText)) {
+    return `${label} could not be completed. Reload the page and try again.`;
+  }
+
+  if (/forbidden|internal|admin|dispatcher|referer|origin|purpose|boundary|blocked/.test(errorText)) {
+    return `${label} requires the internal admin customer surface. Reload /customers and try again.`;
+  }
+
+  if (/permission|rls|denied/.test(errorText)) {
+    return `${label} was blocked by database permissions. No customer, invoice, payment, provider, or payout action ran.`;
+  }
+
+  if (/missing|required|malformed|invalid|unknown|not found/.test(errorText)) {
+    return `${label} details need review before the read can complete.`;
+  }
+
+  return `${label} could not be read right now. Reload the page and try again.`;
+}
+
+function customerInvoiceActionFailureMessage(action: string, rawError: unknown) {
+  const errorText = customerAdminFailureText(rawError);
+
+  if (/recipient|allowlist|allowlisted|email.*invalid/.test(errorText)) {
+    return `${action} was not sent because the recipient email is invalid or not allowlisted.`;
+  }
+
+  if (/email sending is not configured|provider.*config|resend|api key|email.*not configured/.test(errorText)) {
+    return `${action} was not sent because invoice email provider settings are not configured.`;
+  }
+
+  if (/email.*failed|provider.*failure|delivery|send failed/.test(errorText)) {
+    return `${action} was not sent because the email provider did not confirm delivery.`;
+  }
+
+  if (/draft.*email|can only send issued|issued documents/.test(errorText)) {
+    return `${action} can only send an issued stored invoice. Issue the invoice first.`;
+  }
+
+  if (/not enabled|configuration|config|client_init|supabaseurl/.test(errorText)) {
+    return `${action} is not enabled or configured on this server. No invoice number, payment, provider send, or payout was confirmed.`;
+  }
+
+  if (/pdf|download|file|artifact|bytes/.test(errorText)) {
+    return `${action} PDF could not be downloaded yet. The invoice record was not changed; use PDF again after the page refreshes.`;
+  }
+
+  if (/failed safely|request failed|could not be completed/.test(errorText)) {
+    return `${action} could not be completed. Reload Billing Documents before trying again; no payment, provider send, payout, or GPS action ran.`;
+  }
+
+  if (/forbidden|internal|admin|dispatcher|referer|origin|purpose|boundary|blocked/.test(errorText)) {
+    return `${action} requires the internal admin customer surface. Reload /customers and try again.`;
+  }
+
+  if (/permission|rls|denied/.test(errorText)) {
+    return `${action} was blocked by database permissions. No payment, provider send, payout, or GPS action ran.`;
+  }
+
+  if (/duplicate|unique|already exists|23505|already reserved/.test(errorText)) {
+    return `${action} was not saved because a matching invoice record already exists. Reload Billing Documents before trying again.`;
+  }
+
+  if (/missing|required|malformed|invalid|unknown|amount|line item|due date|customer|reference/.test(errorText)) {
+    return `${action} details need review before saving. Check bill-to/customer, amount, due date, reference, and line item.`;
+  }
+
+  return `${action} could not complete. Reload the page and try again; no payment, provider send, payout, or GPS action ran.`;
+}
+
 function findMockCustomerForSavedAccount(account: RegularCustomerAccountReadRecord) {
   const accountId = normalizeCustomerFolderMatch(account.customer_id);
   const accountName = normalizeCustomerFolderMatch(account.customer_account);
@@ -2180,7 +2262,7 @@ export default function MockCustomerDashboardPage() {
       const result = await response.json().catch(() => null);
 
       if (!response.ok || !result?.ok) {
-        throw new Error(result?.error || "Saved customer account read failed safely.");
+        throw new Error(result?.error || "Saved customer account read could not be completed.");
       }
 
       const accounts = Array.isArray(result.accounts)
@@ -2216,10 +2298,10 @@ export default function MockCustomerDashboardPage() {
               .filter((target): target is RegularCustomerSavedBookingReadTarget => Boolean(target))
           : localCustomerFolderSavedBookingTargets,
       );
-    } catch {
+    } catch (error) {
       setRegularCustomerAccountReadState({
         accounts: [],
-        message: "Saved customer account read failed safely or is not enabled for this staff surface.",
+        message: customerAdminReadFailureMessage("Saved customer account read", error),
         status: "error",
         summary: null,
         tone: "error",
@@ -2245,7 +2327,7 @@ export default function MockCustomerDashboardPage() {
     const result = await response.json().catch(() => null);
 
     if (!response.ok || !result?.ok) {
-      throw new Error(result?.error || "Saved booking read failed safely.");
+      throw new Error(result?.error || "Saved booking read could not be completed.");
     }
 
     return {
@@ -2300,8 +2382,9 @@ export default function MockCustomerDashboardPage() {
             ok: true,
             ...(await readRegularCustomerSavedBookingsForTarget(target)),
           };
-        } catch {
+        } catch (error) {
           return {
+            error,
             ok: false,
             savedBookings: [] as RegularCustomerSavedBookingReadRecord[],
             summary: null,
@@ -2327,8 +2410,12 @@ export default function MockCustomerDashboardPage() {
     const returnedCount = savedBookings.length;
 
     if (returnedCount === 0 && failedCount === reads.length) {
+      const firstFailedRead = reads.find((read) => !read.ok) as { error?: unknown } | undefined;
       setRegularCustomerSavedBookingReadState({
-        message: "Saved booking read failed safely or is not enabled for the Unbilled Customers queue.",
+        message: customerAdminReadFailureMessage(
+          "Saved booking read for the Unbilled Customers queue",
+          firstFailedRead?.error,
+        ),
         savedBookings: [],
         status: "error",
         summary: null,
@@ -2336,7 +2423,7 @@ export default function MockCustomerDashboardPage() {
       });
       setRegularCustomerSavedBookingBillingReadinessState({
         closeoutsByReference: {},
-        message: "Closeout billing readiness was not checked because saved booking reads failed.",
+        message: "Closeout billing readiness was not checked because saved booking references could not be loaded.",
         status: "error",
         tone: "error",
       });
@@ -2396,7 +2483,7 @@ export default function MockCustomerDashboardPage() {
           const result = await response.json().catch(() => null);
 
           if (!response.ok || !result?.ok) {
-            throw new Error(result?.error || "Completed closeout readiness read failed safely.");
+            throw new Error(result?.error || "Completed closeout readiness read could not be completed.");
           }
 
           return {
@@ -2404,9 +2491,10 @@ export default function MockCustomerDashboardPage() {
             ok: true,
             reference: bookingReference,
           };
-        } catch {
+        } catch (error) {
           return {
             closeout: null,
+            error,
             ok: false,
             reference: bookingReference,
           };
@@ -2431,7 +2519,10 @@ export default function MockCustomerDashboardPage() {
       closeoutsByReference,
       message:
         failedCount === closeoutReads.length
-          ? "Completed closeout billing readiness could not be verified from Customers."
+          ? customerAdminReadFailureMessage(
+              "Completed closeout billing readiness",
+              (closeoutReads.find((item) => !item.ok) as { error?: unknown } | undefined)?.error,
+            )
           : `Verified ${readyCount} closeout-ready saved booking${readyCount === 1 ? "" : "s"} for the existing Unbilled Customers queue.`,
       status: failedCount === closeoutReads.length ? "error" : "loaded",
       tone: failedCount === closeoutReads.length ? "error" : "success",
@@ -2489,9 +2580,12 @@ export default function MockCustomerDashboardPage() {
         tone: "success",
       });
       await loadRegularCustomerSavedBookingBillingReadiness(savedBookings);
-    } catch {
+    } catch (error) {
       setRegularCustomerSavedBookingReadState({
-        message: "Saved booking read failed safely or is not enabled for this admin surface.",
+        message: customerAdminReadFailureMessage(
+          `Saved booking read for ${selectedRegularCustomer.companyName}`,
+          error,
+        ),
         savedBookings: [],
         status: "error",
         summary: null,
@@ -2499,7 +2593,7 @@ export default function MockCustomerDashboardPage() {
       });
       setRegularCustomerSavedBookingBillingReadinessState({
         closeoutsByReference: {},
-        message: "Closeout billing readiness was not checked because saved booking read failed.",
+        message: "Closeout billing readiness was not checked because saved booking references could not be loaded.",
         status: "error",
         tone: "error",
       });
@@ -2735,7 +2829,7 @@ export default function MockCustomerDashboardPage() {
     const result = await response.json().catch(() => null);
 
     if (!response.ok || !result?.ok) {
-      throw new Error(result?.error || "Driver JC timing read failed safely.");
+      throw new Error(result?.error || "Driver JC timing read could not be completed.");
     }
 
     return (
@@ -2848,15 +2942,14 @@ export default function MockCustomerDashboardPage() {
       setCustomerInvoiceIssueFeedback(
         "Driver JC timing loaded into Approved amount. Review it, then issue only when correct.",
       );
-    } catch {
+    } catch (error) {
       if (customerInvoicePrepRowKeyRef.current !== row.key) {
         return;
       }
 
       setCustomerInvoiceDriverActualTimeReadState({
         bookingReference,
-        message:
-          "Driver JC timing read failed safely. Keep the row amount or enter the approved amount before issuing.",
+        message: `${customerAdminReadFailureMessage("Driver JC timing read", error)} Keep the row amount or enter the approved amount before issuing.`,
         status: "error",
         summary: null,
         tone: "error",
@@ -3076,7 +3169,7 @@ export default function MockCustomerDashboardPage() {
       const result = await response.json().catch(() => null);
 
       if (!response.ok || !result?.ok || !result.invoice) {
-        throw new Error(result?.error || "Create Invoice draft failed safely.");
+        throw new Error(result?.error || "Create Invoice draft save");
       }
 
       const draftInvoice = {
@@ -3095,9 +3188,7 @@ export default function MockCustomerDashboardPage() {
       );
       setPlainInvoiceFeedbackTone("success");
     } catch (error) {
-      setPlainInvoiceFeedback(
-        error instanceof Error ? error.message : "Create Invoice draft failed safely.",
-      );
+      setPlainInvoiceFeedback(customerInvoiceActionFailureMessage("Create Invoice draft save", error));
       setPlainInvoiceFeedbackTone("error");
     } finally {
       window.setTimeout(() => setIssuingCustomerInvoiceKey(""), 700);
@@ -3134,7 +3225,7 @@ export default function MockCustomerDashboardPage() {
       const result = await response.json().catch(() => null);
 
       if (!response.ok || !result?.ok || !result.invoice) {
-        throw new Error(result?.error || "Create Invoice issue failed safely.");
+        throw new Error(result?.error || "Create Invoice issue");
       }
 
       const issuedInvoice = {
@@ -3151,11 +3242,7 @@ export default function MockCustomerDashboardPage() {
       await downloadStoredCustomerInvoicePdf(issuedInvoice);
       setPlainInvoicePreview(null);
     } catch (error) {
-      setPlainInvoiceFeedback(
-        error instanceof Error
-          ? error.message
-          : "Create Invoice issue failed safely. No invoice number was confirmed.",
-      );
+      setPlainInvoiceFeedback(customerInvoiceActionFailureMessage("Create Invoice issue", error));
       setPlainInvoiceFeedbackTone("error");
     } finally {
       window.setTimeout(() => setIssuingCustomerInvoiceKey(""), 700);
@@ -3203,7 +3290,7 @@ export default function MockCustomerDashboardPage() {
       const result = await response.json().catch(() => null);
 
       if (!response.ok || !result?.ok || !result.invoice) {
-        throw new Error(result?.error || "Create Invoice email issue failed safely.");
+        throw new Error(result?.error || "Create Invoice email issue");
       }
 
       const issuedInvoice = {
@@ -3236,7 +3323,7 @@ export default function MockCustomerDashboardPage() {
       }
 
       if (!emailResponse.ok || !emailResult?.ok) {
-        throw new Error(emailResult?.error || "Create Invoice email failed safely.");
+        throw new Error(emailResult?.error || "Create Invoice email could not be sent.");
       }
 
       setPlainInvoiceFeedback(`Create Invoice ${issuedInvoice.invoiceNumber} emailed to ${recipientEmail}.`);
@@ -3244,12 +3331,12 @@ export default function MockCustomerDashboardPage() {
       setPlainInvoicePreview(null);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Create Invoice email failed safely.";
+        error instanceof Error ? error.message : "Create Invoice email could not be sent.";
 
       setPlainInvoiceFeedback(
         issuedInvoiceNumber
-          ? `${issuedInvoiceNumber} was issued, but email failed safely: ${message}`
-          : message,
+          ? `${issuedInvoiceNumber} was issued, but email was not sent: ${customerInvoiceActionFailureMessage("Create Invoice email", message)}`
+          : customerInvoiceActionFailureMessage("Create Invoice email", message),
       );
       setPlainInvoiceFeedbackTone("error");
     } finally {
@@ -3365,7 +3452,7 @@ export default function MockCustomerDashboardPage() {
       );
 
       if (!response.ok) {
-        throw new Error("Stored invoice PDF download failed safely.");
+        throw new Error("Stored invoice PDF download");
       }
 
       downloadBrowserBlob(await response.blob(), invoice.pdfFilename || `${invoice.invoiceNumber}.pdf`);
@@ -3437,7 +3524,7 @@ export default function MockCustomerDashboardPage() {
       const result = await response.json().catch(() => null);
 
       if (!response.ok || !result?.ok || !result.invoice) {
-        throw new Error(result?.error || "Customer invoice draft failed safely.");
+        throw new Error(result?.error || "Customer invoice draft save");
       }
 
       const draftInvoice = {
@@ -3457,9 +3544,7 @@ export default function MockCustomerDashboardPage() {
         )} draft saved as ${draftInvoice.invoiceNumber}. It is admin-only, not emailed, and not shown in the customer portal until issued.`,
       );
     } catch (error) {
-      setCustomerInvoiceIssueFeedback(
-        error instanceof Error ? error.message : "Customer invoice draft failed safely.",
-      );
+      setCustomerInvoiceIssueFeedback(customerInvoiceActionFailureMessage("Customer invoice draft save", error));
     } finally {
       window.setTimeout(() => setIssuingCustomerInvoiceKey(""), 700);
     }
@@ -3520,7 +3605,7 @@ export default function MockCustomerDashboardPage() {
       const result = await response.json().catch(() => null);
 
       if (!response.ok || !result?.ok || !result.invoice) {
-        throw new Error(result?.error || "Customer invoice record failed safely.");
+        throw new Error(result?.error || "Customer invoice issue");
       }
 
       const issuedInvoice = {
@@ -3542,11 +3627,7 @@ export default function MockCustomerDashboardPage() {
       await downloadStoredCustomerInvoicePdf(issuedInvoice);
       setCustomerInvoicePreview(null);
     } catch (error) {
-      setCustomerInvoiceIssueFeedback(
-        error instanceof Error
-          ? error.message
-          : "Customer invoice issue failed safely. No invoice number was confirmed.",
-      );
+      setCustomerInvoiceIssueFeedback(customerInvoiceActionFailureMessage("Customer invoice issue", error));
     } finally {
       window.setTimeout(() => setIssuingCustomerInvoiceKey(""), 700);
     }
@@ -3558,8 +3639,8 @@ export default function MockCustomerDashboardPage() {
     try {
       await downloadStoredCustomerInvoicePdf(invoice);
       setCustomerInvoiceIssueFeedback(`${invoice.invoiceNumber} PDF download started.`);
-    } catch {
-      setCustomerInvoiceIssueFeedback(`${invoice.invoiceNumber} PDF download failed safely.`);
+    } catch (error) {
+      setCustomerInvoiceIssueFeedback(customerInvoiceActionFailureMessage(`${invoice.invoiceNumber} PDF download`, error));
     } finally {
       window.setTimeout(() => setDownloadingCustomerInvoiceNumber(""), 700);
     }
@@ -3604,14 +3685,12 @@ export default function MockCustomerDashboardPage() {
       }
 
       if (!response.ok || !result?.ok) {
-        throw new Error(result?.error || "Customer invoice email failed safely.");
+        throw new Error(result?.error || "Customer invoice email");
       }
 
       setCustomerInvoiceIssueFeedback(`${invoice.invoiceNumber} emailed to ${recipientEmail}.`);
     } catch (error) {
-      setCustomerInvoiceIssueFeedback(
-        error instanceof Error ? error.message : `${invoice.invoiceNumber} email failed safely.`,
-      );
+      setCustomerInvoiceIssueFeedback(customerInvoiceActionFailureMessage(`${invoice.invoiceNumber} email`, error));
     } finally {
       window.setTimeout(() => setEmailingCustomerInvoiceNumber(""), 700);
     }
@@ -3641,7 +3720,7 @@ export default function MockCustomerDashboardPage() {
         const result = await response.json().catch(() => null);
 
         if (!response.ok || !result?.ok || !result.invoice) {
-          throw new Error(result?.error || "Customer invoice status update failed safely.");
+          throw new Error(result?.error || "Customer invoice paid status update");
         }
 
         const paidInvoice = {
@@ -3655,9 +3734,7 @@ export default function MockCustomerDashboardPage() {
         return;
       } catch (error) {
         setCustomerInvoiceIssueFeedback(
-          error instanceof Error
-            ? error.message
-            : `${invoice.invoiceNumber} paid status failed safely.`,
+          customerInvoiceActionFailureMessage(`${invoice.invoiceNumber} paid status update`, error),
         );
         return;
       } finally {
@@ -3702,7 +3779,7 @@ export default function MockCustomerDashboardPage() {
         const result = await response.json().catch(() => null);
 
         if (!response.ok || !result?.ok || !result.invoice) {
-          throw new Error(result?.error || "Customer invoice status update failed safely.");
+          throw new Error(result?.error || "Customer invoice unpaid status update");
         }
 
         const unpaidInvoice = {
@@ -3716,9 +3793,7 @@ export default function MockCustomerDashboardPage() {
         return;
       } catch (error) {
         setCustomerInvoiceIssueFeedback(
-          error instanceof Error
-            ? error.message
-            : `${invoice.invoiceNumber} unpaid status failed safely.`,
+          customerInvoiceActionFailureMessage(`${invoice.invoiceNumber} unpaid status update`, error),
         );
         return;
       } finally {
@@ -3792,7 +3867,7 @@ export default function MockCustomerDashboardPage() {
       const result = await response.json().catch(() => null);
 
       if (!response.ok || !result?.ok || !result.invoice) {
-        throw new Error(result?.error || "Credit note failed safely.");
+        throw new Error(result?.error || "Credit note creation");
       }
 
       const creditNote = {
@@ -3807,9 +3882,7 @@ export default function MockCustomerDashboardPage() {
         `${creditNote.invoiceNumber} created from ${invoice.invoiceNumber}. The paid invoice was not edited or deleted.`,
       );
     } catch (error) {
-      setCustomerInvoiceIssueFeedback(
-        error instanceof Error ? error.message : "Credit note failed safely.",
-      );
+      setCustomerInvoiceIssueFeedback(customerInvoiceActionFailureMessage("Credit note creation", error));
     } finally {
       window.setTimeout(() => setUpdatingCustomerInvoiceStatusNumber(""), 700);
     }
@@ -3851,7 +3924,7 @@ export default function MockCustomerDashboardPage() {
       const result = await response.json().catch(() => null);
 
       if (!response.ok || !result?.ok || !result?.archived || !result.invoice) {
-        throw new Error(result?.error || "Customer invoice archive failed safely.");
+        throw new Error(result?.error || "Customer invoice archive");
       }
 
       removeCustomerLocalInvoice(invoice.invoiceNumber);
@@ -3871,9 +3944,7 @@ export default function MockCustomerDashboardPage() {
         `${invoice.invoiceNumber} archived as a test artifact. It is hidden from active billing and the customer portal; the stored record was not deleted or marked paid.`,
       );
     } catch (error) {
-      setCustomerInvoiceIssueFeedback(
-        error instanceof Error ? error.message : `${invoice.invoiceNumber} archive failed safely.`,
-      );
+      setCustomerInvoiceIssueFeedback(customerInvoiceActionFailureMessage(`${invoice.invoiceNumber} archive`, error));
     } finally {
       window.setTimeout(() => setUpdatingCustomerInvoiceStatusNumber(""), 700);
     }
@@ -3928,7 +3999,7 @@ export default function MockCustomerDashboardPage() {
       const result = await response.json().catch(() => null);
 
       if (!response.ok || !result?.ok || !result.invoice) {
-        throw new Error(result?.error || "Quotation conversion failed safely.");
+        throw new Error(result?.error || "Quotation conversion");
       }
 
       const convertedInvoice = {
@@ -3943,9 +4014,7 @@ export default function MockCustomerDashboardPage() {
         `${invoice.invoiceNumber} converted to ${convertedInvoice.invoiceNumber}. PDF download started.`,
       );
     } catch (error) {
-      setCustomerInvoiceIssueFeedback(
-        error instanceof Error ? error.message : "Quotation conversion failed safely.",
-      );
+      setCustomerInvoiceIssueFeedback(customerInvoiceActionFailureMessage("Quotation conversion", error));
     } finally {
       window.setTimeout(() => setUpdatingCustomerInvoiceStatusNumber(""), 700);
     }

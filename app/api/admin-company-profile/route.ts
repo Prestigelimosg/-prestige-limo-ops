@@ -58,7 +58,7 @@ async function readJsonBody(request: Request) {
 function safeFailureResponse() {
   return Response.json(
     {
-      error: "Company profile settings failed safely.",
+      error: "Company profile settings could not be loaded or saved. Reload Company Settings and try again.",
       ok: false,
     },
     { status: 500 },

@@ -58,6 +58,32 @@ function initialMessage(customerName: string) {
   return `Load saved booking references for ${customerName} from the guarded customer-folder read path.`;
 }
 
+function savedBookingReadFailureMessage(rawError: unknown) {
+  const message = rawError instanceof Error ? rawError.message.toLowerCase() : String(rawError ?? "").toLowerCase();
+
+  if (/not enabled|configuration|config|client_init/.test(message)) {
+    return "Saved booking references are not enabled or configured on this server.";
+  }
+
+  if (/failed safely|request failed|could not be completed/.test(message)) {
+    return "Saved booking references could not be loaded right now. Reload this customer folder and try again.";
+  }
+
+  if (/forbidden|internal|admin|dispatcher|referer|origin|purpose|boundary|blocked/.test(message)) {
+    return "Saved booking references require the internal customer folder admin surface. Reload this customer folder and try again.";
+  }
+
+  if (/permission|rls|denied/.test(message)) {
+    return "Saved booking references were blocked by database permissions. No booking, invoice, payment, or provider action ran.";
+  }
+
+  if (/missing|required|malformed|invalid|unknown/.test(message)) {
+    return "Saved booking reference details need review before this customer folder can load them.";
+  }
+
+  return "Saved booking references could not be loaded right now. Reload this customer folder and try again.";
+}
+
 export function CustomerFolderSavedBookingsPanel({
   customerId,
   customerName,
@@ -94,7 +120,7 @@ export function CustomerFolderSavedBookingsPanel({
       const result = await response.json().catch(() => null);
 
       if (!response.ok || !result?.ok) {
-        throw new Error(result?.error || "Saved booking read failed safely.");
+        throw new Error(result?.error || "Saved booking read could not be completed.");
       }
 
       const savedBookings = Array.isArray(result.saved_bookings)
@@ -112,9 +138,9 @@ export function CustomerFolderSavedBookingsPanel({
         summary: result.summary || null,
         tone: "success",
       });
-    } catch {
+    } catch (error) {
       setReadState({
-        message: "Saved booking read failed safely or is not enabled for this staff folder.",
+        message: savedBookingReadFailureMessage(error),
         savedBookings: [],
         status: "error",
         summary: null,

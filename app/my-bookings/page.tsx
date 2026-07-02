@@ -764,7 +764,7 @@ export default function CustomerPortalPage() {
       const pdf = await fetchCustomerPortalInvoicePdf(invoice.invoiceNumber);
 
       if (!pdf) {
-        throw new Error("Stored invoice PDF download failed safely.");
+        throw new Error("Invoice PDF could not be downloaded right now.");
       }
 
       downloadBrowserBlob(pdf.blob, pdf.filename || invoice.pdfFilename || `${invoice.invoiceNumber}.pdf`);

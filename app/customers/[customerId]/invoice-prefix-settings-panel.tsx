@@ -68,6 +68,44 @@ function errorMessage(value: unknown) {
   return value instanceof Error ? value.message : "";
 }
 
+function prefixSettingsFailureMessage(action: "load" | "save", rawError: unknown, prefix: string) {
+  const message = errorMessage(rawError).toLowerCase();
+
+  if (/locked/.test(message)) {
+    return lockedPrefixFeedback(prefix);
+  }
+
+  if (/duplicate|unique|23505|already.*used|used by another|already exists/.test(message) && action === "save") {
+    return `Prefix ${prefix || "this value"} is already used by another customer/account. Choose a different prefix.`;
+  }
+
+  if (/not enabled|configuration|config|client_init/.test(message)) {
+    return "Invoice prefix settings are not enabled or configured on this server.";
+  }
+
+  if (/failed safely|request failed|could not be completed/.test(message)) {
+    return action === "load"
+      ? "Invoice prefix settings could not be loaded. Reload this customer folder and try again."
+      : "Invoice prefix was not saved. No invoice number was reserved; reload this customer folder and try again.";
+  }
+
+  if (/forbidden|internal|admin|dispatcher|referer|origin|purpose|boundary|blocked/.test(message)) {
+    return "Invoice prefix settings require the internal customer folder admin surface. Reload this customer folder and try again.";
+  }
+
+  if (/permission|rls|denied/.test(message)) {
+    return "Invoice prefix settings were blocked by database permissions. No invoice number was reserved.";
+  }
+
+  if (/missing|required|malformed|invalid|unknown/.test(message)) {
+    return "Invoice prefix details need review. Use 2-12 uppercase letters or numbers only.";
+  }
+
+  return action === "load"
+    ? "Invoice prefix settings could not be loaded. Reload this customer folder and try again."
+    : "Invoice prefix was not saved. No invoice number was reserved; reload this customer folder and try again.";
+}
+
 export function CustomerInvoicePrefixSettingsPanel({
   customerAccount,
   suggestedPrefix,
@@ -146,10 +184,10 @@ export function CustomerInvoicePrefixSettingsPanel({
         status: "loaded",
         tone: "success",
       });
-    } catch {
+    } catch (error) {
       setState((current) => ({
         ...current,
-        message: "Prefix settings could not be loaded from this customer folder.",
+        message: prefixSettingsFailureMessage("load", error, prefixInput),
         status: "error",
         tone: "error",
       }));
@@ -238,7 +276,7 @@ export function CustomerInvoicePrefixSettingsPanel({
 
       setState((current) => ({
         ...current,
-        message: "Prefix was not saved. It may already be used by another account.",
+        message: prefixSettingsFailureMessage("save", error, prefixInput),
         status: "error",
         tone: "error",
       }));

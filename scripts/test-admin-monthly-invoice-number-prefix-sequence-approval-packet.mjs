@@ -31,6 +31,8 @@ const sequenceMigrationPath =
   "supabase/migrations/202606080006_monthly_invoice_number_sequence_foundation.sql";
 const sequenceFixMigrationPath =
   "supabase/migrations/202606090001_fix_monthly_invoice_number_reservation_function.sql";
+const sequenceSavedPrefixMigrationPath =
+  "supabase/migrations/202607020001_monthly_invoice_number_saved_prefix_precedence.sql";
 const guardScript =
   "scripts/test-admin-monthly-invoice-number-prefix-sequence-approval-packet.mjs";
 
@@ -105,6 +107,7 @@ const [
   adminSavedBookingsRoute,
   sequenceMigration,
   sequenceFixMigration,
+  sequenceSavedPrefixMigration,
 ] = await Promise.all([
   readFile(packetPath, "utf8"),
   readFile(ledgerPath, "utf8"),
@@ -126,6 +129,7 @@ const [
   readFile(adminSavedBookingsRoutePath, "utf8"),
   readFile(sequenceMigrationPath, "utf8"),
   readFile(sequenceFixMigrationPath, "utf8"),
+  readFile(sequenceSavedPrefixMigrationPath, "utf8"),
 ]);
 
 const ledgerSection = sectionBetween(
@@ -312,11 +316,29 @@ for (const fragment of [
   "lpad(v_sequence_number::text, 4, '0')",
 ]) {
   assertIncludes(
-    `${sequenceMigration}\n${sequenceFixMigration}`,
+    `${sequenceMigration}\n${sequenceFixMigration}\n${sequenceSavedPrefixMigration}`,
     fragment,
     `Invoice sequence migration proof: ${fragment}`,
   );
 }
+
+for (const fragment of [
+  "v_requested_invoice_prefix",
+  "on conflict (customer_account) do nothing",
+  "v_invoice_prefix := v_sequence.invoice_prefix",
+  "lpad(v_sequence_number::text, 4, '0')",
+]) {
+  assertIncludes(
+    sequenceSavedPrefixMigration,
+    fragment,
+    `Saved-prefix precedence migration proof: ${fragment}`,
+  );
+}
+assertExcludes(
+  sequenceSavedPrefixMigration,
+  "invoice_prefix_mismatch",
+  "saved-prefix precedence migration mismatch rejection",
+);
 
 for (const [label, source] of [
   ["invoice-number reservation route", invoiceNumberRoute],

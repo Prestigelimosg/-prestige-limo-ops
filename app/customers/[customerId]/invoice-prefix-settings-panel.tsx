@@ -148,7 +148,7 @@ export function CustomerInvoicePrefixSettingsPanel({
       setState((current) => ({
         ...current,
         message: prefixLocked
-          ? "Prefix is locked after the first reserved invoice number."
+          ? "Prefix is locked after it is saved or auto-created for this customer/account."
           : "Enter a 2-12 character uppercase prefix before saving.",
         status: "error",
         tone: "error",

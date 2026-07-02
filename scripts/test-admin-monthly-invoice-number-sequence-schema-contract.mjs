@@ -10,11 +10,17 @@ const fixMigrationPath = path.join(
   process.cwd(),
   "supabase/migrations/202606090001_fix_monthly_invoice_number_reservation_function.sql",
 );
+const savedPrefixMigrationPath = path.join(
+  process.cwd(),
+  "supabase/migrations/202607020001_monthly_invoice_number_saved_prefix_precedence.sql",
+);
 const migration = await readFile(migrationPath, "utf8");
 const fixMigration = await readFile(fixMigrationPath, "utf8");
+const savedPrefixMigration = await readFile(savedPrefixMigrationPath, "utf8");
 const normalized = migration.replace(/\s+/g, " ").toLowerCase();
 const normalizedFix = fixMigration.replace(/\s+/g, " ").toLowerCase();
-const combinedNormalized = `${normalized} ${normalizedFix}`;
+const normalizedSavedPrefix = savedPrefixMigration.replace(/\s+/g, " ").toLowerCase();
+const combinedNormalized = `${normalized} ${normalizedFix} ${normalizedSavedPrefix}`;
 const forbiddenColumnsOrBehaviors = [
   "amount_due",
   "balance_due",
@@ -147,6 +153,46 @@ assert.equal(
   normalizedFix.includes("update public.customer_invoice_sequences as cis"),
   true,
   "Expected repair migration to qualify sequence updates",
+);
+assert.equal(
+  normalizedSavedPrefix.includes("create or replace function public.reserve_monthly_invoice_number_for_issue_record"),
+  true,
+  "Expected saved-prefix migration to replace the reservation RPC",
+);
+assert.equal(
+  normalizedSavedPrefix.includes("v_requested_invoice_prefix text := upper(btrim(coalesce(p_invoice_prefix, '')))"),
+  true,
+  "Expected saved-prefix migration to keep the browser fallback prefix as a requested prefix",
+);
+assert.equal(
+  normalizedSavedPrefix.includes("on conflict (customer_account) do nothing"),
+  true,
+  "Expected saved-prefix migration to leave existing customer prefix rows unchanged",
+);
+assert.equal(
+  normalizedSavedPrefix.includes("from public.customer_invoice_sequences as cis"),
+  true,
+  "Expected saved-prefix migration to qualify sequence selection",
+);
+assert.equal(
+  normalizedSavedPrefix.includes("for update"),
+  true,
+  "Expected saved-prefix migration to lock the saved sequence row during reservation",
+);
+assert.equal(
+  normalizedSavedPrefix.includes("v_invoice_prefix := v_sequence.invoice_prefix"),
+  true,
+  "Expected saved-prefix migration to use the stored sequence prefix for reservation",
+);
+assert.equal(
+  normalizedSavedPrefix.includes("invoice_prefix_mismatch"),
+  false,
+  "Saved-prefix migration must not reject an existing saved prefix because the browser fallback differs",
+);
+assert.equal(
+  normalizedSavedPrefix.includes("lpad(v_sequence_number::text, 4, '0')"),
+  true,
+  "Expected saved-prefix migration to keep the four-digit minimum running number format",
 );
 
 for (const forbidden of forbiddenColumnsOrBehaviors) {

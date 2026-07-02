@@ -68,7 +68,7 @@ const malformedPrefixSettingsError =
 const forbiddenPrefixSettingsError =
   "Admin customer invoice prefix settings include unsupported or unsafe fields.";
 const prefixLockedError =
-  "Customer invoice prefix is locked after the first reserved invoice number.";
+  "Customer invoice prefix is locked after it is saved or auto-created for this customer/account.";
 const safePrefixSettingsReadError =
   "Admin customer invoice prefix settings read failed safely.";
 const safePrefixSettingsSaveError =
@@ -419,9 +419,7 @@ function normalizePrefixSettingRow(
     return null;
   }
 
-  const prefixLocked = Boolean(
-    lastReservedSequenceNumber || lastReservedInvoiceNumber || lastReservedAt || nextSequenceNumber > 1,
-  );
+  const prefixLocked = true;
 
   return {
     customer_account: customerAccount,

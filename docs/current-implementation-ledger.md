@@ -15,12 +15,13 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Admin Customer Invoice Prefix Settings Lane
 
 - Customer-specific invoice prefix settings are now owner-approved for an admin customer-folder lane only.
-- The approved policy is `PREFIX-0001`, lifetime sequence, prefix locked after first reserved number, no reuse of voided/cancelled numbers, and no automatic prefix change on customer/company rename.
+- The approved policy is `PREFIX-0001`, lifetime sequence, prefix locked once the customer/account row is admin-saved or auto-created, no reuse of voided/cancelled numbers, and no automatic prefix change on customer/company rename.
 - The implementation stores settings in the existing `customer_invoice_sequences` table through `lib/admin-customer-invoice-prefix-settings.ts` and `/api/admin-customer-invoice-prefix-settings`.
+- The existing admin monthly invoice number reservation RPC now treats the browser-derived prefix as an auto-generated fallback only: an existing saved `customer_invoice_sequences` prefix wins, and if no row exists the RPC creates one from the fallback prefix and starts at `-0001`.
 - The new route allows same-origin `/customers` and `/customers/*` referers only, requires the existing admin purpose header, allows guarded reads for admin/dispatcher server sessions, and requires the admin role or local admin surface for writes.
 - The UI is limited to the existing customer folder Invoices area via `CustomerInvoicePrefixSettingsPanel`; `/settings/invoice`, the dashboard monthly invoice reservation workbench, customer portal, public booking, and driver pages are not wired to this prefix route.
-- This lane does not create invoices, reserve invoice numbers, generate PDFs, send invoice/customer/provider messages, activate payment links, record payments, create payouts, change invoice numbering, change DB schema, change env, use Vercel CLI, or touch GPS/live-location.
-- Focused guard coverage lives in `scripts/test-admin-customer-invoice-prefix-settings-guard.mjs`.
+- This lane does not create invoices, execute invoice-number reservations, generate PDFs, send invoice/customer/provider messages, activate payment links, record payments, create payouts, change the running-number digit width, change DB schema, change env, use Vercel CLI, or touch GPS/live-location.
+- Focused guard coverage lives in `scripts/test-admin-customer-invoice-prefix-settings-guard.mjs` and `scripts/test-admin-monthly-invoice-saved-prefix-precedence-guard.mjs`.
 
 ### No-Show / Late-Cancellation Billing Control
 

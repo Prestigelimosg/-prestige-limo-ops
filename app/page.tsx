@@ -25104,8 +25104,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       setAdminMonthlyInvoiceIssueRecordAction(null);
     }
   };
-  const monthlyInvoiceNumberReservationPrefix =
-    deriveAdminMonthlyInvoicePrefix(monthlyInvoiceIssueRecordPrimaryRecord?.customer_account);
   const monthlyInvoiceNumberReservationDisabled =
     !monthlyInvoiceIssueRecordPrimaryRecord ||
     !clean(monthlyInvoiceIssueRecordPrimaryRecord.id) ||
@@ -25127,7 +25125,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     : monthlyInvoiceIssueRecordPrimaryRecord?.invoice_number_status === "reserved" ||
         clean(monthlyInvoiceIssueRecordPrimaryRecord?.invoice_number)
       ? "Number reserved"
-      : `Reserve ${monthlyInvoiceNumberReservationPrefix}`;
+      : "Reserve number";
   const reserveMonthlyInvoiceNumberFromCurrentIssueRecord = async () => {
     if (!monthlyInvoiceIssueRecordPrimaryRecord || monthlyInvoiceNumberReservationDisabled) {
       setAdminMonthlyInvoiceIssueRecordReadState((current) => ({

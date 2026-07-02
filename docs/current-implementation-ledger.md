@@ -1,10 +1,10 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-f93dcbee Move todays jobs below assigned driver
+e7097070 Clarify in-app notification queued labels
 
 Latest pushed main/staging runtime checkpoint:
-f93dcbee Move todays jobs below assigned driver
+e7097070 Clarify in-app notification queued labels
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
 d0c5e211 Persist Save CRM driver assignment

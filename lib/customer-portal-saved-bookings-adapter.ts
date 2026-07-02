@@ -168,11 +168,49 @@ function findMonthIndex(value: string) {
   );
 }
 
+function formatSingaporeDateTime(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-SG", {
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+    minute: "2-digit",
+    month: "2-digit",
+    timeZone: "Asia/Singapore",
+    year: "numeric",
+  }).formatToParts(date);
+  const partValue = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value || "";
+  const year = partValue("year");
+  const month = partValue("month");
+  const day = partValue("day");
+  const hour = partValue("hour");
+  const minute = partValue("minute");
+  const monthName = monthNames[Number(month) - 1];
+
+  if (!year || !monthName || !day || !hour || !minute) {
+    return null;
+  }
+
+  return `${Number(day)} ${monthName} ${year}, ${hour}:${minute}`;
+}
+
 function formatPickupDateTime(value: unknown) {
   const cleaned = safeText(value, 80);
 
   if (!cleaned) {
     return "Pickup time to confirm";
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/i.test(cleaned)) {
+    const parsed = new Date(cleaned);
+
+    if (!Number.isNaN(parsed.getTime())) {
+      const singaporeDateTime = formatSingaporeDateTime(parsed);
+
+      if (singaporeDateTime) {
+        return singaporeDateTime;
+      }
+    }
   }
 
   const isoLikeMatch = cleaned.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2}))?/);

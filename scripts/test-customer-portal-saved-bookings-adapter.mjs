@@ -143,7 +143,7 @@ try {
       dropoffLocation: "Raffles Singapore",
       id: "saved-SAFE-PORTAL-001",
       passengerName: "Safe Passenger",
-      pickupDateTime: "8 June 2026, 09:00",
+      pickupDateTime: "8 June 2026, 17:00",
       pickupLocation: "Changi Airport",
       serviceType: "Airport Arrival",
       status: "Confirmed",
@@ -204,7 +204,7 @@ try {
       dropoffLocation: "Drop-off to confirm",
       id: "saved-SAFE-PORTAL-003",
       passengerName: "Passenger to confirm",
-      pickupDateTime: "10 June 2026, 09:00",
+      pickupDateTime: "10 June 2026, 17:00",
       pickupLocation: "Pickup to confirm",
       serviceType: "Service to confirm",
       status: "Confirmed",
@@ -212,6 +212,36 @@ try {
     },
   ]);
   assertNoVisibleLeak(sanitized, "sanitized unsafe value booking");
+
+  assert.deepEqual(
+    mapCustomerSavedBookingsPayload({
+      ok: true,
+      saved_bookings: [
+        {
+          booking_reference: "SAFE-PORTAL-004",
+          customer_facing_status: "confirmed",
+          dropoff_location: "Changi Airport Terminal 3 Departure",
+          passenger_name: "Safe Passenger",
+          pickup_at: "2026-07-05T18:45:00+00:00",
+          pickup_location: "Raffles Hotel Singapore Lobby",
+          service_type: "Departure",
+        },
+      ],
+    }),
+    [
+      {
+        dropoffLocation: "Changi Airport Terminal 3 Departure",
+        id: "saved-SAFE-PORTAL-004",
+        passengerName: "Safe Passenger",
+        pickupDateTime: "6 July 2026, 02:45",
+        pickupLocation: "Raffles Hotel Singapore Lobby",
+        serviceType: "Departure",
+        status: "Confirmed",
+        vehicleType: "To confirm",
+      },
+    ],
+    "Customer portal should display offset timestamps in Singapore local time after admin-approved amendments.",
+  );
 
   const fetchCalls = [];
   const successfulLoad = await loadCustomerPortalSavedBookings({

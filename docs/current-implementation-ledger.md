@@ -12,6 +12,13 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Customer Portal Access Reference Correction
+
+- Visible production amendment testing found the Customers finder `Portal` action could fail for a loaded saved-account row such as `hourly-test-customer` because the button sent the numeric saved account id instead of the approved customer portal account reference.
+- The Customers finder portal button now prefers a safe account reference label from the visible customer row, for example `hourly-test-customer`, and falls back to the numeric saved account id for stored-document invoice portal links when the label is not a valid portal reference.
+- The correction does not change the admin portal access API, signed token/cookie behavior, customer saved-booking reader, invoice PDF/customer portal readers, CRM, calendar, billing, email, SMS, WhatsApp, Telegram, provider, GPS/live-location, payment, or payout behavior.
+- Guard coverage in `scripts/test-customer-portal-access-link-guard.mjs` now locks the safe-label-first portal reference selection.
+
 ### Customer Booking Change Request Review Wire
 
 - Customer portal saved bookings now wire the existing `Edit` and `Cancel` row buttons into a compact customer-safe review request form instead of local-only feedback.

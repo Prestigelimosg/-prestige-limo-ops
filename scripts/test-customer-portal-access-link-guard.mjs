@@ -191,6 +191,9 @@ assertExcludes(publicAccessRoute, forbiddenCustomerPortalAccessSurfacePattern, "
 
 for (const fragment of [
   "adminCustomerPortalAccessLinksApiPath",
+  "customerPortalAccessReferenceForFinderRow",
+  "safeCustomerPortalAccessReferenceCandidate(customer.customerName.trim())",
+  "safeCustomerPortalAccessReferenceCandidate(customer.customerId.trim())",
   "data-customer-portal-access-link",
   "navigator.clipboard.writeText(url)",
   "Portal link copied for",

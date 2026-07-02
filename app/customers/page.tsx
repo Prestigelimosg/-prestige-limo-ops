@@ -2341,8 +2341,20 @@ export default function MockCustomerDashboardPage() {
     return "Portal";
   }
 
+  function safeCustomerPortalAccessReferenceCandidate(value: string) {
+    return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(value) ? value : "";
+  }
+
+  function customerPortalAccessReferenceForFinderRow(customer: (typeof customerFolderIndexRows)[number]) {
+    return (
+      safeCustomerPortalAccessReferenceCandidate(customer.customerName.trim()) ||
+      safeCustomerPortalAccessReferenceCandidate(customer.customerId.trim())
+    );
+  }
+
   async function copyCustomerPortalAccessLink(customer: (typeof customerFolderIndexRows)[number]) {
-    const customerAccountReference = customer.customerId.trim();
+    const customerAccountReference = customerPortalAccessReferenceForFinderRow(customer);
+    const customerPortalCopyStateKey = customer.customerId.trim() || customerAccountReference;
 
     if (!customerAccountReference) {
       setCustomerPortalAccessFeedback({
@@ -2354,7 +2366,7 @@ export default function MockCustomerDashboardPage() {
 
     setCustomerPortalAccessCopyStates((currentStates) => ({
       ...currentStates,
-      [customerAccountReference]: "copying",
+      [customerPortalCopyStateKey]: "copying",
     }));
     setCustomerPortalAccessFeedback({
       message: `Preparing portal link for ${customer.customerName}...`,
@@ -2382,7 +2394,7 @@ export default function MockCustomerDashboardPage() {
 
       setCustomerPortalAccessCopyStates((currentStates) => ({
         ...currentStates,
-        [customerAccountReference]: "copied",
+        [customerPortalCopyStateKey]: "copied",
       }));
       setCustomerPortalAccessFeedback({
         message: `Portal link copied for ${customer.customerName}. It opens only this customer folder.`,
@@ -2391,7 +2403,7 @@ export default function MockCustomerDashboardPage() {
     } catch {
       setCustomerPortalAccessCopyStates((currentStates) => ({
         ...currentStates,
-        [customerAccountReference]: "error",
+        [customerPortalCopyStateKey]: "error",
       }));
       setCustomerPortalAccessFeedback({
         message:

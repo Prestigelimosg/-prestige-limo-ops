@@ -337,7 +337,9 @@ for (const fragment of [
   "includesForbiddenFragment(key)",
   "includesForbiddenFragment(String(value ?? \"\"))",
   "Customer saved bookings read includes fields outside the approved read scope.",
-  "purpose !== \"customer-saved-bookings-read\"",
+  "expectedPurpose = \"customer-saved-bookings-read\"",
+  "purpose !== expectedPurpose",
+  "return resolveCustomerSavedBookingsBoundaryForPurpose(request);",
   "refererUrl.pathname !== \"/my-bookings\"",
 ]) {
   assertIncludes(customerSavedBookingsRead, fragment, `customer saved bookings input fragment ${fragment}`);

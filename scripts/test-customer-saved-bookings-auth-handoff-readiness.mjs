@@ -111,7 +111,13 @@ assertIncludes(source.readBoundary, "request-cookie", "server boundary");
 assertIncludes(source.readBoundary, 'mode !== "server-session-token"', "server boundary");
 assertIncludes(source.readBoundary, 'providedToken.source === "request-cookie"', "server boundary");
 assertIncludes(source.readBoundary, 'refererUrl.pathname !== "/my-bookings"', "server boundary");
-assertIncludes(source.readBoundary, 'purpose !== "customer-saved-bookings-read"', "server boundary");
+assertIncludes(source.readBoundary, 'expectedPurpose = "customer-saved-bookings-read"', "server boundary");
+assertIncludes(source.readBoundary, "purpose !== expectedPurpose", "server boundary");
+assertIncludes(
+  source.readBoundary,
+  "return resolveCustomerSavedBookingsBoundaryForPurpose(request);",
+  "server boundary",
+);
 assertMatches(
   source.readBoundary,
   /configuredValue\s*&&\s*!configuredName[\s\S]*?return \[\]/,

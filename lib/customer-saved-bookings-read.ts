@@ -843,15 +843,16 @@ export function parseCustomerSavedBookingsReadParams(
   };
 }
 
-export function resolveCustomerSavedBookingsBoundary(
+export function resolveCustomerSavedBookingsBoundaryForPurpose(
   request: Request,
+  expectedPurpose = "customer-saved-bookings-read",
 ): AdminBookingResult<CustomerSavedBookingsBoundaryContext> {
   const requestUrl = new URL(request.url);
   const origin = request.headers.get("origin");
   const referer = request.headers.get("referer");
   const purpose = request.headers.get("x-prestige-customer-purpose");
 
-  if (purpose !== "customer-saved-bookings-read") {
+  if (purpose !== expectedPurpose) {
     return customerSavedBookingsAuthRequiredResult();
   }
 
@@ -980,6 +981,12 @@ export function resolveCustomerSavedBookingsBoundary(
     },
     ok: true,
   };
+}
+
+export function resolveCustomerSavedBookingsBoundary(
+  request: Request,
+): AdminBookingResult<CustomerSavedBookingsBoundaryContext> {
+  return resolveCustomerSavedBookingsBoundaryForPurpose(request);
 }
 
 export async function loadCustomerSavedBookings(

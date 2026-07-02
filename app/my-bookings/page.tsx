@@ -7,6 +7,7 @@ import {
   loadCustomerPortalSavedBookings,
   type CustomerPortalBooking,
 } from "../../lib/customer-portal-saved-bookings-adapter";
+import { submitCustomerPortalBookingChangeRequest } from "../../lib/customer-portal-booking-change-request-adapter";
 import {
   fetchCustomerPortalInvoicePdf,
   loadCustomerPortalInvoiceRecords,
@@ -54,6 +55,18 @@ type BookingRequestForm = {
 type BookingRequestFeedback = {
   tone: "info" | "success" | "error";
   text: string;
+};
+
+type BookingChangeRequestMode = "amendment" | "cancellation";
+
+type BookingChangeRequestDraft = {
+  bookingId: string;
+  requestKind: BookingChangeRequestMode;
+  requestNote: string;
+  requestedDropoffLocation: string;
+  requestedPickupDate: string;
+  requestedPickupLocation: string;
+  requestedPickupTime: string;
 };
 
 const serviceOptions = [
@@ -240,6 +253,10 @@ function canRequestBookingReview(booking: CustomerPortalBooking) {
   return booking.status !== "Completed" && booking.status !== "Cancelled";
 }
 
+function bookingReferenceFromPortalId(value: string) {
+  return value.startsWith("saved-") ? value.slice("saved-".length) : "";
+}
+
 function customerPortalInvoiceFolder(invoice: CustomerPortalInvoiceRecord): InvoiceFolder {
   if (invoice.documentType === "quotation") {
     return "Quotations";
@@ -303,7 +320,9 @@ export default function CustomerPortalPage() {
     useState<PublicCompanyProfile>(defaultCompanyProfile);
   const [expandedBookingId, setExpandedBookingId] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [changeFeedback, setChangeFeedback] = useState<Record<string, string>>({});
+  const [changeFeedback, setChangeFeedback] = useState<Record<string, BookingRequestFeedback>>({});
+  const [changeRequestDraft, setChangeRequestDraft] = useState<BookingChangeRequestDraft | null>(null);
+  const [changeRequestSubmittingId, setChangeRequestSubmittingId] = useState("");
   const [portalBookings, setPortalBookings] = useState<CustomerPortalBooking[]>([]);
   const [portalBookingsLoadState, setPortalBookingsLoadState] =
     useState<PortalBookingsLoadState>("loading");
@@ -443,6 +462,7 @@ export default function CustomerPortalPage() {
       setPortalBookingsLoadState(loadedBookings === null ? "blocked" : "ready");
       setExpandedBookingId("");
       setChangeFeedback({});
+      setChangeRequestDraft(null);
       setBookingPages({ ...initialBookingPages });
       setSelectedBookingMonths({ ...initialSelectedBookingMonths });
     }
@@ -543,6 +563,7 @@ export default function CustomerPortalPage() {
     setActiveSection(section);
     setExpandedBookingId("");
     setChangeFeedback({});
+    setChangeRequestDraft(null);
     setBookingPages((current) => ({ ...current, [nextFilter]: 1 }));
     setSelectedBookingMonths((current) => ({ ...current, [nextFilter]: "" }));
   }
@@ -551,6 +572,7 @@ export default function CustomerPortalPage() {
     setSearchQuery(value);
     setExpandedBookingId("");
     setChangeFeedback({});
+    setChangeRequestDraft(null);
     setBookingPages((current) => ({ ...current, [activeFilter]: 1 }));
   }
 
@@ -559,6 +581,7 @@ export default function CustomerPortalPage() {
     setBookingPages((current) => ({ ...current, [activeFilter]: 1 }));
     setExpandedBookingId("");
     setChangeFeedback({});
+    setChangeRequestDraft(null);
   }
 
   function handlePageChange(direction: "next" | "previous") {
@@ -573,24 +596,162 @@ export default function CustomerPortalPage() {
     });
     setExpandedBookingId("");
     setChangeFeedback({});
+    setChangeRequestDraft(null);
   }
 
   function handleEditRequest(booking: CustomerPortalBooking) {
     setExpandedBookingId(booking.id);
+    setChangeRequestDraft(
+      canRequestBookingReview(booking)
+        ? {
+            bookingId: booking.id,
+            requestKind: "amendment",
+            requestNote: "",
+            requestedDropoffLocation: "",
+            requestedPickupDate: "",
+            requestedPickupLocation: "",
+            requestedPickupTime: "",
+          }
+        : null,
+    );
     setChangeFeedback({
       [booking.id]: canRequestBookingReview(booking)
-        ? `Edit request noted for review. ${companyName} staff will confirm before anything changes.`
-        : "Completed or cancelled bookings are read-only here. Please contact our team if you need help.",
+        ? {
+            text: `${companyName} staff must review and confirm before the booking or calendar changes.`,
+            tone: "info",
+          }
+        : {
+            text: "Completed or cancelled bookings are read-only here. Please contact our team if you need help.",
+            tone: "error",
+          },
     });
   }
 
   function handleCancelRequest(booking: CustomerPortalBooking) {
     setExpandedBookingId(booking.id);
+    setChangeRequestDraft(
+      canRequestBookingReview(booking)
+        ? {
+            bookingId: booking.id,
+            requestKind: "cancellation",
+            requestNote: "",
+            requestedDropoffLocation: "",
+            requestedPickupDate: "",
+            requestedPickupLocation: "",
+            requestedPickupTime: "",
+          }
+        : null,
+    );
     setChangeFeedback({
       [booking.id]: canRequestBookingReview(booking)
-        ? `Cancel request noted for review. Your booking is not cancelled until ${companyName} confirms.`
-        : "Completed or cancelled bookings are read-only here. Please contact our team if you need help.",
+        ? {
+            text: `Your booking is not cancelled until ${companyName} confirms.`,
+            tone: "info",
+          }
+        : {
+            text: "Completed or cancelled bookings are read-only here. Please contact our team if you need help.",
+            tone: "error",
+        },
     });
+  }
+
+  function updateChangeRequestDraftField(
+    field: keyof Omit<BookingChangeRequestDraft, "bookingId" | "requestKind">,
+    value: string,
+  ) {
+    setChangeRequestDraft((current) =>
+      current
+        ? {
+            ...current,
+            [field]: value,
+          }
+        : current,
+    );
+  }
+
+  async function submitCustomerBookingChangeRequest(
+    event: FormEvent<HTMLFormElement>,
+    booking: CustomerPortalBooking,
+  ) {
+    event.preventDefault();
+
+    if (!changeRequestDraft || changeRequestDraft.bookingId !== booking.id) {
+      return;
+    }
+
+    const bookingReference = bookingReferenceFromPortalId(booking.id);
+
+    if (!bookingReference) {
+      setChangeFeedback({
+        [booking.id]: {
+          text: "Booking change request is not available for this booking.",
+          tone: "error",
+        },
+      });
+      return;
+    }
+
+    const hasAmendmentValue = Boolean(
+      changeRequestDraft.requestedPickupDate.trim() ||
+        changeRequestDraft.requestedPickupTime.trim() ||
+        changeRequestDraft.requestedPickupLocation.trim() ||
+        changeRequestDraft.requestedDropoffLocation.trim(),
+    );
+
+    if (changeRequestDraft.requestKind === "amendment" && !hasAmendmentValue) {
+      setChangeFeedback({
+        [booking.id]: {
+          text: "Enter at least one new date, time, pickup, or drop-off value for staff review.",
+          tone: "error",
+        },
+      });
+      return;
+    }
+
+    setChangeRequestSubmittingId(booking.id);
+    setChangeFeedback({
+      [booking.id]: {
+        text: "Sending request for staff review.",
+        tone: "info",
+      },
+    });
+
+    try {
+      await submitCustomerPortalBookingChangeRequest({
+        input: {
+          bookingReference,
+          requestKind: changeRequestDraft.requestKind,
+          requestNote: changeRequestDraft.requestNote.trim(),
+          requestedDropoffLocation: changeRequestDraft.requestedDropoffLocation.trim(),
+          requestedPickupDate: changeRequestDraft.requestedPickupDate,
+          requestedPickupLocation: changeRequestDraft.requestedPickupLocation.trim(),
+          requestedPickupTime: changeRequestDraft.requestedPickupTime,
+        },
+      });
+
+      setChangeRequestDraft(null);
+      setChangeFeedback({
+        [booking.id]: {
+          text:
+            changeRequestDraft.requestKind === "cancellation"
+              ? "Cancel request sent for staff review. The booking is not cancelled until Prestige confirms."
+              : "Edit request sent for staff review. The booking and calendar are unchanged until Prestige confirms.",
+          tone: "success",
+        },
+      });
+    } catch (error) {
+      setChangeFeedback({
+        [booking.id]: {
+          text:
+            error instanceof Error
+              ? error.message
+              : "Booking change request could not be saved safely.",
+          tone: "error",
+        },
+      });
+    } finally {
+      setChangeRequestSubmittingId("");
+    }
   }
 
   async function downloadPortalInvoice(invoice: CustomerPortalInvoiceRecord) {
@@ -1449,6 +1610,10 @@ export default function CustomerPortalPage() {
                   {visibleBookings.map((booking) => {
                     const canRequestReview = canRequestBookingReview(booking);
                     const isExpanded = expandedBooking?.id === booking.id;
+                    const rowChangeDraft =
+                      changeRequestDraft?.bookingId === booking.id ? changeRequestDraft : null;
+                    const rowFeedback = changeFeedback[booking.id] || null;
+                    const rowSubmitting = changeRequestSubmittingId === booking.id;
 
                     return (
                       <li
@@ -1520,13 +1685,129 @@ export default function CustomerPortalPage() {
                           </div>
                         </div>
 
-                        {changeFeedback[booking.id] ? (
+                        {rowFeedback ? (
                           <p
-                            className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-950"
+                            className={`rounded-md border px-3 py-2 text-sm font-semibold ${feedbackClass(
+                              rowFeedback.tone,
+                            )}`}
                             data-customer-portal-feedback={booking.id}
                           >
-                            {changeFeedback[booking.id]}
+                            {rowFeedback.text}
                           </p>
+                        ) : null}
+                        {rowChangeDraft ? (
+                          <form
+                            className="grid gap-2 rounded-md border border-sky-200 bg-sky-50/70 p-2"
+                            data-customer-portal-change-request-form={booking.id}
+                            data-customer-portal-change-request-kind={rowChangeDraft.requestKind}
+                            onSubmit={(event) => submitCustomerBookingChangeRequest(event, booking)}
+                          >
+                            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                              <p className="text-sm font-semibold text-slate-950">
+                                {rowChangeDraft.requestKind === "cancellation"
+                                  ? "Cancel request"
+                                  : "Edit request"}
+                              </p>
+                              <span className="w-fit rounded-full border border-sky-200 bg-white px-2 py-1 text-xs font-semibold text-sky-800">
+                                Staff review required
+                              </span>
+                            </div>
+                            {rowChangeDraft.requestKind === "amendment" ? (
+                              <div className="grid gap-2 md:grid-cols-2">
+                                <label className="text-sm font-semibold text-slate-700">
+                                  New pickup date
+                                  <input
+                                    className={fieldClass()}
+                                    data-customer-portal-change-field="requested-pickup-date"
+                                    onChange={(event) =>
+                                      updateChangeRequestDraftField(
+                                        "requestedPickupDate",
+                                        event.target.value,
+                                      )
+                                    }
+                                    type="date"
+                                    value={rowChangeDraft.requestedPickupDate}
+                                  />
+                                </label>
+                                <label className="text-sm font-semibold text-slate-700">
+                                  New pickup time
+                                  <input
+                                    className={fieldClass()}
+                                    data-customer-portal-change-field="requested-pickup-time"
+                                    onChange={(event) =>
+                                      updateChangeRequestDraftField(
+                                        "requestedPickupTime",
+                                        event.target.value,
+                                      )
+                                    }
+                                    type="time"
+                                    value={rowChangeDraft.requestedPickupTime}
+                                  />
+                                </label>
+                                <label className="text-sm font-semibold text-slate-700">
+                                  New pickup location
+                                  <input
+                                    className={fieldClass()}
+                                    data-customer-portal-change-field="requested-pickup-location"
+                                    onChange={(event) =>
+                                      updateChangeRequestDraftField(
+                                        "requestedPickupLocation",
+                                        event.target.value,
+                                      )
+                                    }
+                                    placeholder={booking.pickupLocation}
+                                    type="text"
+                                    value={rowChangeDraft.requestedPickupLocation}
+                                  />
+                                </label>
+                                <label className="text-sm font-semibold text-slate-700">
+                                  New drop-off location
+                                  <input
+                                    className={fieldClass()}
+                                    data-customer-portal-change-field="requested-dropoff-location"
+                                    onChange={(event) =>
+                                      updateChangeRequestDraftField(
+                                        "requestedDropoffLocation",
+                                        event.target.value,
+                                      )
+                                    }
+                                    placeholder={booking.dropoffLocation}
+                                    type="text"
+                                    value={rowChangeDraft.requestedDropoffLocation}
+                                  />
+                                </label>
+                              </div>
+                            ) : null}
+                            <label className="text-sm font-semibold text-slate-700">
+                              Note
+                              <textarea
+                                className={`${fieldClass()} min-h-20 resize-y`}
+                                data-customer-portal-change-field="request-note"
+                                onChange={(event) =>
+                                  updateChangeRequestDraftField("requestNote", event.target.value)
+                                }
+                                value={rowChangeDraft.requestNote}
+                              />
+                            </label>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                className="min-h-9 rounded-md border border-sky-700 bg-sky-700 px-3 py-1.5 text-sm font-semibold text-white transition enabled:hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50"
+                                data-customer-portal-submit-change-request={booking.id}
+                                disabled={rowSubmitting}
+                                type="submit"
+                              >
+                                {rowSubmitting ? "Sending..." : "Send for review"}
+                              </button>
+                              <button
+                                className="min-h-9 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 transition hover:border-slate-500"
+                                data-customer-portal-close-change-request={booking.id}
+                                onClick={() => setChangeRequestDraft(null)}
+                                type="button"
+                              >
+                                Close
+                              </button>
+                            </div>
+                          </form>
                         ) : null}
                       </li>
                     );

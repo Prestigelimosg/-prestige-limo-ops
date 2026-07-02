@@ -1299,14 +1299,17 @@ type AdminAppNotificationPriority = "low" | "normal" | "high" | "urgent";
 type AdminAppNotificationUpdateStatus = "archived" | "dismissed" | "read";
 
 type AdminAppNotificationRecord = {
+  booking_reference?: string | null;
   created_at?: string | null;
   id?: string | null;
   notification_status?: AdminAppNotificationStatus | string | null;
   notification_type?: AdminAppNotificationType | string | null;
   priority?: AdminAppNotificationPriority | string | null;
+  safe_context?: Record<string, unknown> | null;
   safe_message?: string | null;
   safe_title?: string | null;
   updated_at?: string | null;
+  workflow_area?: string | null;
 };
 
 type AdminAppNotificationPagination = {
@@ -8040,11 +8043,56 @@ function adminAppNotificationTimeLabel(value: string | null | undefined) {
     return cleaned.slice(0, 80);
   }
 
-  return `${parsedDate.getUTCFullYear()}-${String(parsedDate.getUTCMonth() + 1).padStart(2, "0")}-${String(
-    parsedDate.getUTCDate(),
-  ).padStart(2, "0")} ${String(parsedDate.getUTCHours()).padStart(2, "0")}:${String(
-    parsedDate.getUTCMinutes(),
-  ).padStart(2, "0")} UTC`;
+	  return `${parsedDate.getUTCFullYear()}-${String(parsedDate.getUTCMonth() + 1).padStart(2, "0")}-${String(
+	    parsedDate.getUTCDate(),
+	  ).padStart(2, "0")} ${String(parsedDate.getUTCHours()).padStart(2, "0")}:${String(
+	    parsedDate.getUTCMinutes(),
+	  ).padStart(2, "0")} UTC`;
+}
+
+function adminAppNotificationContextValue(value: unknown) {
+  const cleaned =
+    typeof value === "string" || typeof value === "number" ? clean(value) : "";
+
+  if (!cleaned || cleaned === "not_requested" || cleaned === "not_provided") {
+    return "";
+  }
+
+  return cleaned.replace(/_/g, " ");
+}
+
+function adminAppNotificationChangeRequestRows(notification: AdminAppNotificationRecord) {
+  if (clean(notification.workflow_area) !== "customer_booking_change_request") {
+    return [];
+  }
+
+  const context =
+    notification.safe_context &&
+    typeof notification.safe_context === "object" &&
+    !Array.isArray(notification.safe_context)
+      ? notification.safe_context
+      : {};
+  const rows: Array<[string, unknown]> = [
+    ["Booking", notification.booking_reference],
+    ["Passenger", context.passenger_name],
+    ["Request", context.request_kind],
+    ["Current service", context.current_service_type],
+    ["Current pickup time", context.current_pickup_at],
+    ["Current pickup", context.current_pickup_location],
+    ["Current drop-off", context.current_dropoff_location],
+    ["Requested date", context.requested_pickup_date],
+    ["Requested time", context.requested_pickup_time],
+    ["Requested pickup", context.requested_pickup_location],
+    ["Requested drop-off", context.requested_dropoff_location],
+    ["Note", context.request_note],
+  ];
+
+  return rows
+    .map(([label, value]) => ({
+      label,
+      value: adminAppNotificationContextValue(value),
+    }))
+    .filter((row) => row.value);
 }
 
 function adminMapRouteAssistFailureMessage(rawError: unknown, label = "Map route assist") {
@@ -37661,13 +37709,14 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   const notificationId = clean(notification.id);
                   const title = clean(notification.safe_title) || "Admin app notification";
                   const message = clean(notification.safe_message) || "No safe notification message recorded.";
-                  const notificationType = adminAppNotificationDisplayLabel(notification.notification_type);
-                  const notificationPriority = adminAppNotificationPriorityLabel(notification.priority);
-                  const notificationStatus = adminAppNotificationDisplayLabel(notification.notification_status);
-                  const createdTime = adminAppNotificationTimeLabel(notification.created_at);
-                  const activeNotificationAction =
-                    notificationId &&
-                    adminAppNotificationAction?.notificationId === notificationId
+	                  const notificationType = adminAppNotificationDisplayLabel(notification.notification_type);
+	                  const notificationPriority = adminAppNotificationPriorityLabel(notification.priority);
+	                  const notificationStatus = adminAppNotificationDisplayLabel(notification.notification_status);
+	                  const createdTime = adminAppNotificationTimeLabel(notification.created_at);
+	                  const changeRequestRows = adminAppNotificationChangeRequestRows(notification);
+	                  const activeNotificationAction =
+	                    notificationId &&
+	                    adminAppNotificationAction?.notificationId === notificationId
                       ? adminAppNotificationAction.status
                       : null;
                   const notificationActionDisabled =
@@ -37687,21 +37736,34 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                           >
                             {title}
                           </h4>
-                          <p
-                            className="mt-1 break-words text-xs text-slate-700 sm:text-sm"
-                            data-admin-app-notification-feed-message="true"
-                          >
-                            {message}
-                          </p>
-                        </div>
+	                          <p
+	                            className="mt-1 break-words text-xs text-slate-700 sm:text-sm"
+	                            data-admin-app-notification-feed-message="true"
+	                          >
+	                            {message}
+	                          </p>
+	                        </div>
                         <span className="w-fit rounded-full bg-sky-100 px-2 py-1 text-xs font-semibold text-sky-800">
                           {notificationPriority}
                         </span>
                       </div>
-                      <p className="mt-2 hidden break-words text-xs text-slate-600">
-                        {notificationType} / {notificationStatus} / {createdTime}
-                      </p>
-                      <div className="mt-2 flex flex-wrap gap-2">
+	                      <p className="mt-2 hidden break-words text-xs text-slate-600">
+	                        {notificationType} / {notificationStatus} / {createdTime}
+	                      </p>
+	                      {changeRequestRows.length > 0 ? (
+	                        <dl
+	                          className="mt-2 grid gap-1 rounded-md border border-sky-100 bg-sky-50/60 p-2 text-xs text-slate-700 sm:grid-cols-2"
+	                          data-admin-app-notification-change-request="true"
+	                        >
+	                          {changeRequestRows.map((row) => (
+	                            <div key={row.label}>
+	                              <dt className="font-semibold text-slate-600">{row.label}</dt>
+	                              <dd className="mt-0.5 break-words text-slate-950">{row.value}</dd>
+	                            </div>
+	                          ))}
+	                        </dl>
+	                      ) : null}
+	                      <div className="mt-2 flex flex-wrap gap-2">
                         {[
                           {
                             label: "Mark read",

@@ -8,6 +8,7 @@ const guardScript = "scripts/test-public-customer-portal-saved-booking-surface-g
 
 const portalPagePath = "app/my-bookings/page.tsx";
 const portalAdapterPath = "lib/customer-portal-saved-bookings-adapter.ts";
+const portalChangeRequestAdapterPath = "lib/customer-portal-booking-change-request-adapter.ts";
 const savedBookingsReadPath = "lib/customer-saved-bookings-read.ts";
 
 const allowedPortalBookingFields = [
@@ -174,6 +175,7 @@ const allPaths = [
   preactivationSuitePath,
   portalPagePath,
   portalAdapterPath,
+  portalChangeRequestAdapterPath,
   savedBookingsReadPath,
   ...contractChecks.map(({ script }) => script),
 ];
@@ -186,6 +188,7 @@ const ledger = files[ledgerPath];
 const preactivationSuite = files[preactivationSuitePath];
 const portalPage = files[portalPagePath];
 const portalAdapter = files[portalAdapterPath];
+const portalChangeRequestAdapter = files[portalChangeRequestAdapterPath];
 const savedBookingsRead = files[savedBookingsReadPath];
 const ledgerSection = sectionBetween(
   ledger,
@@ -193,12 +196,12 @@ const ledgerSection = sectionBetween(
 );
 
 for (const phrase of [
-  "Public customer portal saved-booking display/action surfaces are guarded across `/my-bookings`, `lib/customer-portal-saved-bookings-adapter.ts`, and `lib/customer-saved-bookings-read.ts`.",
-  "This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.",
+  "Public customer portal saved-booking display/action surfaces are guarded across `/my-bookings`, `lib/customer-portal-saved-bookings-adapter.ts`, `lib/customer-portal-booking-change-request-adapter.ts`, and `lib/customer-saved-bookings-read.ts`.",
+  "This guard allows only the approved customer booking change-request review write; it does not approve env changes, deployment by CLI, live provider sends, migrations, direct customer booking mutation, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/GPS activation, UI sectors, or new shims.",
   "`/my-bookings` saved-booking rows must render only customer-safe status, passenger, pickup/drop-off, service, vehicle, date/time, flight, and optional request-note display fields.",
-  "`/my-bookings` saved-booking actions must stay limited to disabled PDF, local edit-review feedback, local cancel-review feedback, and local detail expansion.",
+  "`/my-bookings` saved-booking actions must stay limited to disabled PDF, customer-safe edit/cancel review request form, and local detail expansion.",
   "The customer PDF control must remain disabled/no-op and must not create files, links, downloads, invoices, payment records, or provider sends.",
-  "Edit and cancel controls must remain local review requests only and must not call APIs, mutate bookings, submit forms, or change `/api/customer-saved-bookings`.",
+  "Edit and cancel controls may submit only through `lib/customer-portal-booking-change-request-adapter.ts` to `/api/customer-booking-change-requests`; they must not mutate bookings, update calendar, or change `/api/customer-saved-bookings`.",
   "The customer portal saved-bookings adapter must keep using the guarded read endpoint with `cache: \"no-store\"`, `credentials: \"same-origin\"`, and the customer saved-bookings purpose header without manual Cookie, Authorization, customer session-token, or admin headers.",
   "Customer saved-booking API and adapter output must stay limited to the approved saved-booking record fields and must exclude customer price, driver payout, PayNow payout, billing, invoice/payment/PDF, internal finance/admin notes, parser/debug, secrets/tokens, provider/send, notification payloads, live location/photo, and mock QA/dev archive fields.",
   "This guard coordinates the customer portal saved-bookings adapter contract, customer saved-bookings API contract, public API response privacy guard, and public API client caller guard in the preactivation suite.",
@@ -265,22 +268,43 @@ const editHandlerBlock = blockBetween(
 );
 assertIncludes(
   editHandlerBlock,
-  "Edit request noted for review. ${companyName} staff will confirm before anything changes.",
-  "/my-bookings local edit review feedback",
+  "${companyName} staff must review and confirm before the booking or calendar changes.",
+  "/my-bookings edit review feedback",
 );
 assertExcludes(editHandlerBlock, /\bfetch\s*\(|loadCustomerPortalSavedBookings|submitCustomerBookingRequest|new Request\(/, "/my-bookings edit handler API call");
 
 const cancelHandlerBlock = blockBetween(
   portalPage,
   "function handleCancelRequest(booking: CustomerPortalBooking)",
-  "async function downloadPortalInvoice",
-).replace("async function downloadPortalInvoice", "");
+  "function updateChangeRequestDraftField",
+).replace("function updateChangeRequestDraftField", "");
 assertIncludes(
   cancelHandlerBlock,
-  "Cancel request noted for review. Your booking is not cancelled until ${companyName} confirms.",
-  "/my-bookings local cancel review feedback",
+  "Your booking is not cancelled until ${companyName} confirms.",
+  "/my-bookings cancel review feedback",
 );
 assertExcludes(cancelHandlerBlock, /\bfetch\s*\(|loadCustomerPortalSavedBookings|submitCustomerBookingRequest|new Request\(/, "/my-bookings cancel handler API call");
+
+const submitChangeRequestBlock = blockBetween(
+  portalPage,
+  "async function submitCustomerBookingChangeRequest",
+  "async function downloadPortalInvoice",
+);
+for (const fragment of [
+  "submitCustomerPortalBookingChangeRequest",
+  "bookingReference",
+  "requestKind: changeRequestDraft.requestKind",
+  "requestedPickupDate: changeRequestDraft.requestedPickupDate",
+  "requestedPickupLocation: changeRequestDraft.requestedPickupLocation.trim()",
+  "requestedDropoffLocation: changeRequestDraft.requestedDropoffLocation.trim()",
+]) {
+  assertIncludes(submitChangeRequestBlock, fragment, `/my-bookings change request submit ${fragment}`);
+}
+assertExcludes(
+  submitChangeRequestBlock,
+  /\bfetch\s*\(|new Request\(|\/api\/admin|\/api\/customer-saved-bookings/i,
+  "/my-bookings change request direct API call",
+);
 
 for (const fragment of [
   'data-customer-portal-request-edit={booking.id}',
@@ -358,6 +382,29 @@ for (const fragment of [
 }
 assertExcludes(portalAdapter, /x-prestige-customer-session-token|Authorization|authorization|Cookie|cookie|x-prestige-admin-purpose/, "customer portal adapter manual auth/admin headers");
 assertExcludes(portalAdapter, /\.(?:insert|upsert|delete|update|rpc)\s*\(/, "customer portal adapter write/query methods");
+
+for (const fragment of [
+  "customerPortalBookingChangeRequestsApiPath",
+  "/api/customer-booking-change-requests",
+  'cache: "no-store"',
+  'credentials: "same-origin"',
+  '"x-prestige-customer-purpose": "customer-booking-change-request"',
+  "calendarUpdate: false",
+  "crmUpdate: false",
+  "externalSend: false",
+]) {
+  assertIncludes(portalChangeRequestAdapter, fragment, `customer portal change request adapter ${fragment}`);
+}
+assertExcludes(
+  portalChangeRequestAdapter,
+  /x-prestige-customer-session-token|Authorization|authorization|Cookie|cookie|x-prestige-admin-purpose/i,
+  "customer portal change request adapter manual auth/admin headers",
+);
+assertExcludes(
+  portalChangeRequestAdapter,
+  /\.(?:insert|upsert|delete|update|rpc)\s*\(/,
+  "customer portal change request adapter database methods",
+);
 
 assertSameList(extractSetItems(savedBookingsRead, "allowedQueryParams"), allowedQueryParams, "customer saved bookings query params");
 assertIncludes(

@@ -12,6 +12,17 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Customer Booking Change Request Review Wire
+
+- Customer portal saved bookings now wire the existing `Edit` and `Cancel` row buttons into a compact customer-safe review request form instead of local-only feedback.
+- `POST /api/customer-booking-change-requests` is the only new public write route. It requires same-origin `/my-bookings` referer, `x-prestige-customer-purpose: customer-booking-change-request`, the existing customer saved-bookings session/runtime boundary, and a booking reference that belongs to the active customer account.
+- The customer route verifies the target booking through `loadCustomerSavedBookings`; completed, cancelled, declined, or out-of-account bookings fail closed.
+- Successful requests create one internal `admin_app` inbox item with workflow area `customer_booking_change_request`, booking reference, passenger, current safe trip fields, and requested safe date/time/pickup/drop-off/note values.
+- The customer response does not expose the internal admin inbox id and explicitly reports `crm_update: false`, `calendar_update: false`, and `external_send: false`.
+- The customer route does not mutate bookings, does not update Google Calendar, and does not create duplicate billing, invoice, PDF, payment, payout, provider, SMS, WhatsApp, Telegram, GPS/live-location, parser, or admin saved-booking behavior.
+- Admin App Notifications now show compact request details for customer booking change requests inside the existing admin inbox. Admin still reviews the request, loads the booking, applies approved edits, and uses the existing `Update + Cal` path to update the saved booking and existing calendar event.
+- Guard coverage lives in `scripts/test-customer-booking-change-request-review-guard.mjs`; related public portal/runtime/privacy guards were updated to allow only this approved review wire while preserving the saved-bookings read boundary.
+
 ### Live Billing Rehearsal And Cleanup Closeout
 
 - On 2026-07-02 14:29 SGT, the fresh visible Mac Chrome production billing rehearsal passed on `https://app.prestigelimo.sg` after the service-change price review runtime was live at `4aaacd88`.
@@ -2400,12 +2411,12 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No env change, DB write, migration, provider/send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/button/card addition, or new shim was included.
 
 ### Public Customer Portal Saved-Booking Surface Guard Lock
-- Public customer portal saved-booking display/action surfaces are guarded across `/my-bookings`, `lib/customer-portal-saved-bookings-adapter.ts`, and `lib/customer-saved-bookings-read.ts`.
-- This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.
+- Public customer portal saved-booking display/action surfaces are guarded across `/my-bookings`, `lib/customer-portal-saved-bookings-adapter.ts`, `lib/customer-portal-booking-change-request-adapter.ts`, and `lib/customer-saved-bookings-read.ts`.
+- This guard allows only the approved customer booking change-request review write; it does not approve env changes, deployment by CLI, live provider sends, migrations, direct customer booking mutation, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/GPS activation, UI sectors, or new shims.
 - `/my-bookings` saved-booking rows must render only customer-safe status, passenger, pickup/drop-off, service, vehicle, date/time, flight, and optional request-note display fields.
-- `/my-bookings` saved-booking actions must stay limited to disabled PDF, local edit-review feedback, local cancel-review feedback, and local detail expansion.
+- `/my-bookings` saved-booking actions must stay limited to disabled PDF, customer-safe edit/cancel review request form, and local detail expansion.
 - The customer PDF control must remain disabled/no-op and must not create files, links, downloads, invoices, payment records, or provider sends.
-- Edit and cancel controls must remain local review requests only and must not call APIs, mutate bookings, submit forms, or change `/api/customer-saved-bookings`.
+- Edit and cancel controls may submit only through `lib/customer-portal-booking-change-request-adapter.ts` to `/api/customer-booking-change-requests`; they must not mutate bookings, update calendar, or change `/api/customer-saved-bookings`.
 - The customer portal saved-bookings adapter must keep using the guarded read endpoint with `cache: "no-store"`, `credentials: "same-origin"`, and the customer saved-bookings purpose header without manual Cookie, Authorization, customer session-token, or admin headers.
 - Customer saved-booking API and adapter output must stay limited to the approved saved-booking record fields and must exclude customer price, driver payout, PayNow payout, billing, invoice/payment/PDF, internal finance/admin notes, parser/debug, secrets/tokens, provider/send, notification payloads, live location/photo, and mock QA/dev archive fields.
 - This guard coordinates the customer portal saved-bookings adapter contract, customer saved-bookings API contract, public API response privacy guard, and public API client caller guard in the preactivation suite.
@@ -2433,7 +2444,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Chrome process stderr emitted non-app background lines: DevTools listening, allocator warning, GCM `DEPRECATED_ENDPOINT`, TensorFlow Lite delegate creation, and GoogleUpdater/Crashpad noise; these were not page console/runtime exceptions and did not come from an app POST/write/send request.
 - Screenshot captured: false.
 - The public customer portal saved-booking surface guard remains docs/test-only/read-only and does not approve endpoint migration.
-- `/my-bookings` saved-booking display/actions remain guarded to customer-safe fields, disabled PDF no-op, local edit-review feedback, local cancel-review feedback, and local detail expansion.
+- `/my-bookings` saved-booking display/actions remain guarded to customer-safe fields, disabled PDF no-op, customer-safe edit/cancel review request form, and local detail expansion.
 - The customer portal saved-bookings adapter remains guarded on `cache: "no-store"`, `credentials: "same-origin"`, and the customer saved-bookings purpose header without manual Cookie, Authorization, customer session-token, or admin headers.
 - Customer saved-booking API and adapter output remains limited to the approved saved-booking record fields and excludes customer price, driver payout, PayNow payout, billing, invoice/payment/PDF, internal finance/admin notes, parser/debug, secrets/tokens, provider/send, notification payloads, live location/photo, and mock QA/dev archive fields.
 - Save Booking + CRM remains on `POST /api/admin-bookings`.

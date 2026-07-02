@@ -88,6 +88,21 @@ export type CustomerBookingRequestAdminAppNotificationInput = {
   booking_reference: string | null;
 };
 
+export type CustomerBookingChangeRequestAdminAppNotificationInput = {
+  booking_reference: string | null;
+  current_dropoff_location: string | null;
+  current_pickup_at: string | null;
+  current_pickup_location: string | null;
+  current_service_type: string | null;
+  passenger_name: string | null;
+  request_kind: "amendment" | "cancellation";
+  request_note: string | null;
+  requested_dropoff_location: string | null;
+  requested_pickup_date: string | null;
+  requested_pickup_location: string | null;
+  requested_pickup_time: string | null;
+};
+
 export type AdminAppNotificationPagination = {
   has_next_page: boolean;
   has_previous_page: boolean;
@@ -1040,6 +1055,78 @@ export async function createCustomerBookingRequestAdminAppNotification(
   const payload = {
     ...parsed.data,
     actor_label: "customer-booking-request",
+    actor_role: "system",
+    delivery_surface: "admin_app",
+    source_surface: "system",
+    updated_at: new Date().toISOString(),
+  };
+  const { data, error } = await clientResult.data
+    .from("admin_app_notification_outbox")
+    .insert(payload)
+    .select(notificationSelect)
+    .single();
+
+  if (error) {
+    return safeAdapterFailure(safeNotificationCreateError, 500, error);
+  }
+
+  return {
+    data: normalizeNotificationRecord(asRecord(data)),
+    ok: true,
+  };
+}
+
+export async function createCustomerBookingChangeRequestAdminAppNotification(
+  input: CustomerBookingChangeRequestAdminAppNotificationInput,
+): Promise<AdminBookingResult<AdminAppNotificationRecord>> {
+  const bookingReference = optionalSafeText(input.booking_reference, maxBookingReferenceLength);
+  const requestKind = input.request_kind === "cancellation" ? "cancellation" : "amendment";
+  const requestLabel = requestKind === "cancellation" ? "Cancellation" : "Amendment";
+  const parsed = parseAdminAppNotificationCreatePayload({
+    booking_reference: bookingReference,
+    event_key: [
+      "booking-change-request",
+      requestKind,
+      String(bookingReference || "unassigned").replace(/[^A-Za-z0-9._:-]+/g, "-"),
+      Date.now(),
+    ].join("-"),
+    notification_status: "queued",
+    notification_type: "booking_workflow",
+    priority: "high",
+    safe_context: {
+      current_dropoff_location: input.current_dropoff_location || "not_provided",
+      current_pickup_at: input.current_pickup_at || "not_provided",
+      current_pickup_location: input.current_pickup_location || "not_provided",
+      current_service_type: input.current_service_type || "not_provided",
+      passenger_name: input.passenger_name || "not_provided",
+      request_kind: requestKind,
+      request_note: input.request_note || "not_provided",
+      requested_dropoff_location: input.requested_dropoff_location || "not_requested",
+      requested_pickup_date: input.requested_pickup_date || "not_requested",
+      requested_pickup_location: input.requested_pickup_location || "not_requested",
+      requested_pickup_time: input.requested_pickup_time || "not_requested",
+      surface: "customer_booking_change_request",
+      workflow_area: "customer_booking_change_request",
+    },
+    safe_message:
+      `${requestLabel} request received. Load the booking, review the requested values, then use Update + Cal only after approval.`,
+    safe_title: "Customer booking change request",
+    workflow_area: "customer_booking_change_request",
+  });
+
+  if (!parsed.ok) {
+    return parsed;
+  }
+
+  const clientResult = getServerOnlySystemNotificationSupabaseClient();
+
+  if (!clientResult.ok) {
+    return clientResult;
+  }
+
+  const payload = {
+    ...parsed.data,
+    actor_label: "customer-booking-change-request",
     actor_role: "system",
     delivery_surface: "admin_app",
     source_surface: "system",

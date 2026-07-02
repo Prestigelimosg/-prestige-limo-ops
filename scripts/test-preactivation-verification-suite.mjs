@@ -326,6 +326,10 @@ const guardChecks = [
     script: "scripts/test-public-customer-portal-saved-booking-surface-guard.mjs",
   },
   {
+    label: "customer booking change request review guard",
+    script: "scripts/test-customer-booking-change-request-review-guard.mjs",
+  },
+  {
     label: "Customer Portal saved-bookings authenticated read evidence contract guard",
     script: "scripts/test-customer-portal-saved-bookings-read-evidence-contract-guard.mjs",
   },

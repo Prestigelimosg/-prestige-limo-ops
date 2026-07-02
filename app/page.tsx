@@ -21521,8 +21521,8 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       }
 
       return (
-        normaliseTimeForSort(firstBooking.pickup_time) -
-        normaliseTimeForSort(secondBooking.pickup_time)
+        normaliseTimeForSort(formatPickupTimeFromRecord(firstBooking)) -
+        normaliseTimeForSort(formatPickupTimeFromRecord(secondBooking))
       );
     });
   function getActiveJobBookingReference(bookingRecord: BookingRecord) {
@@ -21673,7 +21673,11 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               activeJobRoutePoints[activeJobRoutePoints.length - 1] ||
               clean(activeJobBooking.dropoff_address) ||
               "Drop-off";
-            const activeJobDriver = clean(activeJobBooking.driver_name) || "Driver TBC";
+            const activeJobPickupTime = formatPickupTimeFromRecord(activeJobBooking);
+            const activeJobDriver =
+              clean(activeJobBooking.driver_name) ||
+              (isSelectedActiveJob ? clean(booking.driverName) : "") ||
+              "Driver TBC";
             const activeJobDriverStatusReadState =
               activeJobBookingReference &&
               isSelectedActiveJob &&
@@ -21721,7 +21725,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                     <p className="truncate text-xs text-lime-800">
                       {formatPickupDateTime(
                         getBookingDateKey(activeJobBooking),
-                        activeJobBooking.pickup_time,
+                        activeJobPickupTime,
                       )}
                     </p>
                   </div>

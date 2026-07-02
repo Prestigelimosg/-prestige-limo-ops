@@ -167,6 +167,8 @@ assertIncludes(
 
 for (const fragment of [
   "bookingRecordIsInsideActiveJobMonitorWindow(bookingRecord, currentTimeMs)",
+  "normaliseTimeForSort(formatPickupTimeFromRecord(firstBooking))",
+  "normaliseTimeForSort(formatPickupTimeFromRecord(secondBooking))",
   "const dayOfTripActiveJobVisibleBookings = dayOfTripActiveJobBookings;",
   "const activeJobsMapAllowedReferenceKey = adminActiveJobsMapReadState.allowedBookingReferences.join(\"|\");",
   'const todayJobsMonitorIsActive = activeTab === "dashboard" || activeTab === "dispatch";',
@@ -180,6 +182,8 @@ for (const fragment of [
   "{dayOfTripActiveJobBookings.length} in window",
   "inside the 1-hour pickup monitor window",
   "Auto-refresh 10s {dashboardDriverJobAutoRefreshEnabled ? \"On\" : \"Off\"}",
+  "const activeJobPickupTime = formatPickupTimeFromRecord(activeJobBooking);",
+  "(isSelectedActiveJob ? clean(booking.driverName) : \"\")",
   'data-dashboard-live-driver-map="true"',
   "Open live map",
   "Refresh map",

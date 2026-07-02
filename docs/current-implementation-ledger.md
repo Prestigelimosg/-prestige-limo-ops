@@ -91,6 +91,11 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Active unbilled detection keeps the exact archived test booking reference suppressed without counting the archived invoice as an active issued billing document, so the old acceptance artifact does not return to daily unbilled work or inflate active invoice totals.
 - No DB schema change, raw SQL, Supabase CLI, Vercel CLI, Stripe/payment, payout, provider, email, SMS, WhatsApp, Telegram, GPS/live-location, booking, or calendar behavior changed.
 - Guard coverage lives in `scripts/test-customer-invoice-test-artifact-archive-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+- On 2026-07-02 17:27 SGT, visible Mac Chrome production proof on `https://app.prestigelimo.sg/customers` showed `INV-20260702-0001` as `Unpaid Stored` with the compact `Archive` action only on that exact row. The confirmation dialog explicitly named `INV-20260702-0001` / `ADM-20260702061357` and stated the record would be hidden from active billing and the customer portal without deleting it.
+- After confirming, the active Billing Documents list removed `INV-20260702-0001` and the visible count changed from `1-5 of 13` to `1-5 of 12`; Unbilled Customers remained at `0` rows.
+- Read-only production API proof immediately after archive returned `INV-20260702-0001` with reference `ADM-20260702061357`, customer id `64`, amount `5500` cents, status `Unpaid`, document type `invoice`, document state `draft`, and archive reason present. The historical invoice email status remained `sent`; no new email was sent.
+- Because customer invoice and customer PDF portal reads require issued stored records, the archived `draft` test artifact is no longer customer-portal/PDF visible.
+- The live cleanup did not delete invoice/booking rows, mark the invoice paid, create a credit note, send email/WhatsApp/SMS/Telegram/provider messages, charge Stripe/payment, create payout activity, change env, change DB schema, use Vercel CLI, or touch GPS/live-location.
 
 ### Save + CRM Billing Identity Review
 

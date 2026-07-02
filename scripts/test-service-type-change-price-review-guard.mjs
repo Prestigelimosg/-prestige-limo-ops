@@ -6,6 +6,7 @@ const customersPagePath = "app/customers/page.tsx";
 const portalPagePath = "app/my-bookings/page.tsx";
 const bookPagePath = "app/book/page.tsx";
 const hourlyHelperPath = "lib/hourly-billing.ts";
+const pricingPath = "lib/pricing.ts";
 const billablePriceReviewPath = "lib/admin-monthly-invoice-billable-item-price-review-persistence.ts";
 
 function assertIncludes(source, fragment, label = fragment) {
@@ -30,13 +31,14 @@ function sectionBetween(source, startFragment, endFragment) {
   return source.slice(start, end);
 }
 
-const [appPage, customersPage, portalPage, bookPage, hourlyHelper, billablePriceReview] =
+const [appPage, customersPage, portalPage, bookPage, hourlyHelper, pricing, billablePriceReview] =
   await Promise.all([
     readFile(appPagePath, "utf8"),
     readFile(customersPagePath, "utf8"),
     readFile(portalPagePath, "utf8"),
     readFile(bookPagePath, "utf8"),
     readFile(hourlyHelperPath, "utf8"),
+    readFile(pricingPath, "utf8"),
     readFile(billablePriceReviewPath, "utf8"),
   ]);
 
@@ -69,6 +71,11 @@ const invoiceIssuePanel = sectionBetween(
   customersPage,
   'data-customer-invoice-issue-panel="true"',
   'data-customer-invoice-draft-list="true"',
+);
+const pricingNormalizeSection = sectionBetween(
+  pricing,
+  "export function normalizeBookingType",
+  "export function isMidnightPickup",
 );
 
 for (const fragment of [
@@ -152,6 +159,19 @@ for (const fragment of [
   "16 minutes or more starts the next chargeable hour",
 ]) {
   assertIncludes(hourlyHelper, fragment, `hourly billing helper fragment ${fragment}`);
+}
+
+for (const fragment of [
+  'bookingType === "MNG"',
+  "HOURLY|DISPOSAL|STANDBY",
+  "POINT\\s*TO\\s*POINT",
+  "AIRPORT\\s+DROP",
+  "MEET\\s*(?:AND|&)\\s*GREET",
+  'return "DSP";',
+  'return "DEP";',
+  'return "TRF";',
+]) {
+  assertIncludes(pricingNormalizeSection, fragment, `shared pricing service alias fragment ${fragment}`);
 }
 
 for (const [label, source] of [

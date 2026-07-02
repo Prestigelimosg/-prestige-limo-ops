@@ -143,8 +143,24 @@ function normalizePickupTimeForStorage(value: string | null | undefined) {
 export function normalizeBookingType(value: string | null | undefined): BookingType {
   const bookingType = clean(value).toUpperCase();
 
-  if (bookingType === "DEP" || bookingType === "TRF" || bookingType === "DSP") {
+  if (bookingType === "DEP" || bookingType === "TRF" || bookingType === "DSP" || bookingType === "MNG") {
     return bookingType;
+  }
+
+  if (/\b(?:HOURLY|DISPOSAL|STANDBY|WAIT\s+\d+\s*(?:HOURS?|HRS?))\b/.test(bookingType)) {
+    return "DSP";
+  }
+
+  if (/\b(?:DEP|DEPARTURE|DEPART|AIRPORT\s+DROP|DROP\s*OFF\s+(?:AT\s+)?AIRPORT|TO\s+AIRPORT)\b/.test(bookingType)) {
+    return "DEP";
+  }
+
+  if (/\b(?:TRF|TRANSFER|POINT\s*TO\s*POINT|CITY\s+TRANSFER)\b/.test(bookingType)) {
+    return "TRF";
+  }
+
+  if (/\b(?:MNG|ARRIVAL|ARRIVING|MEET\s*(?:AND|&)\s*GREET|AIRPORT\s+PICK)\b/.test(bookingType)) {
+    return "MNG";
   }
 
   return "MNG";

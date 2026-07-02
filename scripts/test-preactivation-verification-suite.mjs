@@ -791,8 +791,8 @@ const guardChecks = [
     script: "scripts/test-telegram-internal-admin-alert-no-live-guard.mjs",
   },
   {
-    label: "Telegram provider no-send approval packet guard",
-    script: "scripts/test-telegram-provider-no-send-approval-packet.mjs",
+    label: "Telegram internal admin alert live-send guard",
+    script: "scripts/test-telegram-internal-admin-alert-live-send-guard.mjs",
   },
   {
     label: "Telegram True Live Location evidence contract guard",

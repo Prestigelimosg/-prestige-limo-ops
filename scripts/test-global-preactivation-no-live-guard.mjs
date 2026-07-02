@@ -45,6 +45,10 @@ const separatelyGuardedPostRouteFiles = new Map([
     "app/api/admin-customer-driver-details-email-send-action/route.ts",
     "scripts/test-admin-customer-driver-details-email-send-action-api-contract.mjs",
   ],
+  [
+    "app/api/admin-telegram-internal-admin-alert-send/route.ts",
+    "scripts/test-telegram-internal-admin-alert-live-send-guard.mjs",
+  ],
 ]);
 const separatelyGuardedRuntimeRouteFiles = new Map([
   [

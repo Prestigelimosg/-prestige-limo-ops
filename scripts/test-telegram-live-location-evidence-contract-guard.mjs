@@ -94,7 +94,7 @@ for (const phrase of [
   "No DB persistence is approved unless separately approved with table/RLS proof.",
   "Customer-facing Telegram live-location evidence must not expose pricing, payout, PayNow, payout preferences, `driver_payout_rules`, `customer_rates`, payment/PDF/billing, invoice content, internal/admin notes, parser/debug fields, secrets/tokens, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, auth/session/cookie/JWT values, or OTS photo/storage data unless separately approved.",
   "Telegram live location must remain separate from Customer/Driver Auth activation, OTS photo/storage, calendar, billing/payment/PDF, pricing/rates/customer_rates, `driver_payout_rules`, payout execution, Email/WhatsApp/SMS sends, FlightAware live lookup, parser, Save Booking, `/api/admin-saved-bookings`, UI sector/card/button expansion, shims, and production activation.",
-  "Current Telegram surfaces remain setup-only/no-live and current live-location surfaces remain setup-only/disabled.",
+  "Current Telegram live-location surfaces remain setup-only/no-live and current live-location surfaces remain setup-only/disabled.",
   "No true live-location route/helper exists and no driver GPS source exists for true live location in this lane.",
   "WhatsApp remains a later phase.",
   "Email remains driver-details and admin-selected secure tracking link only; Email must not do native/streaming live location.",

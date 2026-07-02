@@ -79,6 +79,8 @@ const adminSmsCustomerDriverDetailsSendDisabledApiPath =
   "/api/admin-sms-customer-driver-details-send-disabled-setup";
 const adminEmailActivationPreflightApiPath =
   "/api/admin-email-activation-preflight-setup";
+const adminTelegramInternalAdminAlertSendApiPath =
+  "/api/admin-telegram-internal-admin-alert-send";
 const adminCustomerDriverAppNotificationsApiPath =
   "/api/admin-customer-driver-app-notifications";
 const adminCompaniesCrmIdentityApiPath = "/api/admin-companies-crm-identity";
@@ -2448,7 +2450,7 @@ const replacementDriverActions = [
 ];
 
 const telegramAlertPreviewSafetyText =
-  "Mock/local only. Does not send Telegram, WhatsApp, SMS, or email. Does not update booking, driver status, Supabase, notification logs, or customer/driver records.";
+  "Mock preview stays local. Internal Telegram test sends only through the server env gate and approved chat allowlist. It does not send WhatsApp, SMS, or email, and does not update booking, driver status, Supabase, notification logs, or customer/driver records.";
 
 const telegramAlertPreviewTemplates = [
   {
@@ -10376,6 +10378,8 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     useState<TelegramAlertPreviewType>("assignment");
   const [telegramAlertPreviewFeedback, setTelegramAlertPreviewFeedback] =
     useState<Message | null>(null);
+  const [sendingTelegramInternalAdminAlert, setSendingTelegramInternalAdminAlert] =
+    useState(false);
   const [loadingDrivers, setLoadingDrivers] = useState(false);
   const [loadingDriverAssignmentDisplay, setLoadingDriverAssignmentDisplay] = useState(false);
   const [savingDriverProfile, setSavingDriverProfile] = useState(false);
@@ -17268,6 +17272,59 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       text: "Mock only — no Telegram message sent.",
       tone: "success",
     });
+  }
+
+  async function sendTelegramInternalAdminTestAlert() {
+    setSendingTelegramInternalAdminAlert(true);
+    setTelegramAlertPreviewFeedback({
+      text: "Sending internal Telegram test...",
+      tone: "info",
+    });
+
+    try {
+      const response = await fetch(adminTelegramInternalAdminAlertSendApiPath, {
+        body: JSON.stringify({
+          action_source: "admin_dashboard_telegram_panel",
+          booking_reference: "TELEGRAM-TEST",
+          confirm_send: "approved_internal_admin_test",
+          event_type: "urgent_review_required",
+          safe_message:
+            "Internal admin Telegram test from Prestige Limo Ops. No booking, driver status, or customer record was changed.",
+          safe_title: "Prestige Telegram internal test",
+        }),
+        cache: "no-store",
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "POST",
+      });
+      const result = await response.json().catch(() => null);
+
+      if (response.ok && result?.ok === true && result?.status === "sent") {
+        setTelegramAlertPreviewFeedback({
+          text: "Telegram internal admin test sent.",
+          tone: "success",
+        });
+      } else {
+        setTelegramAlertPreviewFeedback({
+          text:
+            result?.reason === "env_gate_closed" ||
+            result?.reason === "provider_not_configured" ||
+            result?.reason === "chat_not_allowlisted"
+              ? "Telegram not sent. Configure the server env gate, bot token, and allowlisted chat first."
+              : "Telegram internal admin test was not sent.",
+          tone: "error",
+        });
+      }
+    } catch {
+      setTelegramAlertPreviewFeedback({
+        text: "Telegram internal admin test failed safely.",
+        tone: "error",
+      });
+    } finally {
+      setSendingTelegramInternalAdminAlert(false);
+    }
   }
 
   async function copyDraftDriverDispatch() {
@@ -31412,7 +31469,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   className="cursor-pointer list-none text-sm font-semibold text-sky-950"
                   data-telegram-alert-title="true"
                 >
-                  Telegram Alert Preview — Mock Only
+                  Telegram Internal Admin Alert
                 </summary>
                 <div className="mt-2 mb-3 flex flex-col gap-1">
                   <p
@@ -31449,6 +31506,15 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                         type="button"
                       >
                         Generate Mock Preview
+                      </button>
+                      <button
+                        className="min-h-10 w-full rounded-md border border-emerald-300 bg-white px-3 py-2 text-left text-sm font-semibold text-emerald-900 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-70"
+                        data-telegram-alert-send-test="true"
+                        disabled={sendingTelegramInternalAdminAlert}
+                        onClick={sendTelegramInternalAdminTestAlert}
+                        type="button"
+                      >
+                        {sendingTelegramInternalAdminAlert ? "Sending Test" : "Send Internal Test"}
                       </button>
                       {telegramAlertPreviewFeedback ? (
                         <p
@@ -32492,7 +32558,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
 
                     return (
                       <button
-                        className={`min-h-8 rounded px-2.5 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${
+                        className={`min-h-9 rounded px-2.5 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${
                           isSelected
                             ? "bg-lime-700 text-white"
                             : "bg-white text-lime-950 hover:bg-lime-100"
@@ -32504,7 +32570,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                         disabled={isDisabled}
                         key={option.value}
                         onClick={() => setDayOfTripDispatchMonitorStatus(option.value)}
-                        style={{ minHeight: 32, minWidth: 70 }}
+                        style={{ minHeight: 36, minWidth: 72 }}
                         type="button"
                       >
                         {option.label}

@@ -376,9 +376,9 @@ function isBlockedTelegramPreviewBrowserRequest(url) {
     !telegramPreviewAllowedSetupOnlyCallPattern.test(url)
   );
 }
-const telegramAlertPreviewTitle = "Telegram Alert Preview — Mock Only";
+const telegramAlertPreviewTitle = "Telegram Internal Admin Alert";
 const telegramAlertPreviewSafetyText =
-  "Mock/local only. Does not send Telegram, WhatsApp, SMS, or email. Does not update booking, driver status, Supabase, notification logs, or customer/driver records.";
+  "Mock preview stays local. Internal Telegram test sends only through the server env gate and approved chat allowlist. It does not send WhatsApp, SMS, or email, and does not update booking, driver status, Supabase, notification logs, or customer/driver records.";
 const telegramAlertPreviewOptions = [
   "New driver job assignment",
   "Driver acknowledgement reminder",
@@ -398,7 +398,7 @@ const telegramBoundaryBrowserExpression = String.raw`(async () => {
   const telegramPreviewUiPattern =
     /telegram\s+alert\s+preview|telegram\s+mock(?:\/log)?(?:-only)?\s+preview|mock(?:\/log)?(?:-only)?\s+telegram\s+(?:alert\s+)?preview|telegram\s+(?:send|test|preview)\b|(?:send|test|preview)\s+telegram\b/i;
   const telegramPreviewStoragePattern =
-    /Telegram Alert Preview|MOCK-JOB-042|secure job link placeholder|Mock only — no Telegram message sent|Mock\/local only\. Does not send Telegram/i;
+    /Telegram Internal Admin Alert|MOCK-JOB-042|secure job link placeholder|Mock only — no Telegram message sent|Mock preview stays local/i;
   const telegramPreviewForbiddenControlPattern =
     /send\s*(?:telegram)?|test\s*(?:send|telegram)|telegram\s*send|sendmessage|getupdates/i;
   const controlText = (element) =>
@@ -492,7 +492,12 @@ const telegramBoundaryBrowserExpression = String.raw`(async () => {
     telegramMockPreview: {
       boundary: telegramPreviewSection?.querySelector("[data-telegram-alert-boundary]")?.textContent.trim() || "",
       feedback: telegramPreviewSection?.querySelector("[data-telegram-alert-feedback]")?.textContent.trim() || "",
-      forbiddenControls: previewControls.filter((value) => telegramPreviewForbiddenControlPattern.test(value)),
+      forbiddenControls: previewControls.filter(
+        (value) =>
+          telegramPreviewForbiddenControlPattern.test(value) &&
+          value !== "Send Internal Test" &&
+          value !== "Sending Test",
+      ),
       message: telegramPreviewSection?.querySelector("[data-telegram-alert-message]")?.textContent.trim() || "",
       options: telegramPreviewSection
         ? [...telegramPreviewSection.querySelectorAll("[data-telegram-alert-type] option")].map((option) =>
@@ -2181,7 +2186,8 @@ async function runChromeTest() {
             const calls = window.__adminBookingPersistenceCalls || [];
             const postCall = calls.find((call) => call.method === "POST");
             const body = postCall?.body;
-            if (!feedback.includes("Operational booking saved") || !body) {
+            const loadButton = document.querySelector("[data-admin-booking-persistence-load]");
+            if (!feedback.includes("Operational booking saved") || !body || loadButton?.disabled) {
               return false;
             }
 
@@ -2208,6 +2214,7 @@ async function runChromeTest() {
               callCount: calls.length,
               feedback,
               forbiddenKeys: keys.filter((key) => forbiddenKeyPattern.test(key)),
+              loadEnabled: !loadButton?.disabled,
               recordVisible: Boolean(document.querySelector("[data-admin-booking-persistence-records]")),
             };
           })()`),
@@ -2512,7 +2519,29 @@ async function runChromeTest() {
           };
         })()`);
 
-      const requestSearchBaseline = await collectAdminSnapshotFilterState();
+      const waitForAdminBookingPersistenceGetCallsSettled = async () => {
+        let previousGetCalls = -1;
+        let stableReads = 0;
+
+        return waitForCondition(
+          async () => {
+            const state = await collectAdminSnapshotFilterState();
+
+            if (state.getCalls === previousGetCalls) {
+              stableReads += 1;
+            } else {
+              previousGetCalls = state.getCalls;
+              stableReads = 0;
+            }
+
+            return stableReads >= 2 ? state : false;
+          },
+          10000,
+          "admin booking persistence background GET calls settled",
+        );
+      };
+
+      const requestSearchBaseline = await waitForAdminBookingPersistenceGetCallsSettled();
       assert.equal(
         await setAdminCustomerRequestSearch("Loaded Ops Stop"),
         true,
@@ -6669,18 +6698,17 @@ async function runChromeTest() {
           `${viewport.label}: expected saved driver status readout to stay readable`,
         );
         for (const expectedBoundaryText of [
-          "Local UI only.",
-          "No Supabase write",
-          "live database access",
-          "notification sending",
+          "Saved driver status reads use the guarded admin driver-status API.",
+          "Live location uses only the",
+          "selected admin/driver live-location gates above.",
           "customer message",
-          "driver notification",
+          "provider notification",
           "billing",
           "payment",
           "PDF",
           "payout",
-          "live location",
           "parser-learning",
+          "broad tracking behavior",
         ]) {
           assert.equal(
             state.boundary.includes(expectedBoundaryText),
@@ -25423,7 +25451,12 @@ async function runChromeTest() {
             fileInputs: [...(section?.querySelectorAll("input[type='file']") || [])].map((input) =>
               input.getAttribute("name") || input.id || "file",
             ),
-            forbiddenControls: controls.filter((value) => forbiddenControlPattern.test(value)),
+            forbiddenControls: controls.filter(
+              (value) =>
+                forbiddenControlPattern.test(value) &&
+                value !== "Send Internal Test" &&
+                value !== "Sending Test",
+            ),
             message: section?.querySelector("[data-telegram-alert-message]")?.textContent.trim() || "",
             options: [...(section?.querySelectorAll("[data-telegram-alert-type] option") || [])].map((option) =>
               option.textContent.trim(),
@@ -25470,7 +25503,7 @@ async function runChromeTest() {
             ...(await readIndexedDbNames()),
           ];
           const previewPattern =
-            /Telegram Alert Preview|MOCK-JOB-042|secure job link placeholder|Mock only — no Telegram message sent/i;
+            /Telegram Internal Admin Alert|MOCK-JOB-042|secure job link placeholder|Mock only — no Telegram message sent/i;
 
           return {
             cookieLeaks: (document.cookie ? document.cookie.split(";").map((value) => value.trim()) : []).filter(
@@ -25612,8 +25645,8 @@ async function runChromeTest() {
       );
       assert.deepEqual(
         initialState.buttonLabels,
-        ["Generate Mock Preview"],
-        "Expected only the local mock preview action",
+        ["Generate Mock Preview", "Send Internal Test"],
+        "Expected the local mock preview action plus the env-gated internal Telegram test action",
       );
       assert.deepEqual(
         initialState.forbiddenControls,

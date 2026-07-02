@@ -3406,15 +3406,20 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No SMTP/provider SDK/API activation, live send, DB read/write, migration, Save Booking + CRM change, `/api/admin-saved-bookings` change, parser change, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/card, or new shim is included.
 - Focused coverage: `node scripts/test-admin-email-activation-preflight-setup-api-contract.mjs`.
 
-## Telegram Pre-Activation Completion Audit Lock
+## Telegram Internal Admin Alert Live Send Activation Lock
 
-- Telegram internal admin alerts are complete up to the activation stop.
-- Setup foundation is done.
-- Preview/readiness API is done.
-- Disabled send API is done.
-- Send audit payload setup foundation is done.
-- Telegram no-live guard is done.
-- Live bot token/env/Telegram API/send activation remains blocked until explicit approval.
+- Approval status: approved by William from Codex mobile for internal-admin Telegram activation.
+- Telegram internal admin alerts now have one bounded live-send path: `POST /api/admin-telegram-internal-admin-alert-send`.
+- The live-send route is admin-dashboard only through the existing same-origin dispatcher boundary and `x-prestige-admin-purpose: admin-booking-persistence`.
+- Live send remains closed unless all server env gates are configured: `PRESTIGE_TELEGRAM_INTERNAL_ADMIN_ALERTS_ENABLED=true`, `PRESTIGE_TELEGRAM_BOT_TOKEN`, `PRESTIGE_TELEGRAM_INTERNAL_ADMIN_ALERTS_DEFAULT_CHAT_ID`, and `PRESTIGE_TELEGRAM_INTERNAL_ADMIN_ALERTS_CHAT_ALLOWLIST`.
+- Chat IDs are server-side only and must be numeric. The configured default chat must be present in the configured allowlist before any provider call is attempted.
+- The admin UI adds one compact `Send Internal Test` action inside the existing Telegram details panel. The browser sends only safe test text and a confirmation marker; it never receives or reads the bot token or chat ID.
+- The live sender uses Telegram Bot API `sendMessage` only, with protected content and disabled link previews, matching the official Bot API text-message method shape.
+- Provider responses are redacted: the app reports only safe status, whether a provider message id was present, and redacted chat/config booleans. It does not return the token, chat ID, Telegram URL, provider response body, or raw provider error text.
+- The existing mock preview/readiness and disabled-send setup routes remain available as setup/no-op evidence.
+- No Telegram webhook, `getUpdates`, polling, scheduler, retry loop, batch send, DB write, schema change, customer send, driver send, live-location send, payment/PDF/billing/payout, parser, Save Booking + CRM, or `/api/admin-saved-bookings` behavior is added.
+- Customer and driver pages remain free of Telegram controls, Telegram chat mapping, bot tokens, chat IDs, payout/pricing/payment/PDF, parser/debug, and internal admin/finance data.
+- Focused guard coverage: `scripts/test-telegram-internal-admin-alert-live-send-guard.mjs` plus the existing setup-route no-live guard.
 
 ## WhatsApp Pre-Activation Completion Audit Lock
 
@@ -6211,26 +6216,15 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Rollback note: keep SMS on the setup-only disabled-send route until a separate staging test is approved, guarded, and verified; if any future provider test fails, close the provider gate/env, redeploy if env changed, rotate exposed provider tokens, and restore the disabled/no-op route surface unchanged.
 - No runtime implementation, UI/API/helper behavior change, env change, deployment, DB read/write, migration, provider activation, live send, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/button/card, or new shim is approved by this packet.
 
-### Telegram Provider No-Send Approval Packet Lock
-- Approval status: pending future Telegram staging test approval.
-- This is a docs/test-only no-send approval packet guarded by `scripts/test-telegram-provider-no-send-approval-packet.mjs`.
-- Current Telegram routes remain setup-only/no-live:
+### Telegram Provider Activation Packet Supersession Lock
+- The previous Telegram no-send approval packet is superseded by the approved `Telegram Internal Admin Alert Live Send Activation Lock`.
+- The only approved live provider path is `POST /api/admin-telegram-internal-admin-alert-send`.
+- The previous setup-only routes remain no-op/readiness evidence:
   `GET /api/admin-telegram-internal-admin-alert-preview-readiness-setup` and
   `GET /api/admin-telegram-internal-admin-alert-send-disabled-setup`.
-- Current Telegram send surface remains disabled/no-op with `external_send: false`, `sendingEnabled: false`, `liveSendingEnabled: false`, and `providerConfigured: false`.
-- No provider env values are printed, required, or read by the current Telegram setup-only routes/helpers.
-- No Telegram bot token/API activation is approved.
-- No live Telegram send is approved.
-- Future staging Telegram test requires separate owner approval, secret-safe bot/env-name handling, recipient/chat allowlist, content guard, one-message test scope, and rollback/disable plan.
-- Future Telegram content must exclude pricing, payout, payment/PDF, auth, location/photo/calendar, parser/debug, internal notes, and secrets.
-- Future live/provider send wiring must not change Save Booking + CRM.
-- Future live/provider send wiring must not change `/api/admin-saved-bookings`.
-- Future live/provider send wiring must not change parser behavior or `/api/ai-parse`.
-- Future live/provider send wiring must not add UI sectors/buttons/cards.
-- Future live/provider send wiring must not add new shims.
-- Required tests before any future Telegram staging send: `node scripts/test-telegram-provider-no-send-approval-packet.mjs`, `node scripts/test-telegram-internal-admin-alert-no-live-guard.mjs`, `node scripts/test-preactivation-verification-suite.mjs`, provider env-name/secret-safe listing guard, recipient/chat allowlist guard, content forbidden-field guard, single-send staging approval guard, rollback/disable verification guard, `npm run lint`, `npm run test:booking-ui-browser` if UI wiring changes, `git diff --check`, and `git status --short`.
-- Rollback note: keep Telegram on the setup-only disabled-send route until a separate staging test is approved, guarded, and verified; if any future provider test fails, close the provider gate/env, redeploy if env changed, rotate exposed bot tokens, and restore the disabled/no-op route surface unchanged.
-- No runtime implementation, UI/API/helper behavior change, env change, deployment, DB read/write, migration, provider activation, live send, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/button/card, or new shim is approved by this packet.
+- Telegram remains forbidden for customer sends, driver sends, live-location sends, webhooks, `getUpdates`, polling, scheduler/retry loops, batch sends, DB writes, schema changes, parser changes, Save Booking + CRM changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, new shims, or broad UI sectors.
+- Provider env values, bot tokens, chat IDs, cookies, API keys, database URLs, and secrets must never be printed, logged, committed, screenshot, or returned to the browser.
+- If the live provider test fails, close `PRESTIGE_TELEGRAM_INTERNAL_ADMIN_ALERTS_ENABLED`, rotate any exposed bot token, and keep the disabled/no-op setup route surface available while investigating.
 
 ### Telegram True Live Location Evidence Contract Guard Lock
 - This is a docs/test-only guard for a future separately approved Telegram True Live Location evidence pass.
@@ -6265,7 +6259,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No DB persistence is approved unless separately approved with table/RLS proof.
 - Customer-facing Telegram live-location evidence must not expose pricing, payout, PayNow, payout preferences, `driver_payout_rules`, `customer_rates`, payment/PDF/billing, invoice content, internal/admin notes, parser/debug fields, secrets/tokens, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, auth/session/cookie/JWT values, or OTS photo/storage data unless separately approved.
 - Telegram live location must remain separate from Customer/Driver Auth activation, OTS photo/storage, calendar, billing/payment/PDF, pricing/rates/customer_rates, `driver_payout_rules`, payout execution, Email/WhatsApp/SMS sends, FlightAware live lookup, parser, Save Booking, `/api/admin-saved-bookings`, UI sector/card/button expansion, shims, and production activation.
-- Current Telegram surfaces remain setup-only/no-live and current live-location surfaces remain setup-only/disabled.
+- Current Telegram live-location surfaces remain setup-only/no-live and current live-location surfaces remain setup-only/disabled.
 - No true live-location route/helper exists and no driver GPS source exists for true live location in this lane.
 - WhatsApp remains a later phase.
 - Email remains driver-details and admin-selected secure tracking link only; Email must not do native/streaming live location.

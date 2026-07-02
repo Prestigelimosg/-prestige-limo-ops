@@ -12,6 +12,17 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Admin Customer Amendment Review Apply Lane
+
+- Admin App Notifications now show compact admin-only `Review`, `Reject`, and `Apply + Cal` actions for queued customer booking change requests.
+- `Review` uses the existing admin-only `/api/admin-bookings?limit=200` read to resolve the saved booking/customer account and keeps the request visible for admin comparison. The customer portal still only submits an internal request and does not mutate bookings, CRM, calendar, invoices, payments, providers, GPS/live-location, or external messages.
+- `Reject` archives the internal admin notification through the existing admin app notification status path. Booking and Google Calendar remain unchanged.
+- `Apply + Cal` merges only approved request fields into the existing saved booking update path, sends a `PATCH` to `/api/admin-bookings`, then uses the existing Google Calendar upsert path keyed by booking reference. The notification is archived only after the Google Calendar sync succeeds, so a failed calendar sync leaves the request pending for admin review.
+- Service-type amendments are defensive-gated: if a request carries a changed service type, the app loads Dispatch and requires the existing `Service Change Price Review` / `Update + Cal` flow instead of one-click applying the change.
+- Already-issued stored invoice records for the same booking reference block one-click amendment apply and guide admin toward adjustment, credit note, or new invoice review. Existing invoices are not silently mutated.
+- This lane does not add a customer-side direct write, new DB schema, duplicate amendment route/workbench, email/WhatsApp/SMS/Telegram send, Stripe/payment/payout/provider/GPS/live-location behavior, or public/customer/driver exposure of admin amendment internals.
+- Focused guard coverage lives in `scripts/test-admin-booking-change-request-review-apply-guard.mjs`.
+
 ### Customer Portal Access Reference Correction
 
 - Visible production amendment testing found the Customers finder `Portal` action could fail for a loaded saved-account row such as `hourly-test-customer` because the button sent the numeric saved account id instead of the approved customer portal account reference.

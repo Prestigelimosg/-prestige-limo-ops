@@ -1333,6 +1333,35 @@ type AdminAppNotificationAction = {
   status: AdminAppNotificationUpdateStatus;
 } | null;
 
+type AdminBookingChangeRequestReviewAction = {
+  action: "apply" | "reject" | "review";
+  notificationId: string;
+} | null;
+
+type AdminBookingChangeRequestContext = {
+  bookingReference: string;
+  currentDropoffLocation: string;
+  currentPickupAt: string;
+  currentPickupLocation: string;
+  currentServiceType: string;
+  passengerName: string;
+  requestedDropoffLocation: string;
+  requestedPickupDate: string;
+  requestedPickupLocation: string;
+  requestedPickupTime: string;
+  requestedServiceType: string;
+  requestKind: string;
+  requestNote: string;
+};
+
+type AdminCustomerInvoiceReviewRecord = {
+  documentState?: string | null;
+  documentType?: string | null;
+  invoiceNumber?: string | null;
+  reference?: string | null;
+  status?: string | null;
+};
+
 type AdminDevicePushStatus =
   | "idle"
   | "checking"
@@ -8061,9 +8090,11 @@ function adminAppNotificationContextValue(value: unknown) {
   return cleaned.replace(/_/g, " ");
 }
 
-function adminAppNotificationChangeRequestRows(notification: AdminAppNotificationRecord) {
+function adminAppNotificationChangeRequestContext(
+  notification: AdminAppNotificationRecord,
+): AdminBookingChangeRequestContext | null {
   if (clean(notification.workflow_area) !== "customer_booking_change_request") {
-    return [];
+    return null;
   }
 
   const context =
@@ -8072,19 +8103,143 @@ function adminAppNotificationChangeRequestRows(notification: AdminAppNotificatio
     !Array.isArray(notification.safe_context)
       ? notification.safe_context
       : {};
+
+  const bookingReference =
+    cleanReferenceText(notification.booking_reference) ||
+    cleanReferenceText(adminAppNotificationContextValue(context.booking_reference));
+
+  if (!bookingReference) {
+    return null;
+  }
+
+  return {
+    bookingReference,
+    currentDropoffLocation: adminAppNotificationContextValue(context.current_dropoff_location),
+    currentPickupAt: adminAppNotificationContextValue(context.current_pickup_at),
+    currentPickupLocation: adminAppNotificationContextValue(context.current_pickup_location),
+    currentServiceType: adminAppNotificationContextValue(context.current_service_type),
+    passengerName: adminAppNotificationContextValue(context.passenger_name),
+    requestedDropoffLocation: adminAppNotificationContextValue(context.requested_dropoff_location),
+    requestedPickupDate: adminAppNotificationContextValue(context.requested_pickup_date),
+    requestedPickupLocation: adminAppNotificationContextValue(context.requested_pickup_location),
+    requestedPickupTime: adminAppNotificationContextValue(context.requested_pickup_time),
+    requestedServiceType: adminAppNotificationContextValue(context.requested_service_type),
+    requestKind: adminAppNotificationContextValue(context.request_kind),
+    requestNote: adminAppNotificationContextValue(context.request_note),
+  };
+}
+
+function adminBookingChangeRequestHasRequestedBookingChange(
+  context: AdminBookingChangeRequestContext,
+) {
+  return Boolean(
+    context.requestedPickupDate ||
+      context.requestedPickupTime ||
+      context.requestedPickupLocation ||
+      context.requestedDropoffLocation ||
+      context.requestedServiceType,
+  );
+}
+
+function adminBookingChangeRequestServiceTypeChanged(
+  context: AdminBookingChangeRequestContext,
+  record: AdminBookingPersistenceRecord,
+) {
+  const requestedServiceType = canonicalServiceTypeForPriceReview(context.requestedServiceType);
+  const currentServiceType = canonicalServiceTypeForPriceReview(adminBookingPersistenceServiceType(record));
+
+  return Boolean(requestedServiceType && currentServiceType && requestedServiceType !== currentServiceType);
+}
+
+function adminBookingChangeRequestMergeIntoBookingForm(
+  baseBooking: BookingForm,
+  context: AdminBookingChangeRequestContext,
+): BookingForm {
+  const requestedTime = normalizePickupTimeForStorage(context.requestedPickupTime);
+
+  return {
+    ...baseBooking,
+    bookingType: context.requestedServiceType || baseBooking.bookingType,
+    date: context.requestedPickupDate || baseBooking.date,
+    dropoff: context.requestedDropoffLocation || baseBooking.dropoff,
+    pickup: context.requestedPickupLocation || baseBooking.pickup,
+    time: requestedTime || baseBooking.time,
+  };
+}
+
+function adminCustomerInvoiceBlocksBookingAmendment(
+  invoice: AdminCustomerInvoiceReviewRecord,
+  bookingReference: string,
+) {
+  const reference = clean(invoice.reference);
+  const normalizedReference = cleanReferenceText(reference);
+  const normalizedBookingReference = cleanReferenceText(bookingReference);
+  const documentState = clean(invoice.documentState).toLowerCase() || "issued";
+
+  return (
+    documentState !== "draft" &&
+    Boolean(reference) &&
+    (reference === bookingReference || normalizedReference === normalizedBookingReference)
+  );
+}
+
+async function loadBlockingCustomerInvoicesForAmendment(
+  bookingReference: string,
+): Promise<AdminCustomerInvoiceReviewRecord[]> {
+  const response = await fetch("/api/admin-customer-invoices", {
+    cache: "no-store",
+    headers: {
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "GET",
+  });
+  const result = (await response.json().catch(() => null)) as {
+    error?: string;
+    invoices?: AdminCustomerInvoiceReviewRecord[];
+    ok?: boolean;
+  } | null;
+
+  if (!response.ok || !result?.ok) {
+    throw new Error(result?.error || "Customer invoice check failed.");
+  }
+
+  return Array.isArray(result.invoices)
+    ? result.invoices.filter((invoice) =>
+        adminCustomerInvoiceBlocksBookingAmendment(invoice, bookingReference),
+      )
+    : [];
+}
+
+function adminAppNotificationChangeRequestRows(
+  notification: AdminAppNotificationRecord,
+  linkedBookingRecord: AdminBookingPersistenceRecord | null = null,
+) {
+  const context = adminAppNotificationChangeRequestContext(notification);
+
+  if (!context) {
+    return [];
+  }
+
   const rows: Array<[string, unknown]> = [
-    ["Booking", notification.booking_reference],
-    ["Passenger", context.passenger_name],
-    ["Request", context.request_kind],
-    ["Current service", context.current_service_type],
-    ["Current pickup time", context.current_pickup_at],
-    ["Current pickup", context.current_pickup_location],
-    ["Current drop-off", context.current_dropoff_location],
-    ["Requested date", context.requested_pickup_date],
-    ["Requested time", context.requested_pickup_time],
-    ["Requested pickup", context.requested_pickup_location],
-    ["Requested drop-off", context.requested_dropoff_location],
-    ["Note", context.request_note],
+    ["Booking", context.bookingReference],
+    ["Customer/account", linkedBookingRecord ? adminBookingPersistenceCustomerDisplayName(linkedBookingRecord) : ""],
+    [
+      "Passenger",
+      linkedBookingRecord
+        ? adminBookingPersistencePassengerDisplayName(linkedBookingRecord)
+        : context.passengerName,
+    ],
+    ["Request", context.requestKind],
+    ["Current service", context.currentServiceType],
+    ["Current pickup time", context.currentPickupAt],
+    ["Current pickup", context.currentPickupLocation],
+    ["Current drop-off", context.currentDropoffLocation],
+    ["Requested date", context.requestedPickupDate],
+    ["Requested time", context.requestedPickupTime],
+    ["Requested pickup", context.requestedPickupLocation],
+    ["Requested drop-off", context.requestedDropoffLocation],
+    ["Requested service", context.requestedServiceType],
+    ["Note", context.requestNote],
   ];
 
   return rows
@@ -10923,6 +11078,8 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   const [adminAppNotificationReadRevision, setAdminAppNotificationReadRevision] = useState(0);
   const [adminAppNotificationAction, setAdminAppNotificationAction] =
     useState<AdminAppNotificationAction>(null);
+  const [adminBookingChangeRequestReviewAction, setAdminBookingChangeRequestReviewAction] =
+    useState<AdminBookingChangeRequestReviewAction>(null);
   const [adminDevicePushState, setAdminDevicePushState] = useState<AdminDevicePushState>({
     message: null,
     publicKey: null,
@@ -11693,6 +11850,436 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       setAdminAppNotificationAction(null);
     }
   };
+
+  async function loadAdminBookingChangeRequestReviewRecord(
+    context: AdminBookingChangeRequestContext,
+  ) {
+    const params = new URLSearchParams({ limit: "200" });
+    const response = await fetch(`/api/admin-bookings?${params.toString()}`, {
+      headers: {
+        "x-prestige-admin-purpose": "admin-booking-persistence",
+      },
+      method: "GET",
+    });
+    const result = await response.json().catch(() => null);
+
+    if (!response.ok || !result?.ok) {
+      throw new Error(adminBookingPersistenceFailureDetail(result, "Admin booking review read failed."));
+    }
+
+    const loadedBookings = Array.isArray(result.bookings)
+      ? (result.bookings as AdminBookingPersistenceRecord[])
+      : [];
+    const loadedMatch = findAdminBookingPersistenceRecordByReference(
+      loadedBookings,
+      context.bookingReference,
+    );
+    const currentMatch = findAdminBookingPersistenceRecordByReference(
+      adminBookingPersistenceRecords,
+      context.bookingReference,
+    );
+    const loadedBookingRecord = findLoadedBookingRecordByReference(bookings, context.bookingReference);
+    const fallbackMatch = loadedBookingRecord
+      ? bookingRecordToAdminBookingPersistenceRecord(loadedBookingRecord)
+      : null;
+    const match = loadedMatch || currentMatch || fallbackMatch;
+
+    if (loadedBookings.length > 0) {
+      setAdminBookingPersistenceRecords((current) => {
+        const loadedReferences = new Set(
+          loadedBookings.map((record) => clean(record.booking_reference)).filter(Boolean),
+        );
+
+        return [
+          ...loadedBookings,
+          ...current.filter((record) => !loadedReferences.has(clean(record.booking_reference))),
+        ];
+      });
+    }
+
+    if (!match) {
+      throw new Error(
+        `Saved booking ${context.bookingReference} was not found for amendment review.`,
+      );
+    }
+
+    return match;
+  }
+
+  function setAdminBookingChangeRequestFormForReview(
+    record: AdminBookingPersistenceRecord,
+    context: AdminBookingChangeRequestContext,
+    options: { openDispatch?: boolean } = {},
+  ) {
+    const bookingRecord = adminBookingPersistenceRecordToCalendarBookingRecord(record);
+    const baseBooking = bookingRecordToForm(bookingRecord);
+    const amendedBooking = adminBookingChangeRequestMergeIntoBookingForm(baseBooking, context);
+    const bookingReference = clean(record.booking_reference) || context.bookingReference;
+
+    setBooking(() => amendedBooking);
+    markAdminBookingAsActiveForUpdates(bookingReference, record);
+    setDispatchReleaseWorkflowLoadRevision((currentRevision) => currentRevision + 1);
+    if (options.openDispatch) {
+      setActiveTab("dispatch");
+      clearBookingMessageInput();
+    }
+
+    return {
+      amendedBooking,
+      bookingReference,
+    };
+  }
+
+  function removeHandledAdminAppNotification(notificationId: string, message: Message) {
+    setAdminAppNotificationReadState((current) => ({
+      ...current,
+      message,
+      notifications: current.notifications.filter(
+        (notification) => clean(notification.id) !== notificationId,
+      ),
+      pagination: current.pagination
+        ? {
+            ...current.pagination,
+            total_notification_count: Math.max(
+              0,
+              adminMonthlyBillingGroupingCount(current.pagination.total_notification_count) - 1,
+            ),
+          }
+        : current.pagination,
+      status: "loaded",
+    }));
+  }
+
+  async function handleAdminBookingChangeRequestReview(
+    notification: AdminAppNotificationRecord,
+  ) {
+    const notificationId = clean(notification.id);
+    const context = adminAppNotificationChangeRequestContext(notification);
+
+    if (!notificationId || !context) {
+      setAdminAppNotificationReadState((current) => ({
+        ...current,
+        message: {
+          tone: "error",
+          text: "Customer amendment review needs a saved notification id and booking reference.",
+        },
+      }));
+      return;
+    }
+
+    setAdminBookingChangeRequestReviewAction({
+      action: "review",
+      notificationId,
+    });
+    setAdminAppNotificationReadState((current) => ({
+      ...current,
+      message: {
+        tone: "info",
+        text: `Loading amendment review for ${context.bookingReference}...`,
+      },
+    }));
+
+    try {
+      const record = await loadAdminBookingChangeRequestReviewRecord(context);
+      const { bookingReference } = setAdminBookingChangeRequestFormForReview(record, context, {
+        openDispatch: false,
+      });
+      const message = {
+        tone: "success",
+        text: `Amendment review loaded for ${bookingReference}. Customer/account is resolved in this row; booking and Google Calendar are unchanged until Apply + Cal.`,
+      } satisfies Message;
+
+      setMessage(message);
+      setAdminBookingPersistenceMessage(message);
+      setAdminAppNotificationReadState((current) => ({
+        ...current,
+        message,
+        status: "loaded",
+      }));
+    } catch (error) {
+      setAdminAppNotificationReadState((current) => ({
+        ...current,
+        message: {
+          tone: "error",
+          text: error instanceof Error ? error.message : "Customer amendment review failed safely.",
+        },
+        status: "error",
+      }));
+    } finally {
+      setAdminBookingChangeRequestReviewAction(null);
+    }
+  }
+
+  async function handleAdminBookingChangeRequestReject(
+    notification: AdminAppNotificationRecord,
+  ) {
+    const notificationId = clean(notification.id);
+    const bookingReference =
+      cleanReferenceText(notification.booking_reference) ||
+      cleanReferenceText(adminAppNotificationChangeRequestContext(notification)?.bookingReference);
+
+    if (!notificationId) {
+      setAdminAppNotificationReadState((current) => ({
+        ...current,
+        message: {
+          tone: "error",
+          text: "Customer amendment rejection needs a saved notification id.",
+        },
+      }));
+      return;
+    }
+
+    setAdminBookingChangeRequestReviewAction({
+      action: "reject",
+      notificationId,
+    });
+    setAdminAppNotificationReadState((current) => ({
+      ...current,
+      message: {
+        tone: "info",
+        text: `Rejecting amendment request for ${bookingReference || "selected booking"}...`,
+      },
+    }));
+
+    try {
+      const updatedNotification = await updateAdminAppNotificationStatus(notificationId, "archived");
+      const handledId = clean(updatedNotification.id) || notificationId;
+      const message = {
+        tone: "success",
+        text: `Customer amendment request ${bookingReference ? `for ${bookingReference} ` : ""}rejected/archived. Booking and Google Calendar were not changed.`,
+      } satisfies Message;
+
+      removeHandledAdminAppNotification(handledId, message);
+      setMessage(message);
+      setAdminBookingPersistenceMessage(message);
+    } catch (error) {
+      setAdminAppNotificationReadState((current) => ({
+        ...current,
+        message: {
+          tone: "error",
+          text: adminAppNotificationFailureMessage(error),
+        },
+        status: "error",
+      }));
+    } finally {
+      setAdminBookingChangeRequestReviewAction(null);
+    }
+  }
+
+  async function handleAdminBookingChangeRequestApply(
+    notification: AdminAppNotificationRecord,
+  ) {
+    const notificationId = clean(notification.id);
+    const context = adminAppNotificationChangeRequestContext(notification);
+
+    if (!notificationId || !context) {
+      setAdminAppNotificationReadState((current) => ({
+        ...current,
+        message: {
+          tone: "error",
+          text: "Customer amendment apply needs a saved notification id and booking reference.",
+        },
+      }));
+      return;
+    }
+
+    if (!adminBookingChangeRequestHasRequestedBookingChange(context)) {
+      setAdminAppNotificationReadState((current) => ({
+        ...current,
+        message: {
+          tone: "error",
+          text: `No booking field amendment was requested for ${context.bookingReference}. Booking and Google Calendar were not changed.`,
+        },
+      }));
+      return;
+    }
+
+    setAdminBookingChangeRequestReviewAction({
+      action: "apply",
+      notificationId,
+    });
+    setAdminAppNotificationReadState((current) => ({
+      ...current,
+      message: {
+        tone: "info",
+        text: `Applying approved amendment for ${context.bookingReference}...`,
+      },
+    }));
+
+    try {
+      const record = await loadAdminBookingChangeRequestReviewRecord(context);
+      const { amendedBooking, bookingReference } = setAdminBookingChangeRequestFormForReview(record, context, {
+        openDispatch: true,
+      });
+
+      if (adminBookingChangeRequestServiceTypeChanged(context, record)) {
+        const oldServiceLabel = serviceChangePriceReviewServiceLabel(
+          adminBookingPersistenceServiceType(record),
+        );
+        const newServiceLabel = serviceChangePriceReviewServiceLabel(context.requestedServiceType);
+        const message = {
+          tone: "error",
+          text: `Service Change Price Review required for ${bookingReference}: ${oldServiceLabel} to ${newServiceLabel}. Confirm price review in Dispatch, then use Update + Cal. Amendment notification remains pending.`,
+        } satisfies Message;
+
+        setServiceChangePriceReviewSafeMessage(message);
+        setAdminAppNotificationReadState((current) => ({
+          ...current,
+          message,
+          status: "loaded",
+        }));
+        window.setTimeout(scrollToServiceChangePriceReview, 0);
+        return;
+      }
+
+      const blockingInvoices = await loadBlockingCustomerInvoicesForAmendment(bookingReference);
+
+      if (blockingInvoices.length > 0) {
+        const invoiceNumber = clean(blockingInvoices[0]?.invoiceNumber) || "issued invoice";
+        const message = {
+          tone: "error",
+          text: `Amendment apply stopped for ${bookingReference}: ${invoiceNumber} already exists. Use adjustment, credit note, or new invoice review before changing billed trip details. Booking, invoice, and Google Calendar were not changed.`,
+        } satisfies Message;
+
+        setMessage(message);
+        setAdminBookingPersistenceMessage(message);
+        setAdminAppNotificationReadState((current) => ({
+          ...current,
+          message,
+          status: "loaded",
+        }));
+        return;
+      }
+
+      const payload = buildAdminBookingPersistencePayload(
+        amendedBooking,
+        currentTimeMs,
+        bookingReference,
+        {
+          customerDisplayNameOverride: adminBookingPersistenceCustomerDisplayName(record),
+        },
+      );
+
+      payload.booking.source_channel = clean(record.source_channel) || payload.booking.source_channel;
+      payload.booking.customer_facing_status =
+        clean(record.customer_facing_status) || payload.booking.customer_facing_status;
+      payload.booking.admin_internal_status =
+        clean(record.admin_internal_status) || payload.booking.admin_internal_status;
+      payload.booking.short_notice_review_status =
+        clean(record.short_notice_review_status) || payload.booking.short_notice_review_status;
+      payload.booking.request_review_status =
+        clean(record.request_review_status) || payload.booking.request_review_status;
+
+      setAdminBookingPersistenceAction("update");
+      setAdminBookingPersistenceMessage({
+        tone: "info",
+        text: `Updating approved amendment for ${bookingReference}...`,
+      });
+
+      const response = await fetch("/api/admin-bookings", {
+        body: JSON.stringify({
+          target_booking_reference: bookingReference,
+          ...payload,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "PATCH",
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.ok) {
+        throw new Error(adminBookingPersistenceFailureDetail(result, "Admin booking update failed."));
+      }
+
+      const updatedBooking = result.booking as AdminBookingPersistenceRecord;
+      const updatedBookingReference = clean(updatedBooking.booking_reference) || bookingReference;
+
+      markAdminBookingAsActiveForUpdates(updatedBookingReference, updatedBooking);
+      setAdminBookingPersistenceMessage({
+        tone: "info",
+        text: `Amendment applied to ${updatedBookingReference}. Syncing Google Calendar...`,
+      });
+
+      const calendarSyncResult = await autoSyncSavedBookingGoogleCalendar(updatedBooking);
+
+      if (!calendarSyncResult.ok) {
+        const message = {
+          tone: "error",
+          text: `Amendment saved for ${updatedBookingReference}, but ${calendarSyncResult.message} Notification remains pending until calendar is reviewed.`,
+        } satisfies Message;
+
+        setMessage(message);
+        setBookingSaveMessage(message);
+        setAdminBookingPersistenceMessage(message);
+        setAdminAppNotificationReadState((current) => ({
+          ...current,
+          message,
+          status: "loaded",
+        }));
+        return;
+      }
+
+      let handledId = notificationId;
+
+      try {
+        const updatedNotification = await updateAdminAppNotificationStatus(notificationId, "archived");
+        handledId = clean(updatedNotification.id) || notificationId;
+      } catch (error) {
+        const message = {
+          tone: "error",
+          text: `Amendment applied for ${updatedBookingReference} and Google Calendar auto-synced, but the admin notification could not be archived: ${adminAppNotificationFailureMessage(
+            error,
+          )}`,
+        } satisfies Message;
+
+        setMessage(message);
+        setBookingSaveMessage(message);
+        setAdminBookingPersistenceMessage(message);
+        setAdminAppNotificationReadState((current) => ({
+          ...current,
+          message,
+          status: "error",
+        }));
+        return;
+      }
+
+      const message = {
+        tone: "success",
+        text: `Amendment applied for ${updatedBookingReference}. Google Calendar auto-synced on the same booking reference; request archived. No external message was sent.`,
+      } satisfies Message;
+
+      removeHandledAdminAppNotification(handledId, message);
+      setMessage(message);
+      setBookingSaveMessage(message);
+      setAdminBookingPersistenceMessage(message);
+      lastSuccessfulBookingSaveRef.current = {
+        bookingId: updatedBookingReference,
+        key: getBookingSaveGuardKey(updatedBookingReference),
+        record: updatedBooking,
+      };
+    } catch (error) {
+      const message = {
+        tone: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : "Approved amendment apply failed safely. Booking and calendar need review.",
+      } satisfies Message;
+
+      setMessage(message);
+      setAdminBookingPersistenceMessage(message);
+      setAdminAppNotificationReadState((current) => ({
+        ...current,
+        message,
+        status: "error",
+      }));
+    } finally {
+      setAdminBookingChangeRequestReviewAction(null);
+      setAdminBookingPersistenceAction(null);
+    }
+  }
 
   const dispatchReleaseWorkflowBookingReference =
     cleanReferenceText(appliedAdminBookingSnapshotReference) || cleanReferenceText(loadedBookingId);
@@ -37713,14 +38300,40 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
 	                  const notificationPriority = adminAppNotificationPriorityLabel(notification.priority);
 	                  const notificationStatus = adminAppNotificationDisplayLabel(notification.notification_status);
 	                  const createdTime = adminAppNotificationTimeLabel(notification.created_at);
-	                  const changeRequestRows = adminAppNotificationChangeRequestRows(notification);
+	                  const changeRequestContext = adminAppNotificationChangeRequestContext(notification);
+                  const loadedChangeRequestBookingRecord = changeRequestContext
+                    ? findAdminBookingPersistenceRecordByReference(
+                        adminBookingPersistenceRecords,
+                        changeRequestContext.bookingReference,
+                      ) ||
+                      (() => {
+                        const loadedRecord = findLoadedBookingRecordByReference(
+                          bookings,
+                          changeRequestContext.bookingReference,
+                        );
+
+                        return loadedRecord ? bookingRecordToAdminBookingPersistenceRecord(loadedRecord) : null;
+                      })()
+                    : null;
+	                  const changeRequestRows = adminAppNotificationChangeRequestRows(
+                    notification,
+                    loadedChangeRequestBookingRecord,
+                  );
 	                  const activeNotificationAction =
 	                    notificationId &&
 	                    adminAppNotificationAction?.notificationId === notificationId
                       ? adminAppNotificationAction.status
                       : null;
+                  const activeChangeRequestAction =
+                    notificationId &&
+                    adminBookingChangeRequestReviewAction?.notificationId === notificationId
+                      ? adminBookingChangeRequestReviewAction.action
+                      : null;
                   const notificationActionDisabled =
-                    !notificationId || Boolean(adminAppNotificationAction);
+                    !notificationId ||
+                    Boolean(adminAppNotificationAction) ||
+                    Boolean(adminBookingChangeRequestReviewAction);
+                  const changeRequestActionDisabled = notificationActionDisabled;
 
                   return (
                     <div
@@ -37764,6 +38377,40 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
 	                        </dl>
 	                      ) : null}
 	                      <div className="mt-2 flex flex-wrap gap-2">
+                        {changeRequestContext ? (
+                          <div
+                            className="flex flex-wrap gap-2"
+                            data-admin-booking-change-request-review-actions="true"
+                          >
+                            <button
+                              className="h-7 rounded-md border border-sky-300 bg-white px-2 text-xs font-semibold text-sky-800 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                              data-admin-booking-change-request-review-action="review"
+                              disabled={changeRequestActionDisabled}
+                              onClick={() => handleAdminBookingChangeRequestReview(notification)}
+                              type="button"
+                            >
+                              {activeChangeRequestAction === "review" ? "Loading..." : "Review"}
+                            </button>
+                            <button
+                              className="h-7 rounded-md border border-rose-200 bg-white px-2 text-xs font-semibold text-rose-800 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                              data-admin-booking-change-request-review-action="reject"
+                              disabled={changeRequestActionDisabled}
+                              onClick={() => handleAdminBookingChangeRequestReject(notification)}
+                              type="button"
+                            >
+                              {activeChangeRequestAction === "reject" ? "Rejecting..." : "Reject"}
+                            </button>
+                            <button
+                              className="h-7 rounded-md border border-emerald-300 bg-emerald-700 px-2 text-xs font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                              data-admin-booking-change-request-review-action="apply"
+                              disabled={changeRequestActionDisabled}
+                              onClick={() => handleAdminBookingChangeRequestApply(notification)}
+                              type="button"
+                            >
+                              {activeChangeRequestAction === "apply" ? "Applying..." : "Apply + Cal"}
+                            </button>
+                          </div>
+                        ) : null}
                         {[
                           {
                             label: "Mark read",

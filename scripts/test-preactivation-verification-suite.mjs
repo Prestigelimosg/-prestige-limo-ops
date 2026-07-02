@@ -967,6 +967,10 @@ const guardChecks = [
     script: "scripts/test-admin-monthly-invoice-number-prefix-sequence-approval-packet.mjs",
   },
   {
+    label: "admin customer invoice prefix settings guard",
+    script: "scripts/test-admin-customer-invoice-prefix-settings-guard.mjs",
+  },
+  {
     label: "admin monthly invoice sending delivery approval packet guard",
     script: "scripts/test-admin-monthly-invoice-sending-delivery-approval-packet.mjs",
   },

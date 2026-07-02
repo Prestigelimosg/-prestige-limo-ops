@@ -7,6 +7,7 @@ import {
   type MockCustomer,
   type MockCustomerBooking,
 } from "../_data/mock-customers";
+import { CustomerInvoicePrefixSettingsPanel } from "./invoice-prefix-settings-panel";
 import { CustomerFolderSavedBookingsPanel } from "./saved-bookings-panel";
 
 type CustomerFolderPageProps = {
@@ -448,6 +449,10 @@ export default async function MockCustomerFolderPage({ params }: CustomerFolderP
                 Invoice numbers are unique and must not be reused. Once issued, invoice numbers are immutable. Changing
                 a customer invoice prefix later requires warning/protection because it can make invoice history messy.
               </p>
+              <CustomerInvoicePrefixSettingsPanel
+                customerAccount={customer.companyName}
+                suggestedPrefix={customer.invoicePrefix}
+              />
             </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[560px] border-collapse text-left text-sm">

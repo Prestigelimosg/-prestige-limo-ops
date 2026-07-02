@@ -12,6 +12,16 @@ d0c5e211 Persist Save CRM driver assignment
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Admin Customer Invoice Prefix Settings Lane
+
+- Customer-specific invoice prefix settings are now owner-approved for an admin customer-folder lane only.
+- The approved policy is `PREFIX-0001`, lifetime sequence, prefix locked after first reserved number, no reuse of voided/cancelled numbers, and no automatic prefix change on customer/company rename.
+- The implementation stores settings in the existing `customer_invoice_sequences` table through `lib/admin-customer-invoice-prefix-settings.ts` and `/api/admin-customer-invoice-prefix-settings`.
+- The new route allows same-origin `/customers` and `/customers/*` referers only, requires the existing admin purpose header, allows guarded reads for admin/dispatcher server sessions, and requires the admin role or local admin surface for writes.
+- The UI is limited to the existing customer folder Invoices area via `CustomerInvoicePrefixSettingsPanel`; `/settings/invoice`, the dashboard monthly invoice reservation workbench, customer portal, public booking, and driver pages are not wired to this prefix route.
+- This lane does not create invoices, reserve invoice numbers, generate PDFs, send invoice/customer/provider messages, activate payment links, record payments, create payouts, change invoice numbering, change DB schema, change env, use Vercel CLI, or touch GPS/live-location.
+- Focused guard coverage lives in `scripts/test-admin-customer-invoice-prefix-settings-guard.mjs`.
+
 ### No-Show / Late-Cancellation Billing Control
 
 - Completed Trip Closeout Review now reuses the existing compact admin-only closeout control for `No-show Bill`, `Late Cancel Bill`, and `Waive`; no duplicate Dispatch sector, route, table, invoice workbench, or DB schema was added.

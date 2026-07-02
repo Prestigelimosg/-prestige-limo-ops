@@ -2087,6 +2087,36 @@ type SaveCrmBillingIdentityAccountResolution =
       ok: false;
     };
 
+type ServiceChangePriceReview = {
+  bookingReference: string;
+  customerAccount: string;
+  key: string;
+  newServiceLabel: string;
+  newServiceType: string;
+  oldServiceLabel: string;
+  oldServiceType: string;
+  reviewedAmountLabel: string;
+  travelerName: string;
+};
+
+type ServiceChangePriceReviewConfirmation = {
+  bookingReference: string;
+  key: string;
+  newServiceType: string;
+  oldServiceType: string;
+  reviewedAmountLabel: string;
+  reviewedAt: string;
+};
+
+type ServiceChangePriceReviewResolution =
+  | {
+      ok: true;
+    }
+  | {
+      message: Message;
+      ok: false;
+    };
+
 type AdminBookingPersistenceAction = "save" | "load" | "update";
 type AdminCustomerRequestReviewDecisionKey =
   | "needs-review"
@@ -4110,6 +4140,112 @@ function buildSaveCrmBillingIdentityReview(
     key,
     matchingRecordCount: uniqueRelatedTravelerNames.length,
     needsTravelerName,
+    travelerName,
+  };
+}
+
+function canonicalServiceTypeForPriceReview(value: string | null | undefined) {
+  const rawValue = clean(value);
+  const normalizedValue = rawValue.toUpperCase();
+
+  if (!normalizedValue) {
+    return "";
+  }
+
+  if (/\b(?:DSP|HOURLY|DISPOSAL|STANDBY|WAIT\s+\d+\s*(?:HOURS?|HRS?))\b/.test(normalizedValue)) {
+    return "DSP";
+  }
+
+  if (/\b(?:DEP|DEPARTURE|DEPART|AIRPORT\s+DROP|DROP\s*OFF\s+(?:AT\s+)?AIRPORT|TO\s+AIRPORT)\b/.test(normalizedValue)) {
+    return "DEP";
+  }
+
+  if (/\b(?:TRF|TRANSFER|POINT\s*TO\s*POINT|CITY\s+TRANSFER)\b/.test(normalizedValue)) {
+    return "TRF";
+  }
+
+  if (/\b(?:MNG|ARRIVAL|ARRIVING|MEET\s*(?:AND|&)\s*GREET|AIRPORT\s+PICK)\b/.test(normalizedValue)) {
+    return "MNG";
+  }
+
+  return normalizedValue.replace(/[^A-Z0-9]+/g, " ").trim();
+}
+
+function serviceChangePriceReviewServiceLabel(value: string | null | undefined) {
+  const rawValue = clean(value);
+  const canonicalServiceType = canonicalServiceTypeForPriceReview(rawValue);
+  const standardLabel =
+    canonicalServiceType === "MNG" ||
+    canonicalServiceType === "DEP" ||
+    canonicalServiceType === "TRF" ||
+    canonicalServiceType === "DSP"
+      ? rateLabels[canonicalServiceType]
+      : "";
+
+  if (!rawValue) {
+    return standardLabel || "Service to confirm";
+  }
+
+  if (!standardLabel) {
+    return rawValue;
+  }
+
+  return rawValue.toUpperCase() === canonicalServiceType ? standardLabel : `${standardLabel} (${rawValue})`;
+}
+
+function buildServiceChangePriceReview(
+  bookingValue: BookingForm,
+  appliedRecord: AdminBookingPersistenceRecord | null | undefined,
+  reviewedCustomerPrice: number,
+): ServiceChangePriceReview | null {
+  if (!appliedRecord) {
+    return null;
+  }
+
+  const bookingReference = clean(appliedRecord.booking_reference);
+  const oldServiceRaw = adminBookingPersistenceServiceType(appliedRecord);
+  const newServiceRaw = clean(bookingValue.bookingType);
+  const oldServiceType = canonicalServiceTypeForPriceReview(oldServiceRaw);
+  const newServiceType = canonicalServiceTypeForPriceReview(newServiceRaw);
+
+  if (!bookingReference || !oldServiceType || !newServiceType || oldServiceType === newServiceType) {
+    return null;
+  }
+
+  const customerAccount =
+    normalizeCompanyAccount(bookingValue.company, bookingValue.bookerEmail) ||
+    adminBookingPersistenceCustomerDisplayName(appliedRecord) ||
+    clean(bookingValue.booker) ||
+    "Customer/account to confirm";
+  const travelerName =
+    clean(bookingValue.name) ||
+    clean(appliedRecord.passenger_name) ||
+    "Passenger/traveler to confirm";
+  const reviewedAmountLabel = `$${formatCompactMoney(reviewedCustomerPrice)}`;
+  const key = [
+    bookingReference,
+    oldServiceType,
+    clean(oldServiceRaw).toUpperCase(),
+    newServiceType,
+    clean(newServiceRaw).toUpperCase(),
+    normalizeBillingIdentityMatch(customerAccount),
+    normalizeBillingIdentityMatch(travelerName),
+    reviewedAmountLabel,
+    clean(bookingValue.customerPriceOverride),
+    clean(bookingValue.customerPriceOverrideReason),
+    clean(bookingValue.manualExtraCharges),
+    clean(bookingValue.manualExtraChargesNote),
+  ].join("::");
+
+  return {
+    bookingReference,
+    customerAccount,
+    key,
+    newServiceLabel: serviceChangePriceReviewServiceLabel(newServiceRaw),
+    newServiceType,
+    oldServiceLabel: serviceChangePriceReviewServiceLabel(oldServiceRaw),
+    oldServiceType,
+    reviewedAmountLabel,
     travelerName,
   };
 }
@@ -10672,6 +10808,10 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     useState<SaveCrmBillingIdentityConfirmation | null>(null);
   const [saveCrmBillingIdentityMessage, setSaveCrmBillingIdentityMessage] =
     useState<Message | null>(null);
+  const [serviceChangePriceReviewConfirmation, setServiceChangePriceReviewConfirmation] =
+    useState<ServiceChangePriceReviewConfirmation | null>(null);
+  const [serviceChangePriceReviewMessage, setServiceChangePriceReviewMessage] =
+    useState<Message | null>(null);
   const [deletingCompletedBookingId, setDeletingCompletedBookingId] = useState<string | null>(null);
   const [copyEditStates, setCopyEditStates] =
     useState<Record<DispatchCopyTarget, CopyEditState>>(createInitialCopyEditStates);
@@ -12880,6 +13020,20 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       : null;
   const saveCrmBillingIdentityAccountOverride =
     confirmedSaveCrmBillingIdentity?.accountLabel || "";
+  const serviceChangePriceReview = useMemo(
+    () =>
+      buildServiceChangePriceReview(
+        booking,
+        appliedAdminBookingSnapshot,
+        draftPricing.customerPrice,
+      ),
+    [appliedAdminBookingSnapshot, booking, draftPricing.customerPrice],
+  );
+  const confirmedServiceChangePriceReview =
+    serviceChangePriceReview &&
+    serviceChangePriceReviewConfirmation?.key === serviceChangePriceReview.key
+      ? serviceChangePriceReviewConfirmation
+      : null;
 
   function getBookingSaveGuardKey(appliedReferenceOverride = appliedAdminBookingSnapshotReference) {
     const normalizedBooking = Object.fromEntries(
@@ -13837,6 +13991,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     setBookingSaveMessage(null);
     setCustomerMatchFeedback(null);
     setSaveCrmBillingIdentityMessage(null);
+    setServiceChangePriceReviewMessage(null);
     setJobCardCalendarAction(null);
     setJobCardCalendarMessage(null);
   }
@@ -14219,6 +14374,74 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
 
     return {
       accountLabel: saveCrmBillingIdentityConfirmation.accountLabel,
+      ok: true,
+    };
+  }
+
+  function scrollToServiceChangePriceReview() {
+    window.setTimeout(() => {
+      document
+        .querySelector('[data-service-change-price-review="true"]')
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 0);
+  }
+
+  function setServiceChangePriceReviewSafeMessage(message: Message) {
+    setServiceChangePriceReviewMessage(message);
+    setBookingSaveMessage(message);
+    setAdminBookingPersistenceMessage(message);
+    setMessage(message);
+  }
+
+  function confirmServiceChangePriceReview(review = serviceChangePriceReview) {
+    if (!review) {
+      return;
+    }
+
+    const confirmation = {
+      bookingReference: review.bookingReference,
+      key: review.key,
+      newServiceType: review.newServiceType,
+      oldServiceType: review.oldServiceType,
+      reviewedAmountLabel: review.reviewedAmountLabel,
+      reviewedAt: new Date().toISOString(),
+    } satisfies ServiceChangePriceReviewConfirmation;
+
+    setServiceChangePriceReviewConfirmation(confirmation);
+    setServiceChangePriceReviewSafeMessage({
+      tone: "success",
+      text: `Service change price reviewed for ${review.bookingReference}: ${review.oldServiceLabel} to ${review.newServiceLabel}. Invoice amount must still be previewed before issue.`,
+    });
+  }
+
+  function resolveServiceChangePriceReviewForSave(): ServiceChangePriceReviewResolution {
+    const review = buildServiceChangePriceReview(
+      booking,
+      appliedAdminBookingSnapshot,
+      draftPricing.customerPrice,
+    );
+
+    if (!review) {
+      return {
+        ok: true,
+      };
+    }
+
+    if (serviceChangePriceReviewConfirmation?.key !== review.key) {
+      const message = {
+        tone: "error",
+        text: `Service Change Price Review required for ${review.bookingReference}: ${review.oldServiceLabel} to ${review.newServiceLabel}. Review ${review.reviewedAmountLabel}, confirm, then save/update again before billing.`,
+      } satisfies Message;
+
+      setServiceChangePriceReviewSafeMessage(message);
+      scrollToServiceChangePriceReview();
+      return {
+        message,
+        ok: false,
+      };
+    }
+
+    return {
       ok: true,
     };
   }
@@ -15703,6 +15926,12 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       return null;
     }
 
+    const serviceChangePriceReviewResolution = resolveServiceChangePriceReviewForSave();
+
+    if (!serviceChangePriceReviewResolution.ok) {
+      return null;
+    }
+
     bookingSaveInFlightKeyRef.current = bookingSaveGuardKey;
     setSaving(true);
     setMessage({ tone: "info", text: "Saving booking + CRM..." });
@@ -16264,6 +16493,13 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
 
     if (!billingIdentityResolution.ok) {
       setAdminBookingPersistenceMessage(billingIdentityResolution.message);
+      return;
+    }
+
+    const serviceChangePriceReviewResolution = resolveServiceChangePriceReviewForSave();
+
+    if (!serviceChangePriceReviewResolution.ok) {
+      setAdminBookingPersistenceMessage(serviceChangePriceReviewResolution.message);
       return;
     }
 
@@ -17125,6 +17361,13 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
 
     if (!billingIdentityResolution.ok) {
       setAdminBookingPersistenceMessage(billingIdentityResolution.message);
+      return;
+    }
+
+    const serviceChangePriceReviewResolution = resolveServiceChangePriceReviewForSave();
+
+    if (!serviceChangePriceReviewResolution.ok) {
+      setAdminBookingPersistenceMessage(serviceChangePriceReviewResolution.message);
       return;
     }
 
@@ -35472,6 +35715,65 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                       {saveCrmBillingIdentityMessage ? (
                         <p className="mt-1 break-words text-[10px] leading-4">
                           {saveCrmBillingIdentityMessage.text}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {serviceChangePriceReview ? (
+                    <div
+                      className={`max-w-full rounded-md border px-2 py-1 text-[11px] font-semibold leading-4 ${
+                        confirmedServiceChangePriceReview
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-950"
+                          : "border-amber-200 bg-amber-50 text-amber-950"
+                      }`}
+                      data-service-change-price-review="true"
+                      data-service-change-price-review-state={
+                        confirmedServiceChangePriceReview ? "reviewed" : "needs-review"
+                      }
+                    >
+                      <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="uppercase tracking-wide">Service Change Price Review</p>
+                          <p className="break-words font-medium normal-case tracking-normal">
+                            Booking {serviceChangePriceReview.bookingReference}:{" "}
+                            <span data-service-change-price-review-old-service="true">
+                              {serviceChangePriceReview.oldServiceLabel}
+                            </span>{" "}
+                            to{" "}
+                            <span data-service-change-price-review-new-service="true">
+                              {serviceChangePriceReview.newServiceLabel}
+                            </span>
+                            .
+                          </p>
+                          <p className="break-words font-medium normal-case tracking-normal">
+                            Account: {serviceChangePriceReview.customerAccount}. Passenger/traveler:{" "}
+                            {serviceChangePriceReview.travelerName}. Reviewed amount:{" "}
+                            <span data-service-change-price-review-amount="true">
+                              {serviceChangePriceReview.reviewedAmountLabel}
+                            </span>
+                            .
+                          </p>
+                          <p
+                            className="break-words font-medium normal-case tracking-normal"
+                            data-service-change-price-review-billing-guidance="true"
+                          >
+                            Price/invoice must be reviewed before billing. Do not edit an issued invoice silently; use
+                            adjustment, credit note, or new invoice review.
+                          </p>
+                        </div>
+                        <button
+                          className="h-8 shrink-0 rounded border border-amber-300 bg-white px-2 text-[11px] font-bold text-amber-950 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+                          data-service-change-price-review-confirm="true"
+                          disabled={Boolean(confirmedServiceChangePriceReview)}
+                          onClick={() => confirmServiceChangePriceReview(serviceChangePriceReview)}
+                          type="button"
+                        >
+                          {confirmedServiceChangePriceReview ? "Reviewed" : "Confirm Price"}
+                        </button>
+                      </div>
+                      {serviceChangePriceReviewMessage ? (
+                        <p className="mt-1 break-words text-[10px] leading-4">
+                          {serviceChangePriceReviewMessage.text}
                         </p>
                       ) : null}
                     </div>

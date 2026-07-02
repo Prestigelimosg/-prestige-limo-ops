@@ -64,6 +64,7 @@ for (const phrase of [
   "`Today's Jobs` shows a compact saved driver report readout per visible job, using the existing guarded admin `GET /api/admin-driver-job-statuses` path only, with monitor-wide/per-card refresh controls and auto-refresh on by default.",
   "`Today's Jobs` includes compact live-map controls that reuse the existing admin-only live-location runtime for the jobs inside the monitor window.",
   "The lower Dispatch saved-record finder is now a compact `Saved Booking Records` disclosure by default. The existing admin-only persistence controls and loaded-record scrollbox are still available after expanding, but they no longer fill the normal Dispatch view.",
+  "Dispatch internal readiness, handoff, recovery, exception, closeout-review, and billing-prep panels now live under one compact `Advanced Checks` disclosure. The existing guarded controls remain colocated and unchanged after expanding, but the default operator view stays focused on daily trip work.",
   "The Dashboard driver report readout is read-only and does not create driver status events, notification rows, provider sends, GPS/live-location records, billing/payment/PDF/invoice/payout records, or a duplicate single-booking Dispatch workflow.",
   "The Bookings tab shows a compact new-request badge/highlight after open customer requests are detected; no sound, browser notification, polling loop, provider send, or new route is added.",
 ]) {
@@ -288,6 +289,45 @@ assertIncludes(
   'data-admin-collapsed-sector-body="admin-booking-persistence"',
   "Dispatch saved booking records collapsed body",
 );
+assertIncludes(
+  dispatchBlock,
+  'data-dispatch-workflow-step="advanced-checks"',
+  "Dispatch advanced checks workflow step",
+);
+assertIncludes(dispatchBlock, 'data-dispatch-advanced-checks="true"', "Dispatch advanced checks wrapper");
+assertIncludes(
+  dispatchBlock,
+  'data-dispatch-advanced-checks-body="true"',
+  "Dispatch advanced checks body",
+);
+assertIncludes(dispatchBlock, "Advanced Checks", "Dispatch advanced checks summary");
+
+const advancedChecksBlock = sliceBetween(
+  dispatchBlock,
+  'data-dispatch-advanced-checks="true"',
+  '<aside className="contents">',
+);
+
+for (const advancedCheckFragment of [
+  'data-admin-dispatch-release-checklist="true"',
+  'data-admin-dispatch-release-handoff-packet="true"',
+  'data-admin-driver-acknowledgement-readiness="true"',
+  'data-admin-driver-acknowledgement-follow-up="true"',
+  'data-admin-day-of-trip-exception-escalation="true"',
+  'data-admin-dispatch-recovery-replacement-readiness="true"',
+  'data-admin-post-recovery-update-readiness="true"',
+  'data-admin-day-of-trip-completion-handoff="true"',
+  'data-admin-completed-trip-closeout-review="true"',
+  'data-admin-closeout-to-billing-preparation-review="true"',
+  'data-admin-billing-preparation-exception-review="true"',
+  'data-admin-billing-preparation-summary-ready-review="true"',
+  'data-admin-monthly-billing-queue-readiness-review="true"',
+  'data-admin-monthly-billing-queue-exception-review="true"',
+  'data-admin-monthly-billing-month-grouping-review="true"',
+]) {
+  assertIncludes(advancedChecksBlock, advancedCheckFragment, `Advanced Checks colocated fragment ${advancedCheckFragment}`);
+}
+
 assertIncludes(
   dispatchBlock,
   'data-admin-day-of-trip-dispatch-monitor-legacy-hidden="true"',

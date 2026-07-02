@@ -33622,6 +33622,25 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             </details>
 
             <details
+              aria-label="Advanced Checks"
+              className="group order-[79] rounded-md border border-slate-200 bg-slate-50/80 p-2.5"
+              data-dispatch-workflow-step="advanced-checks"
+              data-dispatch-advanced-checks="true"
+            >
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-md bg-white/80 px-2 py-1.5 text-sm font-semibold text-slate-900 outline-none transition hover:bg-white focus-visible:ring-2 focus-visible:ring-slate-300 [&::-webkit-details-marker]:hidden">
+                <span className="min-w-0 break-words">
+                  Advanced Checks
+                  <span className="mt-0.5 block text-xs font-medium leading-4 text-slate-500">
+                    Readiness, handoff, recovery, exception, and billing-prep checks.
+                  </span>
+                </span>
+                <span className="shrink-0 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+                  <span className="group-open:hidden">Expand</span>
+                  <span className="hidden group-open:inline">Collapse</span>
+                </span>
+              </summary>
+              <div className="mt-2 grid gap-2" data-dispatch-advanced-checks-body="true">
+            <details
               aria-label="Dispatch Release checklist"
               className="group order-[80] rounded-md border border-sky-200 bg-sky-50/70 p-2.5"
               data-admin-dispatch-release-checklist="true"
@@ -36392,6 +36411,8 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                 activation, customer message, or driver notification behavior.
               </p>
                           </div>
+            </details>
+              </div>
             </details>
           </div>
 

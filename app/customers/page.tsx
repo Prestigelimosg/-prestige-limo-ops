@@ -25,6 +25,7 @@ import {
   invoiceDateInputDaysFromNow,
   parseInvoiceAmountToCents,
   readCustomerLocalInvoices,
+  removeCustomerLocalInvoice,
   saveCustomerLocalInvoice,
   type CustomerBillingDocumentType,
   type CustomerLocalInvoiceRecord,
@@ -47,6 +48,14 @@ const adminCustomerPortalAccessLinksApiPath = "/api/admin-customer-portal-access
 const adminCompletedBookingCloseoutApiPath = "/api/admin-completed-booking-closeouts";
 const adminDriverJobDspActualTimeSummariesApiPath =
   "/api/admin-driver-job-dsp-actual-time-summaries";
+const customerInvoiceTestArtifactArchiveAction = "archive_test_invoice";
+const approvedCustomerTestInvoiceArchiveTarget = {
+  bookingReference: "ADM-20260702061357",
+  confirmationText: "ARCHIVE TEST INVOICE INV-20260702-0001 ADM-20260702061357",
+  customerId: "64",
+  customerName: "Codex Live Ops Account 20260702141102 Pte Ltd [Codex Traveler 20260702141102]",
+  invoiceNumber: "INV-20260702-0001",
+};
 
 const customerFolderIndexHandoffRows = mockCustomers.map((customer) => {
   const upcomingJobs = customer.bookingHistory.filter((booking) => booking.jobStatus === "Upcoming").length;
@@ -310,6 +319,7 @@ type CustomerInvoicePreview = {
 };
 
 type CustomerDisplayedInvoiceRecord = CustomerLocalInvoiceRecord & {
+  creditNoteReason?: string;
   customerEmail?: string;
   emailDeliveryStatus?: "blocked" | "failed" | "not_sent" | "sent";
   emailSentAt?: string | null;
@@ -1079,6 +1089,33 @@ function displayLocalInvoice(invoice: CustomerLocalInvoiceRecord): CustomerDispl
   };
 }
 
+function isArchivedCustomerTestInvoiceRecord(invoice: CustomerDisplayedInvoiceRecord) {
+  return (
+    invoice.invoiceNumber === approvedCustomerTestInvoiceArchiveTarget.invoiceNumber &&
+    invoice.reference === approvedCustomerTestInvoiceArchiveTarget.bookingReference &&
+    invoice.documentState === "draft" &&
+    typeof invoice.creditNoteReason === "string" &&
+    invoice.creditNoteReason.includes("Archived test artifact")
+  );
+}
+
+function isApprovedCustomerTestInvoiceArchiveCandidate(invoice: CustomerDisplayedInvoiceRecord) {
+  return (
+    invoice.storageSource === "server" &&
+    invoice.invoiceNumber === approvedCustomerTestInvoiceArchiveTarget.invoiceNumber &&
+    invoice.reference === approvedCustomerTestInvoiceArchiveTarget.bookingReference &&
+    invoice.customerId === approvedCustomerTestInvoiceArchiveTarget.customerId &&
+    invoice.customerName === approvedCustomerTestInvoiceArchiveTarget.customerName &&
+    invoice.documentState !== "draft" &&
+    (invoice.documentType || "invoice") === "invoice" &&
+    invoice.status === "Unpaid"
+  );
+}
+
+function activeCustomerInvoiceRecords(records: CustomerDisplayedInvoiceRecord[]) {
+  return records.filter((record) => !isArchivedCustomerTestInvoiceRecord(record));
+}
+
 function mergeDisplayedInvoices(
   primaryRecords: CustomerDisplayedInvoiceRecord[],
   fallbackRecords: CustomerDisplayedInvoiceRecord[],
@@ -1320,6 +1357,9 @@ export default function MockCustomerDashboardPage() {
   const [downloadingCustomerInvoiceNumber, setDownloadingCustomerInvoiceNumber] = useState("");
   const [emailingCustomerInvoiceNumber, setEmailingCustomerInvoiceNumber] = useState("");
   const [updatingCustomerInvoiceStatusNumber, setUpdatingCustomerInvoiceStatusNumber] = useState("");
+  const [archivedCustomerTestInvoiceReferences, setArchivedCustomerTestInvoiceReferences] = useState<
+    string[]
+  >([]);
   const [issuedCustomerInvoices, setIssuedCustomerInvoices] = useState<CustomerDisplayedInvoiceRecord[]>(() =>
     readCustomerLocalInvoices().map(displayLocalInvoice),
   );
@@ -1633,6 +1673,10 @@ export default function MockCustomerDashboardPage() {
   );
   const unbilledCustomerRows = useMemo<UnbilledCustomerRow[]>(() => {
     const invoicedReferences = invoicedReferenceSetFrom(issuedCustomerInvoices);
+    const suppressedInvoiceReferences = new Set([
+      ...invoicedReferences,
+      ...archivedCustomerTestInvoiceReferences,
+    ]);
     const localDraftRows = regularCustomerBookingListItems
       .filter((item) => item.billingStatus.trim().toLowerCase().includes("unbilled"))
       .map((item) => {
@@ -1653,7 +1697,7 @@ export default function MockCustomerDashboardPage() {
           statusLabel: hourlyInvoiceReview ? "Hourly auto-calculated" : "Unbilled / draft booking",
         };
       })
-      .filter((row) => !invoicedReferences.has(normalizedInvoiceReference(row.reference)));
+      .filter((row) => !suppressedInvoiceReferences.has(normalizedInvoiceReference(row.reference)));
     const closeoutReadySavedBookingRows = regularCustomerSavedBookingReadState.savedBookings
       .map((booking) =>
         savedBookingUnbilledRow(
@@ -1666,13 +1710,14 @@ export default function MockCustomerDashboardPage() {
       .filter((row): row is UnbilledCustomerRow => Boolean(row));
 
     return [...localDraftRows, ...closeoutReadySavedBookingRows, ...getMockUnbilledCustomerRows()]
-      .filter((row) => !invoicedReferences.has(normalizedInvoiceReference(row.reference)))
+      .filter((row) => !suppressedInvoiceReferences.has(normalizedInvoiceReference(row.reference)))
       .sort(
         (firstRow, secondRow) =>
           parseMockDateValue(firstRow.dateLabel) - parseMockDateValue(secondRow.dateLabel) ||
           firstRow.customerName.localeCompare(secondRow.customerName),
       );
   }, [
+    archivedCustomerTestInvoiceReferences,
     issuedCustomerInvoices,
     regularCustomerBookingListItems,
     regularCustomerSavedBookingBillingReadinessState.closeoutsByReference,
@@ -1768,7 +1813,9 @@ export default function MockCustomerDashboardPage() {
     const controller = new AbortController();
 
     async function loadIssuedCustomerInvoices() {
-      const localInvoices = readCustomerLocalInvoices().map(displayLocalInvoice);
+      const localInvoices = activeCustomerInvoiceRecords(
+        readCustomerLocalInvoices().map(displayLocalInvoice),
+      );
 
       try {
         const response = await fetch(adminCustomerInvoicesApiPath, {
@@ -1781,10 +1828,21 @@ export default function MockCustomerDashboardPage() {
         const result = await response.json().catch(() => null);
 
         if (response.ok && result?.ok) {
-          const serverInvoiceRecords = safeInvoiceApiRecords(result.invoices).map((invoice) => ({
+          const serverInvoiceRecordsWithStorage = safeInvoiceApiRecords(result.invoices).map((invoice) => ({
             ...invoice,
             storageSource: "server" as const,
           }));
+          const archivedReferences = [
+            ...new Set(
+              serverInvoiceRecordsWithStorage
+                .filter(isArchivedCustomerTestInvoiceRecord)
+                .map((invoice) => normalizedInvoiceReference(invoice.reference))
+                .filter(Boolean),
+            ),
+          ];
+          const serverInvoiceRecords = activeCustomerInvoiceRecords(
+            serverInvoiceRecordsWithStorage,
+          );
           const serverDraftRecords = serverInvoiceRecords.filter(
             (invoice) => invoice.documentState === "draft",
           );
@@ -1792,6 +1850,7 @@ export default function MockCustomerDashboardPage() {
             (invoice) => invoice.documentState !== "draft",
           );
 
+          setArchivedCustomerTestInvoiceReferences(archivedReferences);
           setCustomerInvoiceDrafts(serverDraftRecords.map(invoiceDraftRecordFromDisplayedInvoice));
           setIssuedCustomerInvoices(
             mergeDisplayedInvoices(serverIssuedRecords, localInvoices),
@@ -3252,6 +3311,70 @@ export default function MockCustomerDashboardPage() {
     } catch (error) {
       setCustomerInvoiceIssueFeedback(
         error instanceof Error ? error.message : "Credit note failed safely.",
+      );
+    } finally {
+      window.setTimeout(() => setUpdatingCustomerInvoiceStatusNumber(""), 700);
+    }
+  }
+
+  async function archiveCustomerTestInvoiceArtifact(invoice: CustomerDisplayedInvoiceRecord) {
+    if (!isApprovedCustomerTestInvoiceArchiveCandidate(invoice)) {
+      setCustomerInvoiceIssueFeedback(
+        "Only the exact approved live acceptance test invoice can be archived here.",
+      );
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Archive test invoice ${invoice.invoiceNumber} for ${invoice.reference}? This hides it from active billing and the customer portal, but does not delete the stored record.`,
+    );
+
+    if (!confirmed) {
+      setCustomerInvoiceIssueFeedback(`${invoice.invoiceNumber} archive cancelled. No record was changed.`);
+      return;
+    }
+
+    setUpdatingCustomerInvoiceStatusNumber(invoice.invoiceNumber);
+
+    try {
+      const response = await fetch(adminCustomerInvoicesApiPath, {
+        body: JSON.stringify({
+          action: customerInvoiceTestArtifactArchiveAction,
+          bookingReference: approvedCustomerTestInvoiceArchiveTarget.bookingReference,
+          confirmationText: approvedCustomerTestInvoiceArchiveTarget.confirmationText,
+          invoiceNumber: approvedCustomerTestInvoiceArchiveTarget.invoiceNumber,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "PATCH",
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.ok || !result?.archived || !result.invoice) {
+        throw new Error(result?.error || "Customer invoice archive failed safely.");
+      }
+
+      removeCustomerLocalInvoice(invoice.invoiceNumber);
+      setArchivedCustomerTestInvoiceReferences((currentReferences) => [
+        ...new Set([
+          ...currentReferences,
+          normalizedInvoiceReference(invoice.reference),
+        ].filter(Boolean)),
+      ]);
+      setIssuedCustomerInvoices((currentInvoices) =>
+        currentInvoices.filter((currentInvoice) => currentInvoice.invoiceNumber !== invoice.invoiceNumber),
+      );
+      setCustomerInvoiceDrafts((currentDrafts) =>
+        currentDrafts.filter((draft) => draft.documentNumber !== invoice.invoiceNumber),
+      );
+      setCustomerInvoiceIssueFeedback(
+        `${invoice.invoiceNumber} archived as a test artifact. It is hidden from active billing and the customer portal; the stored record was not deleted or marked paid.`,
+      );
+    } catch (error) {
+      setCustomerInvoiceIssueFeedback(
+        error instanceof Error ? error.message : `${invoice.invoiceNumber} archive failed safely.`,
       );
     } finally {
       window.setTimeout(() => setUpdatingCustomerInvoiceStatusNumber(""), 700);
@@ -4856,20 +4979,39 @@ export default function MockCustomerDashboardPage() {
                                     </button>
                                   </>
                                 ) : (
-                                  <button
-                                    className={`inline-flex h-7 items-center justify-center rounded-md border px-2 text-[11px] font-bold leading-none transition ${
-                                      updatingCustomerInvoiceStatusNumber === invoice.invoiceNumber
-                                        ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-                                        : "border-emerald-300 bg-white text-emerald-800 hover:border-emerald-600"
-                                    }`}
-                                    data-customer-invoice-issued-local-mark-paid={invoice.invoiceNumber}
-                                    data-customer-invoice-issued-local-status-toggle={invoice.invoiceNumber}
-                                    onClick={() => markIssuedCustomerInvoicePaid(invoice)}
-                                    title="Mark invoice paid"
-                                    type="button"
-                                  >
-                                    Paid
-                                  </button>
+                                  <>
+                                    <button
+                                      className={`inline-flex h-7 items-center justify-center rounded-md border px-2 text-[11px] font-bold leading-none transition ${
+                                        updatingCustomerInvoiceStatusNumber === invoice.invoiceNumber
+                                          ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                                          : "border-emerald-300 bg-white text-emerald-800 hover:border-emerald-600"
+                                      }`}
+                                      data-customer-invoice-issued-local-mark-paid={invoice.invoiceNumber}
+                                      data-customer-invoice-issued-local-status-toggle={invoice.invoiceNumber}
+                                      onClick={() => markIssuedCustomerInvoicePaid(invoice)}
+                                      title="Mark invoice paid"
+                                      type="button"
+                                    >
+                                      Paid
+                                    </button>
+                                    {isApprovedCustomerTestInvoiceArchiveCandidate(invoice) ? (
+                                      <button
+                                        className={`inline-flex h-7 items-center justify-center rounded-md border px-2 text-[11px] font-bold leading-none transition ${
+                                          updatingCustomerInvoiceStatusNumber === invoice.invoiceNumber
+                                            ? "border-amber-300 bg-amber-50 text-amber-900"
+                                            : "border-slate-300 bg-white text-slate-700 hover:border-slate-600"
+                                        }`}
+                                        data-customer-invoice-issued-local-archive-test={invoice.invoiceNumber}
+                                        onClick={() => archiveCustomerTestInvoiceArtifact(invoice)}
+                                        title="Archive approved test invoice artifact"
+                                        type="button"
+                                      >
+                                        {updatingCustomerInvoiceStatusNumber === invoice.invoiceNumber
+                                          ? "Archiving"
+                                          : "Archive"}
+                                      </button>
+                                    ) : null}
+                                  </>
                                 )}
                                 </div>
                               </td>

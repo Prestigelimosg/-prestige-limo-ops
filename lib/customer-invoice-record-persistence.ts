@@ -31,6 +31,7 @@ import type { CustomerSavedBookingsBoundaryContext } from "./customer-saved-book
 
 export const customerInvoiceRecordVersion = "customer-invoice-record-v1";
 export const customerInvoiceRecordTableName = "customer_invoice_records";
+export const customerInvoiceTestArtifactArchiveAction = "archive_test_invoice";
 
 export type CustomerInvoiceEmailDeliveryStatus = "blocked" | "failed" | "not_sent" | "sent";
 
@@ -59,6 +60,13 @@ export type CustomerInvoiceCreateInput = {
   route?: unknown;
   service?: unknown;
   status?: unknown;
+};
+
+export type CustomerInvoiceTestArtifactArchiveInput = {
+  action?: unknown;
+  bookingReference?: unknown;
+  confirmationText?: unknown;
+  invoiceNumber?: unknown;
 };
 
 type UnknownRecord = Record<string, unknown>;
@@ -122,6 +130,20 @@ const safeWriteError = "Customer invoice record failed safely.";
 const safeReadError = "Customer invoice records failed safely.";
 const safeMissingError = "Customer invoice record was not found.";
 const safeCustomerAuthError = "Customer invoice records require secure customer account access.";
+const safeArchiveValidationError =
+  "Customer invoice archive request is invalid or outside approved test cleanup scope.";
+const approvedCustomerTestInvoiceArchiveTargets = [
+  {
+    amountCents: 5500,
+    bookingReference: "ADM-20260702061357",
+    confirmationText: "ARCHIVE TEST INVOICE INV-20260702-0001 ADM-20260702061357",
+    customerId: "64",
+    customerName: "Codex Live Ops Account 20260702141102 Pte Ltd [Codex Traveler 20260702141102]",
+    invoiceNumber: "INV-20260702-0001",
+  },
+] as const;
+const archivedCustomerTestInvoiceReason =
+  "Archived test artifact INV-20260702-0001 / ADM-20260702061357 after live acceptance. Not paid, not deleted, hidden from active billing and customer portal.";
 const forbiddenCustomerInvoiceFragments = [
   "admin_finance",
   "admin_internal_status",
@@ -249,6 +271,32 @@ function documentPrefix(documentType: CustomerBillingDocumentType) {
 
 function safeStatus(value: unknown): CustomerLocalInvoiceStatus | null {
   return value === "Paid" || value === "Unpaid" ? value : null;
+}
+
+function approvedCustomerTestInvoiceArchiveTargetFor(
+  invoiceNumberInput: unknown,
+  bookingReferenceInput: unknown,
+  confirmationTextInput: unknown,
+) {
+  const invoiceNumber = safeInvoiceNumber(invoiceNumberInput);
+  const bookingReference = safeText(bookingReferenceInput, 160);
+  const confirmationText = safeText(confirmationTextInput, 120);
+
+  return approvedCustomerTestInvoiceArchiveTargets.find(
+    (target) =>
+      invoiceNumber === target.invoiceNumber &&
+      bookingReference === target.bookingReference &&
+      confirmationText === target.confirmationText,
+  );
+}
+
+function isArchivedCustomerTestInvoiceRecord(record: CustomerInvoiceStoredRecord) {
+  return (
+    record.invoiceNumber === approvedCustomerTestInvoiceArchiveTargets[0].invoiceNumber &&
+    record.reference === approvedCustomerTestInvoiceArchiveTargets[0].bookingReference &&
+    record.documentState === "draft" &&
+    record.creditNoteReason === archivedCustomerTestInvoiceReason
+  );
 }
 
 function safeAmountCents(value: unknown) {
@@ -935,6 +983,108 @@ export async function updateAdminCustomerInvoiceStatus(
     ok: true,
     version: customerInvoiceRecordVersion,
   } : safeFailure(safeMissingError, 404);
+}
+
+export async function archiveAdminCustomerTestInvoiceArtifact(
+  input: CustomerInvoiceTestArtifactArchiveInput,
+  actor: AdminBookingPersistenceAdapterActor,
+  client: CustomerInvoiceClient = createServerClient(),
+): Promise<CustomerInvoiceResult<CustomerInvoiceStoredRecord>> {
+  if (!safeActor(actor)) {
+    return safeFailure(safePersistenceConfigError, 403);
+  }
+
+  const readiness = checkAdminBookingPersistenceStagingConfigReadiness();
+
+  if (!readiness.ok) {
+    return safeFailure(safePersistenceConfigError, 503);
+  }
+
+  if (input.action !== customerInvoiceTestArtifactArchiveAction) {
+    return safeFailure(safeArchiveValidationError, 400);
+  }
+
+  const target = approvedCustomerTestInvoiceArchiveTargetFor(
+    input.invoiceNumber,
+    input.bookingReference,
+    input.confirmationText,
+  );
+
+  if (!target) {
+    return safeFailure(safeArchiveValidationError, 400);
+  }
+
+  const { data: readData, error: readError } = await client
+    .from(customerInvoiceRecordTableName)
+    .select(customerInvoiceSelect)
+    .eq("invoice_number", target.invoiceNumber)
+    .maybeSingle();
+
+  if (readError) {
+    return safeFailure(safeReadError, 500);
+  }
+
+  const existingRecord = toStoredRecord(asRecord(readData));
+
+  if (!existingRecord) {
+    return safeFailure(safeMissingError, 404);
+  }
+
+  if (isArchivedCustomerTestInvoiceRecord(existingRecord)) {
+    return {
+      data: existingRecord,
+      ok: true,
+      version: customerInvoiceRecordVersion,
+    };
+  }
+
+  if (
+    existingRecord.amountCents !== target.amountCents ||
+    existingRecord.customerId !== target.customerId ||
+    existingRecord.customerName !== target.customerName ||
+    existingRecord.documentState !== "issued" ||
+    existingRecord.documentType !== "invoice" ||
+    existingRecord.reference !== target.bookingReference ||
+    existingRecord.status !== "Unpaid"
+  ) {
+    return safeFailure(safeArchiveValidationError, 400);
+  }
+
+  const { data, error } = await client
+    .from(customerInvoiceRecordTableName)
+    .update({
+      actor_label: actor.actor_label,
+      actor_role: actor.actor_role,
+      credit_note_reason: archivedCustomerTestInvoiceReason,
+      document_state: "draft",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("invoice_number", target.invoiceNumber)
+    .eq("reference", target.bookingReference)
+    .eq("customer_id", target.customerId)
+    .eq("customer_name", target.customerName)
+    .eq("amount_cents", target.amountCents)
+    .eq("document_type", "invoice")
+    .eq("document_state", "issued")
+    .eq("status", "Unpaid")
+    .select(customerInvoiceSelect)
+    .maybeSingle();
+
+  if (error) {
+    return lifecycleColumnUnavailableError(error)
+      ? safeFailure(safePersistenceConfigError, 503)
+      : safeFailure(safeWriteError, 500);
+  }
+
+  const archivedRecord = toStoredRecord(asRecord(data));
+
+  return archivedRecord && isArchivedCustomerTestInvoiceRecord(archivedRecord)
+    ? {
+        data: archivedRecord,
+        ok: true,
+        version: customerInvoiceRecordVersion,
+      }
+    : safeFailure(safeMissingError, 404);
 }
 
 export async function loadAdminCustomerInvoicePdf(

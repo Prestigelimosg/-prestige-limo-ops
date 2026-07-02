@@ -386,6 +386,10 @@ const guardChecks = [
     script: "scripts/test-customer-local-invoice-issue-pdf-portal-guard.mjs",
   },
   {
+    label: "customer invoice test artifact archive guard",
+    script: "scripts/test-customer-invoice-test-artifact-archive-guard.mjs",
+  },
+  {
     label: "customer folder job history compact guard",
     script: "scripts/test-customer-folder-job-history-compact-guard.mjs",
   },

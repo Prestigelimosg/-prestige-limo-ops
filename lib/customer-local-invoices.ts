@@ -209,6 +209,19 @@ export function saveCustomerLocalInvoice(record: CustomerLocalInvoiceRecord) {
   return writeCustomerLocalInvoices(nextRecords);
 }
 
+export function removeCustomerLocalInvoice(invoiceNumber: string) {
+  const targetInvoiceNumber = invoiceNumber.trim();
+  const existingRecords = readCustomerLocalInvoices();
+
+  if (!targetInvoiceNumber) {
+    return existingRecords;
+  }
+
+  return writeCustomerLocalInvoices(
+    existingRecords.filter((record) => record.invoiceNumber !== targetInvoiceNumber),
+  );
+}
+
 export function formatInvoiceAmount(amountCents: number) {
   return `$${(Math.max(0, amountCents) / 100).toLocaleString("en-US", {
     maximumFractionDigits: 2,

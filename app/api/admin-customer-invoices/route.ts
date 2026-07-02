@@ -1,6 +1,8 @@
 import { resolveAdminCustomerInvoiceBoundary } from "../../../lib/admin-customer-invoice-boundary";
 import {
+  archiveAdminCustomerTestInvoiceArtifact,
   createCustomerInvoiceRecord,
+  customerInvoiceTestArtifactArchiveAction,
   loadAdminCustomerInvoiceRecords,
   updateAdminCustomerInvoiceStatus,
 } from "../../../lib/customer-invoice-record-persistence";
@@ -97,17 +99,21 @@ export async function PATCH(request: Request) {
     }
 
     const body = await readJsonBody(request);
-    const result = await updateAdminCustomerInvoiceStatus(
-      body?.invoiceNumber,
-      body?.status,
-      boundary.actor,
-    );
+    const isArchiveTestArtifactAction = body?.action === customerInvoiceTestArtifactArchiveAction;
+    const result = isArchiveTestArtifactAction
+      ? await archiveAdminCustomerTestInvoiceArtifact(body, boundary.actor)
+      : await updateAdminCustomerInvoiceStatus(
+          body?.invoiceNumber,
+          body?.status,
+          boundary.actor,
+        );
 
     if (!result.ok) {
       return safeErrorResponse(result);
     }
 
     return Response.json({
+      archived: isArchiveTestArtifactAction,
       invoice: result.data,
       ok: true,
       version: result.version,

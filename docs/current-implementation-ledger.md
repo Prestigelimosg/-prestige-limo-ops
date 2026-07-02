@@ -1,13 +1,13 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-4aaacd88 Normalize service type aliases for pricing
+Pending this bounded production test invoice archive cleanup commit
 
 Latest pushed main/staging runtime checkpoint:
-4aaacd88 Normalize service type aliases for pricing
+Pending this bounded production test invoice archive cleanup commit
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-4aaacd88 Normalize service type aliases for pricing
+Pending this bounded production test invoice archive cleanup commit
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -80,6 +80,17 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Cleanup decision: do not mark `INV-20260702-0001` Paid, do not create a credit note, and do not direct-delete invoice/booking rows. The current supported stored invoice mutations are Paid/Unpaid only; there is no approved stored void/archive/delete route. Marking a test invoice paid would create a false accounting trail, and creating a credit note would require first marking it paid and would also be misleading.
 - The unpaid safe fake invoice remains in production as live acceptance evidence until a separate exact-reference, admin-gated void/test-cleanup lane is approved and implemented. Future cleanup must be scoped to `ADM-20260702061357`, `INV-20260702-0001`, and clearly linked safe fake records only, with no raw SQL, no Supabase CLI, no Vercel CLI, no secret output, no real customer data touch, and rollback/proof evidence.
 - No Stripe/payment charge, payout, Paid click, SMS, WhatsApp, Telegram, provider dispatch send, GPS/live-location action, env change, DB schema change, Vercel CLI, or customer/driver message outside the approved invoice email occurred in this closeout.
+
+### Production Test Invoice Archive Cleanup
+
+- The cleanup is scoped to exact production acceptance proof `INV-20260702-0001` / `ADM-20260702061357` / customer id `64` only.
+- The admin-only action reuses the existing `customer_invoice_records.document_state` lifecycle and moves that exact issued invoice to `draft` with a safe audit reason instead of deleting the row, marking it paid, creating a credit note, or changing payment state.
+- Customer portal invoice and PDF reads already require `document_state = issued`, so the archived test artifact is hidden from customer portal invoice folders and customer PDF downloads.
+- The compact Customers billing document row exposes only a small `Archive` button for that exact safe test invoice, after admin confirmation.
+- The browser-local invoice fallback record for that invoice number is removed after archive so the old acceptance invoice does not reappear from local storage in the admin billing list.
+- Active unbilled detection keeps the exact archived test booking reference suppressed without counting the archived invoice as an active issued billing document, so the old acceptance artifact does not return to daily unbilled work or inflate active invoice totals.
+- No DB schema change, raw SQL, Supabase CLI, Vercel CLI, Stripe/payment, payout, provider, email, SMS, WhatsApp, Telegram, GPS/live-location, booking, or calendar behavior changed.
+- Guard coverage lives in `scripts/test-customer-invoice-test-artifact-archive-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Save + CRM Billing Identity Review
 

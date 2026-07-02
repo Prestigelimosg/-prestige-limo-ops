@@ -48,6 +48,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Dispatch daily-use layout is now operator-focused: intake, booking details, route/vehicle, pricing, assigned driver, customer/driver copy, driver job link, and save actions stay visible while complex readiness, handoff, recovery, exception, and billing-prep panels are grouped under the compact `Advanced Checks` disclosure.
 - Saved booking records are collapsed by default behind a compact `Saved Booking Records` disclosure so the Dispatch page does not open with a large loaded-records sector.
 - Dashboard and Dispatch now share the same `Today's Jobs` monitor. It shows loaded jobs inside the 1-hour pickup window, auto-refreshes driver reports every 10 seconds while open, and includes one compact admin live-map control surface for those active jobs.
+- On Dispatch, the shared `Today's Jobs` monitor now sits below the `Assigned Driver` sector so driver assignment stays the primary operator action before multi-job scanning.
 - The previous duplicate active-jobs map/monitor surfaces were consolidated so the operator can use one daily monitor for 1-hour auto-appearance, driver reporting, and same-window live map controls.
 - The shared monitor displays pickup time through the normalized booking time formatter instead of the raw persisted `pickup_time` value, preventing saved production jobs from showing `Time TBC` when their pickup time exists in another saved field.
 - `Save + CRM` now persists manual assigned-driver fields through the admin booking persistence path: `driver_name`, `driver_contact`, and `driver_plate_number`.
@@ -618,7 +619,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Loading a customer request into Dispatch now records a bounded browser-local handled-request key so that request leaves the Dashboard urgent queue plus the Bookings `Urgent & New Booking Requests` queue and badge on that admin browser while remaining available in Recent/Active booking lists.
 - Loading a saved booking into Dispatch refreshes the typed operational display once immediately and pauses one background sync tick, keeping the existing guarded read set stable while Customer Copy focuses for review.
 - The Dashboard now uses compact read-only booking summaries plus `Open` handoff buttons; single-booking driver assignment, status, copy, job-card, and completion work stays in Dispatch/Bookings so page purposes do not duplicate.
-- The shared `Today's Jobs` sector is shown on the Dashboard command centre and at the top of Dispatch for multi-driver scanning.
+- The shared `Today's Jobs` sector is shown on the Dashboard command centre and below the Dispatch `Assigned Driver` sector for multi-driver scanning.
 - `Today's Jobs` shows all loaded active jobs inside the 1-hour pickup monitor window without a separate expand/collapse toggle.
 - `Today's Jobs` shows a compact saved driver report readout per visible job, using the existing guarded admin `GET /api/admin-driver-job-statuses` path only, with monitor-wide/per-card refresh controls and auto-refresh on by default.
 - `Today's Jobs` includes compact live-map controls that reuse the existing admin-only live-location runtime for the jobs inside the monitor window.

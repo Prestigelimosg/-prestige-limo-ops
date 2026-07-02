@@ -32473,7 +32473,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
 
         {activeTab === "dispatch" ? (
         <section className="flex min-w-0 flex-col gap-2.5" data-dispatch-workflow="true">
-          <div className="order-5">{activeJobsMonitorPanel}</div>
           <div className="contents">
             <section
               className="order-10 min-w-0 rounded-md border border-stone-200 bg-white p-2.5"
@@ -33466,6 +33465,8 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                 </div>
               </details>
             </section>
+
+            <div className="order-[61]">{activeJobsMonitorPanel}</div>
 
             {shouldShowParserDebugPanel && parsedDebugBooking ? (
               <div className="order-[100] rounded-md border border-slate-200 bg-slate-50 p-3">

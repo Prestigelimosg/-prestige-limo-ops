@@ -59,7 +59,7 @@ for (const phrase of [
   "Loading a customer request into Dispatch now records a bounded browser-local handled-request key so that request leaves the Dashboard urgent queue plus the Bookings `Urgent & New Booking Requests` queue and badge on that admin browser while remaining available in Recent/Active booking lists.",
   "Loading a saved booking into Dispatch refreshes the typed operational display once immediately and pauses one background sync tick, keeping the existing guarded read set stable while Customer Copy focuses for review.",
   "The Dashboard now uses compact read-only booking summaries plus `Open` handoff buttons; single-booking driver assignment, status, copy, job-card, and completion work stays in Dispatch/Bookings so page purposes do not duplicate.",
-  "The shared `Today's Jobs` sector is shown on the Dashboard command centre and at the top of Dispatch for multi-driver scanning.",
+  "The shared `Today's Jobs` sector is shown on the Dashboard command centre and below the Dispatch `Assigned Driver` sector for multi-driver scanning.",
   "`Today's Jobs` shows all loaded active jobs inside the 1-hour pickup monitor window without a separate expand/collapse toggle.",
   "`Today's Jobs` shows a compact saved driver report readout per visible job, using the existing guarded admin `GET /api/admin-driver-job-statuses` path only, with monitor-wide/per-card refresh controls and auto-refresh on by default.",
   "`Today's Jobs` includes compact live-map controls that reuse the existing admin-only live-location runtime for the jobs inside the monitor window.",
@@ -278,6 +278,13 @@ for (const duplicateDashboardWorkflowFragment of [
 }
 
 assertIncludes(dispatchBlock, "{activeJobsMonitorPanel}", "Dispatch uses shared Today's Jobs monitor");
+assertIncludes(dispatchBlock, '<div className="order-[61]">{activeJobsMonitorPanel}</div>', "Dispatch Today's Jobs monitor placement below Assigned Driver");
+assert.equal(
+  dispatchBlock.indexOf('data-dispatch-workflow-step="driver-assignment"') <
+    dispatchBlock.indexOf('<div className="order-[61]">{activeJobsMonitorPanel}</div>'),
+  true,
+  "Dispatch Today's Jobs monitor must render after the Assigned Driver sector.",
+);
 assertIncludes(
   dispatchBlock,
   'data-dispatch-compact-panel="saved-booking-records"',

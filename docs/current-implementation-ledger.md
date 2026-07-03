@@ -1,10 +1,10 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-Pending local return-trip dispatch/customer folder compaction lane
+Pending local admin/customer booking form slimming lane
 
 Latest pushed main/staging runtime checkpoint:
-18d1c980 Add searchable create invoice CRM picker
+c4704ad9 Add linked return trips and compact customer folders
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
 d0c5e211 Persist Save CRM driver assignment
@@ -23,6 +23,14 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Admin return-trip `Save + CRM` uses the existing guarded `/api/admin-bookings` create path for each leg and then runs the existing Google Calendar sync once per saved leg. It creates two separate calendar events when both legs are complete; no guest email is sent.
 - `Update + Cal` remains a single-record update and does not create a return trip pair for an already-applied saved booking.
 - Focused guard coverage lives in `scripts/test-customer-return-trip-request-guard.mjs` and `scripts/test-admin-dispatch-return-trip-save-guard.mjs`.
+
+### Admin And Customer Booking Form Slimming
+
+- The admin Dispatch intake forms, public `/book` request form, and customer portal New Booking Request form now use slimmer operator/customer rows: shorter input controls, tighter section padding, denser desktop grids, compact return-trip rows, and shorter notes fields.
+- Admin Dispatch keeps the same Booking Details, Pickup / Drop-off / Vehicle, Pricing, Route Extras & Child Seat, and Assigned Driver fields, but uses compact four-column desktop grids where safe so operators see more without scrolling.
+- Public and portal customer booking forms keep the same visible customer-safe fields and the approved return-trip expansion, but use the same slim control height and dense desktop grid treatment.
+- This is a UI-only density pass: it does not change booking submit handlers, CRM/calendar save behavior, return-trip pairing, invoices, PDFs, payments, payouts, provider sends, GPS/live-location, env, or DB schema.
+- Focused guard coverage lives in `scripts/test-admin-customer-booking-form-slim-layout-guard.mjs`.
 
 ### Customer Folder Operator Row Compaction
 

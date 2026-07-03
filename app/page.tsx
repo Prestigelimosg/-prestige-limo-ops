@@ -19970,23 +19970,23 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   }
 
   const pricingPanel = (
-    <div className="rounded-md border border-stone-200 bg-white p-3">
-      <h2 className="text-lg font-semibold">Pricing</h2>
-      <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-        <div className="rounded-md border border-stone-200 bg-stone-50 px-2 py-3">
+    <div className="rounded-md border border-stone-200 bg-white p-2.5" data-admin-dispatch-form-density="slim-pricing">
+      <h2 className="text-sm font-semibold">Pricing</h2>
+      <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+        <div className="rounded-md border border-stone-200 bg-stone-50 px-2 py-2">
           <p className="text-xs text-slate-500">Customer</p>
-          <p className="text-lg font-semibold">${formatMoney(draftPricing.customerPrice)}</p>
+          <p className="text-base font-semibold">${formatMoney(draftPricing.customerPrice)}</p>
         </div>
-        <div className="rounded-md border border-stone-200 bg-stone-50 px-2 py-3">
+        <div className="rounded-md border border-stone-200 bg-stone-50 px-2 py-2">
           <p className="text-xs text-slate-500">Driver</p>
-          <p className="text-lg font-semibold">${formatMoney(draftPricing.driverPayout)}</p>
+          <p className="text-base font-semibold">${formatMoney(draftPricing.driverPayout)}</p>
         </div>
-        <div className="rounded-md border border-stone-200 bg-stone-50 px-2 py-3">
+        <div className="rounded-md border border-stone-200 bg-stone-50 px-2 py-2">
           <p className="text-xs text-slate-500">Profit</p>
-          <p className="text-lg font-semibold">${formatMoney(draftPricing.profit)}</p>
+          <p className="text-base font-semibold">${formatMoney(draftPricing.profit)}</p>
         </div>
       </div>
-      <p className="mt-3 text-sm text-slate-600">
+      <p className="mt-2 text-xs text-slate-600">
         Source: {draftPricing.customerPriceSource}; customer rate ${formatMoney(draftPricing.customerRate)}/
         {draftPricing.customerRateUnit}; driver payout ${formatMoney(draftPricing.driverPayoutMin)}
         {draftPricing.driverPayoutMax !== draftPricing.driverPayoutMin
@@ -19998,7 +19998,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       draftPricing.midnightPayout ||
       draftPricing.extraStopCount ||
       draftPricing.childSeatCount ? (
-        <div className="mt-3 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-slate-700">
+        <div className="mt-2 rounded-md border border-stone-200 bg-stone-50 px-2.5 py-1.5 text-xs text-slate-700">
           {draftPricing.midnightSurcharge || draftPricing.midnightPayout ? (
             <p>
               Midnight: customer +${formatMoney(draftPricing.midnightSurcharge)} / driver +$
@@ -20021,13 +20021,13 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           ) : null}
         </div>
       ) : null}
-      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+      <div className="mt-2 grid gap-2 sm:grid-cols-2">
         <label>
-          <span className="mb-1 block text-sm font-medium text-slate-700">
+          <span className="mb-0.5 block text-xs font-semibold text-slate-700">
             Customer Price Override
           </span>
           <input
-            className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+            className="h-8 w-full rounded-md border border-stone-300 bg-white px-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
             min={0}
             onChange={(event) => update("customerPriceOverride", event.target.value)}
             placeholder={formatMoney(draftPricing.customerPrice)}
@@ -20036,11 +20036,11 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           />
         </label>
         <label className="sm:col-span-2">
-          <span className="mb-1 block text-sm font-medium text-slate-700">
+          <span className="mb-0.5 block text-xs font-semibold text-slate-700">
             Override Reason
           </span>
           <input
-            className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+            className="h-8 w-full rounded-md border border-stone-300 bg-white px-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
             onChange={(event) => update("customerPriceOverrideReason", event.target.value)}
             placeholder="Custom quote / VIP / account rule"
             value={booking.customerPriceOverrideReason}
@@ -20073,20 +20073,20 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         field === "dropoff" ||
         field === "returnPickup" ||
         field === "returnDropoff"
-          ? "sm:col-span-2"
+          ? "md:col-span-2 xl:col-span-2"
           : ""
       }
       key={field}
     >
       <label className="block">
-        <span className="mb-1 block text-sm font-medium text-slate-700">
+        <span className="mb-0.5 block text-xs font-semibold text-slate-700">
           {fieldLabels[field]}
           {requiredFields.includes(field) ? (
             <span className="text-red-600"> *</span>
           ) : null}
         </span>
         <input
-          className="h-9 w-full rounded-md border border-stone-300 bg-white px-2.5 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+          className="h-8 w-full rounded-md border border-stone-300 bg-white px-2 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
           inputMode={
             field === "pax"
               ? "numeric"
@@ -32966,37 +32966,39 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             </section>
 
             <section
-              className="order-20 min-w-0 rounded-md border border-stone-200 bg-white p-2.5"
+              className="order-20 min-w-0 rounded-md border border-stone-200 bg-white p-2"
+              data-admin-dispatch-form-density="slim-booking-details"
               data-dispatch-workflow-step="booking-details"
             >
-              <div className="mb-2">
-                <h3 className="text-base font-semibold text-slate-900">Booking Details</h3>
+              <div className="mb-1.5">
+                <h3 className="text-sm font-semibold text-slate-900">Booking Details</h3>
                 <p className="text-xs text-slate-500">Account, passenger, booker, and contact details.</p>
               </div>
-              <div className="grid gap-2.5 sm:grid-cols-2">
+              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                 {bookingDetailFieldOrder.map(renderDispatchBookingField)}
               </div>
             </section>
 
             <section
-              className="order-30 min-w-0 rounded-md border border-stone-200 bg-white p-2.5"
+              className="order-30 min-w-0 rounded-md border border-stone-200 bg-white p-2"
+              data-admin-dispatch-form-density="slim-pickup-dropoff"
               data-dispatch-workflow-step="pickup-dropoff-vehicle"
             >
-              <div className="mb-2">
-                <h3 className="text-base font-semibold text-slate-900">Pickup / Drop-off / Vehicle</h3>
+              <div className="mb-1.5">
+                <h3 className="text-sm font-semibold text-slate-900">Pickup / Drop-off / Vehicle</h3>
                 <p className="text-xs text-slate-500">Trip timing, route, flight, and vehicle details.</p>
               </div>
-              <div className="grid gap-2.5 sm:grid-cols-2">
+              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                 {tripRouteFieldOrder.map(renderDispatchBookingField)}
               </div>
               <div
-                className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2"
+                className="mt-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5"
                 data-admin-dispatch-return-trip-control="true"
               >
-                <label className="flex items-start gap-2 text-sm font-semibold text-slate-800">
+                <label className="flex items-center gap-2 text-xs font-semibold text-slate-800">
                   <input
                     checked={adminDispatchReturnTripRequested(booking)}
-                    className="mt-1 h-4 w-4 rounded border-slate-300 text-slate-950"
+                    className="h-4 w-4 rounded border-slate-300 text-slate-950"
                     data-admin-dispatch-return-trip-checkbox="true"
                     onChange={(event) => {
                       const checked = event.target.checked;
@@ -33012,7 +33014,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   />
                   <span>
                     Return trip
-                    <span className="block text-xs font-medium leading-5 text-slate-600">
+                    <span className="ml-2 inline text-[11px] font-medium leading-5 text-slate-600">
                       Save + CRM creates outbound and return as two linked booking records.
                     </span>
                   </span>
@@ -33020,7 +33022,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
 
                 {adminDispatchReturnTripRequested(booking) ? (
                   <div
-                    className="mt-3 grid gap-2.5 sm:grid-cols-2"
+                    className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-4"
                     data-admin-dispatch-return-trip-fields="true"
                   >
                     {(["returnDate", "returnTime", "returnFlight", "returnPickup", "returnDropoff"] as Array<
@@ -33276,20 +33278,21 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             </div>
 
             <div
-              className="order-[31] rounded-md border border-stone-200 bg-stone-50 p-3"
+              className="order-[31] rounded-md border border-stone-200 bg-stone-50 p-2.5"
+              data-admin-dispatch-form-density="slim-trip-extras"
               data-dispatch-workflow-step="trip-extras"
               data-route-extras-child-seat-section="true"
             >
-              <div className="mb-3">
-                <h3 className="text-base font-semibold text-slate-900">Route Extras & Child Seat</h3>
-                <p className="text-sm text-slate-600">Review extra stops and child seat requirements together.</p>
+              <div className="mb-2">
+                <h3 className="text-sm font-semibold text-slate-900">Route Extras & Child Seat</h3>
+                <p className="text-xs text-slate-600">Review extra stops and child seat requirements together.</p>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
                 <div className="sm:col-span-2 lg:col-span-2">
                   <label className="block">
-                    <span className="mb-1 block text-sm font-medium text-slate-700">Extra stop location</span>
+                    <span className="mb-0.5 block text-xs font-semibold text-slate-700">Extra stop location</span>
                     <input
-                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                      className="h-8 w-full rounded-md border border-stone-300 bg-white px-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
                       onChange={(event) => update("extraStopLocation", event.target.value)}
                       placeholder="Marina Bay Sands"
                       value={booking.extraStopLocation}
@@ -33297,9 +33300,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   </label>
                 </div>
                 <label>
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Extra Stops</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Extra Stops</span>
                   <input
-                    className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                    className="h-8 w-full rounded-md border border-stone-300 bg-white px-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
                     inputMode="numeric"
                     min={0}
                     onChange={(event) => update("extraStopCount", event.target.value)}
@@ -33310,9 +33313,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   />
                 </label>
                 <label>
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Extra Charges</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Extra Charges</span>
                   <input
-                    className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                    className="h-8 w-full rounded-md border border-stone-300 bg-white px-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
                     data-manual-extra-charges-amount="true"
                     inputMode="decimal"
                     min={0}
@@ -33324,9 +33327,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   />
                 </label>
                 <label>
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Child seat required</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Child seat required</span>
                   <select
-                    className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                    className="h-8 w-full rounded-md border border-stone-300 bg-white px-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
                     onChange={(event) =>
                       setBooking((current) => ({
                         ...current,
@@ -33348,9 +33351,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   </select>
                 </label>
                 <label>
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Child seat count</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Child seat count</span>
                   <input
-                    className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                    className="h-8 w-full rounded-md border border-stone-300 bg-white px-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
                     inputMode="numeric"
                     min={0}
                     onChange={(event) => update("childSeatCount", event.target.value)}
@@ -33361,9 +33364,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   />
                 </label>
                 <label className="sm:col-span-2 lg:col-span-3">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Child seat type / note</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Child seat type / note</span>
                   <select
-                    className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                    className="h-8 w-full rounded-md border border-stone-300 bg-white px-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
                     onChange={(event) => update("childSeatType", event.target.value)}
                     value={booking.childSeatType}
                   >
@@ -33376,9 +33379,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   </select>
                 </label>
                 <label className="sm:col-span-2 lg:col-span-3">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Extra Charges note / reason</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Extra Charges note / reason</span>
                   <input
-                    className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                    className="h-8 w-full rounded-md border border-stone-300 bg-white px-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
                     data-manual-extra-charges-note="true"
                     onChange={(event) => update("manualExtraChargesNote", event.target.value)}
                     placeholder="Add manual extra charge reason, if any"
@@ -33412,16 +33415,17 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             </div>
 
             <section
-              className="order-[60] rounded-md border border-sky-200 bg-sky-50 p-2.5"
+              className="order-[60] rounded-md border border-sky-200 bg-sky-50 p-2"
+              data-admin-dispatch-form-density="slim-driver-assignment"
               data-dispatch-workflow-step="driver-assignment"
             >
-              <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="mb-1.5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h3 className="text-base font-semibold text-sky-950">Assigned Driver</h3>
-                  <p className="text-sm text-slate-600">Manual assignment with payout control.</p>
+                  <h3 className="text-sm font-semibold text-sky-950">Assigned Driver</h3>
+                  <p className="text-xs text-slate-600">Manual assignment with payout control.</p>
                 </div>
                 <button
-                  className="h-9 rounded-md border border-sky-300 bg-white px-3 text-sm font-medium text-sky-900 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                  className="h-8 rounded-md border border-sky-300 bg-white px-2.5 text-xs font-semibold text-sky-900 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                   disabled={loadingDriverAssignmentDisplay}
                   onClick={() =>
                     loadDriverAssignmentDisplayDrivers(
@@ -33434,11 +33438,11 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   {loadingDriverAssignmentDisplay ? "Loading Drivers..." : "Load Drivers for Assignment"}
                 </button>
               </div>
-              <div className="grid gap-2.5 sm:grid-cols-2">
+              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                 <label>
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Driver</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Driver</span>
                   <select
-                    className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                    className="h-8 w-full rounded-md border border-stone-300 bg-white px-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
                     onChange={(event) => applyDriverToBooking(event.target.value)}
                     value={assignedDriverSelectValue}
                   >
@@ -33457,18 +33461,18 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   </select>
                 </label>
                 <label>
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Driver Name</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Driver Name</span>
                   <input
-                    className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                    className="h-8 w-full rounded-md border border-stone-300 bg-white px-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
                     onChange={(event) => update("driverName", event.target.value)}
                     placeholder="Driver name"
                     value={booking.driverName}
                   />
                 </label>
                 <label>
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Driver Contact</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Driver Contact</span>
                   <input
-                    className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                    className="h-8 w-full rounded-md border border-stone-300 bg-white px-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
                     onChange={(event) => update("driverContact", event.target.value)}
                     placeholder="Phone / WhatsApp"
                     type="tel"
@@ -33476,18 +33480,18 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   />
                 </label>
                 <label>
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Driver Car Plate</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Driver Car Plate</span>
                   <input
-                    className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                    className="h-8 w-full rounded-md border border-stone-300 bg-white px-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
                     onChange={(event) => update("driverPlate", event.target.value)}
                     placeholder="Plate: —"
                     value={assignedDriverPlate}
                   />
                 </label>
                 <label>
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Override Payout</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Override Payout</span>
                   <input
-                    className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                    className="h-8 w-full rounded-md border border-stone-300 bg-white px-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
                     min={0}
                     onChange={(event) => update("driverPayoutOverride", event.target.value)}
                     placeholder={formatMoney(draftPricing.driverPayout)}
@@ -33496,23 +33500,23 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   />
                 </label>
                 <label>
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Override Reason</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Override Reason</span>
                   <input
-                    className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                    className="h-8 w-full rounded-md border border-stone-300 bg-white px-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
                     onChange={(event) => update("driverPayoutReason", event.target.value)}
                     value={booking.driverPayoutReason}
                   />
                 </label>
                 <label>
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Driver Notes</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Driver Notes</span>
                   <input
-                    className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                    className="h-8 w-full rounded-md border border-stone-300 bg-white px-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
                     onChange={(event) => update("driverNotes", event.target.value)}
                     placeholder="Permit, vehicle, handover notes"
                     value={booking.driverNotes}
                   />
                 </label>
-                <label className="flex items-center gap-2 text-sm text-slate-700">
+                <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
                   <input
                     checked={Boolean(booking.driverIncludePayout)}
                     onChange={(event) => update("driverIncludePayout", event.target.checked ? "yes" : "")}
@@ -33521,7 +33525,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   Include payout in dispatch
                 </label>
                 <button
-                  className="h-10 rounded-md border border-sky-300 bg-white px-4 text-sm font-semibold text-sky-900 transition hover:bg-sky-50"
+                  className="h-8 rounded-md border border-sky-300 bg-white px-3 text-xs font-semibold text-sky-900 transition hover:bg-sky-50"
                   onClick={assignDraftDriver}
                   type="button"
                 >

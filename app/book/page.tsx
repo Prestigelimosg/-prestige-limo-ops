@@ -151,7 +151,7 @@ const pickupMinuteOptions = Array.from({ length: 12 }, (_, index) => String(inde
 
 function fieldClass(hasError = false) {
   return [
-    "mt-2 min-h-11 w-full rounded-md border bg-white px-3 py-2 font-sans text-base font-normal text-slate-950 shadow-sm outline-none transition",
+    "mt-1 min-h-9 w-full rounded-md border bg-white px-2.5 py-1.5 font-sans text-sm font-normal text-slate-950 shadow-sm outline-none transition",
     "focus:border-sky-500 focus:ring-2 focus:ring-sky-100",
     hasError ? "border-red-400" : "border-slate-300",
   ].join(" ");
@@ -159,7 +159,7 @@ function fieldClass(hasError = false) {
 
 function timePartClass(hasError = false) {
   return [
-    "min-h-11 rounded-md border bg-white px-3 py-2 font-sans text-base font-normal text-slate-950 shadow-sm outline-none transition",
+    "min-h-9 rounded-md border bg-white px-2.5 py-1.5 font-sans text-sm font-normal text-slate-950 shadow-sm outline-none transition",
     "focus:border-sky-500 focus:ring-2 focus:ring-sky-100",
     hasError ? "border-red-400" : "border-slate-300",
   ].join(" ");
@@ -600,26 +600,27 @@ export default function CustomerBookingPage() {
         </header>
 
         <form
-          className="rounded-md border border-slate-200 bg-white p-4 shadow-sm sm:p-6"
+          className="rounded-md border border-slate-200 bg-white p-3 shadow-sm sm:p-4"
+          data-customer-booking-form-density="slim"
           data-customer-booking-form="true"
           noValidate
           onSubmit={handleSubmit}
         >
-          <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-3">
             <section aria-labelledby="contact-section-title">
               <div className="flex flex-col gap-1">
-                <h2 className="text-lg font-semibold text-slate-950" id="contact-section-title">
+                <h2 className="text-base font-semibold text-slate-950" id="contact-section-title">
                   Contact Details
                 </h2>
                 <div
-                  className="mt-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm leading-6 text-sky-950"
+                  className="mt-1 rounded-md border border-sky-200 bg-sky-50 px-2.5 py-1.5 text-xs leading-5 text-sky-950"
                   data-customer-booking-request-notice="true"
                 >
                   <p>Admin will review and confirm your booking shortly. Thank you</p>
                 </div>
               </div>
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <label className="text-sm font-semibold text-slate-800">
+              <div className="mt-3 grid gap-2.5 md:grid-cols-2 xl:grid-cols-4">
+                <label className="text-xs font-semibold text-slate-800">
                   Customer / company name
                   <input
                     className={fieldClass()}
@@ -632,7 +633,7 @@ export default function CustomerBookingPage() {
                   />
                 </label>
 
-                <label className="text-sm font-semibold text-slate-800">
+                <label className="text-xs font-semibold text-slate-800">
                   Contact no.
                   <input
                     aria-invalid={isMissing("contactNo")}
@@ -647,7 +648,7 @@ export default function CustomerBookingPage() {
                   />
                 </label>
 
-                <label className="text-sm font-semibold text-slate-800 md:col-span-2">
+                <label className="text-xs font-semibold text-slate-800 md:col-span-2">
                   Email address
                   <input
                     className={fieldClass()}
@@ -663,11 +664,11 @@ export default function CustomerBookingPage() {
             </section>
 
             <section aria-labelledby="trip-section-title">
-              <h2 className="text-lg font-semibold text-slate-950" id="trip-section-title">
+              <h2 className="text-base font-semibold text-slate-950" id="trip-section-title">
                 Trip Details
               </h2>
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <label className="text-sm font-semibold text-slate-800">
+              <div className="mt-3 grid gap-2.5 md:grid-cols-2 xl:grid-cols-4">
+                <label className="text-xs font-semibold text-slate-800">
                   Passenger name
                   <input
                     aria-invalid={isMissing("passengerName")}
@@ -701,7 +702,7 @@ export default function CustomerBookingPage() {
                   ) : null}
                 </label>
 
-                <label className="text-sm font-semibold text-slate-800">
+                <label className="text-xs font-semibold text-slate-800">
                   Flight number if any
                   <input
                     className={fieldClass()}
@@ -714,7 +715,7 @@ export default function CustomerBookingPage() {
                   />
                 </label>
 
-                <label className="text-sm font-semibold text-slate-800">
+                <label className="text-xs font-semibold text-slate-800">
                   Pickup date
                   <input
                     aria-invalid={isMissing("pickupDate")}
@@ -728,7 +729,7 @@ export default function CustomerBookingPage() {
                   />
                 </label>
 
-                <label className="text-sm font-semibold text-slate-800">
+                <label className="text-xs font-semibold text-slate-800">
                   Pickup time
                   <input
                     aria-invalid={isMissing("pickupTime")}
@@ -739,13 +740,13 @@ export default function CustomerBookingPage() {
                     value={form.pickupTime}
                   />
                   <div
-                    className="mt-2 flex max-w-xs items-center gap-2"
+                    className="mt-1 flex max-w-xs items-center gap-1.5"
                     data-customer-booking-time-control="compact-selects"
                   >
                     <select
                       aria-invalid={isMissing("pickupTime")}
                       aria-label="Pickup hour"
-                      className={`${timePartClass(isMissing("pickupTime"))} w-20`}
+                      className={`${timePartClass(isMissing("pickupTime"))} w-16`}
                       data-customer-booking-time-part="hour"
                       onChange={(event) => updatePickupTimeSelect("hour", event.target.value)}
                       value={visiblePickupTimeParts.hour}
@@ -763,7 +764,7 @@ export default function CustomerBookingPage() {
                     <select
                       aria-invalid={isMissing("pickupTime")}
                       aria-label="Pickup minute"
-                      className={`${timePartClass(isMissing("pickupTime"))} w-20`}
+                      className={`${timePartClass(isMissing("pickupTime"))} w-16`}
                       data-customer-booking-time-part="minute"
                       onChange={(event) => updatePickupTimeSelect("minute", event.target.value)}
                       value={visiblePickupTimeParts.minute}
@@ -778,7 +779,7 @@ export default function CustomerBookingPage() {
                   </div>
                 </label>
 
-                <label className="text-sm font-semibold text-slate-800">
+                <label className="text-xs font-semibold text-slate-800 md:col-span-1 xl:col-span-2">
                   Pickup location
                   <input
                     aria-invalid={isMissing("pickupLocation")}
@@ -793,7 +794,7 @@ export default function CustomerBookingPage() {
                   />
                 </label>
 
-                <label className="text-sm font-semibold text-slate-800">
+                <label className="text-xs font-semibold text-slate-800 md:col-span-1 xl:col-span-2">
                   Drop-off location
                   <input
                     aria-invalid={isMissing("dropoffLocation")}
@@ -809,13 +810,13 @@ export default function CustomerBookingPage() {
                 </label>
 
                 <div
-                  className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 md:col-span-2"
+                  className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 md:col-span-2 xl:col-span-4"
                   data-customer-booking-return-trip-control="true"
                 >
-                  <label className="flex items-start gap-2 text-sm font-semibold text-slate-800">
+                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-800">
                     <input
                       checked={form.returnTripRequested === "yes"}
-                      className="mt-1 h-4 w-4 rounded border-slate-300 text-slate-950"
+                      className="h-4 w-4 rounded border-slate-300 text-slate-950"
                       data-customer-booking-field="returnTripRequested"
                       data-customer-booking-return-trip-checkbox="true"
                       name="returnTripRequested"
@@ -824,7 +825,7 @@ export default function CustomerBookingPage() {
                     />
                     <span>
                       Return trip
-                      <span className="block text-xs font-medium leading-5 text-slate-600">
+                      <span className="ml-2 inline text-[11px] font-medium leading-5 text-slate-600">
                         Add return details as a linked second request for admin review.
                       </span>
                     </span>
@@ -833,10 +834,10 @@ export default function CustomerBookingPage() {
 
                 {form.returnTripRequested === "yes" ? (
                   <div
-                    className="grid gap-4 rounded-md border border-slate-200 bg-white p-3 md:col-span-2 md:grid-cols-2"
+                    className="grid gap-2.5 rounded-md border border-slate-200 bg-white p-2.5 md:col-span-2 md:grid-cols-2 xl:col-span-4 xl:grid-cols-4"
                     data-customer-booking-return-trip-fields="true"
                   >
-                    <label className="text-sm font-semibold text-slate-800">
+                    <label className="text-xs font-semibold text-slate-800">
                       Return pickup date
                       <input
                         aria-invalid={isMissing("returnPickupDate")}
@@ -850,7 +851,7 @@ export default function CustomerBookingPage() {
                       />
                     </label>
 
-                    <label className="text-sm font-semibold text-slate-800">
+                    <label className="text-xs font-semibold text-slate-800">
                       Return pickup time
                       <input
                         aria-invalid={isMissing("returnPickupTime")}
@@ -860,11 +861,11 @@ export default function CustomerBookingPage() {
                         type="hidden"
                         value={form.returnPickupTime}
                       />
-                      <div className="mt-2 flex max-w-xs items-center gap-2">
+                      <div className="mt-1 flex max-w-xs items-center gap-1.5">
                         <select
                           aria-invalid={isMissing("returnPickupTime")}
                           aria-label="Return pickup hour"
-                          className={`${timePartClass(isMissing("returnPickupTime"))} w-20`}
+                          className={`${timePartClass(isMissing("returnPickupTime"))} w-16`}
                           data-customer-booking-time-part="return-hour"
                           onChange={(event) => updateReturnPickupTimeSelect("hour", event.target.value)}
                           value={visibleReturnPickupTimeParts.hour}
@@ -882,7 +883,7 @@ export default function CustomerBookingPage() {
                         <select
                           aria-invalid={isMissing("returnPickupTime")}
                           aria-label="Return pickup minute"
-                          className={`${timePartClass(isMissing("returnPickupTime"))} w-20`}
+                          className={`${timePartClass(isMissing("returnPickupTime"))} w-16`}
                           data-customer-booking-time-part="return-minute"
                           onChange={(event) => updateReturnPickupTimeSelect("minute", event.target.value)}
                           value={visibleReturnPickupTimeParts.minute}
@@ -897,7 +898,7 @@ export default function CustomerBookingPage() {
                       </div>
                     </label>
 
-                    <label className="text-sm font-semibold text-slate-800">
+                    <label className="text-xs font-semibold text-slate-800 xl:col-span-2">
                       Return pickup location
                       <input
                         aria-invalid={isMissing("returnPickupLocation")}
@@ -912,7 +913,7 @@ export default function CustomerBookingPage() {
                       />
                     </label>
 
-                    <label className="text-sm font-semibold text-slate-800">
+                    <label className="text-xs font-semibold text-slate-800 xl:col-span-2">
                       Return drop-off location
                       <input
                         aria-invalid={isMissing("returnDropoffLocation")}
@@ -927,7 +928,7 @@ export default function CustomerBookingPage() {
                       />
                     </label>
 
-                    <label className="text-sm font-semibold text-slate-800 md:col-span-2">
+                    <label className="text-xs font-semibold text-slate-800 md:col-span-2 xl:col-span-4">
                       Return flight number if any
                       <input
                         className={fieldClass()}
@@ -942,7 +943,7 @@ export default function CustomerBookingPage() {
                   </div>
                 ) : null}
 
-                <label className="text-sm font-semibold text-slate-800">
+                <label className="text-xs font-semibold text-slate-800">
                   Trip type
                   <select
                     className={fieldClass()}
@@ -960,7 +961,7 @@ export default function CustomerBookingPage() {
                   </select>
                 </label>
 
-                <label className="text-sm font-semibold text-slate-800">
+                <label className="text-xs font-semibold text-slate-800">
                   Preferred vehicle
                   <select
                     className={fieldClass()}
@@ -978,7 +979,7 @@ export default function CustomerBookingPage() {
                   </select>
                 </label>
 
-                <label className="text-sm font-semibold text-slate-800">
+                <label className="text-xs font-semibold text-slate-800">
                   Number of passengers
                   <input
                     className={fieldClass()}
@@ -992,7 +993,7 @@ export default function CustomerBookingPage() {
                   />
                 </label>
 
-                <label className="text-sm font-semibold text-slate-800">
+                <label className="text-xs font-semibold text-slate-800">
                   Luggage
                   <input
                     className={fieldClass()}
@@ -1005,7 +1006,7 @@ export default function CustomerBookingPage() {
                   />
                 </label>
 
-                <label className="text-sm font-semibold text-slate-800 md:col-span-2">
+                <label className="text-xs font-semibold text-slate-800 md:col-span-2 xl:col-span-2">
                   Extra stops
                   <input
                     className={fieldClass()}
@@ -1018,10 +1019,10 @@ export default function CustomerBookingPage() {
                   />
                 </label>
 
-                <label className="text-sm font-semibold text-slate-800 md:col-span-2">
+                <label className="text-xs font-semibold text-slate-800 md:col-span-2 xl:col-span-2">
                   Special request / note
                   <textarea
-                    className={`${fieldClass()} min-h-28 resize-y`}
+                    className={`${fieldClass()} min-h-20 resize-y`}
                     data-customer-booking-field="specialRequest"
                     name="specialRequest"
                     onChange={(event) => updateField("specialRequest", event.target.value)}

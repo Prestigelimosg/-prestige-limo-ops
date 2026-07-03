@@ -63,8 +63,8 @@ for (const phrase of [
   "`Today's Jobs` shows all loaded active jobs inside the 1-hour pickup monitor window without a separate expand/collapse toggle.",
   "`Today's Jobs` shows a compact saved driver report readout per visible job, using the existing guarded admin `GET /api/admin-driver-job-statuses` path only, with monitor-wide/per-card refresh controls and auto-refresh on by default.",
   "`Today's Jobs` includes compact live-map controls that reuse the existing admin-only live-location runtime for the jobs inside the monitor window.",
-  "The lower Dispatch saved-record finder is now a compact `Saved Booking Records` disclosure by default. The existing admin-only persistence controls and loaded-record scrollbox are still available after expanding, but they no longer fill the normal Dispatch view.",
-  "Dispatch internal readiness, handoff, follow-up, day-of-trip monitor, recovery, exception, closeout-review, and billing-prep panels now live under one compact `Advanced Checks` disclosure. Every Advanced Checks child panel is a closed nested disclosure by default, while the existing guarded controls remain colocated after expansion and the default operator view stays focused on daily trip work.",
+  "The lower Dispatch saved-record finder and internal advanced checks now sit behind one compact `Optional Workflow Tools` disclosure by default. The existing admin-only persistence controls, loaded-record scrollbox, and guarded checks are still available after expanding, but they no longer fill the normal Dispatch view.",
+  "Dispatch internal readiness, handoff, follow-up, day-of-trip monitor, recovery, exception, closeout-review, and billing-prep panels now live under the optional workflow drawer and one nested `Advanced Checks` disclosure. Every Advanced Checks child panel is a closed nested disclosure by default, while the existing guarded controls remain colocated after expansion and the default operator view stays focused on daily trip work.",
   "The `Today's Jobs` driver report readout is read-only and does not create driver status events, notification rows, provider sends, GPS/live-location records, billing/payment/PDF/invoice/payout records, or a duplicate single-booking Dispatch workflow.",
   "The Bookings tab shows a compact new-request badge/highlight after open customer requests are detected; no sound, browser notification, polling loop, provider send, or new route is added.",
 ]) {
@@ -301,27 +301,52 @@ assert.equal(
 );
 assertIncludes(
   dispatchBlock,
+  'data-dispatch-optional-workflow-tools="true"',
+  "Dispatch optional workflow tools wrapper",
+);
+assertIncludes(
+  dispatchBlock,
+  'data-dispatch-optional-workflow-tools-body="true"',
+  "Dispatch optional workflow tools body",
+);
+assertIncludes(dispatchBlock, "Optional Workflow Tools", "Dispatch optional workflow tools summary");
+
+const optionalWorkflowToolsTag = sliceBetween(
+  dispatchBlock,
+  '<details\n              aria-label="Optional Workflow Tools"',
+  ">",
+);
+assertIncludes(optionalWorkflowToolsTag, 'order-[95]', "Optional workflow tools lower daily-flow order");
+assertExcludes(optionalWorkflowToolsTag, /\sopen(?:=|\s|$)/, "Optional workflow tools default disclosure");
+
+const optionalWorkflowToolsBlock = sliceBetween(
+  dispatchBlock,
+  'data-dispatch-optional-workflow-tools="true"',
+  '<aside className="contents">',
+);
+assertIncludes(
+  optionalWorkflowToolsBlock,
   'data-dispatch-compact-panel="saved-booking-records"',
   "Dispatch saved booking records compact panel",
 );
-assertIncludes(dispatchBlock, "Saved Booking Records", "Dispatch saved booking records summary");
+assertIncludes(optionalWorkflowToolsBlock, "Saved Booking Records", "Dispatch saved booking records summary");
 assertIncludes(
-  dispatchBlock,
+  optionalWorkflowToolsBlock,
   'data-admin-collapsed-sector-body="admin-booking-persistence"',
   "Dispatch saved booking records collapsed body",
 );
 assertIncludes(
-  dispatchBlock,
+  optionalWorkflowToolsBlock,
   'data-dispatch-workflow-step="advanced-checks"',
   "Dispatch advanced checks workflow step",
 );
-assertIncludes(dispatchBlock, 'data-dispatch-advanced-checks="true"', "Dispatch advanced checks wrapper");
+assertIncludes(optionalWorkflowToolsBlock, 'data-dispatch-advanced-checks="true"', "Dispatch advanced checks wrapper");
 assertIncludes(
-  dispatchBlock,
+  optionalWorkflowToolsBlock,
   'data-dispatch-advanced-checks-body="true"',
   "Dispatch advanced checks body",
 );
-assertIncludes(dispatchBlock, "Advanced Checks", "Dispatch advanced checks summary");
+assertIncludes(optionalWorkflowToolsBlock, "Advanced Checks", "Dispatch advanced checks summary");
 
 const advancedChecksTag = sliceBetween(
   dispatchBlock,

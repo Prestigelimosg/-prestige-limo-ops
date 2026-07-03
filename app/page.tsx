@@ -34880,7 +34880,21 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             ) : null}
 
             <details
-              className="group order-[78] rounded-md border border-emerald-200 bg-emerald-50/60 p-2.5"
+              aria-label="Optional Workflow Tools"
+              className="group order-[95] rounded-md border border-slate-200 bg-slate-50/80 p-2.5"
+              data-dispatch-optional-workflow-tools="true"
+              data-dispatch-workflow-step="optional-workflow-tools"
+            >
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-md bg-white/80 px-2 py-1.5 text-sm font-semibold text-slate-900 outline-none transition hover:bg-white focus-visible:ring-2 focus-visible:ring-slate-300 [&::-webkit-details-marker]:hidden">
+                <span className="min-w-0 break-words">Optional Workflow Tools</span>
+                <span className="shrink-0 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+                  <span className="group-open:hidden">Expand</span>
+                  <span className="hidden group-open:inline">Collapse</span>
+                </span>
+              </summary>
+              <div className="mt-2 grid gap-2" data-dispatch-optional-workflow-tools-body="true">
+            <details
+              className="group rounded-md border border-emerald-200 bg-emerald-50/60 p-2.5"
               data-dispatch-workflow-step="admin-lower-persistence"
               data-dispatch-compact-panel="saved-booking-records"
               data-admin-booking-persistence-panel="true"
@@ -37944,6 +37958,8 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                 activation, customer message, or driver notification behavior.
               </p>
                           </div>
+            </details>
+              </div>
             </details>
               </div>
             </details>

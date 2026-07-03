@@ -169,16 +169,31 @@ assertIncludes(
   "const [adminPickupRiskMonitorEnabled, setAdminPickupRiskMonitorEnabled] = useState(false);",
   "admin pickup risk monitor defaults off",
 );
+assertIncludes(
+  appPage,
+  "setAdminPickupApproachEvidenceByReference",
+  "admin pickup approach evidence cache state",
+);
 
 for (const fragment of [
   "type AdminPickupRiskLevel =",
+  "type AdminPickupApproachEvidenceState =",
+  "function adminPickupApproachRequestKey",
+  "function adminPickupApproachTrend",
   "function computeAdminPickupRiskState",
   "function adminPickupRiskBadgeClass",
   "function adminPickupRiskCardClass",
+  "approachEvidence?: AdminPickupApproachEvidenceState | null",
+  "Pickup approach evidence",
+  "Route ETA",
+  "Moving away",
   "activeJobsMapLocationsByReference",
+  "activeJobPickupApproachTargetKey",
   "activeJobPickupRiskRows",
   "activeJobPickupRiskByReference",
   "activeJobPickupRiskSummaryLabel",
+  "loadAdminMapLocationSearchFirstMatch(pickupQuery)",
+  "loadAdminMapRouteEstimate",
   "Route-direction checks need pickup GPS/ETA evidence.",
 ]) {
   assertIncludes(appPage, fragment, `pickup risk helper fragment ${fragment}`);
@@ -215,6 +230,10 @@ for (const fragment of [
   'data-admin-pickup-risk-detail="true"',
   'data-admin-pickup-risk-monitor-summary="true"',
   'data-admin-pickup-risk-marker-state=',
+  'data-admin-pickup-approach-evidence-state=',
+  'data-admin-pickup-approach-evidence-summary="true"',
+  'data-admin-pickup-approach-evidence-marker-state=',
+  "Wrong-direction/ETA alerts use guarded pickup geocode and route evidence when available; otherwise the row says evidence unavailable.",
   "shared driver pins refresh automatically while Today&apos;s Jobs is open.",
   "AdminActiveJobsBrowserMap",
 ]) {
@@ -251,8 +270,8 @@ for (const phrase of [
   "Day-of-trip jobs are now shown as `Today's Jobs`; the shared sector shows all loaded active jobs inside the 1-hour-before-pickup monitor window on Dashboard and Dispatch.",
   "`Today's Jobs` driver report auto-refresh is on by default, still uses the guarded admin driver-status read path, and can be switched off by the operator.",
   "The `Today's Jobs` live map control opens the existing admin-only live-location runtime for the jobs in the monitor window and refreshes shared markers every 10 seconds while the sector is open.",
-  "The pickup risk monitor defaults off, can be toggled by admin, highlights only the affected driver/job row and marker for no-pin, stale/offline, and near-pickup watch states, and does not claim route direction/ETA certainty without pickup GPS or route evidence.",
-  "This reuses existing admin live-location runtime and map read paths; it does not add provider sends, notification sends, customer/driver messages, env changes, DB schema changes, billing/payment/PDF/invoice/payout, calendar sync, parser changes, or shims.",
+  "The pickup risk monitor defaults off, can be toggled by admin, highlights only the affected driver/job row and marker for no-pin, stale/offline, near-pickup watch, route ETA risk, and route-distance moving-away states, and does not claim route direction/ETA certainty unless guarded pickup approach evidence is ready.",
+  "This reuses existing admin live-location runtime, map read paths, and guarded admin map search/route estimate routes for evidence when available; it does not add provider sends, notification sends, customer/driver messages, env changes, DB schema changes, billing/payment/PDF/invoice/payout, calendar sync, parser changes, or shims.",
   "Guard coverage lives in `scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {
   assertIncludes(ledgerSection, phrase, `ledger phrase ${phrase}`);

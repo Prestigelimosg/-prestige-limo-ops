@@ -1264,6 +1264,27 @@ type AdminActiveJobsMapReadState = {
 
 type AdminPickupRiskLevel = "alert" | "critical" | "ok" | "pending" | "watch";
 
+type AdminPickupApproachEvidenceStatus =
+  | "error"
+  | "idle"
+  | "loading"
+  | "ready"
+  | "unavailable";
+
+type AdminPickupApproachTrend = "closer" | "farther" | "steady" | "unknown";
+
+type AdminPickupApproachEvidenceState = {
+  detail: string;
+  distanceMeters: number | null;
+  durationSeconds: number | null;
+  pickupLabel: string;
+  previousDistanceMeters: number | null;
+  requestKey: string;
+  status: AdminPickupApproachEvidenceStatus;
+  trend: AdminPickupApproachTrend;
+  updatedAtMs: number | null;
+};
+
 type AdminPickupRiskState = {
   detail: string;
   level: AdminPickupRiskLevel;
@@ -6179,6 +6200,48 @@ function activeJobMinutesUntilPickup(bookingRecord: BookingRecord, currentTimeMs
   return Math.round((pickupTimeMs - currentTimeMs) / 60000);
 }
 
+function roundedAdminPickupApproachCoordinate(value: number | null | undefined) {
+  const parsed = Number(value);
+
+  return Number.isFinite(parsed) ? parsed.toFixed(3) : "";
+}
+
+function adminPickupApproachRequestKey(
+  bookingReference: string,
+  pickupQuery: string,
+  liveLocation: AdminActiveJobsMapLocation | null | undefined,
+) {
+  const latitude = roundedAdminPickupApproachCoordinate(liveLocation?.latitude);
+  const longitude = roundedAdminPickupApproachCoordinate(liveLocation?.longitude);
+  const normalizedPickupQuery = clean(pickupQuery).toLowerCase();
+
+  if (!bookingReference || !normalizedPickupQuery || !latitude || !longitude) {
+    return "";
+  }
+
+  return [bookingReference, normalizedPickupQuery, latitude, longitude].join("|");
+}
+
+function adminPickupApproachTrend(
+  currentDistanceMeters: number | null | undefined,
+  previousDistanceMeters: number | null | undefined,
+): AdminPickupApproachTrend {
+  const currentDistance = Number(currentDistanceMeters);
+  const previousDistance = Number(previousDistanceMeters);
+
+  if (!Number.isFinite(currentDistance) || !Number.isFinite(previousDistance)) {
+    return "unknown";
+  }
+
+  const distanceDelta = currentDistance - previousDistance;
+
+  if (Math.abs(distanceDelta) < 150) {
+    return "steady";
+  }
+
+  return distanceDelta > 0 ? "farther" : "closer";
+}
+
 function adminPickupRiskBadgeClass(level: AdminPickupRiskLevel) {
   if (level === "critical") {
     return "border-red-300 bg-red-50 text-red-800";
@@ -6220,6 +6283,7 @@ function adminPickupRiskCardClass(level: AdminPickupRiskLevel) {
 }
 
 function computeAdminPickupRiskState({
+  approachEvidence,
   bookingRecord,
   currentTimeMs,
   driverStatusValue,
@@ -6227,6 +6291,7 @@ function computeAdminPickupRiskState({
   monitorEnabled,
   runtimeStatus,
 }: {
+  approachEvidence?: AdminPickupApproachEvidenceState | null;
   bookingRecord: BookingRecord;
   currentTimeMs: number;
   driverStatusValue?: string | null;
@@ -6303,9 +6368,98 @@ function computeAdminPickupRiskState({
     };
   }
 
+  if (approachEvidence?.status === "ready") {
+    const etaMinutes =
+      typeof approachEvidence.durationSeconds === "number" &&
+      Number.isFinite(approachEvidence.durationSeconds)
+        ? Math.max(1, Math.round(approachEvidence.durationSeconds / 60))
+        : null;
+    const distanceLabel = formatAdminMapDistance(approachEvidence.distanceMeters);
+    const durationLabel = formatAdminMapDuration(approachEvidence.durationSeconds);
+    const evidenceLabel = `${distanceLabel}, ${durationLabel} to pickup`;
+
+    if (
+      typeof approachEvidence.distanceMeters === "number" &&
+      Number.isFinite(approachEvidence.distanceMeters) &&
+      approachEvidence.distanceMeters <= 300
+    ) {
+      return {
+        detail: `Driver is near pickup by route evidence (${evidenceLabel}).`,
+        level: "ok",
+        pulse: false,
+        shortLabel: "Near pickup",
+        title: "Pickup Risk: Near pickup",
+      };
+    }
+
+    if (
+      minutesUntilPickup !== null &&
+      etaMinutes !== null &&
+      etaMinutes > Math.max(1, minutesUntilPickup) + 5
+    ) {
+      const level: AdminPickupRiskLevel = minutesUntilPickup <= 15 ? "critical" : "alert";
+
+      return {
+        detail: `Route ETA ${durationLabel} may miss pickup in ${Math.max(
+          0,
+          minutesUntilPickup,
+        )} min. Call driver or prepare replacement.`,
+        level,
+        pulse: level === "critical",
+        shortLabel: "ETA risk",
+        title: "Pickup Risk: ETA risk",
+      };
+    }
+
+    if (approachEvidence.trend === "farther" && minutesUntilPickup !== null && minutesUntilPickup <= 30) {
+      const level: AdminPickupRiskLevel = minutesUntilPickup <= 15 ? "critical" : "alert";
+
+      return {
+        detail: `Route distance increased (${evidenceLabel}). Driver may be moving away; check now.`,
+        level,
+        pulse: level === "critical",
+        shortLabel: "Moving away",
+        title: "Pickup Risk: Moving away",
+      };
+    }
+
+    if (minutesUntilPickup !== null && minutesUntilPickup <= 5 && normalizedDriverStatus !== "ots") {
+      return {
+        detail: `Pickup is very soon; route evidence says ${evidenceLabel}. Watch arrival.`,
+        level: "watch",
+        pulse: false,
+        shortLabel: "Watch",
+        title: "Pickup Risk: Watch",
+      };
+    }
+
+    return {
+      detail:
+        approachEvidence.trend === "closer"
+          ? `Driver is closing in by route evidence (${evidenceLabel}).`
+          : `Live pin and pickup route evidence are current (${evidenceLabel}).`,
+      level: "ok",
+      pulse: false,
+      shortLabel: approachEvidence.trend === "closer" ? "Closing in" : "On route",
+      title: "Pickup Risk: On route",
+    };
+  }
+
+  if (approachEvidence?.status === "loading") {
+    return {
+      detail: "Checking pickup geocode and route ETA through the guarded admin map route.",
+      level: "pending",
+      pulse: false,
+      shortLabel: "Checking",
+      title: "Pickup Risk: Checking",
+    };
+  }
+
   if (minutesUntilPickup !== null && minutesUntilPickup <= 5 && normalizedDriverStatus !== "ots") {
     return {
-      detail: "Live pin is current; pickup is very soon. Watch arrival and be ready to call.",
+      detail:
+        approachEvidence?.detail ||
+        "Live pin is current; pickup is very soon. Watch arrival and be ready to call.",
       level: "watch",
       pulse: false,
       shortLabel: "Watch",
@@ -6314,7 +6468,9 @@ function computeAdminPickupRiskState({
   }
 
   return {
-    detail: "Live pin is current. Route-direction checks need pickup GPS/ETA evidence.",
+    detail:
+      approachEvidence?.detail ||
+      "Live pin is current. Route-direction checks need pickup GPS/ETA evidence.",
     level: "ok",
     pulse: false,
     shortLabel: "Current",
@@ -6605,6 +6761,12 @@ function getRoutePoints(bookingRecord: BookingRecord) {
     clean(bookingRecord.pickup_location) || clean(bookingRecord.pickup_address),
     clean(bookingRecord.dropoff_location) || clean(bookingRecord.dropoff_address),
   ].filter(Boolean);
+}
+
+function getBookingPickupLocationText(bookingRecord: BookingRecord) {
+  const routePoints = getRoutePoints(bookingRecord);
+
+  return routePoints[0] || clean(bookingRecord.pickup_location) || clean(bookingRecord.pickup_address);
 }
 
 const loadBookingsOperationalDisplayForbiddenValueFragments = [
@@ -11526,6 +11688,10 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       runtimeStatus: "closed",
       status: "idle",
     });
+  const [
+    adminPickupApproachEvidenceByReference,
+    setAdminPickupApproachEvidenceByReference,
+  ] = useState<Record<string, AdminPickupApproachEvidenceState>>({});
   const [
     adminActiveJobsBrowserMapConfigState,
     setAdminActiveJobsBrowserMapConfigState,
@@ -22347,6 +22513,16 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       .map((job) => [cleanReferenceText(job.assigned_job_reference), job] as const)
       .filter(([reference]) => Boolean(reference)),
   );
+  const activeJobPickupApproachTargetKey = dayOfTripActiveJobVisibleBookings
+    .map((activeJobBooking) => {
+      const bookingReference = getActiveJobBookingReference(activeJobBooking);
+      const pickupQuery = getBookingPickupLocationText(activeJobBooking);
+      const liveLocation = activeJobsMapLocationsByReference.get(bookingReference) || null;
+
+      return adminPickupApproachRequestKey(bookingReference, pickupQuery, liveLocation);
+    })
+    .filter(Boolean)
+    .join("||");
 
   function activeJobDriverStatusReadStateForBooking(
     activeJobBookingReference: string,
@@ -22372,6 +22548,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     );
 
     return computeAdminPickupRiskState({
+      approachEvidence: adminPickupApproachEvidenceByReference[activeJobBookingReference] || null,
       bookingRecord: activeJobBooking,
       currentTimeMs,
       driverStatusValue: readState?.latestStatus?.status_value,
@@ -22411,6 +22588,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   const activeJobPickupRiskCriticalCount = activeJobPickupRiskRows.filter(
     (row) => row.riskState.level === "critical",
   ).length;
+  const activeJobPickupApproachReadyCount = activeJobPickupRiskRows.filter(
+    (row) => adminPickupApproachEvidenceByReference[row.reference]?.status === "ready",
+  ).length;
   const activeJobPickupRiskSummaryLabel = !adminPickupRiskMonitorEnabled
     ? "Pickup risk monitor is off."
     : adminActiveJobsMapReadState.runtimeStatus !== "active"
@@ -22421,9 +22601,154 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           }.`
         : activeJobPickupRiskAlertRows.length > 0
           ? `${activeJobPickupRiskAlertRows.length} pickup risk watch item${
-              activeJobPickupRiskAlertRows.length === 1 ? "" : "s"
-            }.`
-          : "All live shared pins are current.";
+            activeJobPickupRiskAlertRows.length === 1 ? "" : "s"
+          }.`
+          : activeJobPickupApproachReadyCount > 0
+            ? `Live pins current; pickup approach evidence ready for ${activeJobPickupApproachReadyCount} job${
+                activeJobPickupApproachReadyCount === 1 ? "" : "s"
+              }.`
+            : "Live pins current; pickup approach evidence is pending or unavailable.";
+
+  useEffect(() => {
+    if (
+      !adminPickupRiskMonitorEnabled ||
+      !todayJobsMonitorIsActive ||
+      adminActiveJobsMapReadState.runtimeStatus !== "active" ||
+      !activeJobPickupApproachTargetKey
+    ) {
+      return;
+    }
+
+    for (const activeJobBooking of dayOfTripActiveJobVisibleBookings) {
+      const bookingReference = getActiveJobBookingReference(activeJobBooking);
+      const liveLocation = activeJobsMapLocationsByReference.get(bookingReference) || null;
+      const pickupQuery = getBookingPickupLocationText(activeJobBooking);
+      const requestKey = adminPickupApproachRequestKey(bookingReference, pickupQuery, liveLocation);
+      const latitude = Number(liveLocation?.latitude);
+      const longitude = Number(liveLocation?.longitude);
+
+      if (
+        !bookingReference ||
+        !pickupQuery ||
+        !requestKey ||
+        !liveLocation ||
+        liveLocation.is_stale ||
+        clean(liveLocation.sharing_state).toLowerCase() === "stale" ||
+        !Number.isFinite(latitude) ||
+        !Number.isFinite(longitude)
+      ) {
+        continue;
+      }
+
+      const currentEvidence = adminPickupApproachEvidenceByReference[bookingReference];
+
+      if (
+        currentEvidence?.requestKey === requestKey &&
+        currentEvidence.status !== "idle"
+      ) {
+        continue;
+      }
+
+      const previousDistanceMeters =
+        currentEvidence?.distanceMeters ?? currentEvidence?.previousDistanceMeters ?? null;
+
+      setAdminPickupApproachEvidenceByReference((current) => ({
+        ...current,
+        [bookingReference]: {
+          detail: "Checking pickup geocode and route ETA through the guarded admin map route.",
+          distanceMeters: null,
+          durationSeconds: null,
+          pickupLabel: pickupQuery,
+          previousDistanceMeters,
+          requestKey,
+          status: "loading",
+          trend: "unknown",
+          updatedAtMs: Date.now(),
+        },
+      }));
+
+      void (async () => {
+        try {
+          const pickupMatch = await loadAdminMapLocationSearchFirstMatch(pickupQuery);
+          const routeEstimate = await loadAdminMapRouteEstimate({
+            bookingReference,
+            destination: pickupMatch,
+            origin: {
+              address: null,
+              block_no: null,
+              building: null,
+              label: `${clean(liveLocation.driver_display_label) || "Driver"} live pin`,
+              latitude,
+              longitude,
+              postal: null,
+              road_name: null,
+            },
+          });
+          const distanceMeters =
+            typeof routeEstimate.distance_meters === "number" &&
+            Number.isFinite(routeEstimate.distance_meters)
+              ? routeEstimate.distance_meters
+              : null;
+          const durationSeconds =
+            typeof routeEstimate.duration_seconds === "number" &&
+            Number.isFinite(routeEstimate.duration_seconds)
+              ? routeEstimate.duration_seconds
+              : null;
+
+          setAdminPickupApproachEvidenceByReference((current) => {
+            const latestEvidence = current[bookingReference];
+            const latestPreviousDistanceMeters =
+              latestEvidence?.requestKey === requestKey
+                ? latestEvidence.previousDistanceMeters
+                : latestEvidence?.distanceMeters ?? previousDistanceMeters;
+
+            return {
+              ...current,
+              [bookingReference]: {
+                detail: `Pickup approach evidence loaded: ${formatAdminMapDistance(
+                  distanceMeters,
+                )}, ${formatAdminMapDuration(durationSeconds)} to pickup.`,
+                distanceMeters,
+                durationSeconds,
+                pickupLabel: adminMapLocationLabel(pickupMatch),
+                previousDistanceMeters: latestPreviousDistanceMeters,
+                requestKey,
+                status: "ready",
+                trend: adminPickupApproachTrend(distanceMeters, latestPreviousDistanceMeters),
+                updatedAtMs: Date.now(),
+              },
+            };
+          });
+        } catch (error) {
+          setAdminPickupApproachEvidenceByReference((current) => ({
+            ...current,
+            [bookingReference]: {
+              detail: `${adminMapRouteAssistFailureMessage(
+                error,
+                "Pickup approach evidence",
+              )} Live pin is current, but wrong-direction/ETA alert is unavailable.`,
+              distanceMeters: null,
+              durationSeconds: null,
+              pickupLabel: pickupQuery,
+              previousDistanceMeters,
+              requestKey,
+              status: "unavailable",
+              trend: "unknown",
+              updatedAtMs: Date.now(),
+            },
+          }));
+        }
+      })();
+    }
+    // The evidence target key already includes booking reference, pickup text, and rounded driver pin.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    activeJobPickupApproachTargetKey,
+    adminActiveJobsMapReadState.runtimeStatus,
+    adminPickupApproachEvidenceByReference,
+    adminPickupRiskMonitorEnabled,
+    todayJobsMonitorIsActive,
+  ]);
 
   useEffect(() => {
     const bookingReferences = activeJobDriverStatusReferenceKey.split("|").filter(Boolean);
@@ -22601,6 +22926,8 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               activeJobBookingReference,
               isSelectedActiveJob,
             );
+            const activeJobPickupApproachEvidence =
+              adminPickupApproachEvidenceByReference[activeJobBookingReference] || null;
             const activeJobCardStateClass = adminPickupRiskMonitorEnabled
               ? adminPickupRiskCardClass(activeJobPickupRiskState.level)
               : isSelectedActiveJob
@@ -22617,6 +22944,11 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                 }
                 data-admin-pickup-risk-card-state={
                   adminPickupRiskMonitorEnabled ? activeJobPickupRiskState.level : "off"
+                }
+                data-admin-pickup-approach-evidence-state={
+                  adminPickupRiskMonitorEnabled
+                    ? activeJobPickupApproachEvidence?.status || "none"
+                    : "off"
                 }
                 key={`active-job-${activeJobBooking.id}`}
                 title={activeJobBookingReference || undefined}
@@ -22823,8 +23155,11 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           >
             {activeJobPickupRiskSummaryLabel}
             {adminPickupRiskMonitorEnabled ? (
-              <span className="block pt-0.5 text-[10px] font-medium">
-                Driver direction/ETA alert needs pickup GPS or route evidence; this monitor only alerts safe live-pin freshness now.
+              <span
+                className="block pt-0.5 text-[10px] font-medium"
+                data-admin-pickup-approach-evidence-summary="true"
+              >
+                Wrong-direction/ETA alerts use guarded pickup geocode and route evidence when available; otherwise the row says evidence unavailable.
               </span>
             ) : null}
           </div>
@@ -22867,6 +23202,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                 const markerRiskState = activeJobPickupRiskByReference.get(
                   cleanReferenceText(job.assigned_job_reference),
                 );
+                const markerApproachEvidence = adminPickupApproachEvidenceByReference[
+                  cleanReferenceText(job.assigned_job_reference)
+                ];
 
                 return (
                   <div
@@ -22878,6 +23216,11 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                     data-dashboard-live-driver-map-marker={job.assigned_job_reference || "unknown"}
                     data-admin-pickup-risk-marker-state={
                       adminPickupRiskMonitorEnabled && markerRiskState ? markerRiskState.level : "off"
+                    }
+                    data-admin-pickup-approach-evidence-marker-state={
+                      adminPickupRiskMonitorEnabled
+                        ? markerApproachEvidence?.status || "none"
+                        : "off"
                     }
                     key={`dashboard-${job.assigned_job_reference}-${job.updated_at || ""}`}
                   >

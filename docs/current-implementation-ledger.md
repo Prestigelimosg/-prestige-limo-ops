@@ -1,10 +1,10 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-Pending local live driver pickup risk monitor lane
+Pending local pickup approach alert lane
 
 Latest pushed main/staging runtime checkpoint:
-0b0e6d24 Clarify dispatch copy previews
+10ab21dd Add pickup risk monitor toggle
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
 d0c5e211 Persist Save CRM driver assignment
@@ -43,8 +43,10 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 - The shared `Today's Jobs` monitor now includes an admin-only `Pickup risk` toggle beside the existing driver report auto-refresh control. The toggle defaults off and does not create a new map/window or duplicate monitor sector.
 - When enabled, the existing Today’s Jobs rows and existing Live Driver Map marker rows show the same derived pickup-risk state for the exact driver/job reference: no live pin, stale/offline pin, near-pickup watch, current pin, at-pickup, POB, or completed.
-- The pickup risk monitor defaults off, can be toggled by admin, highlights only the affected driver/job row and marker for no-pin, stale/offline, and near-pickup watch states, and does not claim route direction/ETA certainty without pickup GPS or route evidence.
-- The monitor uses only already loaded active jobs, saved driver report state, and the existing guarded admin active-jobs marker read. It does not add provider sends, notification sends, customer/driver messages, env changes, DB schema changes, new live-location writes, route estimate calls, billing/payment/PDF/invoice/payout, calendar sync, parser changes, or shims.
+- The pickup risk monitor defaults off, can be toggled by admin, highlights only the affected driver/job row and marker for no-pin, stale/offline, near-pickup watch, route ETA risk, and route-distance moving-away states, and does not claim route direction/ETA certainty unless guarded pickup approach evidence is ready.
+- When the toggle is on and the existing live map runtime is active, the monitor may use the existing guarded admin map location search and route estimate APIs to geocode the pickup text and estimate the driver's route distance/ETA to pickup. This is cached by booking reference, pickup text, and rounded driver pin so it does not add a duplicate polling loop.
+- If pickup geocode/route evidence is unavailable, disabled, blocked, or not configured, the exact job row says evidence is unavailable and keeps using the safe live-pin freshness checks instead of guessing wrong direction.
+- The monitor uses only already loaded active jobs, saved driver report state, the existing guarded admin active-jobs marker read, and the existing guarded admin map search/route estimate routes when evidence is available. It does not add provider sends, notification sends, customer/driver messages, env changes, DB schema changes, new live-location writes, billing/payment/PDF/invoice/payout, calendar sync, parser changes, or shims.
 - Customer and driver routes are not expanded; no customer/driver/public route receives admin risk alerts, other-driver locations, finance, payout, billing, parser/debug, token, secret, or mock archive fields.
 - Focused guard coverage lives in `scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs`.
 
@@ -703,8 +705,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Day-of-trip jobs are now shown as `Today's Jobs`; the shared sector shows all loaded active jobs inside the 1-hour-before-pickup monitor window on Dashboard and Dispatch.
 - `Today's Jobs` driver report auto-refresh is on by default, still uses the guarded admin driver-status read path, and can be switched off by the operator.
 - The `Today's Jobs` live map control opens the existing admin-only live-location runtime for the jobs in the monitor window and refreshes shared markers every 10 seconds while the sector is open.
-- The pickup risk monitor defaults off, can be toggled by admin, highlights only the affected driver/job row and marker for no-pin, stale/offline, and near-pickup watch states, and does not claim route direction/ETA certainty without pickup GPS or route evidence.
-- This reuses existing admin live-location runtime and map read paths; it does not add provider sends, notification sends, customer/driver messages, env changes, DB schema changes, billing/payment/PDF/invoice/payout, calendar sync, parser changes, or shims.
+- The pickup risk monitor defaults off, can be toggled by admin, highlights only the affected driver/job row and marker for no-pin, stale/offline, near-pickup watch, route ETA risk, and route-distance moving-away states, and does not claim route direction/ETA certainty unless guarded pickup approach evidence is ready.
+- This reuses existing admin live-location runtime, map read paths, and guarded admin map search/route estimate routes for evidence when available; it does not add provider sends, notification sends, customer/driver messages, env changes, DB schema changes, billing/payment/PDF/invoice/payout, calendar sync, parser changes, or shims.
 - Guard coverage lives in `scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Driver Completed History Grouping Lock

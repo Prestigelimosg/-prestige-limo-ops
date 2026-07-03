@@ -76,6 +76,10 @@ const originalEnv = {
   PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN: process.env.PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN,
 };
 
+function assertIncludes(source, fragment, label = fragment) {
+  assert.equal(source.includes(fragment), true, `${label} must include ${fragment}.`);
+}
+
 function restoreEnv() {
   for (const [key, value] of Object.entries(originalEnv)) {
     if (value === undefined) {
@@ -263,6 +267,14 @@ assert.equal(
   true,
   "Customer Copy must keep compact Email, WhatsApp, and SMS controls.",
 );
+for (const fragment of [
+  'data-customer-copy-readable-summary="true"',
+  'data-dispatch-compact-panel="customer-copy-message-text"',
+  "Message text for Copy / Email / WhatsApp / SMS",
+  'data-copy-preview="customerCopy"',
+]) {
+  assertIncludes(customerCopySection, fragment, `Customer Copy readable summary fragment ${fragment}`);
+}
 assert.equal(
   customerCopySection.includes("disabled-send-sending-enabled") &&
     customerCopySection.includes("disabled-send-external-send") &&

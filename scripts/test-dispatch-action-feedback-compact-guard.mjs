@@ -182,14 +182,14 @@ for (const fragment of [
 
 for (const fragment of [
   "setAdminBookingPersistenceMessage(null);",
-  "adminBookingCalendarReadyForRealSync(booking)",
+  "adminBookingCalendarReadyForRealSync(savedBooking.bookingValue)",
   "Google Calendar auto-sync skipped because the saved admin draft still has date/time or route details to confirm.",
   "Calendar skipped until date/time or route is confirmed; no guest email sent.",
   "adminBookingPersistenceFailureDetail",
   "safe_error_category",
   "safe_error_operation",
-  "markAdminBookingAsActiveForUpdates(savedBookingReference, savedBooking);",
-  "key: getBookingSaveGuardKey(savedBookingReference)",
+  "markAdminBookingAsActiveForUpdates(primarySavedBookingReference, primarySavedBooking);",
+  "key: getBookingSaveGuardKey(primarySavedBookingReference)",
 ]) {
   assertIncludes(saveBookingBlock, fragment, `Save Booking + CRM preflight fragment ${fragment}`);
 }
@@ -224,6 +224,14 @@ for (const [section, label] of [
   ]) {
     assertExcludes(section, forbiddenPattern, `${label} UI-only/privacy boundary`);
   }
+}
+
+for (const fragment of [
+  'data-job-card-readable-summary="true"',
+  "jobCardSaveFeedbackDuplicatesBillingIdentity",
+  "Billing account reviewed",
+]) {
+  assertIncludes(dispatchCopyUiBlock, fragment, `Job Card readable summary fragment ${fragment}`);
 }
 
 for (const phrase of [

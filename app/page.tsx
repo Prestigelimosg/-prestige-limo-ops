@@ -20759,6 +20759,68 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   const jobCardCopyText = getDispatchCopyText("jobCard");
   const customerCopyText = getDispatchCopyText("customerCopy");
   const driverDispatchCopyText = getDispatchCopyText("driverDispatch");
+  const dispatchReadableFlightLocationParts = dispatchCopyLocationFlightParts(booking);
+  const dispatchReadablePickupDateTime = [
+    clean(booking.date) ? formatDate(booking.date) : "Date not set",
+    clean(booking.time) ? formatPickupTime(booking.time) : "Time not set",
+  ].join(", ");
+  const dispatchReadableReturnDateTime = [
+    clean(booking.returnDate) ? formatDate(booking.returnDate) : "Return date not set",
+    clean(booking.returnTime) ? formatPickupTime(booking.returnTime) : "Return time not set",
+  ].join(", ");
+  const dispatchReadableDriverValue = [
+    clean(booking.driverName) || clean(assignedDriverRecord?.driver_name),
+    clean(booking.driverContact) || clean(assignedDriverRecord?.contact_number),
+  ].filter(Boolean).join(" / ") || "Driver not assigned";
+  const dispatchReadableVehicleValue = [
+    assignedDriverPlate,
+    safeDriverVehicleModelDisplay(booking.driverVehicleModel) ||
+      safeDriverVehicleModelDisplay(assignedDriverRecord?.vehicle_type) ||
+      clean(booking.vehicle),
+  ].filter(Boolean).join(" / ") || "Vehicle not assigned";
+  const dispatchReadableCustomerVehicleValue = [
+    assignedDriverPlate,
+    safeDriverVehicleModelDisplay(booking.driverVehicleModel) ||
+      safeDriverVehicleModelDisplay(assignedDriverRecord?.vehicle_type),
+  ].filter(Boolean).join(" / ");
+  const dispatchReadableBillingAccount =
+    clean(confirmedSaveCrmBillingIdentity?.accountLabel) || clean(booking.company) || "Account not set";
+  const dispatchReadableSummaryItems = [
+    { label: "Billing account", value: dispatchReadableBillingAccount },
+    { label: "Passenger", value: clean(booking.name) || "Passenger not set" },
+    {
+      label: "Reference",
+      value: clean(dispatchReleaseWorkflowBookingReference) || "Not saved yet",
+    },
+    {
+      label: "Service",
+      value: customerBookingTypeLabel(booking.bookingType) || clean(booking.bookingType) || "Service not set",
+    },
+    { label: "Pickup", value: dispatchReadablePickupDateTime },
+    { label: "From", value: clean(dispatchReadableFlightLocationParts.pickup) || "Pickup not set" },
+    { label: "To", value: clean(dispatchReadableFlightLocationParts.dropoff) || "Drop-off not set" },
+    { label: "Pax", value: String(Number(clean(booking.pax)) || 1) },
+    { label: "Driver", value: dispatchReadableDriverValue },
+    { label: "Vehicle", value: dispatchReadableVehicleValue },
+    ...(adminDispatchReturnTripRequested(booking)
+      ? [
+          { label: "Return", value: dispatchReadableReturnDateTime },
+          { label: "Return from", value: clean(booking.returnPickup) || "Return pickup not set" },
+          { label: "Return to", value: clean(booking.returnDropoff) || "Return drop-off not set" },
+        ]
+      : []),
+  ];
+  const customerCopyReadableSummaryItems = [
+    ...dispatchReadableSummaryItems.filter(
+      (item) => item.label !== "Billing account" && item.label !== "Vehicle",
+    ),
+    ...(dispatchReadableCustomerVehicleValue
+      ? [{ label: "Car", value: dispatchReadableCustomerVehicleValue }]
+      : []),
+  ];
+  const jobCardSaveFeedbackDuplicatesBillingIdentity =
+    Boolean(bookingSaveMessage && saveCrmBillingIdentityMessage && saveCrmBillingIdentityReview) &&
+    clean(bookingSaveMessage?.text) === clean(saveCrmBillingIdentityMessage?.text);
   const showDriverJobLinkCopy = Boolean(cleanReferenceText(dispatchReleaseWorkflowBookingReference));
   const dispatchReleaseLoadedBookingRecord = loadedBookingId
     ? bookings.find((bookingRecord) => String(bookingRecord.id) === loadedBookingId) ?? null
@@ -37191,7 +37253,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                       {jobCardFeedback.text}
                     </div>
                   ) : null}
-                  {bookingSaveMessage ? (
+                  {bookingSaveMessage && !jobCardSaveFeedbackDuplicatesBillingIdentity ? (
                     <div
                       className={`max-w-full rounded-md border px-2 py-1 text-[11px] font-semibold leading-4 ${statusClass(
                         bookingSaveMessage.tone,
@@ -37215,22 +37277,32 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                     >
                       <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                         <div className="min-w-0">
-                          <p className="uppercase tracking-wide">Billing Identity Review</p>
-                          {saveCrmBillingIdentityReview.conflictingTravelerNames.length > 0 ? (
+                          <p className="uppercase tracking-wide">
+                            {confirmedSaveCrmBillingIdentity ? "Billing account reviewed" : "Billing Identity Review"}
+                          </p>
+                          {confirmedSaveCrmBillingIdentity ? (
                             <p className="break-words font-medium normal-case tracking-normal">
-                              Same company/booker has other traveler(s):{" "}
-                              {saveCrmBillingIdentityReview.conflictingTravelerNames.join(", ")}.
+                              Using: {confirmedSaveCrmBillingIdentity.accountLabel}
                             </p>
                           ) : (
-                            <p className="break-words font-medium normal-case tracking-normal">
-                              Passenger/traveler name is required before Save + CRM can choose the billing account.
-                            </p>
+                            <>
+                              {saveCrmBillingIdentityReview.conflictingTravelerNames.length > 0 ? (
+                                <p className="break-words font-medium normal-case tracking-normal">
+                                  Same company/booker has other traveler(s):{" "}
+                                  {saveCrmBillingIdentityReview.conflictingTravelerNames.join(", ")}.
+                                </p>
+                              ) : (
+                                <p className="break-words font-medium normal-case tracking-normal">
+                                  Passenger/traveler name is required before Save + CRM can choose the billing account.
+                                </p>
+                              )}
+                              <p className="break-words font-medium normal-case tracking-normal">
+                                {saveCrmBillingIdentityReview.needsTravelerName
+                                  ? "Enter Passenger name before Save + CRM."
+                                  : `Save will bill/create account ${saveCrmBillingIdentityReview.accountLabel}.`}
+                              </p>
+                            </>
                           )}
-                          <p className="break-words font-medium normal-case tracking-normal">
-                            {saveCrmBillingIdentityReview.needsTravelerName
-                              ? "Enter Passenger name before Save + CRM."
-                              : `Save will bill/create account ${saveCrmBillingIdentityReview.accountLabel}.`}
-                          </p>
                         </div>
                         <button
                           className="h-8 shrink-0 rounded border border-amber-300 bg-white px-2 text-[11px] font-bold text-amber-950 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
@@ -37245,7 +37317,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                           {confirmedSaveCrmBillingIdentity ? "Reviewed" : "Confirm Account"}
                         </button>
                       </div>
-                      {saveCrmBillingIdentityMessage ? (
+                      {saveCrmBillingIdentityMessage && !confirmedSaveCrmBillingIdentity ? (
                         <p className="mt-1 break-words text-[10px] leading-4">
                           {saveCrmBillingIdentityMessage.text}
                         </p>
@@ -37322,6 +37394,17 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                     </div>
                   ) : null}
                 </div>
+              </div>
+              <div
+                className="mb-2 grid grid-cols-1 gap-1.5 rounded-md border border-slate-200 bg-slate-50/70 p-2 text-xs sm:grid-cols-2 xl:grid-cols-3"
+                data-job-card-readable-summary="true"
+              >
+                {dispatchReadableSummaryItems.map((item) => (
+                  <div className="min-w-0 rounded border border-white bg-white px-2 py-1.5" key={`job-${item.label}`}>
+                    <p className="text-[10px] font-semibold uppercase text-slate-500">{item.label}</p>
+                    <p className="mt-0.5 break-words font-semibold text-slate-950">{item.value}</p>
+                  </div>
+                ))}
               </div>
               <details
                 className="mb-2 rounded-md border border-amber-200 bg-amber-50/80 px-2 py-1 text-sm text-amber-950"
@@ -37685,12 +37768,36 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   value={customerCopyEditState.draftText}
                 />
               ) : (
-                <pre
-                  className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-md bg-emerald-50 p-2.5 text-xs leading-5 text-slate-900"
-                  data-copy-preview="customerCopy"
-                >
-                  {customerCopyText}
-                </pre>
+                <>
+                  <div
+                    className="mb-2 grid grid-cols-1 gap-1.5 rounded-md border border-emerald-200 bg-emerald-50/60 p-2 text-xs sm:grid-cols-2 xl:grid-cols-3"
+                    data-customer-copy-readable-summary="true"
+                  >
+                    {customerCopyReadableSummaryItems.map((item) => (
+                      <div
+                        className="min-w-0 rounded border border-emerald-100 bg-white px-2 py-1.5"
+                        key={`customer-${item.label}`}
+                      >
+                        <p className="text-[10px] font-semibold uppercase text-emerald-700">{item.label}</p>
+                        <p className="mt-0.5 break-words font-semibold text-slate-950">{item.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <details
+                    className="rounded-md border border-emerald-200 bg-white px-2 py-1.5"
+                    data-dispatch-compact-panel="customer-copy-message-text"
+                  >
+                    <summary className="cursor-pointer list-none text-xs font-semibold text-emerald-900 [&::-webkit-details-marker]:hidden">
+                      Message text for Copy / Email / WhatsApp / SMS
+                    </summary>
+                    <pre
+                      className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-md bg-emerald-50 p-2.5 text-xs leading-5 text-slate-900"
+                      data-copy-preview="customerCopy"
+                    >
+                      {customerCopyText}
+                    </pre>
+                  </details>
+                </>
               )}
             </div>
 

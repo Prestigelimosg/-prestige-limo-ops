@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-Pending local admin/customer booking form slimming lane
+Pending local dispatch copy readability polish lane
 
 Latest pushed main/staging runtime checkpoint:
 c4704ad9 Add linked return trips and compact customer folders
@@ -31,6 +31,13 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Public and portal customer booking forms keep the same visible customer-safe fields and the approved return-trip expansion, but use the same slim control height and dense desktop grid treatment.
 - This is a UI-only density pass: it does not change booking submit handlers, CRM/calendar save behavior, return-trip pairing, invoices, PDFs, payments, payouts, provider sends, GPS/live-location, env, or DB schema.
 - Focused guard coverage lives in `scripts/test-admin-customer-booking-form-slim-layout-guard.mjs`.
+
+### Dispatch Copy Readability Polish
+
+- Job Card Preview now shows a readable operator summary before the raw job-card copy disclosure, and duplicate reviewed billing-identity feedback is collapsed into one compact reviewed account line.
+- Customer Copy now shows customer-safe readable trip rows as the main view while keeping the existing generated plain-text payload behind a compact `Message text` disclosure for Copy/Edit/Email/WhatsApp/SMS review.
+- The canonical Customer Copy payload, edit/copy controls, gated Email route, parked WhatsApp/SMS checks, Customer In-App button, Save + CRM, calendar sync, CRM writes, invoices, PDFs, payments, payouts, provider sends, GPS/live-location, env, and DB schema are unchanged.
+- Focused guard coverage lives in `scripts/test-dispatch-action-feedback-compact-guard.mjs` and `scripts/test-customer-copy-multi-channel-no-live-guard.mjs`.
 
 ### Customer Folder Operator Row Compaction
 

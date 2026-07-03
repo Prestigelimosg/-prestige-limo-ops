@@ -717,7 +717,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Dashboard Urgent Requests And One-Window Active Monitor
 
 - Dashboard request panel is now `Urgent Booking Requests` and displays open customer requests with pickup under 24 hours plus saved Driver TBC jobs inside the 1-hour pickup monitor window.
-- Dashboard `Open Urgent` and urgent rows load the selected urgent booking into Dispatch with the existing Driver Job Link panel focused so admin can create and copy the driver link before a driver is assigned.
+- Dashboard `Open Urgent` and urgent rows load the selected urgent booking into Dispatch with the existing Driver Job Link panel focused, a visible urgent handoff notice, and keyboard focus on `Create Link` so admin can create and copy the driver link before a driver is assigned.
 - Dashboard keeps a secondary `Review` action for the existing Bookings review path; it does not replace the Driver Job Link urgent handoff.
 - The Bookings page request panel remains the full queue as `Urgent & New Booking Requests`, with row badges separating urgent under-24h requests from new non-urgent requests.
 - Day-of-trip jobs are shown as `Today's Jobs` only on Dispatch; Dashboard stays focused on urgent requests, admin notifications, calendar, and booking summaries.

@@ -12636,6 +12636,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   const [dispatchLoadFocusTarget, setDispatchLoadFocusTarget] = useState<
     "customerCopy" | "driverJobLink" | null
   >(null);
+  const [driverJobLinkHandoffReference, setDriverJobLinkHandoffReference] = useState("");
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
   const [message, setMessage] = useState<Message>({
     tone: "info",
@@ -12686,6 +12687,13 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       ).find((element) => element.dataset.dispatchWorkflowStep === focusStep);
 
       focusElement?.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (dispatchLoadFocusTarget === "driverJobLink") {
+        window.setTimeout(() => {
+          document
+            .querySelector<HTMLButtonElement>('[data-create-driver-job-link-button="true"]')
+            ?.focus({ preventScroll: true });
+        }, 120);
+      }
       setDispatchLoadFocusTarget(null);
     }, 0);
 
@@ -18699,6 +18707,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       }
     }
     setDispatchReleaseWorkflowLoadRevision((currentRevision) => currentRevision + 1);
+    setDriverJobLinkHandoffReference(options.focusDriverJobLink ? bookingReference : "");
     setDispatchLoadFocusTarget(
       options.focusCustomerCopy
         ? "customerCopy"
@@ -39984,6 +39993,15 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                     ) : null}
                   </div>
                 </div>
+                {driverJobLinkHandoffReference ? (
+                  <div
+                    className="mb-2 rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-950"
+                    data-driver-job-link-handoff-notice="true"
+                  >
+                    Urgent booking {driverJobLinkHandoffReference} loaded here. Next: Create Link,
+                    then Copy Link and send it to the driver.
+                  </div>
+                ) : null}
                 <details
                   className="rounded-md border border-indigo-100 bg-white px-2 py-1.5"
                   data-dispatch-compact-panel="driver-job-link-preview"

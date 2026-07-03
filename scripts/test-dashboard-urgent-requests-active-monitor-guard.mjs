@@ -158,9 +158,15 @@ for (const fragment of [
 for (const fragment of [
   "const [dispatchLoadFocusTarget, setDispatchLoadFocusTarget] = useState<",
   '"customerCopy" | "driverJobLink" | null',
+  'const [driverJobLinkHandoffReference, setDriverJobLinkHandoffReference] = useState("");',
   'dispatchLoadFocusTarget === "driverJobLink"',
   '? "driver-job-link"',
+  'data-create-driver-job-link-button="true"',
+  '?.focus({ preventScroll: true });',
+  "setDriverJobLinkHandoffReference(options.focusDriverJobLink ? bookingReference : \"\");",
   'data-dispatch-workflow-step="driver-job-link"',
+  'data-driver-job-link-handoff-notice="true"',
+  "Urgent booking {driverJobLinkHandoffReference} loaded here. Next: Create Link,",
   "Driver Job Link is ready for admin action.",
 ]) {
   assertIncludes(appPage, fragment, `dispatch driver job link focus fragment ${fragment}`);
@@ -315,7 +321,7 @@ for (const forbiddenPattern of [
 
 for (const phrase of [
   "Dashboard request panel is now `Urgent Booking Requests` and displays open customer requests with pickup under 24 hours plus saved Driver TBC jobs inside the 1-hour pickup monitor window.",
-  "Dashboard `Open Urgent` and urgent rows load the selected urgent booking into Dispatch with the existing Driver Job Link panel focused so admin can create and copy the driver link before a driver is assigned.",
+  "Dashboard `Open Urgent` and urgent rows load the selected urgent booking into Dispatch with the existing Driver Job Link panel focused, a visible urgent handoff notice, and keyboard focus on `Create Link` so admin can create and copy the driver link before a driver is assigned.",
   "Dashboard keeps a secondary `Review` action for the existing Bookings review path; it does not replace the Driver Job Link urgent handoff.",
   "The Bookings page request panel remains the full queue as `Urgent & New Booking Requests`, with row badges separating urgent under-24h requests from new non-urgent requests.",
   "Day-of-trip jobs are shown as `Today's Jobs` only on Dispatch; Dashboard stays focused on urgent requests, admin notifications, calendar, and booking summaries.",

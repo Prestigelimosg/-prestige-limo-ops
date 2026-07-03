@@ -3391,6 +3391,16 @@ function renderAdminActiveJobsBrowserMapTileFallback(
   });
 }
 
+function positionAdminActiveJobsBrowserMapTileFallbackElement(mapElement: HTMLElement) {
+  mapElement.style.display = "block";
+  mapElement.style.height = "100%";
+  mapElement.style.left = "0";
+  mapElement.style.position = "absolute";
+  mapElement.style.top = "0";
+  mapElement.style.width = "100%";
+  mapElement.style.zIndex = "0";
+}
+
 function waitForAdminActiveJobsBrowserMapTileFallback(mapElement: HTMLElement) {
   const tileImages = [
     ...mapElement.querySelectorAll<HTMLImageElement>('[data-admin-active-jobs-map-google-tile="true"]'),
@@ -3529,13 +3539,7 @@ function AdminActiveJobsBrowserMap({
       }
 
       if (tileFallbackInline) {
-        portalElement.style.display = "block";
-        portalElement.style.height = "100%";
-        portalElement.style.left = "0";
-        portalElement.style.position = "absolute";
-        portalElement.style.top = "0";
-        portalElement.style.width = "100%";
-        portalElement.style.zIndex = "0";
+        positionAdminActiveJobsBrowserMapTileFallbackElement(portalElement);
         return;
       }
 
@@ -3656,6 +3660,35 @@ function AdminActiveJobsBrowserMap({
       }
     };
   }, [activeMarkerJobs.length, apiKey, mapId]);
+
+  useEffect(() => {
+    if (renderState !== "ready" || !mapRef.current) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      const mapElement = mapElementRef.current;
+      const latestMarkerJobs = activeMarkerJobsRef.current;
+
+      if (
+        !mapElement ||
+        !adminActiveJobsBrowserMapHasGoogleError(mapElement) ||
+        latestMarkerJobs.length === 0
+      ) {
+        return;
+      }
+
+      markersRef.current.forEach((marker) => marker.setMap(null));
+      markersRef.current.clear();
+      mapRef.current = null;
+      mapsRuntimeRef.current = null;
+      mapSlotRef.current?.prepend(mapElement);
+      positionAdminActiveJobsBrowserMapTileFallbackElement(mapElement);
+      renderAdminActiveJobsBrowserMapTileFallback(mapElement, latestMarkerJobs);
+    }, 500);
+
+    return () => window.clearInterval(interval);
+  }, [renderState]);
 
   useEffect(() => {
     const map = mapRef.current;

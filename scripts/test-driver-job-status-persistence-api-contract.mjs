@@ -136,6 +136,12 @@ class MockSupabaseQuery {
     return this;
   }
 
+  delete() {
+    this.action = "delete";
+
+    return this;
+  }
+
   limit(value) {
     this.limitCount = value;
 
@@ -167,6 +173,10 @@ class MockSupabaseQuery {
   }
 
   then(resolve, reject) {
+    if (this.action === "delete") {
+      return this.client.resolveDelete(this).then(resolve, reject);
+    }
+
     return this.client.resolveSelect(this, "array").then(resolve, reject);
   }
 }
@@ -180,6 +190,7 @@ class MockSupabaseClient {
       driver_job_dsp_actual_time_events: seed.driver_job_dsp_actual_time_events || [],
       driver_job_links: seed.driver_job_links || [],
       driver_job_status_events: seed.driver_job_status_events || [],
+      driver_live_location_latest_positions: seed.driver_live_location_latest_positions || [],
     };
   }
 
@@ -227,6 +238,26 @@ class MockSupabaseClient {
 
     return {
       data: row,
+      error: null,
+    };
+  }
+
+  async resolveDelete(query) {
+    this.operations.push({
+      action: "delete",
+      filters: query.filters,
+      table: query.table,
+    });
+
+    const beforeCount = this.tables[query.table].length;
+
+    this.tables[query.table] = this.tables[query.table].filter(
+      (row) => !query.filters.every((filter) => row[filter.column] === filter.value),
+    );
+
+    return {
+      count: beforeCount - this.tables[query.table].length,
+      data: null,
       error: null,
     };
   }
@@ -372,6 +403,13 @@ function createSeededClient({
         : []),
       ...priorStatusEvents,
     ],
+    driver_live_location_latest_positions: [
+      {
+        booking_reference: "DRV-JOB-API-001",
+        driver_job_link_id: "91c9d972-6fa5-4f3b-b157-bb56a9366c7c",
+        sharing_state: "active",
+      },
+    ],
   });
 }
 
@@ -489,6 +527,24 @@ function assertInsertedActualTimeEvent(
     driver_status_event: expectedStatus,
   });
   assertNoDriverJobLeaks(operation.payload);
+}
+
+function assertDeletedCompletedSharingMarker(client) {
+  const deleteOperations = client.operations.filter(
+    (operation) => operation.table === "driver_live_location_latest_positions",
+  );
+
+  assert.equal(deleteOperations.length, 1);
+  const [operation] = deleteOperations;
+
+  assert.equal(operation.action, "delete");
+  assert.deepEqual(operation.filters, [
+    {
+      column: "driver_job_link_id",
+      value: "91c9d972-6fa5-4f3b-b157-bb56a9366c7c",
+    },
+  ]);
+  assert.equal(client.tables.driver_live_location_latest_positions.length, 0);
 }
 
 function restoreEnv() {
@@ -719,6 +775,14 @@ try {
       result.payload.statusHistory.map((event) => event.status),
       ["pob", "ots"],
     );
+    assert.deepEqual(result.sharing_cleanup, {
+      customerVisible: false,
+      external_send: false,
+      no_op: true,
+      ok: true,
+      reason: "not_terminal_status",
+    });
+    assert.equal(client.tables.driver_live_location_latest_positions.length, 1);
     assertInsertedStatusEvent(client, "pob");
     assertNoDriverJobLeaks(result);
   }
@@ -749,9 +813,17 @@ try {
         exception_reason_status: "provided",
       },
       safeStatusNote: "Passenger dropped at hotel lobby.",
-      totalOperations: 2,
+      totalOperations: 3,
     });
     assertInsertedActualTimeEvent(client, "dsp_end", "completed");
+    assert.deepEqual(result.sharing_cleanup, {
+      customerVisible: false,
+      external_send: false,
+      no_op: false,
+      ok: true,
+      reason: "completed_marker_cleared",
+    });
+    assertDeletedCompletedSharingMarker(client);
     assertNoDriverJobLeaks(result);
   }
 
@@ -877,6 +949,14 @@ try {
     assert.equal(result.body.payload.status, "pob");
     assert.equal(reloaded.status, 200);
     assert.equal(reloaded.body.payload.status, "pob");
+    assert.deepEqual(result.body.sharing_cleanup, {
+      customerVisible: false,
+      external_send: false,
+      no_op: true,
+      ok: true,
+      reason: "not_terminal_status",
+    });
+    assert.equal(client.tables.driver_live_location_latest_positions.length, 1);
     assertInsertedStatusEvent(client, "pob");
     assertNoDriverJobLeaks(result);
     assertNoDriverJobLeaks(reloaded);
@@ -907,7 +987,16 @@ try {
         exception_reason_status: "provided",
       },
       safeStatusNote: "Passenger dropped safely at lobby.",
+      totalOperations: 2,
     });
+    assert.deepEqual(result.body.sharing_cleanup, {
+      customerVisible: false,
+      external_send: false,
+      no_op: false,
+      ok: true,
+      reason: "completed_marker_cleared",
+    });
+    assertDeletedCompletedSharingMarker(client);
     assertNoDriverJobLeaks(result);
   }
 

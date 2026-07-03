@@ -11,6 +11,7 @@ import {
   parseAdminDriverJobLinkRevokePayload,
   revokeAdminDriverJobLink,
 } from "../../../lib/admin-driver-job-link-persistence";
+import { openAdminLiveLocationRuntimeControl } from "../../../lib/admin-live-location-runtime-control";
 
 export const dynamic = "force-dynamic";
 
@@ -72,6 +73,44 @@ function safeFailureResponse() {
 
 function driverJobUrlFromToken(token: string) {
   return `${publicDriverJobLinkOrigin}/driver-job/${encodeURIComponent(token)}`;
+}
+
+async function authorizeLiveLocationForDriverJobLink({
+  bookingReference,
+  context,
+}: {
+  bookingReference: string;
+  context: AdminDispatcherBoundaryContext;
+}) {
+  try {
+    const authorization = await openAdminLiveLocationRuntimeControl({
+      actor: context,
+      bookingReference,
+    });
+    const allowedBookingReferences = authorization.allowed_booking_references;
+    const authorized =
+      authorization.ok &&
+      authorization.runtime_status === "active" &&
+      allowedBookingReferences.includes(bookingReference);
+
+    return {
+      allowed_booking_references: allowedBookingReferences,
+      authorized,
+      customerVisible: false,
+      external_send: false,
+      reason: authorization.reason,
+      runtime_status: authorization.runtime_status,
+    };
+  } catch {
+    return {
+      allowed_booking_references: [],
+      authorized: false,
+      customerVisible: false,
+      external_send: false,
+      reason: "authorization_failed",
+      runtime_status: "error" as const,
+    };
+  }
 }
 
 export async function GET(request: Request) {
@@ -139,9 +178,15 @@ export async function POST(request: Request) {
       );
     }
 
+    const liveLocationAuthorization = await authorizeLiveLocationForDriverJobLink({
+      bookingReference: result.data.link.booking_reference,
+      context: boundary.context,
+    });
+
     return Response.json({
       driver_job_url: driverJobUrlFromToken(result.data.driver_job_token),
       link: result.data.link,
+      live_location: liveLocationAuthorization,
       ok: true,
       token_display_once: true,
     });

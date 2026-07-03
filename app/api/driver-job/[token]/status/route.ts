@@ -77,6 +77,7 @@ export async function PATCH(request: Request, context: DriverJobStatusRouteConte
         ok: true,
         mode: "production",
         payload: result.payload,
+        sharing_cleanup: result.sharing_cleanup,
         status: result.status,
       });
     }

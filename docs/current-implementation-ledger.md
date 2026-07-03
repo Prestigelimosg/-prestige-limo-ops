@@ -107,6 +107,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Dispatch daily-use layout is now operator-focused: intake, booking details, route/vehicle, pricing, assigned driver, customer/driver copy, driver job link, and save actions stay visible while complex readiness, handoff, recovery, exception, and billing-prep panels are grouped under the compact `Advanced Checks` disclosure.
 - Saved booking records are collapsed by default behind a compact `Saved Booking Records` disclosure so the Dispatch page does not open with a large loaded-records sector.
 - Dashboard and Dispatch now share the same `Today's Jobs` monitor. It shows loaded jobs inside the 1-hour pickup window, auto-refreshes driver reports every 10 seconds while open, and includes one compact admin live-map control surface for those active jobs.
+- The shared live-map control keeps a two-slot readiness signal in the existing panel: if fewer than two active job references are in the 1-hour pickup window, the panel shows standby live map slots ready for the next upcoming jobs as they enter that window.
 - On Dispatch, the shared `Today's Jobs` monitor now sits below the `Assigned Driver` sector so driver assignment stays the primary operator action before multi-job scanning.
 - The previous duplicate active-jobs map/monitor surfaces were consolidated so the operator can use one daily monitor for 1-hour auto-appearance, driver reporting, and same-window live map controls.
 - The shared monitor displays pickup time through the normalized booking time formatter instead of the raw persisted `pickup_time` value, preventing saved production jobs from showing `Time TBC` when their pickup time exists in another saved field.
@@ -278,7 +279,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Driver Live Location Multi-Driver Admin List
 
 - Admin Dispatch has a compact Selected Job Live Map runtime control inside the existing Day-of-Trip Dispatch Monitor.
-- The visible Driver Job Link panel also exposes `Enable Live Location` for the loaded booking, so dispatch can open live tracking for a future/single selected job without relying on the hidden Day-of-Trip monitor or the active-jobs dashboard list.
+- Creating a driver job link now auto-authorizes live movement for that booking by opening the existing admin live-location runtime allowlist after the link row is saved.
+- The visible Driver Job Link panel no longer exposes the manual `Enable Live Location` button; the panel stays limited to `Create Link`, `Copy Link`, `Revoke`, and useful status copy.
 - The control adds selected saved bookings one by one through `/api/admin-live-location-runtime` instead of replacing the previous selected booking.
 - Runtime control keeps existing `driver_live_location_allowed_job_references`, removes duplicates, and caps the selected booking list at 50 references.
 - Driver `Share Location` first calls `GET /api/driver-job/[token]/live-location` for server readiness; Chrome GPS is requested only after that readiness check passes.
@@ -714,6 +716,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Day-of-trip jobs are now shown as `Today's Jobs`; the shared sector shows all loaded active jobs inside the 1-hour-before-pickup monitor window on Dashboard and Dispatch.
 - `Today's Jobs` driver report auto-refresh is on by default, still uses the guarded admin driver-status read path, and can be switched off by the operator.
 - The `Today's Jobs` live map control opens the existing admin-only live-location runtime for the jobs in the monitor window and refreshes shared markers every 10 seconds while the sector is open.
+- The same live map control keeps a two-slot readiness signal; when fewer than two active job references are in the 1-hour window, standby slots remain ready for upcoming jobs as they enter that window.
 - The pickup risk monitor defaults off, can be toggled by admin, highlights only the affected driver/job row and marker for no-pin, stale/offline, near-pickup watch, route ETA risk, and route-distance moving-away states, and does not claim route direction/ETA certainty unless guarded pickup approach evidence is ready.
 - This reuses existing admin live-location runtime, map read paths, and guarded admin map search/route estimate routes for evidence when available; it does not add provider sends, notification sends, customer/driver messages, env changes, DB schema changes, billing/payment/PDF/invoice/payout, calendar sync, parser changes, or shims.
 - Guard coverage lives in `scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
@@ -6886,19 +6889,12 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This guard adds `scripts/test-driver-live-location-browser-map-key-readiness-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Driver Live Location POB Auto-Stop Readiness Contract Guard Lock
-- This is a docs/test-only guard for future Driver Live Location stop behavior after POB or Job Completed.
-- This lock does not activate GPS capture, start/stop live-location runtime, open live-location gates, write/read location rows, apply migrations, change env, deploy, call providers, send messages, activate customer live map links, or activate production.
-- Current state remains closed: no browser GPS capture, no location row persistence, no active admin map, no customer live map, no polling loop, and no background auto-stop worker.
-- Future auto-stop must use persisted driver job status evidence from `driver_job_status_events`, not local UI state, demo state, mock state, localStorage, customer status text, or untrusted browser-submitted status history.
-- Future auto-stop may stop sharing when the resolved assigned job reaches persisted `pob` or `completed`, using the guarded `driver_otw -> ots -> pob -> completed` workflow.
-- Future POB stop policy must be bounded and names-only; the default planning value remains 5 minutes after persisted POB unless owner separately approves a different value.
-- Future Job Completed stop policy must stop sharing immediately or at the approved bounded grace window; it must not leave indefinite tracking active after terminal completion.
-- Future auto-stop must be scoped to the resolved driver job token and assigned job only; one driver's POB/completed event must not stop or expose another driver/job location.
-- Future auto-stop implementation must be server-side verified, admin/dispatcher auditable, and must not rely on client-only timers as the source of truth.
-- Future auto-stop may use a bounded timer or scheduler only after separate owner approval; no indefinite polling loop, retry storm, fallback send, queue, cron, or multi-channel blast is approved by this guard.
-- Future auto-stop evidence must prove closed gates, fake/staging-safe status events first, wrong-driver blocked, wrong-admin blocked, stop after persisted POB/completed, stale/offline state, cleanup zero temporary rows, rollback disabled, and no customer live map.
-- Future stop/audit rows must include only safe operational fields and must not include pricing, payout, PayNow, payout preferences, `driver_payout_rules`, `customer_rates`, billing/payment/PDF/invoice, internal/admin notes, parser/debug fields, secrets/tokens/cookies/JWTs, raw provider payloads, customer contact details, customer messages, Save Booking internals, `/api/admin-saved-bookings` internals, OTS/photo/storage, or calendar data.
-- Future auto-stop remains separate from Telegram True Live Location, Email/WhatsApp/SMS provider sends, Customer In-App, Driver In-App, Customer Copy, Driver Details Email, Google Maps admin search/route estimates, OneMap, FlightAware, billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, and shim work.
+- Driver `Job Completed` now clears the exact active sharing marker for the resolved driver job link by deleting from `driver_live_location_latest_positions` with `driver_job_link_id` scope.
+- This completed-status cleanup uses persisted driver job status evidence from `driver_job_status_events`, not local UI state, demo state, mock state, localStorage, customer status text, or untrusted browser-submitted status history.
+- The completed cleanup is server-side verified through the existing driver job token path, customer-invisible, provider-send-free, and scoped to the resolved assigned job only; one driver's completed event must not stop or expose another driver/job location.
+- Driver status remains the source of truth. If marker cleanup is unavailable, the status update still returns safe `sharing_cleanup` status without exposing table errors, coordinates, tokens, secrets, pricing, payout, finance, parser/debug, or internal notes.
+- POB timed stop remains a future separately approved policy; the default planning value remains 5 minutes after persisted POB unless owner separately approves a different value.
+- No GPS capture auto-start, customer live map activation, provider call/send, email/WhatsApp/SMS/Telegram send, env change, DB schema change, deploy, billing/payment/PDF/invoice/payout, parser, Save Booking, `/api/admin-saved-bookings`, OTS/photo/storage, calendar, or shim work changed in this cleanup.
 - This guard adds `scripts/test-driver-live-location-pob-auto-stop-readiness-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Driver Live Location Stale/Offline Readiness Contract Guard Lock

@@ -72,19 +72,12 @@ const ledgerSection = sectionBetween(
 );
 
 for (const phrase of [
-  "This is a docs/test-only guard for future Driver Live Location stop behavior after POB or Job Completed.",
-  "This lock does not activate GPS capture, start/stop live-location runtime, open live-location gates, write/read location rows, apply migrations, change env, deploy, call providers, send messages, activate customer live map links, or activate production.",
-  "Current state remains closed: no browser GPS capture, no location row persistence, no active admin map, no customer live map, no polling loop, and no background auto-stop worker.",
-  "Future auto-stop must use persisted driver job status evidence from `driver_job_status_events`, not local UI state, demo state, mock state, localStorage, customer status text, or untrusted browser-submitted status history.",
-  "Future auto-stop may stop sharing when the resolved assigned job reaches persisted `pob` or `completed`, using the guarded `driver_otw -> ots -> pob -> completed` workflow.",
-  "Future POB stop policy must be bounded and names-only; the default planning value remains 5 minutes after persisted POB unless owner separately approves a different value.",
-  "Future Job Completed stop policy must stop sharing immediately or at the approved bounded grace window; it must not leave indefinite tracking active after terminal completion.",
-  "Future auto-stop must be scoped to the resolved driver job token and assigned job only; one driver's POB/completed event must not stop or expose another driver/job location.",
-  "Future auto-stop implementation must be server-side verified, admin/dispatcher auditable, and must not rely on client-only timers as the source of truth.",
-  "Future auto-stop may use a bounded timer or scheduler only after separate owner approval; no indefinite polling loop, retry storm, fallback send, queue, cron, or multi-channel blast is approved by this guard.",
-  "Future auto-stop evidence must prove closed gates, fake/staging-safe status events first, wrong-driver blocked, wrong-admin blocked, stop after persisted POB/completed, stale/offline state, cleanup zero temporary rows, rollback disabled, and no customer live map.",
-  "Future stop/audit rows must include only safe operational fields and must not include pricing, payout, PayNow, payout preferences, `driver_payout_rules`, `customer_rates`, billing/payment/PDF/invoice, internal/admin notes, parser/debug fields, secrets/tokens/cookies/JWTs, raw provider payloads, customer contact details, customer messages, Save Booking internals, `/api/admin-saved-bookings` internals, OTS/photo/storage, or calendar data.",
-  "Future auto-stop remains separate from Telegram True Live Location, Email/WhatsApp/SMS provider sends, Customer In-App, Driver In-App, Customer Copy, Driver Details Email, Google Maps admin search/route estimates, OneMap, FlightAware, billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, and shim work.",
+  "Driver `Job Completed` now clears the exact active sharing marker for the resolved driver job link by deleting from `driver_live_location_latest_positions` with `driver_job_link_id` scope.",
+  "This completed-status cleanup uses persisted driver job status evidence from `driver_job_status_events`, not local UI state, demo state, mock state, localStorage, customer status text, or untrusted browser-submitted status history.",
+  "The completed cleanup is server-side verified through the existing driver job token path, customer-invisible, provider-send-free, and scoped to the resolved assigned job only; one driver's completed event must not stop or expose another driver/job location.",
+  "Driver status remains the source of truth. If marker cleanup is unavailable, the status update still returns safe `sharing_cleanup` status without exposing table errors, coordinates, tokens, secrets, pricing, payout, finance, parser/debug, or internal notes.",
+  "POB timed stop remains a future separately approved policy; the default planning value remains 5 minutes after persisted POB unless owner separately approves a different value.",
+  "No GPS capture auto-start, customer live map activation, provider call/send, email/WhatsApp/SMS/Telegram send, env change, DB schema change, deploy, billing/payment/PDF/invoice/payout, parser, Save Booking, `/api/admin-saved-bookings`, OTS/photo/storage, calendar, or shim work changed in this cleanup.",
   "This guard adds `scripts/test-driver-live-location-pob-auto-stop-readiness-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {
   assertIncludes(ledgerSection, phrase, `ledger POB auto-stop phrase ${phrase}`);
@@ -93,9 +86,8 @@ for (const phrase of [
 assertIncludes(preactivationSuite, guardScript, "preactivation POB auto-stop guard registration");
 
 for (const forbiddenPhrase of [
-  "auto-stop is active now",
+  "POB timed stop is active now",
   "GPS capture is active",
-  "location row persistence is active",
   "background auto-stop worker is active",
   "client-only timer is approved",
   "local UI state may stop sharing",
@@ -129,6 +121,12 @@ for (const fragment of [
   'status_source: "driver_job_api"',
   ".insert(eventRow)",
   ".select(driverJobStatusEventSelect)",
+  "clearDriverSharingMarkerForCompletedStatus",
+  '.from("driver_live_location_latest_positions")',
+  ".delete()",
+  '.eq("driver_job_link_id", link.id)',
+  "completed_marker_cleared",
+  "sharing_cleanup: sharingCleanup",
 ]) {
   assertIncludes(driverStatusPersistence, fragment, `driver status persistence fragment ${fragment}`);
 }
@@ -137,6 +135,8 @@ for (const fragment of [
   'assert.equal(result.status, "pob")',
   "assertInsertedStatusEvent(client, \"pob\")",
   "assertInsertedStatusEvent(client, \"completed\"",
+  "assertDeletedCompletedSharingMarker(client)",
+  "completed_marker_cleared",
 ]) {
   assertIncludes(
     driverStatusPersistenceContract,

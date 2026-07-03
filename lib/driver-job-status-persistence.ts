@@ -49,6 +49,7 @@ export type DriverJobProductionStatusUpdateResult =
       ok: true;
       payload: SafeDriverJobPayload;
       reason: "updated";
+      sharing_cleanup: DriverJobSharingCleanupResult;
       status: DriverJobStatusUpdate;
     }
   | {
@@ -159,6 +160,18 @@ type DriverStatusCustomerInAppFanoutResult =
       provider_send: false;
       status: number;
     };
+
+type DriverJobSharingCleanupResult = {
+  customerVisible: false;
+  external_send: false;
+  no_op: boolean;
+  ok: boolean;
+  reason:
+    | "cleanup_unavailable"
+    | "completed_marker_cleared"
+    | "missing_driver_job_link"
+    | "not_terminal_status";
+};
 
 const driverJobLinkSelect =
   "id, booking_reference, link_status, expires_at, revoked_at, safe_link_context";
@@ -676,6 +689,69 @@ async function saveHourlyActualTimeEvidenceForDriverStatus({
   }
 }
 
+async function clearDriverSharingMarkerForCompletedStatus({
+  client,
+  link,
+  status,
+}: {
+  client: DriverJobStatusPersistenceClient;
+  link: DriverJobLinkPersistenceRow;
+  status: DriverJobStatusUpdate;
+}): Promise<DriverJobSharingCleanupResult> {
+  if (status !== "completed") {
+    return {
+      customerVisible: false,
+      external_send: false,
+      no_op: true,
+      ok: true,
+      reason: "not_terminal_status",
+    };
+  }
+
+  if (!link.id) {
+    return {
+      customerVisible: false,
+      external_send: false,
+      no_op: true,
+      ok: false,
+      reason: "missing_driver_job_link",
+    };
+  }
+
+  try {
+    const { error } = await client
+      .from("driver_live_location_latest_positions")
+      .delete()
+      .eq("driver_job_link_id", link.id);
+
+    if (error) {
+      return {
+        customerVisible: false,
+        external_send: false,
+        no_op: false,
+        ok: false,
+        reason: "cleanup_unavailable",
+      };
+    }
+
+    return {
+      customerVisible: false,
+      external_send: false,
+      no_op: false,
+      ok: true,
+      reason: "completed_marker_cleared",
+    };
+  } catch {
+    return {
+      customerVisible: false,
+      external_send: false,
+      no_op: false,
+      ok: false,
+      reason: "cleanup_unavailable",
+    };
+  }
+}
+
 function configValueOrNull(value: string | undefined) {
   const trimmed = value?.trim();
 
@@ -1019,6 +1095,11 @@ export async function saveDriverJobStatusThroughStatusPersistence(
     link: resolvedLink.link,
     statusEvent: persistedEvent,
   });
+  const sharingCleanup = await clearDriverSharingMarkerForCompletedStatus({
+    client: input.client,
+    link: resolvedLink.link,
+    status: nextStatus,
+  });
 
   let customerNotification = customerInAppNotificationSkippedResult;
 
@@ -1044,6 +1125,7 @@ export async function saveDriverJobStatusThroughStatusPersistence(
       ...statusHistory.statuses,
     ]),
     reason: "updated",
+    sharing_cleanup: sharingCleanup,
     status: nextStatus,
   };
 }

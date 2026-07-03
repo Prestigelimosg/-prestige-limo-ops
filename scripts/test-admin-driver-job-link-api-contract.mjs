@@ -18,6 +18,7 @@ const unsafeDriverJobLinkLeakPattern =
   /token_hash|raw_token|driver_job_token|safe_link_context|customer_price|quoted_price|rate_amount|driver_payout|paynow|invoice|payment|pdf|billing|finance|parser_debug|raw_ai|parser_prompt|live_location|proof|photo|notification|mock_archive|mock_qa|dev_workbench|internal_admin_note|admin_note|server_secret/i;
 const sourceFiles = [
   "lib/admin-driver-job-link-persistence.ts",
+  "lib/admin-live-location-runtime-control.ts",
   "lib/admin-booking-supabase-adapter.ts",
   "lib/admin-booking-persistence.ts",
   "lib/admin-dispatcher-auth-boundary.ts",
@@ -132,6 +133,7 @@ class MockSupabaseQuery {
     this.client = client;
     this.filters = [];
     this.operation = null;
+    this.onConflict = null;
     this.orderBy = null;
     this.payload = null;
     this.resultLimit = null;
@@ -181,6 +183,12 @@ class MockSupabaseQuery {
     return this;
   }
 
+  maybeSingle() {
+    this.resultMode = "maybeSingle";
+
+    return this;
+  }
+
   then(onFulfilled, onRejected) {
     return Promise.resolve(this.execute()).then(onFulfilled, onRejected);
   }
@@ -192,9 +200,26 @@ class MockSupabaseQuery {
     return this;
   }
 
+  upsert(payload, options = {}) {
+    this.operation = "upsert";
+    this.onConflict = options.onConflict || null;
+    this.payload = payload;
+
+    return this;
+  }
+
   execute() {
     if (this.operation === "insert") {
       return this.client.insertRows(this.table, this.payload, this.resultMode);
+    }
+
+    if (this.operation === "upsert") {
+      return this.client.upsertRows(
+        this.table,
+        this.payload,
+        this.onConflict,
+        this.resultMode,
+      );
     }
 
     if (this.operation === "update") {
@@ -206,6 +231,7 @@ class MockSupabaseQuery {
       this.filters,
       this.orderBy,
       this.resultLimit,
+      this.resultMode,
       this.selectedColumns,
     );
   }
@@ -218,6 +244,7 @@ class MockSupabaseClient {
     this.operations = [];
     this.selectHistory = [];
     this.tables = {
+      driver_live_location_runtime_settings: [],
       driver_job_links: [],
     };
 
@@ -273,7 +300,57 @@ class MockSupabaseClient {
     };
   }
 
-  selectRows(table, filters, orderBy, resultLimit, selectedColumns) {
+  upsertRows(table, payload, onConflict, mode) {
+    const failure = this.failureFor("upsert", table);
+
+    if (failure) {
+      return {
+        data: null,
+        error: failure,
+      };
+    }
+
+    const rows = Array.isArray(payload) ? payload : [payload];
+    const upsertedRows = rows.map((row) => {
+      const conflictKey = onConflict || "id";
+      const existing = this.tables[table].find(
+        (tableRow) => tableRow[conflictKey] === row[conflictKey],
+      );
+
+      if (existing) {
+        Object.assign(existing, clone(row));
+
+        return existing;
+      }
+
+      const nextRow = {
+        id: row.id || this.nextUuid(),
+        created_at: row.created_at || "2026-06-10T01:00:00.000Z",
+        ...clone(row),
+      };
+
+      this.tables[table].push(nextRow);
+
+      return nextRow;
+    });
+
+    this.operations.push({
+      onConflict,
+      payload: clone(payload),
+      table,
+      type: "upsert",
+    });
+
+    return {
+      data:
+        mode === "single" || mode === "maybeSingle"
+          ? clone(upsertedRows[0] || null)
+          : clone(upsertedRows),
+      error: null,
+    };
+  }
+
+  selectRows(table, filters, orderBy, resultLimit, resultMode, selectedColumns) {
     const failure = this.failureFor("select", table);
 
     this.selectHistory.push({
@@ -303,6 +380,20 @@ class MockSupabaseClient {
 
     if (resultLimit) {
       rows = rows.slice(0, resultLimit);
+    }
+
+    if (resultMode === "single") {
+      return {
+        data: clone(rows[0] || null),
+        error: rows[0] ? null : { code: "PGRST116" },
+      };
+    }
+
+    if (resultMode === "maybeSingle") {
+      return {
+        data: clone(rows[0] || null),
+        error: null,
+      };
     }
 
     return {
@@ -515,14 +606,43 @@ try {
   assert.equal(created.body.link.link_status, "active");
   assert.equal(created.body.link.safe_summary.assigned_driver, "Contract Driver");
   assert.equal(created.body.link.safe_summary.vehicle, "Toyota Alphard");
+  assert.equal(created.body.live_location.authorized, true);
+  assert.equal(created.body.live_location.customerVisible, false);
+  assert.equal(created.body.live_location.external_send, false);
+  assert.equal(created.body.live_location.runtime_status, "active");
+  assert.deepEqual(created.body.live_location.allowed_booking_references, [
+    "JOB-LINK-CONTRACT-001",
+  ]);
   assertNoApiLeak(created, "create response");
   assertNoUnsafeDriverJobLinkLeak(created.body.link, "create link payload");
   assert.doesNotMatch(JSON.stringify(created.body), /token_hash|raw_token|driver_job_token/i);
 
-  assert.equal(createdClients.length, 1);
+  assert.equal(createdClients.length, 2);
   assert.equal(createdClients[0].url, supabaseUrlSentinel);
   assert.equal(createdClients[0].serviceRoleKey, serviceRoleSentinel);
+  assert.equal(createdClients[1].url, supabaseUrlSentinel);
+  assert.equal(createdClients[1].serviceRoleKey, serviceRoleSentinel);
   assert.equal(client.tables.driver_job_links.length, 1);
+  assert.equal(client.tables.driver_live_location_runtime_settings.length, 1);
+  assert.equal(
+    client.tables.driver_live_location_runtime_settings[0].setting_name,
+    "driver_live_location_runtime",
+  );
+  assert.deepEqual(
+    client.tables.driver_live_location_runtime_settings[0]
+      .driver_live_location_allowed_job_references,
+    ["JOB-LINK-CONTRACT-001"],
+  );
+  assert.equal(
+    client.tables.driver_live_location_runtime_settings[0]
+      .driver_live_location_capture_enabled,
+    true,
+  );
+  assert.equal(
+    client.tables.driver_live_location_runtime_settings[0]
+      .admin_active_jobs_map_enabled,
+    true,
+  );
   assert.match(client.tables.driver_job_links[0].token_hash, /^[a-f0-9]{64}$/);
   assert.equal(client.tables.driver_job_links[0].safe_link_context.driver_job_payload.assigned_driver_name, "Contract Driver");
   assert.equal(client.tables.driver_job_links[0].safe_link_context.driver_job_payload.pickup_location, "Raffles Hotel Singapore");
@@ -557,7 +677,17 @@ try {
   assert.equal(optionalDriverDetailsCreate.body.link.booking_reference, "JOB-LINK-CONTRACT-OPTIONAL-DRIVER");
   assert.equal(optionalDriverDetailsCreate.body.link.safe_summary.assigned_driver, null);
   assert.equal(optionalDriverDetailsCreate.body.link.safe_summary.vehicle, "Vehicle TBC");
+  assert.equal(optionalDriverDetailsCreate.body.live_location.authorized, true);
+  assert.deepEqual(
+    optionalDriverDetailsCreate.body.live_location.allowed_booking_references,
+    ["JOB-LINK-CONTRACT-001", "JOB-LINK-CONTRACT-OPTIONAL-DRIVER"],
+  );
   assert.equal(client.tables.driver_job_links.length, 2);
+  assert.deepEqual(
+    client.tables.driver_live_location_runtime_settings[0]
+      .driver_live_location_allowed_job_references,
+    ["JOB-LINK-CONTRACT-001", "JOB-LINK-CONTRACT-OPTIONAL-DRIVER"],
+  );
   assert.equal(
     client.tables.driver_job_links[1].safe_link_context.driver_job_payload.assigned_driver_name,
     undefined,
@@ -603,6 +733,15 @@ try {
   assert.equal(dashboardBrowserCreate.body.link.booking_reference, "JOB-LINK-CONTRACT-BROWSER-DASHBOARD");
   assert.equal(dashboardBrowserCreate.body.link.actor_role, "admin");
   assert.equal(dashboardBrowserCreate.body.link.safe_summary.assigned_driver, null);
+  assert.equal(dashboardBrowserCreate.body.live_location.authorized, true);
+  assert.deepEqual(
+    dashboardBrowserCreate.body.live_location.allowed_booking_references,
+    [
+      "JOB-LINK-CONTRACT-001",
+      "JOB-LINK-CONTRACT-OPTIONAL-DRIVER",
+      "JOB-LINK-CONTRACT-BROWSER-DASHBOARD",
+    ],
+  );
   assertNoApiLeak(dashboardBrowserCreate, "dashboard browser create response");
   assertNoUnsafeDriverJobLinkLeak(
     dashboardBrowserCreate.body.link,
@@ -610,6 +749,15 @@ try {
   );
   assert.doesNotMatch(JSON.stringify(dashboardBrowserCreate.body), /token_hash|raw_token|driver_job_token/i);
   assert.equal(client.tables.driver_job_links.length, 3);
+  assert.deepEqual(
+    client.tables.driver_live_location_runtime_settings[0]
+      .driver_live_location_allowed_job_references,
+    [
+      "JOB-LINK-CONTRACT-001",
+      "JOB-LINK-CONTRACT-OPTIONAL-DRIVER",
+      "JOB-LINK-CONTRACT-BROWSER-DASHBOARD",
+    ],
+  );
 
   const listed = await readResponse(
     await harness.route.GET(
@@ -733,10 +881,15 @@ try {
 
   assert.deepEqual(
     client.operations.map((operation) => operation.type),
-    ["insert", "insert", "insert", "update", "update"],
+    ["insert", "upsert", "insert", "upsert", "insert", "upsert", "update", "update"],
   );
   assert.equal(
-    client.operations.some((operation) => operation.table !== "driver_job_links"),
+    client.operations.some(
+      (operation) =>
+        !["driver_job_links", "driver_live_location_runtime_settings"].includes(
+          operation.table,
+        ),
+    ),
     false,
   );
 

@@ -19732,13 +19732,65 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         throw new Error("Driver job link response was missing the one-time URL.");
       }
 
+      const liveLocation =
+        result.live_location &&
+        typeof result.live_location === "object" &&
+        !Array.isArray(result.live_location)
+          ? result.live_location as {
+              allowed_booking_references?: unknown;
+              authorized?: unknown;
+              customerVisible?: unknown;
+              external_send?: unknown;
+            }
+          : null;
+      const liveLocationAuthorized =
+        liveLocation?.authorized === true &&
+        liveLocation.customerVisible === false &&
+        liveLocation.external_send === false;
+      const liveLocationAllowedBookingReferences = Array.isArray(
+        liveLocation?.allowed_booking_references,
+      )
+        ? liveLocation.allowed_booking_references
+            .map(cleanReferenceText)
+            .filter(Boolean)
+        : [];
+
+      if (liveLocationAuthorized) {
+        setAdminActiveJobsMapReadState((current) => ({
+          ...current,
+          allowedBookingReferences:
+            liveLocationAllowedBookingReferences.length > 0
+              ? liveLocationAllowedBookingReferences
+              : [...new Set([...current.allowedBookingReferences, link.booking_reference])],
+          loadedReference: link.booking_reference,
+          message: {
+            tone: "success",
+            text: `Live movement is authorized for ${compactBookingReference(
+              link.booking_reference,
+            )}. Driver still taps Share Location from the same link.`,
+          },
+          runtimeStatus: "active",
+        }));
+      } else {
+        setAdminActiveJobsMapReadState((current) => ({
+          ...current,
+          loadedReference: link.booking_reference,
+          message: {
+            tone: "info",
+            text: "Driver job link created. Live movement authorization did not open automatically; check the Live Dispatch Map before pickup.",
+          },
+        }));
+      }
+
       setAdminDriverJobLinkState({
         action: null,
         link,
         loadedReference: link.booking_reference,
         message: {
           tone: "success",
-          text: "Driver job link created. Copy the one-time link now; it will not be listed again.",
+          text: liveLocationAuthorized
+            ? "Driver job link created and live movement authorized automatically. Copy the one-time link now; it will not be listed again."
+            : "Driver job link created. Live movement authorization did not open automatically; check the Live Dispatch Map before pickup. Copy the one-time link now; it will not be listed again.",
         },
         oneTimeUrl: driverJobUrl,
       });
@@ -22831,6 +22883,21 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   const activeJobDriverStatusReferenceList = dayOfTripActiveJobVisibleBookings
     .map(getActiveJobBookingReference)
     .filter(Boolean);
+  const liveDispatchPreparedSlotCount = Math.max(2, activeJobDriverStatusReferenceList.length);
+  const liveDispatchStandbySlotCount = Math.max(
+    0,
+    liveDispatchPreparedSlotCount - activeJobDriverStatusReferenceList.length,
+  );
+  const liveDispatchSlotSummaryLabel =
+    liveDispatchStandbySlotCount > 0
+      ? `${activeJobDriverStatusReferenceList.length} active job reference${
+          activeJobDriverStatusReferenceList.length === 1 ? "" : "s"
+        }; ${liveDispatchStandbySlotCount} standby live map slot${
+          liveDispatchStandbySlotCount === 1 ? "" : "s"
+        } ready for upcoming jobs as they enter the 1-hour window.`
+      : `${activeJobDriverStatusReferenceList.length} active live map slot${
+          activeJobDriverStatusReferenceList.length === 1 ? "" : "s"
+        } ready.`;
   const activeJobDriverStatusReferenceKey = activeJobDriverStatusReferenceList.join("|");
   const activeJobsMapAllowedReferenceKey = adminActiveJobsMapReadState.allowedBookingReferences.join("|");
   const todayJobsMonitorIsActive = activeTab === "dashboard" || activeTab === "dispatch";
@@ -23417,6 +23484,13 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               >
                 {adminActiveJobsMapReadState.markerCount} pin
                 {adminActiveJobsMapReadState.markerCount === 1 ? "" : "s"}
+              </span>
+              <span
+                className="rounded-full bg-sky-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-sky-900 sm:px-2 sm:text-[10px]"
+                data-dashboard-live-driver-map-slot-count={liveDispatchPreparedSlotCount}
+                title={liveDispatchSlotSummaryLabel}
+              >
+                {liveDispatchPreparedSlotCount} slots
               </span>
             </div>
           </div>
@@ -26855,21 +26929,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     : driverJobLinkRevoked
       ? "Revoked"
       : "Revoke";
-  const driverJobLinkLiveLocationReference = cleanReferenceText(dispatchReleaseWorkflowBookingReference);
-  const driverJobLinkLiveLocationEnabled =
-    Boolean(driverJobLinkLiveLocationReference) &&
-    adminActiveJobsMapReadState.allowedBookingReferences.includes(driverJobLinkLiveLocationReference);
-  const driverJobLinkLiveLocationButtonLabel =
-    adminActiveJobsMapReadState.action === "opening"
-      ? "Enabling..."
-      : driverJobLinkLiveLocationEnabled
-        ? "Live Enabled"
-        : "Enable Live Location";
-  const driverJobLinkLiveLocationMessage =
-    driverJobLinkLiveLocationReference &&
-    cleanReferenceText(adminActiveJobsMapReadState.loadedReference) === driverJobLinkLiveLocationReference
-      ? adminActiveJobsMapReadState.message
-      : null;
   const companyProfileLogoPreviewUrl =
     /^\/[a-z0-9][a-z0-9/_-]*\.(?:png|jpe?g|webp)$/i.test(companyProfileDraft.logo_image_url) ||
     /^https:\/\/[^\s"')]+$/i.test(companyProfileDraft.logo_image_url) ||
@@ -39019,27 +39078,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                       >
                         {driverJobLinkRevokeButtonLabel}
                       </button>
-                      <button
-                        className={`min-h-9 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 ${
-                          actionFeedbackButtonClass(
-                            driverJobLinkLiveLocationEnabled ? "success" : null,
-                            "border-lime-300 text-lime-950 hover:bg-lime-50",
-                          )
-                        }`}
-                        data-enable-driver-job-live-location-button="true"
-                        data-enable-driver-job-live-location-state={
-                          driverJobLinkLiveLocationEnabled ? "enabled" : "idle"
-                        }
-                        disabled={
-                          !driverJobLinkLiveLocationReference ||
-                          !activeAdminDriverJobLink ||
-                          adminActiveJobsMapReadState.action !== "idle"
-                        }
-                        onClick={openAdminLiveLocationRuntimeForLoadedBooking}
-                        type="button"
-                      >
-                        {driverJobLinkLiveLocationButtonLabel}
-                      </button>
                     </div>
                     {driverJobLinkCopyMessage?.tone === "error" ? (
                       <div
@@ -39059,16 +39097,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                         data-driver-job-link-api-feedback="true"
                       >
                         {adminDriverJobLinkState.message.text}
-                      </div>
-                    ) : null}
-                    {driverJobLinkLiveLocationMessage ? (
-                      <div
-                        className={`rounded-md border px-2 py-1 text-xs font-medium ${statusClass(
-                          driverJobLinkLiveLocationMessage.tone,
-                        )}`}
-                        data-driver-job-live-location-feedback="true"
-                      >
-                        {driverJobLinkLiveLocationMessage.text}
                       </div>
                     ) : null}
                   </div>

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const adminPagePath = "app/page.tsx";
+const adminDriverJobLinksRoutePath = "app/api/admin-driver-job-links/route.ts";
 const adminControlHelperPath = "lib/admin-live-location-runtime-control.ts";
 const adminControlRoutePath = "app/api/admin-live-location-runtime/route.ts";
 const adminMapRoutePath = "app/api/admin-active-jobs-map-locations/route.ts";
@@ -33,6 +34,7 @@ function sectionBetween(source, startHeading, nextHeadingPrefix = "\n### ") {
 
 const [
   adminPage,
+  adminDriverJobLinksRoute,
   adminControlHelper,
   adminControlRoute,
   adminMapRoute,
@@ -42,6 +44,7 @@ const [
   ledger,
 ] = await Promise.all([
   readFile(adminPagePath, "utf8"),
+  readFile(adminDriverJobLinksRoutePath, "utf8"),
   readFile(adminControlHelperPath, "utf8"),
   readFile(adminControlRoutePath, "utf8"),
   readFile(adminMapRoutePath, "utf8"),
@@ -63,7 +66,8 @@ const runtimeReadinessSection = sectionBetween(
 
 for (const phrase of [
   "Admin Dispatch has a compact Selected Job Live Map runtime control inside the existing Day-of-Trip Dispatch Monitor.",
-  "The visible Driver Job Link panel also exposes `Enable Live Location` for the loaded booking, so dispatch can open live tracking for a future/single selected job without relying on the hidden Day-of-Trip monitor or the active-jobs dashboard list.",
+  "Creating a driver job link now auto-authorizes live movement for that booking by opening the existing admin live-location runtime allowlist after the link row is saved.",
+  "The visible Driver Job Link panel no longer exposes the manual `Enable Live Location` button; the panel stays limited to `Create Link`, `Copy Link`, `Revoke`, and useful status copy.",
   "The control adds selected saved bookings one by one through `/api/admin-live-location-runtime` instead of replacing the previous selected booking.",
   "Runtime control keeps existing `driver_live_location_allowed_job_references`, removes duplicates, and caps the selected booking list at 50 references.",
   "Driver `Share Location` first calls `GET /api/driver-job/[token]/live-location` for server readiness; Chrome GPS is requested only after that readiness check passes.",
@@ -95,14 +99,7 @@ for (const fragment of [
   "adminActiveJobsMapPollIntervalMs",
   "Use Dashboard for all active jobs. Add this loaded booking only when you need selected-job live detail.",
   "Add this job",
-  "Enable Live Location",
-  "Live Enabled",
-  'data-enable-driver-job-live-location-button="true"',
-  'data-enable-driver-job-live-location-state=',
-  'data-driver-job-live-location-feedback="true"',
-  "driverJobLinkLiveLocationReference",
-  "driverJobLinkLiveLocationEnabled",
-  "driverJobLinkLiveLocationMessage",
+  "Driver job link created and live movement authorized automatically.",
   "Selected:",
   "Close all",
   "openAdminLiveLocationRuntimeForLoadedBooking",
@@ -111,6 +108,23 @@ for (const fragment of [
   "googleMapsLocationUrl",
 ]) {
   assertIncludes(adminPage, fragment, `admin page live-location runtime UI fragment ${fragment}`);
+}
+
+for (const removedDriverJobLinkFragment of [
+  "Enable Live Location",
+  "Live Enabled",
+  'data-enable-driver-job-live-location-button="true"',
+  'data-enable-driver-job-live-location-state=',
+  'data-driver-job-live-location-feedback="true"',
+  "driverJobLinkLiveLocationReference",
+  "driverJobLinkLiveLocationEnabled",
+  "driverJobLinkLiveLocationMessage",
+]) {
+  assertExcludes(
+    adminPage,
+    removedDriverJobLinkFragment,
+    `removed Driver Job Link manual live-location control ${removedDriverJobLinkFragment}`,
+  );
 }
 
 assertExcludes(
@@ -153,6 +167,18 @@ for (const fragment of [
   "external_send: false",
 ]) {
   assertIncludes(adminControlRoute, fragment, `admin control route fragment ${fragment}`);
+}
+
+for (const fragment of [
+  "openAdminLiveLocationRuntimeControl",
+  "authorizeLiveLocationForDriverJobLink",
+  "live_location: liveLocationAuthorization",
+  "allowed_booking_references",
+  "authorized",
+  "customerVisible: false",
+  "external_send: false",
+]) {
+  assertIncludes(adminDriverJobLinksRoute, fragment, `admin driver job link route auto-authorize fragment ${fragment}`);
 }
 
 for (const fragment of [

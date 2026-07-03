@@ -60,7 +60,8 @@ for (const phrase of [
   "Loading a saved booking into Dispatch refreshes the typed operational display once immediately and pauses one background sync tick, keeping the existing guarded read set stable while Customer Copy focuses for review.",
   "The Dashboard now uses compact read-only booking summaries plus `Open` handoff buttons; single-booking driver assignment, status, copy, job-card, and completion work stays in Dispatch/Bookings so page purposes do not duplicate.",
   "`Today's Jobs` is shown below the Dispatch `Assigned Driver` sector for multi-driver scanning and is not rendered on Dashboard.",
-  "`Today's Jobs` shows all loaded active jobs inside the 1-hour pickup monitor window without a separate expand/collapse toggle.",
+  "`Today's Jobs` shows assigned operational jobs inside the 1-hour pickup monitor window without a separate expand/collapse toggle.",
+  "`Today's Jobs` excludes customer-request rows and unassigned/Driver TBC rows from the live-dispatch queue; those rows remain available in the Bookings review and normal assignment flow.",
   "`Today's Jobs` shows a compact saved driver report readout per visible job, using the existing guarded admin `GET /api/admin-driver-job-statuses` path only, with monitor-wide/per-card refresh controls and auto-refresh on by default.",
   "`Today's Jobs` includes compact live-map controls that reuse the existing admin-only live-location runtime for the jobs inside the monitor window.",
   "The lower Dispatch saved-record finder and internal advanced checks now sit behind one compact `Optional Workflow Tools` disclosure by default. The existing admin-only persistence controls, loaded-record scrollbox, and guarded checks are still available after expanding, but they no longer fill the normal Dispatch view.",
@@ -458,8 +459,23 @@ assertIncludes(appPage, "const typedDisplaySearchParams = new URLSearchParams({ 
 assertIncludes(appPage, "fetchLoadBookingsTypedOperationalDisplayResult(typedDisplaySearchParams)", "Loaded booking immediate typed refresh");
 assertIncludes(
   appPage,
+  "function bookingRecordIsDispatchActiveJobsMonitorEligible",
+  "Active jobs monitor assigned operational eligibility helper",
+);
+assertIncludes(
+  appPage,
+  "bookingRecordHasDispatchActiveJobsMonitorDriver(bookingRecord) &&\n    !bookingRecordIsCustomerBookingRequest(bookingRecord)",
+  "Active jobs monitor excludes customer requests and unassigned rows",
+);
+assertIncludes(
+  appPage,
+  ".filter(bookingRecordIsDispatchActiveJobsMonitorEligible)",
+  "Active jobs monitor applies assigned operational eligibility",
+);
+assertIncludes(
+  appPage,
   "const dayOfTripActiveJobVisibleBookings = dayOfTripActiveJobBookings;",
-  "Active jobs monitor shows all active rows",
+  "Active jobs monitor uses the assigned operational row set",
 );
 assertIncludes(
   appPage,

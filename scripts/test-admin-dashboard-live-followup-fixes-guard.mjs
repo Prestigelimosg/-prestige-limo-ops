@@ -115,7 +115,7 @@ for (const fragment of [
   "now - lastRequestedAt < 8_000",
   "activeJobIsInMonitorWindow",
   "pickupTimeMs - 60 * 60 * 1000",
-  "No active jobs inside the 1-hour pickup monitor window.",
+  "No assigned jobs inside the 1-hour pickup monitor window.",
   "dashboardDriverJobAutoRefreshEnabled",
   "data-admin-multi-driver-active-jobs-auto-refresh-state",
   "Auto-refresh 10s {dashboardDriverJobAutoRefreshEnabled ? \"On\" : \"Off\"}",

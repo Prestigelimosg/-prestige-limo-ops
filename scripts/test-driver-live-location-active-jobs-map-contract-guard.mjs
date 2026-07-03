@@ -203,15 +203,16 @@ const activeJobsRuntimeStart = adminPage.indexOf(
   'data-dispatch-live-driver-map="true"',
 );
 assert.notEqual(activeJobsRuntimeStart, -1, "Missing admin active-jobs map runtime.");
-const activeJobsRuntimeBoundary = 'data-dispatch-live-driver-map-boundary="true"';
+const activeJobsRuntimeBoundaryText =
+  "Admin-only. Uses assigned active jobs and driver-shared live movement; no external message is sent from here.";
 const activeJobsRuntimeEnd = adminPage.indexOf(
-  activeJobsRuntimeBoundary,
+  activeJobsRuntimeBoundaryText,
   activeJobsRuntimeStart,
 );
 assert.notEqual(activeJobsRuntimeEnd, -1, "Missing admin active-jobs runtime end boundary.");
 const activeJobsRuntimeSource = adminPage.slice(
   activeJobsRuntimeStart,
-  activeJobsRuntimeEnd + activeJobsRuntimeBoundary.length,
+  activeJobsRuntimeEnd + activeJobsRuntimeBoundaryText.length,
 );
 
 for (const fragment of [
@@ -226,11 +227,13 @@ for (const fragment of [
   'data-dispatch-live-driver-map-marker-list="true"',
   'data-dispatch-live-driver-map-boundary="true"',
   "Live Dispatch Map",
-  "One click opens live movement for the active jobs above",
+  "Assigned job live movement; driver locations refresh automatically while Today&apos;s Jobs is open.",
   "Open Live Dispatch Map",
   "Refresh movement",
   "Close live map",
   "Open Map",
+  "activeJobDriverStatusReferenceList.length === 0",
+  "Admin-only. Uses assigned active jobs and driver-shared live movement; no external message is sent from here.",
 ]) {
   assertIncludes(activeJobsRuntimeSource, fragment, `admin active-jobs runtime UI fragment ${fragment}`);
 }

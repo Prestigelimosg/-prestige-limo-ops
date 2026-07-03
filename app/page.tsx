@@ -6743,6 +6743,32 @@ function bookingRecordIsOpenCustomerBookingRequest(bookingRecord: BookingRecord)
   ].includes(status);
 }
 
+const dispatchActiveJobsMonitorUnassignedDriverLabels = new Set([
+  "driver tbc",
+  "driver to be confirmed",
+  "pending driver",
+  "tbc",
+  "to be confirmed",
+  "unassigned",
+]);
+
+function bookingRecordHasDispatchActiveJobsMonitorDriver(bookingRecord: BookingRecord) {
+  const driverId = clean(bookingRecord.driver_id);
+  const driverName = clean(bookingRecord.driver_name).toLowerCase();
+
+  return Boolean(
+    driverId ||
+      (driverName && !dispatchActiveJobsMonitorUnassignedDriverLabels.has(driverName)),
+  );
+}
+
+function bookingRecordIsDispatchActiveJobsMonitorEligible(bookingRecord: BookingRecord) {
+  return (
+    bookingRecordHasDispatchActiveJobsMonitorDriver(bookingRecord) &&
+    !bookingRecordIsCustomerBookingRequest(bookingRecord)
+  );
+}
+
 function getBookingName(bookingRecord: BookingRecord) {
   if (isLegacyMrLeeBrowserTestBooking(bookingRecord)) {
     return legacyBrowserTestBookingName;
@@ -18726,7 +18752,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         ...current,
         message: {
           tone: "info",
-          text: "No active jobs are inside the 1-hour monitor window yet.",
+          text: "No assigned jobs are inside the 1-hour monitor window yet.",
         },
       }));
       return;
@@ -22745,6 +22771,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     return bookingRecordIsInsideActiveJobMonitorWindow(bookingRecord, currentTimeMs);
   }
   const dayOfTripActiveJobBookings = operationalBookings
+    .filter(bookingRecordIsDispatchActiveJobsMonitorEligible)
     .filter((bookingRecord) => {
       const normalizedStatus = clean(bookingRecord.status).toLowerCase();
 
@@ -22810,7 +22837,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           activeJobDriverStatusReferenceList.length === 1 ? "" : "s"
         }; ${liveDispatchStandbySlotCount} standby live map slot${
           liveDispatchStandbySlotCount === 1 ? "" : "s"
-        } ready for upcoming jobs as they enter the 1-hour window.`
+        } ready for upcoming assigned jobs as they enter the 1-hour window.`
       : `${activeJobDriverStatusReferenceList.length} active live map slot${
           activeJobDriverStatusReferenceList.length === 1 ? "" : "s"
         } ready.`;
@@ -23134,7 +23161,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         <div className="min-w-0">
           <h3 className="text-base font-semibold text-lime-950">Today&apos;s Jobs</h3>
           <p className="text-xs text-lime-900 sm:text-sm">
-            All loaded jobs appear here 1 hour before pickup. Driver reports auto-refresh every 10s.
+            Assigned jobs appear here 1 hour before pickup. Driver reports auto-refresh every 10s.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -23362,19 +23389,18 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         </div>
       ) : (
         <p className="mt-3 rounded-md border border-lime-100 bg-white px-3 py-2 text-sm font-semibold text-lime-900">
-          No active jobs inside the 1-hour pickup monitor window.
+          No assigned jobs inside the 1-hour pickup monitor window.
         </p>
       )}
-      {dayOfTripActiveJobBookings.length > 0 ? (
-        <div
-          className="mt-2 rounded-md border border-lime-200 bg-white p-1.5 text-[11px] leading-4 text-lime-950 sm:text-xs"
-          data-dispatch-live-driver-map="true"
-        >
+      <div
+        className="mt-2 rounded-md border border-lime-200 bg-white p-1.5 text-[11px] leading-4 text-lime-950 sm:text-xs"
+        data-dispatch-live-driver-map="true"
+      >
           <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
               <p className="font-semibold">Live Dispatch Map</p>
               <p className="mt-0.5 text-[10px] text-lime-900 sm:text-[11px]">
-                One click opens live movement for the active jobs above; driver locations refresh automatically while Today&apos;s Jobs is open.
+                Assigned job live movement; driver locations refresh automatically while Today&apos;s Jobs is open.
               </p>
             </div>
             <div className="flex flex-wrap gap-1">
@@ -23415,7 +23441,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               className="rounded border border-lime-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-lime-950 transition hover:bg-lime-50 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[11px]"
               data-dispatch-live-driver-map-open="true"
               disabled={
-                dayOfTripActiveJobBookings.length === 0 ||
+                activeJobDriverStatusReferenceList.length === 0 ||
                 adminActiveJobsMapReadState.action !== "idle"
               }
               onClick={openAdminLiveLocationRuntimeForActiveJobs}
@@ -23576,10 +23602,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             className="mt-1 border-t border-lime-100 pt-1 text-[10px] leading-3 text-lime-900 sm:text-[11px]"
             data-dispatch-live-driver-map-boundary="true"
           >
-            Admin-only. Uses loaded active jobs and driver-shared live movement; no external message is sent from here.
+            Admin-only. Uses assigned active jobs and driver-shared live movement; no external message is sent from here.
           </p>
         </div>
-      ) : null}
     </section>
   );
   const dayOfTripExceptionEscalationClosed =

@@ -204,6 +204,14 @@ for (const fragment of [
 }
 
 for (const fragment of [
+  "bookingRecordHasDispatchActiveJobsMonitorDriver(bookingRecord)",
+  "!bookingRecordIsCustomerBookingRequest(bookingRecord)",
+]) {
+  assertIncludes(appPage, fragment, `assigned active monitor eligibility helper fragment ${fragment}`);
+}
+
+for (const fragment of [
+  ".filter(bookingRecordIsDispatchActiveJobsMonitorEligible)",
   "bookingRecordIsInsideActiveJobMonitorWindow(bookingRecord, currentTimeMs)",
   "normaliseTimeForSort(formatPickupTimeFromRecord(firstBooking))",
   "normaliseTimeForSort(formatPickupTimeFromRecord(secondBooking))",
@@ -219,9 +227,10 @@ for (const fragment of [
 
 for (const fragment of [
   "Today's Jobs",
-  "All loaded jobs appear here 1 hour before pickup. Driver reports auto-refresh every 10s.",
+  "Assigned jobs appear here 1 hour before pickup. Driver reports auto-refresh every 10s.",
   "{dayOfTripActiveJobBookings.length} in window",
   "inside the 1-hour pickup monitor window",
+  "No assigned jobs inside the 1-hour pickup monitor window.",
   "Auto-refresh 10s {dashboardDriverJobAutoRefreshEnabled ? \"On\" : \"Off\"}",
   "const activeJobPickupTime = formatPickupTimeFromRecord(activeJobBooking);",
   "(isSelectedActiveJob ? clean(booking.driverName) : \"\")",
@@ -278,8 +287,8 @@ for (const phrase of [
   "The Bookings page request panel remains the full queue as `Urgent & New Booking Requests`, with row badges separating urgent under-24h requests from new non-urgent requests.",
   "Day-of-trip jobs are shown as `Today's Jobs` only on Dispatch; Dashboard stays focused on urgent requests, admin notifications, calendar, and booking summaries.",
   "`Today's Jobs` driver report auto-refresh is on by default, still uses the guarded admin driver-status read path, and can be switched off by the operator.",
-  "The `Today's Jobs` live map control opens the existing admin-only live-location runtime for the jobs in the monitor window and refreshes shared markers every 10 seconds while the sector is open.",
-  "The same live map control keeps a two-slot readiness signal; when fewer than two active job references are in the 1-hour window, standby slots remain ready for upcoming jobs as they enter that window.",
+  "The `Today's Jobs` live map control opens the existing admin-only live-location runtime for assigned jobs in the monitor window and refreshes shared markers every 10 seconds while the sector is open.",
+  "The same live map control stays visible at zero assigned jobs and keeps a two-slot readiness signal; when fewer than two assigned active job references are in the 1-hour window, standby slots remain ready for upcoming assigned jobs as they enter that window.",
   "The pickup risk monitor defaults off, can be toggled by admin, highlights only the affected driver/job row and marker for no-pin, stale/offline, near-pickup watch, route ETA risk, and route-distance moving-away states, and does not claim route direction/ETA certainty unless guarded pickup approach evidence is ready.",
   "This reuses existing admin live-location runtime, map read paths, and guarded admin map search/route estimate routes for evidence when available; it does not add provider sends, notification sends, customer/driver messages, env changes, DB schema changes, billing/payment/PDF/invoice/payout, calendar sync, parser changes, or shims.",
   "Guard coverage lives in `scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",

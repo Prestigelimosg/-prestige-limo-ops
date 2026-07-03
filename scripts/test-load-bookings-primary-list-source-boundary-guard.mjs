@@ -196,8 +196,15 @@ assertExcludes(typedDisplayBridgeBlock, legacySavedBookingsPath, "typed display 
 
 const typedDisplayFetchFragment = "fetchLoadBookingsTypedOperationalDisplayResult(searchParams)";
 const legacySavedBookingsFetchFragment = "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`";
-const adminBookingsFallbackFetchFragment = "const adminBookingsResponse = await fetch(adminBookingsApiPath, requestInit);";
+const adminBookingsFallbackFetchFragment =
+  "const adminBookingsResponse = await fetch(`${adminBookingsApiPath}?${searchParams.toString()}`, requestInit);";
+assertIncludes(appPage, 'const adminLoadBookingsListLimit = "100";', "bounded admin booking list limit");
 assertIncludes(loadBookingsBlock, `${typedDisplayFetchFragment}.catch(() => null)`, "typed display best-effort fetch");
+assertIncludes(
+  loadBookingsBlock,
+  'searchParams.set("limit", adminLoadBookingsListLimit);',
+  "admin booking list limit raised after typed display hydration",
+);
 assertIncludes(loadBookingsBlock, legacySavedBookingsFetchFragment, "legacy saved-bookings fetch");
 assertIncludes(loadBookingsBlock, adminBookingsFallbackFetchFragment, "admin bookings fallback fetch");
 assertIncludes(loadBookingsBlock, "const loadedBookings = sortBookingsNewestFirst(bookingsListResult.bookings);", "admin list result source");

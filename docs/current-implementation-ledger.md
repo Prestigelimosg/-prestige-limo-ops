@@ -263,6 +263,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Cleanup was completed: `Stop Sharing` cleared the test marker, the fresh driver job link was revoked, the runtime was closed, and the pre-existing runtime selection `CUST-20260628035919-0NIBST` was restored.
 - This pass did not print, log, screenshot, or commit the browser map key value; did not use Vercel CLI; did not change env, DB schema, provider sends, billing/payment/PDF/invoice/payout, parser, Save Booking, customer messaging, driver messaging, customer live maps, address suggestions, or GPS/live-location scope beyond the bounded same-window driver marker proof.
 - Checks passed: browser map key readiness guard, active jobs map contract guard, live-location runtime control UI guard, `npx tsc --noEmit --pretty false`, `npm run lint` with only existing `loadBookings` warnings, `npm run build`, and `git diff --check`.
+- Current live-map movement display uses Google Maps marker positions anchored to the driver lat/lng rather than a separate CSS arrow/trail overlay. Pickup direction/risk detection is handled by the admin-only pickup-risk route distance/ETA evidence, not by the visual marker shape.
 
 ### Admin Dispatch Map Location Lookup
 
@@ -282,7 +283,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Driver `Share Location` first calls `GET /api/driver-job/[token]/live-location` for server readiness; Chrome GPS is requested only after that readiness check passes.
 - Admin marker refresh uses the existing guarded `GET /api/admin-active-jobs-map-locations` route and returns both selected booking references and current driver markers.
 - The admin UI renders compact selected-booking chips, marker rows, Driver Pin fallback links, and an optional browser map canvas that remains off unless the separate browser-safe map config route is enabled.
-- The admin browser map now keeps recent active marker points per booking and overlays a moving vehicle arrow plus trail dots from driver GPS updates, so a single-driver view no longer pins the marker permanently at the center while coordinates change.
+- The admin browser map updates Google marker positions from driver GPS instead of drawing a separate CSS arrow/trail overlay, so visible marker placement stays aligned to the map.
 - Admin live-marker polling runs every 5 seconds while the active live map is open; this is display refresh only and does not add a new driver/customer tracking surface.
 - Closing the runtime clears the selected list and gates driver/customer map reads off.
 - Customer live-location API remains same-origin/session/booking-boundary gated and no customer message is sent by this lane.
@@ -665,9 +666,10 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Admin Load Bookings CRM Fallback And Compact List Fix
 
 - Live manual walkthrough on 2026-06-26 found that the visible admin `Load Bookings` button could still fail with the safe `Admin saved booking read failed safely.` message when `GET /api/admin-saved-bookings?limit=25` failed, even though same-origin admin `GET /api/admin-bookings` returned `ok: true`.
-- Admin `Load Bookings` now tries same-origin admin `GET /api/admin-saved-bookings?limit=25` first and falls back to same-origin admin `GET /api/admin-bookings` when the saved-bookings read fails or returns a malformed list.
+- Admin `Load Bookings` now keeps typed display hydration at `limit=25`, then uses a bounded same-origin admin booking list read at `limit=100` for Dashboard/Dispatch active-job monitoring.
 - Both reads use the existing `x-prestige-admin-purpose` browser-admin header and remain GET-only.
 - Silent dashboard/bookings/dispatch auto-sync skips the legacy saved-bookings read and uses the CRM-safe admin bookings list, so `Save Booking + CRM` cannot accidentally reload through `/api/admin-saved-bookings`.
+- The bounded active-job list read prevents a driver who has already tapped OTW/Share Location from disappearing from `Today's Jobs` merely because newer booking rows pushed the job outside the old 25-row dashboard slice.
 - The fallback is an admin dashboard read fallback only; it does not add public reads, broad writes, DB writes, provider sends, env changes, deploys, parser changes, live GPS/customer-wide live map, billing/payment/PDF/invoice/payout, or shims.
 - Save Booking + CRM remains on `POST /api/admin-bookings` and is not changed by this fallback.
 - Recent and Completed booking lists now render compact expandable rows by default so dispatch can scan more bookings at once while keeping existing details and action buttons available.
@@ -684,6 +686,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - `Today's Jobs` shows all loaded active jobs inside the 1-hour pickup monitor window without a separate expand/collapse toggle.
 - `Today's Jobs` shows a compact saved driver report readout per visible job, using the existing guarded admin `GET /api/admin-driver-job-statuses` path only, with monitor-wide/per-card refresh controls and auto-refresh on by default.
 - `Today's Jobs` includes compact live-map controls that reuse the existing admin-only live-location runtime for the jobs inside the monitor window.
+- Admin live-map display collapses older stale duplicate pins for the same driver identity when a newer/current pin exists, so one driver does not look like two live cars.
 - The legacy Dispatch Day-of-Trip Dispatch Monitor remains hidden from the normal UI so it does not compete with the shared `Today's Jobs` sector.
 - The lower Dispatch saved-record finder is now a compact `Saved Booking Records` disclosure by default. The existing admin-only persistence controls and loaded-record scrollbox are still available after expanding, but they no longer fill the normal Dispatch view.
 - Dispatch internal readiness, handoff, recovery, exception, closeout-review, and billing-prep panels now live under one compact `Advanced Checks` disclosure. The existing guarded controls remain colocated and unchanged after expanding, but the default operator view stays focused on daily trip work.
@@ -2069,7 +2072,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Load Bookings typed-read detail mode is isolated before any future endpoint migration.
 - This is a docs/test-only guard; it does not approve endpoint migration, env changes, deployment, live reads, or DB writes.
 - Typed detail responses may exist only on `GET /api/admin-load-bookings-typed-read` when an `id` or `booking_id` query param is supplied by an approved internal caller.
-- The app Load Bookings bridge must request only list mode with `limit=25`; it must not send `id` or `booking_id` to the typed-read endpoint.
+- The app typed-read Load Bookings bridge must request only typed list mode with `limit=25`; it must not send `id` or `booking_id` to the typed-read endpoint.
 - The app typed-read response type and bridge must consume only `bookings` list payloads; they must not consume a singular `booking` detail payload or branch on typed `mode=detail`.
 - Typed detail data must not feed `loadSelectedBooking`, `bookingRecordToForm`, Save Booking + CRM, driver dispatch payout copy, driver assignment payout controls, billing readiness, or finance/payout/internal paths.
 - Current Load Bookings booking/form/detail source remains `GET /api/admin-saved-bookings` and `BookingRecord`.

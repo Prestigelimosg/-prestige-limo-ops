@@ -187,7 +187,7 @@ for (const phrase of [
   "Runtime control keeps existing `driver_live_location_allowed_job_references`, removes duplicates, and caps the selected booking list at 50 references.",
   "Admin marker refresh uses the existing guarded `GET /api/admin-active-jobs-map-locations` route and returns both selected booking references and current driver markers.",
   "The admin UI renders compact selected-booking chips, marker rows, Driver Pin fallback links, and an optional browser map canvas that remains off unless the separate browser-safe map config route is enabled.",
-  "The admin browser map now keeps recent active marker points per booking and overlays a moving vehicle arrow plus trail dots from driver GPS updates, so a single-driver view no longer pins the marker permanently at the center while coordinates change.",
+  "The admin browser map updates Google marker positions from driver GPS instead of drawing a separate CSS arrow/trail overlay, so visible marker placement stays aligned to the map.",
   "Admin live-marker polling runs every 5 seconds while the active live map is open; this is display refresh only and does not add a new driver/customer tracking surface.",
   "Customer live-location API remains same-origin/session/booking-boundary gated and no customer message is sent by this lane.",
 ]) {
@@ -240,9 +240,10 @@ for (const fragment of [
 
 for (const fragment of [
   'data-admin-active-jobs-map-live-movement="true"',
-  'data-admin-active-jobs-map-overlay-arrow="true"',
-  'data-admin-active-jobs-map-overlay-trail={trailPoint.reference}',
   'data-admin-active-jobs-map-live-movement-status="true"',
+  "Google marker positions update from driver GPS every few seconds",
+  "collapseAdminActiveJobsMapStaleDriverDuplicates",
+  "older stale duplicate",
   "adminActiveJobsMapPollIntervalMs",
 ]) {
   assertIncludes(adminPage, fragment, `admin active-jobs moving map component fragment ${fragment}`);

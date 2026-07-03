@@ -106,7 +106,7 @@ for (const phrase of [
   "Load Bookings typed-read detail mode is isolated before any future endpoint migration.",
   "This is a docs/test-only guard; it does not approve endpoint migration, env changes, deployment, live reads, or DB writes.",
   "Typed detail responses may exist only on `GET /api/admin-load-bookings-typed-read` when an `id` or `booking_id` query param is supplied by an approved internal caller.",
-  "The app Load Bookings bridge must request only list mode with `limit=25`; it must not send `id` or `booking_id` to the typed-read endpoint.",
+  "The app typed-read Load Bookings bridge must request only typed list mode with `limit=25`; it must not send `id` or `booking_id` to the typed-read endpoint.",
   "The app typed-read response type and bridge must consume only `bookings` list payloads; they must not consume a singular `booking` detail payload or branch on typed `mode=detail`.",
   "Typed detail data must not feed `loadSelectedBooking`, `bookingRecordToForm`, Save Booking + CRM, driver dispatch payout copy, driver assignment payout controls, billing readiness, or finance/payout/internal paths.",
   "Current Load Bookings booking/form/detail source remains `GET /api/admin-saved-bookings` and `BookingRecord`.",
@@ -197,8 +197,18 @@ assertExcludes(typedDisplayBridge, 'searchParams.set("id"', "typed bridge id que
 assertExcludes(typedDisplayBridge, 'searchParams.append("id"', "typed bridge id query append");
 
 const loadBookingsBlock = sliceBetween(appPage, "async function loadBookings", "function loadSelectedBooking");
-assertIncludes(loadBookingsBlock, 'new URLSearchParams({ limit: "25" })', "Load Bookings list params only");
-assertIncludes(loadBookingsBlock, "fetchLoadBookingsTypedOperationalDisplayResult(searchParams).catch(() => null)", "typed list bridge safe fallback");
+assertIncludes(appPage, 'const adminLoadBookingsListLimit = "100";', "Load Bookings bounded admin list limit");
+assertIncludes(loadBookingsBlock, 'new URLSearchParams({ limit: "25" })', "typed Load Bookings list params only");
+assertIncludes(
+  loadBookingsBlock,
+  "fetchLoadBookingsTypedOperationalDisplayResult(searchParams).catch(() => null)",
+  "typed list bridge safe fallback",
+);
+assertIncludes(
+  loadBookingsBlock,
+  'searchParams.set("limit", adminLoadBookingsListLimit);',
+  "admin booking list limit is raised only after typed display hydration",
+);
 assertIncludes(
   loadBookingsBlock,
   "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`",

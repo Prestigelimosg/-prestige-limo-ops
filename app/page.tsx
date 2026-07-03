@@ -100,6 +100,7 @@ const adminFullDriverProfileRuntimeWriteActionApiPath =
   "/api/admin-full-driver-profile-runtime-write-action";
 const adminSavedBookingsApiPath = "/api/admin-saved-bookings";
 const adminBookingsApiPath = "/api/admin-bookings";
+const adminLoadBookingsListLimit = "100";
 const saveCrmBillingIdentityReviewReadLimit = 200;
 const adminHandledCustomerBookingRequestsStorageKey =
   "prestige-admin-handled-customer-booking-requests";
@@ -2942,7 +2943,6 @@ function googleMapsLocationUrl(latitude: number | null | undefined, longitude: n
 }
 
 const adminActiveJobsMapPollIntervalMs = 5 * 1000;
-const adminActiveJobsMapTrackHistoryLimit = 8;
 
 type BrowserGoogleMap = {
   fitBounds: (bounds: BrowserGoogleLatLngBounds) => void;
@@ -2952,7 +2952,9 @@ type BrowserGoogleMap = {
 
 type BrowserGoogleMarker = {
   setMap: (map: BrowserGoogleMap | null) => void;
+  setLabel?: (label: Record<string, unknown>) => void;
   setPosition?: (position: BrowserGoogleLatLngLiteral) => void;
+  setTitle?: (title: string) => void;
 };
 
 type BrowserGoogleLatLngLiteral = {
@@ -2963,33 +2965,6 @@ type BrowserGoogleLatLngLiteral = {
 type AdminActiveJobsBrowserMapMarkerEntry = {
   job: AdminActiveJobsMapLocation;
   position: BrowserGoogleLatLngLiteral;
-};
-
-type AdminActiveJobsBrowserMapTrackPoint = {
-  headingDegrees: number | null;
-  isStale: boolean;
-  label: string;
-  position: BrowserGoogleLatLngLiteral;
-  reference: string;
-  updatedAt: string;
-};
-
-type AdminActiveJobsBrowserMapOverlayMarker = {
-  isStale: boolean;
-  key: string;
-  label: string;
-  left: number;
-  reference: string;
-  rotation: number;
-  top: number;
-  updatedAt: string;
-};
-
-type AdminActiveJobsBrowserMapOverlayTrail = {
-  key: string;
-  left: number;
-  reference: string;
-  top: number;
 };
 
 type BrowserGoogleLatLngBounds = {
@@ -3326,106 +3301,16 @@ function validAdminActiveJobMapPosition(job: AdminActiveJobsMapLocation) {
   };
 }
 
-function projectAdminActiveJobsBrowserMapPosition(position: BrowserGoogleLatLngLiteral) {
-  const sinLatitude = Math.max(
-    -0.9999,
-    Math.min(0.9999, Math.sin((position.lat * Math.PI) / 180)),
-  );
-
-  return {
-    x: (position.lng + 180) / 360,
-    y: 0.5 - Math.log((1 + sinLatitude) / (1 - sinLatitude)) / (4 * Math.PI),
-  };
-}
-
 function adminActiveJobsBrowserMapReference(entry: AdminActiveJobsBrowserMapMarkerEntry) {
   return cleanReferenceText(entry.job.assigned_job_reference) || cleanReferenceText(entry.job.assigned_job_label) || "unknown";
 }
 
-function adminActiveJobsBrowserMapLabel(entry: AdminActiveJobsBrowserMapMarkerEntry) {
-  const reference = compactBookingReference(adminActiveJobsBrowserMapReference(entry));
-
-  return `${entry.job.driver_display_label || "Driver"} ${reference}`;
-}
-
-function adminActiveJobsBrowserMapTrackPoint(entry: AdminActiveJobsBrowserMapMarkerEntry): AdminActiveJobsBrowserMapTrackPoint {
+function adminActiveJobsBrowserMapMarkerLabel(entry: AdminActiveJobsBrowserMapMarkerEntry) {
   return {
-    headingDegrees: typeof entry.job.heading_degrees === "number" ? entry.job.heading_degrees : null,
-    isStale: entry.job.is_stale === true,
-    label: adminActiveJobsBrowserMapLabel(entry),
-    position: entry.position,
-    reference: adminActiveJobsBrowserMapReference(entry),
-    updatedAt: clean(entry.job.updated_at) || `${entry.position.lat.toFixed(6)},${entry.position.lng.toFixed(6)}`,
-  };
-}
-
-function sameAdminActiveJobsBrowserMapTrackPoint(
-  left: AdminActiveJobsBrowserMapTrackPoint | undefined,
-  right: AdminActiveJobsBrowserMapTrackPoint,
-) {
-  return Boolean(
-    left &&
-      left.updatedAt === right.updatedAt &&
-      left.position.lat === right.position.lat &&
-      left.position.lng === right.position.lng,
-  );
-}
-
-function adminActiveJobsBrowserMapBearingDegrees(
-  previous: BrowserGoogleLatLngLiteral | null,
-  current: BrowserGoogleLatLngLiteral,
-) {
-  if (!previous) {
-    return 0;
-  }
-
-  const previousLatitude = (previous.lat * Math.PI) / 180;
-  const currentLatitude = (current.lat * Math.PI) / 180;
-  const longitudeDelta = ((current.lng - previous.lng) * Math.PI) / 180;
-  const y = Math.sin(longitudeDelta) * Math.cos(currentLatitude);
-  const x =
-    Math.cos(previousLatitude) * Math.sin(currentLatitude) -
-    Math.sin(previousLatitude) * Math.cos(currentLatitude) * Math.cos(longitudeDelta);
-
-  if (Math.abs(x) < 0.0000001 && Math.abs(y) < 0.0000001) {
-    return 0;
-  }
-
-  return (((Math.atan2(y, x) * 180) / Math.PI) + 360) % 360;
-}
-
-function adminActiveJobsBrowserMapViewport(
-  trackPointsByReference: Record<string, AdminActiveJobsBrowserMapTrackPoint[]>,
-  activeMarkerJobs: AdminActiveJobsBrowserMapMarkerEntry[],
-) {
-  const activeReferences = new Set(activeMarkerJobs.map(adminActiveJobsBrowserMapReference));
-  const projectedPoints = Object.entries(trackPointsByReference).flatMap(([reference, trackPoints]) =>
-    activeReferences.has(reference)
-      ? trackPoints.map((trackPoint) => projectAdminActiveJobsBrowserMapPosition(trackPoint.position))
-      : [],
-  );
-
-  if (projectedPoints.length === 0) {
-    return null;
-  }
-
-  const xValues = projectedPoints.map((point) => point.x);
-  const yValues = projectedPoints.map((point) => point.y);
-  const minX = Math.min(...xValues);
-  const maxX = Math.max(...xValues);
-  const minY = Math.min(...yValues);
-  const maxY = Math.max(...yValues);
-  const minimumRange = 0.000001;
-  const rawRangeX = maxX - minX;
-  const rawRangeY = maxY - minY;
-  const rangeX = Math.max(rawRangeX, minimumRange);
-  const rangeY = Math.max(rawRangeY, minimumRange);
-
-  return {
-    minX: rawRangeX < minimumRange ? minX - rangeX / 2 : minX,
-    minY: rawRangeY < minimumRange ? minY - rangeY / 2 : minY,
-    rangeX,
-    rangeY,
+    color: "#ffffff",
+    fontSize: "14px",
+    fontWeight: "700",
+    text: entry.job.is_stale ? "!" : "*",
   };
 }
 
@@ -3446,9 +3331,6 @@ function AdminActiveJobsBrowserMap({
   const activeMarkerJobsRef = useRef<AdminActiveJobsBrowserMapMarkerEntry[]>([]);
   const singleMarkerCenteredReferenceRef = useRef("");
   const [renderState, setRenderState] = useState<"error" | "loading" | "ready">("loading");
-  const [trackPointsByReference, setTrackPointsByReference] = useState<
-    Record<string, AdminActiveJobsBrowserMapTrackPoint[]>
-  >({});
   const activeMarkerJobs = useMemo(
     () =>
       activeJobs
@@ -3467,95 +3349,7 @@ function AdminActiveJobsBrowserMap({
     activeMarkerJobsRef.current = activeMarkerJobs;
   }, [activeMarkerJobs]);
 
-  useEffect(() => {
-    const animationFrameId = window.requestAnimationFrame(() => {
-      setTrackPointsByReference((current) => {
-        const next: Record<string, AdminActiveJobsBrowserMapTrackPoint[]> = {};
-
-        activeMarkerJobs.forEach((entry) => {
-          const trackPoint = adminActiveJobsBrowserMapTrackPoint(entry);
-          const existingPoints = current[trackPoint.reference] || [];
-          const latestPoint = existingPoints[existingPoints.length - 1];
-          const nextPoints = sameAdminActiveJobsBrowserMapTrackPoint(latestPoint, trackPoint)
-            ? [...existingPoints.slice(0, -1), trackPoint]
-            : [...existingPoints, trackPoint];
-
-          next[trackPoint.reference] = nextPoints.slice(-adminActiveJobsMapTrackHistoryLimit);
-        });
-
-        return next;
-      });
-    });
-
-    return () => window.cancelAnimationFrame(animationFrameId);
-  }, [activeMarkerJobs]);
-
-  const overlayViewport = useMemo(
-    () => adminActiveJobsBrowserMapViewport(trackPointsByReference, activeMarkerJobs),
-    [activeMarkerJobs, trackPointsByReference],
-  );
-  const overlayTrails = useMemo<AdminActiveJobsBrowserMapOverlayTrail[]>(() => {
-    if (!overlayViewport) {
-      return [];
-    }
-
-    const activeReferences = new Set(activeMarkerJobs.map(adminActiveJobsBrowserMapReference));
-    const paddingPercent = 14;
-
-    return Object.entries(trackPointsByReference).flatMap(([reference, trackPoints]) => {
-      if (!activeReferences.has(reference) || trackPoints.length < 2) {
-        return [];
-      }
-
-      return trackPoints.slice(0, -1).map((trackPoint, index) => {
-        const point = projectAdminActiveJobsBrowserMapPosition(trackPoint.position);
-
-        return {
-          key: `${reference}-trail-${trackPoint.updatedAt}-${index}`,
-          left:
-            paddingPercent +
-            ((point.x - overlayViewport.minX) / overlayViewport.rangeX) * (100 - paddingPercent * 2),
-          reference,
-          top:
-            paddingPercent +
-            ((point.y - overlayViewport.minY) / overlayViewport.rangeY) * (100 - paddingPercent * 2),
-        };
-      });
-    });
-  }, [activeMarkerJobs, overlayViewport, trackPointsByReference]);
-  const overlayMarkers = useMemo<AdminActiveJobsBrowserMapOverlayMarker[]>(() => {
-    if (!overlayViewport) {
-      return [];
-    }
-
-    const paddingPercent = 14;
-
-    return activeMarkerJobs.map((entry) => {
-      const reference = adminActiveJobsBrowserMapReference(entry);
-      const trackPoints = trackPointsByReference[reference] || [];
-      const latestPoint = trackPoints[trackPoints.length - 1] || adminActiveJobsBrowserMapTrackPoint(entry);
-      const previousPoint = trackPoints.length > 1 ? trackPoints[trackPoints.length - 2] : null;
-      const projected = projectAdminActiveJobsBrowserMapPosition(latestPoint.position);
-      const headingDegrees =
-        latestPoint.headingDegrees ??
-        adminActiveJobsBrowserMapBearingDegrees(previousPoint?.position || null, latestPoint.position);
-
-      return {
-        isStale: latestPoint.isStale,
-        key: `${reference}-live-marker`,
-        label: latestPoint.label,
-        left:
-          paddingPercent +
-          ((projected.x - overlayViewport.minX) / overlayViewport.rangeX) * (100 - paddingPercent * 2),
-        reference: compactBookingReference(reference),
-        rotation: headingDegrees,
-        top:
-          paddingPercent +
-          ((projected.y - overlayViewport.minY) / overlayViewport.rangeY) * (100 - paddingPercent * 2),
-        updatedAt: latestPoint.updatedAt,
-      };
-    });
-  }, [activeMarkerJobs, overlayViewport, trackPointsByReference]);
+  const hasLiveMovementMarkers = activeMarkerJobs.length > 0;
 
   useEffect(() => {
     let cancelled = false;
@@ -3738,6 +3532,8 @@ function AdminActiveJobsBrowserMap({
 
       if (existingMarker?.setPosition) {
         existingMarker.setPosition(entry.position);
+        existingMarker.setTitle?.(title);
+        existingMarker.setLabel?.(adminActiveJobsBrowserMapMarkerLabel(entry));
         return;
       }
 
@@ -3745,6 +3541,7 @@ function AdminActiveJobsBrowserMap({
       markersRef.current.set(
         reference,
         new MarkerConstructor({
+          label: adminActiveJobsBrowserMapMarkerLabel(entry),
           map,
           position: entry.position,
           title,
@@ -3785,58 +3582,14 @@ function AdminActiveJobsBrowserMap({
         ref={mapSlotRef}
         className="relative z-10 h-48 w-full overflow-hidden bg-transparent sm:h-56"
         data-admin-active-jobs-map-google-slot="true"
-      >
-        {overlayTrails.map((trailPoint) => (
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute z-20 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-red-300/80 ring-1 ring-white"
-            data-admin-active-jobs-map-overlay-trail={trailPoint.reference}
-            key={trailPoint.key}
-            style={{
-              left: `${trailPoint.left}%`,
-              top: `${trailPoint.top}%`,
-            }}
-          />
-        ))}
-        {overlayMarkers.map((marker) => (
-          <span
-            aria-label={marker.label}
-            className={`pointer-events-none absolute z-30 flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white shadow-lg ${
-              marker.isStale ? "bg-amber-600" : "bg-red-600"
-            }`}
-            data-admin-active-jobs-map-live-movement="true"
-            data-admin-active-jobs-map-overlay-marker={marker.reference}
-            key={marker.key}
-            style={{
-              left: `${marker.left}%`,
-              top: `${marker.top}%`,
-              transition: "left 700ms linear, top 700ms linear",
-            }}
-            title={`${marker.label} · ${formatAdminLiveLocationTimestamp(marker.updatedAt)}`}
-          >
-            <span
-              aria-hidden="true"
-              data-admin-active-jobs-map-overlay-arrow="true"
-              style={{
-                borderBottom: "13px solid white",
-                borderLeft: "6px solid transparent",
-                borderRight: "6px solid transparent",
-                height: 0,
-                transform: `rotate(${marker.rotation}deg)`,
-                transformOrigin: "50% 65%",
-                transition: "transform 700ms linear",
-                width: 0,
-              }}
-            />
-          </span>
-        ))}
-      </div>
-      {overlayMarkers.length > 0 ? (
+      />
+      {hasLiveMovementMarkers ? (
         <p
           className="border-t border-lime-100 px-1.5 py-1 text-[10px] font-semibold text-lime-900 sm:text-[11px]"
+          data-admin-active-jobs-map-live-movement="true"
           data-admin-active-jobs-map-live-movement-status="true"
         >
-          Live movement on. Vehicle marker updates from driver GPS every few seconds; Driver Pin remains the fallback.
+          Live movement on. Google marker positions update from driver GPS every few seconds; Driver Pin remains the fallback.
         </p>
       ) : null}
       {renderState === "error" ? (
@@ -17944,6 +17697,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       const searchParams = new URLSearchParams({ limit: "25" });
       const typedOperationalDisplay =
         await fetchLoadBookingsTypedOperationalDisplayResult(searchParams).catch(() => null);
+      searchParams.set("limit", adminLoadBookingsListLimit);
 
       async function fetchAdminBookingsList(): Promise<AdminBookingsListReadResult> {
         const requestInit = {
@@ -17979,7 +17733,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           ).message;
         }
 
-        const adminBookingsResponse = await fetch(adminBookingsApiPath, requestInit);
+        const adminBookingsResponse = await fetch(`${adminBookingsApiPath}?${searchParams.toString()}`, requestInit);
         const adminBookingsBody = (await adminBookingsResponse.json().catch(() => null)) as
           | AdminSavedBookingReadResponse
           | null;
@@ -18635,6 +18389,74 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     return value !== null;
   }
 
+  function adminActiveJobsMapDriverIdentity(location: AdminActiveJobsMapLocation) {
+    const driverLabel = clean(location.driver_display_label).toLowerCase();
+    const plateLabel = clean(location.vehicle_plate_label).toLowerCase();
+
+    if (!driverLabel || driverLabel === "assigned driver") {
+      return "";
+    }
+
+    return `${driverLabel}|${plateLabel}`;
+  }
+
+  function adminActiveJobsMapUpdatedAtMs(location: AdminActiveJobsMapLocation) {
+    const parsed = Date.parse(clean(location.updated_at));
+
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function adminActiveJobsMapLocationIsPreferred(
+    candidate: AdminActiveJobsMapLocation,
+    existing: AdminActiveJobsMapLocation,
+  ) {
+    const candidateIsCurrent = candidate.is_stale !== true;
+    const existingIsCurrent = existing.is_stale !== true;
+
+    if (candidateIsCurrent !== existingIsCurrent) {
+      return candidateIsCurrent;
+    }
+
+    return adminActiveJobsMapUpdatedAtMs(candidate) > adminActiveJobsMapUpdatedAtMs(existing);
+  }
+
+  function collapseAdminActiveJobsMapStaleDriverDuplicates(
+    locations: AdminActiveJobsMapLocation[],
+  ) {
+    const visibleLocations: AdminActiveJobsMapLocation[] = [];
+    const currentDriverIdentityIndexes = new Map<string, number>();
+
+    for (const location of locations) {
+      const driverIdentity = adminActiveJobsMapDriverIdentity(location);
+
+      if (!driverIdentity) {
+        visibleLocations.push(location);
+        continue;
+      }
+
+      const existingIndex = currentDriverIdentityIndexes.get(driverIdentity);
+
+      if (existingIndex === undefined) {
+        currentDriverIdentityIndexes.set(driverIdentity, visibleLocations.length);
+        visibleLocations.push(location);
+        continue;
+      }
+
+      const existingLocation = visibleLocations[existingIndex];
+
+      if (existingLocation.is_stale !== true && location.is_stale !== true) {
+        visibleLocations.push(location);
+        continue;
+      }
+
+      if (adminActiveJobsMapLocationIsPreferred(location, existingLocation)) {
+        visibleLocations[existingIndex] = location;
+      }
+    }
+
+    return visibleLocations;
+  }
+
   async function refreshAdminActiveJobsMapLocations(options: { silent?: boolean } = {}) {
     if (!options.silent) {
       setAdminActiveJobsMapReadState((current) => ({
@@ -18662,11 +18484,13 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         throw new Error(result?.error || result?.reason || "Active jobs map is closed.");
       }
 
-      const activeJobs = Array.isArray(result.active_jobs)
+      const allActiveJobs = Array.isArray(result.active_jobs)
         ? result.active_jobs
             .map(normalizeAdminActiveJobsMapLocation)
             .filter(isAdminActiveJobsMapLocation)
         : [];
+      const activeJobs = collapseAdminActiveJobsMapStaleDriverDuplicates(allActiveJobs);
+      const staleDuplicateCount = allActiveJobs.length - activeJobs.length;
       const allowedBookingReferences = Array.isArray(result.allowed_booking_references)
         ? result.allowed_booking_references.map(cleanReferenceText).filter(Boolean)
         : null;
@@ -18682,7 +18506,11 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           tone: activeJobs.length > 0 ? "success" : "info",
           text:
             activeJobs.length > 0
-              ? `Loaded ${activeJobs.length} active driver marker${activeJobs.length === 1 ? "" : "s"}.`
+              ? `Loaded ${activeJobs.length} active driver marker${activeJobs.length === 1 ? "" : "s"}${
+                  staleDuplicateCount > 0
+                    ? `; ${staleDuplicateCount} older stale duplicate${staleDuplicateCount === 1 ? "" : "s"} hidden.`
+                    : "."
+                }`
               : "Live location is open, but no driver marker has been shared yet.",
         },
         runtimeStatus: "active",

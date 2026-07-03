@@ -15299,9 +15299,43 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     () => customerBookingRequestBookings.slice(0, 5),
     [customerBookingRequestBookings],
   );
-  const visibleUrgentCustomerBookingRequestBookings = useMemo(
-    () => urgentCustomerBookingRequestBookings.slice(0, 3),
-    [urgentCustomerBookingRequestBookings],
+  const urgentUnassignedSavedBookingRequests = useMemo(
+    () =>
+      operationalBookings
+        .filter((bookingRecord) => !bookingRecordBelongsInCompletedHistoryWithDriverReport(bookingRecord))
+        .filter(
+          (bookingRecord) =>
+            !bookingRecordIsCustomerBookingRequest(bookingRecord) &&
+            !bookingRecordHasDispatchActiveJobsMonitorDriver(bookingRecord) &&
+            bookingRecordIsInsideActiveJobMonitorWindow(bookingRecord, currentTimeMs),
+        )
+        .sort((firstBooking, secondBooking) => {
+          const firstPickupTimeMs = bookingRecordPickupDateTimeMs(firstBooking) ?? Number.MAX_SAFE_INTEGER;
+          const secondPickupTimeMs = bookingRecordPickupDateTimeMs(secondBooking) ?? Number.MAX_SAFE_INTEGER;
+
+          return firstPickupTimeMs - secondPickupTimeMs;
+        }),
+    [bookingRecordBelongsInCompletedHistoryWithDriverReport, currentTimeMs, operationalBookings],
+  );
+  const dashboardUrgentBookingRequestBookings = useMemo(
+    () =>
+      [...urgentCustomerBookingRequestBookings, ...urgentUnassignedSavedBookingRequests].sort(
+        (firstBooking, secondBooking) => {
+          const firstPickupTimeMs = bookingRecordPickupDateTimeMs(firstBooking) ?? Number.MAX_SAFE_INTEGER;
+          const secondPickupTimeMs = bookingRecordPickupDateTimeMs(secondBooking) ?? Number.MAX_SAFE_INTEGER;
+
+          return firstPickupTimeMs - secondPickupTimeMs;
+        },
+      ),
+    [urgentCustomerBookingRequestBookings, urgentUnassignedSavedBookingRequests],
+  );
+  const visibleDashboardUrgentBookingRequestBookings = useMemo(
+    () => dashboardUrgentBookingRequestBookings.slice(0, 5),
+    [dashboardUrgentBookingRequestBookings],
+  );
+  const urgentUnassignedSavedBookingIdSet = useMemo(
+    () => new Set(urgentUnassignedSavedBookingRequests.map((bookingRecord) => String(bookingRecord.id))),
+    [urgentUnassignedSavedBookingRequests],
   );
   const urgentCustomerBookingRequestKeySet = useMemo(
     () =>
@@ -15470,10 +15504,14 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   );
 
   const todayBookings = activeDashboardBookings.filter(
-    (bookingRecord) => getBookingDateKey(bookingRecord) === todayKey,
+    (bookingRecord) =>
+      getBookingDateKey(bookingRecord) === todayKey &&
+      !urgentUnassignedSavedBookingIdSet.has(String(bookingRecord.id)),
   );
   const upcomingBookings = activeDashboardBookings.filter(
-    (bookingRecord) => getBookingDateKey(bookingRecord) > todayKey,
+    (bookingRecord) =>
+      getBookingDateKey(bookingRecord) > todayKey &&
+      !urgentUnassignedSavedBookingIdSet.has(String(bookingRecord.id)),
   );
   const calendarExportableBookings = activeDashboardBookings
     .filter((bookingRecord) => getBookingDateKey(bookingRecord) !== "1970-01-01")
@@ -15487,11 +15525,12 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       useTypedOperationalOrder: true,
     });
   const customerBookingRequestCount = customerBookingRequestBookings.length;
-  const urgentCustomerBookingRequestDisplayItems =
-    buildLoadBookingsOperationalDisplayItems(visibleUrgentCustomerBookingRequestBookings, {
+  const urgentCustomerBookingRequestCount = urgentCustomerBookingRequestBookings.length;
+  const dashboardUrgentBookingRequestDisplayItems =
+    buildLoadBookingsOperationalDisplayItems(visibleDashboardUrgentBookingRequestBookings, {
       useTypedOperationalOrder: true,
     });
-  const urgentCustomerBookingRequestCount = urgentCustomerBookingRequestBookings.length;
+  const dashboardUrgentBookingRequestCount = dashboardUrgentBookingRequestBookings.length;
   const filteredRecentBookingDisplayItems =
     buildLoadBookingsOperationalDisplayItems(filteredRecentBookings, { useTypedOperationalOrder: true });
   const filteredCompletedBookingDisplayItems =
@@ -40003,7 +40042,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           <section
             aria-label="Urgent Booking Requests"
             className={`mb-4 rounded-md border p-2 sm:p-3 ${
-              urgentCustomerBookingRequestCount > 0
+              dashboardUrgentBookingRequestCount > 0
                 ? "border-amber-300 bg-amber-50"
                 : "border-stone-200 bg-stone-50"
             }`}
@@ -40016,33 +40055,46 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   <h3 className="text-base font-semibold text-slate-950">Urgent Booking Requests</h3>
                   <span
                     className={`rounded-full px-2.5 py-1 text-xs font-semibold uppercase ring-1 ${
-                      urgentCustomerBookingRequestCount > 0
+                      dashboardUrgentBookingRequestCount > 0
                         ? "bg-amber-100 text-amber-900 ring-amber-200"
                         : "bg-white text-slate-600 ring-stone-200"
                     }`}
-                    data-dashboard-new-booking-requests-count={String(urgentCustomerBookingRequestCount)}
-                    data-dashboard-urgent-booking-requests-count={String(urgentCustomerBookingRequestCount)}
+                    data-dashboard-new-booking-requests-count={String(dashboardUrgentBookingRequestCount)}
+                    data-dashboard-urgent-booking-requests-count={String(dashboardUrgentBookingRequestCount)}
                   >
-                    {urgentCustomerBookingRequestCount} urgent
+                    {dashboardUrgentBookingRequestCount} urgent
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-slate-600 sm:text-sm">
-                  Pickup under 24 hours only. Review urgent requests in Bookings before loading Dispatch.
+                  Pickup under 24 hours; saved Driver TBC jobs under 1 hour stay here until a driver is assigned.
                 </p>
               </div>
               <button
                 className="h-9 rounded-md border border-amber-300 bg-white px-3 text-sm font-semibold text-amber-900 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:border-stone-200 disabled:text-slate-400"
                 data-dashboard-review-new-booking-requests="true"
-                disabled={urgentCustomerBookingRequestCount === 0}
-                onClick={openCustomerBookingRequestsReview}
+                disabled={dashboardUrgentBookingRequestCount === 0}
+                onClick={() => {
+                  const firstBooking = dashboardUrgentBookingRequestDisplayItems[0]?.bookingRecord;
+
+                  if (!firstBooking) {
+                    return;
+                  }
+
+                  if (bookingRecordIsCustomerBookingRequest(firstBooking)) {
+                    openCustomerBookingRequestsReview();
+                    return;
+                  }
+
+                  loadSelectedBooking(firstBooking);
+                }}
                 type="button"
               >
-                Review Requests
+                Open Urgent
               </button>
             </div>
-            {urgentCustomerBookingRequestDisplayItems.length > 0 ? (
+            {dashboardUrgentBookingRequestDisplayItems.length > 0 ? (
               <div className="mt-3 grid gap-2" data-dashboard-new-booking-request-rows="true">
-                {urgentCustomerBookingRequestDisplayItems.map(({ bookingRecord, operationalCard }) => {
+                {dashboardUrgentBookingRequestDisplayItems.map(({ bookingRecord, operationalCard }) => {
                   const routePoints = getRoutePoints(bookingRecord);
                   const pickup = operationalCard.pickup_address || routePoints[0] || "Pickup";
                   const dropoff =
@@ -40053,14 +40105,25 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                     operationalCard.route_points_summary ||
                     (routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`);
                   const bookingId = String(bookingRecord.id);
+                  const isCustomerRequest = bookingRecordIsCustomerBookingRequest(bookingRecord);
 
                   return (
                     <button
                       className="grid min-h-10 gap-1 rounded-md border border-amber-200 bg-white px-3 py-2 text-left text-sm transition hover:bg-amber-50 md:grid-cols-[minmax(9rem,0.8fr)_minmax(10rem,0.8fr)_minmax(12rem,1.2fr)] md:items-center"
                       data-dashboard-new-booking-request-row={bookingId}
+                      data-dashboard-urgent-booking-request-kind={
+                        isCustomerRequest ? "customer-request" : "driver-tbc"
+                      }
                       data-dashboard-urgent-booking-request-row={bookingId}
                       key={`dashboard-request-${bookingRecord.id}`}
-                      onClick={openCustomerBookingRequestsReview}
+                      onClick={() => {
+                        if (isCustomerRequest) {
+                          openCustomerBookingRequestsReview();
+                          return;
+                        }
+
+                        loadSelectedBooking(bookingRecord);
+                      }}
                       type="button"
                     >
                       <span className="min-w-0">
@@ -40077,14 +40140,16 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                           operationalCard.customer_display_name ||
                           "Unknown"}
                       </span>
-                      <span className="truncate text-slate-700">{routeText}</span>
+                      <span className="truncate text-slate-700">
+                        {isCustomerRequest ? routeText : `Driver TBC under 1h | ${routeText}`}
+                      </span>
                     </button>
                   );
                 })}
               </div>
             ) : (
               <p className="mt-3 rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-slate-600">
-                No urgent booking requests inside 24 hours loaded.
+                No urgent booking requests or Driver TBC jobs inside the dispatch window.
               </p>
             )}
           </section>

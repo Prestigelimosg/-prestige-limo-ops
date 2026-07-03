@@ -679,7 +679,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Recent and Completed booking lists now render compact expandable rows by default so dispatch can scan more bookings at once while keeping existing details and action buttons available.
 - The Bookings tab now triggers the same safe Load Bookings read automatically the first time it is opened with an empty loaded list.
 - Open customer booking requests are surfaced on the Dashboard command centre and above Recent Bookings, using the existing customer request source markers with a bounded fallback for open `CUST-` request references when live rows do not carry those markers.
-- The Dashboard is the default admin landing tab, shows a compact `Urgent Booking Requests` alert for open customer requests with pickup under 24 hours, and routes request clicks to the existing Bookings review area instead of loading Dispatch directly.
+- The Dashboard is the default admin landing tab, shows a compact `Urgent Booking Requests` alert for open customer requests with pickup under 24 hours plus saved Driver TBC jobs inside the 1-hour pickup monitor window, and routes each row to the correct existing review or Dispatch assignment flow.
 - The Dashboard now runs the same existing safe Load Bookings read once on initial command-centre entry when the local booking list is empty, so newly submitted customer requests can appear without first opening the Bookings tab.
 - Dashboard initial Load Bookings completion only writes the global status message while the operator is still on Dashboard, so a delayed read cannot overwrite Rates or other tab feedback after navigation.
 - The Bookings request row is the review handoff point and can load the selected request into the existing Dispatch form only when the operator chooses `Load this booking`; the handoff focuses the existing Customer Copy section for admin review/send preparation without adding a duplicate write path.
@@ -688,7 +688,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The Dashboard now uses compact read-only booking summaries plus `Open` handoff buttons; single-booking driver assignment, status, copy, job-card, and completion work stays in Dispatch/Bookings so page purposes do not duplicate.
 - `Today's Jobs` is shown below the Dispatch `Assigned Driver` sector for multi-driver scanning and is not rendered on Dashboard.
 - `Today's Jobs` shows assigned operational jobs inside the 1-hour pickup monitor window without a separate expand/collapse toggle.
-- `Today's Jobs` excludes customer-request rows and unassigned/Driver TBC rows from the live-dispatch queue; those rows remain available in the Bookings review and normal assignment flow.
+- `Today's Jobs` excludes customer-request rows and unassigned/Driver TBC rows from the live-dispatch queue; unassigned saved jobs inside the 1-hour pickup monitor window stay in the Dashboard `Urgent Booking Requests` panel until admin loads them for driver assignment.
 - `Today's Jobs` shows a compact saved driver report readout per visible job, using the existing guarded admin `GET /api/admin-driver-job-statuses` path only, with monitor-wide/per-card refresh controls and auto-refresh on by default.
 - `Today's Jobs` includes compact live-map controls that reuse the existing admin-only live-location runtime for the jobs inside the monitor window.
 - Admin live-map display collapses duplicate live rows for the same driver identity, preferring current/newest movement, so one driver does not look like two live cars.
@@ -713,7 +713,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Dashboard Urgent Requests And One-Window Active Monitor
 
-- Dashboard request panel is now `Urgent Booking Requests` and only displays open customer requests with pickup under 24 hours.
+- Dashboard request panel is now `Urgent Booking Requests` and displays open customer requests with pickup under 24 hours plus saved Driver TBC jobs inside the 1-hour pickup monitor window.
 - The Bookings page request panel remains the full queue as `Urgent & New Booking Requests`, with row badges separating urgent under-24h requests from new non-urgent requests.
 - Day-of-trip jobs are shown as `Today's Jobs` only on Dispatch; Dashboard stays focused on urgent requests, admin notifications, calendar, and booking summaries.
 - `Today's Jobs` driver report auto-refresh is on by default, still uses the guarded admin driver-status read path, and can be switched off by the operator.

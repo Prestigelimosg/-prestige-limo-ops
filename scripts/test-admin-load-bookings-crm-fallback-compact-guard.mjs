@@ -53,7 +53,7 @@ for (const phrase of [
   "Recent and Completed booking lists now render compact expandable rows by default so dispatch can scan more bookings at once while keeping existing details and action buttons available.",
   "The Bookings tab now triggers the same safe Load Bookings read automatically the first time it is opened with an empty loaded list.",
   "Open customer booking requests are surfaced on the Dashboard command centre and above Recent Bookings, using the existing customer request source markers with a bounded fallback for open `CUST-` request references when live rows do not carry those markers.",
-  "The Dashboard is the default admin landing tab, shows a compact `Urgent Booking Requests` alert for open customer requests with pickup under 24 hours, and routes request clicks to the existing Bookings review area instead of loading Dispatch directly.",
+  "The Dashboard is the default admin landing tab, shows a compact `Urgent Booking Requests` alert for open customer requests with pickup under 24 hours plus saved Driver TBC jobs inside the 1-hour pickup monitor window, and routes each row to the correct existing review or Dispatch assignment flow.",
   "Dashboard initial Load Bookings completion only writes the global status message while the operator is still on Dashboard, so a delayed read cannot overwrite Rates or other tab feedback after navigation.",
   "The Bookings request row is the review handoff point and can load the selected request into the existing Dispatch form only when the operator chooses `Load this booking`; the handoff focuses the existing Customer Copy section for admin review/send preparation without adding a duplicate write path.",
   "Loading a customer request into Dispatch now records a bounded browser-local handled-request key so that request leaves the Dashboard urgent queue plus the Bookings `Urgent & New Booking Requests` queue and badge on that admin browser while remaining available in Recent/Active booking lists.",
@@ -61,7 +61,7 @@ for (const phrase of [
   "The Dashboard now uses compact read-only booking summaries plus `Open` handoff buttons; single-booking driver assignment, status, copy, job-card, and completion work stays in Dispatch/Bookings so page purposes do not duplicate.",
   "`Today's Jobs` is shown below the Dispatch `Assigned Driver` sector for multi-driver scanning and is not rendered on Dashboard.",
   "`Today's Jobs` shows assigned operational jobs inside the 1-hour pickup monitor window without a separate expand/collapse toggle.",
-  "`Today's Jobs` excludes customer-request rows and unassigned/Driver TBC rows from the live-dispatch queue; those rows remain available in the Bookings review and normal assignment flow.",
+  "`Today's Jobs` excludes customer-request rows and unassigned/Driver TBC rows from the live-dispatch queue; unassigned saved jobs inside the 1-hour pickup monitor window stay in the Dashboard `Urgent Booking Requests` panel until admin loads them for driver assignment.",
   "`Today's Jobs` shows a compact saved driver report readout per visible job, using the existing guarded admin `GET /api/admin-driver-job-statuses` path only, with monitor-wide/per-card refresh controls and auto-refresh on by default.",
   "`Today's Jobs` includes compact live-map controls that reuse the existing admin-only live-location runtime for the jobs inside the monitor window.",
   "The lower Dispatch saved-record finder and internal advanced checks now sit behind one compact `Optional Workflow Tools` disclosure by default. The existing admin-only persistence controls, loaded-record scrollbox, and guarded checks are still available after expanding, but they no longer fill the normal Dispatch view.",
@@ -225,7 +225,7 @@ assertIncludes(appPage, "activeTabRef.current === options.messageTab", "Load boo
 
 for (const customerRequestFragment of [
   "customerBookingRequestDisplayItems",
-  "urgentCustomerBookingRequestDisplayItems",
+  "dashboardUrgentBookingRequestDisplayItems",
   "data-dashboard-urgent-booking-requests-panel",
   "data-dashboard-new-booking-requests-panel",
   "data-dashboard-review-new-booking-requests",
@@ -469,6 +469,36 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
+  "const urgentUnassignedSavedBookingRequests = useMemo(",
+  "Dashboard urgent booking queue includes unassigned saved jobs",
+);
+assertIncludes(
+  appPage,
+  "operationalBookings\n        .filter((bookingRecord) => !bookingRecordBelongsInCompletedHistoryWithDriverReport(bookingRecord))",
+  "Dashboard urgent saved-job queue uses loaded operational bookings independent of dashboard search",
+);
+assertIncludes(
+  appPage,
+  "!bookingRecordHasDispatchActiveJobsMonitorDriver(bookingRecord) &&\n            bookingRecordIsInsideActiveJobMonitorWindow(bookingRecord, currentTimeMs)",
+  "Dashboard urgent booking queue captures unassigned saved jobs inside the 1-hour pickup window",
+);
+assertIncludes(
+  appPage,
+  "const dashboardUrgentBookingRequestBookings = useMemo(",
+  "Dashboard urgent booking panel combines customer requests and Driver TBC saved jobs",
+);
+assertIncludes(
+  appPage,
+  "const urgentUnassignedSavedBookingIdSet = useMemo(",
+  "Dashboard urgent unassigned saved booking id set",
+);
+assertIncludes(
+  appPage,
+  "!urgentUnassignedSavedBookingIdSet.has(String(bookingRecord.id))",
+  "Dashboard Today/Upcoming excludes urgent unassigned saved jobs",
+);
+assertIncludes(
+  appPage,
   ".filter(bookingRecordIsDispatchActiveJobsMonitorEligible)",
   "Active jobs monitor applies assigned operational eligibility",
 );
@@ -486,6 +516,36 @@ assertIncludes(
   appPage,
   "aria-label=\"Today's Jobs\"",
   "Dispatch active jobs monitor named Today's Jobs",
+);
+assertIncludes(
+  appPage,
+  'aria-label="Urgent Booking Requests"',
+  "Dashboard urgent booking panel label",
+);
+assertIncludes(
+  appPage,
+  "Pickup under 24 hours; saved Driver TBC jobs under 1 hour stay here until a driver is assigned.",
+  "Dashboard urgent booking workflow copy includes Driver TBC saved jobs",
+);
+assertIncludes(
+  appPage,
+  'data-dashboard-urgent-booking-request-kind={',
+  "Dashboard urgent booking rows distinguish request and Driver TBC rows",
+);
+assertIncludes(
+  appPage,
+  'isCustomerRequest ? "customer-request" : "driver-tbc"',
+  "Dashboard urgent booking rows mark Driver TBC jobs",
+);
+assertIncludes(
+  appPage,
+  "loadSelectedBooking(bookingRecord);",
+  "Dashboard urgent Driver TBC rows load Dispatch for assignment",
+);
+assertExcludes(
+  appPage,
+  'aria-label="Urgent Driver Assignment"',
+  "No separate urgent driver assignment sector",
 );
 assertIncludes(appPage, 'data-dispatch-live-driver-map="true"', "Dispatch live map panel");
 assertIncludes(appPage, "openAdminLiveLocationRuntimeForActiveJobs", "Dispatch opens active jobs in live map");

@@ -8,6 +8,7 @@ export const adminSavedBookingStatusVersion = "admin-saved-booking-status-v1";
 
 export type AdminSavedBookingStatusValue =
   | "assigned"
+  | "cancelled"
   | "completed"
   | "confirmed"
   | "driver_otw"
@@ -56,6 +57,7 @@ type SavedBookingStatusStorageShape = "current" | "legacy";
 const allowedAdapterActorRoles = new Set(["admin", "dispatcher", "system"]);
 const allowedStatuses = new Set<AdminSavedBookingStatusValue>([
   "assigned",
+  "cancelled",
   "completed",
   "confirmed",
   "driver_otw",

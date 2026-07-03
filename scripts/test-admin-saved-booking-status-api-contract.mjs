@@ -344,6 +344,21 @@ assert.equal(
   false,
   "Dashboard saved booking status updates must not use the legacy data boundary.",
 );
+assert.equal(
+  dashboardSource.includes('patchBookingStatusReference(driverJobLinkBookingReference, "cancelled")'),
+  true,
+  "Driver job link revoke must persist the booking status as cancelled.",
+);
+assert.equal(
+  dashboardSource.includes('patchBookingStatusReference(bookingStatusReference, "completed")'),
+  true,
+  "Driver Job Completed reports must persist the booking status as completed.",
+);
+assert.equal(
+  dashboardSource.includes("function bookingRecordIsCancelledStatus"),
+  true,
+  "Cancelled bookings must have a status helper for archive routing.",
+);
 
 const harness = await loadHarness();
 
@@ -358,6 +373,16 @@ try {
     data: {
       booking_id: "status-booking-1",
       status: "completed",
+    },
+    ok: true,
+  });
+  assert.deepEqual(persistence.parseAdminSavedBookingStatusPayload({
+    booking_id: "status-booking-1",
+    status: "cancelled",
+  }), {
+    data: {
+      booking_id: "status-booking-1",
+      status: "cancelled",
     },
     ok: true,
   });
@@ -494,6 +519,28 @@ try {
   assert.equal(validMock.client.updateHistory[1].payload.status, "completed");
   assert.equal(validMock.client.updateHistory[1].selectedColumns, "id, booking_reference, status, updated_at");
   assertNoUnsafeResponse(validResult, "valid response");
+
+  setEnv(enabledEnv());
+
+  const cancelledMock = installMockClient(seed);
+  const cancelledResult = await routeJson(
+    await route.PATCH(
+      jsonRequest("http://localhost/api/admin-saved-booking-statuses", {
+        booking_id: "status-booking-1",
+        status: "cancelled",
+      }),
+    ),
+  );
+
+  assert.equal(cancelledResult.status, 200);
+  assert.equal(cancelledResult.body.ok, true);
+  assert.equal(cancelledResult.body.booking.id, "status-booking-1");
+  assert.equal(cancelledResult.body.booking.status, "cancelled");
+  assert.equal(cancelledMock.createdClients.length, 1);
+  assert.equal(cancelledMock.client.updateHistory.length, 2);
+  assert.equal(cancelledMock.client.updateHistory[0].payload.admin_internal_status, "cancelled");
+  assert.equal(cancelledMock.client.updateHistory[1].payload.status, "cancelled");
+  assertNoUnsafeResponse(cancelledResult, "cancelled status response");
 
   setEnv(enabledEnv());
 

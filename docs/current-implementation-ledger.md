@@ -703,6 +703,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Bookings Earlier Jobs Completed History Compact
 
 - Past pickup-date jobs now leave Current / Upcoming and move into Completed / History alongside completed jobs.
+- Cancelled/revoked jobs also leave Current / Upcoming and stay searchable in Completed / History with a Cancelled status pill.
 - Completed / History defaults to the latest available pickup month, can switch to `All months`, and keeps search available by passenger/company/flight/route/driver/status.
 - Completed / History rows are grouped under compact monthly headers such as `June 2026`, with known-date months sorted newest first and unknown dates grouped under `Date to confirm`.
 - The Dashboard no longer renders earlier booking cards; it shows a compact count plus an `Open Completed / History` handoff.
@@ -725,10 +726,11 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Driver Completed History Grouping Lock
 
-- Saved driver `Job Completed` reports now move the loaded booking out of Today/Upcoming and `Today's Jobs` and into Completed / History.
-- The booking row is not overwritten; admin history reads the existing guarded driver status state from the dashboard/dispatch read cache.
-- Driver-completed rows show a compact `Driver completed` badge and do not expose admin billing, customer pricing, payout, internal notes, parser/debug internals, or mock/dev archive data.
-- This is UI-only grouping/read behavior; it does not add routes/APIs, DB writes, provider sends, notification sends, GPS/live location, billing/payment/PDF/invoice/payout, calendar sync, env changes, deploy activation, parser changes, or shims.
+- Saved driver `Job Completed` reports now persist the saved booking status as `completed`, moving the loaded booking out of Today/Upcoming and `Today's Jobs` and into Completed / History.
+- The booking row status is updated through the existing guarded saved-booking-status API only; no booking details, customer data, route data, prices, or driver payout fields are overwritten by the driver status read.
+- Driver-completed fallback rows display as `Completed` in Completed / History while the status sync lands; the old visible `Pending` plus `Driver completed` double-label is not shown.
+- Completed / History exposes Delete only for archived `completed` or `cancelled` rows, plus driver-completed fallback rows after a guarded status sync to `completed`; it does not become a general active-booking delete path.
+- This is status-only sync on the existing route; it does not add routes/APIs, DB schema changes, provider sends, notification sends, GPS/live location, billing/payment/PDF/invoice/payout, calendar sync, env changes, deploy activation, parser changes, or shims.
 - Guard coverage lives in `scripts/test-driver-completed-history-grouping-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Admin New Booking Email Alert Runtime Gate

@@ -157,7 +157,9 @@ for (const fragment of [
 
 for (const fragment of [
   "link: null,",
-  "text: \"Driver job link revoked.\"",
+  'patchBookingStatusReference(driverJobLinkBookingReference, "cancelled")',
+  "Driver job link revoked. Booking status changed to Cancelled.",
+  "Driver job link revoked, but booking status was not changed:",
   "oneTimeUrl: \"\",",
 ]) {
   assertIncludes(driverJobLinkRevokeBlock, fragment, `driver job link revoke clears preview fragment ${fragment}`);

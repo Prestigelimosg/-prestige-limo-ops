@@ -76,13 +76,14 @@ const ledgerSection = sectionBetween(
 
 for (const fragment of [
   "function bookingRecordIsCompletedStatus",
+  "function bookingRecordIsCancelledStatus",
   "function bookingRecordIsEarlierJob",
   "function bookingRecordBelongsInCompletedHistory",
   "function bookingRecordCompletedHistoryMonthKey",
   "function completedHistoryMonthLabel",
   "function sortCompletedHistoryMonthKeysNewestFirst",
   "function sortBookingHistoryNewestFirst",
-  "return bookingRecordIsCompletedStatus(bookingRecord) || bookingRecordIsEarlierJob(bookingRecord, todayKey);",
+  "bookingRecordIsCancelledStatus(bookingRecord) ||",
   "dateKey !== \"1970-01-01\" && dateKey < todayKey",
   "return secondDate.localeCompare(firstDate);",
 ]) {
@@ -102,6 +103,8 @@ for (const fragment of [
   "getBookingDateKey(bookingRecord) === todayKey",
   "getBookingDateKey(bookingRecord) > todayKey",
   "bookingRecord.status,",
+  "cancelledCount: number;",
+  "Cancelled {monthGroup.cancelledCount}",
 ]) {
   assertIncludes(appPage, fragment, `booking history source fragment ${fragment}`);
 }
@@ -137,13 +140,15 @@ for (const fragment of [
   "const isCompletedStatus = bookingRecordIsCompletedStatus(savedBooking);",
   "const isDriverCompletedHistoryJob =",
   "const isEarlierHistoryJob = bookingRecordIsEarlierJob(savedBooking, todayKey);",
+  "const completedHistoryDisplayStatus = isDriverCompletedHistoryJob ? \"completed\" : savedBooking.status;",
+  "const canDeleteCompletedHistoryBooking = bookingRecordCanBeDeletedFromCompletedHistory(savedBooking);",
   "data-completed-history-bucket={",
   "isDriverCompletedHistoryJob",
   "\"driver-completed\"",
   "Earlier",
-  "Driver completed",
   "{isCompletedStatus ? (",
   "data-completed-undo-booking={bookingId}",
+  "{canDeleteCompletedHistoryBooking ? (",
   "data-completed-delete-booking={bookingId}",
   'className="mt-1.5 grid gap-2 border-t border-stone-100 px-2 pt-2"',
   'className="grid gap-2 sm:grid-cols-3"',
@@ -195,6 +200,7 @@ for (const forbiddenPattern of [
 
 for (const phrase of [
   "Past pickup-date jobs now leave Current / Upcoming and move into Completed / History alongside completed jobs.",
+  "Cancelled/revoked jobs also leave Current / Upcoming and stay searchable in Completed / History with a Cancelled status pill.",
   "Completed / History defaults to the latest available pickup month, can switch to `All months`, and keeps search available by passenger/company/flight/route/driver/status.",
   "Completed / History rows are grouped under compact monthly headers such as `June 2026`, with known-date months sorted newest first and unknown dates grouped under `Date to confirm`.",
   "The Dashboard no longer renders earlier booking cards; it shows a compact count plus an `Open Completed / History` handoff.",

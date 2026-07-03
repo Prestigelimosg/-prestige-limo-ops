@@ -10,9 +10,13 @@ export type AdminSavedBookingDeleteInput = {
   booking_id: string;
 };
 
+const adminSavedBookingDeletableStatuses = ["completed", "cancelled"] as const;
+
+type AdminSavedBookingDeletableStatus = (typeof adminSavedBookingDeletableStatuses)[number];
+
 export type AdminSavedBookingDeleteRecord = {
   id: string | number;
-  status: "completed";
+  status: AdminSavedBookingDeletableStatus;
 };
 
 export type AdminSavedBookingDeleteData = {
@@ -55,7 +59,7 @@ const safeDeleteError = "Admin saved booking delete failed safely.";
 const safeSessionActorError =
   "Admin saved booking delete requires a verified admin or dispatcher server session.";
 const safeTargetMissingError =
-  "Completed saved booking delete target was not found.";
+  "Archived saved booking delete target was not found.";
 const placeholderConfigPattern =
   /^(?:todo|tbd|n\/a|none|null|undefined|placeholder|change[-_\s]?me|changeme|replace[-_\s]?me|your[-_\s]?.*|example)$/i;
 
@@ -294,13 +298,18 @@ function toDeleteRecord(value: unknown): AdminSavedBookingDeleteRecord | null {
       : textOrNull(row.id, 120);
   const status = textOrNull(row.status, 40)?.toLowerCase();
 
-  if (id === null || status !== "completed") {
+  if (
+    id === null ||
+    !adminSavedBookingDeletableStatuses.includes(
+      status as AdminSavedBookingDeletableStatus,
+    )
+  ) {
     return null;
   }
 
   return {
     id,
-    status,
+    status: status as AdminSavedBookingDeletableStatus,
   };
 }
 
@@ -347,7 +356,7 @@ export async function deleteAdminCompletedSavedBooking(
     .from("bookings")
     .delete()
     .eq("id", parsed.data.booking_id)
-    .eq("status", "completed")
+    .in("status", [...adminSavedBookingDeletableStatuses])
     .select("id, status")
     .maybeSingle();
 

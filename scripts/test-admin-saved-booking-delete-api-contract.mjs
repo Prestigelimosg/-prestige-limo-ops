@@ -172,6 +172,16 @@ class MockSupabaseQuery {
     return this;
   }
 
+  in(column, values) {
+    this.filters.push({
+      column,
+      type: "in",
+      values,
+    });
+
+    return this;
+  }
+
   maybeSingle() {
     this.resultMode = "maybeSingle";
 
@@ -238,7 +248,13 @@ class MockSupabaseClient {
 
     const rows = this.rows[table] || [];
     const matches = rows.filter((row) =>
-      filters.every((filter) => String(row[filter.column]) === String(filter.value)),
+      filters.every((filter) => {
+        if (filter.type === "in") {
+          return filter.values.map(String).includes(String(row[filter.column]));
+        }
+
+        return String(row[filter.column]) === String(filter.value);
+      }),
     );
     this.rows[table] = rows.filter((row) => !matches.includes(row));
 
@@ -292,6 +308,10 @@ const seed = {
     {
       id: "delete-completed-1",
       status: "completed",
+    },
+    {
+      id: "delete-cancelled-1",
+      status: "cancelled",
     },
     {
       id: "delete-confirmed-1",
@@ -363,7 +383,7 @@ try {
   );
 
   assert.equal(confirmedResult.status, 404);
-  assert.equal(confirmedResult.body.error, "Completed saved booking delete target was not found.");
+  assert.equal(confirmedResult.body.error, "Archived saved booking delete target was not found.");
   assert.equal(confirmedMock.client.deleteHistory.length, 1);
   assert.deepEqual(confirmedMock.client.deleteHistory[0].filters, [
     {
@@ -373,8 +393,8 @@ try {
     },
     {
       column: "status",
-      type: "eq",
-      value: "completed",
+      type: "in",
+      values: ["completed", "cancelled"],
     },
   ]);
   assert.equal(confirmedMock.client.rows.bookings.some((booking) => booking.id === "delete-confirmed-1"), true);
@@ -411,13 +431,37 @@ try {
     },
     {
       column: "status",
-      type: "eq",
-      value: "completed",
+      type: "in",
+      values: ["completed", "cancelled"],
     },
   ]);
   assert.equal(validMock.client.deleteHistory[0].selectedColumns, "id, status");
   assert.equal(validMock.client.rows.bookings.some((booking) => booking.id === "delete-completed-1"), false);
   assertNoUnsafeResponse(validResult, "valid response");
+
+  setEnv(enabledEnv());
+
+  const cancelledMock = installMockClient(seed);
+  const cancelledResult = await routeJson(
+    await route.DELETE(
+      deleteRequest("http://localhost/api/admin-saved-bookings", {
+        booking_id: "delete-cancelled-1",
+      }),
+    ),
+  );
+
+  assert.equal(cancelledResult.status, 200);
+  assert.deepEqual(cancelledResult.body, {
+    booking: {
+      id: "delete-cancelled-1",
+      status: "cancelled",
+    },
+    ok: true,
+    version: "admin-saved-booking-delete-v1",
+  });
+  assert.equal(cancelledMock.client.deleteHistory.length, 1);
+  assert.equal(cancelledMock.client.rows.bookings.some((booking) => booking.id === "delete-cancelled-1"), false);
+  assertNoUnsafeResponse(cancelledResult, "cancelled response");
 
   setEnv(enabledEnv());
 

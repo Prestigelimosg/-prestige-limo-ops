@@ -729,6 +729,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Saved driver `Job Completed` reports now persist the saved booking status as `completed`, moving the loaded booking out of Today/Upcoming and `Today's Jobs` and into Completed / History.
 - The booking row status is updated through the existing guarded saved-booking-status API only; no booking details, customer data, route data, prices, or driver payout fields are overwritten by the driver status read.
 - Driver-completed fallback rows display as `Completed` in Completed / History while the status sync lands; the old visible `Pending` plus `Driver completed` double-label is not shown.
+- Completed / History rows show plain operator feedback: deleting shows `Deleting job...`, success shows `Job deleted.`, and completed rows show `Completed` instead of a driver-completed/internal label.
 - Completed / History exposes Delete only for archived `completed` or `cancelled` rows, plus driver-completed fallback rows after a guarded status sync to `completed`; it does not become a general active-booking delete path.
 - This is status-only sync on the existing route; it does not add routes/APIs, DB schema changes, provider sends, notification sends, GPS/live location, billing/payment/PDF/invoice/payout, calendar sync, env changes, deploy activation, parser changes, or shims.
 - Guard coverage lives in `scripts/test-driver-completed-history-grouping-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.

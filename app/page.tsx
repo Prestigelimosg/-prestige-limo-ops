@@ -3864,9 +3864,9 @@ function isDeleteArchivedJobMessage(message: Message | null | undefined) {
   return Boolean(
     message &&
       (message.text === "Delete cancelled." ||
-        message.text === "Deleting archived job..." ||
-        message.text === "Archived job deleted." ||
-        message.text.startsWith("Delete archived job failed")),
+        message.text === "Deleting job..." ||
+        message.text === "Job deleted." ||
+        message.text.startsWith("Delete job failed")),
   );
 }
 
@@ -15424,7 +15424,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   const completedTabDeleteMessages = Object.entries(bookingCompletionMessages).filter(
     ([bookingId, completionMessage]) =>
       !loadedBookingIds.has(bookingId) &&
-      completionMessage.text === "Archived job deleted." &&
+      completionMessage.text === "Job deleted." &&
       isDeleteArchivedJobMessage(completionMessage),
   );
 
@@ -20587,12 +20587,12 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     if (!isCompletedStatus && !isCancelledStatus && !isDriverCompletedHistoryJob) {
       setBookingCompletionMessage(bookingId, {
         tone: "error",
-        text: "Delete archived job failed: only completed, cancelled, or driver-completed jobs can be deleted here.",
+        text: "Delete job failed: only completed, cancelled, or driver-completed jobs can be deleted here.",
       });
       return;
     }
 
-    const confirmed = window.confirm("Delete this archived job from the app? This cannot be undone.");
+    const confirmed = window.confirm("Delete this job from Completed / History? This cannot be undone.");
 
     if (!confirmed) {
       setBookingCompletionMessage(bookingId, { tone: "info", text: "Delete cancelled." });
@@ -20602,13 +20602,13 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     if (typeof fetch !== "function") {
       setBookingCompletionMessage(bookingId, {
         tone: "error",
-        text: "Delete archived job failed: Admin saved booking API is not available.",
+        text: "Delete job failed: Admin saved booking API is not available.",
       });
       return;
     }
 
     setDeletingCompletedBookingId(bookingId);
-    setBookingCompletionMessage(bookingId, { tone: "info", text: "Deleting archived job..." });
+    setBookingCompletionMessage(bookingId, { tone: "info", text: "Deleting job..." });
 
     try {
       if (isDriverCompletedHistoryJob) {
@@ -20652,12 +20652,12 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       setBookings((current) =>
         current.filter((currentBooking) => String(currentBooking.id) !== bookingId),
       );
-      setBookingCompletionMessage(bookingId, { tone: "success", text: "Archived job deleted." });
+      setBookingCompletionMessage(bookingId, { tone: "success", text: "Job deleted." });
     } catch (error) {
       const errorText = error instanceof Error ? error.message : "Unknown archived job delete error.";
       setBookingCompletionMessage(bookingId, {
         tone: "error",
-        text: `Delete archived job failed: ${errorText}`,
+        text: `Delete job failed: ${errorText}`,
       });
     } finally {
       setDeletingCompletedBookingId(null);
@@ -21471,7 +21471,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                 >
                   <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
                     <details className="min-w-0 rounded-md bg-white" data-completed-operational-details={bookingId}>
-                      <summary className="grid cursor-pointer list-none gap-2 rounded-md px-2 py-1.5 outline-none transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900/20 md:grid-cols-[minmax(13rem,1.1fr)_minmax(10rem,0.8fr)_minmax(14rem,1.4fr)_minmax(9rem,0.7fr)_auto] md:items-center">
+                      <summary className="grid cursor-pointer list-none gap-2 rounded-md px-2 py-1.5 outline-none transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900/20 md:grid-cols-[minmax(13rem,1.1fr)_minmax(10rem,0.8fr)_minmax(14rem,1.4fr)_minmax(9rem,0.7fr)_minmax(8rem,auto)] md:items-center">
                         <span className="min-w-0">
                           <span className="block truncate font-semibold text-slate-950">
                             {getLoadBookingsOperationalDisplayTitle(operationalCard)}
@@ -21489,20 +21489,20 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                           <span className="block truncate text-slate-800">{driverText}</span>
                           <span className="block truncate text-xs text-slate-500">{vehiclePaxText}</span>
                         </span>
-                        <span className="flex items-center gap-2">
+                        <span className="flex min-w-0 flex-wrap items-center gap-1.5 md:justify-end md:text-right">
                           <span
-                            className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${bookingStatusClass(
+                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium leading-5 ring-1 ${bookingStatusClass(
                               completedHistoryDisplayStatus,
                             )}`}
                           >
                             {bookingStatusLabel(completedHistoryDisplayStatus)}
                           </span>
                           {!isCompletedStatus && !isCancelledStatus && isEarlierHistoryJob ? (
-                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-slate-200">
+                            <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium leading-5 text-slate-600 ring-1 ring-slate-200">
                               Earlier
                             </span>
                           ) : null}
-                          <span className="text-xs font-medium text-slate-500">Details</span>
+                          <span className="shrink-0 text-xs font-medium text-slate-500">Details</span>
                         </span>
                       </summary>
                       <div className="mt-1.5 grid gap-2 border-t border-stone-100 px-2 pt-2" data-completed-operational-body={bookingId}>

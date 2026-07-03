@@ -92,10 +92,21 @@ for (const fragment of [
 }
 
 for (const fragment of [
+  "Delete this job from Completed / History? This cannot be undone.",
+  "Deleting job...",
+  "Job deleted.",
+  "Delete job failed",
+]) {
+  assertIncludes(appPage, fragment, `completed history delete feedback fragment ${fragment}`);
+}
+
+for (const fragment of [
   "const isDriverCompletedHistoryJob =",
   "!isCompletedStatus && !isCancelledStatus && bookingRecordHasCompletedDriverReport(savedBooking)",
   "const completedHistoryDisplayStatus = isDriverCompletedHistoryJob ? \"completed\" : savedBooking.status;",
   "bookingStatusLabel(completedHistoryDisplayStatus)",
+  "md:grid-cols-[minmax(13rem,1.1fr)_minmax(10rem,0.8fr)_minmax(14rem,1.4fr)_minmax(9rem,0.7fr)_minmax(8rem,auto)]",
+  "flex min-w-0 flex-wrap items-center gap-1.5 md:justify-end md:text-right",
   "isDriverCompletedHistoryJob",
   "\"driver-completed\"",
   "const canDeleteCompletedHistoryBooking = bookingRecordCanBeDeletedFromCompletedHistory(savedBooking);",
@@ -135,6 +146,7 @@ for (const phrase of [
   "Saved driver `Job Completed` reports now persist the saved booking status as `completed`, moving the loaded booking out of Today/Upcoming and `Today's Jobs` and into Completed / History.",
   "The booking row status is updated through the existing guarded saved-booking-status API only; no booking details, customer data, route data, prices, or driver payout fields are overwritten by the driver status read.",
   "Driver-completed fallback rows display as `Completed` in Completed / History while the status sync lands; the old visible `Pending` plus `Driver completed` double-label is not shown.",
+  "Completed / History rows show plain operator feedback: deleting shows `Deleting job...`, success shows `Job deleted.`, and completed rows show `Completed` instead of a driver-completed/internal label.",
   "Completed / History exposes Delete only for archived `completed` or `cancelled` rows, plus driver-completed fallback rows after a guarded status sync to `completed`; it does not become a general active-booking delete path.",
   "This is status-only sync on the existing route; it does not add routes/APIs, DB schema changes, provider sends, notification sends, GPS/live location, billing/payment/PDF/invoice/payout, calendar sync, env changes, deploy activation, parser changes, or shims.",
   "Guard coverage lives in `scripts/test-driver-completed-history-grouping-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",

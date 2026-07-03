@@ -1262,6 +1262,16 @@ type AdminActiveJobsMapReadState = {
   status: "idle" | "loading" | "loaded" | "error";
 };
 
+type AdminPickupRiskLevel = "alert" | "critical" | "ok" | "pending" | "watch";
+
+type AdminPickupRiskState = {
+  detail: string;
+  level: AdminPickupRiskLevel;
+  pulse: boolean;
+  shortLabel: string;
+  title: string;
+};
+
 type AdminActiveJobsBrowserMapConfigState = {
   apiKey: string;
   mapId: string;
@@ -6157,6 +6167,159 @@ function bookingRecordIsInsideActiveJobMonitorWindow(
   const monitorWindowEndMs = pickupTimeMs + 24 * 60 * 60 * 1000;
 
   return currentTimeMs >= monitorWindowStartMs && currentTimeMs <= monitorWindowEndMs;
+}
+
+function activeJobMinutesUntilPickup(bookingRecord: BookingRecord, currentTimeMs: number) {
+  const pickupTimeMs = bookingRecordPickupDateTimeMs(bookingRecord);
+
+  if (pickupTimeMs === null) {
+    return null;
+  }
+
+  return Math.round((pickupTimeMs - currentTimeMs) / 60000);
+}
+
+function adminPickupRiskBadgeClass(level: AdminPickupRiskLevel) {
+  if (level === "critical") {
+    return "border-red-300 bg-red-50 text-red-800";
+  }
+
+  if (level === "alert") {
+    return "border-amber-300 bg-amber-50 text-amber-900";
+  }
+
+  if (level === "watch") {
+    return "border-yellow-300 bg-yellow-50 text-yellow-900";
+  }
+
+  if (level === "ok") {
+    return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  }
+
+  return "border-slate-200 bg-slate-50 text-slate-700";
+}
+
+function adminPickupRiskCardClass(level: AdminPickupRiskLevel) {
+  if (level === "critical") {
+    return "border-red-300 bg-red-50";
+  }
+
+  if (level === "alert") {
+    return "border-amber-300 bg-amber-50";
+  }
+
+  if (level === "watch") {
+    return "border-yellow-300 bg-yellow-50";
+  }
+
+  if (level === "ok") {
+    return "border-emerald-200 bg-emerald-50";
+  }
+
+  return "border-lime-100 bg-white";
+}
+
+function computeAdminPickupRiskState({
+  bookingRecord,
+  currentTimeMs,
+  driverStatusValue,
+  liveLocation,
+  monitorEnabled,
+  runtimeStatus,
+}: {
+  bookingRecord: BookingRecord;
+  currentTimeMs: number;
+  driverStatusValue?: string | null;
+  liveLocation?: AdminActiveJobsMapLocation | null;
+  monitorEnabled: boolean;
+  runtimeStatus: AdminActiveJobsMapReadState["runtimeStatus"];
+}): AdminPickupRiskState {
+  if (!monitorEnabled) {
+    return {
+      detail: "Pickup risk monitor is off.",
+      level: "pending",
+      pulse: false,
+      shortLabel: "Off",
+      title: "Pickup Risk: Off",
+    };
+  }
+
+  if (runtimeStatus !== "active") {
+    return {
+      detail: "Open live map to monitor pickup risk.",
+      level: "pending",
+      pulse: false,
+      shortLabel: "Open map",
+      title: "Pickup Risk: Waiting",
+    };
+  }
+
+  const normalizedDriverStatus = clean(driverStatusValue).toLowerCase();
+  const minutesUntilPickup = activeJobMinutesUntilPickup(bookingRecord, currentTimeMs);
+
+  if (normalizedDriverStatus === "completed" || normalizedDriverStatus === "pob") {
+    return {
+      detail: normalizedDriverStatus === "pob" ? "Passenger on board." : "Job completed.",
+      level: "ok",
+      pulse: false,
+      shortLabel: normalizedDriverStatus === "pob" ? "POB" : "Done",
+      title: "Pickup Risk: Cleared",
+    };
+  }
+
+  if (normalizedDriverStatus === "ots") {
+    return {
+      detail: "Driver reported on-site at pickup.",
+      level: "ok",
+      pulse: false,
+      shortLabel: "At pickup",
+      title: "Pickup Risk: At pickup",
+    };
+  }
+
+  if (!liveLocation) {
+    const level: AdminPickupRiskLevel =
+      minutesUntilPickup !== null && minutesUntilPickup <= 15 ? "critical" : "alert";
+
+    return {
+      detail:
+        minutesUntilPickup !== null && minutesUntilPickup <= 15
+          ? "No live pin near pickup time. Call driver or prepare replacement."
+          : "No live pin yet. Ask driver to share location.",
+      level,
+      pulse: level === "critical",
+      shortLabel: "No pin",
+      title: "Pickup Risk: No live pin",
+    };
+  }
+
+  if (liveLocation.is_stale || clean(liveLocation.sharing_state).toLowerCase() === "stale") {
+    return {
+      detail: "Driver location is stale/offline. Confirm driver movement now.",
+      level: "critical",
+      pulse: true,
+      shortLabel: "Offline",
+      title: "Pickup Risk: Offline",
+    };
+  }
+
+  if (minutesUntilPickup !== null && minutesUntilPickup <= 5 && normalizedDriverStatus !== "ots") {
+    return {
+      detail: "Live pin is current; pickup is very soon. Watch arrival and be ready to call.",
+      level: "watch",
+      pulse: false,
+      shortLabel: "Watch",
+      title: "Pickup Risk: Watch",
+    };
+  }
+
+  return {
+    detail: "Live pin is current. Route-direction checks need pickup GPS/ETA evidence.",
+    level: "ok",
+    pulse: false,
+    shortLabel: "Current",
+    title: "Pickup Risk: Current",
+  };
 }
 
 function sortBookingHistoryNewestFirst(firstBooking: BookingRecord, secondBooking: BookingRecord) {
@@ -11274,6 +11437,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   const [completingBookingId, setCompletingBookingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [dashboardDriverJobAutoRefreshEnabled, setDashboardDriverJobAutoRefreshEnabled] = useState(true);
+  const [adminPickupRiskMonitorEnabled, setAdminPickupRiskMonitorEnabled] = useState(false);
   const [dashboardDriverJobStatusReadStates, setDashboardDriverJobStatusReadStates] =
     useState<Record<string, AdminDriverJobStatusReadState>>({});
   const dashboardDriverJobStatusAutoRequestedRef = useRef<Set<string>>(new Set());
@@ -22178,6 +22342,88 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   const activeJobDriverStatusReferenceKey = activeJobDriverStatusReferenceList.join("|");
   const activeJobsMapAllowedReferenceKey = adminActiveJobsMapReadState.allowedBookingReferences.join("|");
   const todayJobsMonitorIsActive = activeTab === "dashboard" || activeTab === "dispatch";
+  const activeJobsMapLocationsByReference = new Map(
+    adminActiveJobsMapReadState.activeJobs
+      .map((job) => [cleanReferenceText(job.assigned_job_reference), job] as const)
+      .filter(([reference]) => Boolean(reference)),
+  );
+
+  function activeJobDriverStatusReadStateForBooking(
+    activeJobBookingReference: string,
+    isSelectedActiveJob: boolean,
+  ) {
+    return activeJobBookingReference &&
+      isSelectedActiveJob &&
+      adminDriverJobStatusReadState.bookingReference === activeJobBookingReference
+      ? adminDriverJobStatusReadState
+      : activeJobBookingReference
+        ? dashboardDriverJobStatusReadStates[activeJobBookingReference] || null
+        : null;
+  }
+
+  function pickupRiskStateForActiveJob(
+    activeJobBooking: BookingRecord,
+    activeJobBookingReference: string,
+    isSelectedActiveJob: boolean,
+  ) {
+    const readState = activeJobDriverStatusReadStateForBooking(
+      activeJobBookingReference,
+      isSelectedActiveJob,
+    );
+
+    return computeAdminPickupRiskState({
+      bookingRecord: activeJobBooking,
+      currentTimeMs,
+      driverStatusValue: readState?.latestStatus?.status_value,
+      liveLocation: activeJobsMapLocationsByReference.get(activeJobBookingReference) || null,
+      monitorEnabled: adminPickupRiskMonitorEnabled,
+      runtimeStatus: adminActiveJobsMapReadState.runtimeStatus,
+    });
+  }
+
+  const activeJobPickupRiskRows = dayOfTripActiveJobVisibleBookings.map((activeJobBooking) => {
+    const activeJobBookingReference = getActiveJobBookingReference(activeJobBooking);
+    const isSelectedActiveJob =
+      Boolean(activeJobBookingReference) &&
+      activeJobBookingReference === cleanReferenceText(loadedBookingId);
+    const riskState = pickupRiskStateForActiveJob(
+      activeJobBooking,
+      activeJobBookingReference,
+      isSelectedActiveJob,
+    );
+
+    return {
+      booking: activeJobBooking,
+      driverLabel:
+        clean(activeJobBooking.driver_name) ||
+        (isSelectedActiveJob ? clean(booking.driverName) : "") ||
+        "Driver TBC",
+      reference: activeJobBookingReference,
+      riskState,
+    };
+  });
+  const activeJobPickupRiskByReference = new Map(
+    activeJobPickupRiskRows.map((row) => [row.reference, row.riskState] as const),
+  );
+  const activeJobPickupRiskAlertRows = activeJobPickupRiskRows.filter((row) =>
+    ["alert", "critical", "watch"].includes(row.riskState.level),
+  );
+  const activeJobPickupRiskCriticalCount = activeJobPickupRiskRows.filter(
+    (row) => row.riskState.level === "critical",
+  ).length;
+  const activeJobPickupRiskSummaryLabel = !adminPickupRiskMonitorEnabled
+    ? "Pickup risk monitor is off."
+    : adminActiveJobsMapReadState.runtimeStatus !== "active"
+      ? "Open live map to start pickup risk monitoring."
+      : activeJobPickupRiskCriticalCount > 0
+        ? `${activeJobPickupRiskCriticalCount} critical pickup risk${
+            activeJobPickupRiskCriticalCount === 1 ? "" : "s"
+          }.`
+        : activeJobPickupRiskAlertRows.length > 0
+          ? `${activeJobPickupRiskAlertRows.length} pickup risk watch item${
+              activeJobPickupRiskAlertRows.length === 1 ? "" : "s"
+            }.`
+          : "All live shared pins are current.";
 
   useEffect(() => {
     const bookingReferences = activeJobDriverStatusReferenceKey.split("|").filter(Boolean);
@@ -22286,6 +22532,20 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           >
             Auto-refresh 10s {dashboardDriverJobAutoRefreshEnabled ? "On" : "Off"}
           </button>
+          <button
+            aria-pressed={adminPickupRiskMonitorEnabled}
+            className={`h-8 rounded-md border px-3 text-xs font-semibold transition ${
+              adminPickupRiskMonitorEnabled
+                ? "border-amber-400 bg-amber-100 text-amber-950 hover:bg-amber-200"
+                : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+            }`}
+            data-admin-pickup-risk-monitor-toggle="true"
+            data-admin-pickup-risk-monitor-state={adminPickupRiskMonitorEnabled ? "on" : "off"}
+            onClick={() => setAdminPickupRiskMonitorEnabled((currentValue) => !currentValue)}
+            type="button"
+          >
+            Pickup risk {adminPickupRiskMonitorEnabled ? "On" : "Off"}
+          </button>
           <span
             className="w-fit rounded-full bg-lime-100 px-2.5 py-1 text-xs font-semibold uppercase text-lime-900 ring-1 ring-lime-200"
             data-admin-multi-driver-active-jobs-count={String(dayOfTripActiveJobBookings.length)}
@@ -22313,14 +22573,10 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               clean(activeJobBooking.driver_name) ||
               (isSelectedActiveJob ? clean(booking.driverName) : "") ||
               "Driver TBC";
-            const activeJobDriverStatusReadState =
-              activeJobBookingReference &&
-              isSelectedActiveJob &&
-              adminDriverJobStatusReadState.bookingReference === activeJobBookingReference
-                ? adminDriverJobStatusReadState
-                : activeJobBookingReference
-                  ? dashboardDriverJobStatusReadStates[activeJobBookingReference] || null
-                  : null;
+            const activeJobDriverStatusReadState = activeJobDriverStatusReadStateForBooking(
+              activeJobBookingReference,
+              isSelectedActiveJob,
+            );
             const activeJobDriverStatusLatest =
               activeJobDriverStatusReadState?.latestStatus || null;
             const activeJobDriverStatusLabel = activeJobDriverStatusLatest
@@ -22340,14 +22596,27 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               activeJobDriverStatusLatest
                 ? activeJobDriverStatusLabel
                 : bookingStatusLabel(activeJobBooking.status);
+            const activeJobPickupRiskState = pickupRiskStateForActiveJob(
+              activeJobBooking,
+              activeJobBookingReference,
+              isSelectedActiveJob,
+            );
+            const activeJobCardStateClass = adminPickupRiskMonitorEnabled
+              ? adminPickupRiskCardClass(activeJobPickupRiskState.level)
+              : isSelectedActiveJob
+                ? "border-lime-400 bg-white"
+                : "border-lime-100 bg-white";
 
             return (
               <article
                 className={`min-w-0 rounded-md border px-2.5 py-2 text-sm ${
-                  isSelectedActiveJob ? "border-lime-400 bg-white" : "border-lime-100 bg-white"
-                }`}
+                  activeJobCardStateClass
+                } ${activeJobPickupRiskState.pulse ? "animate-pulse" : ""}`}
                 data-admin-multi-driver-active-job={
                   activeJobBookingReference || String(activeJobBooking.id)
+                }
+                data-admin-pickup-risk-card-state={
+                  adminPickupRiskMonitorEnabled ? activeJobPickupRiskState.level : "off"
                 }
                 key={`active-job-${activeJobBooking.id}`}
                 title={activeJobBookingReference || undefined}
@@ -22364,18 +22633,41 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                       )}
                     </p>
                   </div>
-                  <span
-                    className={`max-w-[7rem] shrink-0 truncate rounded-full px-2 py-0.5 text-xs font-semibold ${
-                      isSelectedActiveJob ? "bg-lime-700 text-white" : "bg-slate-100 text-slate-700"
-                    }`}
-                  >
-                    {isSelectedActiveJob ? "Open" : activeJobStatus}
-                  </span>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <span
+                      className={`max-w-[7rem] truncate rounded-full px-2 py-0.5 text-xs font-semibold ${
+                        isSelectedActiveJob ? "bg-lime-700 text-white" : "bg-slate-100 text-slate-700"
+                      }`}
+                    >
+                      {isSelectedActiveJob ? "Open" : activeJobStatus}
+                    </span>
+                    {adminPickupRiskMonitorEnabled ? (
+                      <span
+                        className={`max-w-[7.5rem] truncate rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${adminPickupRiskBadgeClass(
+                          activeJobPickupRiskState.level,
+                        )}`}
+                        data-admin-pickup-risk-state={activeJobPickupRiskState.level}
+                        title={activeJobPickupRiskState.detail}
+                      >
+                        {activeJobPickupRiskState.shortLabel}
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
                 <p className="mt-1 truncate text-slate-800">{activeJobDriver}</p>
                 <p className="mt-0.5 truncate text-xs text-lime-800">
                   {activeJobPickup} &gt; {activeJobDropoff}
                 </p>
+                {adminPickupRiskMonitorEnabled ? (
+                  <p
+                    className={`mt-1 rounded border px-2 py-1 text-[11px] font-semibold leading-4 ${adminPickupRiskBadgeClass(
+                      activeJobPickupRiskState.level,
+                    )}`}
+                    data-admin-pickup-risk-detail="true"
+                  >
+                    {activeJobPickupRiskState.title}: {activeJobPickupRiskState.detail}
+                  </p>
+                ) : null}
                 <div
                   className={`mt-2 rounded-md border px-2 py-1 text-xs ${
                     activeJobDriverStatusLatest
@@ -22508,6 +22800,34 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               {adminActiveJobsMapReadState.action === "closing" ? "Closing" : "Close map"}
             </button>
           </div>
+          <div
+            className={`mt-1 rounded border px-1.5 py-1 text-[10px] font-semibold leading-3 sm:text-[11px] ${
+              adminPickupRiskMonitorEnabled
+                ? activeJobPickupRiskCriticalCount > 0
+                  ? adminPickupRiskBadgeClass("critical")
+                  : activeJobPickupRiskAlertRows.length > 0
+                    ? adminPickupRiskBadgeClass("alert")
+                    : adminPickupRiskBadgeClass("ok")
+                : adminPickupRiskBadgeClass("pending")
+            }`}
+            data-admin-pickup-risk-monitor-summary="true"
+            data-admin-pickup-risk-monitor-summary-state={
+              adminPickupRiskMonitorEnabled
+                ? activeJobPickupRiskCriticalCount > 0
+                  ? "critical"
+                  : activeJobPickupRiskAlertRows.length > 0
+                    ? "watch"
+                    : "ok"
+                : "off"
+            }
+          >
+            {activeJobPickupRiskSummaryLabel}
+            {adminPickupRiskMonitorEnabled ? (
+              <span className="block pt-0.5 text-[10px] font-medium">
+                Driver direction/ETA alert needs pickup GPS or route evidence; this monitor only alerts safe live-pin freshness now.
+              </span>
+            ) : null}
+          </div>
           {adminActiveJobsMapReadState.message ? (
             <p
               className={`mt-1 rounded border px-1.5 py-1 text-[10px] font-semibold leading-3 sm:text-[11px] ${statusClass(
@@ -22544,11 +22864,21 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             >
               {adminActiveJobsMapReadState.activeJobs.map((job) => {
                 const mapUrl = googleMapsLocationUrl(job.latitude, job.longitude);
+                const markerRiskState = activeJobPickupRiskByReference.get(
+                  cleanReferenceText(job.assigned_job_reference),
+                );
 
                 return (
                   <div
-                    className="grid grid-cols-[1fr_auto] gap-1 rounded bg-lime-50 px-1 py-0.5"
+                    className={`grid grid-cols-[1fr_auto] gap-1 rounded px-1 py-0.5 ${
+                      adminPickupRiskMonitorEnabled && markerRiskState
+                        ? adminPickupRiskCardClass(markerRiskState.level)
+                        : "bg-lime-50"
+                    } ${adminPickupRiskMonitorEnabled && markerRiskState?.pulse ? "animate-pulse" : ""}`}
                     data-dashboard-live-driver-map-marker={job.assigned_job_reference || "unknown"}
+                    data-admin-pickup-risk-marker-state={
+                      adminPickupRiskMonitorEnabled && markerRiskState ? markerRiskState.level : "off"
+                    }
                     key={`dashboard-${job.assigned_job_reference}-${job.updated_at || ""}`}
                   >
                     <div className="min-w-0">
@@ -22560,6 +22890,11 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                         {job.is_stale ? "Stale" : "Current"} ·{" "}
                         {formatAdminLiveLocationTimestamp(job.updated_at)}
                       </p>
+                      {adminPickupRiskMonitorEnabled && markerRiskState ? (
+                        <p className="break-words text-[10px] font-semibold leading-3 text-slate-800">
+                          {markerRiskState.title}: {markerRiskState.shortLabel}
+                        </p>
+                      ) : null}
                     </div>
                     {mapUrl ? (
                       <a

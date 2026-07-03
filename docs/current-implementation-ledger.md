@@ -1,10 +1,10 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-Pending local dispatch copy readability polish lane
+Pending local live driver pickup risk monitor lane
 
 Latest pushed main/staging runtime checkpoint:
-c4704ad9 Add linked return trips and compact customer folders
+0b0e6d24 Clarify dispatch copy previews
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
 d0c5e211 Persist Save CRM driver assignment
@@ -38,6 +38,15 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer Copy now shows customer-safe readable trip rows as the main view while keeping the existing generated plain-text payload behind a compact `Message text` disclosure for Copy/Edit/Email/WhatsApp/SMS review.
 - The canonical Customer Copy payload, edit/copy controls, gated Email route, parked WhatsApp/SMS checks, Customer In-App button, Save + CRM, calendar sync, CRM writes, invoices, PDFs, payments, payouts, provider sends, GPS/live-location, env, and DB schema are unchanged.
 - Focused guard coverage lives in `scripts/test-dispatch-action-feedback-compact-guard.mjs` and `scripts/test-customer-copy-multi-channel-no-live-guard.mjs`.
+
+### Live Driver Pickup Risk Monitor
+
+- The shared `Today's Jobs` monitor now includes an admin-only `Pickup risk` toggle beside the existing driver report auto-refresh control. The toggle defaults off and does not create a new map/window or duplicate monitor sector.
+- When enabled, the existing Today’s Jobs rows and existing Live Driver Map marker rows show the same derived pickup-risk state for the exact driver/job reference: no live pin, stale/offline pin, near-pickup watch, current pin, at-pickup, POB, or completed.
+- The pickup risk monitor defaults off, can be toggled by admin, highlights only the affected driver/job row and marker for no-pin, stale/offline, and near-pickup watch states, and does not claim route direction/ETA certainty without pickup GPS or route evidence.
+- The monitor uses only already loaded active jobs, saved driver report state, and the existing guarded admin active-jobs marker read. It does not add provider sends, notification sends, customer/driver messages, env changes, DB schema changes, new live-location writes, route estimate calls, billing/payment/PDF/invoice/payout, calendar sync, parser changes, or shims.
+- Customer and driver routes are not expanded; no customer/driver/public route receives admin risk alerts, other-driver locations, finance, payout, billing, parser/debug, token, secret, or mock archive fields.
+- Focused guard coverage lives in `scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs`.
 
 ### Customer Folder Operator Row Compaction
 
@@ -694,6 +703,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Day-of-trip jobs are now shown as `Today's Jobs`; the shared sector shows all loaded active jobs inside the 1-hour-before-pickup monitor window on Dashboard and Dispatch.
 - `Today's Jobs` driver report auto-refresh is on by default, still uses the guarded admin driver-status read path, and can be switched off by the operator.
 - The `Today's Jobs` live map control opens the existing admin-only live-location runtime for the jobs in the monitor window and refreshes shared markers every 10 seconds while the sector is open.
+- The pickup risk monitor defaults off, can be toggled by admin, highlights only the affected driver/job row and marker for no-pin, stale/offline, and near-pickup watch states, and does not claim route direction/ETA certainty without pickup GPS or route evidence.
 - This reuses existing admin live-location runtime and map read paths; it does not add provider sends, notification sends, customer/driver messages, env changes, DB schema changes, billing/payment/PDF/invoice/payout, calendar sync, parser changes, or shims.
 - Guard coverage lives in `scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 

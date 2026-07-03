@@ -164,6 +164,25 @@ assertIncludes(
   "const [dashboardDriverJobAutoRefreshEnabled, setDashboardDriverJobAutoRefreshEnabled] = useState(true);",
   "dashboard auto-refresh on by default state",
 );
+assertIncludes(
+  appPage,
+  "const [adminPickupRiskMonitorEnabled, setAdminPickupRiskMonitorEnabled] = useState(false);",
+  "admin pickup risk monitor defaults off",
+);
+
+for (const fragment of [
+  "type AdminPickupRiskLevel =",
+  "function computeAdminPickupRiskState",
+  "function adminPickupRiskBadgeClass",
+  "function adminPickupRiskCardClass",
+  "activeJobsMapLocationsByReference",
+  "activeJobPickupRiskRows",
+  "activeJobPickupRiskByReference",
+  "activeJobPickupRiskSummaryLabel",
+  "Route-direction checks need pickup GPS/ETA evidence.",
+]) {
+  assertIncludes(appPage, fragment, `pickup risk helper fragment ${fragment}`);
+}
 
 for (const fragment of [
   "bookingRecordIsInsideActiveJobMonitorWindow(bookingRecord, currentTimeMs)",
@@ -188,6 +207,14 @@ for (const fragment of [
   "Open live map",
   "Refresh map",
   "Close map",
+  "Pickup risk {adminPickupRiskMonitorEnabled ? \"On\" : \"Off\"}",
+  'data-admin-pickup-risk-monitor-toggle="true"',
+  'data-admin-pickup-risk-monitor-state={adminPickupRiskMonitorEnabled ? "on" : "off"}',
+  'data-admin-pickup-risk-card-state=',
+  'data-admin-pickup-risk-state={activeJobPickupRiskState.level}',
+  'data-admin-pickup-risk-detail="true"',
+  'data-admin-pickup-risk-monitor-summary="true"',
+  'data-admin-pickup-risk-marker-state=',
   "shared driver pins refresh automatically while Today&apos;s Jobs is open.",
   "AdminActiveJobsBrowserMap",
 ]) {
@@ -224,6 +251,7 @@ for (const phrase of [
   "Day-of-trip jobs are now shown as `Today's Jobs`; the shared sector shows all loaded active jobs inside the 1-hour-before-pickup monitor window on Dashboard and Dispatch.",
   "`Today's Jobs` driver report auto-refresh is on by default, still uses the guarded admin driver-status read path, and can be switched off by the operator.",
   "The `Today's Jobs` live map control opens the existing admin-only live-location runtime for the jobs in the monitor window and refreshes shared markers every 10 seconds while the sector is open.",
+  "The pickup risk monitor defaults off, can be toggled by admin, highlights only the affected driver/job row and marker for no-pin, stale/offline, and near-pickup watch states, and does not claim route direction/ETA certainty without pickup GPS or route evidence.",
   "This reuses existing admin live-location runtime and map read paths; it does not add provider sends, notification sends, customer/driver messages, env changes, DB schema changes, billing/payment/PDF/invoice/payout, calendar sync, parser changes, or shims.",
   "Guard coverage lives in `scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {

@@ -41089,37 +41089,37 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-slate-600 sm:text-sm">
-                  Pickup under 24 hours; saved Driver TBC jobs under 1 hour stay here until a driver is assigned.
+                  Open urgent bookings in Driver Job Link, then create and copy the driver link.
                 </p>
               </div>
-              <button
-                className="h-9 rounded-md border border-amber-300 bg-white px-3 text-sm font-semibold text-amber-900 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:border-stone-200 disabled:text-slate-400"
-                data-dashboard-review-new-booking-requests="true"
-                disabled={dashboardUrgentBookingRequestCount === 0}
-                onClick={() => {
-                  const firstSavedDriverTbcBooking =
-                    dashboardUrgentBookingRequestDisplayItems.find(
-                      ({ bookingRecord }) => !bookingRecordIsCustomerBookingRequest(bookingRecord),
-                    )?.bookingRecord;
-                  const firstBooking =
-                    firstSavedDriverTbcBooking ||
-                    dashboardUrgentBookingRequestDisplayItems[0]?.bookingRecord;
+              <div className="flex flex-wrap gap-2 sm:justify-end">
+                <button
+                  className="h-9 rounded-md border border-amber-300 bg-white px-3 text-sm font-semibold text-amber-900 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:border-stone-200 disabled:text-slate-400"
+                  data-dashboard-open-urgent-driver-job-link="true"
+                  disabled={dashboardUrgentBookingRequestCount === 0}
+                  onClick={() => {
+                    const firstBooking = dashboardUrgentBookingRequestDisplayItems[0]?.bookingRecord;
 
-                  if (!firstBooking) {
-                    return;
-                  }
+                    if (!firstBooking) {
+                      return;
+                    }
 
-                  if (bookingRecordIsCustomerBookingRequest(firstBooking)) {
-                    openCustomerBookingRequestsReview();
-                    return;
-                  }
-
-                  loadSelectedBooking(firstBooking, { focusDriverJobLink: true });
-                }}
-                type="button"
-              >
-                Open Urgent
-              </button>
+                    loadSelectedBooking(firstBooking, { focusDriverJobLink: true });
+                  }}
+                  type="button"
+                >
+                  Open Urgent
+                </button>
+                <button
+                  className="h-9 rounded-md border border-stone-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                  data-dashboard-review-new-booking-requests="true"
+                  disabled={urgentCustomerBookingRequestCount === 0}
+                  onClick={openCustomerBookingRequestsReview}
+                  type="button"
+                >
+                  Review
+                </button>
+              </div>
             </div>
             {dashboardUrgentBookingRequestDisplayItems.length > 0 ? (
               <div className="mt-3 grid gap-2" data-dashboard-new-booking-request-rows="true">
@@ -41146,11 +41146,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                       data-dashboard-urgent-booking-request-row={bookingId}
                       key={`dashboard-request-${bookingRecord.id}`}
                       onClick={() => {
-                        if (isCustomerRequest) {
-                          openCustomerBookingRequestsReview();
-                          return;
-                        }
-
                         loadSelectedBooking(bookingRecord, { focusDriverJobLink: true });
                       }}
                       type="button"
@@ -41170,7 +41165,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                           "Unknown"}
                       </span>
                       <span className="truncate text-slate-700">
-                        {isCustomerRequest ? routeText : `Driver TBC under 1h | ${routeText}`}
+                        {isCustomerRequest
+                          ? `Needs driver link | ${routeText}`
+                          : `Driver TBC under 1h | ${routeText}`}
                       </span>
                     </button>
                   );

@@ -524,8 +524,8 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  "Pickup under 24 hours; saved Driver TBC jobs under 1 hour stay here until a driver is assigned.",
-  "Dashboard urgent booking workflow copy includes Driver TBC saved jobs",
+  "Open urgent bookings in Driver Job Link, then create and copy the driver link.",
+  "Dashboard urgent booking workflow copy points to Driver Job Link",
 );
 assertIncludes(
   appPage,
@@ -540,7 +540,7 @@ assertIncludes(
 assertIncludes(
   appPage,
   "loadSelectedBooking(bookingRecord, { focusDriverJobLink: true });",
-  "Dashboard urgent Driver TBC rows load Dispatch and focus Driver Job Link for assignment",
+  "Dashboard urgent rows load Dispatch and focus Driver Job Link for assignment",
 );
 assertExcludes(
   appPage,

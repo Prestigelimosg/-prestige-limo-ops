@@ -23068,13 +23068,41 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     activeJobBookingReference: string,
     isSelectedActiveJob: boolean,
   ) {
-    return activeJobBookingReference &&
+    if (!activeJobBookingReference) {
+      return null;
+    }
+
+    const selectedDriverStatusState =
       isSelectedActiveJob &&
       adminDriverJobStatusReadState.bookingReference === activeJobBookingReference
-      ? adminDriverJobStatusReadState
-      : activeJobBookingReference
-        ? dashboardDriverJobStatusReadStates[activeJobBookingReference] || null
+        ? adminDriverJobStatusReadState
         : null;
+    const dashboardDriverStatusState =
+      dashboardDriverJobStatusReadStates[activeJobBookingReference] || null;
+
+    if (dashboardDriverStatusState?.latestStatus && !selectedDriverStatusState?.latestStatus) {
+      return dashboardDriverStatusState;
+    }
+
+    const dashboardDriverStatusTime = clean(
+      dashboardDriverStatusState?.latestStatus?.occurred_at ||
+        dashboardDriverStatusState?.latestStatus?.created_at,
+    );
+    const selectedDriverStatusTime = clean(
+      selectedDriverStatusState?.latestStatus?.occurred_at ||
+        selectedDriverStatusState?.latestStatus?.created_at,
+    );
+
+    if (
+      dashboardDriverStatusState?.latestStatus &&
+      selectedDriverStatusState?.latestStatus &&
+      dashboardDriverStatusTime &&
+      dashboardDriverStatusTime > selectedDriverStatusTime
+    ) {
+      return dashboardDriverStatusState;
+    }
+
+    return selectedDriverStatusState || dashboardDriverStatusState;
   }
 
   function pickupRiskStateForActiveJob(

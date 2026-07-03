@@ -610,6 +610,31 @@ assertIncludes(
   "dashboardDriverJobStatusAutoRequestedRef",
   "Dispatch driver report auto-read guard",
 );
+const activeJobDriverStatusStateSelector = sliceBetween(
+  appPage,
+  "function activeJobDriverStatusReadStateForBooking",
+  "function pickupRiskStateForActiveJob",
+);
+assertIncludes(
+  activeJobDriverStatusStateSelector,
+  "const selectedDriverStatusState",
+  "Today's Jobs selected booking status state",
+);
+assertIncludes(
+  activeJobDriverStatusStateSelector,
+  "const dashboardDriverStatusState",
+  "Today's Jobs dashboard status state",
+);
+assertIncludes(
+  activeJobDriverStatusStateSelector,
+  "dashboardDriverStatusState?.latestStatus && !selectedDriverStatusState?.latestStatus",
+  "Today's Jobs fresh dashboard report overrides stale selected empty report",
+);
+assertIncludes(
+  activeJobDriverStatusStateSelector,
+  "return selectedDriverStatusState || dashboardDriverStatusState",
+  "Today's Jobs selected/dashboard report fallback",
+);
 assertIncludes(
   appPage,
   "refreshDashboardDriverJobStatusRead",

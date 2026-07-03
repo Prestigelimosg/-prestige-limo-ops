@@ -52,6 +52,8 @@ export type AdminDriverJobLinkRecord = {
   revoked_at: string | null;
   safe_summary: {
     assigned_driver: string | null;
+    assigned_driver_contact: string | null;
+    assigned_driver_plate: string | null;
     pickup_datetime: string | null;
     route: string | null;
     vehicle: string | null;
@@ -754,6 +756,8 @@ function safeSummaryFromContext(context: UnknownRecord): AdminDriverJobLinkRecor
 
   return {
     assigned_driver: safeText(payload.assigned_driver_name) || null,
+    assigned_driver_contact: safeText(payload.assigned_driver_contact) || null,
+    assigned_driver_plate: safeText(payload.assigned_driver_plate) || null,
     pickup_datetime: safeText(payload.pickup_datetime) || null,
     route: safeText(payload.route, maxSafeRouteLength) || null,
     vehicle: safeText(payload.assigned_driver_vehicle_model) || null,

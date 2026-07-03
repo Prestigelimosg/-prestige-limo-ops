@@ -14,6 +14,9 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Linked Return Trip Request Lane
 
+- Admin Dispatch now refreshes the existing active driver job link while a saved booking is loaded and merges the admin-only safe driver-link summary back into the current Dispatch view. Driver `Save & Acknowledge Job` edits for driver name, contact, plate, and vehicle can update the visible admin Driver Dispatch/Customer Copy details without exposing token data or customer/public/driver internals.
+- The admin driver job link read response now keeps contact and plate inside the existing guarded admin-only `safe_summary`; public driver token pages, customer pages, and public routes are not expanded, and no message, provider send, payment, payout, invoice, GPS/live-location, env, or DB schema behavior changed.
+
 - `/book` and the customer portal New Booking Request form now include a compact `Return trip` checkbox. When checked, the customer/admin-facing form shows return pickup date, return pickup time, return pickup location, return drop-off location, and optional return flight.
 - Public customer form validation requires the return date/time/pickup/drop-off only when the return checkbox is checked. The portal request remains local review-only and still does not call the customer booking request persistence API.
 - `/api/customer-booking-requests` now parses a customer request into one or two safe admin-review booking payloads through `parseCustomerBookingRequestPayloads`. Return requests are saved as two normal booking records with linked references such as `CUST-...-OUT` and `CUST-...-RET`; they are not stored as one mixed booking.
@@ -279,6 +282,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Driver `Share Location` first calls `GET /api/driver-job/[token]/live-location` for server readiness; Chrome GPS is requested only after that readiness check passes.
 - Admin marker refresh uses the existing guarded `GET /api/admin-active-jobs-map-locations` route and returns both selected booking references and current driver markers.
 - The admin UI renders compact selected-booking chips, marker rows, Driver Pin fallback links, and an optional browser map canvas that remains off unless the separate browser-safe map config route is enabled.
+- The admin browser map now keeps recent active marker points per booking and overlays a moving vehicle arrow plus trail dots from driver GPS updates, so a single-driver view no longer pins the marker permanently at the center while coordinates change.
+- Admin live-marker polling runs every 5 seconds while the active live map is open; this is display refresh only and does not add a new driver/customer tracking surface.
 - Closing the runtime clears the selected list and gates driver/customer map reads off.
 - Customer live-location API remains same-origin/session/booking-boundary gated and no customer message is sent by this lane.
 - No broad driver tracking, no wildcard job tracking, no existing server-side Google key exposure, no Vercel CLI, env value change, DB schema change, provider send, email/WhatsApp/SMS/Telegram send, billing/payment/PDF/invoice/payout, parser, Save Booking, `/api/admin-saved-bookings`, OTS/photo/storage, or calendar behavior changed.

@@ -1,10 +1,10 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-d9a29f9a Clarify create invoice CRM selector
+18d1c980 Add searchable create invoice CRM picker
 
 Latest pushed main/staging runtime checkpoint:
-d9a29f9a Clarify create invoice CRM selector
+18d1c980 Add searchable create invoice CRM picker
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
 d0c5e211 Persist Save CRM driver assignment

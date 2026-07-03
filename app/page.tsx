@@ -35658,11 +35658,19 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                           </div>
             </details>
 
-            <section
+            <details
               aria-label="Driver Acknowledgement Follow-up"
-              className="order-[80] rounded-md border border-cyan-200 bg-cyan-50/70 p-2.5"
+              className="group order-[80] rounded-md border border-cyan-200 bg-cyan-50/70 p-2.5"
               data-admin-driver-acknowledgement-follow-up="true"
             >
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-md bg-white/70 px-2 py-1.5 text-sm font-semibold text-slate-900 outline-none transition hover:bg-white focus-visible:ring-2 focus-visible:ring-slate-300 [&::-webkit-details-marker]:hidden">
+                <span className="min-w-0 break-words">Driver Acknowledgement Follow-up</span>
+                <span className="shrink-0 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+                  <span className="group-open:hidden">Expand</span>
+                  <span className="hidden group-open:inline">Collapse</span>
+                </span>
+              </summary>
+              <div className="mt-2" data-admin-collapsed-sector-body="driver-acknowledgement-follow-up">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
@@ -35783,7 +35791,8 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                 Local UI only. No Supabase write, live database access, notification sending, customer message,
                 driver notification, billing, payment, PDF, payout, live location, or parser-learning behavior.
               </p>
-            </section>
+                          </div>
+            </details>
 
             <section
               aria-label="Day-of-Trip Dispatch Monitor"

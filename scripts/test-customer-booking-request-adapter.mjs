@@ -92,6 +92,12 @@ try {
     pickupDate: "2026-06-05",
     pickupLocation: "Customer Test Pickup",
     pickupTime: "09:30",
+    returnDropoffLocation: "Customer Test Return Dropoff",
+    returnFlightNumber: "SQ889",
+    returnPickupDate: "2026-06-06",
+    returnPickupLocation: "Customer Test Return Pickup",
+    returnPickupTime: "18:30",
+    returnTripRequested: "yes",
     serviceType: "Airport Arrival",
     specialRequest: "must not be sent",
     vehicleType: "Alphard / Vellfire",
@@ -110,6 +116,8 @@ try {
           request: {
             booking_reference: "CUST-SAFE-001",
             customer_facing_status: "Request Received",
+            return_booking_reference: "CUST-SAFE-001-RET",
+            return_trip_requested: true,
             short_notice_review_required: true,
           },
         }),
@@ -121,6 +129,7 @@ try {
   assert.equal(customerBookingRequestApiPath, "/api/customer-booking-requests");
   assert.deepEqual(success, {
     ok: true,
+    returnTripRequested: true,
     shortNoticeReviewRequired: true,
   });
   assert.equal(fetchCalls.length, 1);
@@ -147,6 +156,12 @@ try {
       "pickupDate",
       "pickupLocation",
       "pickupTime",
+      "returnDropoffLocation",
+      "returnFlightNumber",
+      "returnPickupDate",
+      "returnPickupLocation",
+      "returnPickupTime",
+      "returnTripRequested",
       "serviceType",
       "vehicleType",
     ],
@@ -172,11 +187,14 @@ try {
       request: {
         booking_reference: "CUST-SAFE-002",
         customer_facing_status: "Request Received",
+        return_booking_reference: null,
+        return_trip_requested: false,
         short_notice_review_required: false,
       },
     }),
     {
       ok: true,
+      returnTripRequested: false,
       shortNoticeReviewRequired: false,
     },
     "Adapter should map non-short-notice success to false.",
@@ -188,6 +206,8 @@ try {
       request: {
         booking_reference: "CUST-SAFE-003",
         customer_facing_status: "Request Received",
+        return_booking_reference: null,
+        return_trip_requested: false,
         short_notice_review_required: true,
       },
     }),
@@ -200,6 +220,8 @@ try {
       request: {
         booking_reference: "CUST-SAFE-004",
         customer_facing_status: "Request Received",
+        return_booking_reference: null,
+        return_trip_requested: false,
         short_notice_review_required: true,
         short_notice_review_status: "Admin Review Required",
       },
@@ -213,6 +235,8 @@ try {
       request: {
         booking_reference: "SQL-service-role-secret",
         customer_facing_status: "Request Received",
+        return_booking_reference: null,
+        return_trip_requested: false,
         short_notice_review_required: true,
       },
     }),

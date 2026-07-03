@@ -1,6 +1,6 @@
 import {
   createAdminBooking,
-  parseCustomerBookingRequestPayload,
+  parseCustomerBookingRequestPayloads,
   type AdminBookingPersistenceRecord,
 } from "../../../lib/admin-booking-persistence";
 import { createCustomerBookingRequestAdminAppNotification } from "../../../lib/admin-app-notification-persistence";
@@ -145,7 +145,7 @@ export async function POST(request: Request) {
       return blockedResponse();
     }
 
-    const parsed = parseCustomerBookingRequestPayload(await readJsonBody(request));
+    const parsed = parseCustomerBookingRequestPayloads(await readJsonBody(request));
 
     if (!parsed.ok) {
       return Response.json(
@@ -157,32 +157,47 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await createAdminBooking(parsed.data, customerBookingRequestPersistenceAdapterActor, {
-      action: "customer_booking_request_create",
-      source_route: "/book",
-      actor_label: "Customer booking request",
-      change_summary: "Customer-submitted booking request saved for admin review.",
-    });
+    const savedRequests: AdminBookingPersistenceRecord[] = [];
 
-    if (!result.ok) {
-      return Response.json(
-        {
-          ok: false,
-          error: customerSafeError(result.error),
-        },
-        { status: result.status },
-      );
+    for (const requestPayload of parsed.data.requests) {
+      const result = await createAdminBooking(requestPayload, customerBookingRequestPersistenceAdapterActor, {
+        action: "customer_booking_request_create",
+        source_route: "/book",
+        actor_label: "Customer booking request",
+        change_summary: "Customer-submitted booking request saved for admin review.",
+      });
+
+      if (!result.ok) {
+        return Response.json(
+          {
+            ok: false,
+            error: customerSafeError(result.error),
+          },
+          { status: result.status },
+        );
+      }
+
+      savedRequests.push(result.data);
     }
 
-    await notifyAdminNewBookingRequest(result.data);
+    if (savedRequests.length === 0) {
+      return safeFailureResponse();
+    }
+
+    const primaryRequest = savedRequests[0];
+    const returnRequest = savedRequests[1] ?? null;
+
+    await notifyAdminNewBookingRequest(primaryRequest);
 
     return Response.json({
       ok: true,
       request: {
-        booking_reference: result.data.booking_reference,
-        customer_facing_status: result.data.customer_facing_status,
+        booking_reference: primaryRequest.booking_reference,
+        customer_facing_status: primaryRequest.customer_facing_status,
+        return_booking_reference: returnRequest?.booking_reference ?? null,
+        return_trip_requested: parsed.data.returnTripRequested,
         short_notice_review_required:
-          result.data.short_notice_review_status === "Admin Review Required",
+          savedRequests.some((savedRequest) => savedRequest.short_notice_review_status === "Admin Review Required"),
       },
     });
   } catch {

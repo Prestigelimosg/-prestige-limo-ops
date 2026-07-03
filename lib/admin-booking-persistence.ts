@@ -79,6 +79,12 @@ export type CustomerBookingRequestInput = {
   flightNumber?: string | null;
   pickupLocation?: string | null;
   dropoffLocation?: string | null;
+  returnTripRequested?: boolean | string | number | null;
+  returnPickupDate?: string | null;
+  returnPickupTime?: string | null;
+  returnFlightNumber?: string | null;
+  returnPickupLocation?: string | null;
+  returnDropoffLocation?: string | null;
   serviceType?: string | null;
   vehicleType?: string | null;
   passengerCount?: string | number | null;
@@ -165,6 +171,12 @@ const customerBookingRequestFields = new Set([
   "flightNumber",
   "pickupLocation",
   "dropoffLocation",
+  "returnTripRequested",
+  "returnPickupDate",
+  "returnPickupTime",
+  "returnFlightNumber",
+  "returnPickupLocation",
+  "returnDropoffLocation",
   "serviceType",
   "vehicleType",
   "passengerCount",
@@ -815,9 +827,129 @@ export function parseAdminBookingUpdatePayload(
   };
 }
 
-export function parseCustomerBookingRequestPayload(
+export type CustomerBookingRequestParsedPayloads = {
+  groupReference: string;
+  requests: AdminBookingPersistenceInput[];
+  returnTripRequested: boolean;
+};
+
+function isCustomerReturnTripRequested(value: unknown) {
+  if (value === true) {
+    return true;
+  }
+
+  if (typeof value === "number") {
+    return value === 1;
+  }
+
+  if (typeof value === "string") {
+    return /^(?:1|true|yes|y|on|return)$/i.test(value.trim());
+  }
+
+  return false;
+}
+
+function buildCustomerBookingRequestPayloadForLeg({
+  body,
+  bookingReference,
+  dropoffLocation,
+  flightNumber,
+  groupReference,
+  legLabel,
+  linkedReturnTrip,
+  passengerName,
+  pickupDateTime,
+  pickupLocation,
+}: {
+  body: UnknownRecord;
+  bookingReference: string;
+  dropoffLocation: string;
+  flightNumber: string | null;
+  groupReference: string;
+  legLabel: "OUTBOUND" | "RETURN";
+  linkedReturnTrip: boolean;
+  passengerName: string;
+  pickupDateTime: string;
+  pickupLocation: string;
+}): AdminBookingResult<AdminBookingPersistenceInput> {
+  const companyName = textOrNull(body.companyName);
+  const contactNo = textOrNull(body.contactNo);
+  const emailAddress = textOrNull(body.emailAddress);
+  const extraStopLocations =
+    legLabel === "OUTBOUND" ? splitCustomerExtraStops(textOrNull(body.extraStops)) : [];
+  const routePoints: AdminBookingRoutePointInput[] = [
+    {
+      point_type: "pickup",
+      sequence_number: 1,
+      location_text: pickupLocation,
+      timing_note: null,
+    },
+    ...extraStopLocations.map((location, index) => ({
+      point_type: "stop" as const,
+      sequence_number: index + 2,
+      location_text: location,
+      timing_note: null,
+    })),
+    {
+      point_type: "dropoff",
+      sequence_number: extraStopLocations.length + 2,
+      location_text: dropoffLocation,
+      timing_note: null,
+    },
+  ];
+  const serviceItems: AdminBookingServiceItemInput[] =
+    extraStopLocations.length > 0
+      ? [
+          {
+            service_item_type: "extra_stop",
+            quantity: extraStopLocations.length,
+            blocks_count: null,
+          },
+        ]
+      : [];
+  const parserSourceReference = [
+    "Customer request via /book",
+    linkedReturnTrip ? `Linked return group ${groupReference}` : "",
+    linkedReturnTrip ? legLabel : "",
+    flightNumber ? `Flight ${flightNumber}` : "",
+    passengerName ? `Passenger ${passengerName}` : "",
+  ]
+    .filter(Boolean)
+    .join(" / ");
+  const operationalPayload = {
+    booking: {
+      booking_reference: bookingReference,
+      source_channel: "customer-booking-request",
+      customer_id: null,
+      pickup_datetime: pickupDateTime,
+      pickup_location: pickupLocation,
+      dropoff_location: dropoffLocation,
+      route_type: textOrNull(body.serviceType) || "Other / To Confirm",
+      customer_display_name: companyName || passengerName,
+      contact_phone: contactNo,
+      contact_email: emailAddress,
+      passenger_name: passengerName,
+      flight_no: flightNumber,
+      pax_count: integerOrNull(body.passengerCount),
+      luggage_count: integerOrNull(body.luggage),
+      vehicle_type_or_category: textOrNull(body.vehicleType),
+      customer_facing_status: "Request Received",
+      admin_internal_status: adminReviewRequiredStatus,
+      short_notice_review_status: pickupIsUnderTwentyFourHours(pickupDateTime)
+        ? adminReviewRequiredStatus
+        : "Not Required",
+      parser_source_reference: parserSourceReference,
+    },
+    route_points: routePoints,
+    service_items: serviceItems,
+  } satisfies AdminBookingPersistenceInput;
+
+  return parseAdminBookingOperationalPayload(operationalPayload, createPayloadTopLevelFields);
+}
+
+export function parseCustomerBookingRequestPayloads(
   value: unknown,
-): AdminBookingResult<AdminBookingPersistenceInput> {
+): AdminBookingResult<CustomerBookingRequestParsedPayloads> {
   const body = asRecord(value);
   const forbiddenFields = findForbiddenFieldNames(body);
 
@@ -835,9 +967,7 @@ export function parseCustomerBookingRequestPayload(
     };
   }
 
-  const companyName = textOrNull(body.companyName);
   const contactNo = textOrNull(body.contactNo);
-  const emailAddress = textOrNull(body.emailAddress);
   const passengerName = textOrNull(body.passengerName);
   const pickupDate = textOrNull(body.pickupDate);
   const pickupTime = textOrNull(body.pickupTime);
@@ -869,74 +999,100 @@ export function parseCustomerBookingRequestPayload(
     };
   }
 
-  const extraStopLocations = splitCustomerExtraStops(textOrNull(body.extraStops));
-  const routePoints: AdminBookingRoutePointInput[] = [
-    {
-      point_type: "pickup",
-      sequence_number: 1,
-      location_text: pickupLocation,
-      timing_note: null,
-    },
-    ...extraStopLocations.map((location, index) => ({
-      point_type: "stop" as const,
-      sequence_number: index + 2,
-      location_text: location,
-      timing_note: null,
-    })),
-    {
-      point_type: "dropoff",
-      sequence_number: extraStopLocations.length + 2,
-      location_text: dropoffLocation,
-      timing_note: null,
-    },
-  ];
-  const serviceItems: AdminBookingServiceItemInput[] =
-    extraStopLocations.length > 0
-      ? [
-          {
-            service_item_type: "extra_stop",
-            quantity: extraStopLocations.length,
-            blocks_count: null,
-          },
-        ]
-      : [];
+  const returnTripRequested = isCustomerReturnTripRequested(body.returnTripRequested);
   const flightNumber = textOrNull(body.flightNumber);
-  const parserSourceReference = [
-    "Customer request via /book",
-    flightNumber ? `Flight ${flightNumber}` : "",
-    passengerName ? `Passenger ${passengerName}` : "",
-  ]
-    .filter(Boolean)
-    .join(" / ");
-  const operationalPayload = {
-    booking: {
-      booking_reference: createCustomerBookingRequestReference(),
-      source_channel: "customer-booking-request",
-      customer_id: null,
-      pickup_datetime: pickupDateTime,
-      pickup_location: pickupLocation,
-      dropoff_location: dropoffLocation,
-      route_type: textOrNull(body.serviceType) || "Other / To Confirm",
-      customer_display_name: companyName || passengerName,
-      contact_phone: contactNo,
-      contact_email: emailAddress,
-      passenger_name: passengerName,
-      flight_no: flightNumber,
-      pax_count: integerOrNull(body.passengerCount),
-      luggage_count: integerOrNull(body.luggage),
-      vehicle_type_or_category: textOrNull(body.vehicleType),
-      customer_facing_status: "Request Received",
-      admin_internal_status: adminReviewRequiredStatus,
-      short_notice_review_status: pickupIsUnderTwentyFourHours(pickupDateTime)
-        ? adminReviewRequiredStatus
-        : "Not Required",
-      parser_source_reference: parserSourceReference,
-    },
-    route_points: routePoints,
-    service_items: serviceItems,
-  } satisfies AdminBookingPersistenceInput;
+  const groupReference = createCustomerBookingRequestReference();
+  const outbound = buildCustomerBookingRequestPayloadForLeg({
+    body,
+    bookingReference: returnTripRequested ? `${groupReference}-OUT` : groupReference,
+    dropoffLocation: dropoffLocation || "",
+    flightNumber,
+    groupReference,
+    legLabel: "OUTBOUND",
+    linkedReturnTrip: returnTripRequested,
+    passengerName: passengerName || "",
+    pickupDateTime,
+    pickupLocation: pickupLocation || "",
+  });
 
-  return parseAdminBookingOperationalPayload(operationalPayload, createPayloadTopLevelFields);
+  if (!outbound.ok) {
+    return outbound;
+  }
+
+  const requests = [outbound.data];
+
+  if (returnTripRequested) {
+    const returnPickupDate = textOrNull(body.returnPickupDate);
+    const returnPickupTime = textOrNull(body.returnPickupTime);
+    const returnPickupLocation = textOrNull(body.returnPickupLocation);
+    const returnDropoffLocation = textOrNull(body.returnDropoffLocation);
+    const returnPickupDateTime = validCustomerPickupDateTime(returnPickupDate, returnPickupTime);
+    const returnMissingFields = [
+      !returnPickupDate ? "returnPickupDate" : "",
+      !returnPickupTime ? "returnPickupTime" : "",
+      !returnPickupLocation ? "returnPickupLocation" : "",
+      !returnDropoffLocation ? "returnDropoffLocation" : "",
+    ].filter(Boolean);
+
+    if (returnMissingFields.length > 0) {
+      return {
+        ok: false,
+        status: 400,
+        error: `Missing required return trip request fields: ${returnMissingFields.join(", ")}`,
+      };
+    }
+
+    if (!returnPickupDateTime) {
+      return {
+        ok: false,
+        status: 400,
+        error: "Malformed return trip request pickup date/time rejected.",
+      };
+    }
+
+    const returnPayload = buildCustomerBookingRequestPayloadForLeg({
+      body,
+      bookingReference: `${groupReference}-RET`,
+      dropoffLocation: returnDropoffLocation || "",
+      flightNumber: textOrNull(body.returnFlightNumber),
+      groupReference,
+      legLabel: "RETURN",
+      linkedReturnTrip: true,
+      passengerName: passengerName || "",
+      pickupDateTime: returnPickupDateTime,
+      pickupLocation: returnPickupLocation || "",
+    });
+
+    if (!returnPayload.ok) {
+      return returnPayload;
+    }
+
+    requests.push(returnPayload.data);
+  }
+
+  return {
+    ok: true,
+    data: {
+      groupReference,
+      requests,
+      returnTripRequested,
+    },
+  };
+}
+
+export function parseCustomerBookingRequestPayload(
+  value: unknown,
+): AdminBookingResult<AdminBookingPersistenceInput> {
+  const parsed = parseCustomerBookingRequestPayloads(value);
+
+  if (!parsed.ok) {
+    return parsed;
+  }
+
+  return {
+    ok: true,
+    data: parsed.data.requests[0],
+  };
 }
 
 export async function createAdminBooking(

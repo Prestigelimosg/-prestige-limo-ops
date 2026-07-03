@@ -44,6 +44,12 @@ type BookingRequestForm = {
   flightNumber: string;
   pickupLocation: string;
   dropoffLocation: string;
+  returnTripRequested: string;
+  returnPickupDate: string;
+  returnPickupTime: string;
+  returnFlightNumber: string;
+  returnPickupLocation: string;
+  returnDropoffLocation: string;
   serviceType: string;
   vehicleType: string;
   passengerCount: string;
@@ -135,6 +141,12 @@ const initialBookingRequestForm: BookingRequestForm = {
   flightNumber: "",
   pickupLocation: "",
   dropoffLocation: "",
+  returnTripRequested: "",
+  returnPickupDate: "",
+  returnPickupTime: "",
+  returnFlightNumber: "",
+  returnPickupLocation: "",
+  returnDropoffLocation: "",
   serviceType: "",
   vehicleType: "",
   passengerCount: "",
@@ -151,6 +163,12 @@ const requiredBookingRequestFields: Array<keyof BookingRequestForm> = [
   "pickupLocation",
   "dropoffLocation",
 ];
+const returnTripRequiredBookingRequestFields: Array<keyof BookingRequestForm> = [
+  "returnPickupDate",
+  "returnPickupTime",
+  "returnPickupLocation",
+  "returnDropoffLocation",
+];
 
 const bookingRequestFieldLabels: Record<keyof BookingRequestForm, string> = {
   companyName: "Customer / company name",
@@ -162,6 +180,12 @@ const bookingRequestFieldLabels: Record<keyof BookingRequestForm, string> = {
   flightNumber: "Flight number if any",
   pickupLocation: "Pickup location",
   dropoffLocation: "Drop-off location",
+  returnTripRequested: "Return trip",
+  returnPickupDate: "Return pickup date",
+  returnPickupTime: "Return pickup time",
+  returnFlightNumber: "Return flight number if any",
+  returnPickupLocation: "Return pickup location",
+  returnDropoffLocation: "Return drop-off location",
   serviceType: "Trip type",
   vehicleType: "Preferred vehicle",
   passengerCount: "Number of passengers",
@@ -336,6 +360,9 @@ export default function CustomerPortalPage() {
     useState<Record<string, InvoiceDownloadState>>({});
   const [bookingRequestForm, setBookingRequestForm] = useState<BookingRequestForm>(initialBookingRequestForm);
   const [pickupTimeDraft, setPickupTimeDraft] = useState(() => splitPickupTime(initialBookingRequestForm.pickupTime));
+  const [returnPickupTimeDraft, setReturnPickupTimeDraft] = useState(() =>
+    splitPickupTime(initialBookingRequestForm.returnPickupTime),
+  );
   const [missingBookingRequestFields, setMissingBookingRequestFields] = useState<Array<keyof BookingRequestForm>>([]);
   const bookingRequestFormRef = useRef<BookingRequestForm>(initialBookingRequestForm);
   const voiceRecognitionRef = useRef<CustomerBookingSpeechRecognition | null>(null);
@@ -811,6 +838,41 @@ export default function CustomerPortalPage() {
     });
   }
 
+  function updateReturnPickupTimeSelect(part: "hour" | "minute", value: string) {
+    setReturnPickupTimeDraft((current) => {
+      const base =
+        current.hour || current.minute
+          ? current
+          : splitPickupTime(bookingRequestFormRef.current.returnPickupTime);
+      const next = { ...base, [part]: value };
+      updateBookingRequestField("returnPickupTime", next.hour && next.minute ? `${next.hour}:${next.minute}` : "");
+      return next;
+    });
+  }
+
+  function toggleReturnTripRequest(checked: boolean) {
+    setBookingRequestForm((current) => {
+      const nextForm = {
+        ...current,
+        returnDropoffLocation: checked
+          ? current.returnDropoffLocation || current.pickupLocation
+          : current.returnDropoffLocation,
+        returnPickupLocation: checked
+          ? current.returnPickupLocation || current.dropoffLocation
+          : current.returnPickupLocation,
+        returnTripRequested: checked ? "yes" : "",
+      };
+
+      bookingRequestFormRef.current = nextForm;
+      return nextForm;
+    });
+    setMissingBookingRequestFields((current) =>
+      checked
+        ? current.filter((item) => item !== "returnTripRequested")
+        : current.filter((item) => !returnTripRequiredBookingRequestFields.includes(item)),
+    );
+  }
+
   function applyLocalVoiceDraftFieldFill(transcript: string) {
     const result = applyCustomerBookingLocalVoiceDraftFieldFillToForm(bookingRequestFormRef.current, transcript);
     setVoiceDraftFilledFields(result.filledFields);
@@ -898,13 +960,20 @@ export default function CustomerPortalPage() {
   function handleBookingRequestSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const missing = requiredBookingRequestFields.filter((field) => !bookingRequestForm[field].trim());
+    const requiredForSubmit =
+      bookingRequestForm.returnTripRequested === "yes"
+        ? [...requiredBookingRequestFields, ...returnTripRequiredBookingRequestFields]
+        : requiredBookingRequestFields;
+    const missing = requiredForSubmit.filter((field) => !bookingRequestForm[field].trim());
 
     if (missing.length > 0) {
       setMissingBookingRequestFields(missing);
       setBookingRequestFeedback({
         tone: "error",
-        text: "Please complete contact no., passenger name, pickup date, pickup time, pickup location, and drop-off location before submitting your request.",
+        text:
+          bookingRequestForm.returnTripRequested === "yes"
+            ? "Please complete the outbound and return trip date, time, pickup, and drop-off details before submitting your request."
+            : "Please complete contact no., passenger name, pickup date, pickup time, pickup location, and drop-off location before submitting your request.",
       });
       return;
     }
@@ -926,6 +995,14 @@ export default function CustomerPortalPage() {
     return {
       hour: pickupTimeDraft.hour || formParts.hour,
       minute: pickupTimeDraft.minute || formParts.minute,
+    };
+  })();
+  const visibleReturnPickupTimeParts = (() => {
+    const formParts = splitPickupTime(bookingRequestForm.returnPickupTime);
+
+    return {
+      hour: returnPickupTimeDraft.hour || formParts.hour,
+      minute: returnPickupTimeDraft.minute || formParts.minute,
     };
   })();
 
@@ -1214,6 +1291,140 @@ export default function CustomerPortalPage() {
                       value={bookingRequestForm.dropoffLocation}
                     />
                   </label>
+
+                  <div
+                    className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 md:col-span-2"
+                    data-customer-portal-return-trip-control="true"
+                  >
+                    <label className="flex items-start gap-2 text-sm font-semibold text-slate-800">
+                      <input
+                        checked={bookingRequestForm.returnTripRequested === "yes"}
+                        className="mt-1 h-4 w-4 rounded border-slate-300 text-slate-950"
+                        data-customer-portal-request-field="returnTripRequested"
+                        data-customer-portal-return-trip-checkbox="true"
+                        name="returnTripRequested"
+                        onChange={(event) => toggleReturnTripRequest(event.target.checked)}
+                        type="checkbox"
+                      />
+                      <span>
+                        Return trip
+                        <span className="block text-xs font-medium leading-5 text-slate-600">
+                          Add return details as a linked second request for staff review.
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+
+                  {bookingRequestForm.returnTripRequested === "yes" ? (
+                    <div
+                      className="grid gap-3 rounded-md border border-slate-200 bg-white p-3 md:col-span-2 md:grid-cols-2"
+                      data-customer-portal-return-trip-fields="true"
+                    >
+                      <label className="text-sm font-semibold text-slate-800">
+                        Return pickup date
+                        <input
+                          aria-invalid={isBookingRequestMissing("returnPickupDate")}
+                          className={fieldClass(isBookingRequestMissing("returnPickupDate"))}
+                          data-customer-portal-request-field="returnPickupDate"
+                          name="returnPickupDate"
+                          onChange={(event) => updateBookingRequestField("returnPickupDate", event.target.value)}
+                          required
+                          type="date"
+                          value={bookingRequestForm.returnPickupDate}
+                        />
+                      </label>
+
+                      <label className="text-sm font-semibold text-slate-800">
+                        Return pickup time
+                        <input
+                          aria-invalid={isBookingRequestMissing("returnPickupTime")}
+                          data-customer-portal-request-field="returnPickupTime"
+                          name="returnPickupTime"
+                          required
+                          type="hidden"
+                          value={bookingRequestForm.returnPickupTime}
+                        />
+                        <div className="mt-2 flex max-w-xs items-center gap-2">
+                          <select
+                            aria-invalid={isBookingRequestMissing("returnPickupTime")}
+                            aria-label="Return pickup hour"
+                            className={`${timePartClass(isBookingRequestMissing("returnPickupTime"))} w-20`}
+                            data-customer-portal-pickup-time-part="return-hour"
+                            onChange={(event) => updateReturnPickupTimeSelect("hour", event.target.value)}
+                            value={visibleReturnPickupTimeParts.hour}
+                          >
+                            <option value="">HH</option>
+                            {pickupHourOptions.map((hour) => (
+                              <option key={hour} value={hour}>
+                                {hour}
+                              </option>
+                            ))}
+                          </select>
+                          <span aria-hidden="true" className="text-base text-slate-500">
+                            :
+                          </span>
+                          <select
+                            aria-invalid={isBookingRequestMissing("returnPickupTime")}
+                            aria-label="Return pickup minute"
+                            className={`${timePartClass(isBookingRequestMissing("returnPickupTime"))} w-20`}
+                            data-customer-portal-pickup-time-part="return-minute"
+                            onChange={(event) => updateReturnPickupTimeSelect("minute", event.target.value)}
+                            value={visibleReturnPickupTimeParts.minute}
+                          >
+                            <option value="">MM</option>
+                            {pickupMinuteOptions.map((minute) => (
+                              <option key={minute} value={minute}>
+                                {minute}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </label>
+
+                      <label className="text-sm font-semibold text-slate-800">
+                        Return pickup location
+                        <input
+                          aria-invalid={isBookingRequestMissing("returnPickupLocation")}
+                          className={fieldClass(isBookingRequestMissing("returnPickupLocation"))}
+                          data-customer-portal-request-field="returnPickupLocation"
+                          name="returnPickupLocation"
+                          onChange={(event) => updateBookingRequestField("returnPickupLocation", event.target.value)}
+                          placeholder="Return pickup location"
+                          required
+                          type="text"
+                          value={bookingRequestForm.returnPickupLocation}
+                        />
+                      </label>
+
+                      <label className="text-sm font-semibold text-slate-800">
+                        Return drop-off location
+                        <input
+                          aria-invalid={isBookingRequestMissing("returnDropoffLocation")}
+                          className={fieldClass(isBookingRequestMissing("returnDropoffLocation"))}
+                          data-customer-portal-request-field="returnDropoffLocation"
+                          name="returnDropoffLocation"
+                          onChange={(event) => updateBookingRequestField("returnDropoffLocation", event.target.value)}
+                          placeholder="Return destination"
+                          required
+                          type="text"
+                          value={bookingRequestForm.returnDropoffLocation}
+                        />
+                      </label>
+
+                      <label className="text-sm font-semibold text-slate-800 md:col-span-2">
+                        Return flight number if any
+                        <input
+                          className={fieldClass()}
+                          data-customer-portal-request-field="returnFlightNumber"
+                          name="returnFlightNumber"
+                          onChange={(event) => updateBookingRequestField("returnFlightNumber", event.target.value)}
+                          placeholder="SQ318"
+                          type="text"
+                          value={bookingRequestForm.returnFlightNumber}
+                        />
+                      </label>
+                    </div>
+                  ) : null}
 
                   <label className="text-sm font-semibold text-slate-800">
                     Trip type

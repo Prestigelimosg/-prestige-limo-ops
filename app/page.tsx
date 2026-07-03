@@ -397,6 +397,12 @@ type BookingForm = {
   flight: string;
   pickup: string;
   dropoff: string;
+  returnTripRequested: string;
+  returnDate: string;
+  returnTime: string;
+  returnFlight: string;
+  returnPickup: string;
+  returnDropoff: string;
   booker: string;
   bookerContact: string;
   bookerEmail: string;
@@ -2758,6 +2764,12 @@ function createInitialBooking(): BookingForm {
     flight: "",
     pickup: "",
     dropoff: "",
+    returnTripRequested: "",
+    returnDate: "",
+    returnTime: "",
+    returnFlight: "",
+    returnPickup: "",
+    returnDropoff: "",
     booker: "",
     bookerContact: "",
     bookerEmail: "",
@@ -2794,6 +2806,12 @@ const fieldLabels: Record<keyof BookingForm, string> = {
   flight: "Flight number",
   pickup: "Pickup",
   dropoff: "Drop-off",
+  returnTripRequested: "Return trip",
+  returnDate: "Return pickup date",
+  returnTime: "Return pickup time",
+  returnFlight: "Return flight",
+  returnPickup: "Return pickup",
+  returnDropoff: "Return drop-off",
   booker: "Booker",
   bookerContact: "Booker WhatsApp / Contact",
   bookerEmail: "Booker email (optional)",
@@ -6990,7 +7008,10 @@ function buildAdminBookingPersistencePayload(
   bookingValue: BookingForm,
   currentTimeMs: number,
   bookingReference = createAdminBookingReference(),
-  options: { customerDisplayNameOverride?: string | null } = {},
+  options: {
+    customerDisplayNameOverride?: string | null;
+    parserSourceReferenceOverride?: string | null;
+  } = {},
 ): AdminBookingPersistenceRequestBody {
   const shortNoticeReviewRequired = isAdminShortNoticeReviewRequired(bookingValue, currentTimeMs);
   const pickupLocation = clean(bookingValue.pickup) || adminDraftPickupFallback;
@@ -7100,11 +7121,127 @@ function buildAdminBookingPersistencePayload(
       admin_internal_status: shortNoticeReviewRequired ? "Admin Review Required" : "Draft",
       short_notice_review_status: shortNoticeReviewRequired ? "Admin Review Required" : "Not Required",
       request_review_status: "pending_review",
-      parser_source_reference: parsedSourceReference(bookingValue),
+      parser_source_reference: clean(options.parserSourceReferenceOverride) || parsedSourceReference(bookingValue),
     },
     route_points: routePoints,
     service_items: serviceItems,
   };
+}
+
+type AdminDispatchReturnTripPersistencePayload = {
+  bookingValue: BookingForm;
+  legLabel: "outbound" | "return";
+  payload: AdminBookingPersistenceRequestBody;
+};
+
+function adminDispatchReturnTripRequested(bookingValue: BookingForm) {
+  return clean(bookingValue.returnTripRequested) === "yes";
+}
+
+function adminDispatchReturnTripMissingFields(bookingValue: BookingForm) {
+  if (!adminDispatchReturnTripRequested(bookingValue)) {
+    return [];
+  }
+
+  return [
+    !clean(bookingValue.returnDate) ? fieldLabels.returnDate : "",
+    !clean(bookingValue.returnTime) ? fieldLabels.returnTime : "",
+    !clean(bookingValue.returnPickup) ? fieldLabels.returnPickup : "",
+    !clean(bookingValue.returnDropoff) ? fieldLabels.returnDropoff : "",
+  ].filter(Boolean);
+}
+
+function buildAdminDispatchReturnTripBooking(bookingValue: BookingForm): BookingForm {
+  return {
+    ...bookingValue,
+    date: clean(bookingValue.returnDate),
+    dropoff: clean(bookingValue.returnDropoff),
+    extraStopCount: "",
+    extraStopLocation: "",
+    flight: clean(bookingValue.returnFlight),
+    manualExtraCharges: "",
+    manualExtraChargesNote: "",
+    pickup: clean(bookingValue.returnPickup),
+    returnDate: "",
+    returnDropoff: "",
+    returnFlight: "",
+    returnPickup: "",
+    returnTime: "",
+    returnTripRequested: "",
+    time: clean(bookingValue.returnTime),
+  };
+}
+
+function adminDispatchLinkedReturnParserSource(
+  bookingValue: BookingForm,
+  groupReference: string,
+  legLabel: "OUTBOUND" | "RETURN",
+) {
+  return [
+    parsedSourceReference(bookingValue),
+    `Linked return group ${groupReference}`,
+    legLabel,
+  ]
+    .filter(Boolean)
+    .join(" / ");
+}
+
+function buildAdminDispatchReturnTripPersistencePayloads(
+  bookingValue: BookingForm,
+  currentTimeMs: number,
+  options: { customerDisplayNameOverride?: string | null } = {},
+): AdminDispatchReturnTripPersistencePayload[] {
+  const returnTripRequested = adminDispatchReturnTripRequested(bookingValue);
+  const groupReference = createAdminBookingReference();
+  const outboundReference = returnTripRequested ? `${groupReference}-OUT` : groupReference;
+  const outboundPayload = buildAdminBookingPersistencePayload(
+    bookingValue,
+    currentTimeMs,
+    outboundReference,
+    {
+      ...options,
+      parserSourceReferenceOverride: returnTripRequested
+        ? adminDispatchLinkedReturnParserSource(bookingValue, groupReference, "OUTBOUND")
+        : undefined,
+    },
+  );
+
+  if (!returnTripRequested) {
+    return [
+      {
+        bookingValue,
+        legLabel: "outbound",
+        payload: outboundPayload,
+      },
+    ];
+  }
+
+  const returnBookingValue = buildAdminDispatchReturnTripBooking(bookingValue);
+
+  return [
+    {
+      bookingValue,
+      legLabel: "outbound",
+      payload: outboundPayload,
+    },
+    {
+      bookingValue: returnBookingValue,
+      legLabel: "return",
+      payload: buildAdminBookingPersistencePayload(
+        returnBookingValue,
+        currentTimeMs,
+        `${groupReference}-RET`,
+        {
+          ...options,
+          parserSourceReferenceOverride: adminDispatchLinkedReturnParserSource(
+            returnBookingValue,
+            groupReference,
+            "RETURN",
+          ),
+        },
+      ),
+    },
+  ];
 }
 
 function safeAdminBookingPersistenceCount(value: number | null | undefined) {
@@ -15171,6 +15308,19 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       return false;
     }
 
+    const returnTripMissingFields = adminDispatchReturnTripMissingFields(booking);
+
+    if (returnTripMissingFields.length > 0) {
+      const saveMessage = {
+        tone: "error",
+        text: `Return trip needs ${returnTripMissingFields.join(", ")} before Save + CRM can create the linked return booking.`,
+      } satisfies Message;
+
+      setMessage(saveMessage);
+      setBookingSaveMessage(saveMessage);
+      return false;
+    }
+
     return true;
   }
 
@@ -16878,87 +17028,149 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     setBookingSaveMessage({ tone: "info", text: "Saving booking + CRM..." });
 
     try {
-      const bookingPayload = buildAdminBookingPersistencePayload(booking, currentTimeMs, undefined, {
-        customerDisplayNameOverride: billingIdentityResolution.accountLabel,
-      });
-      const response = await fetch("/api/admin-bookings", {
-        body: JSON.stringify(bookingPayload),
-        headers: {
-          "Content-Type": "application/json",
-          "x-prestige-admin-purpose": "admin-booking-persistence",
+      const bookingPayloads = buildAdminDispatchReturnTripPersistencePayloads(
+        booking,
+        currentTimeMs,
+        {
+          customerDisplayNameOverride: billingIdentityResolution.accountLabel,
         },
-        method: "POST",
-      });
-      const responseBody = (await response.json().catch(() => null)) as {
-        booking?: AdminBookingPersistenceRecord | null;
-        error?: string;
-        ok?: boolean;
-        safe_error_category?: string;
-        safe_error_operation?: string;
-      } | null;
-      const savedBooking = responseBody?.booking ?? null;
-      const savedBookingReference = clean(savedBooking?.booking_reference);
+      );
+      const savedBookings: Array<{
+        bookingValue: BookingForm;
+        legLabel: "outbound" | "return";
+        record: AdminBookingPersistenceRecord;
+      }> = [];
 
-      if (!response.ok || responseBody?.ok !== true || !savedBooking || !savedBookingReference) {
-        const errorMessage = adminBookingPersistenceFailureDetail(
-          responseBody,
-          "Admin booking persistence request failed.",
-        );
-        const saveMessage = {
-          tone: "error",
-          text: adminBookingPersistenceFailureMessage("save", new Error(errorMessage)),
-        } satisfies Message;
+      for (const bookingPayload of bookingPayloads) {
+        const response = await fetch("/api/admin-bookings", {
+          body: JSON.stringify(bookingPayload.payload),
+          headers: {
+            "Content-Type": "application/json",
+            "x-prestige-admin-purpose": "admin-booking-persistence",
+          },
+          method: "POST",
+        });
+        const responseBody = (await response.json().catch(() => null)) as {
+          booking?: AdminBookingPersistenceRecord | null;
+          error?: string;
+          ok?: boolean;
+          safe_error_category?: string;
+          safe_error_operation?: string;
+        } | null;
+        const savedBooking = responseBody?.booking ?? null;
+        const savedBookingReference = clean(savedBooking?.booking_reference);
 
-        setMessage(saveMessage);
-        setBookingSaveMessage(saveMessage);
-        setAdminBookingPersistenceMessage(saveMessage);
-        return null;
+        if (!response.ok || responseBody?.ok !== true || !savedBooking || !savedBookingReference) {
+          const errorMessage = adminBookingPersistenceFailureDetail(
+            responseBody,
+            "Admin booking persistence request failed.",
+          );
+          const partialSavedReferences = savedBookings
+            .map((item) => clean(item.record.booking_reference))
+            .filter(Boolean)
+            .join(", ");
+          const saveMessage = {
+            tone: "error",
+            text: partialSavedReferences
+              ? `Booking save failed on linked ${bookingPayload.legLabel} trip after saving ${partialSavedReferences}: ${adminBookingPersistenceFailureMessage(
+                  "save",
+                  new Error(errorMessage),
+                )}`
+              : adminBookingPersistenceFailureMessage("save", new Error(errorMessage)),
+          } satisfies Message;
+
+          setMessage(saveMessage);
+          setBookingSaveMessage(saveMessage);
+          setAdminBookingPersistenceMessage(saveMessage);
+          return savedBookings[0]?.record ?? null;
+        }
+
+        savedBookings.push({
+          bookingValue: bookingPayload.bookingValue,
+          legLabel: bookingPayload.legLabel,
+          record: savedBooking,
+        });
       }
 
-      markAdminBookingAsActiveForUpdates(savedBookingReference, savedBooking);
+      const primarySavedBooking = savedBookings[0]?.record ?? null;
+      const primarySavedBookingReference = clean(primarySavedBooking?.booking_reference);
+      const savedBookingReferences = savedBookings
+        .map((item) => clean(item.record.booking_reference))
+        .filter(Boolean);
+
+      if (!primarySavedBooking || !primarySavedBookingReference) {
+        throw new Error("Admin booking persistence returned no saved booking.");
+      }
+
+      markAdminBookingAsActiveForUpdates(primarySavedBookingReference, primarySavedBooking);
       const savedMessage = {
         tone: "info",
-        text: `Operational booking saved: ${savedBookingReference}. Syncing Google Calendar...`,
+        text: `Operational booking${savedBookings.length > 1 ? "s" : ""} saved: ${savedBookingReferences.join(
+          ", ",
+        )}. Syncing Google Calendar...`,
       } satisfies Message;
 
       setMessage(savedMessage);
       setBookingSaveMessage(savedMessage);
       setAdminBookingPersistenceMessage(savedMessage);
       lastSuccessfulBookingSaveRef.current = {
-        bookingId: savedBookingReference,
-        key: getBookingSaveGuardKey(savedBookingReference),
-        record: savedBooking,
+        bookingId: primarySavedBookingReference,
+        key: getBookingSaveGuardKey(primarySavedBookingReference),
+        record: primarySavedBooking,
       };
-      const calendarSyncResult = adminBookingCalendarReadyForRealSync(booking)
-        ? await autoSyncSavedBookingGoogleCalendar(savedBooking)
-        : {
-            eventCount: 0,
-            message:
-              "Google Calendar auto-sync skipped because the saved admin draft still has date/time or route details to confirm.",
-            ok: true,
-            skipped: true,
-          };
-      const calendarSyncSkipped = "skipped" in calendarSyncResult && calendarSyncResult.skipped;
+
+      const calendarSyncResults = [];
+
+      for (const savedBooking of savedBookings) {
+        const calendarSyncResult = adminBookingCalendarReadyForRealSync(savedBooking.bookingValue)
+          ? await autoSyncSavedBookingGoogleCalendar(savedBooking.record)
+          : {
+              eventCount: 0,
+              message:
+                "Google Calendar auto-sync skipped because the saved admin draft still has date/time or route details to confirm.",
+              ok: true,
+              skipped: true,
+            };
+
+        calendarSyncResults.push({
+          ...calendarSyncResult,
+          reference: clean(savedBooking.record.booking_reference),
+        });
+      }
+
+      const calendarSyncFailed = calendarSyncResults.find((result) => !result.ok);
+      const calendarSyncSkipped = calendarSyncResults.some(
+        (result) => "skipped" in result && result.skipped,
+      );
 
       if (calendarSyncSkipped) {
         setCalendarAgendaMessage({
           tone: "info",
-          text: calendarSyncResult.message,
+          text: calendarSyncResults
+            .filter((result) => "skipped" in result && result.skipped)
+            .map((result) => `${result.reference}: ${result.message}`)
+            .join(" "),
         });
       }
       const saveMessage = {
-        tone: calendarSyncResult.ok ? "success" : "error",
-        text: calendarSyncSkipped
-          ? `Operational booking saved: ${savedBookingReference}. Calendar skipped until date/time or route is confirmed; no guest email sent.`
-          : calendarSyncResult.ok
-          ? `Operational booking saved: ${savedBookingReference}. Google Calendar auto-synced; reminders included; no guest email sent.`
-          : `Operational booking saved: ${savedBookingReference}. ${calendarSyncResult.message}`,
+        tone: calendarSyncFailed ? "error" : "success",
+        text: calendarSyncFailed
+          ? `Operational booking${savedBookings.length > 1 ? "s" : ""} saved: ${savedBookingReferences.join(
+              ", ",
+            )}. ${calendarSyncFailed.message}`
+          : calendarSyncSkipped
+          ? `Operational booking${savedBookings.length > 1 ? "s" : ""} saved: ${savedBookingReferences.join(
+              ", ",
+            )}. Calendar skipped until date/time or route is confirmed; no guest email sent.`
+          : `Operational booking${savedBookings.length > 1 ? "s" : ""} saved: ${savedBookingReferences.join(
+              ", ",
+            )}. Google Calendar auto-synced; reminders included; no guest email sent.`,
       } satisfies Message;
 
       setMessage(saveMessage);
       setBookingSaveMessage(saveMessage);
       setAdminBookingPersistenceMessage(saveMessage);
-      return savedBooking;
+      return primarySavedBooking;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown save error.";
       const saveMessage = { tone: "error", text: `Booking save failed: ${errorMessage}` } satisfies Message;
@@ -19856,7 +20068,14 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   );
   const renderDispatchBookingField = (field: keyof BookingForm) => (
     <div
-      className={field === "pickup" || field === "dropoff" ? "sm:col-span-2" : ""}
+      className={
+        field === "pickup" ||
+        field === "dropoff" ||
+        field === "returnPickup" ||
+        field === "returnDropoff"
+          ? "sm:col-span-2"
+          : ""
+      }
       key={field}
     >
       <label className="block">
@@ -19879,7 +20098,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           onChange={(event) => update(field, event.target.value)}
           placeholder={fieldLabels[field]}
           type={
-            field === "date"
+            field === "date" || field === "returnDate"
               ? "date"
               : field === "bookerEmail"
                 ? "email"
@@ -32769,6 +32988,46 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               </div>
               <div className="grid gap-2.5 sm:grid-cols-2">
                 {tripRouteFieldOrder.map(renderDispatchBookingField)}
+              </div>
+              <div
+                className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2"
+                data-admin-dispatch-return-trip-control="true"
+              >
+                <label className="flex items-start gap-2 text-sm font-semibold text-slate-800">
+                  <input
+                    checked={adminDispatchReturnTripRequested(booking)}
+                    className="mt-1 h-4 w-4 rounded border-slate-300 text-slate-950"
+                    data-admin-dispatch-return-trip-checkbox="true"
+                    onChange={(event) => {
+                      const checked = event.target.checked;
+
+                      setBooking((current) => ({
+                        ...current,
+                        returnDropoff: checked ? current.returnDropoff || current.pickup : current.returnDropoff,
+                        returnPickup: checked ? current.returnPickup || current.dropoff : current.returnPickup,
+                        returnTripRequested: checked ? "yes" : "",
+                      }));
+                    }}
+                    type="checkbox"
+                  />
+                  <span>
+                    Return trip
+                    <span className="block text-xs font-medium leading-5 text-slate-600">
+                      Save + CRM creates outbound and return as two linked booking records.
+                    </span>
+                  </span>
+                </label>
+
+                {adminDispatchReturnTripRequested(booking) ? (
+                  <div
+                    className="mt-3 grid gap-2.5 sm:grid-cols-2"
+                    data-admin-dispatch-return-trip-fields="true"
+                  >
+                    {(["returnDate", "returnTime", "returnFlight", "returnPickup", "returnDropoff"] as Array<
+                      keyof BookingForm
+                    >).map(renderDispatchBookingField)}
+                  </div>
+                ) : null}
               </div>
             </section>
 

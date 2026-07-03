@@ -60,6 +60,12 @@ The broader customer request submit allowlist remains:
 - `flightNumber`
 - `pickupLocation`
 - `dropoffLocation`
+- `returnTripRequested`
+- `returnPickupDate`
+- `returnPickupTime`
+- `returnFlightNumber`
+- `returnPickupLocation`
+- `returnDropoffLocation`
 - `serviceType`
 - `vehicleType`
 - `passengerCount`

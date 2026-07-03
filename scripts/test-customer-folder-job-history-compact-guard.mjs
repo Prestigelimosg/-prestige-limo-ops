@@ -42,7 +42,7 @@ const jobHistorySection = sectionBetween(
 const jobStatusIndexSection = sectionBetween(
   customerFolderPage,
   'data-customer-job-status-index="true"',
-  '<section className="grid gap-4 lg:grid-cols-3">',
+  'data-customer-folder-compact-admin-rows="true"',
 );
 const ledgerSection = sectionBetween(
   ledger,

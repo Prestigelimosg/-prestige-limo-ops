@@ -10,6 +10,12 @@ export type CustomerBookingRequestSubmitInput = {
   flightNumber?: string;
   pickupLocation: string;
   dropoffLocation: string;
+  returnTripRequested?: string | boolean;
+  returnPickupDate?: string;
+  returnPickupTime?: string;
+  returnFlightNumber?: string;
+  returnPickupLocation?: string;
+  returnDropoffLocation?: string;
   serviceType: string;
   vehicleType?: string;
   passengerCount?: string;
@@ -20,6 +26,7 @@ export type CustomerBookingRequestSubmitInput = {
 export type CustomerBookingRequestSubmitResult =
   | {
       ok: true;
+      returnTripRequested: boolean;
       shortNoticeReviewRequired: boolean;
     }
   | {
@@ -33,6 +40,8 @@ const allowedApiPayloadFields = new Set(["ok", "request"]);
 const allowedApiRequestFields = new Set([
   "booking_reference",
   "customer_facing_status",
+  "return_booking_reference",
+  "return_trip_requested",
   "short_notice_review_required",
 ]);
 const forbiddenCustomerBookingRequestFragments = [
@@ -130,6 +139,12 @@ function toCustomerBookingRequestApiBody(input: CustomerBookingRequestSubmitInpu
     flightNumber: input.flightNumber,
     pickupLocation: input.pickupLocation,
     dropoffLocation: input.dropoffLocation,
+    returnTripRequested: input.returnTripRequested,
+    returnPickupDate: input.returnPickupDate,
+    returnPickupTime: input.returnPickupTime,
+    returnFlightNumber: input.returnFlightNumber,
+    returnPickupLocation: input.returnPickupLocation,
+    returnDropoffLocation: input.returnDropoffLocation,
     serviceType: input.serviceType,
     vehicleType: input.vehicleType,
     passengerCount: input.passengerCount,
@@ -160,6 +175,7 @@ export function mapCustomerBookingRequestSubmitPayload(
 
   return {
     ok: true,
+    returnTripRequested: request.return_trip_requested === true,
     shortNoticeReviewRequired: request.short_notice_review_required === true,
   };
 }

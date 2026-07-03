@@ -154,22 +154,22 @@ export function CustomerFolderSavedBookingsPanel({
 
   return (
     <section
-      className="rounded-lg border border-sky-200 bg-sky-50/70 p-4 shadow-sm sm:p-5"
+      className="rounded-md border border-sky-200 bg-sky-50/70 p-3 shadow-sm"
       data-customer-folder-saved-bookings={customerId}
     >
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-sky-800">
             Internal staff-only / guarded read
           </p>
           <h2
-            className="mt-2 text-lg font-bold text-sky-950"
+            className="mt-1 text-base font-bold text-sky-950"
             data-customer-folder-saved-bookings-heading="true"
           >
             Saved Booking References
           </h2>
           <p
-            className="mt-1 max-w-4xl text-sm font-semibold leading-6 text-sky-950"
+            className="mt-0.5 max-w-4xl text-xs font-semibold leading-5 text-sky-950"
             data-customer-folder-saved-bookings-boundary="true"
           >
             Loads safe saved booking references for this customer folder only. No booking write, invoice/PDF/payment
@@ -188,7 +188,7 @@ export function CustomerFolderSavedBookingsPanel({
         </button>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
         {[
           ["Customer/account", customerName],
           ["Returned", countLabel(returnedCount, "saved booking reference")],
@@ -196,7 +196,7 @@ export function CustomerFolderSavedBookingsPanel({
           ["Source", "Guarded saved-booking read; customer-folder context only."],
         ].map(([label, description]) => (
           <div
-            className="rounded-md border border-sky-200 bg-white p-3 text-sm leading-6 text-slate-700"
+            className="rounded-md border border-sky-200 bg-white px-3 py-2 leading-5 text-slate-700"
             data-customer-folder-saved-bookings-summary={label}
             key={label}
           >
@@ -207,7 +207,7 @@ export function CustomerFolderSavedBookingsPanel({
       </div>
 
       <p
-        className={`mt-4 rounded-md border px-3 py-2 text-sm font-semibold leading-6 ${feedbackClass(
+        className={`mt-3 rounded-md border px-3 py-2 text-xs font-semibold leading-5 ${feedbackClass(
           readState.tone,
         )}`}
         data-customer-folder-saved-bookings-note="true"
@@ -225,10 +225,10 @@ export function CustomerFolderSavedBookingsPanel({
       ) : null}
 
       {readState.status === "loaded" && readState.savedBookings.length > 0 ? (
-        <div className="mt-3 grid gap-2" data-customer-folder-saved-bookings-list="true">
+        <div className="mt-3 grid gap-1.5" data-customer-folder-saved-bookings-list="true">
           {readState.savedBookings.map((booking) => (
             <div
-              className="rounded-md border border-sky-200 bg-white p-3 text-sm leading-6 text-slate-700"
+              className="rounded-md border border-sky-200 bg-white px-3 py-2 text-sm leading-5 text-slate-700"
               data-customer-folder-saved-bookings-row={booking.booking_reference || ""}
               key={booking.booking_reference || `${booking.customer_account}-${booking.pickup_at}`}
             >

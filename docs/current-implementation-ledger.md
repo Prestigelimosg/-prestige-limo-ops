@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-18d1c980 Add searchable create invoice CRM picker
+Pending local return-trip dispatch/customer folder compaction lane
 
 Latest pushed main/staging runtime checkpoint:
 18d1c980 Add searchable create invoice CRM picker
@@ -11,6 +11,25 @@ d0c5e211 Persist Save CRM driver assignment
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Linked Return Trip Request Lane
+
+- `/book` and the customer portal New Booking Request form now include a compact `Return trip` checkbox. When checked, the customer/admin-facing form shows return pickup date, return pickup time, return pickup location, return drop-off location, and optional return flight.
+- Public customer form validation requires the return date/time/pickup/drop-off only when the return checkbox is checked. The portal request remains local review-only and still does not call the customer booking request persistence API.
+- `/api/customer-booking-requests` now parses a customer request into one or two safe admin-review booking payloads through `parseCustomerBookingRequestPayloads`. Return requests are saved as two normal booking records with linked references such as `CUST-...-OUT` and `CUST-...-RET`; they are not stored as one mixed booking.
+- The customer booking request API response remains customer-safe: it returns the primary booking reference, optional return booking reference, return-trip requested flag, customer-facing status, and short-notice boolean only. It does not return admin/internal status, CRM details, calendar ids, prices, invoices, payments, payouts, parser/debug data, tokens, or secrets.
+- The existing customer request route still triggers only the existing single admin new-booking notification path for the primary request. This lane does not add email, WhatsApp, SMS, Telegram, provider sends, payment/payout, GPS/live-location, env changes, schema changes, invoice numbering, PDF, or invoice creation.
+- Admin Dispatch now has the same return trip option in the Pickup / Drop-off / Vehicle section. `Save + CRM` creates an outbound booking and a return booking as two linked admin booking records with the same reviewed billing identity/account label.
+- Admin return-trip `Save + CRM` uses the existing guarded `/api/admin-bookings` create path for each leg and then runs the existing Google Calendar sync once per saved leg. It creates two separate calendar events when both legs are complete; no guest email is sent.
+- `Update + Cal` remains a single-record update and does not create a return trip pair for an already-applied saved booking.
+- Focused guard coverage lives in `scripts/test-customer-return-trip-request-guard.mjs` and `scripts/test-admin-dispatch-return-trip-save-guard.mjs`.
+
+### Customer Folder Operator Row Compaction
+
+- Individual customer folders now use compact operator rows and slim tables instead of large cube/card blocks for the top summary, service handoff, payment collection detail, invoice prefix controls, saved booking references, booking history, notes, documents, and collection rules.
+- The invoice prefix settings panel remains admin-only inside the guarded customer folder invoice area; this UI pass does not change prefix storage, invoice numbering, reservation, PDFs, issue/email actions, payments, payouts, routes, APIs, schema, or env.
+- Saved booking references and prefix settings keep their existing guarded read/write routes and purpose headers. Public booking, customer portal, and driver pages are not wired to customer-folder internals.
+- Focused guard coverage lives in `scripts/test-customer-folder-operator-row-layout-guard.mjs`, alongside the existing `scripts/test-customer-folder-job-history-compact-guard.mjs`.
 
 ### Notification Surface Wording Audit
 
@@ -2373,7 +2392,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer must manually review/edit fields and manually press Submit Booking Request / BOOK.
 - Admin review remains required after submission.
 - Existing `/book` submit path remains `submitCustomerBookingRequest(form)` to `POST /api/customer-booking-requests`.
-- Future field-fill may target only existing submitted customer request fields: `companyName`, `contactNo`, `emailAddress`, `passengerName`, `pickupDate`, `pickupTime`, `flightNumber`, `pickupLocation`, `dropoffLocation`, `serviceType`, `vehicleType`, `passengerCount`, `luggage`, and `extraStops`.
+- Future field-fill may target only existing submitted customer request fields: `companyName`, `contactNo`, `emailAddress`, `passengerName`, `pickupDate`, `pickupTime`, `flightNumber`, `pickupLocation`, `dropoffLocation`, `returnTripRequested`, `returnPickupDate`, `returnPickupTime`, `returnFlightNumber`, `returnPickupLocation`, `returnDropoffLocation`, `serviceType`, `vehicleType`, `passengerCount`, `luggage`, and `extraStops`.
 - `specialRequest` exists in `/book` UI state but is not forwarded by the adapter, is not allowed in customer booking request persistence, and remains local-only and excluded from submitted field-fill scope until separately approved.
 - Transcript/audio must not be submitted or stored unless separately approved.
 - `/api/ai-parse` cannot be used for customer voice field-fill without separate owner approval.
@@ -2415,7 +2434,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Local field-fill runs only from the existing browser `SpeechRecognition` transcript after local capture ends.
 - Field-fill only fills empty approved fields and does not overwrite customer-entered values.
 - Approved local field-fill targets are `passengerName`, `pickupDate`, `pickupTime`, `flightNumber`, `pickupLocation`, and `dropoffLocation`.
-- The broader customer request submit allowlist remains `companyName`, `contactNo`, `emailAddress`, `passengerName`, `pickupDate`, `pickupTime`, `flightNumber`, `pickupLocation`, `dropoffLocation`, `serviceType`, `vehicleType`, `passengerCount`, `luggage`, and `extraStops`.
+- The broader customer request submit allowlist remains `companyName`, `contactNo`, `emailAddress`, `passengerName`, `pickupDate`, `pickupTime`, `flightNumber`, `pickupLocation`, `dropoffLocation`, `returnTripRequested`, `returnPickupDate`, `returnPickupTime`, `returnFlightNumber`, `returnPickupLocation`, `returnDropoffLocation`, `serviceType`, `vehicleType`, `passengerCount`, `luggage`, and `extraStops`.
 - `specialRequest` remains local-only/excluded from submitted field-fill scope and remains excluded from customer booking request persistence.
 - Date field-fill is conservative: explicit year dates may fill `pickupDate`; no-year phrases such as `2 June` remain unchanged for manual review.
 - Example local mapping: "Stanley needs a pickup on 2 June 1000hrs from home to airport SQ123. He stays at 123 Orchard Road." may fill `passengerName` Stanley, `pickupTime` 10:00, `pickupLocation` 123 Orchard Road, `dropoffLocation` airport, and `flightNumber` SQ123, while leaving `pickupDate` unchanged because no year is present.

@@ -47,14 +47,19 @@ async function loadRouteHarness() {
       "async function createAdminBooking(data, actor, audit) {",
       "  const state = mock();",
       "  state.createCalls.push({ actor, audit, data });",
-      "  return state.createResult;",
+      "  return Array.isArray(state.createResults) && state.createResults.length > 0 ? state.createResults.shift() : state.createResult;",
       "}",
       "function parseCustomerBookingRequestPayload(payload) {",
       "  const state = mock();",
       "  state.parseCalls.push(payload);",
       "  return state.parseResult;",
       "}",
-      "module.exports = { createAdminBooking, parseCustomerBookingRequestPayload };",
+      "function parseCustomerBookingRequestPayloads(payload) {",
+      "  const state = mock();",
+      "  state.parseCalls.push(payload);",
+      "  return state.parsePayloadsResult || state.parseResult;",
+      "}",
+      "module.exports = { createAdminBooking, parseCustomerBookingRequestPayload, parseCustomerBookingRequestPayloads };",
     ].join("\n"),
   );
   await writeFile(
@@ -143,9 +148,15 @@ function installMock(overrides = {}) {
     parseCalls: [],
     parseResult: {
       data: {
-        booking: {
-          booking_reference: "CUST-SAFE-001",
-        },
+        groupReference: "CUST-SAFE-001",
+        requests: [
+          {
+            booking: {
+              booking_reference: "CUST-SAFE-001",
+            },
+          },
+        ],
+        returnTripRequested: false,
       },
       ok: true,
     },
@@ -287,6 +298,8 @@ try {
     request: {
       booking_reference: "CUST-SAFE-001",
       customer_facing_status: "Request Received",
+      return_booking_reference: null,
+      return_trip_requested: false,
       short_notice_review_required: true,
     },
   });
@@ -306,6 +319,73 @@ try {
     "CUST-SAFE-001",
   );
   assertSafeCustomerBody(success.body, "short-notice success body");
+
+  installMock({
+    createResults: [
+      {
+        data: {
+          admin_internal_status: "Admin Review Required",
+          booking_reference: "CUST-RETURN-001-OUT",
+          customer_facing_status: "Request Received",
+          short_notice_review_status: "Not Required",
+        },
+        ok: true,
+      },
+      {
+        data: {
+          admin_internal_status: "Admin Review Required",
+          booking_reference: "CUST-RETURN-001-RET",
+          customer_facing_status: "Request Received",
+          short_notice_review_status: "Admin Review Required",
+        },
+        ok: true,
+      },
+    ],
+    parsePayloadsResult: {
+      data: {
+        groupReference: "CUST-RETURN-001",
+        requests: [
+          {
+            booking: {
+              booking_reference: "CUST-RETURN-001-OUT",
+            },
+          },
+          {
+            booking: {
+              booking_reference: "CUST-RETURN-001-RET",
+            },
+          },
+        ],
+        returnTripRequested: true,
+      },
+      ok: true,
+    },
+  });
+  const returnTripSuccess = await readJson(
+    await harness.route.POST(
+      postRequest({
+        passengerName: "Safe Passenger",
+        returnTripRequested: "yes",
+      }),
+    ),
+  );
+
+  assert.equal(returnTripSuccess.status, 200);
+  assert.deepEqual(returnTripSuccess.body, {
+    ok: true,
+    request: {
+      booking_reference: "CUST-RETURN-001-OUT",
+      customer_facing_status: "Request Received",
+      return_booking_reference: "CUST-RETURN-001-RET",
+      return_trip_requested: true,
+      short_notice_review_required: true,
+    },
+  });
+  assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.createCalls.length, 2);
+  assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.alertCalls.length, 1);
+  assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.adminAppNotificationCalls.length, 1);
+  assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.devicePushAlertCalls.length, 1);
+  assertSafeCustomerBody(returnTripSuccess.body, "return-trip success body");
 
   installMock({
     adminAppNotificationThrows: true,
@@ -329,6 +409,8 @@ try {
     request: {
       booking_reference: "CUST-SAFE-INAPP-FAIL",
       customer_facing_status: "Request Received",
+      return_booking_reference: null,
+      return_trip_requested: false,
       short_notice_review_required: true,
     },
   });
@@ -359,6 +441,8 @@ try {
     request: {
       booking_reference: "CUST-SAFE-ALERT-FAIL",
       customer_facing_status: "Request Received",
+      return_booking_reference: null,
+      return_trip_requested: false,
       short_notice_review_required: true,
     },
   });
@@ -389,6 +473,8 @@ try {
     request: {
       booking_reference: "CUST-SAFE-PUSH-FAIL",
       customer_facing_status: "Request Received",
+      return_booking_reference: null,
+      return_trip_requested: false,
       short_notice_review_required: true,
     },
   });

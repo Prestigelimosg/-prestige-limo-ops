@@ -285,14 +285,14 @@ export function CustomerInvoicePrefixSettingsPanel({
 
   return (
     <div
-      className="mt-4 border-t border-slate-200 pt-4"
+      className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2"
       data-admin-customer-invoice-prefix-settings="true"
     >
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
-          <h3 className="text-base font-bold text-slate-950">Invoice Prefix Settings</h3>
+          <h3 className="text-sm font-bold text-slate-950">Invoice Prefix Settings</h3>
           <p
-            className="mt-1 truncate text-sm font-semibold text-slate-600"
+            className="mt-0.5 truncate text-xs font-semibold text-slate-600"
             data-admin-customer-invoice-prefix-account="true"
           >
             {account}
@@ -332,7 +332,7 @@ export function CustomerInvoicePrefixSettingsPanel({
       </div>
 
       <div
-        className="mt-3 grid gap-2 text-sm sm:grid-cols-4"
+        className="mt-2 grid gap-2 text-xs sm:grid-cols-4"
         data-admin-customer-invoice-prefix-policy="true"
       >
         {[
@@ -345,14 +345,14 @@ export function CustomerInvoicePrefixSettingsPanel({
           ],
         ].map(([label, value]) => (
           <div className="min-w-0" key={label}>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</p>
-            <p className="mt-1 truncate font-bold text-slate-950">{value}</p>
+            <p className="font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</p>
+            <p className="mt-0.5 truncate font-bold text-slate-950">{value}</p>
           </div>
         ))}
       </div>
 
       <p
-        className={`mt-3 rounded-md border px-3 py-2 text-sm font-semibold leading-6 ${feedbackClass(
+        className={`mt-2 rounded-md border px-3 py-2 text-xs font-semibold leading-5 ${feedbackClass(
           state.tone,
         )}`}
         data-admin-customer-invoice-prefix-feedback="true"

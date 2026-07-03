@@ -388,12 +388,35 @@ const publicClientForbiddenFragments = [
   "AWS_",
 ];
 const driverJobApprovedLiveLocationFragments = new Set(["customerVisible"]);
+const driverJobApprovedOtsPhotoFragments = new Set([
+  "FormData",
+  "STORAGE_",
+]);
 
 for (const path of publicClientPaths) {
   const source = files[path];
 
   for (const fragment of publicClientForbiddenFragments) {
     if (path === "app/driver-job/[token]/page.tsx" && driverJobApprovedLiveLocationFragments.has(fragment)) {
+      continue;
+    }
+
+    if (path === "app/driver-job/[token]/page.tsx" && driverJobApprovedOtsPhotoFragments.has(fragment)) {
+      assertIncludes(
+        source,
+        "/api/driver-job/${encodeURIComponent(token)}/ots-photo",
+        "approved tokenized driver OTS photo proof route",
+      );
+      assertIncludes(
+        source,
+        "data-driver-job-ots-photo-proof-input=\"true\"",
+        "approved driver OTS photo proof input",
+      );
+      assertIncludes(
+        source,
+        "Admin-only proof. No customer message or external send is created from here.",
+        "approved driver OTS photo proof boundary",
+      );
       continue;
     }
 

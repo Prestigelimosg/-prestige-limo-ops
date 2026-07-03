@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import type {
   SafeDriverJobPayload,
@@ -114,6 +114,22 @@ type DriverLiveLocationApiResponse =
       reason?: string;
     };
 
+type DriverOtsPhotoProofApiResponse =
+  | {
+      mode?: "mock" | "production";
+      ok: true;
+      proof?: {
+        customerVisible?: false;
+        external_send?: false;
+        uploaded_at?: string | null;
+      };
+    }
+  | {
+      ok: false;
+      reason?: DriverJobApiBlockedReason | "invalid_file" | "not_configured" | "ots_required" | "storage_failed" | "too_large" | "unsupported_type";
+      proof?: null;
+    };
+
 type DriverAppUpdateState = {
   feedback: ControlFeedback | null;
   kind: "idle" | "loading" | "loaded" | "empty" | "unavailable" | "error";
@@ -138,6 +154,13 @@ type DriverLiveLocationState = {
   permissionState: "denied" | "granted" | "not_requested" | "unavailable";
   sharingState: "active" | "inactive" | "stopped";
   staleState: "active" | "inactive" | "stale";
+};
+
+type DriverOtsPhotoProofState = {
+  action: "idle" | "uploading";
+  feedback: ControlFeedback | null;
+  selectedFileName: string;
+  uploadedAt: string;
 };
 
 type DriverDetails = {
@@ -208,6 +231,12 @@ const emptyDriverLiveLocationState: DriverLiveLocationState = {
   sharingState: "inactive",
   staleState: "inactive",
 };
+const emptyDriverOtsPhotoProofState: DriverOtsPhotoProofState = {
+  action: "idle",
+  feedback: null,
+  selectedFileName: "",
+  uploadedAt: "",
+};
 const driverLiveLocationContinuousShareMinMs = 5000;
 const driverLiveLocationPositionOptions: PositionOptions = {
   enableHighAccuracy: true,
@@ -232,6 +261,7 @@ const statusLabels: Record<string, string> = {
   pending: "Pending",
   ...driverJobStatusDisplayLabels,
 };
+const driverWorkflowStatusOrder = ["driver_otw", "ots", "pob", "completed"];
 
 function normalizeBlockedReason(value: unknown): DriverJobApiBlockedReason {
   return value === "already_completed" ||
@@ -243,6 +273,34 @@ function normalizeBlockedReason(value: unknown): DriverJobApiBlockedReason {
     value === "out_of_order"
     ? value
     : "unavailable";
+}
+
+function driverWorkflowHasReachedOts(status: string) {
+  return driverWorkflowStatusOrder.indexOf(status) >= driverWorkflowStatusOrder.indexOf("ots");
+}
+
+function otsPhotoProofBlockedMessage(reason: unknown) {
+  if (reason === "ots_required") {
+    return "Press OTS before sending the photo to admin.";
+  }
+
+  if (reason === "invalid_file") {
+    return "Choose a photo before sending.";
+  }
+
+  if (reason === "too_large") {
+    return "Photo is too large. Send a smaller photo.";
+  }
+
+  if (reason === "unsupported_type") {
+    return "Photo type was not accepted. Use JPEG, PNG, WebP, HEIC, or HEIF.";
+  }
+
+  if (reason === "not_configured" || reason === "storage_failed") {
+    return "Admin photo storage is not ready. Contact dispatch.";
+  }
+
+  return blockedMessages[normalizeBlockedReason(reason)] || "Photo could not be sent. Contact dispatch.";
 }
 
 function displayValue(value: string) {
@@ -543,9 +601,12 @@ export default function DriverJobPage() {
     useState<DriverAppUpdateState>(emptyDriverAppUpdateState);
   const [driverLiveLocation, setDriverLiveLocation] =
     useState<DriverLiveLocationState>(emptyDriverLiveLocationState);
+  const [driverOtsPhotoProof, setDriverOtsPhotoProof] =
+    useState<DriverOtsPhotoProofState>(emptyDriverOtsPhotoProofState);
   const [statusFeedback, setStatusFeedback] = useState<StatusFeedback | null>(null);
   const [workflowStatus, setWorkflowStatus] = useState("assigned");
   const [updatingStatus, setUpdatingStatus] = useState("");
+  const driverOtsPhotoProofInputRef = useRef<HTMLInputElement | null>(null);
   const driverLiveLocationWatchIdRef = useRef<number | null>(null);
   const driverLiveLocationPostInFlightRef = useRef(false);
   const driverLiveLocationLastPostAtRef = useRef(0);
@@ -616,6 +677,7 @@ export default function DriverJobPage() {
       setDriverAppUpdates({ feedback: null, kind: "loading", updates: [] });
       stopDriverLiveLocationBrowserWatch();
       setDriverLiveLocation(emptyDriverLiveLocationState);
+      setDriverOtsPhotoProof(emptyDriverOtsPhotoProofState);
       setSavedDriverDetails(null);
       setStatusFeedback(null);
       setWorkflowStatus("assigned");
@@ -1244,6 +1306,109 @@ export default function DriverJobPage() {
     }
   }
 
+  function driverOtsPhotoProofRoute() {
+    return `/api/driver-job/${encodeURIComponent(token)}/ots-photo`;
+  }
+
+  function handleDriverOtsPhotoFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0] || null;
+
+    setDriverOtsPhotoProof((currentState) => ({
+      ...currentState,
+      feedback: null,
+      selectedFileName: file?.name || "",
+    }));
+  }
+
+  async function uploadDriverOtsPhotoProof() {
+    if (!token || pageState.kind !== "ready") {
+      return;
+    }
+
+    if (!driverWorkflowHasReachedOts(workflowStatus)) {
+      setDriverOtsPhotoProof((currentState) => ({
+        ...currentState,
+        feedback: {
+          tone: "error",
+          text: "Press OTS before sending the photo to admin.",
+        },
+      }));
+      return;
+    }
+
+    const photoFile = driverOtsPhotoProofInputRef.current?.files?.[0] || null;
+
+    if (!photoFile) {
+      setDriverOtsPhotoProof((currentState) => ({
+        ...currentState,
+        feedback: {
+          tone: "error",
+          text: "Choose a photo before sending.",
+        },
+      }));
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("photo", photoFile);
+
+    setDriverOtsPhotoProof((currentState) => ({
+      ...currentState,
+      action: "uploading",
+      feedback: null,
+    }));
+
+    try {
+      const response = await fetch(driverOtsPhotoProofRoute(), {
+        body: formData,
+        cache: "no-store",
+        method: "POST",
+      });
+      const result = await response.json() as DriverOtsPhotoProofApiResponse;
+
+      if (
+        !response.ok ||
+        !result.ok ||
+        result.proof?.customerVisible !== false ||
+        result.proof?.external_send !== false
+      ) {
+        setDriverOtsPhotoProof((currentState) => ({
+          ...currentState,
+          action: "idle",
+          feedback: {
+            tone: "error",
+            text: otsPhotoProofBlockedMessage(result.ok ? "unavailable" : result.reason),
+          },
+        }));
+        return;
+      }
+
+      if (driverOtsPhotoProofInputRef.current) {
+        driverOtsPhotoProofInputRef.current.value = "";
+      }
+
+      setDriverOtsPhotoProof({
+        action: "idle",
+        feedback: {
+          tone: "success",
+          text: "OTS photo sent to admin.",
+        },
+        selectedFileName: "",
+        uploadedAt: result.proof.uploaded_at || new Date().toISOString(),
+      });
+      addActivity("OTS photo sent", "Driver sent an admin-only OTS photo proof.");
+    } catch {
+      setDriverOtsPhotoProof((currentState) => ({
+        ...currentState,
+        action: "idle",
+        feedback: {
+          tone: "error",
+          text: "Photo could not be sent. Contact dispatch.",
+        },
+      }));
+    }
+  }
+
   async function updateStatus(nextStatus: string, label: string, displayLabel = label) {
     if (!token || pageState.kind !== "ready") {
       return;
@@ -1315,6 +1480,15 @@ export default function DriverJobPage() {
       setWorkflowStatus(result.payload.status);
       setPageState({ kind: "ready", job: result.payload });
       addActivity(`${displayLabel} marked`, `Driver status updated to ${nextStatusText}.`);
+      if (result.payload.status === "ots") {
+        setDriverOtsPhotoProof((currentState) => ({
+          ...currentState,
+          feedback: {
+            tone: "success",
+            text: "OTS recorded. Send the OTS photo to admin before POB.",
+          },
+        }));
+      }
       setStatusFeedback({
         target: label,
         tone: "success",
@@ -1347,6 +1521,19 @@ export default function DriverJobPage() {
       : driverLiveLocation.sharingState === "stopped"
         ? "Stopped"
         : "Off";
+  const driverOtsPhotoProofReady =
+    pageState.kind === "ready" &&
+    acknowledged &&
+    driverWorkflowHasReachedOts(workflowStatus);
+  const driverOtsPhotoProofUploadDisabled =
+    !driverOtsPhotoProofReady ||
+    driverOtsPhotoProof.action !== "idle" ||
+    !driverOtsPhotoProof.selectedFileName;
+  const driverOtsPhotoProofStatusLabel = driverOtsPhotoProof.uploadedAt
+    ? "Sent"
+    : driverOtsPhotoProofReady
+      ? "Ready"
+      : "Locked";
 
   return (
     <main className="min-h-screen bg-stone-50 text-slate-950">
@@ -1775,8 +1962,66 @@ export default function DriverJobPage() {
                   </div>
                 ))}
               </div>
+              {driverOtsPhotoProofReady ? (
+                <div
+                  className="order-2 space-y-2 rounded-md border border-sky-200 bg-sky-50/70 p-2.5"
+                  data-driver-job-ots-photo-proof="true"
+                  data-driver-primary-step="ots-photo-proof"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="space-y-0.5">
+                      <h3 className="text-sm font-semibold text-sky-950">OTS Photo to Admin</h3>
+                      <p className="text-xs font-semibold leading-5 text-sky-900">
+                        Send one arrival photo after OTS. Admin sees it inside Dispatch.
+                      </p>
+                    </div>
+                    <span
+                      className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-sky-900 ring-1 ring-sky-200"
+                      data-driver-job-ots-photo-proof-state={driverOtsPhotoProofStatusLabel.toLowerCase()}
+                    >
+                      {driverOtsPhotoProofStatusLabel}
+                    </span>
+                  </div>
+                  <label className="block space-y-1 text-sm font-semibold text-sky-950">
+                    <span>Photo</span>
+                    <input
+                      accept="image/heic,image/heif,image/jpeg,image/png,image/webp,image/*"
+                      capture="environment"
+                      className="block w-full rounded-md border border-sky-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900 file:mr-3 file:rounded file:border-0 file:bg-sky-100 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-sky-950"
+                      data-driver-job-ots-photo-proof-input="true"
+                      onChange={handleDriverOtsPhotoFileChange}
+                      ref={driverOtsPhotoProofInputRef}
+                      type="file"
+                    />
+                  </label>
+                  <button
+                    className="h-11 w-full rounded-md border border-sky-400 bg-white px-3 text-sm font-semibold text-sky-950 transition active:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    data-driver-job-ots-photo-proof-upload="true"
+                    disabled={driverOtsPhotoProofUploadDisabled}
+                    onClick={uploadDriverOtsPhotoProof}
+                    type="button"
+                  >
+                    {driverOtsPhotoProof.action === "uploading" ? "Sending..." : "Send Photo to Admin"}
+                  </button>
+                  {driverOtsPhotoProof.feedback ? (
+                    <p
+                      aria-live="polite"
+                      className={`rounded-md border px-2.5 py-1.5 text-sm font-semibold ${feedbackClassName(driverOtsPhotoProof.feedback.tone)}`}
+                      data-driver-job-ots-photo-proof-message="true"
+                    >
+                      {driverOtsPhotoProof.feedback.text}
+                    </p>
+                  ) : null}
+                  <p
+                    className="text-xs font-semibold leading-5 text-sky-900"
+                    data-driver-job-ots-photo-proof-boundary="true"
+                  >
+                    Admin-only proof. No customer message or external send is created from here.
+                  </p>
+                </div>
+              ) : null}
               <div
-                className="order-2 space-y-2 rounded-md border border-slate-200 bg-white p-2.5"
+                className="order-3 space-y-2 rounded-md border border-slate-200 bg-white p-2.5"
                 data-driver-job-status-timing-evidence="true"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1875,7 +2120,7 @@ export default function DriverJobPage() {
                 ) : null}
               </div>
               <p className="text-xs font-semibold leading-5 text-amber-900" data-driver-job-report-issue-boundary="true">
-                Internal app alert only. No external messages, live location, or photo upload.
+                Internal app alert only. No external messages are sent from this issue control.
               </p>
             </section>
           </>

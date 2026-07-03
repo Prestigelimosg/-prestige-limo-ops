@@ -47,6 +47,7 @@ const adminWorkflowStatusApiPath = "/api/admin-booking-workflow-statuses";
 const adminDriverJobLinksApiPath = "/api/admin-driver-job-links";
 const adminCompletedBookingCloseoutApiPath = "/api/admin-completed-booking-closeouts";
 const adminDriverJobStatusesApiPath = "/api/admin-driver-job-statuses";
+const adminDriverOtsPhotoProofsApiPath = "/api/admin-driver-ots-photo-proofs";
 const adminDriverJobDspActualTimeSummariesApiPath =
   "/api/admin-driver-job-dsp-actual-time-summaries";
 const adminMonthlyBillingGroupsApiPath = "/api/admin-monthly-billing-groups";
@@ -1209,6 +1210,28 @@ type AdminDriverJobStatusReadState = {
   message: Message | null;
   status: "idle" | "loading" | "loaded" | "error";
   statuses: AdminDriverJobStatusEvent[];
+};
+
+type AdminDriverOtsPhotoProofRecord = {
+  admin_view_url?: string | null;
+  admin_view_url_expires_at?: string | null;
+  booking_reference?: string | null;
+  content_type?: string | null;
+  customerVisible?: false;
+  external_send?: false;
+  file_size_bytes?: number | null;
+  id?: string | null;
+  photo_type?: "ots" | string | null;
+  proof_status?: "uploaded" | string | null;
+  uploaded_at?: string | null;
+};
+
+type AdminDriverOtsPhotoProofReadState = {
+  bookingReference: string;
+  latestProof: AdminDriverOtsPhotoProofRecord | null;
+  message: Message | null;
+  proofs: AdminDriverOtsPhotoProofRecord[];
+  status: "idle" | "loading" | "loaded" | "error";
 };
 
 type AdminActiveJobsMapLocation = {
@@ -9093,6 +9116,25 @@ function adminDriverJobStatusFailureMessage(rawError: unknown) {
   return "Saved driver job status could not be read. Reload the admin dashboard and try again.";
 }
 
+function adminDriverOtsPhotoProofFailureMessage(rawError: unknown) {
+  const normalizedError =
+    rawError instanceof Error ? clean(rawError.message).toLowerCase() : clean(String(rawError || "")).toLowerCase();
+
+  if (/not ready|not enabled|configuration/.test(normalizedError)) {
+    return "OTS photo proof storage is not ready on this server.";
+  }
+
+  if (/forbidden/.test(normalizedError)) {
+    return "OTS photo proof read is available only from the internal admin dashboard.";
+  }
+
+  if (/missing|required|malformed|invalid|unknown/.test(normalizedError)) {
+    return "OTS photo proof booking reference needs review.";
+  }
+
+  return "OTS photo proof could not be read. Reload the admin dashboard and try again.";
+}
+
 function adminDriverJobStatusDisplayLabel(statusValue: string | null | undefined) {
   const normalized = clean(statusValue).toLowerCase();
 
@@ -9598,6 +9640,46 @@ async function loadAdminDriverJobStatusRead(bookingReference: string) {
     bookingReference,
     latestStatus,
     statuses: matchingStatuses.slice(0, 4),
+  };
+}
+
+async function loadAdminDriverOtsPhotoProofRead(bookingReference: string) {
+  const params = new URLSearchParams({
+    booking_reference: bookingReference,
+    limit: "3",
+  });
+
+  const response = await fetch(`${adminDriverOtsPhotoProofsApiPath}?${params.toString()}`, {
+    headers: {
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "GET",
+  });
+  const result = await response.json().catch(() => null);
+
+  if (
+    !response.ok ||
+    !result?.ok ||
+    result.customerVisible !== false ||
+    result.external_send !== false
+  ) {
+    throw new Error(result?.error || "OTS photo proof read failed.");
+  }
+
+  const proofs = Array.isArray(result.proofs)
+    ? (result.proofs as AdminDriverOtsPhotoProofRecord[])
+    : [];
+  const matchingProofs = proofs.filter(
+    (proof) =>
+      clean(proof.booking_reference) === bookingReference &&
+      proof.customerVisible === false &&
+      proof.external_send === false,
+  );
+
+  return {
+    bookingReference,
+    latestProof: matchingProofs[0] || null,
+    proofs: matchingProofs.slice(0, 3),
   };
 }
 
@@ -12218,6 +12300,8 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   const [adminPickupRiskMonitorEnabled, setAdminPickupRiskMonitorEnabled] = useState(false);
   const [dashboardDriverJobStatusReadStates, setDashboardDriverJobStatusReadStates] =
     useState<Record<string, AdminDriverJobStatusReadState>>({});
+  const [dashboardDriverOtsPhotoProofReadStates, setDashboardDriverOtsPhotoProofReadStates] =
+    useState<Record<string, AdminDriverOtsPhotoProofReadState>>({});
   const dashboardDriverJobStatusAutoRequestedRef = useRef<Set<string>>(new Set());
   const driverCompletedBookingStatusSyncRequestedRef = useRef<Set<string>>(new Set());
   const [bookingsSearchTerm, setBookingsSearchTerm] = useState("");
@@ -12293,6 +12377,14 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       message: null,
       status: "idle",
       statuses: [],
+    });
+  const [adminDriverOtsPhotoProofReadState, setAdminDriverOtsPhotoProofReadState] =
+    useState<AdminDriverOtsPhotoProofReadState>({
+      bookingReference: "",
+      latestProof: null,
+      message: null,
+      proofs: [],
+      status: "idle",
     });
   const [adminActiveJobsMapReadState, setAdminActiveJobsMapReadState] =
     useState<AdminActiveJobsMapReadState>({
@@ -13905,6 +13997,16 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           status: "idle",
           statuses: [],
         });
+        setAdminDriverOtsPhotoProofReadState({
+          bookingReference: "",
+          latestProof: null,
+          message: {
+            tone: "info",
+            text: "Load saved booking before reading OTS photo proof.",
+          },
+          proofs: [],
+          status: "idle",
+        });
         setAdminBookingWorkflowStatusAction(null);
         setCompletedBookingCloseoutAction(null);
         setDispatchReleaseMessage(null);
@@ -14032,6 +14134,55 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             },
             status: "error",
             statuses: [],
+          });
+        }
+      }
+
+      if (!cancelled) {
+        setAdminDriverOtsPhotoProofReadState({
+          bookingReference,
+          latestProof: null,
+          message: {
+            tone: "info",
+            text: `Checking OTS photo proof for ${bookingReference}...`,
+          },
+          proofs: [],
+          status: "loading",
+        });
+
+        try {
+          const loadedProofs = await loadAdminDriverOtsPhotoProofRead(bookingReference);
+
+          if (cancelled) {
+            return;
+          }
+
+          setAdminDriverOtsPhotoProofReadState({
+            bookingReference,
+            latestProof: loadedProofs.latestProof,
+            message: {
+              tone: loadedProofs.latestProof ? "success" : "info",
+              text: loadedProofs.latestProof
+                ? `OTS photo proof received for ${bookingReference}.`
+                : `No OTS photo proof for ${bookingReference} yet.`,
+            },
+            proofs: loadedProofs.proofs,
+            status: "loaded",
+          });
+        } catch (error) {
+          if (cancelled) {
+            return;
+          }
+
+          setAdminDriverOtsPhotoProofReadState({
+            bookingReference,
+            latestProof: null,
+            message: {
+              tone: "error",
+              text: adminDriverOtsPhotoProofFailureMessage(error),
+            },
+            proofs: [],
+            status: "error",
           });
         }
       }
@@ -18929,11 +19080,82 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       status: "idle",
       statuses: [],
     });
+    setAdminDriverOtsPhotoProofReadState({
+      bookingReference: "",
+      latestProof: null,
+      message: {
+        tone: "info",
+        text: "Load saved booking before reading OTS photo proof.",
+      },
+      proofs: [],
+      status: "idle",
+    });
     setCompletedTripCloseoutReviewMessage(null);
     setAdminBookingPersistenceMessage({
       tone: "success",
       text: "Applied operational snapshot cleared. Current dispatch form values were kept.",
     });
+  }
+
+  async function refreshAdminDriverOtsPhotoProofRead(bookingReferenceValue?: string) {
+    const bookingReference = clean(
+      bookingReferenceValue === undefined
+        ? dispatchReleaseWorkflowBookingReference
+        : bookingReferenceValue,
+    );
+
+    if (!bookingReference) {
+      setAdminDriverOtsPhotoProofReadState({
+        bookingReference: "",
+        latestProof: null,
+        message: {
+          tone: "info",
+          text: "Load saved booking before reading OTS photo proof.",
+        },
+        proofs: [],
+        status: "idle",
+      });
+      return;
+    }
+
+    setAdminDriverOtsPhotoProofReadState({
+      bookingReference,
+      latestProof: null,
+      message: {
+        tone: "info",
+        text: `Checking OTS photo proof for ${bookingReference}...`,
+      },
+      proofs: [],
+      status: "loading",
+    });
+
+    try {
+      const loadedProofs = await loadAdminDriverOtsPhotoProofRead(bookingReference);
+
+      setAdminDriverOtsPhotoProofReadState({
+        bookingReference,
+        latestProof: loadedProofs.latestProof,
+        message: {
+          tone: loadedProofs.latestProof ? "success" : "info",
+          text: loadedProofs.latestProof
+            ? `OTS photo proof received for ${bookingReference}.`
+            : `No OTS photo proof for ${bookingReference} yet.`,
+        },
+        proofs: loadedProofs.proofs,
+        status: "loaded",
+      });
+    } catch (error) {
+      setAdminDriverOtsPhotoProofReadState({
+        bookingReference,
+        latestProof: null,
+        message: {
+          tone: "error",
+          text: adminDriverOtsPhotoProofFailureMessage(error),
+        },
+        proofs: [],
+        status: "error",
+      });
+    }
   }
 
   async function refreshAdminDriverJobStatusRead() {
@@ -18950,6 +19172,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         status: "idle",
         statuses: [],
       });
+      void refreshAdminDriverOtsPhotoProofRead("");
       return;
     }
 
@@ -18986,6 +19209,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         status: "loaded",
         statuses: loadedDriverStatuses.statuses,
       });
+      void refreshAdminDriverOtsPhotoProofRead(bookingReference);
     } catch (error) {
       setAdminDriverJobStatusReadState({
         bookingReference,
@@ -19392,6 +19616,62 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           },
           status: "error",
           statuses: [],
+        },
+      }));
+    }
+  }
+
+  async function refreshDashboardDriverOtsPhotoProofRead(bookingReferenceValue: string) {
+    const bookingReference = cleanReferenceText(bookingReferenceValue);
+
+    if (!bookingReference) {
+      return;
+    }
+
+    setDashboardDriverOtsPhotoProofReadStates((currentStates) => ({
+      ...currentStates,
+      [bookingReference]: {
+        bookingReference,
+        latestProof: null,
+        message: {
+          tone: "info",
+          text: `Checking OTS photo for ${compactBookingReference(bookingReference)}...`,
+        },
+        proofs: [],
+        status: "loading",
+      },
+    }));
+
+    try {
+      const loadedProofs = await loadAdminDriverOtsPhotoProofRead(bookingReference);
+
+      setDashboardDriverOtsPhotoProofReadStates((currentStates) => ({
+        ...currentStates,
+        [bookingReference]: {
+          bookingReference,
+          latestProof: loadedProofs.latestProof,
+          message: {
+            tone: loadedProofs.latestProof ? "success" : "info",
+            text: loadedProofs.latestProof
+              ? `OTS photo received for ${compactBookingReference(bookingReference)}.`
+              : `No OTS photo for ${compactBookingReference(bookingReference)} yet.`,
+          },
+          proofs: loadedProofs.proofs,
+          status: "loaded",
+        },
+      }));
+    } catch (error) {
+      setDashboardDriverOtsPhotoProofReadStates((currentStates) => ({
+        ...currentStates,
+        [bookingReference]: {
+          bookingReference,
+          latestProof: null,
+          message: {
+            tone: "error",
+            text: adminDriverOtsPhotoProofFailureMessage(error),
+          },
+          proofs: [],
+          status: "error",
         },
       }));
     }
@@ -23289,6 +23569,17 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           )
           .join(" | ")
       : "No saved history loaded.";
+  const adminDriverOtsPhotoProofLatest = adminDriverOtsPhotoProofReadState.latestProof;
+  const adminDriverOtsPhotoProofLatestTime = adminDriverJobStatusTimeLabel(
+    adminDriverOtsPhotoProofLatest?.uploaded_at,
+  );
+  const adminDriverOtsPhotoProofLabel = adminDriverOtsPhotoProofLatest
+    ? "OTS photo received"
+    : adminDriverOtsPhotoProofReadState.status === "loading"
+      ? "Checking OTS photo"
+      : adminDriverOtsPhotoProofReadState.status === "error"
+        ? "OTS photo read error"
+        : "No OTS photo yet";
   const dayOfTripDispatchMonitorItems: DispatchReleaseChecklistItem[] = [
     {
       detail: dayOfTripDriverAcknowledged ? "Acknowledged locally." : "Not acknowledged locally.",
@@ -23486,6 +23777,41 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     }
 
     return selectedDriverStatusState || dashboardDriverStatusState;
+  }
+
+  function activeJobDriverOtsPhotoProofReadStateForBooking(
+    activeJobBookingReference: string,
+    isSelectedActiveJob: boolean,
+  ) {
+    if (!activeJobBookingReference) {
+      return null;
+    }
+
+    const selectedProofState =
+      isSelectedActiveJob &&
+      adminDriverOtsPhotoProofReadState.bookingReference === activeJobBookingReference
+        ? adminDriverOtsPhotoProofReadState
+        : null;
+    const dashboardProofState =
+      dashboardDriverOtsPhotoProofReadStates[activeJobBookingReference] || null;
+
+    if (dashboardProofState?.latestProof && !selectedProofState?.latestProof) {
+      return dashboardProofState;
+    }
+
+    const dashboardProofTime = clean(dashboardProofState?.latestProof?.uploaded_at);
+    const selectedProofTime = clean(selectedProofState?.latestProof?.uploaded_at);
+
+    if (
+      dashboardProofState?.latestProof &&
+      selectedProofState?.latestProof &&
+      dashboardProofTime &&
+      dashboardProofTime > selectedProofTime
+    ) {
+      return dashboardProofState;
+    }
+
+    return selectedProofState || dashboardProofState;
   }
 
   function pickupRiskStateForActiveJob(
@@ -23715,6 +24041,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
 
       dashboardDriverJobStatusAutoRequestedRef.current.add(bookingReference);
       void refreshDashboardDriverJobStatusRead(bookingReference);
+      void refreshDashboardDriverOtsPhotoProofRead(bookingReference);
     }
     // The booking reference key is the trigger; the read callback intentionally uses the latest page state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -23734,6 +24061,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     const intervalId = window.setInterval(() => {
       for (const bookingReference of bookingReferences) {
         void refreshDashboardDriverJobStatusRead(bookingReference);
+        void refreshDashboardDriverOtsPhotoProofRead(bookingReference);
       }
     }, 10 * 1000);
 
@@ -23793,6 +24121,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     for (const bookingReference of activeJobDriverStatusReferenceList) {
       dashboardDriverJobStatusAutoRequestedRef.current.add(bookingReference);
       void refreshDashboardDriverJobStatusRead(bookingReference);
+      void refreshDashboardDriverOtsPhotoProofRead(bookingReference);
     }
   }
 
@@ -23898,6 +24227,29 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   activeJobDriverStatusLatest.occurred_at ||
                     activeJobDriverStatusLatest.created_at,
                 )
+              : "";
+            const activeJobDriverOtsPhotoProofReadState =
+              activeJobDriverOtsPhotoProofReadStateForBooking(
+                activeJobBookingReference,
+                isSelectedActiveJob,
+              );
+            const activeJobDriverOtsPhotoProofLatest =
+              activeJobDriverOtsPhotoProofReadState?.latestProof || null;
+            const activeJobReachedOts =
+              activeJobDriverStatusLatest?.status_value === "ots" ||
+              activeJobDriverStatusLatest?.status_value === "pob" ||
+              activeJobDriverStatusLatest?.status_value === "completed";
+            const activeJobDriverOtsPhotoProofLabel = activeJobDriverOtsPhotoProofLatest
+              ? "OTS photo received"
+              : activeJobDriverOtsPhotoProofReadState?.status === "loading"
+                ? "Checking OTS photo"
+                : activeJobDriverOtsPhotoProofReadState?.status === "error"
+                  ? "OTS photo read error"
+                  : activeJobReachedOts
+                    ? "Waiting for OTS photo"
+                    : "OTS photo not due yet";
+            const activeJobDriverOtsPhotoProofTime = activeJobDriverOtsPhotoProofLatest
+              ? adminDriverJobStatusTimeLabel(activeJobDriverOtsPhotoProofLatest.uploaded_at)
               : "";
             const activeJobStatus =
               activeJobDriverStatusLatest
@@ -24006,6 +24358,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                       onClick={() => {
                         if (activeJobBookingReference) {
                           void refreshDashboardDriverJobStatusRead(activeJobBookingReference);
+                          void refreshDashboardDriverOtsPhotoProofRead(activeJobBookingReference);
                         }
                       }}
                       type="button"
@@ -24018,6 +24371,43 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                     data-admin-multi-driver-active-job-driver-report-time="true"
                   >
                     {activeJobDriverStatusTime || "Latest driver update will show here."}
+                  </p>
+                </div>
+                <div
+                  className={`mt-2 rounded-md border px-2 py-1 text-xs ${
+                    activeJobDriverOtsPhotoProofLatest
+                      ? "border-sky-200 bg-sky-50 text-sky-950"
+                      : activeJobDriverOtsPhotoProofReadState?.status === "error"
+                        ? "border-rose-200 bg-rose-50 text-rose-950"
+                        : activeJobReachedOts
+                          ? "border-amber-200 bg-amber-50 text-amber-950"
+                          : "border-slate-200 bg-slate-50 text-slate-700"
+                  }`}
+                  data-admin-multi-driver-active-job-ots-photo-proof="true"
+                >
+                  <div className="flex min-w-0 items-center justify-between gap-2">
+                    <p className="min-w-0 truncate font-semibold">
+                      {activeJobDriverOtsPhotoProofLabel}
+                    </p>
+                    {activeJobDriverOtsPhotoProofLatest?.admin_view_url ? (
+                      <a
+                        className="shrink-0 rounded border border-current bg-white/70 px-1.5 py-0.5 text-[10px] font-semibold transition hover:bg-white"
+                        data-admin-multi-driver-active-job-ots-photo-proof-view="true"
+                        href={activeJobDriverOtsPhotoProofLatest.admin_view_url}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        View
+                      </a>
+                    ) : null}
+                  </div>
+                  <p
+                    className="mt-0.5 truncate text-[11px]"
+                    data-admin-multi-driver-active-job-ots-photo-proof-time="true"
+                  >
+                    {activeJobDriverOtsPhotoProofTime ||
+                      activeJobDriverOtsPhotoProofReadState?.message?.text ||
+                      "Photo will appear here after driver sends it."}
                   </p>
                 </div>
                 {!isSelectedActiveJob ? (
@@ -36644,7 +37034,10 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                         !clean(dispatchReleaseWorkflowBookingReference) ||
                         adminDriverJobStatusReadState.status === "loading"
                       }
-                      onClick={refreshAdminDriverJobStatusRead}
+                      onClick={() => {
+                        void refreshAdminDriverJobStatusRead();
+                        void refreshAdminDriverOtsPhotoProofRead();
+                      }}
                       type="button"
                     >
                       Refresh
@@ -36711,6 +37104,41 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                     >
                       {adminDriverJobStatusHistorySummary}
                     </p>
+                  </div>
+                </div>
+                <div
+                  className="mt-1 border-t border-lime-100 pt-1"
+                  data-admin-driver-ots-photo-proof-readout="true"
+                >
+                  <div className="flex min-w-0 items-start justify-between gap-1">
+                    <div className="min-w-0">
+                      <p className="font-semibold leading-3 sm:leading-4">
+                        OTS photo proof
+                      </p>
+                      <p
+                        className="mt-0.5 break-words leading-3 sm:leading-4"
+                        data-admin-driver-ots-photo-proof-readout-detail="true"
+                      >
+                        {adminDriverOtsPhotoProofReadState.message?.text ||
+                          adminDriverOtsPhotoProofLabel}
+                      </p>
+                      {adminDriverOtsPhotoProofLatest ? (
+                        <p className="mt-0.5 break-words leading-3 sm:leading-4">
+                          Received {adminDriverOtsPhotoProofLatestTime}
+                        </p>
+                      ) : null}
+                    </div>
+                    {adminDriverOtsPhotoProofLatest?.admin_view_url ? (
+                      <a
+                        className="shrink-0 rounded border border-lime-300 bg-white px-2 py-0.5 text-[9px] font-semibold text-lime-950 transition hover:bg-lime-50 sm:text-[10px]"
+                        data-admin-driver-ots-photo-proof-view="true"
+                        href={adminDriverOtsPhotoProofLatest.admin_view_url}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        View photo
+                      </a>
+                    ) : null}
                   </div>
                 </div>
               </div>

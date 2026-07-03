@@ -121,7 +121,11 @@ async function assertNoRealLocationImplementation() {
   );
   assert.doesNotMatch(source, /navigator\.mediaDevices|getUserMedia/i, "Driver pages must not call camera APIs.");
   assert.doesNotMatch(source, /localStorage|sessionStorage/i, "Driver pages must not add browser storage persistence.");
-  assert.doesNotMatch(source, /\/api\/(?:driver-)?(?:ots-photo|photo-proof)/i, "Driver pages must not add photo upload endpoints.");
+  assert.match(
+    source,
+    /\/api\/driver-job\/\$\{encodeURIComponent\(token\)\}\/ots-photo/,
+    "Driver OTS photo proof must use the existing tokenized driver-job route.",
+  );
   assert.doesNotMatch(source, /\/api\/[^"')\s]*(?:upload|storage|file)/i, "Driver pages must not add upload, storage, or file APIs.");
   assert.doesNotMatch(source, /\/api\/(?:driver-)?(?:flight|eta|reminder|notification|notify|sms|whatsapp)/i, "Driver pages must not add flight or notification endpoints.");
   assert.doesNotMatch(source, /\/api\/[^"')\s]*(?:cancel|reassign|replacement|exception|breakdown|missed|late-driver)/i, "Driver pages must not add dispatcher exception APIs.");
@@ -130,8 +134,17 @@ async function assertNoRealLocationImplementation() {
   assert.doesNotMatch(source, /\b(?:Notification|PushManager|serviceWorker|showNotification|sendNotification)\b/, "Driver pages must not add notification APIs.");
   assert.doesNotMatch(source, /google\.maps|maps\.google|mapbox|gps api/i, "Driver pages must not add map or GPS APIs.");
   assert.doesNotMatch(source, /customer live location link/i, "Driver pages must not create fake customer live location links.");
-  assert.doesNotMatch(source, /type=["']file["']|capture=|accept=["'][^"']*image/i, "Driver pages must not add file or camera inputs.");
-  assert.doesNotMatch(source, /new FormData|URL\.createObjectURL|supabase\.storage|storage\.from|\.upload\s*\(/i, "Driver pages must not add upload/storage plumbing.");
+  assert.match(
+    source,
+    /data-driver-job-ots-photo-proof-input="true"/,
+    "Driver page must expose the approved OTS photo proof input after OTS.",
+  );
+  assert.match(
+    source,
+    /new FormData/,
+    "Driver OTS photo proof must post one browser FormData payload through the tokenized route.",
+  );
+  assert.doesNotMatch(source, /URL\.createObjectURL|supabase\.storage|storage\.from|\.upload\s*\(/i, "Driver pages must not preview or write storage directly.");
 }
 
 async function runChromeTest() {
@@ -672,6 +685,69 @@ async function runChromeTest() {
       return state;
     };
 
+    const uploadOtsPhotoProof = async () => {
+      const beforeState = await pageState();
+      const selected = await evaluate(`(() => {
+        const input = document.querySelector("[data-driver-job-ots-photo-proof-input]");
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "files")?.set;
+
+        if (!input || !setter) {
+          return false;
+        }
+
+        const transfer = new DataTransfer();
+        transfer.items.add(new File(["mock-ots-photo"], "ots-photo.jpg", { type: "image/jpeg" }));
+        setter.call(input, transfer.files);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        return true;
+      })()`);
+
+      assert.equal(selected, true, "Expected OTS photo proof input to accept a mock image file.");
+
+      const clicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-driver-job-ots-photo-proof-upload]");
+
+        if (!button || button.disabled) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+
+      assert.equal(clicked, true, "Expected OTS photo proof upload button to be clickable.");
+
+      await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const message = document.querySelector("[data-driver-job-ots-photo-proof-message]");
+            const state = document.querySelector("[data-driver-job-ots-photo-proof-state]");
+
+            return message?.textContent.trim() === "OTS photo sent to admin." &&
+              state?.textContent.trim() === "Sent";
+          })()`),
+        10000,
+        "OTS photo proof upload",
+      );
+
+      const afterState = await pageState();
+      assert.equal(
+        afterState.fetchCalls.some((call) =>
+          call === `POST /api/driver-job/${mockDriverJobTokens.workflowOrder}/ots-photo`,
+        ),
+        true,
+        "Expected OTS photo proof to use the tokenized driver OTS photo route.",
+      );
+      assert.equal(
+        afterState.fetchCalls.length,
+        beforeState.fetchCalls.length + 1,
+        "OTS photo proof should make one internal app POST only.",
+      );
+      assertNoSensitiveText(afterState);
+      return afterState;
+    };
+
     const clickBlockedStatus = async (label, expectedMessage, expectedStatusText) => {
       const beforeState = await pageState();
       const clicked = await evaluate(`(() => {
@@ -796,7 +872,7 @@ async function runChromeTest() {
     );
     assert.equal(
       validState.reportIssue.boundary,
-      "Internal app alert only. No external messages, live location, or photo upload.",
+      "Internal app alert only. No external messages are sent from this issue control.",
       "Expected report issue boundary to block external sending and future-only features.",
     );
     assert.deepEqual(
@@ -1010,6 +1086,13 @@ async function runChromeTest() {
       "DEP public mock job should not require OTS photo proof after OTS.",
     );
     assert.equal(
+      depOtsState.visibleText.includes("OTS Photo to Admin"),
+      true,
+      "Expected approved OTS photo proof control after OTS.",
+    );
+    assert.equal(depOtsState.fileInputs.length, 1, "Expected one approved OTS image input after OTS.");
+    await uploadOtsPhotoProof();
+    assert.equal(
       depOtsState.visibleText.includes("Acknowledge Latest ETA"),
       false,
       "DEP public mock job should not require latest ETA acknowledgement after OTS.",
@@ -1093,7 +1176,7 @@ async function runChromeTest() {
     const arrivalOtsState = await pageState();
     assert.equal(arrivalOtsState.visibleText.includes("Mock OTS Photo Proof"), false);
     assert.equal(arrivalOtsState.visibleText.includes("Add Mock OTS Photo Proof"), false);
-    assert.deepEqual(arrivalOtsState.fileInputs, [], "Mock OTS proof must not expose real file/photo inputs.");
+    assert.equal(arrivalOtsState.fileInputs.length, 1, "Approved OTS proof must expose one OTS image input after OTS.");
     assert.deepEqual(
       arrivalOtsState.dispatcherExceptionText,
       [],

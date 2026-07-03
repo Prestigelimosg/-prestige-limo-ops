@@ -116,6 +116,10 @@ for (const fragment of [
   "loadAdminDriverOtsPhotoProofRead",
   "data-admin-multi-driver-active-job-ots-photo-proof=\"true\"",
   "data-admin-driver-ots-photo-proof-readout=\"true\"",
+  "data-admin-driver-ots-photo-proof-visible-readout=\"true\"",
+  "data-admin-driver-ots-photo-proof-visible-refresh=\"true\"",
+  "data-admin-driver-ots-photo-proof-visible-view=\"true\"",
+  "Photo will appear here after driver sends it from the job link.",
   "View photo",
 ]) {
   assertIncludes(adminPage, fragment, `admin Dispatch OTS proof fragment: ${fragment}`);

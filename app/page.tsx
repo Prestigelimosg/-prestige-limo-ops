@@ -40022,6 +40022,65 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                     then Copy Link and send it to the driver.
                   </div>
                 ) : null}
+                <div
+                  className={`mb-2 rounded-md border px-3 py-2 text-xs ${
+                    adminDriverOtsPhotoProofLatest
+                      ? "border-sky-200 bg-sky-50 text-sky-950"
+                      : adminDriverOtsPhotoProofReadState.status === "error"
+                        ? "border-rose-200 bg-rose-50 text-rose-950"
+                        : "border-slate-200 bg-slate-50 text-slate-700"
+                  }`}
+                  data-admin-driver-ots-photo-proof-visible-readout="true"
+                >
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-slate-950">OTS Photo to Admin</p>
+                      <p
+                        className="mt-0.5 break-words"
+                        data-admin-driver-ots-photo-proof-visible-detail="true"
+                      >
+                        {adminDriverOtsPhotoProofReadState.message?.text ||
+                          adminDriverOtsPhotoProofLabel}
+                      </p>
+                      {adminDriverOtsPhotoProofLatest ? (
+                        <p className="mt-0.5 break-words">
+                          Received {adminDriverOtsPhotoProofLatestTime}
+                        </p>
+                      ) : (
+                        <p className="mt-0.5 break-words">
+                          Photo will appear here after driver sends it from the job link.
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 flex-wrap gap-2">
+                      <button
+                        className="min-h-8 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                        data-admin-driver-ots-photo-proof-visible-refresh="true"
+                        disabled={
+                          !clean(dispatchReleaseWorkflowBookingReference) ||
+                          adminDriverOtsPhotoProofReadState.status === "loading"
+                        }
+                        onClick={() => {
+                          void refreshAdminDriverOtsPhotoProofRead();
+                        }}
+                        type="button"
+                      >
+                        {adminDriverOtsPhotoProofReadState.status === "loading" ? "Checking" : "Refresh"}
+                      </button>
+                      {adminDriverOtsPhotoProofLatest?.admin_view_url ? (
+                        <a
+                          className="inline-flex min-h-8 items-center rounded-md border border-sky-300 bg-white px-2.5 py-1 text-xs font-semibold text-sky-950 transition hover:bg-sky-50"
+                          data-admin-driver-ots-photo-proof-visible-view="true"
+                          href={adminDriverOtsPhotoProofLatest.admin_view_url}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          View photo
+                        </a>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
                 <details
                   className="rounded-md border border-indigo-100 bg-white px-2 py-1.5"
                   data-dispatch-compact-panel="driver-job-link-preview"

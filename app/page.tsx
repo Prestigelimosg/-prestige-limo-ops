@@ -12637,6 +12637,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     "customerCopy" | "driverJobLink" | null
   >(null);
   const [driverJobLinkHandoffReference, setDriverJobLinkHandoffReference] = useState("");
+  const driverJobLinkHandoffFocusAppliedRef = useRef("");
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
   const [message, setMessage] = useState<Message>({
     tone: "info",
@@ -12687,18 +12688,34 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       ).find((element) => element.dataset.dispatchWorkflowStep === focusStep);
 
       focusElement?.scrollIntoView({ behavior: "smooth", block: "start" });
-      if (dispatchLoadFocusTarget === "driverJobLink") {
-        window.setTimeout(() => {
-          document
-            .querySelector<HTMLButtonElement>('[data-create-driver-job-link-button="true"]')
-            ?.focus({ preventScroll: true });
-        }, 120);
-      }
       setDispatchLoadFocusTarget(null);
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
   }, [activeTab, dispatchLoadFocusTarget]);
+
+  useEffect(() => {
+    if (
+      activeTab !== "dispatch" ||
+      !driverJobLinkHandoffReference ||
+      adminDriverJobLinkState.action !== null ||
+      driverJobLinkHandoffFocusAppliedRef.current === driverJobLinkHandoffReference
+    ) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      const createButton = document.querySelector<HTMLButtonElement>(
+        '[data-create-driver-job-link-button="true"]',
+      );
+
+      createButton?.scrollIntoView({ behavior: "smooth", block: "center" });
+      createButton?.focus({ preventScroll: true });
+      driverJobLinkHandoffFocusAppliedRef.current = driverJobLinkHandoffReference;
+    }, 150);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [activeTab, adminDriverJobLinkState.action, driverJobLinkHandoffReference]);
 
   useEffect(() => {
     loadedBookingIdRef.current = loadedBookingId;
@@ -18707,6 +18724,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       }
     }
     setDispatchReleaseWorkflowLoadRevision((currentRevision) => currentRevision + 1);
+    if (options.focusDriverJobLink) {
+      driverJobLinkHandoffFocusAppliedRef.current = "";
+    }
     setDriverJobLinkHandoffReference(options.focusDriverJobLink ? bookingReference : "");
     setDispatchLoadFocusTarget(
       options.focusCustomerCopy

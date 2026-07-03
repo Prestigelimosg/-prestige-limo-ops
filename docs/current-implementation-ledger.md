@@ -44,7 +44,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Live Driver Pickup Risk Monitor
 
-- The shared `Today's Jobs` monitor now includes an admin-only `Pickup risk` toggle beside the existing driver report auto-refresh control. The toggle defaults off and does not create a new map/window or duplicate monitor sector.
+- The Dispatch-only `Today's Jobs` monitor includes an admin-only `Pickup risk` toggle beside the existing driver report auto-refresh control. The toggle defaults off and does not create a new map/window or duplicate monitor sector.
 - When enabled, the existing Today’s Jobs rows and existing Live Dispatch Map marker rows show the same derived pickup-risk state for the exact driver/job reference: no live pin, stale/offline pin, near-pickup watch, current pin, at-pickup, POB, or completed.
 - The pickup risk monitor defaults off, can be toggled by admin, highlights only the affected driver/job row and marker for no-pin, stale/offline, near-pickup watch, route ETA risk, and route-distance moving-away states, and does not claim route direction/ETA certainty unless guarded pickup approach evidence is ready.
 - When the toggle is on and the existing live map runtime is active, the monitor may use the existing guarded admin map location search and route estimate APIs to geocode the pickup text and estimate the driver's route distance/ETA to pickup. This is cached by booking reference, pickup text, and rounded driver pin so it does not add a duplicate polling loop.
@@ -106,11 +106,11 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 - Dispatch daily-use layout is now operator-focused: intake, booking details, route/vehicle, pricing, assigned driver, customer/driver copy, driver job link, and save actions stay visible while complex readiness, handoff, recovery, exception, and billing-prep panels are grouped under the compact `Advanced Checks` disclosure.
 - Saved booking records are collapsed by default behind a compact `Saved Booking Records` disclosure so the Dispatch page does not open with a large loaded-records sector.
-- Dashboard and Dispatch now share the same `Today's Jobs` monitor. It shows loaded jobs inside the 1-hour pickup window, auto-refreshes driver reports every 10 seconds while open, and includes one compact admin live-map control surface for those active jobs.
-- The shared live-map control keeps a two-slot readiness signal in the existing panel: if fewer than two active job references are in the 1-hour pickup window, the panel shows standby live map slots ready for the next upcoming jobs as they enter that window.
-- On Dispatch, the shared `Today's Jobs` monitor now sits below the `Assigned Driver` sector so driver assignment stays the primary operator action before multi-job scanning.
+- Dispatch now owns the `Today's Jobs` monitor. It shows loaded jobs inside the 1-hour pickup window, auto-refreshes driver reports every 10 seconds while Dispatch is open, and includes one compact admin live-map control surface for those active jobs.
+- The live-map control keeps a two-slot readiness signal in the existing panel: if fewer than two active job references are in the 1-hour pickup window, the panel shows standby live map slots ready for the next upcoming jobs as they enter that window.
+- On Dispatch, `Today's Jobs` sits below the `Assigned Driver` sector so driver assignment stays the primary operator action before multi-job scanning.
 - The previous duplicate active-jobs map/monitor surfaces were consolidated so the operator can use one daily monitor for 1-hour auto-appearance, driver reporting, and same-window live map controls.
-- The shared monitor displays pickup time through the normalized booking time formatter instead of the raw persisted `pickup_time` value, preventing saved production jobs from showing `Time TBC` when their pickup time exists in another saved field.
+- The Dispatch monitor displays pickup time through the normalized booking time formatter instead of the raw persisted `pickup_time` value, preventing saved production jobs from showing `Time TBC` when their pickup time exists in another saved field.
 - `Save + CRM` now persists manual assigned-driver fields through the admin booking persistence path: `driver_name`, `driver_contact`, and `driver_plate_number`.
 - The Supabase adapter preserves those assigned-driver fields on foundation inserts and reads them back when available, while retaining a legacy no-driver-column fallback for older schemas.
 - Visible Mac Chrome production proof on `https://app.prestigelimo.sg` used safe fake booking `ADM-20260702112134` first. That booking proved the time-label fix after deployment by showing `02 Jul 2026, 2015hrs`; it still showed `Driver TBC` because it had been saved before the driver-persistence fix.
@@ -230,7 +230,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Admin Active Jobs Browser Map JavaScript API
 
-- Admin Dispatch can render an optional same-window Google Maps JavaScript canvas inside the existing compact Dashboard Live Dispatch Map panel.
+- Admin Dispatch can render an optional same-window Google Maps JavaScript canvas inside the existing compact Dispatch Live Dispatch Map panel.
 - The canvas is default-closed: it only loads after active driver markers exist and `/api/admin-active-jobs-map-browser-config` returns a configured browser-safe provider/key response.
 - The browser config route uses the existing admin dispatcher boundary, same-origin dashboard purpose header, a separate `PRESTIGE_ADMIN_ACTIVE_JOBS_MAP_BROWSER_PROVIDER=google_maps_javascript` gate, `PRESTIGE_GOOGLE_MAPS_BROWSER_API_KEY`, explicit `PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS`, and optional `PRESTIGE_GOOGLE_MAPS_BROWSER_MAP_ID`.
 - The existing server-side `PRESTIGE_GOOGLE_MAPS_API_KEY` remains server-only for admin location search/route estimates and is not read or returned by the browser-map config route.
@@ -278,10 +278,10 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Driver Live Location Multi-Driver Admin List
 
-- Admin Dispatch has one compact Dashboard Live Dispatch Map runtime control for the active jobs list; the old selected-job live map control is not rendered inside the Day-of-Trip Dispatch Monitor.
+- Admin Dispatch has one compact Dispatch Live Dispatch Map runtime control for the active jobs list; the old selected-job live map control is not rendered inside the Day-of-Trip Dispatch Monitor.
 - Creating a driver job link now auto-authorizes live movement for that booking by opening the existing admin live-location runtime allowlist after the link row is saved.
 - The visible Driver Job Link panel no longer exposes the manual `Enable Live Location` button; the panel stays limited to `Create Link`, `Copy Link`, `Revoke`, and useful status copy.
-- The Dashboard Live Dispatch Map opens live movement for the active job references in one operator click through `/api/admin-live-location-runtime` instead of requiring a selected booking to be added manually.
+- The Dispatch Live Dispatch Map opens live movement for the active job references in one operator click through `/api/admin-live-location-runtime` instead of requiring a selected booking to be added manually.
 - Runtime control keeps existing `driver_live_location_allowed_job_references`, removes duplicates, and caps the selected booking list at 50 references.
 - Driver `Share Location` first calls `GET /api/driver-job/[token]/live-location` for server readiness; Chrome GPS is requested only after that readiness check passes.
 - Admin marker refresh uses the existing guarded `GET /api/admin-active-jobs-map-locations` route and returns both selected booking references and current driver markers.
@@ -686,15 +686,15 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Loading a customer request into Dispatch now records a bounded browser-local handled-request key so that request leaves the Dashboard urgent queue plus the Bookings `Urgent & New Booking Requests` queue and badge on that admin browser while remaining available in Recent/Active booking lists.
 - Loading a saved booking into Dispatch refreshes the typed operational display once immediately and pauses one background sync tick, keeping the existing guarded read set stable while Customer Copy focuses for review.
 - The Dashboard now uses compact read-only booking summaries plus `Open` handoff buttons; single-booking driver assignment, status, copy, job-card, and completion work stays in Dispatch/Bookings so page purposes do not duplicate.
-- The shared `Today's Jobs` sector is shown on the Dashboard command centre and below the Dispatch `Assigned Driver` sector for multi-driver scanning.
+- `Today's Jobs` is shown below the Dispatch `Assigned Driver` sector for multi-driver scanning and is not rendered on Dashboard.
 - `Today's Jobs` shows all loaded active jobs inside the 1-hour pickup monitor window without a separate expand/collapse toggle.
 - `Today's Jobs` shows a compact saved driver report readout per visible job, using the existing guarded admin `GET /api/admin-driver-job-statuses` path only, with monitor-wide/per-card refresh controls and auto-refresh on by default.
 - `Today's Jobs` includes compact live-map controls that reuse the existing admin-only live-location runtime for the jobs inside the monitor window.
 - Admin live-map display collapses duplicate live rows for the same driver identity, preferring current/newest movement, so one driver does not look like two live cars.
-- The legacy Dispatch Day-of-Trip Dispatch Monitor remains hidden from the normal UI so it does not compete with the shared `Today's Jobs` sector.
+- The legacy Dispatch Day-of-Trip Dispatch Monitor remains hidden from the normal UI so it does not compete with the Dispatch `Today's Jobs` sector.
 - The lower Dispatch saved-record finder is now a compact `Saved Booking Records` disclosure by default. The existing admin-only persistence controls and loaded-record scrollbox are still available after expanding, but they no longer fill the normal Dispatch view.
 - Dispatch internal readiness, handoff, recovery, exception, closeout-review, and billing-prep panels now live under one compact `Advanced Checks` disclosure. The existing guarded controls remain colocated and unchanged after expanding, but the default operator view stays focused on daily trip work.
-- The Dashboard driver report readout is read-only and does not create driver status events, notification rows, provider sends, GPS/live-location records, billing/payment/PDF/invoice/payout records, or a duplicate single-booking Dispatch workflow.
+- The `Today's Jobs` driver report readout is read-only and does not create driver status events, notification rows, provider sends, GPS/live-location records, billing/payment/PDF/invoice/payout records, or a duplicate single-booking Dispatch workflow.
 - The Bookings tab shows a compact new-request badge/highlight after open customer requests are detected; no sound, browser notification, polling loop, provider send, or new route is added.
 - Customer/driver-visible forbidden data remains blocked from this list path: driver payout, PayNow payout, customer price, billing, invoice, payment, internal admin notes, parser/debug, secrets, raw provider payloads, and mock QA/dev archive data.
 - Guard coverage lives in `scripts/test-admin-load-bookings-crm-fallback-compact-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
@@ -714,7 +714,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 - Dashboard request panel is now `Urgent Booking Requests` and only displays open customer requests with pickup under 24 hours.
 - The Bookings page request panel remains the full queue as `Urgent & New Booking Requests`, with row badges separating urgent under-24h requests from new non-urgent requests.
-- Day-of-trip jobs are now shown as `Today's Jobs`; the shared sector shows all loaded active jobs inside the 1-hour-before-pickup monitor window on Dashboard and Dispatch.
+- Day-of-trip jobs are shown as `Today's Jobs` only on Dispatch; Dashboard stays focused on urgent requests, admin notifications, calendar, and booking summaries.
 - `Today's Jobs` driver report auto-refresh is on by default, still uses the guarded admin driver-status read path, and can be switched off by the operator.
 - The `Today's Jobs` live map control opens the existing admin-only live-location runtime for the jobs in the monitor window and refreshes shared markers every 10 seconds while the sector is open.
 - The same live map control keeps a two-slot readiness signal; when fewer than two active job references are in the 1-hour window, standby slots remain ready for upcoming jobs as they enter that window.
@@ -904,7 +904,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The admin Dispatch page quietly refreshes the existing active driver job link read once when booking sync sees driver name/contact/plate but no vehicle model on the currently loaded booking, so the safe vehicle summary can catch up after driver `Save & Acknowledge Job` without a manual refresh.
 - If the loaded Dispatch booking already has driver name/contact/plate but no vehicle model, the same one-shot active driver job link safe-summary fallback starts immediately on load.
 - Customer Copy and Driver Dispatch can reflect driver-entered details without pressing Refresh or reloading the page.
-- The shared `Today's Jobs` sector shows all jobs inside the monitor window, so saved OTW/OTS/POB/Completed driver reports can appear without expanding a separate monitor.
+- The Dispatch `Today's Jobs` sector shows all jobs inside the monitor window, so saved OTW/OTS/POB/Completed driver reports can appear without expanding a separate monitor.
 - This is not a customer send; admin still reviews Customer Copy before any customer-facing send.
 - The auto-sync uses existing admin-safe booking read paths only and does not add public reads, broad writes, provider sends, Email/Resend/Telegram/WhatsApp/SMS, push sends, live GPS/customer map, billing/payment/PDF/invoice/payout, parser, calendar, or shims.
 - Customer/driver-visible forbidden data remains blocked from this path: driver payout, PayNow payout, customer price, billing, invoice, payment, internal admin notes, parser/debug, secrets, raw provider payloads, and mock QA/dev archive data.
@@ -915,7 +915,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer `/book` requests now create an internal admin-app inbox item after the booking request is saved.
 - The admin-app notification payload is safe and template-only: no phone, email, pricing, payout, billing, provider payload, live location, token, parser/debug, or internal note data is included.
 - Customer Copy and Driver Dispatch keep using the existing active driver job link safe-summary fallback for driver-entered vehicle models, and the fallback read can retry after a driver save instead of getting stuck behind an early stale read.
-- Shared `Today's Jobs` only lists jobs inside the one-hour-before-pickup monitor window.
+- Dispatch `Today's Jobs` only lists jobs inside the one-hour-before-pickup monitor window.
 - Dashboard Upcoming booking rows show assigned driver name/contact/plate/vehicle details when available.
 - `Today's Jobs` driver report auto-refresh has an explicit 10-second on/off switch, defaults on, and manual Refresh remains available.
 - Customers payment review rows are compact by default; the mock payment controls and long notes stay collapsed until `View details` is opened.

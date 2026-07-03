@@ -4172,12 +4172,13 @@ async function runChromeTest() {
                   (
                     text.includes("Operations Dashboard") &&
                     text.includes("Urgent Booking Requests") &&
-                    text.includes("Today's Jobs")
+                    text.includes("Admin App Notifications")
                   ) ||
                   (
                     text.includes("Dispatcher Intake") &&
                     text.includes("Job Card Preview") &&
-                    text.includes("Driver Dispatch")
+                    text.includes("Driver Dispatch") &&
+                    text.includes("Today's Jobs")
                   )
                 ),
               toggleHeight: Math.round(toggleRect?.height || 0),

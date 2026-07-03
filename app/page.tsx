@@ -22816,7 +22816,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         } ready.`;
   const activeJobDriverStatusReferenceKey = activeJobDriverStatusReferenceList.join("|");
   const activeJobsMapAllowedReferenceKey = adminActiveJobsMapReadState.allowedBookingReferences.join("|");
-  const todayJobsMonitorIsActive = activeTab === "dashboard" || activeTab === "dispatch";
+  const todayJobsMonitorIsActive = activeTab === "dispatch";
   const activeJobsMapLocationsByReference = new Map(
     adminActiveJobsMapReadState.activeJobs
       .map((job) => [cleanReferenceText(job.assigned_job_reference), job] as const)
@@ -23127,7 +23127,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     <section
       aria-label="Today's Jobs"
       className="rounded-md border border-lime-200 bg-lime-50/70 p-2 sm:p-3"
-      data-dashboard-day-of-trip-operations-monitor="true"
+      data-dispatch-day-of-trip-operations-monitor="true"
       data-admin-multi-driver-active-jobs-monitor="true"
     >
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -23368,7 +23368,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       {dayOfTripActiveJobBookings.length > 0 ? (
         <div
           className="mt-2 rounded-md border border-lime-200 bg-white p-1.5 text-[11px] leading-4 text-lime-950 sm:text-xs"
-          data-dashboard-live-driver-map="true"
+          data-dispatch-live-driver-map="true"
         >
           <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
@@ -23386,7 +23386,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                       ? "bg-red-100 text-red-800"
                       : "bg-slate-100 text-slate-700"
                 }`}
-                data-dashboard-live-driver-map-state={adminActiveJobsMapReadState.runtimeStatus}
+                data-dispatch-live-driver-map-state={adminActiveJobsMapReadState.runtimeStatus}
               >
                 {adminActiveJobsMapReadState.runtimeStatus === "active"
                   ? "Live On"
@@ -23396,24 +23396,24 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               </span>
               <span
                 className="rounded-full bg-lime-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-lime-900 sm:px-2 sm:text-[10px]"
-                data-dashboard-live-driver-map-marker-count={adminActiveJobsMapReadState.markerCount}
+                data-dispatch-live-driver-map-marker-count={adminActiveJobsMapReadState.markerCount}
               >
                 {adminActiveJobsMapReadState.markerCount} driver
                 {adminActiveJobsMapReadState.markerCount === 1 ? "" : "s"}
               </span>
               <span
                 className="rounded-full bg-sky-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-sky-900 sm:px-2 sm:text-[10px]"
-                data-dashboard-live-driver-map-slot-count={liveDispatchPreparedSlotCount}
+                data-dispatch-live-driver-map-slot-count={liveDispatchPreparedSlotCount}
                 title={liveDispatchSlotSummaryLabel}
               >
                 {liveDispatchPreparedSlotCount} slots
               </span>
             </div>
           </div>
-          <div className="mt-1 flex flex-wrap gap-1" data-dashboard-live-driver-map-controls="true">
+          <div className="mt-1 flex flex-wrap gap-1" data-dispatch-live-driver-map-controls="true">
             <button
               className="rounded border border-lime-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-lime-950 transition hover:bg-lime-50 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[11px]"
-              data-dashboard-live-driver-map-open="true"
+              data-dispatch-live-driver-map-open="true"
               disabled={
                 dayOfTripActiveJobBookings.length === 0 ||
                 adminActiveJobsMapReadState.action !== "idle"
@@ -23425,7 +23425,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             </button>
             <button
               className="rounded border border-lime-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-lime-950 transition hover:bg-lime-50 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[11px]"
-              data-dashboard-live-driver-map-refresh="true"
+              data-dispatch-live-driver-map-refresh="true"
               disabled={
                 adminActiveJobsMapReadState.runtimeStatus !== "active" ||
                 adminActiveJobsMapReadState.action !== "idle"
@@ -23437,7 +23437,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             </button>
             <button
               className="rounded border border-red-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-red-800 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[11px]"
-              data-dashboard-live-driver-map-close="true"
+              data-dispatch-live-driver-map-close="true"
               disabled={
                 adminActiveJobsMapReadState.runtimeStatus !== "active" ||
                 adminActiveJobsMapReadState.action !== "idle"
@@ -23484,7 +23484,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               className={`mt-1 rounded border px-1.5 py-1 text-[10px] font-semibold leading-3 sm:text-[11px] ${statusClass(
                 adminActiveJobsMapReadState.message.tone,
               )}`}
-              data-dashboard-live-driver-map-message="true"
+              data-dispatch-live-driver-map-message="true"
             >
               {adminActiveJobsMapReadState.message.text}
             </p>
@@ -23503,7 +23503,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               className={`mt-1 rounded border px-1.5 py-1 text-[10px] font-semibold leading-3 sm:text-[11px] ${statusClass(
                 adminActiveJobsBrowserMapConfigState.message.tone,
               )}`}
-              data-dashboard-live-driver-map-config-message="true"
+              data-dispatch-live-driver-map-config-message="true"
             >
               {adminActiveJobsBrowserMapConfigState.message.text}
             </p>
@@ -23511,7 +23511,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           {adminActiveJobsMapReadState.activeJobs.length > 0 ? (
             <div
               className="mt-1 max-h-24 space-y-1 overflow-y-auto border-t border-lime-100 pt-1"
-              data-dashboard-live-driver-map-marker-list="true"
+              data-dispatch-live-driver-map-marker-list="true"
             >
               {adminActiveJobsMapReadState.activeJobs.map((job) => {
                 const mapUrl = googleMapsLocationUrl(job.latitude, job.longitude);
@@ -23529,7 +23529,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                         ? adminPickupRiskCardClass(markerRiskState.level)
                         : "bg-lime-50"
                     } ${adminPickupRiskMonitorEnabled && markerRiskState?.pulse ? "animate-pulse" : ""}`}
-                    data-dashboard-live-driver-map-marker={job.assigned_job_reference || "unknown"}
+                    data-dispatch-live-driver-map-marker={job.assigned_job_reference || "unknown"}
                     data-admin-pickup-risk-marker-state={
                       adminPickupRiskMonitorEnabled && markerRiskState ? markerRiskState.level : "off"
                     }
@@ -23574,7 +23574,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           ) : null}
           <p
             className="mt-1 border-t border-lime-100 pt-1 text-[10px] leading-3 text-lime-900 sm:text-[11px]"
-            data-dashboard-live-driver-map-boundary="true"
+            data-dispatch-live-driver-map-boundary="true"
           >
             Admin-only. Uses loaded active jobs and driver-shared live movement; no external message is sent from here.
           </p>
@@ -36004,7 +36004,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                 data-admin-day-of-trip-dispatch-monitor-boundary="true"
               >
                 Saved driver status reads use the guarded admin driver-status API. Live location is opened from
-                the Dashboard Live Dispatch Map for active jobs only. No customer message, provider notification,
+                the Dispatch Live Dispatch Map for active jobs only. No customer message, provider notification,
                 billing, payment, PDF, payout, parser-learning, or broad tracking behavior.
               </p>
             </section>
@@ -39878,7 +39878,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             <div>
               <h2 className="text-lg font-semibold">Operations Dashboard</h2>
               <p className="text-xs text-slate-500">
-                Command centre for urgent requests, day-of-trip jobs, driver reports, and live shared pins.
+                Command centre for urgent requests, admin notifications, calendar, and booking summaries.
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row lg:min-w-[520px]">
@@ -40402,8 +40402,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               </p>
             )}
           </section>
-
-          <div className="mb-4">{activeJobsMonitorPanel}</div>
 
           <div className="grid gap-3 border-y border-stone-200 py-4 text-center sm:grid-cols-3">
             <div>

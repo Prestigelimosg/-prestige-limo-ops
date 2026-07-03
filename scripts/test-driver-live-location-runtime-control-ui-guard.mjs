@@ -65,10 +65,10 @@ const runtimeReadinessSection = sectionBetween(
 );
 
 for (const phrase of [
-  "Admin Dispatch has one compact Dashboard Live Dispatch Map runtime control for the active jobs list; the old selected-job live map control is not rendered inside the Day-of-Trip Dispatch Monitor.",
+  "Admin Dispatch has one compact Dispatch Live Dispatch Map runtime control for the active jobs list; the old selected-job live map control is not rendered inside the Day-of-Trip Dispatch Monitor.",
   "Creating a driver job link now auto-authorizes live movement for that booking by opening the existing admin live-location runtime allowlist after the link row is saved.",
   "The visible Driver Job Link panel no longer exposes the manual `Enable Live Location` button; the panel stays limited to `Create Link`, `Copy Link`, `Revoke`, and useful status copy.",
-  "The Dashboard Live Dispatch Map opens live movement for the active job references in one operator click through `/api/admin-live-location-runtime` instead of requiring a selected booking to be added manually.",
+  "The Dispatch Live Dispatch Map opens live movement for the active job references in one operator click through `/api/admin-live-location-runtime` instead of requiring a selected booking to be added manually.",
   "Runtime control keeps existing `driver_live_location_allowed_job_references`, removes duplicates, and caps the selected booking list at 50 references.",
   "Driver `Share Location` first calls `GET /api/driver-job/[token]/live-location` for server readiness; Chrome GPS is requested only after that readiness check passes.",
   "Admin marker refresh uses the existing guarded `GET /api/admin-active-jobs-map-locations` route and returns both selected booking references and current driver markers.",
@@ -86,12 +86,12 @@ for (const phrase of [
 for (const fragment of [
   "adminLiveLocationRuntimeApiPath",
   "adminActiveJobsMapLocationsApiPath",
-  'data-dashboard-live-driver-map="true"',
-  'data-dashboard-live-driver-map-open="true"',
-  'data-dashboard-live-driver-map-refresh="true"',
-  'data-dashboard-live-driver-map-close="true"',
-  'data-dashboard-live-driver-map-marker-count={adminActiveJobsMapReadState.markerCount}',
-  'data-dashboard-live-driver-map-marker-list="true"',
+  'data-dispatch-live-driver-map="true"',
+  'data-dispatch-live-driver-map-open="true"',
+  'data-dispatch-live-driver-map-refresh="true"',
+  'data-dispatch-live-driver-map-close="true"',
+  'data-dispatch-live-driver-map-marker-count={adminActiveJobsMapReadState.markerCount}',
+  'data-dispatch-live-driver-map-marker-list="true"',
   'data-admin-active-jobs-map-live-movement="true"',
   'data-admin-active-jobs-map-live-movement-status="true"',
   "Google marker positions update from driver GPS every few seconds",

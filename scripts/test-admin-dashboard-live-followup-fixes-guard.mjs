@@ -48,7 +48,7 @@ for (const phrase of [
   "Customer `/book` requests now create an internal admin-app inbox item after the booking request is saved.",
   "The admin-app notification payload is safe and template-only: no phone, email, pricing, payout, billing, provider payload, live location, token, parser/debug, or internal note data is included.",
   "Customer Copy and Driver Dispatch keep using the existing active driver job link safe-summary fallback for driver-entered vehicle models, and the fallback read can retry after a driver save instead of getting stuck behind an early stale read.",
-  "Shared `Today's Jobs` only lists jobs inside the one-hour-before-pickup monitor window.",
+  "Dispatch `Today's Jobs` only lists jobs inside the one-hour-before-pickup monitor window.",
   "Dashboard Upcoming booking rows show assigned driver name/contact/plate/vehicle details when available.",
   "`Today's Jobs` driver report auto-refresh has an explicit 10-second on/off switch, defaults on, and manual Refresh remains available.",
   "Customers payment review rows are compact by default; the mock payment controls and long notes stay collapsed until `View details` is opened.",

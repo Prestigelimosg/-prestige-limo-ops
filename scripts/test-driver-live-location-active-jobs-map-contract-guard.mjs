@@ -182,8 +182,8 @@ const adminActiveJobsRuntimeSection = sectionBetween(
 );
 
 for (const phrase of [
-  "Admin Dispatch has one compact Dashboard Live Dispatch Map runtime control for the active jobs list; the old selected-job live map control is not rendered inside the Day-of-Trip Dispatch Monitor.",
-  "The Dashboard Live Dispatch Map opens live movement for the active job references in one operator click through `/api/admin-live-location-runtime` instead of requiring a selected booking to be added manually.",
+  "Admin Dispatch has one compact Dispatch Live Dispatch Map runtime control for the active jobs list; the old selected-job live map control is not rendered inside the Day-of-Trip Dispatch Monitor.",
+  "The Dispatch Live Dispatch Map opens live movement for the active job references in one operator click through `/api/admin-live-location-runtime` instead of requiring a selected booking to be added manually.",
   "Runtime control keeps existing `driver_live_location_allowed_job_references`, removes duplicates, and caps the selected booking list at 50 references.",
   "Admin marker refresh uses the existing guarded `GET /api/admin-active-jobs-map-locations` route and returns both selected booking references and current driver markers.",
   "The admin UI renders compact active marker rows, per-driver `Open Map` fallback links, and an optional browser map canvas that remains off unless the separate browser-safe map config route is enabled.",
@@ -200,10 +200,10 @@ for (const phrase of [
 }
 
 const activeJobsRuntimeStart = adminPage.indexOf(
-  'data-dashboard-live-driver-map="true"',
+  'data-dispatch-live-driver-map="true"',
 );
 assert.notEqual(activeJobsRuntimeStart, -1, "Missing admin active-jobs map runtime.");
-const activeJobsRuntimeBoundary = 'data-dashboard-live-driver-map-boundary="true"';
+const activeJobsRuntimeBoundary = 'data-dispatch-live-driver-map-boundary="true"';
 const activeJobsRuntimeEnd = adminPage.indexOf(
   activeJobsRuntimeBoundary,
   activeJobsRuntimeStart,
@@ -215,16 +215,16 @@ const activeJobsRuntimeSource = adminPage.slice(
 );
 
 for (const fragment of [
-  'data-dashboard-live-driver-map="true"',
-  'data-dashboard-live-driver-map-state={adminActiveJobsMapReadState.runtimeStatus}',
-  'data-dashboard-live-driver-map-marker-count={adminActiveJobsMapReadState.markerCount}',
-  'data-dashboard-live-driver-map-slot-count={liveDispatchPreparedSlotCount}',
-  'data-dashboard-live-driver-map-open="true"',
-  'data-dashboard-live-driver-map-refresh="true"',
-  'data-dashboard-live-driver-map-close="true"',
-  'data-dashboard-live-driver-map-config-message="true"',
-  'data-dashboard-live-driver-map-marker-list="true"',
-  'data-dashboard-live-driver-map-boundary="true"',
+  'data-dispatch-live-driver-map="true"',
+  'data-dispatch-live-driver-map-state={adminActiveJobsMapReadState.runtimeStatus}',
+  'data-dispatch-live-driver-map-marker-count={adminActiveJobsMapReadState.markerCount}',
+  'data-dispatch-live-driver-map-slot-count={liveDispatchPreparedSlotCount}',
+  'data-dispatch-live-driver-map-open="true"',
+  'data-dispatch-live-driver-map-refresh="true"',
+  'data-dispatch-live-driver-map-close="true"',
+  'data-dispatch-live-driver-map-config-message="true"',
+  'data-dispatch-live-driver-map-marker-list="true"',
+  'data-dispatch-live-driver-map-boundary="true"',
   "Live Dispatch Map",
   "One click opens live movement for the active jobs above",
   "Open Live Dispatch Map",
@@ -261,8 +261,8 @@ assertExcludes(
 );
 assertIncludes(
   dayOfTripMonitorSource,
-  "the Dashboard Live Dispatch Map for active jobs only.",
-  "Day-of-Trip monitor boundary should point operators to the single Dashboard Live Dispatch Map",
+  "the Dispatch Live Dispatch Map for active jobs only.",
+  "Day-of-Trip monitor boundary should point operators to the single Dispatch Live Dispatch Map",
 );
 
 for (const forbiddenPattern of [

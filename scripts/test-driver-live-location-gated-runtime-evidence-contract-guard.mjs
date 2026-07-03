@@ -148,25 +148,25 @@ for (const fragment of [
 }
 
 const adminRuntimeStart = adminPage.indexOf(
-  'data-dashboard-live-driver-map="true"',
+  'data-dispatch-live-driver-map="true"',
 );
 assert.notEqual(adminRuntimeStart, -1, "Admin active-jobs runtime must exist.");
 const adminRuntimeEnd = adminPage.indexOf(
-  'data-dashboard-live-driver-map-boundary="true"',
+  'data-dispatch-live-driver-map-boundary="true"',
   adminRuntimeStart,
 );
 assert.notEqual(adminRuntimeEnd, -1, "Admin active-jobs runtime must end before boundary.");
 const adminActiveJobsUi = adminPage.slice(adminRuntimeStart, adminRuntimeEnd);
 
 for (const fragment of [
-  'data-dashboard-live-driver-map="true"',
-  'data-dashboard-live-driver-map-state={adminActiveJobsMapReadState.runtimeStatus}',
-  'data-dashboard-live-driver-map-marker-count={adminActiveJobsMapReadState.markerCount}',
-  'data-dashboard-live-driver-map-slot-count={liveDispatchPreparedSlotCount}',
-  'data-dashboard-live-driver-map-open="true"',
-  'data-dashboard-live-driver-map-refresh="true"',
-  'data-dashboard-live-driver-map-close="true"',
-  'data-dashboard-live-driver-map-marker-list="true"',
+  'data-dispatch-live-driver-map="true"',
+  'data-dispatch-live-driver-map-state={adminActiveJobsMapReadState.runtimeStatus}',
+  'data-dispatch-live-driver-map-marker-count={adminActiveJobsMapReadState.markerCount}',
+  'data-dispatch-live-driver-map-slot-count={liveDispatchPreparedSlotCount}',
+  'data-dispatch-live-driver-map-open="true"',
+  'data-dispatch-live-driver-map-refresh="true"',
+  'data-dispatch-live-driver-map-close="true"',
+  'data-dispatch-live-driver-map-marker-list="true"',
   "Live Dispatch Map",
   "Open Live Dispatch Map",
   "Refresh movement",

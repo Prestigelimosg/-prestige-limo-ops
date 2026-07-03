@@ -142,9 +142,13 @@ assertSourceOrder(
     'aria-label="Urgent Booking Requests"',
     'aria-label="Admin App Notifications"',
     'aria-label="Operations Calendar"',
-    "{activeJobsMonitorPanel}",
   ],
-  "dashboard live-ops order",
+  "dashboard command centre order",
+);
+assertExcludes(
+  dashboardCommandCentrePanel,
+  "{activeJobsMonitorPanel}",
+  "Dashboard must not render the Dispatch Today's Jobs monitor",
 );
 assertIncludes(
   dashboardCommandCentrePanel,
@@ -208,7 +212,7 @@ for (const fragment of [
   "const liveDispatchStandbySlotCount = Math.max(",
   "const liveDispatchSlotSummaryLabel =",
   "const activeJobsMapAllowedReferenceKey = adminActiveJobsMapReadState.allowedBookingReferences.join(\"|\");",
-  'const todayJobsMonitorIsActive = activeTab === "dashboard" || activeTab === "dispatch";',
+  'const todayJobsMonitorIsActive = activeTab === "dispatch";',
 ]) {
   assertIncludes(activeMonitorSource, fragment, `active monitor source fragment ${fragment}`);
 }
@@ -221,11 +225,11 @@ for (const fragment of [
   "Auto-refresh 10s {dashboardDriverJobAutoRefreshEnabled ? \"On\" : \"Off\"}",
   "const activeJobPickupTime = formatPickupTimeFromRecord(activeJobBooking);",
   "(isSelectedActiveJob ? clean(booking.driverName) : \"\")",
-  'data-dashboard-live-driver-map="true"',
+  'data-dispatch-live-driver-map="true"',
   "Open Live Dispatch Map",
   "Refresh movement",
   "Close live map",
-  'data-dashboard-live-driver-map-slot-count={liveDispatchPreparedSlotCount}',
+  'data-dispatch-live-driver-map-slot-count={liveDispatchPreparedSlotCount}',
   "liveDispatchSlotSummaryLabel",
   "Pickup risk {adminPickupRiskMonitorEnabled ? \"On\" : \"Off\"}",
   'data-admin-pickup-risk-monitor-toggle="true"',
@@ -272,7 +276,7 @@ for (const forbiddenPattern of [
 for (const phrase of [
   "Dashboard request panel is now `Urgent Booking Requests` and only displays open customer requests with pickup under 24 hours.",
   "The Bookings page request panel remains the full queue as `Urgent & New Booking Requests`, with row badges separating urgent under-24h requests from new non-urgent requests.",
-  "Day-of-trip jobs are now shown as `Today's Jobs`; the shared sector shows all loaded active jobs inside the 1-hour-before-pickup monitor window on Dashboard and Dispatch.",
+  "Day-of-trip jobs are shown as `Today's Jobs` only on Dispatch; Dashboard stays focused on urgent requests, admin notifications, calendar, and booking summaries.",
   "`Today's Jobs` driver report auto-refresh is on by default, still uses the guarded admin driver-status read path, and can be switched off by the operator.",
   "The `Today's Jobs` live map control opens the existing admin-only live-location runtime for the jobs in the monitor window and refreshes shared markers every 10 seconds while the sector is open.",
   "The same live map control keeps a two-slot readiness signal; when fewer than two active job references are in the 1-hour window, standby slots remain ready for upcoming jobs as they enter that window.",

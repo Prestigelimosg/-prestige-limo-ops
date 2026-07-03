@@ -71,7 +71,7 @@ const ledgerSection = sectionBetween(
 );
 
 for (const phrase of [
-  "Admin Dispatch can render an optional same-window Google Maps JavaScript canvas inside the existing compact Dashboard Live Dispatch Map panel.",
+  "Admin Dispatch can render an optional same-window Google Maps JavaScript canvas inside the existing compact Dispatch Live Dispatch Map panel.",
   "The canvas is default-closed: it only loads after active driver markers exist and `/api/admin-active-jobs-map-browser-config` returns a configured browser-safe provider/key response.",
   "The browser config route uses the existing admin dispatcher boundary, same-origin dashboard purpose header, a separate `PRESTIGE_ADMIN_ACTIVE_JOBS_MAP_BROWSER_PROVIDER=google_maps_javascript` gate, `PRESTIGE_GOOGLE_MAPS_BROWSER_API_KEY`, explicit `PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS`, and optional `PRESTIGE_GOOGLE_MAPS_BROWSER_MAP_ID`.",
   "The existing server-side `PRESTIGE_GOOGLE_MAPS_API_KEY` remains server-only for admin location search/route estimates and is not read or returned by the browser-map config route.",
@@ -118,7 +118,7 @@ for (const fragment of [
   "document.body.appendChild(mapElement);",
   "Google Maps visual DOM did not render safely.",
   "data-admin-active-jobs-map-canvas",
-  "data-dashboard-live-driver-map-config-message",
+  "data-dispatch-live-driver-map-config-message",
   "AdminActiveJobsBrowserMap",
   "renderAdminActiveJobsBrowserMapTileFallback",
   "waitForAdminActiveJobsBrowserMapTileFallback",

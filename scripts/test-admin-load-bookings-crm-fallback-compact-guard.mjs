@@ -59,13 +59,13 @@ for (const phrase of [
   "Loading a customer request into Dispatch now records a bounded browser-local handled-request key so that request leaves the Dashboard urgent queue plus the Bookings `Urgent & New Booking Requests` queue and badge on that admin browser while remaining available in Recent/Active booking lists.",
   "Loading a saved booking into Dispatch refreshes the typed operational display once immediately and pauses one background sync tick, keeping the existing guarded read set stable while Customer Copy focuses for review.",
   "The Dashboard now uses compact read-only booking summaries plus `Open` handoff buttons; single-booking driver assignment, status, copy, job-card, and completion work stays in Dispatch/Bookings so page purposes do not duplicate.",
-  "The shared `Today's Jobs` sector is shown on the Dashboard command centre and below the Dispatch `Assigned Driver` sector for multi-driver scanning.",
+  "`Today's Jobs` is shown below the Dispatch `Assigned Driver` sector for multi-driver scanning and is not rendered on Dashboard.",
   "`Today's Jobs` shows all loaded active jobs inside the 1-hour pickup monitor window without a separate expand/collapse toggle.",
   "`Today's Jobs` shows a compact saved driver report readout per visible job, using the existing guarded admin `GET /api/admin-driver-job-statuses` path only, with monitor-wide/per-card refresh controls and auto-refresh on by default.",
   "`Today's Jobs` includes compact live-map controls that reuse the existing admin-only live-location runtime for the jobs inside the monitor window.",
   "The lower Dispatch saved-record finder is now a compact `Saved Booking Records` disclosure by default. The existing admin-only persistence controls and loaded-record scrollbox are still available after expanding, but they no longer fill the normal Dispatch view.",
   "Dispatch internal readiness, handoff, recovery, exception, closeout-review, and billing-prep panels now live under one compact `Advanced Checks` disclosure. The existing guarded controls remain colocated and unchanged after expanding, but the default operator view stays focused on daily trip work.",
-  "The Dashboard driver report readout is read-only and does not create driver status events, notification rows, provider sends, GPS/live-location records, billing/payment/PDF/invoice/payout records, or a duplicate single-booking Dispatch workflow.",
+  "The `Today's Jobs` driver report readout is read-only and does not create driver status events, notification rows, provider sends, GPS/live-location records, billing/payment/PDF/invoice/payout records, or a duplicate single-booking Dispatch workflow.",
   "The Bookings tab shows a compact new-request badge/highlight after open customer requests are detected; no sound, browser notification, polling loop, provider send, or new route is added.",
 ]) {
   assertIncludes(ledgerSection, phrase, `Load Bookings fallback ledger phrase ${phrase}`);
@@ -260,7 +260,6 @@ for (const dashboardCommandCentreFragment of [
   'data-dashboard-earlier-history-handoff="true"',
   'data-dashboard-open-completed-history="true"',
   'onClick={() => selectAppTab("completed")}',
-  "{activeJobsMonitorPanel}",
 ]) {
   assertIncludes(
     dashboardBlock,
@@ -268,6 +267,11 @@ for (const dashboardCommandCentreFragment of [
     `Dashboard command-centre fragment ${dashboardCommandCentreFragment}`,
   );
 }
+assertExcludes(
+  dashboardBlock,
+  "{activeJobsMonitorPanel}",
+  "Dashboard must not render Today's Jobs monitor",
+);
 
 for (const duplicateDashboardWorkflowFragment of [
   "renderBookingCards(",
@@ -373,13 +377,15 @@ assertIncludes(
 assertIncludes(
   appPage,
   "aria-label=\"Today's Jobs\"",
-  "Shared active jobs monitor renamed to Today's Jobs",
+  "Dispatch active jobs monitor named Today's Jobs",
 );
-assertIncludes(appPage, 'data-dashboard-live-driver-map="true"', "Dashboard live map panel");
-assertIncludes(appPage, "openAdminLiveLocationRuntimeForActiveJobs", "Dashboard opens active jobs in live map");
-assertIncludes(appPage, 'data-dashboard-live-driver-map-open="true"', "Dashboard live map open action");
-assertIncludes(appPage, 'data-dashboard-live-driver-map-refresh="true"', "Dashboard live map refresh action");
-assertIncludes(appPage, 'data-dashboard-live-driver-map-close="true"', "Dashboard live map close action");
+assertIncludes(appPage, 'data-dispatch-live-driver-map="true"', "Dispatch live map panel");
+assertIncludes(appPage, "openAdminLiveLocationRuntimeForActiveJobs", "Dispatch opens active jobs in live map");
+assertIncludes(appPage, 'data-dispatch-live-driver-map-open="true"', "Dispatch live map open action");
+assertIncludes(appPage, 'data-dispatch-live-driver-map-refresh="true"', "Dispatch live map refresh action");
+assertIncludes(appPage, 'data-dispatch-live-driver-map-close="true"', "Dispatch live map close action");
+assertExcludes(appPage, 'data-dashboard-live-driver-map="true"', "Dashboard live map panel removed");
+assertExcludes(appPage, 'data-dashboard-day-of-trip-operations-monitor="true"', "Dashboard active jobs monitor removed");
 assertExcludes(appPage, 'data-admin-multi-driver-active-jobs-toggle="true"', "Active jobs monitor expand toggle");
 assertExcludes(appPage, '"Show other active jobs"', "Active jobs monitor expand label");
 assertExcludes(appPage, '"Show one job"', "Active jobs monitor collapse label");
@@ -387,22 +393,22 @@ assertIncludes(appPage, "dashboardDriverJobStatusReadStates", "Dashboard driver 
 assertIncludes(
   appPage,
   "dashboardDriverJobStatusAutoRequestedRef",
-  "Dashboard driver report auto-read guard",
+  "Dispatch driver report auto-read guard",
 );
 assertIncludes(
   appPage,
   "refreshDashboardDriverJobStatusRead",
-  "Dashboard driver report refresh helper",
+  "Dispatch driver report refresh helper",
 );
 assertIncludes(
   appPage,
   "loadAdminDriverJobStatusRead(bookingReference)",
-  "Dashboard driver report uses existing guarded status read path",
+  "Dispatch driver report uses existing guarded status read path",
 );
 assertIncludes(
   appPage,
   'data-admin-multi-driver-active-jobs-refresh-statuses="true"',
-  "Dashboard monitor-wide driver report refresh button",
+  "Dispatch monitor-wide driver report refresh button",
 );
 assertIncludes(
   appPage,
@@ -412,22 +418,22 @@ assertIncludes(
 assertIncludes(
   appPage,
   "window.setInterval(() => {\n      for (const bookingReference of bookingReferences) {\n        void refreshDashboardDriverJobStatusRead(bookingReference);\n      }\n    }, 10 * 1000);",
-  "Dashboard driver report read-only auto-refresh interval",
+  "Dispatch driver report read-only auto-refresh interval",
 );
 assertIncludes(
   appPage,
   'data-admin-multi-driver-active-job-driver-report="true"',
-  "Dashboard active job driver report readout",
+  "Dispatch active job driver report readout",
 );
 assertIncludes(
   appPage,
   'data-admin-multi-driver-active-job-driver-report-refresh="true"',
-  "Dashboard active job driver report refresh button",
+  "Dispatch active job driver report refresh button",
 );
 assertIncludes(
   appPage,
   'data-admin-multi-driver-active-job-driver-report-time="true"',
-  "Dashboard active job driver report time",
+  "Dispatch active job driver report time",
 );
 assertIncludes(
   appPage,
@@ -445,7 +451,7 @@ const bookingsBadgeScope =
   sliceBetween(
     appPage,
     'data-dashboard-new-booking-requests-panel="true"',
-    '<div className="mb-4">{activeJobsMonitorPanel}</div>',
+    '<div className="grid gap-3 border-y border-stone-200 py-4 text-center sm:grid-cols-3">',
   );
 assertExcludes(bookingsBadgeScope, "new Audio(", "Bookings badge sound");
 assertExcludes(

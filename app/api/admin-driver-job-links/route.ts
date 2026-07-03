@@ -14,6 +14,8 @@ import {
 
 export const dynamic = "force-dynamic";
 
+const publicDriverJobLinkOrigin = "https://app.prestigelimo.sg";
+
 async function readJsonBody(request: Request) {
   try {
     return await request.json();
@@ -68,10 +70,8 @@ function safeFailureResponse() {
   );
 }
 
-function driverJobUrlFromToken(request: Request, token: string) {
-  const url = new URL(request.url);
-
-  return `${url.origin}/driver-job/${encodeURIComponent(token)}`;
+function driverJobUrlFromToken(token: string) {
+  return `${publicDriverJobLinkOrigin}/driver-job/${encodeURIComponent(token)}`;
 }
 
 export async function GET(request: Request) {
@@ -140,7 +140,7 @@ export async function POST(request: Request) {
     }
 
     return Response.json({
-      driver_job_url: driverJobUrlFromToken(request, result.data.driver_job_token),
+      driver_job_url: driverJobUrlFromToken(result.data.driver_job_token),
       link: result.data.link,
       ok: true,
       token_display_once: true,

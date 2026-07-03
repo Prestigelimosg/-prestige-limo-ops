@@ -510,7 +510,7 @@ try {
   assert.equal(created.status, 200);
   assert.equal(created.body.ok, true);
   assert.equal(created.body.token_display_once, true);
-  assert.match(created.body.driver_job_url, /^http:\/\/localhost\/driver-job\/[A-Za-z0-9_-]+$/);
+  assert.match(created.body.driver_job_url, /^https:\/\/app\.prestigelimo\.sg\/driver-job\/[A-Za-z0-9_-]+$/);
   assert.equal(created.body.link.booking_reference, "JOB-LINK-CONTRACT-001");
   assert.equal(created.body.link.link_status, "active");
   assert.equal(created.body.link.safe_summary.assigned_driver, "Contract Driver");
@@ -596,7 +596,10 @@ try {
   assert.equal(dashboardBrowserCreate.status, 200);
   assert.equal(dashboardBrowserCreate.body.ok, true);
   assert.equal(dashboardBrowserCreate.body.token_display_once, true);
-  assert.match(dashboardBrowserCreate.body.driver_job_url, /^http:\/\/localhost\/driver-job\/[A-Za-z0-9_-]+$/);
+  assert.match(
+    dashboardBrowserCreate.body.driver_job_url,
+    /^https:\/\/app\.prestigelimo\.sg\/driver-job\/[A-Za-z0-9_-]+$/,
+  );
   assert.equal(dashboardBrowserCreate.body.link.booking_reference, "JOB-LINK-CONTRACT-BROWSER-DASHBOARD");
   assert.equal(dashboardBrowserCreate.body.link.actor_role, "admin");
   assert.equal(dashboardBrowserCreate.body.link.safe_summary.assigned_driver, null);
@@ -767,5 +770,11 @@ assert.doesNotMatch(routeSource + helperSource, /\bsupabase\s+db\b|\bsupabase\s+
 assert.doesNotMatch(routeSource + helperSource, /\btelegram\.(?:send|post|request)|\bwhatsapp\.(?:send|post|request)|sendSms|sendEmail|mailgun|twilio|nodemailer/i);
 assert.doesNotMatch(routeSource + helperSource, /createInvoice|paymentIntent|stripe\.|payoutTransfer|paynowTransfer|generatePdf|pdfkit/i);
 assert.doesNotMatch(routeSource + helperSource, /\bdelete\(\)|\.delete\(/i, "admin driver job link API must not delete links");
+assert.match(routeSource, /const publicDriverJobLinkOrigin = "https:\/\/app\.prestigelimo\.sg"/);
+assert.doesNotMatch(
+  routeSource,
+  /driverJobUrlFromToken\(\s*request/,
+  "created driver job links must not use the admin request origin because preview/staging origins can send drivers to Vercel login",
+);
 
 console.log("Admin driver job link API contract tests passed.");

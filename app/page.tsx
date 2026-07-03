@@ -19686,6 +19686,8 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   async function createDriverJobLink() {
     const payloadResult = buildAdminDriverJobLinkCreatePayload();
 
+    setDriverJobLinkCopyMessage(null);
+
     if (!payloadResult.ok) {
       setAdminDriverJobLinkState((current) => ({
         ...current,
@@ -19693,11 +19695,11 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           tone: "error",
           text: payloadResult.error,
         },
+        oneTimeUrl: "",
       }));
       return;
     }
 
-    setDriverJobLinkCopyMessage(null);
     setAdminDriverJobLinkState((current) => ({
       ...current,
       action: "create",
@@ -26853,6 +26855,21 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     : driverJobLinkRevoked
       ? "Revoked"
       : "Revoke";
+  const driverJobLinkLiveLocationReference = cleanReferenceText(dispatchReleaseWorkflowBookingReference);
+  const driverJobLinkLiveLocationEnabled =
+    Boolean(driverJobLinkLiveLocationReference) &&
+    adminActiveJobsMapReadState.allowedBookingReferences.includes(driverJobLinkLiveLocationReference);
+  const driverJobLinkLiveLocationButtonLabel =
+    adminActiveJobsMapReadState.action === "opening"
+      ? "Enabling..."
+      : driverJobLinkLiveLocationEnabled
+        ? "Live Enabled"
+        : "Enable Live Location";
+  const driverJobLinkLiveLocationMessage =
+    driverJobLinkLiveLocationReference &&
+    cleanReferenceText(adminActiveJobsMapReadState.loadedReference) === driverJobLinkLiveLocationReference
+      ? adminActiveJobsMapReadState.message
+      : null;
   const companyProfileLogoPreviewUrl =
     /^\/[a-z0-9][a-z0-9/_-]*\.(?:png|jpe?g|webp)$/i.test(companyProfileDraft.logo_image_url) ||
     /^https:\/\/[^\s"')]+$/i.test(companyProfileDraft.logo_image_url) ||
@@ -39002,6 +39019,27 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                       >
                         {driverJobLinkRevokeButtonLabel}
                       </button>
+                      <button
+                        className={`min-h-9 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 ${
+                          actionFeedbackButtonClass(
+                            driverJobLinkLiveLocationEnabled ? "success" : null,
+                            "border-lime-300 text-lime-950 hover:bg-lime-50",
+                          )
+                        }`}
+                        data-enable-driver-job-live-location-button="true"
+                        data-enable-driver-job-live-location-state={
+                          driverJobLinkLiveLocationEnabled ? "enabled" : "idle"
+                        }
+                        disabled={
+                          !driverJobLinkLiveLocationReference ||
+                          !activeAdminDriverJobLink ||
+                          adminActiveJobsMapReadState.action !== "idle"
+                        }
+                        onClick={openAdminLiveLocationRuntimeForLoadedBooking}
+                        type="button"
+                      >
+                        {driverJobLinkLiveLocationButtonLabel}
+                      </button>
                     </div>
                     {driverJobLinkCopyMessage?.tone === "error" ? (
                       <div
@@ -39021,6 +39059,16 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                         data-driver-job-link-api-feedback="true"
                       >
                         {adminDriverJobLinkState.message.text}
+                      </div>
+                    ) : null}
+                    {driverJobLinkLiveLocationMessage ? (
+                      <div
+                        className={`rounded-md border px-2 py-1 text-xs font-medium ${statusClass(
+                          driverJobLinkLiveLocationMessage.tone,
+                        )}`}
+                        data-driver-job-live-location-feedback="true"
+                      >
+                        {driverJobLinkLiveLocationMessage.text}
                       </div>
                     ) : null}
                   </div>

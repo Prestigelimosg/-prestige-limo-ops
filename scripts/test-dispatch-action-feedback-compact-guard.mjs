@@ -71,7 +71,7 @@ const updateAppliedSnapshotBlock = sectionBetween(
 );
 const driverJobLinkLoadBlock = sectionBetween(
   appPage,
-  "async function refreshAdminDriverJobLinkForReference",
+  "const refreshAdminDriverJobLinkForReference = useCallback",
   "useEffect(() => {",
 );
 const ledgerSection = sectionBetween(ledger, "### Dispatch Action Feedback And Compact Review", "\n### ");

@@ -63,6 +63,7 @@ const runtimeReadinessSection = sectionBetween(
 
 for (const phrase of [
   "Admin Dispatch has a compact Selected Job Live Map runtime control inside the existing Day-of-Trip Dispatch Monitor.",
+  "The visible Driver Job Link panel also exposes `Enable Live Location` for the loaded booking, so dispatch can open live tracking for a future/single selected job without relying on the hidden Day-of-Trip monitor or the active-jobs dashboard list.",
   "The control adds selected saved bookings one by one through `/api/admin-live-location-runtime` instead of replacing the previous selected booking.",
   "Runtime control keeps existing `driver_live_location_allowed_job_references`, removes duplicates, and caps the selected booking list at 50 references.",
   "Driver `Share Location` first calls `GET /api/driver-job/[token]/live-location` for server readiness; Chrome GPS is requested only after that readiness check passes.",
@@ -94,6 +95,14 @@ for (const fragment of [
   "adminActiveJobsMapPollIntervalMs",
   "Use Dashboard for all active jobs. Add this loaded booking only when you need selected-job live detail.",
   "Add this job",
+  "Enable Live Location",
+  "Live Enabled",
+  'data-enable-driver-job-live-location-button="true"',
+  'data-enable-driver-job-live-location-state=',
+  'data-driver-job-live-location-feedback="true"',
+  "driverJobLinkLiveLocationReference",
+  "driverJobLinkLiveLocationEnabled",
+  "driverJobLinkLiveLocationMessage",
   "Selected:",
   "Close all",
   "openAdminLiveLocationRuntimeForLoadedBooking",

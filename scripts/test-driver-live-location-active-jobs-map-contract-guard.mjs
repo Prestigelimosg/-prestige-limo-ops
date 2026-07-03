@@ -189,6 +189,7 @@ for (const phrase of [
   "The admin UI renders compact active marker rows, per-driver `Open Map` fallback links, and an optional browser map canvas that remains off unless the separate browser-safe map config route is enabled.",
   "Same-driver duplicate live markers are collapsed by driver identity; current/newest movement wins and any older duplicate rows are reported as hidden.",
   "The admin browser map updates Google marker positions from driver GPS instead of drawing a separate CSS arrow/trail overlay, so visible marker placement stays aligned to the map.",
+  "The Dispatch browser map is operator-movable: Google Maps uses direct drag/zoom gestures, and the browser tile fallback is also draggable, wheel/button zoomable, and can recenter on active drivers.",
   "Admin live-marker polling runs every 5 seconds while the active live map is open; this is display refresh only and does not add a new driver/customer tracking surface.",
   "Customer live-location API remains same-origin/session/booking-boundary gated and no customer message is sent by this lane.",
 ]) {
@@ -218,7 +219,7 @@ const activeJobsRuntimeSource = adminPage.slice(
 for (const fragment of [
   'data-dispatch-live-driver-map="true"',
   'data-dispatch-live-driver-map-state={adminActiveJobsMapReadState.runtimeStatus}',
-  'data-dispatch-live-driver-map-marker-count={adminActiveJobsMapReadState.markerCount}',
+  'data-dispatch-live-driver-map-marker-count={activeJobsMapMarkerCount}',
   'data-dispatch-live-driver-map-slot-count={liveDispatchPreparedSlotCount}',
   'data-dispatch-live-driver-map-open="true"',
   'data-dispatch-live-driver-map-refresh="true"',
@@ -242,6 +243,11 @@ for (const fragment of [
   'data-admin-active-jobs-map-live-movement="true"',
   'data-admin-active-jobs-map-live-movement-status="true"',
   "Google marker positions update from driver GPS every few seconds",
+  "gestureHandling: \"greedy\"",
+  "googleMapUserAdjustedRef",
+  "installAdminActiveJobsBrowserMapTileFallbackInteraction",
+  "data-admin-active-jobs-map-tile-fallback-interactive",
+  "Center drivers",
   "collapseAdminActiveJobsMapDriverDuplicates",
   "older duplicate",
   "adminActiveJobsMapPollIntervalMs",

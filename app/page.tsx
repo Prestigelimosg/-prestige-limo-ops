@@ -3268,6 +3268,64 @@ function adminActiveJobsBrowserMapTileYFloat(latitude: number, zoom: number) {
   );
 }
 
+function adminActiveJobsBrowserMapLongitudeFromTileX(tileX: number, zoom: number) {
+  return (tileX / 2 ** zoom) * 360 - 180;
+}
+
+function adminActiveJobsBrowserMapLatitudeFromTileY(tileY: number, zoom: number) {
+  const latitudeRadians = Math.atan(Math.sinh(Math.PI * (1 - (2 * tileY) / 2 ** zoom)));
+
+  return (latitudeRadians * 180) / Math.PI;
+}
+
+const adminActiveJobsBrowserMapTileFallbackMinZoom = 10;
+const adminActiveJobsBrowserMapTileFallbackMaxZoom = 18;
+const adminActiveJobsBrowserMapTileFallbackLatitudeLimit = 85.05112878;
+
+type AdminActiveJobsBrowserMapTileFallbackDragState = {
+  centerTileX: number;
+  centerTileY: number;
+  clientX: number;
+  clientY: number;
+  pointerId: number;
+};
+
+type AdminActiveJobsBrowserMapTileFallbackState = {
+  center: BrowserGoogleLatLngLiteral;
+  cleanup?: () => void;
+  drag: AdminActiveJobsBrowserMapTileFallbackDragState | null;
+  markerEntries: AdminActiveJobsBrowserMapMarkerEntry[];
+  markerKey: string;
+  userAdjusted: boolean;
+  zoom: number;
+};
+
+type AdminActiveJobsBrowserMapTileFallbackElement = HTMLElement & {
+  __prestigeAdminActiveJobsTileFallbackState?: AdminActiveJobsBrowserMapTileFallbackState;
+};
+
+function clampAdminActiveJobsBrowserMapTileFallbackZoom(zoom: number) {
+  return Math.min(
+    adminActiveJobsBrowserMapTileFallbackMaxZoom,
+    Math.max(adminActiveJobsBrowserMapTileFallbackMinZoom, Math.round(zoom)),
+  );
+}
+
+function clampAdminActiveJobsBrowserMapTileFallbackLatitude(latitude: number) {
+  return Math.min(
+    adminActiveJobsBrowserMapTileFallbackLatitudeLimit,
+    Math.max(-adminActiveJobsBrowserMapTileFallbackLatitudeLimit, latitude),
+  );
+}
+
+function normalizeAdminActiveJobsBrowserMapTileFallbackLongitude(longitude: number) {
+  if (!Number.isFinite(longitude)) {
+    return 0;
+  }
+
+  return ((((longitude + 180) % 360) + 360) % 360) - 180;
+}
+
 function adminActiveJobsBrowserMapTileFallbackZoom(
   markerEntries: AdminActiveJobsBrowserMapMarkerEntry[],
 ) {
@@ -3308,6 +3366,273 @@ function adminActiveJobsBrowserMapTileFallbackCenter(
   };
 }
 
+function adminActiveJobsBrowserMapTileFallbackMarkerKey(
+  markerEntries: AdminActiveJobsBrowserMapMarkerEntry[],
+) {
+  return markerEntries
+    .map((entry) => adminActiveJobsBrowserMapReference(entry))
+    .sort()
+    .join("|");
+}
+
+function setAdminActiveJobsBrowserMapTileFallbackCenterFromTile(
+  state: AdminActiveJobsBrowserMapTileFallbackState,
+  centerTileX: number,
+  centerTileY: number,
+) {
+  state.center = {
+    lat: clampAdminActiveJobsBrowserMapTileFallbackLatitude(
+      adminActiveJobsBrowserMapLatitudeFromTileY(centerTileY, state.zoom),
+    ),
+    lng: normalizeAdminActiveJobsBrowserMapTileFallbackLongitude(
+      adminActiveJobsBrowserMapLongitudeFromTileX(centerTileX, state.zoom),
+    ),
+  };
+}
+
+function readAdminActiveJobsBrowserMapTileFallbackState(
+  mapElement: AdminActiveJobsBrowserMapTileFallbackElement,
+  markerEntries: AdminActiveJobsBrowserMapMarkerEntry[],
+) {
+  const markerKey = adminActiveJobsBrowserMapTileFallbackMarkerKey(markerEntries);
+  const center = adminActiveJobsBrowserMapTileFallbackCenter(markerEntries);
+  const zoom = clampAdminActiveJobsBrowserMapTileFallbackZoom(
+    adminActiveJobsBrowserMapTileFallbackZoom(markerEntries),
+  );
+  let state = mapElement.__prestigeAdminActiveJobsTileFallbackState;
+
+  if (!state) {
+    state = {
+      center,
+      drag: null,
+      markerEntries,
+      markerKey,
+      userAdjusted: false,
+      zoom,
+    };
+    mapElement.__prestigeAdminActiveJobsTileFallbackState = state;
+    return state;
+  }
+
+  if (state.markerKey !== markerKey) {
+    state.center = center;
+    state.drag = null;
+    state.markerEntries = markerEntries;
+    state.markerKey = markerKey;
+    state.userAdjusted = false;
+    state.zoom = zoom;
+    return state;
+  }
+
+  state.markerEntries = markerEntries;
+
+  if (!state.userAdjusted) {
+    state.center = center;
+    state.zoom = zoom;
+  }
+
+  return state;
+}
+
+function cleanupAdminActiveJobsBrowserMapTileFallback(
+  mapElement: HTMLElement | null,
+) {
+  const fallbackElement = mapElement as AdminActiveJobsBrowserMapTileFallbackElement | null;
+
+  if (!fallbackElement) {
+    return;
+  }
+
+  fallbackElement.__prestigeAdminActiveJobsTileFallbackState?.cleanup?.();
+  delete fallbackElement.__prestigeAdminActiveJobsTileFallbackState;
+}
+
+function installAdminActiveJobsBrowserMapTileFallbackInteraction(
+  mapElement: AdminActiveJobsBrowserMapTileFallbackElement,
+  markerEntries: AdminActiveJobsBrowserMapMarkerEntry[],
+) {
+  const state = mapElement.__prestigeAdminActiveJobsTileFallbackState;
+
+  if (!state || state.cleanup) {
+    return;
+  }
+
+  const rerender = () =>
+    renderAdminActiveJobsBrowserMapTileFallback(
+      mapElement,
+      mapElement.__prestigeAdminActiveJobsTileFallbackState?.markerEntries || markerEntries,
+    );
+  const ignoreControlTarget = (target: EventTarget | null) =>
+    target instanceof HTMLElement &&
+    Boolean(target.closest("[data-admin-active-jobs-map-tile-control='true']"));
+  const onPointerDown = (event: PointerEvent) => {
+    if (event.button !== 0 || ignoreControlTarget(event.target)) {
+      return;
+    }
+
+    const latestState = mapElement.__prestigeAdminActiveJobsTileFallbackState;
+
+    if (!latestState) {
+      return;
+    }
+
+    latestState.drag = {
+      centerTileX: adminActiveJobsBrowserMapTileXFloat(latestState.center.lng, latestState.zoom),
+      centerTileY: adminActiveJobsBrowserMapTileYFloat(latestState.center.lat, latestState.zoom),
+      clientX: event.clientX,
+      clientY: event.clientY,
+      pointerId: event.pointerId,
+    };
+    latestState.userAdjusted = true;
+    mapElement.setPointerCapture?.(event.pointerId);
+    mapElement.style.cursor = "grabbing";
+  };
+  const onPointerMove = (event: PointerEvent) => {
+    const latestState = mapElement.__prestigeAdminActiveJobsTileFallbackState;
+    const drag = latestState?.drag;
+
+    if (!latestState || !drag || drag.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const tileSize = 256;
+    setAdminActiveJobsBrowserMapTileFallbackCenterFromTile(
+      latestState,
+      drag.centerTileX - (event.clientX - drag.clientX) / tileSize,
+      drag.centerTileY - (event.clientY - drag.clientY) / tileSize,
+    );
+    rerender();
+  };
+  const endPointerDrag = (event: PointerEvent) => {
+    const latestState = mapElement.__prestigeAdminActiveJobsTileFallbackState;
+
+    if (!latestState?.drag || latestState.drag.pointerId !== event.pointerId) {
+      return;
+    }
+
+    latestState.drag = null;
+    mapElement.releasePointerCapture?.(event.pointerId);
+    mapElement.style.cursor = "grab";
+  };
+  const onWheel = (event: WheelEvent) => {
+    const latestState = mapElement.__prestigeAdminActiveJobsTileFallbackState;
+
+    if (!latestState) {
+      return;
+    }
+
+    event.preventDefault();
+    latestState.userAdjusted = true;
+    latestState.zoom = clampAdminActiveJobsBrowserMapTileFallbackZoom(
+      latestState.zoom + (event.deltaY < 0 ? 1 : -1),
+    );
+    latestState.drag = null;
+    rerender();
+  };
+
+  mapElement.addEventListener("pointerdown", onPointerDown);
+  mapElement.addEventListener("pointermove", onPointerMove);
+  mapElement.addEventListener("pointerup", endPointerDrag);
+  mapElement.addEventListener("pointercancel", endPointerDrag);
+  mapElement.addEventListener("wheel", onWheel, { passive: false });
+  state.cleanup = () => {
+    mapElement.removeEventListener("pointerdown", onPointerDown);
+    mapElement.removeEventListener("pointermove", onPointerMove);
+    mapElement.removeEventListener("pointerup", endPointerDrag);
+    mapElement.removeEventListener("pointercancel", endPointerDrag);
+    mapElement.removeEventListener("wheel", onWheel);
+  };
+}
+
+function appendAdminActiveJobsBrowserMapTileFallbackButton(
+  controls: HTMLElement,
+  label: string,
+  title: string,
+  onClick: () => void,
+) {
+  const button = document.createElement("button");
+
+  button.setAttribute("aria-label", title);
+  button.setAttribute("data-admin-active-jobs-map-tile-control", "true");
+  button.textContent = label;
+  button.title = title;
+  button.type = "button";
+  button.style.background = "#ffffff";
+  button.style.border = "1px solid #cbd5e1";
+  button.style.borderRadius = "4px";
+  button.style.boxShadow = "0 1px 4px rgba(15, 23, 42, 0.18)";
+  button.style.color = "#0f172a";
+  button.style.cursor = "pointer";
+  button.style.fontSize = "13px";
+  button.style.fontWeight = "800";
+  button.style.height = "28px";
+  button.style.minWidth = "28px";
+  button.style.padding = "0 8px";
+  button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    onClick();
+  });
+  controls.appendChild(button);
+}
+
+function appendAdminActiveJobsBrowserMapTileFallbackControls(
+  mapElement: AdminActiveJobsBrowserMapTileFallbackElement,
+  markerEntries: AdminActiveJobsBrowserMapMarkerEntry[],
+) {
+  const controls = document.createElement("div");
+  const rerender = () => renderAdminActiveJobsBrowserMapTileFallback(mapElement, markerEntries);
+
+  controls.setAttribute("data-admin-active-jobs-map-tile-controls", "true");
+  controls.style.display = "flex";
+  controls.style.gap = "4px";
+  controls.style.left = "8px";
+  controls.style.position = "absolute";
+  controls.style.top = "8px";
+  controls.style.zIndex = "4";
+
+  appendAdminActiveJobsBrowserMapTileFallbackButton(controls, "+", "Zoom in", () => {
+    const state = mapElement.__prestigeAdminActiveJobsTileFallbackState;
+
+    if (!state) {
+      return;
+    }
+
+    state.userAdjusted = true;
+    state.zoom = clampAdminActiveJobsBrowserMapTileFallbackZoom(state.zoom + 1);
+    state.drag = null;
+    rerender();
+  });
+  appendAdminActiveJobsBrowserMapTileFallbackButton(controls, "-", "Zoom out", () => {
+    const state = mapElement.__prestigeAdminActiveJobsTileFallbackState;
+
+    if (!state) {
+      return;
+    }
+
+    state.userAdjusted = true;
+    state.zoom = clampAdminActiveJobsBrowserMapTileFallbackZoom(state.zoom - 1);
+    state.drag = null;
+    rerender();
+  });
+  appendAdminActiveJobsBrowserMapTileFallbackButton(controls, "Center", "Center drivers", () => {
+    const state = mapElement.__prestigeAdminActiveJobsTileFallbackState;
+
+    if (!state) {
+      return;
+    }
+
+    state.center = adminActiveJobsBrowserMapTileFallbackCenter(markerEntries);
+    state.zoom = clampAdminActiveJobsBrowserMapTileFallbackZoom(
+      adminActiveJobsBrowserMapTileFallbackZoom(markerEntries),
+    );
+    state.userAdjusted = false;
+    state.drag = null;
+    rerender();
+  });
+
+  mapElement.appendChild(controls);
+}
+
 function renderAdminActiveJobsBrowserMapTileFallback(
   mapElement: HTMLElement,
   markerEntries: AdminActiveJobsBrowserMapMarkerEntry[],
@@ -3316,31 +3641,50 @@ function renderAdminActiveJobsBrowserMapTileFallback(
     return;
   }
 
-  const zoom = adminActiveJobsBrowserMapTileFallbackZoom(markerEntries);
-  const center = adminActiveJobsBrowserMapTileFallbackCenter(markerEntries);
+  const fallbackElement = mapElement as AdminActiveJobsBrowserMapTileFallbackElement;
+  const state = readAdminActiveJobsBrowserMapTileFallbackState(
+    fallbackElement,
+    markerEntries,
+  );
+  const zoom = state.zoom;
+  const center = state.center;
   const centerTileX = adminActiveJobsBrowserMapTileX(center.lng, zoom);
   const centerTileY = adminActiveJobsBrowserMapTileY(center.lat, zoom);
   const centerTileXFloat = adminActiveJobsBrowserMapTileXFloat(center.lng, zoom);
   const centerTileYFloat = adminActiveJobsBrowserMapTileYFloat(center.lat, zoom);
   const tileSize = 256;
+  const rect = mapElement.getBoundingClientRect();
+  const horizontalTileRadius = Math.max(
+    3,
+    Math.ceil((rect.width || 768) / tileSize / 2) + 2,
+  );
+  const verticalTileRadius = Math.max(
+    2,
+    Math.ceil((rect.height || 320) / tileSize / 2) + 2,
+  );
 
   mapElement.innerHTML = "";
   mapElement.setAttribute("data-admin-active-jobs-map-google-tile-base", "true");
+  mapElement.setAttribute("data-admin-active-jobs-map-tile-fallback-interactive", "true");
+  mapElement.style.cursor = state.drag ? "grabbing" : "grab";
+  mapElement.style.touchAction = "none";
+  mapElement.style.userSelect = "none";
 
-  for (let tileXOffset = -3; tileXOffset <= 3; tileXOffset += 1) {
-    for (let tileYOffset = -2; tileYOffset <= 2; tileYOffset += 1) {
+  for (let tileXOffset = -horizontalTileRadius; tileXOffset <= horizontalTileRadius; tileXOffset += 1) {
+    for (let tileYOffset = -verticalTileRadius; tileYOffset <= verticalTileRadius; tileYOffset += 1) {
+      const tileX = centerTileX + tileXOffset;
+      const tileY = centerTileY + tileYOffset;
       const tileImage = document.createElement("img");
       tileImage.alt = "";
       tileImage.decoding = "async";
+      tileImage.draggable = false;
       tileImage.loading = "eager";
       tileImage.setAttribute("data-admin-active-jobs-map-google-tile", "true");
-      tileImage.src = `https://mt.google.com/vt/lyrs=m&x=${centerTileX + tileXOffset}&y=${
-        centerTileY + tileYOffset
-      }&z=${zoom}`;
+      tileImage.src = `https://mt.google.com/vt/lyrs=m&x=${tileX}&y=${tileY}&z=${zoom}`;
       tileImage.style.height = `${tileSize}px`;
-      tileImage.style.left = `calc(50% + ${tileXOffset * tileSize - tileSize / 2}px)`;
+      tileImage.style.left = `calc(50% + ${(tileX - centerTileXFloat) * tileSize}px)`;
       tileImage.style.position = "absolute";
-      tileImage.style.top = `calc(50% + ${tileYOffset * tileSize - tileSize / 2}px)`;
+      tileImage.style.top = `calc(50% + ${(tileY - centerTileYFloat) * tileSize}px)`;
       tileImage.style.width = `${tileSize}px`;
       mapElement.appendChild(tileImage);
     }
@@ -3389,6 +3733,9 @@ function renderAdminActiveJobsBrowserMapTileFallback(
     marker.textContent = isStale ? "!" : String(index + 1);
     mapElement.appendChild(marker);
   });
+
+  appendAdminActiveJobsBrowserMapTileFallbackControls(fallbackElement, markerEntries);
+  installAdminActiveJobsBrowserMapTileFallbackInteraction(fallbackElement, markerEntries);
 }
 
 function positionAdminActiveJobsBrowserMapTileFallbackElement(mapElement: HTMLElement) {
@@ -3489,6 +3836,8 @@ function AdminActiveJobsBrowserMap({
   const markersRef = useRef<Map<string, BrowserGoogleMarker>>(new Map());
   const mapsRuntimeRef = useRef<BrowserGoogleMapsNamespace | null>(null);
   const activeMarkerJobsRef = useRef<AdminActiveJobsBrowserMapMarkerEntry[]>([]);
+  const googleMapAutoFitReferenceKeyRef = useRef("");
+  const googleMapUserAdjustedRef = useRef(false);
   const singleMarkerCenteredReferenceRef = useRef("");
   const [renderState, setRenderState] = useState<"error" | "loading" | "ready">("loading");
   const activeMarkerJobs = useMemo(
@@ -3531,6 +3880,14 @@ function AdminActiveJobsBrowserMap({
     mapElement.style.zIndex = "5";
     document.body.appendChild(mapElement);
     mapElementRef.current = mapElement;
+    const markGoogleMapUserAdjusted = () => {
+      if (
+        !tileFallbackInline &&
+        mapElement.getAttribute("data-admin-active-jobs-map-google-tile-base") !== "true"
+      ) {
+        googleMapUserAdjustedRef.current = true;
+      }
+    };
 
     const updateMapPortalRect = () => {
       const slotElement = mapSlotRef.current;
@@ -3540,7 +3897,10 @@ function AdminActiveJobsBrowserMap({
         return;
       }
 
-      if (tileFallbackInline) {
+      if (
+        tileFallbackInline ||
+        portalElement.getAttribute("data-admin-active-jobs-map-google-tile-base") === "true"
+      ) {
         positionAdminActiveJobsBrowserMapTileFallbackElement(portalElement);
         return;
       }
@@ -3567,6 +3927,8 @@ function AdminActiveJobsBrowserMap({
     resizeObserver?.observe(mapSlotRef.current || document.body);
     window.addEventListener("resize", updateMapPortalRect);
     window.addEventListener("scroll", updateMapPortalRect, true);
+    mapElement.addEventListener("pointerdown", markGoogleMapUserAdjusted);
+    mapElement.addEventListener("wheel", markGoogleMapUserAdjusted);
 
     void Promise.resolve()
       .then(() => {
@@ -3598,10 +3960,12 @@ function AdminActiveJobsBrowserMap({
             center: initialMarkerJob.position,
             clickableIcons: false,
             fullscreenControl: false,
+            gestureHandling: "greedy",
             mapId: mapId || undefined,
             mapTypeControl: false,
             streetViewControl: false,
             zoom: 14,
+            zoomControl: true,
           });
         }
 
@@ -3650,10 +4014,15 @@ function AdminActiveJobsBrowserMap({
       resizeObserver?.disconnect();
       window.removeEventListener("resize", updateMapPortalRect);
       window.removeEventListener("scroll", updateMapPortalRect, true);
+      mapElement.removeEventListener("pointerdown", markGoogleMapUserAdjusted);
+      mapElement.removeEventListener("wheel", markGoogleMapUserAdjusted);
+      cleanupAdminActiveJobsBrowserMapTileFallback(mapElement);
       markerRegistry.forEach((marker) => marker.setMap(null));
       markerRegistry.clear();
       mapRef.current = null;
       mapsRuntimeRef.current = null;
+      googleMapAutoFitReferenceKeyRef.current = "";
+      googleMapUserAdjustedRef.current = false;
       singleMarkerCenteredReferenceRef.current = "";
       mapElementRef.current?.remove();
       mapElementRef.current = null;
@@ -3751,8 +4120,9 @@ function AdminActiveJobsBrowserMap({
 
     if (activeMarkerJobs.length === 1) {
       const reference = adminActiveJobsBrowserMapReference(activeMarkerJobs[0]);
+      const referenceChanged = singleMarkerCenteredReferenceRef.current !== reference;
 
-      if (singleMarkerCenteredReferenceRef.current !== reference) {
+      if (!googleMapUserAdjustedRef.current || referenceChanged) {
         map.setCenter(activeMarkerJobs[0].position);
         map.setZoom(15);
         singleMarkerCenteredReferenceRef.current = reference;
@@ -3760,8 +4130,16 @@ function AdminActiveJobsBrowserMap({
       return;
     }
 
+    const referenceKey = adminActiveJobsBrowserMapTileFallbackMarkerKey(activeMarkerJobs);
+
     singleMarkerCenteredReferenceRef.current = "";
-    map.fitBounds(bounds);
+    if (
+      !googleMapUserAdjustedRef.current ||
+      googleMapAutoFitReferenceKeyRef.current !== referenceKey
+    ) {
+      map.fitBounds(bounds);
+      googleMapAutoFitReferenceKeyRef.current = referenceKey;
+    }
   }, [activeMarkerJobs, renderState]);
 
   return (

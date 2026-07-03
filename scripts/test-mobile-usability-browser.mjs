@@ -13034,10 +13034,12 @@ async function runChromeTest() {
           clientWidth: preview.clientWidth,
           key: preview.getAttribute("data-copy-preview"),
           scrollWidth: preview.scrollWidth,
-          text: preview.innerText.slice(0, 100),
+          text: preview.innerText.trim().slice(0, 100),
         }));
 
         return {
+          driverJobLinkPreviewText:
+            previews.find((preview) => preview.key === "driverJobLink")?.text ?? null,
           keys: previews.map((preview) => preview.key),
           overflowingPreviews: previews.filter((preview) => preview.scrollWidth > preview.clientWidth + 2),
           text: document.body.innerText,
@@ -13057,9 +13059,9 @@ async function runChromeTest() {
         `${viewport.label}: expected copy previews to wrap without horizontal overflow`,
       );
       assert.equal(
-        previewState.text.includes("Create a fresh driver job link to display the one-time URL for copying."),
-        true,
-        `${viewport.label}: expected Driver Job Link preview to use guarded create-before-copy wording`,
+        previewState.driverJobLinkPreviewText,
+        "",
+        `${viewport.label}: expected Driver Job Link preview to stay empty until a fresh one-time URL is created`,
       );
       assert.equal(
         /mock-driver-job-valid-a|driver-job-demo|Mock\/demo driver job link|Local demo link/.test(previewState.text),

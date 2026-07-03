@@ -15096,6 +15096,12 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   ]);
 
   const driverJobLinkMessage = useMemo(() => {
+    const oneTimeUrl = clean(adminDriverJobLinkState.oneTimeUrl);
+
+    if (!oneTimeUrl) {
+      return "";
+    }
+
     const bookingReference =
       cleanReferenceText(dispatchReleaseWorkflowBookingReference) ||
       cleanReferenceText(activeAdminDriverJobLink?.booking_reference);
@@ -15122,14 +15128,11 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           activeAdminDriverJobLink.expires_at ? `Expires: ${activeAdminDriverJobLink.expires_at}` : "",
         ]
       : ["Saved link status: No active driver job link loaded."];
-    const oneTimeUrl = clean(adminDriverJobLinkState.oneTimeUrl);
     const sections = [
       [
         "Driver Job Link",
         "Greeting boss, thank you for taking the job. Please keep the car interior clean and fresh.",
-        oneTimeUrl
-          ? "Open this driver job link and update your status:"
-          : "Create a fresh driver job link to display the one-time URL for copying.",
+        "Open this driver job link and update your status:",
         oneTimeUrl,
         ...linkSummary,
       ],
@@ -19863,7 +19866,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
 
       setAdminDriverJobLinkState((current) => ({
         action: null,
-        link: (result.link as AdminDriverJobLinkRecord) || current.link,
+        link: null,
         loadedReference: current.loadedReference,
         message: {
           tone: "success",

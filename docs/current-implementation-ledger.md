@@ -937,6 +937,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Dispatch action buttons now reuse a common completed-state style so finished actions shade green and switch to result wording.
 - Customer Copy, Job Card, Driver Dispatch, Driver Job Link, Email/WhatsApp/SMS checks, and in-app send controls use result labels only when their existing local state confirms success.
 - The Driver Job Link card no longer renders the active-link status pill, copied success box, or loaded-active-link banner shown below the buttons; only errors remain as separate feedback.
+- The Driver Job Link preview stays empty unless the current create action has returned a fresh one-time URL; revoking a link clears the local link record and preview text.
 - The Job Card Preview action toolbar is compact and wrapped; Save + CRM now sits in its own primary save group, separated from Calendar/Edit/Copy utility buttons and Manual Extra Charges, without changing the save or calendar handlers.
 - Admin Dispatch fields no longer show required asterisks; Save + CRM can save an admin draft even when customer/contact/date/route fields are blank.
 - Blank admin draft values are saved through safe `To Confirm` placeholders where the `/api/admin-bookings` contract requires text, while optional Booker email still validates only when typed.

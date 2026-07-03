@@ -18702,7 +18702,14 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             .filter(isAdminActiveJobsMapLocation)
         : [];
       const activeJobs = collapseAdminActiveJobsMapDriverDuplicates(allActiveJobs);
+      const activeJobReferenceSet = new Set(
+        activeJobDriverStatusReferenceList.map(cleanReferenceText).filter(Boolean),
+      );
+      const visibleActiveJobs = activeJobs.filter((job) =>
+        activeJobReferenceSet.has(cleanReferenceText(job.assigned_job_reference)),
+      );
       const duplicateCount = allActiveJobs.length - activeJobs.length;
+      const outsideWindowCount = activeJobs.length - visibleActiveJobs.length;
       const allowedBookingReferences = Array.isArray(result.allowed_booking_references)
         ? result.allowed_booking_references.map(cleanReferenceText).filter(Boolean)
         : null;
@@ -18710,20 +18717,22 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       setAdminActiveJobsMapReadState((current) => ({
         ...current,
         action: "idle",
-        activeJobs,
+        activeJobs: visibleActiveJobs,
         allowedBookingReferences:
           allowedBookingReferences ?? current.allowedBookingReferences,
-        markerCount: activeJobs.length,
+        markerCount: visibleActiveJobs.length,
         message: {
-          tone: activeJobs.length > 0 ? "success" : "info",
+          tone: visibleActiveJobs.length > 0 ? "success" : "info",
           text:
-            activeJobs.length > 0
-              ? `Loaded live movement for ${activeJobs.length} driver${activeJobs.length === 1 ? "" : "s"}${
+            visibleActiveJobs.length > 0
+              ? `Loaded live movement for ${visibleActiveJobs.length} driver${visibleActiveJobs.length === 1 ? "" : "s"}${
                   duplicateCount > 0
                     ? `; ${duplicateCount} older duplicate${duplicateCount === 1 ? "" : "s"} hidden.`
                     : "."
                 }`
-              : "Live location is open, but no driver has shared live movement yet.",
+              : outsideWindowCount > 0
+                ? `${outsideWindowCount} shared driver${outsideWindowCount === 1 ? "" : "s"} outside Today's Jobs window hidden.`
+                : "Live location is open, but no driver has shared live movement yet.",
         },
         runtimeStatus: "active",
         status: "loaded",
@@ -22826,26 +22835,25 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   const activeJobDriverStatusReferenceList = dayOfTripActiveJobVisibleBookings
     .map(getActiveJobBookingReference)
     .filter(Boolean);
-  const liveDispatchPreparedSlotCount = Math.max(2, activeJobDriverStatusReferenceList.length);
-  const liveDispatchStandbySlotCount = Math.max(
-    0,
-    liveDispatchPreparedSlotCount - activeJobDriverStatusReferenceList.length,
+  const activeJobDriverStatusReferenceSet = new Set(
+    activeJobDriverStatusReferenceList.map(cleanReferenceText).filter(Boolean),
   );
+  const activeJobsMapVisibleJobs = adminActiveJobsMapReadState.activeJobs.filter((job) =>
+    activeJobDriverStatusReferenceSet.has(cleanReferenceText(job.assigned_job_reference)),
+  );
+  const activeJobsMapMarkerCount = activeJobsMapVisibleJobs.length;
+  const liveDispatchPreparedSlotCount = activeJobDriverStatusReferenceList.length;
   const liveDispatchSlotSummaryLabel =
-    liveDispatchStandbySlotCount > 0
-      ? `${activeJobDriverStatusReferenceList.length} active job reference${
-          activeJobDriverStatusReferenceList.length === 1 ? "" : "s"
-        }; ${liveDispatchStandbySlotCount} standby live map slot${
-          liveDispatchStandbySlotCount === 1 ? "" : "s"
-        } ready for upcoming assigned jobs as they enter the 1-hour window.`
-      : `${activeJobDriverStatusReferenceList.length} active live map slot${
-          activeJobDriverStatusReferenceList.length === 1 ? "" : "s"
-        } ready.`;
+    liveDispatchPreparedSlotCount > 0
+      ? `${liveDispatchPreparedSlotCount} active live map slot${
+          liveDispatchPreparedSlotCount === 1 ? "" : "s"
+        } ready.`
+      : "No assigned jobs are inside the 1-hour live map window.";
   const activeJobDriverStatusReferenceKey = activeJobDriverStatusReferenceList.join("|");
   const activeJobsMapAllowedReferenceKey = adminActiveJobsMapReadState.allowedBookingReferences.join("|");
   const todayJobsMonitorIsActive = activeTab === "dispatch";
   const activeJobsMapLocationsByReference = new Map(
-    adminActiveJobsMapReadState.activeJobs
+    activeJobsMapVisibleJobs
       .map((job) => [cleanReferenceText(job.assigned_job_reference), job] as const)
       .filter(([reference]) => Boolean(reference)),
   );
@@ -23124,6 +23132,28 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   }, [todayJobsMonitorIsActive, activeJobDriverStatusReferenceKey, dashboardDriverJobAutoRefreshEnabled]);
 
   useEffect(() => {
+    if (!activeJobDriverStatusReferenceKey) {
+      setAdminActiveJobsMapReadState((current) => {
+        if (current.activeJobs.length === 0 && current.markerCount === 0) {
+          return current;
+        }
+
+        return {
+          ...current,
+          activeJobs: [],
+          markerCount: 0,
+          message:
+            current.runtimeStatus === "active"
+              ? {
+                  tone: "info",
+                  text: "No assigned jobs are inside the 1-hour monitor window; live markers are hidden until a job enters the window.",
+                }
+              : current.message,
+        };
+      });
+      return;
+    }
+
     if (
       !todayJobsMonitorIsActive ||
       adminActiveJobsMapReadState.runtimeStatus !== "active" ||
@@ -23141,7 +23171,12 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     return () => window.clearInterval(intervalId);
     // The polling target is keyed by the active Dashboard/runtime state; the refresh helper is intentionally stable by behavior, not identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [todayJobsMonitorIsActive, activeJobsMapAllowedReferenceKey, adminActiveJobsMapReadState.runtimeStatus]);
+  }, [
+    activeJobDriverStatusReferenceKey,
+    todayJobsMonitorIsActive,
+    activeJobsMapAllowedReferenceKey,
+    adminActiveJobsMapReadState.runtimeStatus,
+  ]);
 
   function refreshVisibleDashboardDriverReports() {
     for (const bookingReference of activeJobDriverStatusReferenceList) {
@@ -23422,17 +23457,18 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               </span>
               <span
                 className="rounded-full bg-lime-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-lime-900 sm:px-2 sm:text-[10px]"
-                data-dispatch-live-driver-map-marker-count={adminActiveJobsMapReadState.markerCount}
+                data-dispatch-live-driver-map-marker-count={activeJobsMapMarkerCount}
               >
-                {adminActiveJobsMapReadState.markerCount} driver
-                {adminActiveJobsMapReadState.markerCount === 1 ? "" : "s"}
+                {activeJobsMapMarkerCount} driver
+                {activeJobsMapMarkerCount === 1 ? "" : "s"}
               </span>
               <span
                 className="rounded-full bg-sky-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-sky-900 sm:px-2 sm:text-[10px]"
                 data-dispatch-live-driver-map-slot-count={liveDispatchPreparedSlotCount}
                 title={liveDispatchSlotSummaryLabel}
               >
-                {liveDispatchPreparedSlotCount} slots
+                {liveDispatchPreparedSlotCount} slot
+                {liveDispatchPreparedSlotCount === 1 ? "" : "s"}
               </span>
             </div>
           </div>
@@ -23453,6 +23489,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               className="rounded border border-lime-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-lime-950 transition hover:bg-lime-50 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[11px]"
               data-dispatch-live-driver-map-refresh="true"
               disabled={
+                activeJobDriverStatusReferenceList.length === 0 ||
                 adminActiveJobsMapReadState.runtimeStatus !== "active" ||
                 adminActiveJobsMapReadState.action !== "idle"
               }
@@ -23515,15 +23552,15 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               {adminActiveJobsMapReadState.message.text}
             </p>
           ) : null}
-          {adminActiveJobsMapReadState.activeJobs.length > 0 &&
+          {activeJobsMapVisibleJobs.length > 0 &&
           adminActiveJobsBrowserMapConfigState.status === "ready" &&
           adminActiveJobsBrowserMapConfigState.apiKey ? (
             <AdminActiveJobsBrowserMap
-              activeJobs={adminActiveJobsMapReadState.activeJobs}
+              activeJobs={activeJobsMapVisibleJobs}
               apiKey={adminActiveJobsBrowserMapConfigState.apiKey}
               mapId={adminActiveJobsBrowserMapConfigState.mapId}
             />
-          ) : adminActiveJobsMapReadState.activeJobs.length > 0 &&
+          ) : activeJobsMapVisibleJobs.length > 0 &&
             adminActiveJobsBrowserMapConfigState.message ? (
             <p
               className={`mt-1 rounded border px-1.5 py-1 text-[10px] font-semibold leading-3 sm:text-[11px] ${statusClass(
@@ -23534,12 +23571,12 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               {adminActiveJobsBrowserMapConfigState.message.text}
             </p>
           ) : null}
-          {adminActiveJobsMapReadState.activeJobs.length > 0 ? (
+          {activeJobsMapVisibleJobs.length > 0 ? (
             <div
               className="mt-1 max-h-24 space-y-1 overflow-y-auto border-t border-lime-100 pt-1"
               data-dispatch-live-driver-map-marker-list="true"
             >
-              {adminActiveJobsMapReadState.activeJobs.map((job) => {
+              {activeJobsMapVisibleJobs.map((job) => {
                 const mapUrl = googleMapsLocationUrl(job.latitude, job.longitude);
                 const markerRiskState = activeJobPickupRiskByReference.get(
                   cleanReferenceText(job.assigned_job_reference),

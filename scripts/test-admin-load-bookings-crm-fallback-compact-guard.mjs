@@ -492,6 +492,53 @@ assertIncludes(appPage, "openAdminLiveLocationRuntimeForActiveJobs", "Dispatch o
 assertIncludes(appPage, 'data-dispatch-live-driver-map-open="true"', "Dispatch live map open action");
 assertIncludes(appPage, 'data-dispatch-live-driver-map-refresh="true"', "Dispatch live map refresh action");
 assertIncludes(appPage, 'data-dispatch-live-driver-map-close="true"', "Dispatch live map close action");
+assertIncludes(
+  appPage,
+  "const visibleActiveJobs = activeJobs.filter((job) =>\n        activeJobReferenceSet.has(cleanReferenceText(job.assigned_job_reference)),\n      );",
+  "Dispatch live map filters runtime markers to Today's Jobs references",
+);
+assertIncludes(appPage, "activeJobs: visibleActiveJobs,", "Dispatch live map stores only visible markers");
+assertIncludes(appPage, "markerCount: visibleActiveJobs.length,", "Dispatch live map marker count follows visible markers");
+assertIncludes(
+  appPage,
+  "outside Today's Jobs window hidden.",
+  "Dispatch live map explains hidden out-of-window shared drivers",
+);
+assertIncludes(
+  appPage,
+  "No assigned jobs are inside the 1-hour monitor window; live markers are hidden until a job enters the window.",
+  "Dispatch live map clears stale markers when the monitor window is empty",
+);
+assertIncludes(
+  appPage,
+  "const activeJobsMapVisibleJobs = adminActiveJobsMapReadState.activeJobs.filter((job) =>\n    activeJobDriverStatusReferenceSet.has(cleanReferenceText(job.assigned_job_reference)),\n  );",
+  "Dispatch live map derives visible marker rows from the monitor window",
+);
+assertIncludes(
+  appPage,
+  "activeJobs={activeJobsMapVisibleJobs}",
+  "Dispatch live map browser renderer receives only visible marker rows",
+);
+assertIncludes(
+  appPage,
+  "activeJobDriverStatusReferenceList.length === 0 ||\n                adminActiveJobsMapReadState.runtimeStatus !== \"active\"",
+  "Dispatch live map refresh is disabled when no monitor-window job exists",
+);
+assertIncludes(
+  appPage,
+  "const liveDispatchPreparedSlotCount = activeJobDriverStatusReferenceList.length;",
+  "Dispatch live map slot count follows the actual monitor-window jobs",
+);
+assertExcludes(
+  appPage,
+  "activeJobs={adminActiveJobsMapReadState.activeJobs}",
+  "Dispatch live map browser renderer raw runtime marker feed",
+);
+assertExcludes(
+  appPage,
+  "Math.max(2, activeJobDriverStatusReferenceList.length)",
+  "Dispatch live map standby slot floor",
+);
 assertExcludes(appPage, 'data-dashboard-live-driver-map="true"', "Dashboard live map panel removed");
 assertExcludes(appPage, 'data-dashboard-day-of-trip-operations-monitor="true"', "Dashboard active jobs monitor removed");
 assertExcludes(appPage, 'data-admin-multi-driver-active-jobs-toggle="true"', "Active jobs monitor expand toggle");

@@ -39583,6 +39583,12 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                       {clean(adminCustomerDriverDetailsEmailReviewItem.label) ||
                         "Customer driver details ready"}
                     </span>
+                    <p
+                      className="mt-0.5 text-[10px] font-semibold leading-4 text-emerald-800"
+                      data-admin-customer-driver-details-manual-channel-note="true"
+                    >
+                      WhatsApp/SMS are off in-app. Use Copy, then send manually outside the app.
+                    </p>
                     <div className="mt-1 flex min-w-0 flex-row flex-wrap items-center gap-1.5">
                       <button
                         aria-label={adminCustomerDriverDetailsEmailDisabledSendActionLabel}

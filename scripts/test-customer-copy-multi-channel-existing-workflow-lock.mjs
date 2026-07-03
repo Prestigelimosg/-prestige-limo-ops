@@ -123,10 +123,12 @@ for (const fragment of [
   'data-admin-customer-driver-details-whatsapp-disabled-send-action="true"',
   'data-admin-customer-driver-details-sms-disabled-send-action="true"',
   'data-admin-customer-driver-details-customer-in-app-send-action="true"',
+  'data-admin-customer-driver-details-manual-channel-note="true"',
   'data-admin-email-activation-preflight-status="true"',
   'onClick={sendAdminCustomerDriverDetailsEmail}',
   'onClick={() => checkAdminCustomerDriverDetailsMessageDisabledSend("whatsapp")}',
   'onClick={() => checkAdminCustomerDriverDetailsMessageDisabledSend("sms")}',
+  "WhatsApp/SMS are off in-app. Use Copy, then send manually outside the app.",
   "SMS/WA off",
   "Email gate off",
   "Send In-App",
@@ -145,6 +147,7 @@ for (const [fragment, expectedCount] of [
   ['data-admin-customer-driver-details-whatsapp-disabled-send-action="true"', 1],
   ['data-admin-customer-driver-details-sms-disabled-send-action="true"', 1],
   ['data-admin-customer-driver-details-customer-in-app-send-action="true"', 1],
+  ['data-admin-customer-driver-details-manual-channel-note="true"', 1],
   ['data-admin-email-activation-preflight-status="true"', 1],
 ]) {
   assert.equal(countOccurrences(appPage, fragment), expectedCount);
@@ -157,6 +160,7 @@ for (const fragment of [
   'data-admin-customer-driver-details-whatsapp-disabled-send-action="true"',
   'data-admin-customer-driver-details-sms-disabled-send-action="true"',
   'data-admin-customer-driver-details-customer-in-app-send-action="true"',
+  'data-admin-customer-driver-details-manual-channel-note="true"',
   'data-admin-email-activation-preflight-status="true"',
 ]) {
   assertExcludes(appOutsideCustomerCopy, fragment, `Customer Copy fragment outside section ${fragment}`);

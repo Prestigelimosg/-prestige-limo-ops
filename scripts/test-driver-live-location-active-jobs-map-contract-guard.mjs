@@ -266,8 +266,8 @@ const driverJobRuntimeSource = `${driverJobPage}\n${driverJobDemo}`;
 
 assertExcludes(
   driverJobPage,
-  /watchPosition|clearWatch|GeolocationPosition/i,
-  "production driver job page background GPS",
+  /setInterval|setTimeout|sendBeacon/i,
+  "production driver job page timer/sendBeacon GPS loop",
 );
 assertExcludes(
   driverJobPage,
@@ -280,6 +280,8 @@ for (const fragment of [
   "Share only when dispatch opens live location for this job.",
   "Share Location",
   "navigator.geolocation.getCurrentPosition",
+  "navigator.geolocation.watchPosition",
+  "navigator.geolocation.clearWatch",
   "customerVisible !== false",
   "external_send !== false",
 ]) {

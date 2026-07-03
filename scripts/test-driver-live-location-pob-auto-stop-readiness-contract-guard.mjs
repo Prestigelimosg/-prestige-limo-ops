@@ -188,14 +188,16 @@ for (const forbiddenPattern of [
 
 assertExcludes(
   driverJobPage,
-  /watchPosition|clearWatch|GeolocationPosition|setInterval|setTimeout/i,
-  "production driver job page background GPS/timer",
+  /setInterval|setTimeout|sendBeacon/i,
+  "production driver job page timer/sendBeacon GPS loop",
 );
 for (const fragment of [
   'const driverLiveLocationUiState = pageState.kind === "ready" ? "runtime-check" : "disabled";',
   "checkDriverLiveLocationReadiness",
   "requestDriverLiveLocationPosition",
   "navigator.geolocation.getCurrentPosition",
+  "navigator.geolocation.watchPosition",
+  "navigator.geolocation.clearWatch",
 ]) {
   assertIncludes(driverJobPage, fragment, `production driver job page gated share-location fragment ${fragment}`);
 }

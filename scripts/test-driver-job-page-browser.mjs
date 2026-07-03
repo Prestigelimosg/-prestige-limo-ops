@@ -90,20 +90,30 @@ async function assertNoRealLocationImplementation() {
 
   assert.match(
     source,
-    /NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_SHARE_STOP_UI_ENABLED/,
-    "Driver live-location Share/Stop UI must stay behind a public build-time gate.",
+    /const driverLiveLocationUiState = pageState\.kind === "ready" \? "runtime-check" : "disabled";/,
+    "Driver live-location Share/Stop UI must stay behind the loaded job/runtime-check state.",
   );
   assert.match(
     source,
-    /NEXT_PUBLIC_PRESTIGE_DRIVER_LIVE_LOCATION_BROWSER_GPS_ENABLED/,
-    "Driver browser GPS must stay behind a separate public build-time gate.",
+    /checkDriverLiveLocationReadiness/,
+    "Driver browser GPS must stay behind the server runtime readiness gate.",
   );
   assert.match(
     source,
     /navigator\.geolocation\.getCurrentPosition/,
-    "Driver live-location may request browser position only through the explicit gated Share click path.",
+    "Driver live-location must request the initial browser position only through the explicit gated Share click path.",
   );
-  assert.doesNotMatch(source, /watchPosition|clearWatch/i, "Driver pages must not add background GPS watching.");
+  assert.match(
+    source,
+    /navigator\.geolocation\.watchPosition/,
+    "Driver live-location may keep sharing through the explicit gated Share click path.",
+  );
+  assert.match(
+    source,
+    /navigator\.geolocation\.clearWatch/,
+    "Driver live-location continuous sharing must be cleared by Stop Sharing and page cleanup.",
+  );
+  assert.doesNotMatch(source, /setInterval|setTimeout|sendBeacon/i, "Driver pages must not add timer/sendBeacon GPS loops.");
   assert.doesNotMatch(
     source,
     /void\s+shareDriverLiveLocation\(|shareDriverLiveLocation\(\);|shareDriverLiveLocation\(\)\.catch/i,

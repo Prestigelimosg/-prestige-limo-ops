@@ -108,7 +108,7 @@ for (const forbiddenPhrase of [
 
 assertExcludes(
   driverJobPage,
-  /watchPosition|clearWatch|void\s+shareDriverLiveLocation\(|shareDriverLiveLocation\(\);|shareDriverLiveLocation\(\)\.catch|gpsCaptureEnabled\s*[:=]\s*true|liveMapEnabled\s*[:=]\s*true|locationStorageEnabled\s*[:=]\s*true|customerVisible\s*[:=]\s*true/i,
+  /void\s+shareDriverLiveLocation\(|shareDriverLiveLocation\(\);|shareDriverLiveLocation\(\)\.catch|gpsCaptureEnabled\s*[:=]\s*true|liveMapEnabled\s*[:=]\s*true|locationStorageEnabled\s*[:=]\s*true|customerVisible\s*[:=]\s*true/i,
   "driver job production page live-location activation flags",
 );
 
@@ -149,12 +149,12 @@ for (const fragment of [
 
 assertMatches(
   liveLocationUi,
-  /data-driver-live-location-share-button=\{driverLiveLocationUiState\}[\s\S]*?disabled=\{driverLiveLocationControlsDisabled\}[\s\S]*?Share Location/,
+  /data-driver-live-location-share-button=\{driverLiveLocationUiState\}[\s\S]*?disabled=\{driverLiveLocationShareDisabled\}[\s\S]*?Share Location/,
   "disabled Share Location control",
 );
 assertMatches(
   liveLocationUi,
-  /data-driver-live-location-stop-button=\{driverLiveLocationUiState\}[\s\S]*?disabled=\{driverLiveLocationControlsDisabled\}[\s\S]*?Stop Sharing/,
+  /data-driver-live-location-stop-button=\{driverLiveLocationUiState\}[\s\S]*?disabled=\{driverLiveLocationStopDisabled\}[\s\S]*?Stop Sharing/,
   "disabled Stop Sharing control",
 );
 for (const forbiddenPattern of [
@@ -168,7 +168,11 @@ for (const fragment of [
   'const driverLiveLocationUiState = pageState.kind === "ready" ? "runtime-check" : "disabled";',
   "checkDriverLiveLocationReadiness",
   "requestDriverLiveLocationPosition",
+  "startDriverLiveLocationBrowserWatch",
+  "stopDriverLiveLocationBrowserWatch",
   "navigator.geolocation.getCurrentPosition",
+  "navigator.geolocation.watchPosition",
+  "navigator.geolocation.clearWatch",
   "onClick={shareDriverLiveLocation}",
   "onClick={stopDriverLiveLocation}",
 ]) {

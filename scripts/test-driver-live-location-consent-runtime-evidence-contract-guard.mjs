@@ -127,7 +127,11 @@ for (const fragment of [
   'const driverLiveLocationUiState = pageState.kind === "ready" ? "runtime-check" : "disabled";',
   "checkDriverLiveLocationReadiness",
   "requestDriverLiveLocationPosition",
+  "startDriverLiveLocationBrowserWatch",
+  "stopDriverLiveLocationBrowserWatch",
   "navigator.geolocation.getCurrentPosition",
+  "navigator.geolocation.watchPosition",
+  "navigator.geolocation.clearWatch",
   "onClick={shareDriverLiveLocation}",
   "onClick={stopDriverLiveLocation}",
   "customerVisible !== false",
@@ -138,7 +142,7 @@ for (const fragment of [
 
 for (const forbiddenPattern of [
   /void\s+shareDriverLiveLocation\(|shareDriverLiveLocation\(\);|shareDriverLiveLocation\(\)\.catch/i,
-  /setInterval|setTimeout|watchPosition|clearWatch/i,
+  /setInterval|setTimeout|sendBeacon/i,
 ]) {
   assertExcludes(
     driverJobPage,

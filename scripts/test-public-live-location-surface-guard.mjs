@@ -372,6 +372,8 @@ const driverJobApprovedLiveLocationFragments = new Set([
   "customerVisible",
   "navigator.geolocation",
   "getCurrentPosition",
+  "watchPosition",
+  "clearWatch",
 ]);
 
 for (const path of publicClientPaths) {
@@ -401,7 +403,17 @@ assertIncludes(
 assertIncludes(
   files["app/driver-job/[token]/page.tsx"],
   "navigator.geolocation.getCurrentPosition",
-  "driver job approved one-time browser GPS request",
+  "driver job approved initial browser GPS request",
+);
+assertIncludes(
+  files["app/driver-job/[token]/page.tsx"],
+  "navigator.geolocation.watchPosition",
+  "driver job approved continuous browser GPS watch",
+);
+assertIncludes(
+  files["app/driver-job/[token]/page.tsx"],
+  "navigator.geolocation.clearWatch",
+  "driver job approved Stop Sharing browser GPS cleanup",
 );
 assertIncludes(
   files["app/driver-job/[token]/page.tsx"],

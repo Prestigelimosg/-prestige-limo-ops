@@ -144,6 +144,8 @@ for (const fragment of [
   "handleDriverLiveLocationReadinessRuntimeRequest",
   "checkDriverLiveLocationReadiness",
   "navigator.geolocation.getCurrentPosition",
+  "navigator.geolocation.watchPosition",
+  "navigator.geolocation.clearWatch",
   "Dispatch has not opened live location for this job.",
 ]) {
   assertIncludes(`${driverRoute}\n${driverJobPage}`, fragment, `driver readiness fragment ${fragment}`);
@@ -157,8 +159,8 @@ assertExcludes(
 
 assertExcludes(
   driverJobPage,
-  /watchPosition|clearWatch|sendBeacon|localStorage|sessionStorage/i,
-  "driver page background/live polling GPS",
+  /setInterval|setTimeout|sendBeacon|localStorage|sessionStorage/i,
+  "driver page timer/storage/sendBeacon GPS loop",
 );
 
 for (const fragment of [

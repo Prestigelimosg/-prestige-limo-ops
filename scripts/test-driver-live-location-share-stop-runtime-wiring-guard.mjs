@@ -69,7 +69,7 @@ const appRuntimeSafetySourceWithoutDenylist = appRuntimeSafetySource.replace(
 for (const phrase of [
   "This wires Driver Live Location Share/Stop controls to the existing driver job link page.",
   "The browser UI is controlled by the loaded driver job state and the server runtime readiness check, not a public build-time env flag.",
-  "The browser GPS request is one-time and explicit: it runs only after the driver taps Share Location and `GET /api/driver-job/[token]/live-location` accepts the job.",
+  "The browser GPS request is explicit and bounded: it starts only after the driver taps Share Location and `GET /api/driver-job/[token]/live-location` accepts the job.",
   "No browser geolocation request can happen on page load, status updates, app updates, issue reporting, Customer Copy, provider sends, or quick replies.",
   "Share Location calls only the existing job-token scoped `POST /api/driver-job/[token]/live-location` route with safe browser position fields: latitude, longitude, accuracy_meters, heading_degrees, speed_meters_per_second, and captured_at.",
   "Stop Sharing calls only the existing job-token scoped `DELETE /api/driver-job/[token]/live-location` route.",
@@ -88,9 +88,14 @@ for (const fragment of [
   'const driverLiveLocationUiState = pageState.kind === "ready" ? "runtime-check" : "disabled";',
   "checkDriverLiveLocationReadiness",
   "requestDriverLiveLocationPosition",
+  "postDriverLiveLocationPosition",
+  "startDriverLiveLocationBrowserWatch",
+  "stopDriverLiveLocationBrowserWatch",
   "shareDriverLiveLocation",
   "stopDriverLiveLocation",
   "navigator.geolocation.getCurrentPosition",
+  "navigator.geolocation.watchPosition",
+  "navigator.geolocation.clearWatch",
   "onClick={shareDriverLiveLocation}",
   "onClick={stopDriverLiveLocation}",
   "data-driver-live-location-feedback=\"true\"",
@@ -116,6 +121,16 @@ assertMatches(
   driverJobPage,
   /if \(!token \|\| pageState\.kind !== "ready"\)/,
   "share/stop routes must fail closed before route calls",
+);
+assertMatches(
+  driverJobPage,
+  /function startDriverLiveLocationBrowserWatch\(\)[\s\S]*?navigator\.geolocation\.watchPosition/,
+  "continuous sharing must use the browser watch only after explicit Share setup",
+);
+assertMatches(
+  driverJobPage,
+  /async function stopDriverLiveLocation\(\)[\s\S]*?stopDriverLiveLocationBrowserWatch\(\);[\s\S]*?method: "DELETE"/,
+  "Stop Sharing must clear the browser watch before the guarded stop route",
 );
 
 for (const fragment of [
@@ -145,7 +160,7 @@ for (const fragment of [
 
 for (const forbiddenPattern of [
   /void\s+shareDriverLiveLocation\(|shareDriverLiveLocation\(\);|shareDriverLiveLocation\(\)\.catch/i,
-  /watchPosition|clearWatch|sendBeacon|localStorage|sessionStorage/i,
+  /setInterval|setTimeout|sendBeacon|localStorage|sessionStorage/i,
   /new\s+Resend|sendMail|sendSms|sendMessage|api\.telegram\.org|twilio|whatsapp/i,
   /google\.maps|maps\.google|maps\.googleapis\.com|OneMap|ONEMAP|FlightAware|AeroAPI/i,
   /customerVisible\s*[:=]\s*true|external_send\s*[:=]\s*true/i,

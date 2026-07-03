@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-Pending local pickup approach alert lane
+Pending continuous driver live-location sharing lane
 
 Latest pushed main/staging runtime checkpoint:
 10ab21dd Add pickup risk monitor toggle
@@ -6787,7 +6787,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Driver Live Location Share/Stop Runtime Wiring Guard Lock
 - This wires Driver Live Location Share/Stop controls to the existing driver job link page.
 - The browser UI is controlled by the loaded driver job state and the server runtime readiness check, not a public build-time env flag.
-- The browser GPS request is one-time and explicit: it runs only after the driver taps Share Location and `GET /api/driver-job/[token]/live-location` accepts the job.
+- The browser GPS request is explicit and bounded: it starts only after the driver taps Share Location and `GET /api/driver-job/[token]/live-location` accepts the job.
 - No browser geolocation request can happen on page load, status updates, app updates, issue reporting, Customer Copy, provider sends, or quick replies.
 - Share Location calls only the existing job-token scoped `POST /api/driver-job/[token]/live-location` route with safe browser position fields: latitude, longitude, accuracy_meters, heading_degrees, speed_meters_per_second, and captured_at.
 - Stop Sharing calls only the existing job-token scoped `DELETE /api/driver-job/[token]/live-location` route.
@@ -6797,6 +6797,15 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Future live evidence still requires separate owner approval for fake/staging-safe driver job target, gate window, cleanup zero rows, rollback proof, docs evidence, and staging promotion.
 - This guard adds `scripts/test-driver-live-location-share-stop-runtime-wiring-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 - A no-behavior-change alias guard `scripts/test-driver-live-location-share-stop-runtime-scaffold-guard.mjs` runs the same wiring guard so promotion checklists using the scaffold name remain covered without changing runtime code.
+
+### Driver Live Location Continuous Sharing
+- Driver job pages now keep sharing live location after an explicit driver `Share Location` click by starting a browser `watchPosition` only after the existing guarded readiness check and first accepted position write.
+- The continuous sender reuses the existing job-token scoped `POST /api/driver-job/[token]/live-location` route and the existing latest-position upsert path, so it updates the current driver marker instead of creating duplicate map surfaces or new routes.
+- Continuous sharing is bounded to the open driver job page, throttled before repeated writes, and cleared by `Stop Sharing`, page cleanup, token/job reload, browser GPS errors, or a rejected runtime response.
+- `Stop Sharing` clears the browser watch before calling the existing guarded `DELETE /api/driver-job/[token]/live-location` cleanup route.
+- The admin Live Driver Map already refreshes saved markers automatically while open; this lane only makes the driver page keep the current marker fresh while sharing is active.
+- This lane does not add customer live map links, customer portal tracking, Telegram/WhatsApp/SMS/email/provider sends, payment, payout, invoices, PDFs, calendar behavior, env changes, DB schema changes, new API routes, local/session storage, sendBeacon, or timer-based GPS loops.
+- Customer/public routes remain closed to driver live-location internals, other-driver markers, finance, payout, parser/debug, tokens, secrets, mock archive, and admin-only risk evidence.
 
 ### Driver Live Location Share/Stop Staging Evidence Runner Guard Lock
 - This adds a disabled-by-default runner scaffold for future Driver Live Location Share/Stop staging evidence.

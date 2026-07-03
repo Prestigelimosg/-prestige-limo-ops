@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import type {
   SafeDriverJobPayload,
@@ -207,6 +207,12 @@ const emptyDriverLiveLocationState: DriverLiveLocationState = {
   permissionState: "not_requested",
   sharingState: "inactive",
   staleState: "inactive",
+};
+const driverLiveLocationContinuousShareMinMs = 5000;
+const driverLiveLocationPositionOptions: PositionOptions = {
+  enableHighAccuracy: true,
+  maximumAge: 5000,
+  timeout: 15000,
 };
 
 const blockedMessages: Record<DriverJobApiBlockedReason, string> = {
@@ -540,6 +546,10 @@ export default function DriverJobPage() {
   const [statusFeedback, setStatusFeedback] = useState<StatusFeedback | null>(null);
   const [workflowStatus, setWorkflowStatus] = useState("assigned");
   const [updatingStatus, setUpdatingStatus] = useState("");
+  const driverLiveLocationWatchIdRef = useRef<number | null>(null);
+  const driverLiveLocationPostInFlightRef = useRef(false);
+  const driverLiveLocationLastPostAtRef = useRef(0);
+  const driverLiveLocationShareActiveRef = useRef(false);
   const savedStatusHistory = useMemo(
     () => (pageState.kind === "ready" ? pageState.job.statusHistory : []),
     [pageState],
@@ -560,6 +570,23 @@ export default function DriverJobPage() {
       },
     ]);
   }
+
+  const stopDriverLiveLocationBrowserWatch = useCallback((options: { resetLastPostAt?: boolean } = {}) => {
+    driverLiveLocationShareActiveRef.current = false;
+    driverLiveLocationPostInFlightRef.current = false;
+
+    if (options.resetLastPostAt !== false) {
+      driverLiveLocationLastPostAtRef.current = 0;
+    }
+
+    if (driverLiveLocationWatchIdRef.current === null || !("geolocation" in navigator)) {
+      driverLiveLocationWatchIdRef.current = null;
+      return;
+    }
+
+    navigator.geolocation.clearWatch(driverLiveLocationWatchIdRef.current);
+    driverLiveLocationWatchIdRef.current = null;
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -587,6 +614,7 @@ export default function DriverJobPage() {
       setReportingDriverIssue(false);
       setSelectedDriverIssue("");
       setDriverAppUpdates({ feedback: null, kind: "loading", updates: [] });
+      stopDriverLiveLocationBrowserWatch();
       setDriverLiveLocation(emptyDriverLiveLocationState);
       setSavedDriverDetails(null);
       setStatusFeedback(null);
@@ -693,7 +721,13 @@ export default function DriverJobPage() {
     return () => {
       active = false;
     };
-  }, [token]);
+  }, [stopDriverLiveLocationBrowserWatch, token]);
+
+  useEffect(() => {
+    return () => {
+      stopDriverLiveLocationBrowserWatch();
+    };
+  }, [stopDriverLiveLocationBrowserWatch]);
 
   function updateDriverDetail(field: keyof DriverDetails, value: string) {
     setDetailsFeedback(null);
@@ -935,11 +969,7 @@ export default function DriverJobPage() {
 
     try {
       const position = await new Promise<DriverLiveLocationBrowserPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          maximumAge: 0,
-          timeout: 10000,
-        });
+        navigator.geolocation.getCurrentPosition(resolve, reject, driverLiveLocationPositionOptions);
       });
 
       setDriverLiveLocation((currentState) => ({
@@ -962,35 +992,19 @@ export default function DriverJobPage() {
     }
   }
 
-  async function shareDriverLiveLocation() {
-    if (!token || pageState.kind !== "ready") {
-      setDriverLiveLocation((currentState) => ({
-        ...currentState,
-        feedback: {
-          tone: "error",
-          text: "Location sharing is closed for this job.",
-        },
-      }));
-      return;
+  async function postDriverLiveLocationPosition(
+    position: DriverLiveLocationBrowserPosition,
+    options: {
+      feedbackText?: string;
+      logActivity?: boolean;
+      stopOnFailure?: boolean;
+    } = {},
+  ) {
+    if (!token || pageState.kind !== "ready" || driverLiveLocationPostInFlightRef.current) {
+      return false;
     }
 
-    setDriverLiveLocation((currentState) => ({
-      ...currentState,
-      action: "sharing",
-      feedback: null,
-    }));
-
-    const ready = await checkDriverLiveLocationReadiness();
-
-    if (!ready) {
-      return;
-    }
-
-    const position = await requestDriverLiveLocationPosition();
-
-    if (!position) {
-      return;
-    }
+    driverLiveLocationPostInFlightRef.current = true;
 
     try {
       const response = await fetch(driverLiveLocationRoute(), {
@@ -1009,6 +1023,10 @@ export default function DriverJobPage() {
       const result = await response.json() as DriverLiveLocationApiResponse;
 
       if (!response.ok || !result.ok || result.customerVisible !== false || result.external_send !== false) {
+        if (options.stopOnFailure !== false) {
+          stopDriverLiveLocationBrowserWatch();
+        }
+
         setDriverLiveLocation((currentState) => ({
           ...currentState,
           action: "idle",
@@ -1016,26 +1034,40 @@ export default function DriverJobPage() {
             tone: "error",
             text: "Location sharing was not accepted. Contact dispatch.",
           },
+          sharingState: "inactive",
+          staleState: "inactive",
         }));
-        return;
+        return false;
       }
 
       const sharedAt = new Date(position.timestamp).toISOString();
+      driverLiveLocationLastPostAtRef.current = Date.now();
 
       setDriverLiveLocation((currentState) => ({
         ...currentState,
         action: "idle",
-        feedback: {
-          tone: "success",
-          text: "Location shared for this job only.",
-        },
+        feedback: options.feedbackText
+          ? {
+              tone: "success",
+              text: options.feedbackText,
+            }
+          : currentState.feedback,
         lastSharedAt: sharedAt,
         permissionState: "granted",
         sharingState: "active",
         staleState: "active",
       }));
-      addActivity("Location shared", "Driver location was shared in-app for this assigned job only.");
+
+      if (options.logActivity) {
+        addActivity("Location sharing started", "Driver location is sharing in-app for this assigned job only.");
+      }
+
+      return true;
     } catch {
+      if (options.stopOnFailure !== false) {
+        stopDriverLiveLocationBrowserWatch();
+      }
+
       setDriverLiveLocation((currentState) => ({
         ...currentState,
         action: "idle",
@@ -1043,7 +1075,107 @@ export default function DriverJobPage() {
           tone: "error",
           text: "Location sharing failed. Contact dispatch.",
         },
+        sharingState: "inactive",
+        staleState: "inactive",
       }));
+      return false;
+    } finally {
+      driverLiveLocationPostInFlightRef.current = false;
+    }
+  }
+
+  function startDriverLiveLocationBrowserWatch() {
+    if (!("geolocation" in navigator) || !navigator.geolocation.watchPosition) {
+      setDriverLiveLocation((currentState) => ({
+        ...currentState,
+        feedback: {
+          tone: "error",
+          text: "Location shared once, but continuous sharing is not available in this browser.",
+        },
+        sharingState: "active",
+        staleState: "active",
+      }));
+      return;
+    }
+
+    stopDriverLiveLocationBrowserWatch({ resetLastPostAt: false });
+    driverLiveLocationShareActiveRef.current = true;
+    driverLiveLocationWatchIdRef.current = navigator.geolocation.watchPosition(
+      (position) => {
+        if (!driverLiveLocationShareActiveRef.current) {
+          return;
+        }
+
+        const now = Date.now();
+
+        if (
+          driverLiveLocationPostInFlightRef.current ||
+          now - driverLiveLocationLastPostAtRef.current < driverLiveLocationContinuousShareMinMs
+        ) {
+          return;
+        }
+
+        void postDriverLiveLocationPosition(position, {
+          stopOnFailure: true,
+        });
+      },
+      () => {
+        stopDriverLiveLocationBrowserWatch();
+        setDriverLiveLocation((currentState) => ({
+          ...currentState,
+          action: "idle",
+          feedback: {
+            tone: "error",
+            text: "Browser GPS became unavailable. Stop Sharing is still available to clear the marker.",
+          },
+          permissionState: "denied",
+          sharingState: "active",
+          staleState: "stale",
+        }));
+      },
+      driverLiveLocationPositionOptions,
+    );
+  }
+
+  async function shareDriverLiveLocation() {
+    if (!token || pageState.kind !== "ready") {
+      setDriverLiveLocation((currentState) => ({
+        ...currentState,
+        feedback: {
+          tone: "error",
+          text: "Location sharing is closed for this job.",
+        },
+      }));
+      return;
+    }
+
+    stopDriverLiveLocationBrowserWatch();
+    setDriverLiveLocation((currentState) => ({
+      ...currentState,
+      action: "sharing",
+      feedback: null,
+    }));
+
+    const ready = await checkDriverLiveLocationReadiness();
+
+    if (!ready) {
+      return;
+    }
+
+    const position = await requestDriverLiveLocationPosition();
+
+    if (!position) {
+      return;
+    }
+
+    const posted = await postDriverLiveLocationPosition(position, {
+      feedbackText: "Live location is sharing for this job. Keep this page open; dispatch map updates automatically.",
+      logActivity: true,
+      stopOnFailure: true,
+    });
+
+    if (posted) {
+      startDriverLiveLocationBrowserWatch();
     }
   }
 
@@ -1059,6 +1191,7 @@ export default function DriverJobPage() {
       return;
     }
 
+    stopDriverLiveLocationBrowserWatch();
     setDriverLiveLocation((currentState) => ({
       ...currentState,
       action: "stopping",
@@ -1078,8 +1211,10 @@ export default function DriverJobPage() {
           action: "idle",
           feedback: {
             tone: "error",
-            text: "Stop sharing was not accepted. Contact dispatch.",
+            text: "Local sharing stopped, but dispatch cleanup failed. Contact dispatch.",
           },
+          sharingState: "inactive",
+          staleState: "inactive",
         }));
         return;
       }
@@ -1101,8 +1236,10 @@ export default function DriverJobPage() {
         action: "idle",
         feedback: {
           tone: "error",
-          text: "Stop sharing failed. Contact dispatch.",
+          text: "Local sharing stopped, but dispatch cleanup failed. Contact dispatch.",
         },
+        sharingState: "inactive",
+        staleState: "inactive",
       }));
     }
   }
@@ -1197,9 +1334,13 @@ export default function DriverJobPage() {
   const driverLiveLocationControlsDisabled =
     driverLiveLocation.action !== "idle" ||
     pageState.kind !== "ready";
+  const driverLiveLocationShareDisabled =
+    driverLiveLocationControlsDisabled || driverLiveLocation.sharingState === "active";
+  const driverLiveLocationStopDisabled =
+    driverLiveLocationControlsDisabled || driverLiveLocation.sharingState !== "active";
   const driverLiveLocationUiState = pageState.kind === "ready" ? "runtime-check" : "disabled";
   const driverLiveLocationHelperText =
-    "Share only when dispatch opens live location for this job. Chrome asks for GPS after that check passes.";
+    "Share only when dispatch opens live location for this job. Keep this page open; Stop Sharing ends it.";
   const driverLiveLocationSharingLabel =
     driverLiveLocation.sharingState === "active"
       ? "Sharing"
@@ -1545,7 +1686,7 @@ export default function DriverJobPage() {
                   <button
                     className="h-11 w-full rounded-md border border-slate-300 bg-slate-50 px-3 text-sm font-semibold text-slate-500 disabled:cursor-not-allowed disabled:opacity-70"
                     data-driver-live-location-share-button={driverLiveLocationUiState}
-                    disabled={driverLiveLocationControlsDisabled}
+                    disabled={driverLiveLocationShareDisabled}
                     onClick={shareDriverLiveLocation}
                     type="button"
                   >
@@ -1554,7 +1695,7 @@ export default function DriverJobPage() {
                   <button
                     className="h-11 w-full rounded-md border border-slate-300 bg-slate-50 px-3 text-sm font-semibold text-slate-500 disabled:cursor-not-allowed disabled:opacity-70"
                     data-driver-live-location-stop-button={driverLiveLocationUiState}
-                    disabled={driverLiveLocationControlsDisabled}
+                    disabled={driverLiveLocationStopDisabled}
                     onClick={stopDriverLiveLocation}
                     type="button"
                   >

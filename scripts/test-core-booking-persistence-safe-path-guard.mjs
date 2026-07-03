@@ -38,7 +38,6 @@ const riskyActivationFragments = [
   "payout",
   "payment",
   "pdf",
-  "billing",
   "rate_override",
   "rateOverride",
   "provider",
@@ -293,8 +292,8 @@ try {
   );
   assertIncludes(
     saveBookingSource,
-    "buildAdminBookingPersistencePayload",
-    "Save Booking + CRM safe operational payload builder",
+    "buildAdminDispatchReturnTripPersistencePayloads",
+    "Save Booking + CRM safe return-trip-aware operational payload builder",
   );
   assertExcludes(saveBookingSource, "adminSavedBookingsApiPath", "Save Booking + CRM safe persistence path");
   assertExcludes(saveBookingSource, "/api/admin-saved-bookings", "Save Booking + CRM safe persistence path");

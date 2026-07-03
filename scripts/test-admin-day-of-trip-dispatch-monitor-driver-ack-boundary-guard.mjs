@@ -94,6 +94,11 @@ const dayOfTripBlock = sectionBetween(
   "const dayOfTripDriverAcknowledged =",
   "const dayOfTripExceptionEscalationClosed =",
 );
+const dayOfTripBoundaryBehaviorBlock = sectionBetween(
+  appPage,
+  "const dayOfTripDriverAcknowledged =",
+  "const activeJobDashboardSearchTerm = clean(searchTerm);",
+);
 const dayOfTripMarkupBlock = sectionBetween(
   appPage,
   'aria-label="Day-of-Trip Dispatch Monitor"',
@@ -176,9 +181,9 @@ for (const forbidden of [
 
 for (const pattern of [
   /customer_price|quoted_price|driver_payout|paynow|invoice|payment|pdf|billing|parser_debug|raw_ai|service_role|server_secret/i,
-  /provider|send|notification|live_location|photo|calendar|auth/i,
+  /provider|send|notification|live_location|calendar|auth/i,
 ]) {
-  assertNotMatches(dayOfTripBlock, pattern, "Day-of-Trip boundary forbidden behavior");
+  assertNotMatches(dayOfTripBoundaryBehaviorBlock, pattern, "Day-of-Trip boundary forbidden behavior");
 }
 
 assertIncludes(

@@ -102,11 +102,19 @@ for (const fragment of [
 for (const fragment of [
   "const urgentCustomerBookingRequestBookings = useMemo(",
   "bookingRecordIsPickupWithinNextHours(bookingRecord, currentTimeMs, 24)",
-  "const visibleUrgentCustomerBookingRequestBookings = useMemo(",
-  "urgentCustomerBookingRequestBookings.slice(0, 3)",
+  "const urgentUnassignedSavedBookingRequests = useMemo(",
+  "!bookingRecordIsCustomerBookingRequest(bookingRecord)",
+  "!bookingRecordHasDispatchActiveJobsMonitorDriver(bookingRecord)",
+  "bookingRecordIsInsideActiveJobMonitorWindow(bookingRecord, currentTimeMs)",
+  "const dashboardUrgentBookingRequestBookings = useMemo(",
+  "[...urgentCustomerBookingRequestBookings, ...urgentUnassignedSavedBookingRequests].sort(",
+  "const visibleDashboardUrgentBookingRequestBookings = useMemo(",
+  "dashboardUrgentBookingRequestBookings.slice(0, 5)",
+  "const urgentUnassignedSavedBookingIdSet = useMemo(",
   "const urgentCustomerBookingRequestKeySet = useMemo(",
-  "const urgentCustomerBookingRequestDisplayItems =",
+  "const dashboardUrgentBookingRequestDisplayItems =",
   "const urgentCustomerBookingRequestCount = urgentCustomerBookingRequestBookings.length;",
+  "const dashboardUrgentBookingRequestCount = dashboardUrgentBookingRequestBookings.length;",
 ]) {
   assertIncludes(derivedRequestSection, fragment, `urgent request derived fragment ${fragment}`);
 }
@@ -126,14 +134,32 @@ for (const fragment of [
 for (const fragment of [
   "Urgent Booking Requests",
   'data-dashboard-urgent-booking-requests-panel="true"',
-  'data-dashboard-urgent-booking-requests-count={String(urgentCustomerBookingRequestCount)}',
-  "Pickup under 24 hours only. Review urgent requests in Bookings before loading Dispatch.",
-  "disabled={urgentCustomerBookingRequestCount === 0}",
-  "urgentCustomerBookingRequestDisplayItems.map",
+  'data-dashboard-urgent-booking-requests-count={String(dashboardUrgentBookingRequestCount)}',
+  "Pickup under 24 hours; saved Driver TBC jobs under 1 hour stay here until a driver is assigned.",
+  "disabled={dashboardUrgentBookingRequestCount === 0}",
+  "const firstSavedDriverTbcBooking =",
+  "dashboardUrgentBookingRequestDisplayItems.find(",
+  "!bookingRecordIsCustomerBookingRequest(bookingRecord)",
+  "loadSelectedBooking(firstBooking, { focusDriverJobLink: true })",
+  "dashboardUrgentBookingRequestDisplayItems.map",
+  'data-dashboard-urgent-booking-request-kind=',
+  '"driver-tbc"',
   'data-dashboard-urgent-booking-request-row={bookingId}',
-  "No urgent booking requests inside 24 hours loaded.",
+  "loadSelectedBooking(bookingRecord, { focusDriverJobLink: true })",
+  "No urgent booking requests or Driver TBC jobs inside the dispatch window.",
 ]) {
   assertIncludes(dashboardUrgentPanel, fragment, `dashboard urgent panel fragment ${fragment}`);
+}
+
+for (const fragment of [
+  "const [dispatchLoadFocusTarget, setDispatchLoadFocusTarget] = useState<",
+  '"customerCopy" | "driverJobLink" | null',
+  'dispatchLoadFocusTarget === "driverJobLink"',
+  '? "driver-job-link"',
+  'data-dispatch-workflow-step="driver-job-link"',
+  "Driver Job Link is ready for admin action.",
+]) {
+  assertIncludes(appPage, fragment, `dispatch driver job link focus fragment ${fragment}`);
 }
 
 assertSourceOrder(
@@ -159,6 +185,8 @@ assertIncludes(
 for (const forbidden of [
   "customerBookingRequestDisplayItems.slice(0, 3)",
   "customerBookingRequestCount === 0",
+  "loadSelectedBooking(firstBooking);",
+  "loadSelectedBooking(bookingRecord);",
 ]) {
   assertExcludes(dashboardUrgentPanel, forbidden, `dashboard urgent-only boundary ${forbidden}`);
 }
@@ -216,8 +244,7 @@ for (const fragment of [
   "normaliseTimeForSort(formatPickupTimeFromRecord(firstBooking))",
   "normaliseTimeForSort(formatPickupTimeFromRecord(secondBooking))",
   "const dayOfTripActiveJobVisibleBookings = dayOfTripActiveJobBookings;",
-  "const liveDispatchPreparedSlotCount = Math.max(2, activeJobDriverStatusReferenceList.length);",
-  "const liveDispatchStandbySlotCount = Math.max(",
+  "const liveDispatchPreparedSlotCount = activeJobDriverStatusReferenceList.length;",
   "const liveDispatchSlotSummaryLabel =",
   "const activeJobsMapAllowedReferenceKey = adminActiveJobsMapReadState.allowedBookingReferences.join(\"|\");",
   'const todayJobsMonitorIsActive = activeTab === "dispatch";',
@@ -283,12 +310,13 @@ for (const forbiddenPattern of [
 }
 
 for (const phrase of [
-  "Dashboard request panel is now `Urgent Booking Requests` and only displays open customer requests with pickup under 24 hours.",
+  "Dashboard request panel is now `Urgent Booking Requests` and displays open customer requests with pickup under 24 hours plus saved Driver TBC jobs inside the 1-hour pickup monitor window.",
+  "Dashboard `Open Urgent` prefers the first saved Driver TBC urgent job and loads it into Dispatch with the existing Driver Job Link panel focused; customer-request rows still go to Bookings review before any saved admin job link work.",
   "The Bookings page request panel remains the full queue as `Urgent & New Booking Requests`, with row badges separating urgent under-24h requests from new non-urgent requests.",
   "Day-of-trip jobs are shown as `Today's Jobs` only on Dispatch; Dashboard stays focused on urgent requests, admin notifications, calendar, and booking summaries.",
   "`Today's Jobs` driver report auto-refresh is on by default, still uses the guarded admin driver-status read path, and can be switched off by the operator.",
   "The `Today's Jobs` live map control opens the existing admin-only live-location runtime for assigned jobs in the monitor window and refreshes shared markers every 10 seconds while the sector is open.",
-  "The same live map control stays visible at zero assigned jobs and keeps a two-slot readiness signal; when fewer than two assigned active job references are in the 1-hour window, standby slots remain ready for upcoming assigned jobs as they enter that window.",
+  "The same live map control stays visible at zero assigned jobs, shows the actual active live-map slot count, and stays disabled until at least one assigned active job enters the 1-hour window.",
   "The pickup risk monitor defaults off, can be toggled by admin, highlights only the affected driver/job row and marker for no-pin, stale/offline, near-pickup watch, route ETA risk, and route-distance moving-away states, and does not claim route direction/ETA certainty unless guarded pickup approach evidence is ready.",
   "This reuses existing admin live-location runtime, map read paths, and guarded admin map search/route estimate routes for evidence when available; it does not add provider sends, notification sends, customer/driver messages, env changes, DB schema changes, billing/payment/PDF/invoice/payout, calendar sync, parser changes, or shims.",
   "Guard coverage lives in `scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",

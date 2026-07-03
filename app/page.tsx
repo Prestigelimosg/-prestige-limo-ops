@@ -12633,9 +12633,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     useState("");
   const [dispatchReleaseWorkflowLoadRevision, setDispatchReleaseWorkflowLoadRevision] =
     useState(0);
-  const [dispatchLoadFocusTarget, setDispatchLoadFocusTarget] = useState<"customerCopy" | null>(
-    null,
-  );
+  const [dispatchLoadFocusTarget, setDispatchLoadFocusTarget] = useState<
+    "customerCopy" | "driverJobLink" | null
+  >(null);
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
   const [message, setMessage] = useState<Message>({
     tone: "info",
@@ -12672,17 +12672,20 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   }, []);
 
   useEffect(() => {
-    if (activeTab !== "dispatch" || dispatchLoadFocusTarget !== "customerCopy") {
+    if (activeTab !== "dispatch" || !dispatchLoadFocusTarget) {
       return;
     }
 
     const timeoutId = window.setTimeout(() => {
-      const customerCopyStep = ["customer", "whatsapp", "copy"].join("-");
-      const customerCopyElement = Array.from(
+      const focusStep =
+        dispatchLoadFocusTarget === "driverJobLink"
+          ? "driver-job-link"
+          : ["customer", "whatsapp", "copy"].join("-");
+      const focusElement = Array.from(
         document.querySelectorAll<HTMLElement>("[data-dispatch-workflow-step]"),
-      ).find((element) => element.dataset.dispatchWorkflowStep === customerCopyStep);
+      ).find((element) => element.dataset.dispatchWorkflowStep === focusStep);
 
-      customerCopyElement?.scrollIntoView({ behavior: "smooth", block: "start" });
+      focusElement?.scrollIntoView({ behavior: "smooth", block: "start" });
       setDispatchLoadFocusTarget(null);
     }, 0);
 
@@ -18649,7 +18652,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
 
   function loadSelectedBooking(
     bookingRecord: BookingRecord,
-    options: { focusCustomerCopy?: boolean } = {},
+    options: { focusCustomerCopy?: boolean; focusDriverJobLink?: boolean } = {},
   ) {
     const bookingReference =
       cleanReferenceText(bookingRecord.booking_reference) ||
@@ -18696,12 +18699,20 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       }
     }
     setDispatchReleaseWorkflowLoadRevision((currentRevision) => currentRevision + 1);
-    setDispatchLoadFocusTarget(options.focusCustomerCopy ? "customerCopy" : null);
+    setDispatchLoadFocusTarget(
+      options.focusCustomerCopy
+        ? "customerCopy"
+        : options.focusDriverJobLink
+          ? "driverJobLink"
+          : null,
+    );
     setActiveTab("dispatch");
     clearBookingMessageInput();
     setMessage({
       tone: "success",
-      text: options.focusCustomerCopy
+      text: options.focusDriverJobLink
+        ? `Booking ${bookingReference || "selected booking"} loaded. Driver Job Link is ready for admin action.`
+        : options.focusCustomerCopy
         ? `Booking ${bookingReference || "selected booking"} loaded. Customer Copy is ready for admin review.`
         : `Booking ${bookingReference || "selected booking"} loaded.`,
     });
@@ -41086,7 +41097,13 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                 data-dashboard-review-new-booking-requests="true"
                 disabled={dashboardUrgentBookingRequestCount === 0}
                 onClick={() => {
-                  const firstBooking = dashboardUrgentBookingRequestDisplayItems[0]?.bookingRecord;
+                  const firstSavedDriverTbcBooking =
+                    dashboardUrgentBookingRequestDisplayItems.find(
+                      ({ bookingRecord }) => !bookingRecordIsCustomerBookingRequest(bookingRecord),
+                    )?.bookingRecord;
+                  const firstBooking =
+                    firstSavedDriverTbcBooking ||
+                    dashboardUrgentBookingRequestDisplayItems[0]?.bookingRecord;
 
                   if (!firstBooking) {
                     return;
@@ -41097,7 +41114,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                     return;
                   }
 
-                  loadSelectedBooking(firstBooking);
+                  loadSelectedBooking(firstBooking, { focusDriverJobLink: true });
                 }}
                 type="button"
               >
@@ -41134,7 +41151,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                           return;
                         }
 
-                        loadSelectedBooking(bookingRecord);
+                        loadSelectedBooking(bookingRecord, { focusDriverJobLink: true });
                       }}
                       type="button"
                     >

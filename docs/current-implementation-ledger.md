@@ -107,7 +107,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Dispatch daily-use layout is now operator-focused: intake, booking details, route/vehicle, pricing, assigned driver, customer/driver copy, driver job link, and save actions stay visible while saved-record lookup plus complex readiness, handoff, follow-up, day-of-trip monitor, recovery, exception, and billing-prep checks sit behind one compact `Optional Workflow Tools` disclosure.
 - Saved booking records remain available inside the optional workflow drawer behind a compact `Saved Booking Records` disclosure, so the Dispatch page does not open with a large loaded-records sector.
 - Dispatch now owns the `Today's Jobs` monitor. It shows assigned operational jobs inside the 1-hour pickup window, auto-refreshes driver reports every 10 seconds while Dispatch is open, and includes one compact admin live-map control surface for those active jobs.
-- The live-map control keeps a two-slot readiness signal in the existing panel: if fewer than two active job references are in the 1-hour pickup window, the panel shows standby live map slots ready for the next upcoming jobs as they enter that window.
+- The live-map control shows the actual active live-map slot count in the existing panel and stays disabled until at least one assigned active job is inside the 1-hour pickup window.
 - On Dispatch, `Today's Jobs` sits below the `Assigned Driver` sector so driver assignment stays the primary operator action before multi-job scanning.
 - The previous duplicate active-jobs map/monitor surfaces were consolidated so the operator can use one daily monitor for 1-hour auto-appearance, driver reporting, and same-window live map controls.
 - The Dispatch monitor displays pickup time through the normalized booking time formatter instead of the raw persisted `pickup_time` value, preventing saved production jobs from showing `Time TBC` when their pickup time exists in another saved field.
@@ -717,11 +717,12 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Dashboard Urgent Requests And One-Window Active Monitor
 
 - Dashboard request panel is now `Urgent Booking Requests` and displays open customer requests with pickup under 24 hours plus saved Driver TBC jobs inside the 1-hour pickup monitor window.
+- Dashboard `Open Urgent` prefers the first saved Driver TBC urgent job and loads it into Dispatch with the existing Driver Job Link panel focused; customer-request rows still go to Bookings review before any saved admin job link work.
 - The Bookings page request panel remains the full queue as `Urgent & New Booking Requests`, with row badges separating urgent under-24h requests from new non-urgent requests.
 - Day-of-trip jobs are shown as `Today's Jobs` only on Dispatch; Dashboard stays focused on urgent requests, admin notifications, calendar, and booking summaries.
 - `Today's Jobs` driver report auto-refresh is on by default, still uses the guarded admin driver-status read path, and can be switched off by the operator.
 - The `Today's Jobs` live map control opens the existing admin-only live-location runtime for assigned jobs in the monitor window and refreshes shared markers every 10 seconds while the sector is open.
-- The same live map control stays visible at zero assigned jobs and keeps a two-slot readiness signal; when fewer than two assigned active job references are in the 1-hour window, standby slots remain ready for upcoming assigned jobs as they enter that window.
+- The same live map control stays visible at zero assigned jobs, shows the actual active live-map slot count, and stays disabled until at least one assigned active job enters the 1-hour window.
 - The pickup risk monitor defaults off, can be toggled by admin, highlights only the affected driver/job row and marker for no-pin, stale/offline, near-pickup watch, route ETA risk, and route-distance moving-away states, and does not claim route direction/ETA certainty unless guarded pickup approach evidence is ready.
 - This reuses existing admin live-location runtime, map read paths, and guarded admin map search/route estimate routes for evidence when available; it does not add provider sends, notification sends, customer/driver messages, env changes, DB schema changes, billing/payment/PDF/invoice/payout, calendar sync, parser changes, or shims.
 - Guard coverage lives in `scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.

@@ -539,8 +539,8 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  "loadSelectedBooking(bookingRecord);",
-  "Dashboard urgent Driver TBC rows load Dispatch for assignment",
+  "loadSelectedBooking(bookingRecord, { focusDriverJobLink: true });",
+  "Dashboard urgent Driver TBC rows load Dispatch and focus Driver Job Link for assignment",
 );
 assertExcludes(
   appPage,
@@ -657,8 +657,8 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  "window.setInterval(() => {\n      for (const bookingReference of bookingReferences) {\n        void refreshDashboardDriverJobStatusRead(bookingReference);\n      }\n    }, 10 * 1000);",
-  "Dispatch driver report read-only auto-refresh interval",
+  "window.setInterval(() => {\n      for (const bookingReference of bookingReferences) {\n        void refreshDashboardDriverJobStatusRead(bookingReference);\n        void refreshDashboardDriverOtsPhotoProofRead(bookingReference);\n      }\n    }, 10 * 1000);",
+  "Dispatch driver report and OTS photo proof read-only auto-refresh interval",
 );
 assertIncludes(
   appPage,

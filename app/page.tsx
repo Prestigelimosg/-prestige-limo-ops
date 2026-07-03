@@ -3475,10 +3475,12 @@ function adminActiveJobsBrowserMapMarkerLabel(entry: AdminActiveJobsBrowserMapMa
 function AdminActiveJobsBrowserMap({
   activeJobs,
   apiKey,
+  expanded = false,
   mapId,
 }: {
   activeJobs: AdminActiveJobsMapLocation[];
   apiKey: string;
+  expanded?: boolean;
   mapId: string;
 }) {
   const mapSlotRef = useRef<HTMLDivElement | null>(null);
@@ -3771,7 +3773,9 @@ function AdminActiveJobsBrowserMap({
     >
       <div
         ref={mapSlotRef}
-        className="relative z-10 h-48 w-full overflow-hidden bg-transparent sm:h-56"
+        className={`relative z-10 w-full overflow-hidden bg-transparent ${
+          expanded ? "h-[60vh] min-h-80 max-h-[42rem]" : "h-48 sm:h-56"
+        }`}
         data-admin-active-jobs-map-google-slot="true"
       />
       {hasLiveMovementMarkers ? (
@@ -11923,6 +11927,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       runtimeStatus: "closed",
       status: "idle",
     });
+  const [adminActiveJobsMapExpanded, setAdminActiveJobsMapExpanded] = useState(false);
   const [
     adminPickupApproachEvidenceByReference,
     setAdminPickupApproachEvidenceByReference,
@@ -23727,6 +23732,17 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               {adminActiveJobsMapReadState.action === "refreshing" ? "Refreshing" : "Refresh movement"}
             </button>
             <button
+              aria-pressed={adminActiveJobsMapExpanded}
+              className="rounded border border-sky-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-sky-900 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[11px]"
+              data-dispatch-live-driver-map-expand="true"
+              data-dispatch-live-driver-map-expanded={adminActiveJobsMapExpanded ? "true" : "false"}
+              disabled={activeJobDriverStatusReferenceList.length === 0}
+              onClick={() => setAdminActiveJobsMapExpanded((currentValue) => !currentValue)}
+              type="button"
+            >
+              {adminActiveJobsMapExpanded ? "Collapse map" : "Expand map"}
+            </button>
+            <button
               className="rounded border border-red-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-red-800 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[11px]"
               data-dispatch-live-driver-map-close="true"
               disabled={
@@ -23786,6 +23802,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             <AdminActiveJobsBrowserMap
               activeJobs={activeJobsMapVisibleJobs}
               apiKey={adminActiveJobsBrowserMapConfigState.apiKey}
+              expanded={adminActiveJobsMapExpanded}
               mapId={adminActiveJobsBrowserMapConfigState.mapId}
             />
           ) : activeJobsMapVisibleJobs.length > 0 &&

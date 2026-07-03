@@ -3113,9 +3113,42 @@ function loadAdminActiveJobsBrowserGoogleMaps(apiKey: string) {
 }
 
 function adminActiveJobsBrowserMapDomRendered(mapElement: HTMLElement) {
+  if (adminActiveJobsBrowserMapHasGoogleError(mapElement)) {
+    return false;
+  }
+
+  const imageTiles = [
+    ...mapElement.querySelectorAll<HTMLImageElement>(
+      [
+        'img[src*="StaticMapService.GetMapImage"]',
+        'img[src*="googleapis.com/maps"]',
+        'img[src*="google.com/maps"]',
+        'img[src*="google.com/vt"]',
+        'img[src*="gstatic.com"]',
+      ].join(","),
+    ),
+  ];
+  const renderedImageTile = imageTiles.some(
+    (tileImage) => tileImage.complete && tileImage.naturalWidth > 0,
+  );
+
+  if (renderedImageTile) {
+    return true;
+  }
+
+  const renderedCanvas = [
+    ...mapElement.querySelectorAll<HTMLCanvasElement>(".gm-style canvas"),
+  ].some((canvas) => canvas.width > 0 && canvas.height > 0);
+
+  return renderedCanvas;
+}
+
+function adminActiveJobsBrowserMapHasGoogleError(mapElement: HTMLElement) {
+  const text = mapElement.textContent || "";
+
   return Boolean(
-    mapElement.querySelector(".gm-style") ||
-      mapElement.querySelector('img[src*="StaticMapService.GetMapImage"]'),
+    mapElement.querySelector(".gm-err-container") ||
+      /didn'?t load google maps correctly|something went wrong|for development purposes only/i.test(text),
   );
 }
 
@@ -3164,47 +3197,131 @@ function waitForAdminActiveJobsBrowserMapDom(mapElement: HTMLElement) {
 
   return new Promise<void>((resolve, reject) => {
     let observer: MutationObserver | null = null;
+    let pollInterval: number | null = null;
+    let settled = false;
     const timeout = window.setTimeout(() => {
-      observer?.disconnect();
-      reject(new Error("Google Maps visual DOM did not render safely."));
+      fail("Google Maps visual DOM did not render safely.");
     }, 15000);
-    observer = new MutationObserver(() => {
+    const cleanup = () => {
+      window.clearTimeout(timeout);
+      if (pollInterval !== null) {
+        window.clearInterval(pollInterval);
+      }
+      observer?.disconnect();
+    };
+    const fail = (message: string) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      cleanup();
+      reject(new Error(message));
+    };
+    const check = () => {
+      if (adminActiveJobsBrowserMapHasGoogleError(mapElement)) {
+        fail("Google Maps visual DOM rendered an error surface.");
+        return;
+      }
+
       if (!adminActiveJobsBrowserMapDomRendered(mapElement)) {
         return;
       }
 
-      window.clearTimeout(timeout);
-      observer?.disconnect();
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      cleanup();
       resolve();
-    });
+    };
+
+    observer = new MutationObserver(check);
 
     observer.observe(mapElement, {
       childList: true,
       subtree: true,
     });
+    pollInterval = window.setInterval(check, 250);
   });
 }
 
 function adminActiveJobsBrowserMapTileX(longitude: number, zoom: number) {
-  return Math.floor(((longitude + 180) / 360) * 2 ** zoom);
+  return Math.floor(adminActiveJobsBrowserMapTileXFloat(longitude, zoom));
+}
+
+function adminActiveJobsBrowserMapTileXFloat(longitude: number, zoom: number) {
+  return ((longitude + 180) / 360) * 2 ** zoom;
 }
 
 function adminActiveJobsBrowserMapTileY(latitude: number, zoom: number) {
+  return Math.floor(adminActiveJobsBrowserMapTileYFloat(latitude, zoom));
+}
+
+function adminActiveJobsBrowserMapTileYFloat(latitude: number, zoom: number) {
   const latitudeRadians = (latitude * Math.PI) / 180;
 
-  return Math.floor(
+  return (
     ((1 - Math.log(Math.tan(latitudeRadians) + 1 / Math.cos(latitudeRadians)) / Math.PI) / 2) *
-      2 ** zoom,
+    2 ** zoom
   );
+}
+
+function adminActiveJobsBrowserMapTileFallbackZoom(
+  markerEntries: AdminActiveJobsBrowserMapMarkerEntry[],
+) {
+  const latitudes = markerEntries.map((entry) => entry.position.lat);
+  const longitudes = markerEntries.map((entry) => entry.position.lng);
+  const latitudeSpan = Math.max(...latitudes) - Math.min(...latitudes);
+  const longitudeSpan = Math.max(...longitudes) - Math.min(...longitudes);
+  const span = Math.max(latitudeSpan, longitudeSpan);
+
+  if (span > 0.08) {
+    return 11;
+  }
+
+  if (span > 0.04) {
+    return 12;
+  }
+
+  if (span > 0.02) {
+    return 13;
+  }
+
+  if (span > 0.01) {
+    return 14;
+  }
+
+  return 15;
+}
+
+function adminActiveJobsBrowserMapTileFallbackCenter(
+  markerEntries: AdminActiveJobsBrowserMapMarkerEntry[],
+) {
+  const latitudes = markerEntries.map((entry) => entry.position.lat);
+  const longitudes = markerEntries.map((entry) => entry.position.lng);
+
+  return {
+    lat: (Math.min(...latitudes) + Math.max(...latitudes)) / 2,
+    lng: (Math.min(...longitudes) + Math.max(...longitudes)) / 2,
+  };
 }
 
 function renderAdminActiveJobsBrowserMapTileFallback(
   mapElement: HTMLElement,
-  position: BrowserGoogleLatLngLiteral,
+  markerEntries: AdminActiveJobsBrowserMapMarkerEntry[],
 ) {
-  const zoom = 15;
-  const centerTileX = adminActiveJobsBrowserMapTileX(position.lng, zoom);
-  const centerTileY = adminActiveJobsBrowserMapTileY(position.lat, zoom);
+  if (markerEntries.length === 0) {
+    return;
+  }
+
+  const zoom = adminActiveJobsBrowserMapTileFallbackZoom(markerEntries);
+  const center = adminActiveJobsBrowserMapTileFallbackCenter(markerEntries);
+  const centerTileX = adminActiveJobsBrowserMapTileX(center.lng, zoom);
+  const centerTileY = adminActiveJobsBrowserMapTileY(center.lat, zoom);
+  const centerTileXFloat = adminActiveJobsBrowserMapTileXFloat(center.lng, zoom);
+  const centerTileYFloat = adminActiveJobsBrowserMapTileYFloat(center.lat, zoom);
   const tileSize = 256;
 
   mapElement.innerHTML = "";
@@ -3241,6 +3358,37 @@ function renderAdminActiveJobsBrowserMapTileFallback(
   attribution.style.position = "absolute";
   attribution.style.right = "4px";
   mapElement.appendChild(attribution);
+
+  markerEntries.forEach((entry, index) => {
+    const marker = document.createElement("div");
+    const markerTileX = adminActiveJobsBrowserMapTileXFloat(entry.position.lng, zoom);
+    const markerTileY = adminActiveJobsBrowserMapTileYFloat(entry.position.lat, zoom);
+    const reference = adminActiveJobsBrowserMapReference(entry);
+    const isStale = Boolean(entry.job.is_stale);
+
+    marker.setAttribute("data-admin-active-jobs-map-tile-fallback-marker", reference);
+    marker.title = `${entry.job.driver_display_label || "Driver"} · ${compactBookingReference(reference)}`;
+    marker.style.alignItems = "center";
+    marker.style.background = isStale ? "#d97706" : index === 0 ? "#dc2626" : "#ea580c";
+    marker.style.border = "2px solid #ffffff";
+    marker.style.borderRadius = "999px";
+    marker.style.boxShadow = "0 2px 8px rgba(15, 23, 42, 0.35)";
+    marker.style.color = "#ffffff";
+    marker.style.display = "flex";
+    marker.style.fontSize = "14px";
+    marker.style.fontWeight = "800";
+    marker.style.height = "28px";
+    marker.style.justifyContent = "center";
+    marker.style.left = `calc(50% + ${(markerTileX - centerTileXFloat) * tileSize}px)`;
+    marker.style.lineHeight = "1";
+    marker.style.position = "absolute";
+    marker.style.top = `calc(50% + ${(markerTileY - centerTileYFloat) * tileSize}px)`;
+    marker.style.transform = "translate(-50%, -50%)";
+    marker.style.width = "28px";
+    marker.style.zIndex = "2";
+    marker.textContent = isStale ? "!" : String(index + 1);
+    mapElement.appendChild(marker);
+  });
 }
 
 function waitForAdminActiveJobsBrowserMapTileFallback(mapElement: HTMLElement) {
@@ -3471,13 +3619,13 @@ function AdminActiveJobsBrowserMap({
           mapsRuntimeRef.current = null;
           tileFallbackInline = true;
           mapSlotRef.current?.prepend(mapElement);
-          const latestMarkerJob = activeMarkerJobsRef.current[0];
+          const latestMarkerJobs = activeMarkerJobsRef.current;
 
-          if (!latestMarkerJob) {
+          if (latestMarkerJobs.length === 0) {
             throw new Error("No active marker position available.");
           }
 
-          renderAdminActiveJobsBrowserMapTileFallback(mapElement, latestMarkerJob.position);
+          renderAdminActiveJobsBrowserMapTileFallback(mapElement, latestMarkerJobs);
           updateMapPortalRect();
           await waitForAdminActiveJobsBrowserMapTileFallback(mapElement);
 
@@ -3512,6 +3660,16 @@ function AdminActiveJobsBrowserMap({
   useEffect(() => {
     const map = mapRef.current;
     const maps = mapsRuntimeRef.current;
+    const mapElement = mapElementRef.current;
+
+    if (
+      renderState === "ready" &&
+      mapElement?.getAttribute("data-admin-active-jobs-map-google-tile-base") === "true" &&
+      activeMarkerJobs.length > 0
+    ) {
+      renderAdminActiveJobsBrowserMapTileFallback(mapElement, activeMarkerJobs);
+      return;
+    }
 
     if (renderState !== "ready" || !map || !maps?.Marker || !maps.LatLngBounds || activeMarkerJobs.length === 0) {
       return;

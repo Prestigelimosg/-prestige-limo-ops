@@ -64,7 +64,7 @@ for (const phrase of [
   "`Today's Jobs` shows a compact saved driver report readout per visible job, using the existing guarded admin `GET /api/admin-driver-job-statuses` path only, with monitor-wide/per-card refresh controls and auto-refresh on by default.",
   "`Today's Jobs` includes compact live-map controls that reuse the existing admin-only live-location runtime for the jobs inside the monitor window.",
   "The lower Dispatch saved-record finder is now a compact `Saved Booking Records` disclosure by default. The existing admin-only persistence controls and loaded-record scrollbox are still available after expanding, but they no longer fill the normal Dispatch view.",
-  "Dispatch internal readiness, handoff, follow-up, recovery, exception, closeout-review, and billing-prep panels now live under one compact `Advanced Checks` disclosure. The existing guarded controls remain colocated and available through nested disclosures, but the default operator view stays focused on daily trip work.",
+  "Dispatch internal readiness, handoff, follow-up, day-of-trip monitor, recovery, exception, closeout-review, and billing-prep panels now live under one compact `Advanced Checks` disclosure. Every Advanced Checks child panel is a closed nested disclosure by default, while the existing guarded controls remain colocated after expansion and the default operator view stays focused on daily trip work.",
   "The `Today's Jobs` driver report readout is read-only and does not create driver status events, notification rows, provider sends, GPS/live-location records, billing/payment/PDF/invoice/payout records, or a duplicate single-booking Dispatch workflow.",
   "The Bookings tab shows a compact new-request badge/highlight after open customer requests are detected; no sound, browser notification, polling loop, provider send, or new route is added.",
 ]) {
@@ -335,6 +335,19 @@ const advancedChecksBlock = sliceBetween(
   'data-dispatch-advanced-checks="true"',
   '<aside className="contents">',
 );
+const advancedChecksDisclosureTags = [
+  ...advancedChecksBlock.matchAll(/<details\n\s+aria-label="([^"]+)"[\s\S]*?>/g),
+].map((match) => ({ label: match[1], tag: match[0] }));
+
+assert.equal(
+  advancedChecksDisclosureTags.length,
+  16,
+  "Advanced Checks child panels should all be nested disclosures.",
+);
+
+for (const { label, tag } of advancedChecksDisclosureTags) {
+  assertExcludes(tag, /\sopen(?:=|\s|$)/, `Advanced Checks ${label} default disclosure`);
+}
 
 const driverAcknowledgementFollowUpTag = sliceBetween(
   advancedChecksBlock,
@@ -355,6 +368,32 @@ assertExcludes(
   advancedChecksBlock,
   '<section\n              aria-label="Driver Acknowledgement Follow-up"',
   "Driver Acknowledgement Follow-up open section",
+);
+
+const dayOfTripDispatchMonitorTag = sliceBetween(
+  advancedChecksBlock,
+  '<details\n              aria-label="Day-of-Trip Dispatch Monitor"',
+  ">",
+);
+assertExcludes(
+  dayOfTripDispatchMonitorTag,
+  /\sopen(?:=|\s|$)/,
+  "Day-of-Trip Dispatch Monitor default disclosure",
+);
+assertIncludes(
+  advancedChecksBlock,
+  'data-admin-collapsed-sector-body="day-of-trip-dispatch-monitor"',
+  "Day-of-Trip Dispatch Monitor collapsed body",
+);
+assertIncludes(
+  advancedChecksBlock,
+  'data-admin-day-of-trip-dispatch-monitor-legacy-hidden="true"',
+  "Legacy Day-of-Trip Dispatch Monitor hidden boundary",
+);
+assertExcludes(
+  advancedChecksBlock,
+  /<section\n\s+aria-label="/,
+  "Advanced Checks open sections",
 );
 
 for (const advancedCheckFragment of [

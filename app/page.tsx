@@ -35794,12 +35794,20 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                           </div>
             </details>
 
-            <section
+            <details
               aria-label="Day-of-Trip Dispatch Monitor"
-              className="hidden"
+              className="group hidden"
               data-admin-day-of-trip-dispatch-monitor="true"
               data-admin-day-of-trip-dispatch-monitor-legacy-hidden="true"
             >
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-md bg-white/70 px-2 py-1.5 text-sm font-semibold text-slate-900 outline-none transition hover:bg-white focus-visible:ring-2 focus-visible:ring-slate-300 [&::-webkit-details-marker]:hidden">
+                <span className="min-w-0 break-words">Day-of-Trip Dispatch Monitor</span>
+                <span className="shrink-0 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+                  <span className="group-open:hidden">Expand</span>
+                  <span className="hidden group-open:inline">Collapse</span>
+                </span>
+              </summary>
+              <div className="mt-2" data-admin-collapsed-sector-body="day-of-trip-dispatch-monitor">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
@@ -36016,7 +36024,8 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                 the Dispatch Live Dispatch Map for active jobs only. No customer message, provider notification,
                 billing, payment, PDF, payout, parser-learning, or broad tracking behavior.
               </p>
-            </section>
+                          </div>
+            </details>
 
             <details
               aria-label="Day-of-Trip Exception Escalation"

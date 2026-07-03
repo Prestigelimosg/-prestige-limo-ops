@@ -39,6 +39,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Only the explicit `Draft`, `Issue`, or `Email` action posts to guarded admin invoice routes with the existing admin booking persistence purpose header.
 - Manual bill-to records without a selected CRM account still use an internal `plain-invoice:` customer id and fixed `invoice` document type; selected CRM billing accounts use the existing saved customer/account id/name without creating a new CRM row.
 - The CRM link selector reads only from the existing guarded saved customer account read and does not create customer folders, CRM accounts, portal invites, customer auth, bookings, or calendar records.
+- The Create Invoice CRM account picker is an admin-only searchable picker, not a native browser select: it searches safe account names by prefix, shows 10 accounts per search/load, and keeps the main customer folder finder state separate from invoice account selection.
 - Create Invoice records do not use customer-specific saved prefixes or the monthly invoice number reservation route.
 - The Create Invoice `Email` button requires a current preview and recipient email, issues the invoice through the guarded invoice route, then calls the existing guarded invoice email route.
 - The `Paid` checkbox changes only the stored invoice status label and does not create a payment, bank record, card charge, payout, or reconciliation event.

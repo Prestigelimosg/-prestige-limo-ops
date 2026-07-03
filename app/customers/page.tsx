@@ -937,6 +937,25 @@ function findMockCustomerForSavedAccount(account: RegularCustomerAccountReadReco
   );
 }
 
+function customerFolderRowFromSavedAccount(account: RegularCustomerAccountReadRecord) {
+  const matchedCustomer = findMockCustomerForSavedAccount(account);
+  const customerAccount = String(account.customer_account ?? "").trim() || "Customer account";
+  const customerId = String(account.customer_id ?? "").trim() || customerAccount;
+
+  return {
+    completedJobs: Number(account.completed_count ?? 0),
+    customerId,
+    customerName: customerAccount,
+    folderHref: matchedCustomer ? `/customers/${matchedCustomer.id}` : "",
+    historyRows: Number(account.saved_booking_count ?? 0),
+    latestBookingReference: account.latest_booking_reference ?? null,
+    latestPickupAt: account.latest_pickup_at ?? null,
+    latestServiceType: account.latest_service_type ?? null,
+    source: "saved-account-read" as const,
+    upcomingJobs: Number(account.upcoming_count ?? 0),
+  };
+}
+
 function savedBookingReference(booking: RegularCustomerSavedBookingReadRecord) {
   return String(booking.booking_reference ?? "").trim();
 }
@@ -1457,11 +1476,14 @@ function downloadBrowserBlob(blob: Blob, filename: string) {
 export default function MockCustomerDashboardPage() {
   const customerInvoicePrepPanelRef = useRef<HTMLDivElement | null>(null);
   const plainInvoicePanelRef = useRef<HTMLDivElement | null>(null);
+  const plainInvoiceCrmRequestSequenceRef = useRef(0);
   const customerInvoicePrepRowKeyRef = useRef("");
   const [searchTerm, setSearchTerm] = useState("");
   const [customerFolderFinderPage, setCustomerFolderFinderPage] = useState(1);
   const [customerFolderFinderSelectedId, setCustomerFolderFinderSelectedId] = useState("");
   const [customerFolderFinderDropdownOpen, setCustomerFolderFinderDropdownOpen] = useState(false);
+  const [plainInvoiceCrmPickerOpen, setPlainInvoiceCrmPickerOpen] = useState(false);
+  const [plainInvoiceCrmSearchTerm, setPlainInvoiceCrmSearchTerm] = useState("");
   const [customerPortalAccessCopyStates, setCustomerPortalAccessCopyStates] = useState<
     Record<string, CustomerPortalAccessCopyStatus>
   >({});
@@ -1534,6 +1556,14 @@ export default function MockCustomerDashboardPage() {
     useState<RegularCustomerAccountReadState>({
       accounts: [],
       message: "Load saved customer accounts from the guarded read path when needed.",
+      status: "idle",
+      summary: null,
+      tone: "info",
+    });
+  const [plainInvoiceCrmAccountReadState, setPlainInvoiceCrmAccountReadState] =
+    useState<RegularCustomerAccountReadState>({
+      accounts: [],
+      message: "Load CRM accounts or type an account name prefix to search 10 at a time.",
       status: "idle",
       summary: null,
       tone: "info",
@@ -1663,28 +1693,21 @@ export default function MockCustomerDashboardPage() {
       }));
     }
 
-    return regularCustomerAccountReadState.accounts.map((account) => {
-      const matchedCustomer = findMockCustomerForSavedAccount(account);
-      const customerAccount = String(account.customer_account ?? "").trim() || "Customer account";
-      const customerId = String(account.customer_id ?? "").trim() || customerAccount;
-
-      return {
-        completedJobs: Number(account.completed_count ?? 0),
-        customerId,
-        customerName: customerAccount,
-        folderHref: matchedCustomer ? `/customers/${matchedCustomer.id}` : "",
-        historyRows: Number(account.saved_booking_count ?? 0),
-        latestBookingReference: account.latest_booking_reference ?? null,
-        latestPickupAt: account.latest_pickup_at ?? null,
-        latestServiceType: account.latest_service_type ?? null,
-        source: "saved-account-read" as const,
-        upcomingJobs: Number(account.upcoming_count ?? 0),
-      };
-    });
+    return regularCustomerAccountReadState.accounts.map(customerFolderRowFromSavedAccount);
   }, [regularCustomerAccountReadState.accounts, regularCustomerAccountReadState.status]);
   const plainInvoiceCrmAccountOptions = useMemo(
-    () => customerFolderIndexRows.filter((row) => row.source === "saved-account-read"),
-    [customerFolderIndexRows],
+    () => {
+      if (plainInvoiceCrmAccountReadState.status === "loaded") {
+        return plainInvoiceCrmAccountReadState.accounts.map(customerFolderRowFromSavedAccount);
+      }
+
+      return customerFolderIndexRows.filter((row) => row.source === "saved-account-read");
+    },
+    [
+      customerFolderIndexRows,
+      plainInvoiceCrmAccountReadState.accounts,
+      plainInvoiceCrmAccountReadState.status,
+    ],
   );
   const selectedCustomerFolderFinderRow = useMemo(
     () =>
@@ -2115,6 +2138,17 @@ export default function MockCustomerDashboardPage() {
   const isPlainInvoicePreviewCurrent =
     Boolean(plainInvoicePreview) &&
     plainInvoicePreview?.previewKey === plainInvoiceCurrentPreviewKey;
+  const plainInvoiceCrmPickerLabel =
+    plainInvoiceForm.crmCustomerName.trim() ||
+    (plainInvoiceCrmAccountOptions.length > 0
+      ? "Manual bill-to (no CRM link)"
+      : plainInvoiceCrmAccountReadState.status === "loaded"
+        ? "No CRM accounts found"
+        : "Load CRM accounts first");
+  const plainInvoiceCrmSearchResultsLabel =
+    plainInvoiceCrmAccountReadState.status === "loading"
+      ? "Loading CRM accounts..."
+      : plainInvoiceCrmAccountReadState.message;
   const customerBillingDocumentTotalPages = Math.max(
     1,
     Math.ceil(issuedCustomerInvoices.length / customerBillingDocumentPageSize),
@@ -2414,6 +2448,92 @@ export default function MockCustomerDashboardPage() {
         tone: "error",
       });
       await loadRegularCustomerSavedBookingsForUnbilledQueue(localCustomerFolderSavedBookingTargets);
+    }
+  }
+
+  async function loadPlainInvoiceCrmAccounts(searchTerm = plainInvoiceCrmSearchTerm) {
+    const requestId = plainInvoiceCrmRequestSequenceRef.current + 1;
+    plainInvoiceCrmRequestSequenceRef.current = requestId;
+    const trimmedSearch = searchTerm.trim();
+
+    if (typeof fetch !== "function") {
+      setPlainInvoiceCrmAccountReadState({
+        accounts: [],
+        message: "CRM billing account read is not available in this browser.",
+        status: "error",
+        summary: null,
+        tone: "error",
+      });
+      return;
+    }
+
+    setPlainInvoiceCrmAccountReadState({
+      accounts: [],
+      message: trimmedSearch
+        ? `Searching CRM billing accounts starting with "${trimmedSearch}"...`
+        : "Loading the first 10 CRM billing accounts...",
+      status: "loading",
+      summary: null,
+      tone: "info",
+    });
+
+    try {
+      const params = new URLSearchParams({
+        limit: "10",
+      });
+
+      if (trimmedSearch) {
+        params.set("search", trimmedSearch);
+      }
+
+      const response = await fetch(`${adminCustomerAccountsApiPath}?${params.toString()}`, {
+        headers: {
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "GET",
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.error || "CRM billing account read could not be completed.");
+      }
+
+      if (requestId !== plainInvoiceCrmRequestSequenceRef.current) {
+        return;
+      }
+
+      const accounts = Array.isArray(result.accounts)
+        ? (result.accounts as RegularCustomerAccountReadRecord[])
+        : [];
+      const returnedCount = Number(result.summary?.returned_count ?? accounts.length);
+      const totalCount = Number(result.summary?.total_account_count ?? returnedCount);
+      const matchText = trimmedSearch ? ` starting with "${trimmedSearch}"` : "";
+
+      setPlainInvoiceCrmAccountReadState({
+        accounts,
+        message:
+          returnedCount > 0
+            ? `Showing ${returnedCount} CRM billing account${returnedCount === 1 ? "" : "s"}${matchText}. 10 per search.`
+            : `No CRM billing accounts found${matchText}.`,
+        status: "loaded",
+        summary: {
+          ...(result.summary || {}),
+          total_account_count: totalCount,
+        },
+        tone: returnedCount > 0 ? "success" : "info",
+      });
+    } catch (error) {
+      if (requestId !== plainInvoiceCrmRequestSequenceRef.current) {
+        return;
+      }
+
+      setPlainInvoiceCrmAccountReadState({
+        accounts: [],
+        message: customerAdminReadFailureMessage("CRM billing account read", error),
+        status: "error",
+        summary: null,
+        tone: "error",
+      });
     }
   }
 
@@ -3156,6 +3276,13 @@ export default function MockCustomerDashboardPage() {
         : "Create Invoice switched to manual bill-to. Refresh preview before Draft, Issue, or Email.",
     );
     setPlainInvoiceFeedbackTone("info");
+    setPlainInvoiceCrmPickerOpen(false);
+  }
+
+  function updatePlainInvoiceCrmSearchTerm(value: string) {
+    setPlainInvoiceCrmSearchTerm(value);
+    setPlainInvoiceCrmPickerOpen(true);
+    void loadPlainInvoiceCrmAccounts(value);
   }
 
   function updatePlainInvoiceAdditionalLineItem(
@@ -5560,37 +5687,128 @@ export default function MockCustomerDashboardPage() {
                 </div>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(9rem,1fr)_minmax(9rem,0.9fr)_minmax(8rem,0.75fr)_minmax(8rem,0.7fr)] xl:items-end">
                   <div className="grid gap-2 sm:col-span-2 xl:col-span-4 xl:grid-cols-[minmax(12rem,1fr)_auto] xl:items-end">
-                    <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
-                      CRM billing account
-                      <select
-                        className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
+                    <div className="relative grid gap-1 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                      <span>CRM billing account</span>
+                      <button
+                        aria-expanded={plainInvoiceCrmPickerOpen}
+                        aria-haspopup="listbox"
+                        className="flex h-8 w-full items-center justify-between gap-2 rounded-md border border-slate-300 bg-white px-2 py-1 text-left text-xs font-semibold normal-case tracking-normal text-slate-950 outline-none transition hover:border-slate-500 focus:border-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
                         data-plain-invoice-crm-account="true"
-                        disabled={regularCustomerAccountReadState.status === "loading"}
-                        onChange={(event) => updatePlainInvoiceCrmBillingAccount(event.target.value)}
-                        value={plainInvoiceForm.crmCustomerId}
+                        data-plain-invoice-crm-picker="true"
+                        disabled={plainInvoiceCrmAccountReadState.status === "loading"}
+                        onClick={() => {
+                          setPlainInvoiceCrmPickerOpen((currentOpen) => !currentOpen);
+                          if (
+                            plainInvoiceCrmAccountReadState.status === "idle" &&
+                            regularCustomerAccountReadState.status !== "loaded"
+                          ) {
+                            void loadPlainInvoiceCrmAccounts(plainInvoiceCrmSearchTerm);
+                          }
+                        }}
+                        type="button"
                       >
-                        <option value="">
-                          {plainInvoiceCrmAccountOptions.length > 0
-                            ? "Manual bill-to (no CRM link)"
-                            : regularCustomerAccountReadState.status === "loaded"
-                              ? "No CRM accounts found"
-                              : "Load CRM accounts first"}
-                        </option>
-                        {plainInvoiceCrmAccountOptions.map((account) => (
-                          <option key={account.customerId} value={account.customerId}>
-                            {account.customerName}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                        <span className="truncate">{plainInvoiceCrmPickerLabel}</span>
+                        <span aria-hidden="true" className="text-slate-500">
+                          v
+                        </span>
+                      </button>
+                      {plainInvoiceCrmPickerOpen ? (
+                        <div
+                          className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-md border border-slate-300 bg-white shadow-lg"
+                          data-plain-invoice-crm-picker-panel="true"
+                        >
+                          <div className="grid gap-2 border-b border-slate-200 bg-slate-50 p-2 sm:grid-cols-[minmax(10rem,1fr)_auto]">
+                            <label className="grid gap-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                              Search account starts with
+                              <input
+                                className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold normal-case tracking-normal text-slate-950 outline-none focus:border-slate-700"
+                                data-plain-invoice-crm-search="true"
+                                onChange={(event) => updatePlainInvoiceCrmSearchTerm(event.target.value)}
+                                placeholder="Type c, h, u..."
+                                type="search"
+                                value={plainInvoiceCrmSearchTerm}
+                              />
+                            </label>
+                            <button
+                              className="inline-flex h-8 items-center justify-center self-end rounded-md border border-slate-300 bg-white px-2 text-[11px] font-bold leading-none normal-case tracking-normal text-slate-700 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                              data-plain-invoice-crm-search-action="true"
+                              disabled={plainInvoiceCrmAccountReadState.status === "loading"}
+                              onClick={() => void loadPlainInvoiceCrmAccounts(plainInvoiceCrmSearchTerm)}
+                              type="button"
+                            >
+                              Search
+                            </button>
+                          </div>
+                          <div
+                            className="max-h-72 overflow-y-auto"
+                            data-plain-invoice-crm-results="true"
+                            role="listbox"
+                          >
+                            <button
+                              aria-selected={!plainInvoiceForm.crmCustomerId}
+                              className={`grid w-full gap-0.5 px-3 py-2 text-left text-xs normal-case tracking-normal transition hover:bg-slate-50 ${
+                                plainInvoiceForm.crmCustomerId
+                                  ? "bg-white text-slate-900"
+                                  : "bg-emerald-50 text-emerald-950"
+                              }`}
+                              data-plain-invoice-crm-result="manual"
+                              onClick={() => updatePlainInvoiceCrmBillingAccount("")}
+                              role="option"
+                              type="button"
+                            >
+                              <span className="font-bold">Manual bill-to (no CRM link)</span>
+                              <span className="font-semibold text-slate-500">No customer/account link</span>
+                            </button>
+                            {plainInvoiceCrmAccountOptions.map((account) => (
+                              <button
+                                aria-selected={account.customerId === plainInvoiceForm.crmCustomerId}
+                                className={`grid w-full gap-0.5 px-3 py-2 text-left text-xs normal-case tracking-normal transition hover:bg-slate-50 ${
+                                  account.customerId === plainInvoiceForm.crmCustomerId
+                                    ? "bg-emerald-50 text-emerald-950"
+                                    : "bg-white text-slate-900"
+                                }`}
+                                data-plain-invoice-crm-result={account.customerId}
+                                key={account.customerId}
+                                onClick={() => updatePlainInvoiceCrmBillingAccount(account.customerId)}
+                                role="option"
+                                type="button"
+                              >
+                                <span className="font-bold">{account.customerName}</span>
+                                <span className="font-semibold text-slate-500">
+                                  {account.customerId} | {account.historyRows} booking
+                                  {account.historyRows === 1 ? "" : "s"}
+                                </span>
+                              </button>
+                            ))}
+                            {plainInvoiceCrmAccountOptions.length === 0 ? (
+                              <p className="px-3 py-3 text-xs font-semibold normal-case tracking-normal text-slate-500">
+                                No matching CRM billing accounts.
+                              </p>
+                            ) : null}
+                          </div>
+                          <p
+                            aria-live="polite"
+                            className={`border-t border-slate-200 px-3 py-2 text-[11px] font-semibold normal-case leading-4 tracking-normal ${regularCustomerBookingFeedbackClass(
+                              plainInvoiceCrmAccountReadState.tone,
+                            )}`}
+                            data-plain-invoice-crm-feedback="true"
+                          >
+                            {plainInvoiceCrmSearchResultsLabel}
+                          </p>
+                        </div>
+                      ) : null}
+                    </div>
                     <button
                       className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-2 text-[11px] font-bold leading-none text-slate-700 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
                       data-plain-invoice-load-crm-accounts="true"
-                      disabled={regularCustomerAccountReadState.status === "loading"}
-                      onClick={loadRegularCustomerAccounts}
+                      disabled={plainInvoiceCrmAccountReadState.status === "loading"}
+                      onClick={() => {
+                        setPlainInvoiceCrmPickerOpen(true);
+                        void loadPlainInvoiceCrmAccounts(plainInvoiceCrmSearchTerm);
+                      }}
                       type="button"
                     >
-                      {regularCustomerAccountReadState.status === "loading" ? "Loading" : "Load CRM"}
+                      {plainInvoiceCrmAccountReadState.status === "loading" ? "Loading" : "Load CRM"}
                     </button>
                   </div>
                   <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">

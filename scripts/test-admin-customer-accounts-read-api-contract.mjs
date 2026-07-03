@@ -323,12 +323,21 @@ try {
   assert.deepEqual(reader.parseAdminCustomerAccountsReadParams(new URLSearchParams()), {
     data: {
       limit: 10,
+      search: null,
     },
     ok: true,
   });
   assert.deepEqual(reader.parseAdminCustomerAccountsReadParams({ limit: "2" }), {
     data: {
       limit: 2,
+      search: null,
+    },
+    ok: true,
+  });
+  assert.deepEqual(reader.parseAdminCustomerAccountsReadParams({ limit: "10", search: "ri" }), {
+    data: {
+      limit: 10,
+      search: "ri",
     },
     ok: true,
   });
@@ -336,6 +345,7 @@ try {
   for (const [label, params] of [
     ["bad limit", { limit: "999" }],
     ["unsafe param", { invoice: "INV-1" }],
+    ["unsafe search", { search: "invoice" }],
   ]) {
     const parsed = reader.parseAdminCustomerAccountsReadParams(params);
 
@@ -434,7 +444,34 @@ try {
   assert.equal(readMock.client.operations.length, 0);
   assert.equal(readMock.client.selectHistory.length, 1);
   assert.equal(readMock.client.selectHistory[0].table, "bookings");
+  assert.equal(readMock.client.selectHistory[0].limit, 200);
   assertNoLeaks(readResult, "customer accounts read response should stay safe");
+
+  setEnv(enabledEnv());
+
+  const searchMock = installMockClient(seed);
+  const searchResult = await readRouteResponse(
+    await route.GET(
+      new Request("http://localhost/api/admin-customer-accounts?limit=10&search=r", {
+        headers: sessionHeaders({ "x-prestige-admin-session-token": undefined }),
+      }),
+    ),
+  );
+
+  assert.equal(searchResult.status, 200);
+  assert.equal(searchResult.body.ok, true);
+  assert.deepEqual(searchResult.body.summary, {
+    recent_read_count: 4,
+    returned_count: 1,
+    total_account_count: 2,
+  });
+  assert.deepEqual(searchResult.body.accounts.map((account) => account.customer_account), [
+    "Ritz Carlton",
+  ]);
+  assert.equal(searchMock.client.operations.length, 0);
+  assert.equal(searchMock.client.selectHistory.length, 1);
+  assert.equal(searchMock.client.selectHistory[0].limit, 200);
+  assertNoLeaks(searchResult, "searched customer accounts response should stay safe");
 
   setEnv(enabledEnv());
 

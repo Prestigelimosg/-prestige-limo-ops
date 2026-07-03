@@ -11,6 +11,7 @@ export const adminCustomerAccountsReadVersion = "admin-customer-accounts-read-v1
 
 export type AdminCustomerAccountsReadParams = {
   limit: number;
+  search: string | null;
 };
 
 export type AdminCustomerAccountSafeRecord = {
@@ -44,10 +45,12 @@ type MutableCustomerAccount = AdminCustomerAccountSafeRecord & {
 
 const defaultLimit = 10;
 const maxLimit = 25;
+const accountSourceReadLimit = 200;
+const maxSearchLength = 80;
 const malformedParamsError = "Admin customer accounts read parameters are malformed.";
 const forbiddenParamsError =
   "Admin customer accounts read parameters include unsupported or unsafe fields.";
-const allowedParams = new Set(["limit"]);
+const allowedParams = new Set(["limit", "search"]);
 const forbiddenSafeTextFragments = [
   "admin_finance",
   "admin_note",
@@ -138,6 +141,31 @@ function positiveInteger(value: unknown, defaultValue: number, maxValue: number)
   const parsed = Number(value);
 
   return Number.isInteger(parsed) && parsed >= 1 && parsed <= maxValue ? parsed : null;
+}
+
+function searchText(value: unknown) {
+  const cleaned = textOrNull(value, maxSearchLength);
+
+  if (!cleaned) {
+    return null;
+  }
+
+  return includesForbiddenSafeTextFragment(cleaned) ? false : cleaned;
+}
+
+function filterAccountsBySearch(
+  accounts: AdminCustomerAccountSafeRecord[],
+  search: string | null,
+) {
+  const normalizedSearch = search?.trim().toLowerCase();
+
+  if (!normalizedSearch) {
+    return accounts;
+  }
+
+  return accounts.filter((account) =>
+    account.customer_account.toLowerCase().startsWith(normalizedSearch),
+  );
 }
 
 function accountGroupKey(customerId: string | null, customerAccount: string) {
@@ -263,8 +291,9 @@ export function parseAdminCustomerAccountsReadParams(
   }
 
   const limit = positiveInteger(readParamsValue(params, "limit"), defaultLimit, maxLimit);
+  const search = searchText(readParamsValue(params, "search"));
 
-  if (!limit) {
+  if (!limit || search === false) {
     return {
       error: malformedParamsError,
       ok: false,
@@ -275,6 +304,7 @@ export function parseAdminCustomerAccountsReadParams(
   return {
     data: {
       limit,
+      search,
     },
     ok: true,
   };
@@ -290,14 +320,17 @@ export async function loadAdminCustomerAccounts(
     return parsed;
   }
 
-  const bookingsResult = await listAdminBookings(actor);
+  const bookingsResult = await listAdminBookings(actor, {
+    limit: accountSourceReadLimit,
+  });
 
   if (!bookingsResult.ok) {
     return bookingsResult;
   }
 
   const accounts = toCustomerAccounts(bookingsResult.data);
-  const returnedAccounts = accounts.slice(0, parsed.data.limit);
+  const filteredAccounts = filterAccountsBySearch(accounts, parsed.data.search);
+  const returnedAccounts = filteredAccounts.slice(0, parsed.data.limit);
 
   return {
     data: {

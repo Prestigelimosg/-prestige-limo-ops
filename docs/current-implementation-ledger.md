@@ -45,7 +45,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Live Driver Pickup Risk Monitor
 
 - The shared `Today's Jobs` monitor now includes an admin-only `Pickup risk` toggle beside the existing driver report auto-refresh control. The toggle defaults off and does not create a new map/window or duplicate monitor sector.
-- When enabled, the existing Today’s Jobs rows and existing Live Driver Map marker rows show the same derived pickup-risk state for the exact driver/job reference: no live pin, stale/offline pin, near-pickup watch, current pin, at-pickup, POB, or completed.
+- When enabled, the existing Today’s Jobs rows and existing Live Dispatch Map marker rows show the same derived pickup-risk state for the exact driver/job reference: no live pin, stale/offline pin, near-pickup watch, current pin, at-pickup, POB, or completed.
 - The pickup risk monitor defaults off, can be toggled by admin, highlights only the affected driver/job row and marker for no-pin, stale/offline, near-pickup watch, route ETA risk, and route-distance moving-away states, and does not claim route direction/ETA certainty unless guarded pickup approach evidence is ready.
 - When the toggle is on and the existing live map runtime is active, the monitor may use the existing guarded admin map location search and route estimate APIs to geocode the pickup text and estimate the driver's route distance/ETA to pickup. This is cached by booking reference, pickup text, and rounded driver pin so it does not add a duplicate polling loop.
 - If pickup geocode/route evidence is unavailable, disabled, blocked, or not configured, the exact job row says evidence is unavailable and keeps using the safe live-pin freshness checks instead of guessing wrong direction.
@@ -223,19 +223,19 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 - Loaded operational snapshots now keep customer-review controls inside a compact row disclosure instead of expanding every booking into a large review card.
 - The Day-of-Trip Dispatch Monitor progress controls now render as one compact row/wrap group instead of a large grid block.
-- Active Jobs Map text was increased slightly for readability while keeping the section compact, and the driver location action is labelled `Driver Pin` with an explicit Google Maps search-pin URL.
+- Active Jobs Map text was increased slightly for readability while keeping the section compact, and the driver location fallback is labelled `Open Map` with an explicit Google Maps search-pin URL.
 - The Active Jobs Map runtime state pill now says `Live On` when active, so it is clearer that it is a status label and not a clickable map button.
 - This is an admin UI wording/layout pass only. It does not activate a browser map key, change live-location/GPS capture behavior, change Vercel/env/DB schema, send customer/driver/provider messages, touch billing/payment/PDF/invoice/payout, change parser behavior, or change Save Booking/calendar behavior.
 - Focused checks passed: driver live-location runtime UI guard, active jobs map contract guard, gated runtime evidence guard, Day-of-Trip Dispatch Monitor existing workflow lock, Day-of-Trip driver acknowledgement boundary guard, Load Bookings primary-list source boundary guard, `npx tsc --noEmit --pretty false`, `npm run lint` with only existing `loadBookings` warnings, `npm run build`, and `git diff --check`.
 
 ### Admin Active Jobs Browser Map JavaScript API
 
-- Admin Dispatch can render an optional same-window Google Maps JavaScript canvas inside the existing compact Selected Job Live Map panel.
+- Admin Dispatch can render an optional same-window Google Maps JavaScript canvas inside the existing compact Dashboard Live Dispatch Map panel.
 - The canvas is default-closed: it only loads after active driver markers exist and `/api/admin-active-jobs-map-browser-config` returns a configured browser-safe provider/key response.
 - The browser config route uses the existing admin dispatcher boundary, same-origin dashboard purpose header, a separate `PRESTIGE_ADMIN_ACTIVE_JOBS_MAP_BROWSER_PROVIDER=google_maps_javascript` gate, `PRESTIGE_GOOGLE_MAPS_BROWSER_API_KEY`, explicit `PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS`, and optional `PRESTIGE_GOOGLE_MAPS_BROWSER_MAP_ID`.
 - The existing server-side `PRESTIGE_GOOGLE_MAPS_API_KEY` remains server-only for admin location search/route estimates and is not read or returned by the browser-map config route.
 - If the configured Google Maps JavaScript renderer errors before producing a visible map DOM, the admin UI may fall back inside the same compact panel to a same-window Google road-tile map centered on the active driver marker, with tile attribution and the marker pin still rendered from the guarded admin live-location data.
-- When the browser map config is missing or origin is not allowed, the admin UI stays compact, shows an embedded-map-off message, and keeps the per-driver `Driver Pin` Google Maps fallback links.
+- When the browser map config is missing or origin is not allowed, the admin UI stays compact, shows an embedded-map-off message, and keeps the per-driver `Open Map` Google Maps fallback links.
 - The browser map canvas is admin-only and shows only active driver marker positions already returned by the guarded active-jobs map route.
 - This lane does not change driver GPS capture, driver share/stop behavior, customer live maps, customer portal, public booking, billing/payment/PDF/invoice/payout, provider messaging, parser, Save Booking, `/api/admin-saved-bookings`, calendar, Vercel/env values, or DB schema.
 - No `NEXT_PUBLIC_` map key is introduced; browser key values must never be committed, printed, logged, or pasted into docs.
@@ -278,14 +278,15 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Driver Live Location Multi-Driver Admin List
 
-- Admin Dispatch has a compact Selected Job Live Map runtime control inside the existing Day-of-Trip Dispatch Monitor.
+- Admin Dispatch has one compact Dashboard Live Dispatch Map runtime control for the active jobs list; the old selected-job live map control is not rendered inside the Day-of-Trip Dispatch Monitor.
 - Creating a driver job link now auto-authorizes live movement for that booking by opening the existing admin live-location runtime allowlist after the link row is saved.
 - The visible Driver Job Link panel no longer exposes the manual `Enable Live Location` button; the panel stays limited to `Create Link`, `Copy Link`, `Revoke`, and useful status copy.
-- The control adds selected saved bookings one by one through `/api/admin-live-location-runtime` instead of replacing the previous selected booking.
+- The Dashboard Live Dispatch Map opens live movement for the active job references in one operator click through `/api/admin-live-location-runtime` instead of requiring a selected booking to be added manually.
 - Runtime control keeps existing `driver_live_location_allowed_job_references`, removes duplicates, and caps the selected booking list at 50 references.
 - Driver `Share Location` first calls `GET /api/driver-job/[token]/live-location` for server readiness; Chrome GPS is requested only after that readiness check passes.
 - Admin marker refresh uses the existing guarded `GET /api/admin-active-jobs-map-locations` route and returns both selected booking references and current driver markers.
-- The admin UI renders compact selected-booking chips, marker rows, Driver Pin fallback links, and an optional browser map canvas that remains off unless the separate browser-safe map config route is enabled.
+- The admin UI renders compact active marker rows, per-driver `Open Map` fallback links, and an optional browser map canvas that remains off unless the separate browser-safe map config route is enabled.
+- Same-driver duplicate live markers are collapsed by driver identity; current/newest movement wins and any older duplicate rows are reported as hidden.
 - The admin browser map updates Google marker positions from driver GPS instead of drawing a separate CSS arrow/trail overlay, so visible marker placement stays aligned to the map.
 - Admin live-marker polling runs every 5 seconds while the active live map is open; this is display refresh only and does not add a new driver/customer tracking surface.
 - Closing the runtime clears the selected list and gates driver/customer map reads off.
@@ -689,7 +690,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - `Today's Jobs` shows all loaded active jobs inside the 1-hour pickup monitor window without a separate expand/collapse toggle.
 - `Today's Jobs` shows a compact saved driver report readout per visible job, using the existing guarded admin `GET /api/admin-driver-job-statuses` path only, with monitor-wide/per-card refresh controls and auto-refresh on by default.
 - `Today's Jobs` includes compact live-map controls that reuse the existing admin-only live-location runtime for the jobs inside the monitor window.
-- Admin live-map display collapses older stale duplicate pins for the same driver identity when a newer/current pin exists, so one driver does not look like two live cars.
+- Admin live-map display collapses duplicate live rows for the same driver identity, preferring current/newest movement, so one driver does not look like two live cars.
 - The legacy Dispatch Day-of-Trip Dispatch Monitor remains hidden from the normal UI so it does not compete with the shared `Today's Jobs` sector.
 - The lower Dispatch saved-record finder is now a compact `Saved Booking Records` disclosure by default. The existing admin-only persistence controls and loaded-record scrollbox are still available after expanding, but they no longer fill the normal Dispatch view.
 - Dispatch internal readiness, handoff, recovery, exception, closeout-review, and billing-prep panels now live under one compact `Advanced Checks` disclosure. The existing guarded controls remain colocated and unchanged after expanding, but the default operator view stays focused on daily trip work.
@@ -6815,7 +6816,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The continuous sender reuses the existing job-token scoped `POST /api/driver-job/[token]/live-location` route and the existing latest-position upsert path, so it updates the current driver marker instead of creating duplicate map surfaces or new routes.
 - Continuous sharing is bounded to the open driver job page, throttled before repeated writes, and cleared by `Stop Sharing`, page cleanup, token/job reload, browser GPS errors, or a rejected runtime response.
 - `Stop Sharing` clears the browser watch before calling the existing guarded `DELETE /api/driver-job/[token]/live-location` cleanup route.
-- The admin Live Driver Map already refreshes saved markers automatically while open; this lane only makes the driver page keep the current marker fresh while sharing is active.
+- The admin Live Dispatch Map already refreshes saved markers automatically while open; this lane only makes the driver page keep the current marker fresh while sharing is active.
 - This lane does not add customer live map links, customer portal tracking, Telegram/WhatsApp/SMS/email/provider sends, payment, payout, invoices, PDFs, calendar behavior, env changes, DB schema changes, new API routes, local/session storage, sendBeacon, or timer-based GPS loops.
 - Customer/public routes remain closed to driver live-location internals, other-driver markers, finance, payout, parser/debug, tokens, secrets, mock archive, and admin-only risk evidence.
 

@@ -222,9 +222,9 @@ for (const fragment of [
   "const activeJobPickupTime = formatPickupTimeFromRecord(activeJobBooking);",
   "(isSelectedActiveJob ? clean(booking.driverName) : \"\")",
   'data-dashboard-live-driver-map="true"',
-  "Open live map",
-  "Refresh map",
-  "Close map",
+  "Open Live Dispatch Map",
+  "Refresh movement",
+  "Close live map",
   'data-dashboard-live-driver-map-slot-count={liveDispatchPreparedSlotCount}',
   "liveDispatchSlotSummaryLabel",
   "Pickup risk {adminPickupRiskMonitorEnabled ? \"On\" : \"Off\"}",
@@ -239,7 +239,7 @@ for (const fragment of [
   'data-admin-pickup-approach-evidence-summary="true"',
   'data-admin-pickup-approach-evidence-marker-state=',
   "Wrong-direction/ETA alerts use guarded pickup geocode and route evidence when available; otherwise the row says evidence unavailable.",
-  "shared driver pins refresh automatically while Today&apos;s Jobs is open.",
+  "driver locations refresh automatically while Today&apos;s Jobs is open.",
   "AdminActiveJobsBrowserMap",
 ]) {
   assertIncludes(activeMonitorPanel, fragment, `active monitor fragment ${fragment}`);

@@ -110,8 +110,8 @@ for (const fragment of [
   'data-admin-day-of-trip-dispatch-monitor-boundary="true"',
   "Local day-of-trip bridge from release to job progress.",
   "Saved driver status reads use the guarded admin driver-status API.",
-  "Live location uses only the",
-  "selected admin/driver live-location gates above.",
+  "Live location is opened from",
+  "the Dashboard Live Dispatch Map for active jobs only.",
   "billing, payment, PDF, payout, parser-learning, or broad tracking behavior.",
 ]) {
   assertIncludes(appPage, fragment, `existing app day-of-trip monitor fragment ${fragment}`);

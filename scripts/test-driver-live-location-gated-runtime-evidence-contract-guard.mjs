@@ -148,31 +148,42 @@ for (const fragment of [
 }
 
 const adminRuntimeStart = adminPage.indexOf(
-  'aria-label="Selected Job Live Map"',
+  'data-dashboard-live-driver-map="true"',
 );
 assert.notEqual(adminRuntimeStart, -1, "Admin active-jobs runtime must exist.");
 const adminRuntimeEnd = adminPage.indexOf(
-  'data-admin-day-of-trip-dispatch-monitor-boundary="true"',
+  'data-dashboard-live-driver-map-boundary="true"',
   adminRuntimeStart,
 );
 assert.notEqual(adminRuntimeEnd, -1, "Admin active-jobs runtime must end before boundary.");
 const adminActiveJobsUi = adminPage.slice(adminRuntimeStart, adminRuntimeEnd);
 
 for (const fragment of [
-  'data-admin-active-jobs-map-runtime="true"',
-  'data-admin-active-jobs-map-state={adminActiveJobsMapReadState.runtimeStatus}',
-  'data-admin-active-jobs-map-selected-count=',
-  'data-admin-active-jobs-map-marker-count={adminActiveJobsMapReadState.markerCount}',
-  'data-admin-active-jobs-map-sharing-state=',
-  'data-admin-active-jobs-map-stale-state=',
-  'data-admin-active-jobs-map-selected-list="true"',
-  'data-admin-active-jobs-map-marker-list="true"',
-  "Selected Job Live Map",
-  "Add this job",
-  "Close all",
-  "Driver Pin",
+  'data-dashboard-live-driver-map="true"',
+  'data-dashboard-live-driver-map-state={adminActiveJobsMapReadState.runtimeStatus}',
+  'data-dashboard-live-driver-map-marker-count={adminActiveJobsMapReadState.markerCount}',
+  'data-dashboard-live-driver-map-slot-count={liveDispatchPreparedSlotCount}',
+  'data-dashboard-live-driver-map-open="true"',
+  'data-dashboard-live-driver-map-refresh="true"',
+  'data-dashboard-live-driver-map-close="true"',
+  'data-dashboard-live-driver-map-marker-list="true"',
+  "Live Dispatch Map",
+  "Open Live Dispatch Map",
+  "Refresh movement",
+  "Close live map",
+  "Open Map",
 ]) {
   assertIncludes(adminActiveJobsUi, fragment, `admin active-jobs runtime UI fragment ${fragment}`);
+}
+
+for (const removedFragment of [
+  'aria-label="Selected Job Live Map"',
+  'data-admin-active-jobs-map-runtime="true"',
+  "Selected Job Live Map",
+  "Add this job",
+  "Driver Pin",
+]) {
+  assertExcludes(adminPage, removedFragment, `removed selected-job active map fragment ${removedFragment}`);
 }
 
 for (const forbiddenPattern of [

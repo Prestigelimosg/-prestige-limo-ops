@@ -3780,12 +3780,12 @@ function AdminActiveJobsBrowserMap({
           data-admin-active-jobs-map-live-movement="true"
           data-admin-active-jobs-map-live-movement-status="true"
         >
-          Live movement on. Google marker positions update from driver GPS every few seconds; Driver Pin remains the fallback.
+          Live movement on. Google marker positions update from driver GPS every few seconds; Open Map remains the fallback.
         </p>
       ) : null}
       {renderState === "error" ? (
         <p className="border-t border-lime-100 px-1.5 py-1 text-[10px] font-semibold text-red-800 sm:text-[11px]">
-          Embedded map could not load. Use Driver Pin.
+          Embedded map could not load. Open the driver location in Google Maps.
         </p>
       ) : null}
     </div>
@@ -6511,7 +6511,7 @@ function computeAdminPickupRiskState({
 
   if (runtimeStatus !== "active") {
     return {
-      detail: "Open live map to monitor pickup risk.",
+      detail: "Open Live Dispatch Map to monitor pickup risk.",
       level: "pending",
       pulse: false,
       shortLabel: "Open map",
@@ -12243,7 +12243,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             mapId: "",
             message: {
               tone: "info",
-              text: "Embedded map off. Use Driver Pin until browser-safe Google Maps setup is enabled.",
+              text: "Embedded map off. Open each driver in Google Maps until browser-safe map setup is enabled.",
             },
             status: "off",
           });
@@ -12263,7 +12263,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             mapId: "",
             message: {
               tone: "error",
-              text: "Embedded map setup check could not be completed. Use Driver Pin.",
+              text: "Embedded map setup check could not be completed. Open each driver in Google Maps.",
             },
             status: "error",
           });
@@ -18611,7 +18611,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     return adminActiveJobsMapUpdatedAtMs(candidate) > adminActiveJobsMapUpdatedAtMs(existing);
   }
 
-  function collapseAdminActiveJobsMapStaleDriverDuplicates(
+  function collapseAdminActiveJobsMapDriverDuplicates(
     locations: AdminActiveJobsMapLocation[],
   ) {
     const visibleLocations: AdminActiveJobsMapLocation[] = [];
@@ -18635,11 +18635,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
 
       const existingLocation = visibleLocations[existingIndex];
 
-      if (existingLocation.is_stale !== true && location.is_stale !== true) {
-        visibleLocations.push(location);
-        continue;
-      }
-
       if (adminActiveJobsMapLocationIsPreferred(location, existingLocation)) {
         visibleLocations[existingIndex] = location;
       }
@@ -18655,7 +18650,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         action: "refreshing",
         message: {
           tone: "info",
-          text: "Refreshing active driver markers...",
+          text: "Refreshing live driver movement...",
         },
         status: "loading",
       }));
@@ -18680,8 +18675,8 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             .map(normalizeAdminActiveJobsMapLocation)
             .filter(isAdminActiveJobsMapLocation)
         : [];
-      const activeJobs = collapseAdminActiveJobsMapStaleDriverDuplicates(allActiveJobs);
-      const staleDuplicateCount = allActiveJobs.length - activeJobs.length;
+      const activeJobs = collapseAdminActiveJobsMapDriverDuplicates(allActiveJobs);
+      const duplicateCount = allActiveJobs.length - activeJobs.length;
       const allowedBookingReferences = Array.isArray(result.allowed_booking_references)
         ? result.allowed_booking_references.map(cleanReferenceText).filter(Boolean)
         : null;
@@ -18697,12 +18692,12 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           tone: activeJobs.length > 0 ? "success" : "info",
           text:
             activeJobs.length > 0
-              ? `Loaded ${activeJobs.length} active driver marker${activeJobs.length === 1 ? "" : "s"}${
-                  staleDuplicateCount > 0
-                    ? `; ${staleDuplicateCount} older stale duplicate${staleDuplicateCount === 1 ? "" : "s"} hidden.`
+              ? `Loaded live movement for ${activeJobs.length} driver${activeJobs.length === 1 ? "" : "s"}${
+                  duplicateCount > 0
+                    ? `; ${duplicateCount} older duplicate${duplicateCount === 1 ? "" : "s"} hidden.`
                     : "."
                 }`
-              : "Live location is open, but no driver marker has been shared yet.",
+              : "Live location is open, but no driver has shared live movement yet.",
         },
         runtimeStatus: "active",
         status: "loaded",
@@ -18718,85 +18713,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           text: adminLiveLocationFailureMessage(error),
         },
         runtimeStatus: "closed",
-        status: "error",
-      }));
-    }
-  }
-
-  async function openAdminLiveLocationRuntimeForLoadedBooking() {
-    const bookingReference = cleanReferenceText(dispatchReleaseWorkflowBookingReference);
-
-    if (!bookingReference) {
-      setAdminActiveJobsMapReadState((current) => ({
-        ...current,
-        message: {
-          tone: "error",
-          text: "Load or save one booking before opening live location.",
-        },
-      }));
-      return;
-    }
-
-    setAdminActiveJobsMapReadState((current) => ({
-      ...current,
-      action: "opening",
-      loadedReference: bookingReference,
-      message: {
-        tone: "info",
-        text: `Adding ${bookingReference} to the live location list...`,
-      },
-      status: "loading",
-    }));
-
-    try {
-      const response = await fetch(adminLiveLocationRuntimeApiPath, {
-        body: JSON.stringify({ booking_reference: bookingReference }),
-        cache: "no-store",
-        headers: {
-          "content-type": "application/json",
-          "x-prestige-admin-purpose": adminLegacyDataPurpose,
-        },
-        method: "POST",
-      });
-      const result = await response.json().catch(() => null) as AdminLiveLocationRuntimeControlResponse | null;
-
-      if (!response.ok || !result?.ok || result.customerVisible !== false || result.external_send !== false) {
-        throw new Error(result?.error || result?.reason || "Live-location open could not be completed.");
-      }
-
-      const allowedBookingReferences = Array.isArray(result.allowed_booking_references)
-        ? result.allowed_booking_references.map(cleanReferenceText).filter(Boolean)
-        : [bookingReference];
-
-      setAdminActiveJobsMapReadState((current) => ({
-        ...current,
-        action: "idle",
-        allowedBookingReferences,
-        loadedReference: bookingReference,
-        message: {
-          tone: "success",
-          text: `Live location list includes ${compactBookingReference(
-            bookingReference,
-          )}. ${allowedBookingReferences.length} selected booking${
-            allowedBookingReferences.length === 1 ? "" : "s"
-          }. Ask that driver to tap Share Location.`,
-        },
-        runtimeStatus: "active",
-        status: "loaded",
-      }));
-
-      void refreshAdminActiveJobsMapLocations({ silent: true });
-    } catch (error) {
-      setAdminActiveJobsMapReadState((current) => ({
-        ...current,
-        action: "idle",
-        activeJobs: [],
-        markerCount: 0,
-        message: {
-          tone: "error",
-          text: adminLiveLocationFailureMessage(error),
-        },
-        runtimeStatus: "error",
         status: "error",
       }));
     }
@@ -18861,9 +18777,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         loadedReference: cleanReferenceText(dispatchReleaseWorkflowBookingReference),
         message: {
           tone: "success",
-          text: `Live map is watching ${allowedBookingReferences.length} active job${
+          text: `Live Dispatch Map is watching ${allowedBookingReferences.length} active job${
             allowedBookingReferences.length === 1 ? "" : "s"
-          }. Driver markers refresh automatically while Today's Jobs is open.`,
+          }. Driver movement refreshes automatically while Today's Jobs is open.`,
         },
         runtimeStatus: "active",
         status: "loaded",
@@ -22987,7 +22903,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   const activeJobPickupRiskSummaryLabel = !adminPickupRiskMonitorEnabled
     ? "Pickup risk monitor is off."
     : adminActiveJobsMapReadState.runtimeStatus !== "active"
-      ? "Open live map to start pickup risk monitoring."
+      ? "Open Live Dispatch Map to start pickup risk monitoring."
       : activeJobPickupRiskCriticalCount > 0
         ? `${activeJobPickupRiskCriticalCount} critical pickup risk${
             activeJobPickupRiskCriticalCount === 1 ? "" : "s"
@@ -23456,9 +23372,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         >
           <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
-              <p className="font-semibold">Live Driver Map</p>
+              <p className="font-semibold">Live Dispatch Map</p>
               <p className="mt-0.5 text-[10px] text-lime-900 sm:text-[11px]">
-                Open once for the active jobs above; shared driver pins refresh automatically while Today&apos;s Jobs is open.
+                One click opens live movement for the active jobs above; driver locations refresh automatically while Today&apos;s Jobs is open.
               </p>
             </div>
             <div className="flex flex-wrap gap-1">
@@ -23482,7 +23398,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                 className="rounded-full bg-lime-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-lime-900 sm:px-2 sm:text-[10px]"
                 data-dashboard-live-driver-map-marker-count={adminActiveJobsMapReadState.markerCount}
               >
-                {adminActiveJobsMapReadState.markerCount} pin
+                {adminActiveJobsMapReadState.markerCount} driver
                 {adminActiveJobsMapReadState.markerCount === 1 ? "" : "s"}
               </span>
               <span
@@ -23505,7 +23421,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               onClick={openAdminLiveLocationRuntimeForActiveJobs}
               type="button"
             >
-              {adminActiveJobsMapReadState.action === "opening" ? "Opening" : "Open live map"}
+              {adminActiveJobsMapReadState.action === "opening" ? "Opening" : "Open Live Dispatch Map"}
             </button>
             <button
               className="rounded border border-lime-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-lime-950 transition hover:bg-lime-50 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[11px]"
@@ -23517,7 +23433,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               onClick={() => void refreshAdminActiveJobsMapLocations()}
               type="button"
             >
-              {adminActiveJobsMapReadState.action === "refreshing" ? "Refreshing" : "Refresh map"}
+              {adminActiveJobsMapReadState.action === "refreshing" ? "Refreshing" : "Refresh movement"}
             </button>
             <button
               className="rounded border border-red-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-red-800 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[11px]"
@@ -23529,7 +23445,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               onClick={closeAdminLiveLocationRuntime}
               type="button"
             >
-              {adminActiveJobsMapReadState.action === "closing" ? "Closing" : "Close map"}
+              {adminActiveJobsMapReadState.action === "closing" ? "Closing" : "Close live map"}
             </button>
           </div>
           <div
@@ -23641,14 +23557,14 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                     </div>
                     {mapUrl ? (
                       <a
-                        aria-label="Open driver pin in Google Maps"
+                        aria-label="Open driver location in Google Maps"
                         className="rounded border border-lime-300 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-lime-950 hover:bg-lime-100"
                         href={mapUrl}
                         rel="noreferrer"
                         target="_blank"
-                        title="Open driver pin in Google Maps"
+                        title="Open driver location in Google Maps"
                       >
-                        Driver Pin
+                        Open Map
                       </a>
                     ) : null}
                   </div>
@@ -23660,7 +23576,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             className="mt-1 border-t border-lime-100 pt-1 text-[10px] leading-3 text-lime-900 sm:text-[11px]"
             data-dashboard-live-driver-map-boundary="true"
           >
-            Admin-only. Uses loaded active jobs and driver-shared pins; no external message is sent from here.
+            Admin-only. Uses loaded active jobs and driver-shared live movement; no external message is sent from here.
           </p>
         </div>
       ) : null}
@@ -36082,204 +35998,13 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   </div>
                 </div>
               </div>
-              <div
-                aria-label="Selected Job Live Map"
-                className="mt-1.5 rounded-md border border-lime-200 bg-white/75 p-1.5 text-[11px] leading-4 text-lime-950 sm:text-xs"
-                data-admin-active-jobs-map-runtime="true"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-1">
-                  <div className="min-w-0">
-                    <p className="font-semibold leading-3 sm:leading-4">
-                      Selected Job Live Map
-                    </p>
-                    <p className="mt-0.5 break-words text-[10px] leading-3 text-lime-900 sm:text-[11px]">
-                      Use Dashboard for all active jobs. Add this loaded booking only when you need selected-job live detail.
-                    </p>
-                  </div>
-                  <span
-                    className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase sm:px-2 sm:text-[10px] ${
-                      adminActiveJobsMapReadState.runtimeStatus === "active"
-                        ? "bg-emerald-100 text-emerald-900"
-                        : adminActiveJobsMapReadState.runtimeStatus === "error"
-                          ? "bg-red-100 text-red-800"
-                          : "bg-slate-100 text-slate-700"
-                    }`}
-                    data-admin-active-jobs-map-state={adminActiveJobsMapReadState.runtimeStatus}
-                  >
-                    {adminActiveJobsMapReadState.runtimeStatus === "active"
-                      ? "Live On"
-                      : adminActiveJobsMapReadState.runtimeStatus === "error"
-                        ? "Check"
-                        : "Off"}
-                  </span>
-                </div>
-                <div className="mt-1 grid grid-cols-2 gap-1 sm:grid-cols-4">
-                  <p
-                    className="min-w-0 rounded bg-lime-50 px-1 py-0.5 font-semibold"
-                    data-admin-active-jobs-map-selected-count={
-                      adminActiveJobsMapReadState.allowedBookingReferences.length
-                    }
-                  >
-                    Selected: {adminActiveJobsMapReadState.allowedBookingReferences.length}
-                  </p>
-                  <p
-                    className="min-w-0 rounded bg-lime-50 px-1 py-0.5 font-semibold"
-                    data-admin-active-jobs-map-marker-count={adminActiveJobsMapReadState.markerCount}
-                  >
-                    Markers: {adminActiveJobsMapReadState.markerCount}
-                  </p>
-                  <p
-                    className="min-w-0 rounded bg-lime-50 px-1 py-0.5 font-semibold"
-                    data-admin-active-jobs-map-sharing-state={
-                      adminActiveJobsMapReadState.markerCount > 0 ? "active" : "inactive"
-                    }
-                  >
-                    Sharing: {adminActiveJobsMapReadState.markerCount > 0 ? "on" : "off"}
-                  </p>
-                  <p
-                    className="min-w-0 rounded bg-lime-50 px-1 py-0.5 font-semibold"
-                    data-admin-active-jobs-map-stale-state={
-                      adminActiveJobsMapReadState.activeJobs.some((job) => job.is_stale)
-                        ? "stale"
-                        : "current"
-                    }
-                  >
-                    Stale: {adminActiveJobsMapReadState.activeJobs.some((job) => job.is_stale) ? "yes" : "no"}
-                  </p>
-                </div>
-                <div className="mt-1 flex flex-wrap gap-1" data-admin-active-jobs-map-controls="true">
-                  <button
-                    className="rounded border border-lime-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-lime-950 transition hover:bg-lime-50 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[11px]"
-                    data-admin-active-jobs-map-open="true"
-                    disabled={
-                      !clean(dispatchReleaseWorkflowBookingReference) ||
-                      adminActiveJobsMapReadState.action !== "idle"
-                    }
-                    onClick={openAdminLiveLocationRuntimeForLoadedBooking}
-                    type="button"
-                  >
-                    {adminActiveJobsMapReadState.action === "opening" ? "Adding" : "Add this job"}
-                  </button>
-                  <button
-                    className="rounded border border-lime-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-lime-950 transition hover:bg-lime-50 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[11px]"
-                    data-admin-active-jobs-map-refresh="true"
-                    disabled={adminActiveJobsMapReadState.action !== "idle"}
-                    onClick={() => void refreshAdminActiveJobsMapLocations()}
-                    type="button"
-                  >
-                    {adminActiveJobsMapReadState.action === "refreshing" ? "Refreshing" : "Refresh"}
-                  </button>
-                  <button
-                    className="rounded border border-red-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-red-800 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[11px]"
-                    data-admin-active-jobs-map-close="true"
-                    disabled={adminActiveJobsMapReadState.action !== "idle"}
-                    onClick={closeAdminLiveLocationRuntime}
-                    type="button"
-                  >
-                    {adminActiveJobsMapReadState.action === "closing" ? "Closing" : "Close all"}
-                  </button>
-                </div>
-                {adminActiveJobsMapReadState.message ? (
-                  <p
-                    className={`mt-1 rounded border px-1.5 py-1 text-[10px] font-semibold leading-3 sm:text-[11px] ${statusClass(
-                      adminActiveJobsMapReadState.message.tone,
-                    )}`}
-                    data-admin-active-jobs-map-message="true"
-                  >
-                    {adminActiveJobsMapReadState.message.text}
-                  </p>
-                ) : null}
-                {adminActiveJobsMapReadState.activeJobs.length > 0 &&
-                adminActiveJobsBrowserMapConfigState.status === "ready" &&
-                adminActiveJobsBrowserMapConfigState.apiKey ? (
-                  <AdminActiveJobsBrowserMap
-                    activeJobs={adminActiveJobsMapReadState.activeJobs}
-                    apiKey={adminActiveJobsBrowserMapConfigState.apiKey}
-                    mapId={adminActiveJobsBrowserMapConfigState.mapId}
-                  />
-                ) : adminActiveJobsMapReadState.activeJobs.length > 0 &&
-                  adminActiveJobsBrowserMapConfigState.message ? (
-                  <p
-                    className={`mt-1 rounded border px-1.5 py-1 text-[10px] font-semibold leading-3 sm:text-[11px] ${statusClass(
-                      adminActiveJobsBrowserMapConfigState.message.tone,
-                    )}`}
-                    data-admin-active-jobs-map-canvas-state={adminActiveJobsBrowserMapConfigState.status}
-                    data-admin-active-jobs-map-config-message="true"
-                  >
-                    {adminActiveJobsBrowserMapConfigState.message.text}
-                  </p>
-                ) : null}
-                {adminActiveJobsMapReadState.allowedBookingReferences.length > 0 ? (
-                  <div
-                    className="mt-1 flex max-h-16 flex-wrap gap-1 overflow-y-auto border-t border-lime-100 pt-1"
-                    data-admin-active-jobs-map-selected-list="true"
-                  >
-                    {adminActiveJobsMapReadState.allowedBookingReferences.map((reference) => (
-                      <span
-                        className="rounded bg-white px-1.5 py-0.5 text-[10px] font-semibold text-lime-950"
-                        data-admin-active-jobs-map-selected-reference={reference}
-                        key={reference}
-                      >
-                        {compactBookingReference(reference)}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-                {adminActiveJobsMapReadState.activeJobs.length > 0 ? (
-                  <div
-                    className="mt-1 max-h-28 space-y-1 overflow-y-auto border-t border-lime-100 pt-1"
-                    data-admin-active-jobs-map-marker-list="true"
-                  >
-                    {adminActiveJobsMapReadState.activeJobs.map((job) => {
-                      const mapUrl = googleMapsLocationUrl(job.latitude, job.longitude);
-
-                      return (
-                        <div
-                          className="grid grid-cols-[1fr_auto] gap-1 rounded bg-lime-50 px-1 py-0.5"
-                          data-admin-active-jobs-map-marker={job.assigned_job_reference || "unknown"}
-                          key={`${job.assigned_job_reference}-${job.updated_at || ""}`}
-                        >
-                          <div className="min-w-0">
-                            <p className="break-words font-semibold leading-3">
-                              {job.driver_display_label || "Assigned driver"} ·{" "}
-                              {compactBookingReference(job.assigned_job_reference || "")}
-                            </p>
-                            <p className="break-words text-[10px] leading-3 text-lime-900">
-                              {job.is_stale ? "Stale" : "Current"} · {formatAdminLiveLocationTimestamp(job.updated_at)}
-                            </p>
-                          </div>
-                          {mapUrl ? (
-                            <a
-                              aria-label="Open driver pin in Google Maps"
-                              className="rounded border border-lime-300 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-lime-950 hover:bg-lime-100"
-                              href={mapUrl}
-                              rel="noreferrer"
-                              target="_blank"
-                              title="Open driver pin in Google Maps"
-                            >
-                              Driver Pin
-                            </a>
-                          ) : null}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : null}
-                <p
-                  className="mt-1 break-words border-t border-lime-100 pt-1 text-[10px] leading-3 text-lime-900 sm:text-[11px]"
-                  data-admin-active-jobs-map-boundary="true"
-                >
-                  Admin-only. Selected saved bookings only; no customer message, provider send, billing,
-                  payment, PDF, payout, server map key, or parser change.
-                </p>
-              </div>
               </details>
               <p
                 className="mt-2 border-t border-lime-200 pt-2 text-[11px] leading-4 text-lime-900 md:text-[10px] md:leading-3"
                 data-admin-day-of-trip-dispatch-monitor-boundary="true"
               >
-                Saved driver status reads use the guarded admin driver-status API. Live location uses only the
-                selected admin/driver live-location gates above. No customer message, provider notification,
+                Saved driver status reads use the guarded admin driver-status API. Live location is opened from
+                the Dashboard Live Dispatch Map for active jobs only. No customer message, provider notification,
                 billing, payment, PDF, payout, parser-learning, or broad tracking behavior.
               </p>
             </section>

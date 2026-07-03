@@ -71,12 +71,12 @@ const ledgerSection = sectionBetween(
 );
 
 for (const phrase of [
-  "Admin Dispatch can render an optional same-window Google Maps JavaScript canvas inside the existing compact Selected Job Live Map panel.",
+  "Admin Dispatch can render an optional same-window Google Maps JavaScript canvas inside the existing compact Dashboard Live Dispatch Map panel.",
   "The canvas is default-closed: it only loads after active driver markers exist and `/api/admin-active-jobs-map-browser-config` returns a configured browser-safe provider/key response.",
   "The browser config route uses the existing admin dispatcher boundary, same-origin dashboard purpose header, a separate `PRESTIGE_ADMIN_ACTIVE_JOBS_MAP_BROWSER_PROVIDER=google_maps_javascript` gate, `PRESTIGE_GOOGLE_MAPS_BROWSER_API_KEY`, explicit `PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS`, and optional `PRESTIGE_GOOGLE_MAPS_BROWSER_MAP_ID`.",
   "The existing server-side `PRESTIGE_GOOGLE_MAPS_API_KEY` remains server-only for admin location search/route estimates and is not read or returned by the browser-map config route.",
   "If the configured Google Maps JavaScript renderer errors before producing a visible map DOM, the admin UI may fall back inside the same compact panel to a same-window Google road-tile map centered on the active driver marker, with tile attribution and the marker pin still rendered from the guarded admin live-location data.",
-  "When the browser map config is missing or origin is not allowed, the admin UI stays compact, shows an embedded-map-off message, and keeps the per-driver `Driver Pin` Google Maps fallback links.",
+  "When the browser map config is missing or origin is not allowed, the admin UI stays compact, shows an embedded-map-off message, and keeps the per-driver `Open Map` Google Maps fallback links.",
   "The browser map canvas is admin-only and shows only active driver marker positions already returned by the guarded active-jobs map route.",
   "This lane does not change driver GPS capture, driver share/stop behavior, customer live maps, customer portal, public booking, billing/payment/PDF/invoice/payout, provider messaging, parser, Save Booking, `/api/admin-saved-bookings`, calendar, Vercel/env values, or DB schema.",
   "No `NEXT_PUBLIC_` map key is introduced; browser key values must never be committed, printed, logged, or pasted into docs.",
@@ -118,7 +118,7 @@ for (const fragment of [
   "document.body.appendChild(mapElement);",
   "Google Maps visual DOM did not render safely.",
   "data-admin-active-jobs-map-canvas",
-  "data-admin-active-jobs-map-config-message",
+  "data-dashboard-live-driver-map-config-message",
   "AdminActiveJobsBrowserMap",
   "renderAdminActiveJobsBrowserMapTileFallback",
   "waitForAdminActiveJobsBrowserMapTileFallback",
@@ -128,8 +128,8 @@ for (const fragment of [
   "data-admin-active-jobs-map-google-tile",
   "Map tiles © Google",
   "Google map tile fallback did not load safely.",
-  "Driver Pin",
-  "Embedded map off. Use Driver Pin",
+  "Open Map",
+  "Embedded map off. Open each driver in Google Maps until browser-safe map setup is enabled.",
 ]) {
   assertIncludes(appPage, fragment, `admin browser map UI fragment ${fragment}`);
 }

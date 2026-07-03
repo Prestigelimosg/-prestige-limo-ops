@@ -182,11 +182,12 @@ const adminActiveJobsRuntimeSection = sectionBetween(
 );
 
 for (const phrase of [
-  "Admin Dispatch has a compact Selected Job Live Map runtime control inside the existing Day-of-Trip Dispatch Monitor.",
-  "The control adds selected saved bookings one by one through `/api/admin-live-location-runtime` instead of replacing the previous selected booking.",
+  "Admin Dispatch has one compact Dashboard Live Dispatch Map runtime control for the active jobs list; the old selected-job live map control is not rendered inside the Day-of-Trip Dispatch Monitor.",
+  "The Dashboard Live Dispatch Map opens live movement for the active job references in one operator click through `/api/admin-live-location-runtime` instead of requiring a selected booking to be added manually.",
   "Runtime control keeps existing `driver_live_location_allowed_job_references`, removes duplicates, and caps the selected booking list at 50 references.",
   "Admin marker refresh uses the existing guarded `GET /api/admin-active-jobs-map-locations` route and returns both selected booking references and current driver markers.",
-  "The admin UI renders compact selected-booking chips, marker rows, Driver Pin fallback links, and an optional browser map canvas that remains off unless the separate browser-safe map config route is enabled.",
+  "The admin UI renders compact active marker rows, per-driver `Open Map` fallback links, and an optional browser map canvas that remains off unless the separate browser-safe map config route is enabled.",
+  "Same-driver duplicate live markers are collapsed by driver identity; current/newest movement wins and any older duplicate rows are reported as hidden.",
   "The admin browser map updates Google marker positions from driver GPS instead of drawing a separate CSS arrow/trail overlay, so visible marker placement stays aligned to the map.",
   "Admin live-marker polling runs every 5 seconds while the active live map is open; this is display refresh only and does not add a new driver/customer tracking surface.",
   "Customer live-location API remains same-origin/session/booking-boundary gated and no customer message is sent by this lane.",
@@ -199,41 +200,37 @@ for (const phrase of [
 }
 
 const activeJobsRuntimeStart = adminPage.indexOf(
-  'aria-label="Selected Job Live Map"',
+  'data-dashboard-live-driver-map="true"',
 );
 assert.notEqual(activeJobsRuntimeStart, -1, "Missing admin active-jobs map runtime.");
+const activeJobsRuntimeBoundary = 'data-dashboard-live-driver-map-boundary="true"';
 const activeJobsRuntimeEnd = adminPage.indexOf(
-  'data-admin-day-of-trip-dispatch-monitor-boundary="true"',
+  activeJobsRuntimeBoundary,
   activeJobsRuntimeStart,
 );
 assert.notEqual(activeJobsRuntimeEnd, -1, "Missing admin active-jobs runtime end boundary.");
-const activeJobsRuntimeSource = adminPage.slice(activeJobsRuntimeStart, activeJobsRuntimeEnd);
+const activeJobsRuntimeSource = adminPage.slice(
+  activeJobsRuntimeStart,
+  activeJobsRuntimeEnd + activeJobsRuntimeBoundary.length,
+);
 
 for (const fragment of [
-  'aria-label="Selected Job Live Map"',
-  'data-admin-active-jobs-map-runtime="true"',
-  'data-admin-active-jobs-map-state={adminActiveJobsMapReadState.runtimeStatus}',
-  'data-admin-active-jobs-map-selected-count=',
-  'data-admin-active-jobs-map-marker-count={adminActiveJobsMapReadState.markerCount}',
-  'data-admin-active-jobs-map-sharing-state=',
-  'data-admin-active-jobs-map-stale-state=',
-  'data-admin-active-jobs-map-open="true"',
-  'data-admin-active-jobs-map-refresh="true"',
-  'data-admin-active-jobs-map-close="true"',
-  'data-admin-active-jobs-map-selected-list="true"',
-  'data-admin-active-jobs-map-marker-list="true"',
-  'data-admin-active-jobs-map-canvas',
-  'data-admin-active-jobs-map-config-message',
-  'data-admin-active-jobs-map-boundary="true"',
-  "Selected Job Live Map",
-  "Selected:",
-  "Markers:",
-  "Sharing:",
-  "Stale:",
-  "Add this job",
-  "Refresh",
-  "Close all",
-  "Driver Pin",
+  'data-dashboard-live-driver-map="true"',
+  'data-dashboard-live-driver-map-state={adminActiveJobsMapReadState.runtimeStatus}',
+  'data-dashboard-live-driver-map-marker-count={adminActiveJobsMapReadState.markerCount}',
+  'data-dashboard-live-driver-map-slot-count={liveDispatchPreparedSlotCount}',
+  'data-dashboard-live-driver-map-open="true"',
+  'data-dashboard-live-driver-map-refresh="true"',
+  'data-dashboard-live-driver-map-close="true"',
+  'data-dashboard-live-driver-map-config-message="true"',
+  'data-dashboard-live-driver-map-marker-list="true"',
+  'data-dashboard-live-driver-map-boundary="true"',
+  "Live Dispatch Map",
+  "One click opens live movement for the active jobs above",
+  "Open Live Dispatch Map",
+  "Refresh movement",
+  "Close live map",
+  "Open Map",
 ]) {
   assertIncludes(activeJobsRuntimeSource, fragment, `admin active-jobs runtime UI fragment ${fragment}`);
 }
@@ -242,8 +239,8 @@ for (const fragment of [
   'data-admin-active-jobs-map-live-movement="true"',
   'data-admin-active-jobs-map-live-movement-status="true"',
   "Google marker positions update from driver GPS every few seconds",
-  "collapseAdminActiveJobsMapStaleDriverDuplicates",
-  "older stale duplicate",
+  "collapseAdminActiveJobsMapDriverDuplicates",
+  "older duplicate",
   "adminActiveJobsMapPollIntervalMs",
 ]) {
   assertIncludes(adminPage, fragment, `admin active-jobs moving map component fragment ${fragment}`);
@@ -257,10 +254,15 @@ const dayOfTripExceptionStart = adminPage.indexOf(
 assert.notEqual(dayOfTripMonitorStart, -1, "Missing existing Day-of-Trip Dispatch Monitor section.");
 assert.notEqual(dayOfTripExceptionStart, -1, "Missing Day-of-Trip Exception section boundary.");
 const dayOfTripMonitorSource = adminPage.slice(dayOfTripMonitorStart, dayOfTripExceptionStart);
-assertIncludes(
+assertExcludes(
   dayOfTripMonitorSource,
   'data-admin-active-jobs-map-runtime="true"',
-  "admin active-jobs runtime must remain inside existing Day-of-Trip Dispatch Monitor area",
+  "old selected-job live map runtime must not remain inside existing Day-of-Trip Dispatch Monitor area",
+);
+assertIncludes(
+  dayOfTripMonitorSource,
+  "the Dashboard Live Dispatch Map for active jobs only.",
+  "Day-of-Trip monitor boundary should point operators to the single Dashboard Live Dispatch Map",
 );
 
 for (const forbiddenPattern of [

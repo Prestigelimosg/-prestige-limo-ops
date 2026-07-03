@@ -65,14 +65,15 @@ const runtimeReadinessSection = sectionBetween(
 );
 
 for (const phrase of [
-  "Admin Dispatch has a compact Selected Job Live Map runtime control inside the existing Day-of-Trip Dispatch Monitor.",
+  "Admin Dispatch has one compact Dashboard Live Dispatch Map runtime control for the active jobs list; the old selected-job live map control is not rendered inside the Day-of-Trip Dispatch Monitor.",
   "Creating a driver job link now auto-authorizes live movement for that booking by opening the existing admin live-location runtime allowlist after the link row is saved.",
   "The visible Driver Job Link panel no longer exposes the manual `Enable Live Location` button; the panel stays limited to `Create Link`, `Copy Link`, `Revoke`, and useful status copy.",
-  "The control adds selected saved bookings one by one through `/api/admin-live-location-runtime` instead of replacing the previous selected booking.",
+  "The Dashboard Live Dispatch Map opens live movement for the active job references in one operator click through `/api/admin-live-location-runtime` instead of requiring a selected booking to be added manually.",
   "Runtime control keeps existing `driver_live_location_allowed_job_references`, removes duplicates, and caps the selected booking list at 50 references.",
   "Driver `Share Location` first calls `GET /api/driver-job/[token]/live-location` for server readiness; Chrome GPS is requested only after that readiness check passes.",
   "Admin marker refresh uses the existing guarded `GET /api/admin-active-jobs-map-locations` route and returns both selected booking references and current driver markers.",
-  "The admin UI renders compact selected-booking chips, marker rows, Driver Pin fallback links, and an optional browser map canvas that remains off unless the separate browser-safe map config route is enabled.",
+  "The admin UI renders compact active marker rows, per-driver `Open Map` fallback links, and an optional browser map canvas that remains off unless the separate browser-safe map config route is enabled.",
+  "Same-driver duplicate live markers are collapsed by driver identity; current/newest movement wins and any older duplicate rows are reported as hidden.",
   "The admin browser map updates Google marker positions from driver GPS instead of drawing a separate CSS arrow/trail overlay, so visible marker placement stays aligned to the map.",
   "Admin live-marker polling runs every 5 seconds while the active live map is open; this is display refresh only and does not add a new driver/customer tracking surface.",
   "Closing the runtime clears the selected list and gates driver/customer map reads off.",
@@ -85,24 +86,24 @@ for (const phrase of [
 for (const fragment of [
   "adminLiveLocationRuntimeApiPath",
   "adminActiveJobsMapLocationsApiPath",
-  'data-admin-active-jobs-map-runtime="true"',
-  'data-admin-active-jobs-map-open="true"',
-  'data-admin-active-jobs-map-refresh="true"',
-  'data-admin-active-jobs-map-close="true"',
-  'data-admin-active-jobs-map-selected-count=',
-  'data-admin-active-jobs-map-selected-list="true"',
-  'data-admin-active-jobs-map-marker-list="true"',
+  'data-dashboard-live-driver-map="true"',
+  'data-dashboard-live-driver-map-open="true"',
+  'data-dashboard-live-driver-map-refresh="true"',
+  'data-dashboard-live-driver-map-close="true"',
+  'data-dashboard-live-driver-map-marker-count={adminActiveJobsMapReadState.markerCount}',
+  'data-dashboard-live-driver-map-marker-list="true"',
   'data-admin-active-jobs-map-live-movement="true"',
   'data-admin-active-jobs-map-live-movement-status="true"',
   "Google marker positions update from driver GPS every few seconds",
-  "collapseAdminActiveJobsMapStaleDriverDuplicates",
+  "collapseAdminActiveJobsMapDriverDuplicates",
+  "older duplicate",
   "adminActiveJobsMapPollIntervalMs",
-  "Use Dashboard for all active jobs. Add this loaded booking only when you need selected-job live detail.",
-  "Add this job",
+  "Live Dispatch Map",
+  "Open Live Dispatch Map",
+  "Refresh movement",
+  "Close live map",
+  "Open Map",
   "Driver job link created and live movement authorized automatically.",
-  "Selected:",
-  "Close all",
-  "openAdminLiveLocationRuntimeForLoadedBooking",
   "closeAdminLiveLocationRuntime",
   "refreshAdminActiveJobsMapLocations",
   "googleMapsLocationUrl",
@@ -124,6 +125,24 @@ for (const removedDriverJobLinkFragment of [
     adminPage,
     removedDriverJobLinkFragment,
     `removed Driver Job Link manual live-location control ${removedDriverJobLinkFragment}`,
+  );
+}
+
+for (const removedSelectedJobMapFragment of [
+  'aria-label="Selected Job Live Map"',
+  'data-admin-active-jobs-map-runtime="true"',
+  'data-admin-active-jobs-map-open="true"',
+  'data-admin-active-jobs-map-selected-count=',
+  'data-admin-active-jobs-map-selected-list="true"',
+  "Selected Job Live Map",
+  "Use Dashboard for all active jobs. Add this loaded booking only when you need selected-job live detail.",
+  "Add this job",
+  "openAdminLiveLocationRuntimeForLoadedBooking",
+]) {
+  assertExcludes(
+    adminPage,
+    removedSelectedJobMapFragment,
+    `removed selected-job live-location control ${removedSelectedJobMapFragment}`,
   );
 }
 

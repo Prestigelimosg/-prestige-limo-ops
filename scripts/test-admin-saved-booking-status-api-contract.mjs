@@ -379,6 +379,22 @@ assert.equal(
   true,
   "Cancelled bookings must have a status helper for archive routing.",
 );
+assert.equal(
+  dashboardSource.includes('const archivedStatus = isCancelledStatus ? "cancelled" : isCompletedStatus ? "completed" : "";'),
+  true,
+  "Loaded booking snapshots must normalize final cancelled/completed status before stale pending values.",
+);
+assert.equal(
+  dashboardSource.includes("function adminBookingPersistenceRecordIsCancelledStatus"),
+  true,
+  "Loaded operational snapshots must detect cancelled status across admin/customer/review fields.",
+);
+assert.equal(
+  dashboardSource.includes("adminBookingPersistenceRecordIsCancelledStatus(record)") &&
+    dashboardSource.includes('return "Cancelled";'),
+  true,
+  "Loaded operational snapshot primary status must show Cancelled before older pending/admin text.",
+);
 
 const harness = await loadHarness();
 

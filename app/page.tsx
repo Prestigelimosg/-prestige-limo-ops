@@ -7886,18 +7886,24 @@ function bookingRecordToAdminBookingPersistenceRecord(
       Boolean(clean(routePoint?.location_text)),
   );
   const paxCount = Number(bookingRecord.pax_count || bookingRecord.pax);
+  const isCancelledStatus = bookingRecordIsCancelledStatus(bookingRecord);
+  const isCompletedStatus = bookingRecordIsCompletedStatus(bookingRecord);
+  const archivedStatus = isCancelledStatus ? "cancelled" : isCompletedStatus ? "completed" : "";
 
   return {
-    admin_internal_status: clean(bookingRecord.admin_internal_status) || clean(bookingRecord.status) || null,
+    admin_internal_status:
+      archivedStatus || clean(bookingRecord.admin_internal_status) || clean(bookingRecord.status) || null,
     booking_reference: bookingReference,
-    cancellation_review_status: clean(bookingRecord.cancellation_review_status) || null,
+    cancellation_review_status:
+      isCancelledStatus ? "cancelled" : clean(bookingRecord.cancellation_review_status) || null,
     change_review_status: clean(bookingRecord.change_review_status) || null,
     contact_display_name: clean(bookingRecord.contact_display_name) || clean(bookingRecord.bookers?.booker_name) || null,
     contact_email: clean(bookingRecord.contact_email) || clean(bookingRecord.bookers?.email) || null,
     contact_phone: clean(bookingRecord.contact_phone) || clean(bookingRecord.bookers?.phone) || null,
     created_at: clean(bookingRecord.created_at) || null,
     customer_display_name: clean(bookingRecord.customer_display_name) || getBookingCompanyName(bookingRecord) || null,
-    customer_facing_status: clean(bookingRecord.customer_facing_status) || clean(bookingRecord.status) || null,
+    customer_facing_status:
+      archivedStatus || clean(bookingRecord.customer_facing_status) || clean(bookingRecord.status) || null,
     driver_contact: clean(bookingRecord.driver_contact) || null,
     driver_name: clean(bookingRecord.driver_name) || null,
     driver_plate_number: clean(bookingRecord.driver_plate_number) || null,
@@ -8607,6 +8613,22 @@ function adminBookingPersistenceStatusValues(record: AdminBookingPersistenceReco
   ].filter(Boolean);
 }
 
+function adminBookingPersistenceNormalizedStatusValues(record: AdminBookingPersistenceRecord) {
+  return adminBookingPersistenceStatusValues(record).map((statusValue) => statusValue.toLowerCase());
+}
+
+function adminBookingPersistenceRecordIsCompletedStatus(record: AdminBookingPersistenceRecord) {
+  return adminBookingPersistenceNormalizedStatusValues(record).some((statusValue) =>
+    ["completed", "complete", "job completed", "job_completed"].includes(statusValue),
+  );
+}
+
+function adminBookingPersistenceRecordIsCancelledStatus(record: AdminBookingPersistenceRecord) {
+  return adminBookingPersistenceNormalizedStatusValues(record).some((statusValue) =>
+    ["cancelled", "canceled"].includes(statusValue),
+  );
+}
+
 function adminBookingPersistencePickupSearchValues(record: AdminBookingPersistenceRecord) {
   const rawPickupDateTime = adminBookingPersistencePickupDateTime(record);
 
@@ -8767,6 +8789,14 @@ function adminBookingPersistenceRouteSummary(record: AdminBookingPersistenceReco
 }
 
 function adminBookingPersistencePrimaryStatus(record: AdminBookingPersistenceRecord) {
+  if (adminBookingPersistenceRecordIsCancelledStatus(record)) {
+    return "Cancelled";
+  }
+
+  if (adminBookingPersistenceRecordIsCompletedStatus(record)) {
+    return "Completed";
+  }
+
   return clean(record.admin_internal_status) ||
     clean(record.short_notice_review_status) ||
     clean(record.customer_facing_status) ||

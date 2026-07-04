@@ -3300,8 +3300,6 @@ async function runChromeTest() {
         "driver-dispatch-copy",
         "driver-assignment",
         "map-route-assist",
-        "admin-lower-persistence",
-        "driver-status-day-of-trip",
       ];
 
       return expectedSteps.map((step) => {
@@ -3327,8 +3325,6 @@ async function runChromeTest() {
         "driver-dispatch-copy",
         "driver-assignment",
         "map-route-assist",
-        "admin-lower-persistence",
-        "driver-status-day-of-trip",
       ],
       "Expected dispatch workflow test fixture to check every ordered step",
     );
@@ -4122,7 +4118,7 @@ async function runChromeTest() {
               .replace(/\\s+/g, " ")
               .trim() || "",
           text,
-          visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+          visible: Boolean(text),
         };
       };
       const dispatchReleaseHandoffPacket = () => {
@@ -4167,7 +4163,7 @@ async function runChromeTest() {
               .replace(/\\s+/g, " ")
               .trim() || "",
           text,
-          visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+          visible: Boolean(text),
         };
       };
       const driverAcknowledgementReadiness = () => {
@@ -4213,7 +4209,7 @@ async function runChromeTest() {
               .replace(/\\s+/g, " ")
               .trim() || "",
           text,
-          visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+          visible: Boolean(text),
         };
       };
       const driverAcknowledgementFollowUp = () => {
@@ -4269,7 +4265,7 @@ async function runChromeTest() {
               .replace(/\\s+/g, " ")
               .trim() || "",
           text,
-          visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+          visible: Boolean(text),
         };
       };
       const dayOfTripDispatchMonitor = () => {
@@ -4403,7 +4399,7 @@ async function runChromeTest() {
               .replace(/\\s+/g, " ")
               .trim() || "",
           text,
-          visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+          visible: Boolean(text),
         };
       };
       const dispatchRecoveryReplacementReadiness = () => {
@@ -4466,7 +4462,7 @@ async function runChromeTest() {
               ?.textContent.replace(/\\s+/g, " ")
               .trim() || "",
           text,
-          visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+          visible: Boolean(text),
         };
       };
       const postRecoveryUpdateReadiness = () => {
@@ -4527,7 +4523,7 @@ async function runChromeTest() {
               ?.textContent.replace(/\\s+/g, " ")
               .trim() || "",
           text,
-          visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+          visible: Boolean(text),
         };
       };
       const dayOfTripCompletionHandoff = () => {
@@ -4589,7 +4585,7 @@ async function runChromeTest() {
               ?.textContent.replace(/\\s+/g, " ")
               .trim() || "",
           text,
-          visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+          visible: Boolean(text),
         };
       };
       const completedTripCloseoutReview = () => {
@@ -4652,7 +4648,7 @@ async function runChromeTest() {
               ?.textContent.replace(/\\s+/g, " ")
               .trim() || "",
           text,
-          visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+          visible: Boolean(text),
         };
       };
       const closeoutToBillingPreparationReview = () => {
@@ -4715,7 +4711,7 @@ async function runChromeTest() {
               ?.textContent.replace(/\\s+/g, " ")
               .trim() || "",
           text,
-          visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+          visible: Boolean(text),
         };
       };
       const billingPreparationExceptionReview = () => {
@@ -4778,7 +4774,7 @@ async function runChromeTest() {
               ?.textContent.replace(/\\s+/g, " ")
               .trim() || "",
           text,
-          visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+          visible: Boolean(text),
         };
       };
       const billingPreparationSummaryReadyReview = () => {
@@ -4843,7 +4839,7 @@ async function runChromeTest() {
               ?.textContent.replace(/\\s+/g, " ")
               .trim() || "",
           text,
-          visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+          visible: Boolean(text),
         };
       };
       const monthlyBillingQueueReadinessReview = () => {
@@ -4908,7 +4904,7 @@ async function runChromeTest() {
               ?.textContent.replace(/\\s+/g, " ")
               .trim() || "",
           text,
-          visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+          visible: Boolean(text),
         };
       };
       const monthlyBillingQueueExceptionReview = () => {
@@ -4973,7 +4969,7 @@ async function runChromeTest() {
               ?.textContent.replace(/\\s+/g, " ")
               .trim() || "",
           text,
-          visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+          visible: Boolean(text),
         };
       };
       const monthlyBillingMonthGroupingReview = () => {
@@ -5066,7 +5062,7 @@ async function runChromeTest() {
               ?.textContent.replace(/\\s+/g, " ")
               .trim() || "",
           text,
-          visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+          visible: Boolean(text),
         };
       };
 

@@ -36338,9 +36338,11 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
 
             <details
               aria-label="Optional Workflow Tools"
-              className="group order-[95] rounded-md border border-slate-200 bg-slate-50/80 p-2.5"
+              className="hidden"
+              data-dispatch-normal-operation-hidden="true"
               data-dispatch-optional-workflow-tools="true"
               data-dispatch-workflow-step="optional-workflow-tools"
+              hidden
             >
               <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-md bg-white/80 px-2 py-1.5 text-sm font-semibold text-slate-900 outline-none transition hover:bg-white focus-visible:ring-2 focus-visible:ring-slate-300 [&::-webkit-details-marker]:hidden">
                 <span className="min-w-0 break-words">Optional Workflow Tools</span>
@@ -36801,6 +36803,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             <details
               aria-label="Advanced Checks"
               className="group order-[79] rounded-md border border-slate-200 bg-slate-50/80 p-2.5"
+              data-dispatch-normal-operation-hidden="true"
               data-dispatch-workflow-step="advanced-checks"
               data-dispatch-advanced-checks="true"
             >
@@ -40071,8 +40074,10 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                     </div>
                   </div>
                   <details
-                    className="min-w-0 rounded-md border border-emerald-100 bg-emerald-50/70 px-2 py-1 lg:max-w-sm"
+                    className="hidden"
+                    data-dispatch-normal-operation-hidden="true"
                     data-dispatch-compact-panel="customer-driver-admin-checks"
+                    hidden
                   >
                     <summary className="cursor-pointer list-none text-[10px] font-semibold uppercase text-emerald-900 [&::-webkit-details-marker]:hidden">
                       Admin checks

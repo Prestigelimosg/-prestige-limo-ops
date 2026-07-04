@@ -64,8 +64,8 @@ for (const phrase of [
   "`Today's Jobs` excludes customer-request rows and unassigned/Driver TBC rows from the live-dispatch queue; unassigned saved jobs inside the 1-hour pickup monitor window stay in the Dashboard `Urgent Booking Requests` panel until admin loads them for driver assignment.",
   "`Today's Jobs` shows a compact saved driver report readout per visible job, using the existing guarded admin `GET /api/admin-driver-job-statuses` path only, with monitor-wide/per-card refresh controls and auto-refresh on by default.",
   "`Today's Jobs` includes compact live-map controls that reuse the existing admin-only live-location runtime for the jobs inside the monitor window.",
-  "The lower Dispatch saved-record finder and internal advanced checks now sit behind one compact `Optional Workflow Tools` disclosure by default. The existing admin-only persistence controls, loaded-record scrollbox, and guarded checks are still available after expanding, but they no longer fill the normal Dispatch view.",
-  "Dispatch internal readiness, handoff, follow-up, day-of-trip monitor, recovery, exception, closeout-review, and billing-prep panels now live under the optional workflow drawer and one nested `Advanced Checks` disclosure. Every Advanced Checks child panel is a closed nested disclosure by default, while the existing guarded controls remain colocated after expansion and the default operator view stays focused on daily trip work.",
+  "The lower Dispatch saved-record finder and internal advanced checks stay in the source as an archived `Optional Workflow Tools` block, but the block is hidden from normal operation so it cannot distract dispatch with unused saved-record or readiness panels.",
+  "Dispatch internal readiness, handoff, follow-up, day-of-trip monitor, recovery, exception, closeout-review, and billing-prep panels remain colocated under the archived optional workflow block and nested `Advanced Checks` disclosure for guard coverage, while the default operator view stays focused on daily trip work.",
   "The `Today's Jobs` driver report readout is read-only and does not create driver status events, notification rows, provider sends, GPS/live-location records, billing/payment/PDF/invoice/payout records, or a duplicate single-booking Dispatch workflow.",
   "The Bookings tab shows a compact new-request badge/highlight after open customer requests are detected; no sound, browser notification, polling loop, provider send, or new route is added.",
 ]) {
@@ -317,7 +317,13 @@ const optionalWorkflowToolsTag = sliceBetween(
   '<details\n              aria-label="Optional Workflow Tools"',
   ">",
 );
-assertIncludes(optionalWorkflowToolsTag, 'order-[95]', "Optional workflow tools lower daily-flow order");
+assertIncludes(optionalWorkflowToolsTag, 'className="hidden"', "Optional workflow tools hidden from normal operation");
+assertIncludes(
+  optionalWorkflowToolsTag,
+  'data-dispatch-normal-operation-hidden="true"',
+  "Optional workflow tools normal-operation archive marker",
+);
+assertIncludes(optionalWorkflowToolsTag, "\n              hidden", "Optional workflow tools hidden attribute");
 assertExcludes(optionalWorkflowToolsTag, /\sopen(?:=|\s|$)/, "Optional workflow tools default disclosure");
 
 const optionalWorkflowToolsBlock = sliceBetween(
@@ -355,6 +361,12 @@ const advancedChecksTag = sliceBetween(
   ">",
 );
 assertExcludes(advancedChecksTag, /\sopen(?:=|\s|$)/, "Dispatch advanced checks default disclosure");
+assertIncludes(advancedChecksTag, "order-[79]", "Dispatch advanced checks stays archived in optional tools");
+assertIncludes(
+  advancedChecksTag,
+  'data-dispatch-normal-operation-hidden="true"',
+  "Dispatch advanced checks normal-operation archive marker",
+);
 
 const advancedChecksBlock = sliceBetween(
   dispatchBlock,

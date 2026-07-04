@@ -270,11 +270,25 @@ assert.equal(
 for (const fragment of [
   'data-customer-copy-readable-summary="true"',
   'data-dispatch-compact-panel="customer-copy-message-text"',
+  'data-dispatch-compact-panel="customer-driver-admin-checks"',
+  'data-dispatch-normal-operation-hidden="true"',
   "Message text for Copy / Email / WhatsApp / SMS",
   'data-copy-preview="customerCopy"',
 ]) {
   assertIncludes(customerCopySection, fragment, `Customer Copy readable summary fragment ${fragment}`);
 }
+const customerCopyAdminChecksTag = extractBetween(
+  customerCopySection,
+  '<details\n                    className="hidden"',
+  ">",
+  "Customer Copy hidden admin checks panel",
+);
+assertIncludes(
+  customerCopyAdminChecksTag,
+  'data-dispatch-normal-operation-hidden="true"',
+  "Customer Copy admin checks must stay archived from normal operation",
+);
+assertIncludes(customerCopyAdminChecksTag, "\n                    hidden", "Customer Copy admin checks hidden attribute");
 assert.equal(
   customerCopySection.includes("disabled-send-sending-enabled") &&
     customerCopySection.includes("disabled-send-external-send") &&

@@ -645,6 +645,59 @@ const dashboardCompletionActionFixture = {
     traveler_name: "COMPLETION ACTION TEST TRAVELER",
   },
 };
+const missingIdCompletionActionFixture = {
+  ...dashboardCompletionActionFixture,
+  id: undefined,
+  booking_reference: "ADM-MISSING-ID-COMPLETION-ONE",
+  company_id: 814,
+  booker_id: 815,
+  traveler_id: 816,
+  flight_no: "SQ771",
+  job_card:
+    "AVF MNG\n31 Dec 2099, 1945hrs\nFlight: SQ771\nChangi Airport T3 > Fullerton Hotel Singapore\nCompany: MISSING ID COMPLETION COMPANY ONE\nPassenger: MISSING ID COMPLETION TRAVELER ONE\nPax: 1",
+  pickup_time: "1945",
+  route: "Changi Airport T3 > Fullerton Hotel Singapore",
+  dropoff_address: "Fullerton Hotel Singapore",
+  companies: {
+    company_name: "MISSING ID COMPLETION COMPANY ONE",
+    domain: "missing-id-one.example.com",
+  },
+  bookers: {
+    booker_name: "MISSING ID COMPLETION BOOKER ONE",
+    email: "booker-one@missing-id.example.com",
+    phone: "+65 8333 7711",
+  },
+  travelers: {
+    traveler_name: "MISSING ID COMPLETION TRAVELER ONE",
+  },
+};
+const missingIdCompletionNeighbourFixture = {
+  ...dashboardCompletionActionFixture,
+  id: undefined,
+  booking_reference: "ADM-MISSING-ID-COMPLETION-TWO",
+  company_id: 817,
+  booker_id: 818,
+  traveler_id: 819,
+  flight_no: "SQ772",
+  job_card:
+    "AVF MNG\n31 Dec 2099, 2015hrs\nFlight: SQ772\nOne-North Test Stand > Labrador Test Stand\nCompany: MISSING ID COMPLETION COMPANY TWO\nPassenger: MISSING ID COMPLETION TRAVELER TWO\nPax: 1",
+  pickup_time: "2015",
+  route: "One-North Test Stand > Labrador Test Stand",
+  pickup_address: "One-North Test Stand",
+  dropoff_address: "Labrador Test Stand",
+  companies: {
+    company_name: "MISSING ID COMPLETION COMPANY TWO",
+    domain: "missing-id-two.example.com",
+  },
+  bookers: {
+    booker_name: "MISSING ID COMPLETION BOOKER TWO",
+    email: "booker-two@missing-id.example.com",
+    phone: "+65 8333 7722",
+  },
+  travelers: {
+    traveler_name: "MISSING ID COMPLETION TRAVELER TWO",
+  },
+};
 const completedUndoAssignedFixture = {
   id: "ui-completed-undo-assigned-fixture",
   company_id: 821,
@@ -6979,7 +7032,10 @@ async function runChromeTest() {
             url: String(target),
           });
           window.__prestigeLoadedBookings = (window.__prestigeLoadedBookings || []).map((booking) =>
-            String(booking.id) === String(parsedBody.booking_id)
+            (
+              String(booking.id || "") === String(parsedBody.booking_id) ||
+              String(booking.booking_reference || "") === String(parsedBody.booking_id)
+            )
               ? {
                   ...booking,
                   status: parsedBody.status,
@@ -9780,6 +9836,204 @@ async function runChromeTest() {
       dashboardCompletionState.localMessageDistance !== null &&
         dashboardCompletionState.localMessageDistance <= 120,
       `Expected Mark completed status near booking controls, got ${dashboardCompletionState.localMessageDistance}px`,
+    );
+
+    const missingIdBookingReference = missingIdCompletionActionFixture.booking_reference;
+    const missingIdNeighbourReference = missingIdCompletionNeighbourFixture.booking_reference;
+
+    await evaluate(`(() => {
+      const references = ${JSON.stringify([
+        missingIdCompletionActionFixture.booking_reference,
+        missingIdCompletionNeighbourFixture.booking_reference,
+      ])};
+      window.__prestigeLoadedBookings = (window.__prestigeLoadedBookings || [])
+        .filter((booking) => !references.includes(String(booking.booking_reference || "")))
+        .concat([
+          ${JSON.stringify(missingIdCompletionActionFixture)},
+          ${JSON.stringify(missingIdCompletionNeighbourFixture)},
+        ]);
+    })()`);
+    const clickedMissingIdFixtureRefresh = await evaluate(`(() => {
+      const button = [...document.querySelectorAll("button")].find(
+        (candidate) => candidate.textContent.trim() === "Refresh Loaded Bookings",
+      );
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(clickedMissingIdFixtureRefresh, true, "Expected Refresh Loaded Bookings to be clickable for missing-id fixture injection");
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const bodyText = document.body.innerText;
+
+          return bodyText.includes("${missingIdCompletionActionFixture.booking_reference}") &&
+            bodyText.includes("${missingIdCompletionNeighbourFixture.booking_reference}");
+        })()`),
+      10000,
+      "missing-id fixtures loaded into app state",
+    );
+
+    await clickTab("Bookings", "Bookings");
+
+    const missingIdInitialState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const references = ${JSON.stringify([
+            missingIdCompletionActionFixture.booking_reference,
+            missingIdCompletionNeighbourFixture.booking_reference,
+          ])};
+          const cards = references.map((reference) => {
+            const card = document.querySelector("[data-recent-operational-card='" + reference + "']");
+            const button = card?.querySelector("[data-bookings-mark-completed='" + reference + "']");
+
+            return {
+              buttonKey: button?.getAttribute("data-bookings-mark-completed") || "",
+              cardKey: card?.getAttribute("data-recent-operational-card") || "",
+              found: Boolean(card && button),
+              reference,
+              text: card?.innerText || "",
+            };
+          });
+
+          return cards.every((card) => card.found) && !document.querySelector("[data-recent-operational-card='undefined']")
+            ? {
+                cards,
+                undefinedButtonCount: document.querySelectorAll("[data-bookings-mark-completed='undefined']").length,
+                undefinedMessageCount: document.querySelectorAll("[data-booking-completion-message='undefined']").length,
+              }
+            : false;
+        })()`),
+      10000,
+      "missing-id current/upcoming stable booking keys",
+    );
+    assert.deepEqual(
+      missingIdInitialState.cards.map((card) => card.cardKey),
+      [missingIdBookingReference, missingIdNeighbourReference],
+      "Expected missing-id loaded bookings to use booking_reference as card keys",
+    );
+    assert.deepEqual(
+      missingIdInitialState.cards.map((card) => card.buttonKey),
+      [missingIdBookingReference, missingIdNeighbourReference],
+      "Expected missing-id Mark completed buttons to use booking_reference keys",
+    );
+    assert.equal(missingIdInitialState.undefinedButtonCount, 0);
+    assert.equal(missingIdInitialState.undefinedMessageCount, 0);
+
+    await evaluate(`(() => {
+      window.__prestigeFetchCalls = [];
+      window.__prestigeBookingCompletionRequests = [];
+      window.__prestigeUnhandledSupabaseCalls = [];
+    })()`);
+
+    const clickedMissingIdMarkCompleted = await evaluate(`(() => {
+      const card = document.querySelector("[data-recent-operational-card='${missingIdCompletionActionFixture.booking_reference}']");
+      const markButton = card?.querySelector("[data-bookings-mark-completed='${missingIdCompletionActionFixture.booking_reference}']");
+
+      if (!markButton || markButton.disabled) {
+        return false;
+      }
+
+      markButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedMissingIdMarkCompleted,
+      true,
+      "Expected missing-id booking Mark completed button to be clickable by booking reference",
+    );
+
+    const missingIdCompletionState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const requests = window.__prestigeBookingCompletionRequests || [];
+          const reference = "${missingIdCompletionActionFixture.booking_reference}";
+          const request = requests.find((candidate) => candidate.body?.booking_id === reference);
+          const successMessages = [...document.querySelectorAll("[data-booking-completion-message]")]
+            .filter((message) => message.textContent.trim() === "Booking marked completed.");
+          const neighbourCard = document.querySelector("[data-recent-operational-card='${missingIdCompletionNeighbourFixture.booking_reference}']");
+
+          return request
+            ? {
+                fetchCalls: window.__prestigeFetchCalls || [],
+                neighbourHasSuccessMessage: Boolean(
+                  neighbourCard?.querySelector("[data-booking-completion-message]"),
+                ),
+                request,
+                successMessageCount: successMessages.length,
+                undefinedMessageCount: document.querySelectorAll("[data-booking-completion-message='undefined']").length,
+                unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
+              }
+            : false;
+        })()`),
+      10000,
+      "missing-id mark completed reference status request",
+    );
+    assert.deepEqual(
+      missingIdCompletionState.unhandledSupabaseCalls,
+      [],
+      `Expected missing-id Mark completed Supabase calls to be mocked, got ${missingIdCompletionState.unhandledSupabaseCalls.join(", ")}`,
+    );
+    assert.equal(
+      missingIdCompletionState.fetchCalls.filter((call) => call.startsWith("PATCH ") && call.includes("/api/admin-saved-booking-statuses")).length,
+      1,
+      `Expected missing-id Mark completed to PATCH the typed saved booking status API once, got ${missingIdCompletionState.fetchCalls.join(", ")}`,
+    );
+    assert.deepEqual(
+      missingIdCompletionState.request.body,
+      {
+        booking_id: missingIdBookingReference,
+        status: "completed",
+      },
+      "Expected missing-id Mark completed to target the booking_reference, not undefined",
+    );
+    assert.equal(missingIdCompletionState.undefinedMessageCount, 0);
+    assert.equal(
+      missingIdCompletionState.neighbourHasSuccessMessage,
+      false,
+      "Expected missing-id Mark completed feedback not to appear on another missing-id booking",
+    );
+    assert.ok(
+      missingIdCompletionState.successMessageCount <= 1,
+      `Expected at most one Mark completed success message, got ${missingIdCompletionState.successMessageCount}`,
+    );
+
+    await clickTab("Dashboard", "Operations Dashboard");
+    await evaluate(`(() => {
+      const references = ${JSON.stringify([
+        missingIdCompletionActionFixture.booking_reference,
+        missingIdCompletionNeighbourFixture.booking_reference,
+      ])};
+      window.__prestigeLoadedBookings = (window.__prestigeLoadedBookings || [])
+        .filter((booking) => !references.includes(String(booking.booking_reference || "")));
+    })()`);
+    const clickedMissingIdFixtureCleanup = await evaluate(`(() => {
+      const button = [...document.querySelectorAll("button")].find(
+        (candidate) => candidate.textContent.trim() === "Refresh Loaded Bookings",
+      );
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(clickedMissingIdFixtureCleanup, true, "Expected Refresh Loaded Bookings to be clickable for missing-id fixture cleanup");
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const bodyText = document.body.innerText;
+
+          return !bodyText.includes("${missingIdCompletionActionFixture.booking_reference}") &&
+            !bodyText.includes("${missingIdCompletionNeighbourFixture.booking_reference}");
+        })()`),
+      10000,
+      "missing-id fixtures removed after regression",
     );
 
     await clickTab("Completed", "Completed / History");

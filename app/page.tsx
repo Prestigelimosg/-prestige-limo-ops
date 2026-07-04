@@ -674,7 +674,7 @@ type AdminTravelerCrmIdentityApiResponse = {
 };
 
 type BookingRecord = {
-  id: string | number;
+  id?: string | number | null;
   booking_reference?: string | null;
   source_channel?: string | null;
   source_surface?: string | null;
@@ -2512,7 +2512,7 @@ function AssignedDriverSummaryBlock({
   return (
     <div
       className={`${flush ? "" : "mt-2 "}rounded-md border border-sky-100 bg-sky-50/70 px-2 py-1.5 text-xs leading-5 text-slate-700`}
-      data-assigned-driver-summary={String(bookingRecord.id)}
+      data-assigned-driver-summary={bookingRecordStableKey(bookingRecord, operationalCard)}
     >
       <p className="font-semibold text-sky-950">Driver: {driverSummary.name}</p>
       <p className="mt-0.5 truncate text-slate-600">
@@ -2541,7 +2541,7 @@ function DispatcherStatusSummaryBlock({
   return (
     <div
       className={`${flush ? "" : "mt-2 "}rounded-md border border-emerald-100 bg-emerald-50/70 px-2 py-1.5 text-xs leading-5 text-slate-700`}
-      data-dispatcher-status-summary={String(bookingRecord.id)}
+      data-dispatcher-status-summary={bookingRecordStableKey(bookingRecord, operationalCard)}
     >
       <p className="font-semibold text-emerald-950">Status: {bookingStatusLabel(status)}</p>
     </div>
@@ -2595,7 +2595,7 @@ function OperationalReadinessSummaryBlock({
   return (
     <div
       className={`${flush ? "" : "mt-2 "}rounded-md border border-amber-100 bg-amber-50/70 px-2 py-1.5 text-xs leading-5 text-slate-700`}
-      data-operational-readiness-summary={String(bookingRecord.id)}
+      data-operational-readiness-summary={bookingRecordStableKey(bookingRecord, operationalCard)}
     >
       <p className="font-semibold text-amber-950">Ops: {readinessSummary.otsProof}</p>
       <p className="mt-0.5 truncate text-slate-600">
@@ -2982,6 +2982,39 @@ function cleanReferenceText(value: string | number | null | undefined) {
   const cleaned = clean(value);
 
   return /^(?:undefined|null)$/i.test(cleaned) ? "" : cleaned;
+}
+
+function bookingRecordStableKey(
+  bookingRecord: BookingRecord,
+  operationalCard?: LoadBookingsOperationalDisplayCard,
+) {
+  const directKey =
+    cleanReferenceText(bookingRecord.booking_reference) ||
+    cleanReferenceText(bookingRecord.id) ||
+    cleanReferenceText(operationalCard?.booking_reference) ||
+    cleanReferenceText(operationalCard?.booking_id);
+
+  if (directKey) {
+    return directKey;
+  }
+
+  return (
+    [
+      getBookingDateKey(bookingRecord),
+      formatPickupTimeFromRecord(bookingRecord),
+      getBookingName(bookingRecord),
+      getBookingCompanyName(bookingRecord),
+      clean(bookingRecord.flight_no),
+      clean(bookingRecord.route),
+    ]
+      .map(cleanReferenceText)
+      .filter(Boolean)
+      .join("|") || "booking-record"
+  );
+}
+
+function bookingRecordPersistedReference(bookingRecord: BookingRecord) {
+  return cleanReferenceText(bookingRecord.booking_reference) || cleanReferenceText(bookingRecord.id);
 }
 
 function compactBookingReference(value: string | number | null | undefined) {
@@ -6835,13 +6868,12 @@ function bookingRecordIsCancelledStatus(bookingRecord: BookingRecord) {
 }
 
 function getBookingDriverJobStatusReference(bookingRecord: BookingRecord) {
-  return cleanReferenceText(bookingRecord.booking_reference) || cleanReferenceText(bookingRecord.id);
+  return bookingRecordPersistedReference(bookingRecord);
 }
 
 function getBookingCalendarReference(bookingRecord: BookingRecord) {
   return (
-    cleanReferenceText(bookingRecord.booking_reference) ||
-    cleanReferenceText(bookingRecord.id) ||
+    bookingRecordPersistedReference(bookingRecord) ||
     [
       getBookingDateKey(bookingRecord),
       formatPickupTimeFromRecord(bookingRecord),
@@ -7266,7 +7298,7 @@ function sortBookingHistoryNewestFirst(firstBooking: BookingRecord, secondBookin
 function bookingRecordIsCustomerBookingRequest(bookingRecord: BookingRecord) {
   const referenceCandidates = [
     bookingRecord.booking_reference,
-    bookingRecord.id === null || bookingRecord.id === undefined ? "" : String(bookingRecord.id),
+    cleanReferenceText(bookingRecord.id),
   ]
     .map((value) => clean(value).toUpperCase())
     .filter(Boolean);
@@ -7281,8 +7313,7 @@ function bookingRecordIsCustomerBookingRequest(bookingRecord: BookingRecord) {
 
 function getCustomerBookingRequestQueueKey(bookingRecord: BookingRecord) {
   return (
-    cleanReferenceText(bookingRecord.booking_reference) ||
-    cleanReferenceText(bookingRecord.id) ||
+    bookingRecordPersistedReference(bookingRecord) ||
     [
       getBookingDateKey(bookingRecord),
       formatPickupTimeFromRecord(bookingRecord),
@@ -7477,7 +7508,7 @@ function buildCompletedBookingBillingReadinessAuditPayload(
   return {
     billing_month: adminMonthlyBillingGroupingBillingMonthFromDate(getBookingDateKey(bookingRecord)),
     booker_id: bookingRecord.booker_id,
-    booking_reference: String(bookingRecord.id),
+    booking_reference: bookingRecordPersistedReference(bookingRecord) || getBookingCalendarReference(bookingRecord),
     company_id: bookingRecord.company_id,
     company_name: companyName || null,
     customer_display_name: companyName || null,
@@ -7970,7 +8001,7 @@ function bookingRecordToFinancePayoutInternalFormFields(
 function bookingRecordToAdminBookingPersistenceRecord(
   bookingRecord: BookingRecord,
 ): AdminBookingPersistenceRecord | null {
-  const bookingReference = clean(bookingRecord.booking_reference) || clean(String(bookingRecord.id));
+  const bookingReference = bookingRecordPersistedReference(bookingRecord);
 
   if (!bookingReference) {
     return null;
@@ -15685,7 +15716,11 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   );
   function getLoadBookingsOperationalDisplayCard(bookingRecord: BookingRecord) {
     const fallbackCard = buildLoadBookingsOperationalDisplayCard(bookingRecord);
-    const typedCard = loadBookingsTypedOperationalCardsById[String(bookingRecord.id)];
+    const typedCard =
+      loadBookingsTypedOperationalCardsById[cleanReferenceText(bookingRecord.id)] ||
+      loadBookingsTypedOperationalCardsById[cleanReferenceText(bookingRecord.booking_reference)] ||
+      loadBookingsTypedOperationalCardsById[cleanReferenceText(fallbackCard.booking_id)] ||
+      loadBookingsTypedOperationalCardsById[cleanReferenceText(fallbackCard.booking_reference)];
 
     if (!typedCard) {
       return fallbackCard;
@@ -15696,7 +15731,12 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   function getLoadBookingsOperationalDisplayItemSource(
     bookingRecord: BookingRecord,
   ): LoadBookingsOperationalDisplayItemSource {
-    const typedCard = loadBookingsTypedOperationalCardsById[String(bookingRecord.id)];
+    const fallbackCard = buildLoadBookingsOperationalDisplayCard(bookingRecord);
+    const typedCard =
+      loadBookingsTypedOperationalCardsById[cleanReferenceText(bookingRecord.id)] ||
+      loadBookingsTypedOperationalCardsById[cleanReferenceText(bookingRecord.booking_reference)] ||
+      loadBookingsTypedOperationalCardsById[cleanReferenceText(fallbackCard.booking_id)] ||
+      loadBookingsTypedOperationalCardsById[cleanReferenceText(fallbackCard.booking_reference)];
 
     return typedCard ? "typed-read" : "legacy-fallback";
   }
@@ -15721,7 +15761,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       .map((displayItem, index) => ({
         displayItem,
         index,
-        typedOrder: loadBookingsTypedOperationalCardOrderIndex.get(String(displayItem.bookingRecord.id)),
+        typedOrder: loadBookingsTypedOperationalCardOrderIndex.get(
+          bookingRecordStableKey(displayItem.bookingRecord, displayItem.operationalCard),
+        ),
       }))
       .sort((firstItem, secondItem) => {
         if (firstItem.typedOrder !== undefined && secondItem.typedOrder !== undefined) {
@@ -16151,7 +16193,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     [dashboardUrgentBookingRequestBookings],
   );
   const urgentUnassignedSavedBookingIdSet = useMemo(
-    () => new Set(urgentUnassignedSavedBookingRequests.map((bookingRecord) => String(bookingRecord.id))),
+    () => new Set(urgentUnassignedSavedBookingRequests.map((bookingRecord) => bookingRecordStableKey(bookingRecord))),
     [urgentUnassignedSavedBookingRequests],
   );
   const urgentCustomerBookingRequestKeySet = useMemo(
@@ -16235,8 +16277,8 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   );
   const hasBookingsSearch = Boolean(clean(bookingsSearchTerm));
   const hasCompletedSearch = Boolean(clean(completedSearchTerm));
-  const loadedBookingIds = new Set(operationalBookings.map((bookingRecord) => String(bookingRecord.id)));
-  const completedBookingIds = new Set(completedBookings.map((bookingRecord) => String(bookingRecord.id)));
+  const loadedBookingIds = new Set(operationalBookings.map((bookingRecord) => bookingRecordStableKey(bookingRecord)));
+  const completedBookingIds = new Set(completedBookings.map((bookingRecord) => bookingRecordStableKey(bookingRecord)));
   const completedTabCompletionMessages = Object.entries(bookingCompletionMessages).filter(
     ([bookingId, completionMessage]) =>
       loadedBookingIds.has(bookingId) &&
@@ -16341,13 +16383,13 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   const todayBookings = activeDashboardBookings.filter(
     (bookingRecord) =>
       getBookingDateKey(bookingRecord) === todayKey &&
-      !urgentUnassignedSavedBookingIdSet.has(String(bookingRecord.id)) &&
+      !urgentUnassignedSavedBookingIdSet.has(bookingRecordStableKey(bookingRecord)) &&
       !unhandledCustomerBookingRequestKeySet.has(getCustomerBookingRequestQueueKey(bookingRecord)),
   );
   const upcomingBookings = activeDashboardBookings.filter(
     (bookingRecord) =>
       getBookingDateKey(bookingRecord) > todayKey &&
-      !urgentUnassignedSavedBookingIdSet.has(String(bookingRecord.id)) &&
+      !urgentUnassignedSavedBookingIdSet.has(bookingRecordStableKey(bookingRecord)) &&
       !unhandledCustomerBookingRequestKeySet.has(getCustomerBookingRequestQueueKey(bookingRecord)),
   );
   const calendarExportableBookings = activeDashboardBookings
@@ -18943,8 +18985,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     options: { focusCustomerCopy?: boolean; focusDriverJobLink?: boolean } = {},
   ) {
     const bookingReference =
-      cleanReferenceText(bookingRecord.booking_reference) ||
-      cleanReferenceText(bookingRecord.id) ||
+      bookingRecordPersistedReference(bookingRecord) ||
       cleanReferenceText(bookingRecord.flight_no) ||
       getBookingDateKey(bookingRecord);
 
@@ -21411,7 +21452,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   }
 
   function bookingRecordStatusReference(bookingRecord: BookingRecord) {
-    return cleanReferenceText(bookingRecord.booking_reference) || String(bookingRecord.id);
+    return bookingRecordPersistedReference(bookingRecord);
   }
 
   function bookingRecordMatchesStatusReference(
@@ -21423,7 +21464,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     return Boolean(
       cleanedReference &&
         (cleanReferenceText(bookingRecord.booking_reference) === cleanedReference ||
-          String(bookingRecord.id) === cleanedReference),
+          cleanReferenceText(bookingRecord.id) === cleanedReference),
     );
   }
 
@@ -21441,6 +21482,15 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     bookingStatusReference: string,
     nextStatus: BookingStatusValue,
   ): Promise<BookingStatusPatchResult> {
+    const cleanedBookingStatusReference = cleanReferenceText(bookingStatusReference);
+
+    if (!cleanedBookingStatusReference) {
+      return {
+        errorText: "Saved booking reference is missing.",
+        ok: false,
+      };
+    }
+
     if (typeof fetch !== "function") {
       return {
         errorText: "Admin saved booking status API is not available.",
@@ -21451,7 +21501,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     try {
       const response = await fetch(adminSavedBookingStatusesApiPath, {
         body: JSON.stringify({
-          booking_id: bookingStatusReference,
+          booking_id: cleanedBookingStatusReference,
           status: nextStatus,
         }),
         headers: {
@@ -21483,7 +21533,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
 
       const statusReferences = Array.from(
         new Set(
-          [bookingStatusReference, responseBookingId]
+          [cleanedBookingStatusReference, responseBookingId]
             .map(cleanReferenceText)
             .filter(Boolean),
         ),
@@ -21495,7 +21545,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               bookingRecordMatchesStatusReference(currentBooking, statusReference),
             ),
           )
-          .map((currentBooking) => String(currentBooking.id)),
+          .map((currentBooking) => bookingRecordStableKey(currentBooking)),
       );
 
       setBookings((current) =>
@@ -21556,7 +21606,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     successText: string,
     errorPrefix: string,
   ) {
-    const bookingId = String(bookingRecord.id);
+    const bookingId = bookingRecordStableKey(bookingRecord);
     const bookingStatusReference = bookingRecordStatusReference(bookingRecord);
 
     const loadingMessage = { tone: "info", text: loadingText } satisfies Message;
@@ -21638,7 +21688,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       latestDriverReportLabel?: string;
     } = {},
   ) {
-    const bookingId = String(bookingRecord.id);
+    const bookingId = bookingRecordStableKey(bookingRecord);
     const bookingStatusReference = bookingRecordStatusReference(bookingRecord);
     const referenceLabel = compactBookingReference(bookingStatusReference);
     const driverLabel = clean(context.driverLabel) || clean(bookingRecord.driver_name) || "Driver TBC";
@@ -21693,7 +21743,8 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   }
 
   async function deleteCompletedHistoryBooking(bookingRecord: BookingRecord) {
-    const bookingId = String(bookingRecord.id);
+    const bookingId = bookingRecordStableKey(bookingRecord);
+    const deleteBookingId = cleanReferenceText(bookingRecord.id);
     const isCompletedStatus = bookingRecordIsCompletedStatus(bookingRecord);
     const isCancelledStatus = bookingRecordIsCancelledStatus(bookingRecord);
     const isDriverCompletedHistoryJob =
@@ -21703,6 +21754,14 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       setBookingCompletionMessage(bookingId, {
         tone: "error",
         text: "Delete job failed: only completed, cancelled, or driver-completed jobs can be deleted here.",
+      });
+      return;
+    }
+
+    if (!deleteBookingId) {
+      setBookingCompletionMessage(bookingId, {
+        tone: "error",
+        text: "Delete job failed: saved booking id is missing. Reload bookings, then try again.",
       });
       return;
     }
@@ -21739,7 +21798,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
 
       const response = await fetch(adminSavedBookingsApiPath, {
         body: JSON.stringify({
-          booking_id: bookingId,
+          booking_id: deleteBookingId,
         }),
         headers: {
           "Content-Type": "application/json",
@@ -21753,7 +21812,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         !response.ok ||
         responseBody?.ok !== true ||
         !responseBody.booking ||
-        String(responseBody.booking.id) !== bookingId ||
+        cleanReferenceText(responseBody.booking.id) !== deleteBookingId ||
         !["completed", "cancelled"].includes(clean(responseBody.booking.status).toLowerCase())
       ) {
         const error = readAdminLegacyDataError(
@@ -21765,7 +21824,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       }
 
       setBookings((current) =>
-        current.filter((currentBooking) => String(currentBooking.id) !== bookingId),
+        current.filter((currentBooking) => cleanReferenceText(currentBooking.id) !== deleteBookingId),
       );
       setBookingCompletionMessage(bookingId, { tone: "success", text: "Job deleted." });
     } catch (error) {
@@ -21833,7 +21892,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     return (
       <div className="grid gap-2" data-dashboard-command-centre-bookings="true">
         {sectionItems.slice(0, 8).map(({ bookingRecord: savedBooking, operationalCard }) => {
-          const bookingId = String(savedBooking.id);
+          const bookingId = bookingRecordStableKey(savedBooking, operationalCard);
           const routePoints = getRoutePoints(savedBooking);
           const pickup = operationalCard.pickup_address || routePoints[0] || "Pickup";
           const dropoff =
@@ -21844,9 +21903,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             operationalCard.route_points_summary ||
             (routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`);
           const passengerText = getLoadBookingsOperationalPassengerDisplay(operationalCard, savedBooking);
-          const rowBookingReference =
-            cleanReferenceText(savedBooking.booking_reference) ||
-            cleanReferenceText(savedBooking.id);
+          const rowBookingReference = bookingRecordPersistedReference(savedBooking);
           const rowIsLoadedBooking =
             Boolean(rowBookingReference) &&
             rowBookingReference === cleanReferenceText(loadedBookingId);
@@ -21883,7 +21940,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             <article
               className="grid gap-2 rounded-md border border-stone-200 bg-white px-3 py-2 text-sm shadow-sm md:grid-cols-[minmax(10rem,0.9fr)_minmax(9rem,0.8fr)_minmax(12rem,1.2fr)_minmax(8rem,0.7fr)_auto] md:items-center"
               data-dashboard-command-centre-row={bookingId}
-              key={`dashboard-summary-${savedBooking.id}`}
+              key={`dashboard-summary-${bookingId}`}
             >
               <div className="min-w-0">
                 <p className="truncate font-semibold text-slate-950">
@@ -22112,7 +22169,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           const routeText =
             operationalCard.route_points_summary ||
             (routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`);
-          const bookingId = String(requestBooking.id);
+          const bookingId = bookingRecordStableKey(requestBooking, operationalCard);
           const passengerText = getLoadBookingsOperationalPassengerDisplay(operationalCard, requestBooking);
           const isUrgentRequest = urgentCustomerBookingRequestKeySet.has(
             getCustomerBookingRequestQueueKey(requestBooking),
@@ -22128,7 +22185,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               className="grid gap-2 rounded-md border border-emerald-200 bg-white p-2 text-sm shadow-sm md:grid-cols-[minmax(12rem,0.8fr)_minmax(10rem,0.8fr)_minmax(14rem,1.2fr)_auto] md:items-center"
               data-new-customer-booking-request-row={bookingId}
               data-new-customer-booking-request-urgency={isUrgentRequest ? "urgent" : "new"}
-              key={`customer-request-${requestBooking.id}`}
+              key={`customer-request-${bookingId}`}
             >
               <div className="min-w-0">
                 <p className="truncate font-semibold text-slate-950">
@@ -22222,7 +22279,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             operationalCard.route_points_summary ||
             (routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`);
           const createdAt = operationalCard.created_at || formatCreatedAt(savedBooking.created_at);
-          const bookingId = String(savedBooking.id);
+          const bookingId = bookingRecordStableKey(savedBooking, operationalCard);
           const isCompleted = clean(savedBooking.status).toLowerCase() === "completed";
           const rawBookingCompletionMessage = bookingCompletionMessages[bookingId] ?? null;
           const bookingCompletionMessage = isMarkCompletionMessage(rawBookingCompletionMessage)
@@ -22248,7 +22305,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             <article
               className="rounded-md border border-stone-200 bg-white p-2 text-sm shadow-sm"
               data-recent-operational-card={bookingId}
-              key={`recent-${savedBooking.id}`}
+              key={`recent-${bookingId}`}
             >
               <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
                 <details className="min-w-0 rounded-md bg-white" data-recent-operational-details={bookingId}>
@@ -22526,7 +22583,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                 operationalCard.route_points_summary ||
                 (routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`);
               const createdAt = operationalCard.created_at || formatCreatedAt(savedBooking.created_at);
-              const bookingId = String(savedBooking.id);
+              const bookingId = bookingRecordStableKey(savedBooking, operationalCard);
               const rawBookingCompletionMessage = bookingCompletionMessages[bookingId] ?? null;
               const bookingCompletionMessage =
                 isUndoCompletionMessage(rawBookingCompletionMessage) ||
@@ -22576,7 +22633,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                           ? "earlier"
                           : "history"
                   }
-                  key={`completed-${savedBooking.id}`}
+                  key={`completed-${bookingId}`}
                 >
                   <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
                     <details className="min-w-0 rounded-md bg-white" data-completed-operational-details={bookingId}>
@@ -22787,7 +22844,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     clean(bookingSaveMessage?.text) === clean(saveCrmBillingIdentityMessage?.text);
   const showDriverJobLinkCopy = Boolean(cleanReferenceText(dispatchReleaseWorkflowBookingReference));
   const dispatchReleaseLoadedBookingRecord = loadedBookingId
-    ? bookings.find((bookingRecord) => String(bookingRecord.id) === loadedBookingId) ?? null
+    ? bookings.find((bookingRecord) => bookingRecordStableKey(bookingRecord) === loadedBookingId) ?? null
     : null;
   const dispatchReleaseTripWarnings = getDispatchReleaseTripWarnings(booking);
   const dispatchReleaseTripComplete = dispatchReleaseTripWarnings.length === 0;
@@ -24701,8 +24758,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               activeJobDriverStatusLatest
                 ? activeJobDriverStatusLabel
                 : bookingStatusLabel(activeJobBooking.status);
+            const activeJobKey = bookingRecordStableKey(activeJobBooking);
             const activeJobCompletionMessage =
-              bookingCompletionMessages[String(activeJobBooking.id)] ?? null;
+              bookingCompletionMessages[activeJobKey] ?? null;
             const activeJobPickupRiskState = pickupRiskStateForActiveJob(
               activeJobBooking,
               activeJobBookingReference,
@@ -24722,7 +24780,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   activeJobCardStateClass
                 } ${activeJobPickupRiskState.pulse ? "animate-pulse" : ""}`}
                 data-admin-multi-driver-active-job={
-                  activeJobBookingReference || String(activeJobBooking.id)
+                  activeJobBookingReference || activeJobKey
                 }
                 data-admin-pickup-risk-card-state={
                   adminPickupRiskMonitorEnabled ? activeJobPickupRiskState.level : "off"
@@ -24732,7 +24790,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                     ? activeJobPickupApproachEvidence?.status || "none"
                     : "off"
                 }
-                key={`active-job-${activeJobBooking.id}`}
+                key={`active-job-${activeJobKey}`}
                 title={activeJobBookingReference || undefined}
               >
                 <div className="flex min-w-0 items-start justify-between gap-2">
@@ -24873,8 +24931,8 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   ) : null}
                   <button
                     className="h-8 w-full rounded-md border border-emerald-300 bg-white px-2 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                    data-admin-active-job-confirm-completed={activeJobBookingReference || String(activeJobBooking.id)}
-                    disabled={completingBookingId === String(activeJobBooking.id)}
+                    data-admin-active-job-confirm-completed={activeJobBookingReference || activeJobKey}
+                    disabled={completingBookingId === activeJobKey}
                     onClick={() =>
                       adminConfirmBookingCompletedByPhone(activeJobBooking, {
                         driverLabel: activeJobDriver,
@@ -24884,7 +24942,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                     title="Use only after the driver confirms the trip is finished."
                     type="button"
                   >
-                    {completingBookingId === String(activeJobBooking.id)
+                    {completingBookingId === activeJobKey
                       ? "Confirming..."
                       : "Admin confirm completed"}
                   </button>
@@ -24895,7 +24953,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                       activeJobCompletionMessage.tone,
                     )}`}
                     data-admin-active-job-confirm-completed-message={
-                      activeJobBookingReference || String(activeJobBooking.id)
+                      activeJobBookingReference || activeJobKey
                     }
                   >
                     {activeJobCompletionMessage.text}
@@ -41821,7 +41879,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   const routeText =
                     operationalCard.route_points_summary ||
                     (routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`);
-                  const bookingId = String(bookingRecord.id);
+                  const bookingId = bookingRecordStableKey(bookingRecord, operationalCard);
                   const isCustomerRequest = bookingRecordIsCustomerBookingRequest(bookingRecord);
                   const passengerText = getLoadBookingsOperationalPassengerDisplay(operationalCard, bookingRecord);
 
@@ -41833,7 +41891,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                         isCustomerRequest ? "customer-request" : "driver-tbc"
                       }
                       data-dashboard-urgent-booking-request-row={bookingId}
-                      key={`dashboard-request-${bookingRecord.id}`}
+                      key={`dashboard-request-${bookingId}`}
                       onClick={() => {
                         loadSelectedBooking(bookingRecord, { focusDriverJobLink: true });
                       }}
@@ -42230,7 +42288,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             {calendarPreviewDisplayItems.length > 0 ? (
               <div className="mt-3 grid gap-2" data-operations-calendar-agenda-rows="true">
                 {calendarPreviewDisplayItems.map(({ bookingRecord, operationalCard }) => {
-                  const bookingId = String(bookingRecord.id);
+                  const bookingId = bookingRecordStableKey(bookingRecord, operationalCard);
                   const routePoints = getRoutePoints(bookingRecord);
                   const pickup = operationalCard.pickup_address || routePoints[0] || "Pickup";
                   const dropoff =
@@ -42246,7 +42304,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                     <div
                       className="grid gap-1 rounded-md border border-cyan-100 bg-white px-3 py-2 text-sm md:grid-cols-[minmax(8rem,0.7fr)_minmax(10rem,0.8fr)_minmax(12rem,1.2fr)_auto] md:items-center"
                       data-operations-calendar-agenda-row={bookingId}
-                      key={`operations-calendar-${bookingRecord.id}`}
+                      key={`operations-calendar-${bookingId}`}
                     >
                       <span className="truncate font-semibold text-cyan-950">
                         {operationalCard.pickup_datetime ||

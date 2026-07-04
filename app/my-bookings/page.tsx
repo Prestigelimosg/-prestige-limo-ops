@@ -247,7 +247,7 @@ function getCurrentPortalMonthInfo(date = new Date()) {
 
 function fieldClass(hasError = false) {
   return [
-    "mt-1 min-h-9 w-full rounded-md border bg-white px-2.5 py-1.5 font-sans text-sm font-normal text-slate-950 shadow-sm outline-none transition",
+    "mt-1 min-h-10 w-full rounded-md border bg-white px-2.5 py-1.5 font-sans text-sm font-normal text-slate-950 shadow-sm outline-none transition",
     "focus:border-sky-500 focus:ring-2 focus:ring-sky-100",
     hasError ? "border-red-400" : "border-slate-300",
   ].join(" ");
@@ -255,7 +255,7 @@ function fieldClass(hasError = false) {
 
 function timePartClass(hasError = false) {
   return [
-    "min-h-9 rounded-md border bg-white px-2.5 py-1.5 font-sans text-sm font-normal text-slate-950 shadow-sm outline-none transition",
+    "min-h-10 rounded-md border bg-white px-2.5 py-1.5 font-sans text-sm font-normal text-slate-950 shadow-sm outline-none transition",
     "focus:border-sky-500 focus:ring-2 focus:ring-sky-100",
     hasError ? "border-red-400" : "border-slate-300",
   ].join(" ");
@@ -1048,12 +1048,12 @@ export default function CustomerPortalPage() {
         >
           {portalSections.map((section) => {
             const isActive = activeSection === section;
-            const isBookingFilter = section !== "New Booking Request";
+            const isBookingFilter = bookingFilterSet.has(section);
 
             return (
               <button
                 className={[
-                  "min-h-9 rounded-md border px-2.5 py-1.5 text-sm font-semibold transition",
+                  "min-h-10 rounded-md border px-2.5 py-1.5 text-sm font-semibold transition",
                   isActive
                     ? "border-slate-950 bg-slate-950 text-white"
                     : "border-slate-300 bg-white text-slate-800 hover:border-slate-500",
@@ -1088,7 +1088,7 @@ export default function CustomerPortalPage() {
                     </h2>
                     <button
                       aria-pressed={voiceListening}
-                      className="inline-flex min-h-9 w-fit items-center justify-center rounded-md border border-sky-300 bg-sky-50 px-3 py-1.5 text-sm font-semibold text-sky-950 transition hover:border-sky-500 disabled:cursor-not-allowed disabled:opacity-70"
+                      className="inline-flex min-h-10 w-fit items-center justify-center rounded-md border border-sky-300 bg-sky-50 px-3 py-1.5 text-sm font-semibold text-sky-950 transition hover:border-sky-500 disabled:cursor-not-allowed disabled:opacity-70"
                       data-customer-portal-voice-booking-mode="local-transcript-helper"
                       data-customer-portal-voice-booking-speak-button="true"
                       onClick={handleSpeakDraft}
@@ -1101,7 +1101,7 @@ export default function CustomerPortalPage() {
                     className="mt-1 rounded-md border border-sky-200 bg-sky-50 px-2.5 py-1.5 text-xs leading-5 text-sky-950"
                     data-customer-portal-request-notice="true"
                   >
-                    <p>Admin will review and confirm your booking shortly. Thank you</p>
+                    <p>Our team will review and confirm your booking shortly. Thank you</p>
                   </div>
                   <div
                     className="text-xs leading-5 text-slate-600"
@@ -1270,11 +1270,13 @@ export default function CustomerPortalPage() {
                   <label className="text-xs font-semibold text-slate-800 md:col-span-1 xl:col-span-2">
                     Pickup location
                     <input
+                      aria-invalid={isBookingRequestMissing("pickupLocation")}
                       className={fieldClass()}
                       data-customer-portal-request-field="pickupLocation"
                       name="pickupLocation"
                       onChange={(event) => updateBookingRequestField("pickupLocation", event.target.value)}
                       placeholder="Hotel, airport terminal, lobby, home, or office"
+                      required
                       type="text"
                       value={bookingRequestForm.pickupLocation}
                     />
@@ -1283,11 +1285,13 @@ export default function CustomerPortalPage() {
                   <label className="text-xs font-semibold text-slate-800 md:col-span-1 xl:col-span-2">
                     Drop-off location
                     <input
+                      aria-invalid={isBookingRequestMissing("dropoffLocation")}
                       className={fieldClass()}
                       data-customer-portal-request-field="dropoffLocation"
                       name="dropoffLocation"
                       onChange={(event) => updateBookingRequestField("dropoffLocation", event.target.value)}
                       placeholder="Destination hotel, airport terminal, home, or office"
+                      required
                       type="text"
                       value={bookingRequestForm.dropoffLocation}
                     />
@@ -1663,7 +1667,7 @@ export default function CustomerPortalPage() {
                         <button
                           aria-disabled="true"
                           aria-label={`Download PDF ${folder.toLowerCase()} invoices`}
-                          className="min-h-9 rounded-md border border-slate-200 bg-slate-100 px-3 text-sm font-semibold text-slate-500"
+                          className="min-h-10 rounded-md border border-slate-200 bg-slate-100 px-3 text-sm font-semibold text-slate-500"
                           data-customer-portal-invoice-download={folderKey}
                           disabled
                           title="Download PDF"
@@ -1723,7 +1727,7 @@ export default function CustomerPortalPage() {
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       <button
                         className={[
-                          "min-h-9 rounded-md border px-2.5 py-1.5 text-sm font-semibold transition",
+                          "min-h-10 rounded-md border px-2.5 py-1.5 text-sm font-semibold transition",
                           selectedBookingMonth
                             ? "border-slate-300 bg-white text-slate-800 hover:border-slate-500"
                             : "border-slate-950 bg-slate-950 text-white",
@@ -1742,7 +1746,7 @@ export default function CustomerPortalPage() {
                         return (
                           <button
                             className={[
-                              "min-h-9 rounded-md border px-2.5 py-1.5 text-sm font-semibold transition",
+                              "min-h-10 rounded-md border px-2.5 py-1.5 text-sm font-semibold transition",
                               isSelected
                                 ? "border-slate-950 bg-slate-950 text-white"
                                 : "border-slate-300 bg-white text-slate-800 hover:border-slate-500",
@@ -1776,7 +1780,7 @@ export default function CustomerPortalPage() {
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5" data-customer-portal-pagination="true">
                     <button
-                      className="min-h-9 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-800 transition enabled:hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="min-h-10 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-800 transition enabled:hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-50"
                       data-customer-portal-prev="true"
                       disabled={currentBookingPage <= 1}
                       onClick={() => handlePageChange("previous")}
@@ -1788,7 +1792,7 @@ export default function CustomerPortalPage() {
                       Page {currentBookingPage} of {totalBookingPages}
                     </span>
                     <button
-                      className="min-h-9 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-800 transition enabled:hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="min-h-10 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-800 transition enabled:hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-50"
                       data-customer-portal-next="true"
                       disabled={currentBookingPage >= totalBookingPages}
                       onClick={() => handlePageChange("next")}
@@ -1857,7 +1861,7 @@ export default function CustomerPortalPage() {
                           >
                             <button
                               aria-disabled="true"
-                              className="min-h-9 rounded-md border border-slate-200 bg-slate-100 px-2.5 py-1.5 text-sm font-semibold text-slate-500"
+                              className="min-h-10 rounded-md border border-slate-200 bg-slate-100 px-2.5 py-1.5 text-sm font-semibold text-slate-500"
                               data-customer-portal-pdf={booking.id}
                               data-customer-portal-row-action="pdf"
                               disabled
@@ -1867,7 +1871,7 @@ export default function CustomerPortalPage() {
                               PDF
                             </button>
                             <button
-                              className="min-h-9 rounded-md border border-sky-700 bg-sky-700 px-2.5 py-1.5 text-sm font-semibold text-white transition enabled:hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50"
+                              className="min-h-10 rounded-md border border-sky-700 bg-sky-700 px-2.5 py-1.5 text-sm font-semibold text-white transition enabled:hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50"
                               data-customer-portal-request-edit={booking.id}
                               data-customer-portal-row-action="edit"
                               disabled={!canRequestReview}
@@ -1877,7 +1881,7 @@ export default function CustomerPortalPage() {
                               Edit
                             </button>
                             <button
-                              className="min-h-9 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-800 transition enabled:hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-50"
+                              className="min-h-10 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-800 transition enabled:hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-50"
                               data-customer-portal-request-cancel={booking.id}
                               data-customer-portal-row-action="cancel"
                               disabled={!canRequestReview}
@@ -1887,7 +1891,7 @@ export default function CustomerPortalPage() {
                               Cancel
                             </button>
                             <button
-                              className="min-h-9 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-800 transition hover:border-slate-500"
+                              className="min-h-10 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-800 transition hover:border-slate-500"
                               data-customer-portal-detail-button={booking.id}
                               onClick={() => setExpandedBookingId(isExpanded ? "" : booking.id)}
                               type="button"
@@ -2003,7 +2007,7 @@ export default function CustomerPortalPage() {
                             </label>
                             <div className="flex flex-wrap gap-2">
                               <button
-                                className="min-h-9 rounded-md border border-sky-700 bg-sky-700 px-3 py-1.5 text-sm font-semibold text-white transition enabled:hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50"
+                                className="min-h-10 rounded-md border border-sky-700 bg-sky-700 px-3 py-1.5 text-sm font-semibold text-white transition enabled:hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50"
                                 data-customer-portal-submit-change-request={booking.id}
                                 disabled={rowSubmitting}
                                 type="submit"
@@ -2011,7 +2015,7 @@ export default function CustomerPortalPage() {
                                 {rowSubmitting ? "Sending..." : "Send for review"}
                               </button>
                               <button
-                                className="min-h-9 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 transition hover:border-slate-500"
+                                className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 transition hover:border-slate-500"
                                 data-customer-portal-close-change-request={booking.id}
                                 onClick={() => setChangeRequestDraft(null)}
                                 type="button"

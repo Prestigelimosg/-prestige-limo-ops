@@ -2120,7 +2120,7 @@ export default function DriverJobPage() {
                 ) : null}
               </div>
               <p className="text-xs font-semibold leading-5 text-amber-900" data-driver-job-report-issue-boundary="true">
-                Internal app alert only. No external messages are sent from this issue control.
+                Internal app alert only. No external messages, live location, or photo upload.
               </p>
             </section>
           </>

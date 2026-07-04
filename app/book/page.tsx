@@ -151,7 +151,7 @@ const pickupMinuteOptions = Array.from({ length: 12 }, (_, index) => String(inde
 
 function fieldClass(hasError = false) {
   return [
-    "mt-1 min-h-9 w-full rounded-md border bg-white px-2.5 py-1.5 font-sans text-sm font-normal text-slate-950 shadow-sm outline-none transition",
+    "mt-1 min-h-10 w-full rounded-md border bg-white px-2.5 py-1.5 font-sans text-sm font-normal text-slate-950 shadow-sm outline-none transition",
     "focus:border-sky-500 focus:ring-2 focus:ring-sky-100",
     hasError ? "border-red-400" : "border-slate-300",
   ].join(" ");
@@ -159,7 +159,7 @@ function fieldClass(hasError = false) {
 
 function timePartClass(hasError = false) {
   return [
-    "min-h-9 rounded-md border bg-white px-2.5 py-1.5 font-sans text-sm font-normal text-slate-950 shadow-sm outline-none transition",
+    "min-h-10 rounded-md border bg-white px-2.5 py-1.5 font-sans text-sm font-normal text-slate-950 shadow-sm outline-none transition",
     "focus:border-sky-500 focus:ring-2 focus:ring-sky-100",
     hasError ? "border-red-400" : "border-slate-300",
   ].join(" ");
@@ -549,7 +549,7 @@ export default function CustomerBookingPage() {
                 className="mt-2 max-w-3xl text-sm leading-6 text-slate-700 sm:text-base"
                 data-customer-booking-header-note="true"
               >
-                Thank you for your request. Admin will review it at our soonest. Hotline: {hotlineContact}.
+                Thank you for your request. Our team will review it at our soonest. Hotline: {hotlineContact}.
               </p>
             </div>
             <div
@@ -616,7 +616,7 @@ export default function CustomerBookingPage() {
                   className="mt-1 rounded-md border border-sky-200 bg-sky-50 px-2.5 py-1.5 text-xs leading-5 text-sky-950"
                   data-customer-booking-request-notice="true"
                 >
-                  <p>Admin will review and confirm your booking shortly. Thank you</p>
+                  <p>Our team will review and confirm your booking shortly. Thank you</p>
                 </div>
               </div>
               <div className="mt-3 grid gap-2.5 md:grid-cols-2 xl:grid-cols-4">
@@ -826,7 +826,7 @@ export default function CustomerBookingPage() {
                     <span>
                       Return trip
                       <span className="ml-2 inline text-[11px] font-medium leading-5 text-slate-600">
-                        Add return details as a linked second request for admin review.
+                        Add return details as a linked second request for team review.
                       </span>
                     </span>
                   </label>

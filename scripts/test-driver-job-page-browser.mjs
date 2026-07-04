@@ -872,7 +872,7 @@ async function runChromeTest() {
     );
     assert.equal(
       validState.reportIssue.boundary,
-      "Internal app alert only. No external messages are sent from this issue control.",
+      "Internal app alert only. No external messages, live location, or photo upload.",
       "Expected report issue boundary to block external sending and future-only features.",
     );
     assert.deepEqual(

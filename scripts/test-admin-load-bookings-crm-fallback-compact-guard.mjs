@@ -506,8 +506,8 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  "!urgentUnassignedSavedBookingIdSet.has(String(bookingRecord.id))",
-  "Dashboard Today/Upcoming excludes urgent unassigned saved jobs",
+  "!urgentUnassignedSavedBookingIdSet.has(bookingRecordStableKey(bookingRecord))",
+  "Dashboard Today/Upcoming excludes urgent unassigned saved jobs by stable key",
 );
 assertIncludes(
   appPage,

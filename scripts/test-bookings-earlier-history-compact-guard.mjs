@@ -45,7 +45,7 @@ const [appPage, ledger, preactivationSuite] = await Promise.all([
 
 const helperSection = sliceBetween(
   appPage,
-  "function bookingRecordIsCompletedStatus",
+  "function bookingRecordStatusValues",
   "function bookingRecordIsCustomerBookingRequest",
 );
 const currentUpcomingPanel = sliceBetween(
@@ -75,6 +75,7 @@ const ledgerSection = sectionBetween(
 );
 
 for (const fragment of [
+  "function bookingRecordStatusValues",
   "function bookingRecordIsCompletedStatus",
   "function bookingRecordIsCancelledStatus",
   "function bookingRecordIsEarlierJob",
@@ -83,11 +84,26 @@ for (const fragment of [
   "function completedHistoryMonthLabel",
   "function sortCompletedHistoryMonthKeysNewestFirst",
   "function sortBookingHistoryNewestFirst",
+  "bookingRecord.admin_internal_status",
+  "bookingRecord.customer_facing_status",
+  "bookingRecord.cancellation_review_status",
+  "[\"cancelled\", \"canceled\"].includes(statusValue)",
+  "[\"completed\", \"complete\", \"job completed\", \"job_completed\"].includes(statusValue)",
   "bookingRecordIsCancelledStatus(bookingRecord) ||",
   "dateKey !== \"1970-01-01\" && dateKey < todayKey",
   "return secondDate.localeCompare(firstDate);",
 ]) {
   assertIncludes(helperSection, fragment, `history helper fragment ${fragment}`);
+}
+
+for (const fragment of [
+  "bookingRecord.id,",
+  "bookingRecord.booking_reference,",
+  "bookingRecord.admin_internal_status,",
+  "bookingRecord.customer_facing_status,",
+  "bookingRecord.cancellation_review_status,",
+]) {
+  assertIncludes(appPage, fragment, `completed/current local search fragment ${fragment}`);
 }
 
 for (const fragment of [

@@ -6700,12 +6700,27 @@ function isOperationalBooking(bookingRecord: BookingRecord) {
   return !isLegacyMrLeeBrowserTestBooking(bookingRecord) && !isPersistedBrowserTestBooking(bookingRecord);
 }
 
+function bookingRecordStatusValues(bookingRecord: BookingRecord) {
+  return [
+    bookingRecord.status,
+    bookingRecord.admin_internal_status,
+    bookingRecord.customer_facing_status,
+    bookingRecord.cancellation_review_status,
+  ]
+    .map((value) => clean(value).toLowerCase())
+    .filter(Boolean);
+}
+
 function bookingRecordIsCompletedStatus(bookingRecord: BookingRecord) {
-  return clean(bookingRecord.status).toLowerCase() === "completed";
+  return bookingRecordStatusValues(bookingRecord).some((statusValue) =>
+    ["completed", "complete", "job completed", "job_completed"].includes(statusValue),
+  );
 }
 
 function bookingRecordIsCancelledStatus(bookingRecord: BookingRecord) {
-  return clean(bookingRecord.status).toLowerCase() === "cancelled";
+  return bookingRecordStatusValues(bookingRecord).some((statusValue) =>
+    ["cancelled", "canceled"].includes(statusValue),
+  );
 }
 
 function getBookingDriverJobStatusReference(bookingRecord: BookingRecord) {
@@ -7247,6 +7262,7 @@ function bookingMatchesLocalSearch(bookingRecord: BookingRecord, searchValue: st
   }
 
   const searchableText = [
+    bookingRecord.id,
     bookingRecord.booking_reference,
     getBookingName(bookingRecord),
     getBookerName(bookingRecord),
@@ -7263,6 +7279,9 @@ function bookingMatchesLocalSearch(bookingRecord: BookingRecord, searchValue: st
     bookingRecord.route,
     bookingRecord.driver_name,
     bookingRecord.status,
+    bookingRecord.admin_internal_status,
+    bookingRecord.customer_facing_status,
+    bookingRecord.cancellation_review_status,
     bookingRecord.service_type,
     bookingRecord.route_type,
     bookingRecord.booking_type,

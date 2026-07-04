@@ -10,9 +10,16 @@ function assertIncludes(source, fragment, label) {
   assert.ok(source.includes(fragment), `Missing ${label}: ${fragment}`);
 }
 
+function assertExcludes(source, fragment, label) {
+  assert.equal(source.includes(fragment), false, `Unexpected ${label}: ${fragment}`);
+}
+
 assertIncludes(appSource, "type SaveCrmBillingIdentityReview", "billing identity review type");
 assertIncludes(appSource, "function buildSaveCrmBillingIdentityReview", "billing identity conflict detector");
 assertIncludes(appSource, "function formatTravelerBillingAccountLabel", "traveler billing account label");
+assertIncludes(appSource, "function saveCrmExplicitCompanyAccount", "explicit company/account helper");
+assertIncludes(appSource, "function saveCrmDefaultCustomerAccount", "booker-free default customer account helper");
+assertIncludes(appSource, "function getBookingCustomerAccountDisplayName", "loaded booking booker-free account helper");
 assertIncludes(appSource, "function resolveSaveCrmBillingIdentityAccountForSave", "save guard resolver");
 assertIncludes(appSource, "fetchRecentAdminBookingPersistenceRecordsForBillingIdentity", "fresh recent booking read before save");
 assertIncludes(appSource, "Same company/booker has other traveler(s)", "visible same company/booker warning");
@@ -25,6 +32,41 @@ assertIncludes(
   appSource,
   "if (!needsTravelerName && conflictingTravelerNames.length === 0)",
   "blank traveler must create a blocking review even without prior conflicts",
+);
+assertIncludes(
+  appSource,
+  "const companyAccount = rawCompanyAccount || clean(bookingValue.name);",
+  "Save + CRM review must not treat plain booker as account",
+);
+assertIncludes(
+  appSource,
+  "saveCrmDefaultCustomerAccount(bookingValue) ||\n    adminDraftCustomerFallback",
+  "Save + CRM persisted customer account must stay booker-free",
+);
+assertIncludes(
+  appSource,
+  "billingIdentityMatches(customerDisplayName, bookerDisplayName)",
+  "loaded booking display must filter customer/account values that equal booker/contact",
+);
+assertIncludes(
+  appSource,
+  "return clean(record.passenger_name);",
+  "admin persistence display helper falls back to passenger, not contact/booker",
+);
+assertExcludes(
+  appSource,
+  "const companyAccount = rawCompanyAccount || bookerLabel || clean(bookingValue.name);",
+  "old booker-to-company-account review fallback",
+);
+assertExcludes(
+  appSource,
+  "normalizeCompanyAccount(bookingValue.company, bookingValue.bookerEmail) ||\n    clean(bookingValue.booker) ||",
+  "old Save + CRM booker-to-customer-display fallback",
+);
+assertExcludes(
+  appSource,
+  "return clean(record.customer_display_name) || clean(record.contact_display_name);",
+  "old admin persistence contact-to-customer display fallback",
 );
 assertIncludes(appSource, 'data-save-crm-billing-identity-review="true"', "visible review panel");
 assertIncludes(appSource, 'data-save-crm-billing-identity-confirm="true"', "visible admin confirmation button");

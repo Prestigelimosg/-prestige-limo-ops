@@ -4099,6 +4099,20 @@ assert.deepEqual(
   },
 );
 
+const plainBookerNoCompanyMessage = `Booker: Nicole
+Passenger: Mr Tan
+Date: 15 May 2026
+Time: 9:00am
+Pickup: Orchard Hotel
+Dropoff: Changi Airport T3
+Vehicle: AVF`;
+const plainBookerNoCompany = parseBookingMessage(plainBookerNoCompanyMessage, {
+  referenceDate: new Date('2026-05-14T12:00:00+08:00'),
+});
+assert.equal(plainBookerNoCompany.company, '');
+assert.equal(plainBookerNoCompany.booker, 'Nicole');
+assert.equal(plainBookerNoCompany.name, 'Mr Tan');
+
 const jobCard = [
   `${finalBooking.vehicle} ${finalBooking.bookingType}`,
   `${finalBooking.date}, ${finalBooking.time}`,

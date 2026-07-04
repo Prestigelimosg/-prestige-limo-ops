@@ -4763,7 +4763,24 @@ function billingIdentityBaseAccount(value: string | null | undefined) {
 function saveCrmBillingRecordCustomerAccount(
   record: AdminBookingPersistenceRecord | BookingRecord,
 ) {
-  return clean(record.customer_display_name) || clean((record as BookingRecord).companies?.company_name);
+  const crmCompanyName = clean((record as BookingRecord).companies?.company_name);
+
+  if (crmCompanyName) {
+    return crmCompanyName;
+  }
+
+  const customerDisplayName = clean(record.customer_display_name);
+  const bookerDisplayName =
+    clean(record.contact_display_name) || clean((record as BookingRecord).bookers?.booker_name);
+
+  if (
+    !customerDisplayName ||
+    (bookerDisplayName && billingIdentityMatches(customerDisplayName, bookerDisplayName))
+  ) {
+    return "";
+  }
+
+  return customerDisplayName;
 }
 
 function saveCrmBillingRecordTravelerName(
@@ -4794,6 +4811,14 @@ function saveCrmBillingBookerLabel(bookingValue: BookingForm) {
   return clean(bookingValue.booker) || clean(bookingValue.bookerContact) || clean(bookingValue.bookerEmail) || "";
 }
 
+function saveCrmExplicitCompanyAccount(bookingValue: BookingForm) {
+  return normalizeCompanyAccount(bookingValue.company, bookingValue.bookerEmail);
+}
+
+function saveCrmDefaultCustomerAccount(bookingValue: BookingForm) {
+  return saveCrmExplicitCompanyAccount(bookingValue) || clean(bookingValue.name);
+}
+
 function uniqueBillingTravelerNames(names: string[]) {
   const seen = new Set<string>();
   const unique: string[] = [];
@@ -4817,9 +4842,9 @@ function buildSaveCrmBillingIdentityReview(
   bookingValue: BookingForm,
   records: Array<AdminBookingPersistenceRecord | BookingRecord>,
 ): SaveCrmBillingIdentityReview | null {
-  const rawCompanyAccount = normalizeCompanyAccount(bookingValue.company, bookingValue.bookerEmail);
+  const rawCompanyAccount = saveCrmExplicitCompanyAccount(bookingValue);
   const bookerLabel = saveCrmBillingBookerLabel(bookingValue);
-  const companyAccount = rawCompanyAccount || bookerLabel || clean(bookingValue.name);
+  const companyAccount = rawCompanyAccount || clean(bookingValue.name);
   const travelerName = clean(bookingValue.name);
   const currentBookerTokens = saveCrmCurrentBookerTokens(bookingValue);
 
@@ -4947,9 +4972,9 @@ function buildServiceChangePriceReview(
   }
 
   const customerAccount =
-    normalizeCompanyAccount(bookingValue.company, bookingValue.bookerEmail) ||
+    saveCrmExplicitCompanyAccount(bookingValue) ||
     adminBookingPersistenceCustomerDisplayName(appliedRecord) ||
-    clean(bookingValue.booker) ||
+    clean(bookingValue.name) ||
     "Customer/account to confirm";
   const travelerName =
     clean(bookingValue.name) ||
@@ -6659,6 +6684,29 @@ function getBookingCompanyName(bookingRecord: BookingRecord) {
   return safeCompanyName;
 }
 
+function getBookingCustomerAccountDisplayName(bookingRecord: BookingRecord) {
+  const crmCompanyName = getBookingCompanyName(bookingRecord);
+
+  if (crmCompanyName) {
+    return crmCompanyName;
+  }
+
+  const customerDisplayName = normalizeCompanyAccount(
+    bookingRecord.customer_display_name,
+    bookingRecord.bookers?.email,
+  );
+  const bookerDisplayName = clean(bookingRecord.contact_display_name) || clean(bookingRecord.bookers?.booker_name);
+
+  if (
+    !customerDisplayName ||
+    (bookerDisplayName && billingIdentityMatches(customerDisplayName, bookerDisplayName))
+  ) {
+    return "";
+  }
+
+  return customerDisplayName;
+}
+
 function getJobCardName(jobCard: string | null) {
   const match = clean(jobCard).match(/^\s*(?:name|passenger)\s*:\s*(.+)$/im);
 
@@ -7596,10 +7644,7 @@ function buildLoadBookingsOperationalDisplayCard(
     clean(bookingRecord.vehicle);
   const passengerDisplay = clean(bookingRecord.passenger_name) || getBookingName(bookingRecord);
   const bookerDisplay = clean(bookingRecord.contact_display_name) || getBookerName(bookingRecord);
-  const companyDisplay =
-    clean(bookingRecord.customer_display_name) ||
-    clean(bookingRecord.contact_display_name) ||
-    getBookingCompanyName(bookingRecord);
+  const companyDisplay = getBookingCustomerAccountDisplayName(bookingRecord);
   const extraStopCount = normalizeExtraStopCount(bookingRecord.extra_stop_count);
   const createdAt = formatCreatedAt(bookingRecord.created_at);
   const updatedAt = formatCreatedAt(bookingRecord.updated_at);
@@ -7799,9 +7844,7 @@ function bookingRecordToOperationalFormFields(bookingRecord: BookingRecord): Loa
 
   return {
     company:
-      clean(bookingRecord.customer_display_name) ||
-      clean(bookingRecord.contact_display_name) ||
-      getBookingCompanyName(bookingRecord),
+      getBookingCustomerAccountDisplayName(bookingRecord),
     bookingType: serviceType,
     vehicle: vehicleDisplay,
     date: getBookingDateKey(bookingRecord),
@@ -8112,9 +8155,7 @@ function buildAdminBookingPersistencePayload(
   );
   const customerDisplayName =
     clean(options.customerDisplayNameOverride) ||
-    normalizeCompanyAccount(bookingValue.company, bookingValue.bookerEmail) ||
-    clean(bookingValue.booker) ||
-    clean(bookingValue.name) ||
+    saveCrmDefaultCustomerAccount(bookingValue) ||
     adminDraftCustomerFallback;
   const contactDisplayName =
     clean(bookingValue.booker) ||
@@ -8302,7 +8343,17 @@ function adminBookingPersistenceServiceType(record: AdminBookingPersistenceRecor
 }
 
 function adminBookingPersistenceCustomerDisplayName(record: AdminBookingPersistenceRecord) {
-  return clean(record.customer_display_name) || clean(record.contact_display_name);
+  const customerDisplayName = clean(record.customer_display_name);
+  const contactDisplayName = clean(record.contact_display_name);
+
+  if (
+    customerDisplayName &&
+    !(contactDisplayName && billingIdentityMatches(customerDisplayName, contactDisplayName))
+  ) {
+    return customerDisplayName;
+  }
+
+  return clean(record.passenger_name);
 }
 
 function adminBookingPersistencePassengerDisplayName(record: AdminBookingPersistenceRecord) {

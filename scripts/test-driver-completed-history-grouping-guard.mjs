@@ -103,7 +103,11 @@ for (const fragment of [
 for (const fragment of [
   "const isDriverCompletedHistoryJob =",
   "!isCompletedStatus && !isCancelledStatus && bookingRecordHasCompletedDriverReport(savedBooking)",
-  "const completedHistoryDisplayStatus = isDriverCompletedHistoryJob ? \"completed\" : savedBooking.status;",
+  "const completedHistoryDisplayStatus = isDriverCompletedHistoryJob",
+  "? \"completed\"",
+  ": isCancelledStatus",
+  "? \"cancelled\"",
+  ": isCompletedStatus",
   "bookingStatusLabel(completedHistoryDisplayStatus)",
   "md:grid-cols-[minmax(13rem,1.1fr)_minmax(10rem,0.8fr)_minmax(14rem,1.4fr)_minmax(9rem,0.7fr)_minmax(8rem,auto)]",
   "flex min-w-0 flex-wrap items-center gap-1.5 md:justify-end md:text-right",

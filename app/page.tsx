@@ -22253,7 +22253,13 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               const isCancelledStatus = bookingRecordIsCancelledStatus(savedBooking);
               const isDriverCompletedHistoryJob =
                 !isCompletedStatus && !isCancelledStatus && bookingRecordHasCompletedDriverReport(savedBooking);
-              const completedHistoryDisplayStatus = isDriverCompletedHistoryJob ? "completed" : savedBooking.status;
+              const completedHistoryDisplayStatus = isDriverCompletedHistoryJob
+                ? "completed"
+                : isCancelledStatus
+                  ? "cancelled"
+                  : isCompletedStatus
+                    ? "completed"
+                    : savedBooking.status;
               const canDeleteCompletedHistoryBooking = bookingRecordCanBeDeletedFromCompletedHistory(savedBooking);
               const isEarlierHistoryJob = bookingRecordIsEarlierJob(savedBooking, todayKey);
               return (

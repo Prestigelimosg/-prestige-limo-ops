@@ -12354,6 +12354,7 @@ function companyProfileSettingsFailureMessage(action: "load" | "save", rawError:
 }
 
 export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
+  const showSetupReadinessArchive = false;
   const [booking, setBooking] = useState<BookingForm>(() => createInitialBooking());
   const [activeTab, setActiveTab] = useState<AppTab>(initialTab);
   const activeTabRef = useRef<AppTab>(initialTab);
@@ -28417,6 +28418,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           </div>
         </section>
 
+        {showSetupReadinessArchive ? (
         <section
           aria-label="Setup Readiness Archive"
           className="order-last rounded-md bg-white ring-1 ring-slate-200"
@@ -35199,6 +35201,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             </>
           ) : null}
         </section>
+        ) : null}
 
         {activeTab === "dispatch" ? (
         <section className="flex min-w-0 flex-col gap-2.5" data-dispatch-workflow="true">

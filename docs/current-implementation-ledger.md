@@ -1823,9 +1823,10 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This lock adds `scripts/test-load-bookings-db-read-env-table-policy-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Admin Setup Readiness Archive Label Hardening Lock
-- The collapsed admin archive header now uses the business-grade visible label `Setup Readiness Archive`.
+- The setup readiness archive is parked behind `showSetupReadinessArchive = false` and does not render in the normal admin shell.
+- The parked archive header keeps the business-grade label `Setup Readiness Archive` only inside the disabled source block.
 - The old visible label `Internal QA / Mock Workbench Archive — Mock Only` is removed from `app/page.tsx`.
-- The archive remains collapsed by default and keeps the existing `data-internal-qa-mock-archive` boundary for tests.
+- The parked source block keeps the existing `data-internal-qa-mock-archive` boundary for source guards only.
 - Customer and driver public-surface browser guards treat `Setup Readiness Archive` as forbidden outside the admin shell.
 - Dispatcher Intake `Clear Message` keeps an explicit 44px minimum touch target on small mobile viewports.
 - Existing monthly billing month-grouping pagination stacks on small phones to preserve readable touch targets.

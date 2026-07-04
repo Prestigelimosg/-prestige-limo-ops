@@ -47,9 +47,10 @@ const ledgerSection = sectionBetween(
 );
 
 for (const phrase of [
-  "The collapsed admin archive header now uses the business-grade visible label `Setup Readiness Archive`.",
+  "The setup readiness archive is parked behind `showSetupReadinessArchive = false` and does not render in the normal admin shell.",
+  "The parked archive header keeps the business-grade label `Setup Readiness Archive` only inside the disabled source block.",
   "The old visible label `Internal QA / Mock Workbench Archive — Mock Only` is removed from `app/page.tsx`.",
-  "The archive remains collapsed by default and keeps the existing `data-internal-qa-mock-archive` boundary for tests.",
+  "The parked source block keeps the existing `data-internal-qa-mock-archive` boundary for source guards only.",
   "Customer and driver public-surface browser guards treat `Setup Readiness Archive` as forbidden outside the admin shell.",
   "No UI sector/card addition, route change, parser change, Save Booking change, DB read/write, provider send, pricing/payout/payment/PDF activation, or new shim is approved by this lock.",
   "This lock adds `scripts/test-admin-setup-readiness-archive-label-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.",
@@ -57,6 +58,8 @@ for (const phrase of [
   assertIncludes(ledgerSection, phrase, `Ledger phrase: ${phrase}`);
 }
 
+assertIncludes(appPage, "const showSetupReadinessArchive = false;", "setup readiness archive disabled render gate");
+assertIncludes(appPage, "{showSetupReadinessArchive ? (", "setup readiness archive conditional render gate");
 assertIncludes(appPage, `aria-label="${businessArchiveLabel}"`, "business archive aria label");
 assertIncludes(appPage, `              ${businessArchiveLabel}`, "business archive visible label");
 assertIncludes(appPage, 'data-internal-qa-mock-archive="true"', "archive data boundary");

@@ -100,20 +100,27 @@ for (const fragment of [
 }
 
 for (const fragment of [
+  "const dashboardCustomerBookingRequestBookings = useMemo(",
+  "bookingRecordIsInsideActiveJobMonitorWindow(bookingRecord, currentTimeMs)",
+  "const bookingTabCustomerBookingRequestBookings = useMemo(",
+  "!bookingRecordIsInsideActiveJobMonitorWindow(bookingRecord, currentTimeMs)",
   "const urgentCustomerBookingRequestBookings = useMemo(",
+  "bookingTabCustomerBookingRequestBookings.filter",
   "bookingRecordIsPickupWithinNextHours(bookingRecord, currentTimeMs, 24)",
   "const urgentUnassignedSavedBookingRequests = useMemo(",
   "!bookingRecordIsCustomerBookingRequest(bookingRecord)",
   "!bookingRecordHasDispatchActiveJobsMonitorDriver(bookingRecord)",
   "bookingRecordIsInsideActiveJobMonitorWindow(bookingRecord, currentTimeMs)",
   "const dashboardUrgentBookingRequestBookings = useMemo(",
-  "[...urgentCustomerBookingRequestBookings, ...urgentUnassignedSavedBookingRequests].sort(",
+  "[...dashboardCustomerBookingRequestBookings, ...urgentUnassignedSavedBookingRequests].sort(",
   "const visibleDashboardUrgentBookingRequestBookings = useMemo(",
   "dashboardUrgentBookingRequestBookings.slice(0, 5)",
   "const urgentUnassignedSavedBookingIdSet = useMemo(",
   "const urgentCustomerBookingRequestKeySet = useMemo(",
+  "const unhandledCustomerBookingRequestKeySet = useMemo(",
+  "!unhandledCustomerBookingRequestKeySet.has(getCustomerBookingRequestQueueKey(bookingRecord))",
   "const dashboardUrgentBookingRequestDisplayItems =",
-  "const urgentCustomerBookingRequestCount = urgentCustomerBookingRequestBookings.length;",
+  "const customerBookingRequestCount = bookingTabCustomerBookingRequestBookings.length;",
   "const dashboardUrgentBookingRequestCount = dashboardUrgentBookingRequestBookings.length;",
 ]) {
   assertIncludes(derivedRequestSection, fragment, `urgent request derived fragment ${fragment}`);
@@ -121,12 +128,14 @@ for (const fragment of [
 
 for (const fragment of [
   "Urgent &amp; New Booking Requests",
-  "Urgent means pickup is under 24 hours; new stays here until reviewed.",
+  "Requests outside the 1-hour dispatch window stay here until admin loads them.",
   'data-new-customer-booking-requests-urgent-count={String(urgentCustomerBookingRequestCount)}',
   'data-new-customer-booking-request-urgency={isUrgentRequest ? "urgent" : "new"}',
-  "Urgent <24h",
+  "Passenger: {passengerText}",
+  "Urgent >1h",
   "New",
-  "onClick={() => loadSelectedBooking(requestBooking, { focusCustomerCopy: true })}",
+  "onClick={() => loadSelectedBooking(requestBooking, { focusDriverJobLink: true })}",
+  "Open in Driver Job Link",
 ]) {
   assertIncludes(bookingsRequestPanel, fragment, `bookings request panel fragment ${fragment}`);
 }
@@ -141,13 +150,14 @@ for (const fragment of [
   "const firstBooking = dashboardUrgentBookingRequestDisplayItems[0]?.bookingRecord;",
   "loadSelectedBooking(firstBooking, { focusDriverJobLink: true })",
   'data-dashboard-review-new-booking-requests="true"',
-  "disabled={urgentCustomerBookingRequestCount === 0}",
+  "disabled={customerBookingRequestCount === 0}",
   "onClick={openCustomerBookingRequestsReview}",
   "dashboardUrgentBookingRequestDisplayItems.map",
   'data-dashboard-urgent-booking-request-kind=',
   '"customer-request"',
   '"driver-tbc"',
   'data-dashboard-urgent-booking-request-row={bookingId}',
+  "Passenger:{\" \"}",
   "Needs driver link |",
   "loadSelectedBooking(bookingRecord, { focusDriverJobLink: true })",
   "No urgent booking requests or Driver TBC jobs inside the dispatch window.",
@@ -172,7 +182,7 @@ for (const fragment of [
   "setDriverJobLinkHandoffReference(options.focusDriverJobLink ? bookingReference : \"\");",
   'data-dispatch-workflow-step="driver-job-link"',
   'data-driver-job-link-handoff-notice="true"',
-  "Urgent booking {driverJobLinkHandoffReference} loaded here. Next: Create Link,",
+  "Booking {driverJobLinkHandoffReference} loaded here. Next: Create Link,",
   "Driver Job Link is ready for admin action.",
 ]) {
   assertIncludes(appPage, fragment, `dispatch driver job link focus fragment ${fragment}`);
@@ -200,9 +210,10 @@ assertIncludes(
 
 for (const forbidden of [
   "customerBookingRequestDisplayItems.slice(0, 3)",
-  "customerBookingRequestCount === 0",
   "loadSelectedBooking(firstBooking);",
   "loadSelectedBooking(bookingRecord);",
+  "onClick={() => loadSelectedBooking(requestBooking, { focusCustomerCopy: true })}",
+  "[...urgentCustomerBookingRequestBookings, ...urgentUnassignedSavedBookingRequests].sort(",
 ]) {
   assertExcludes(dashboardUrgentPanel, forbidden, `dashboard urgent-only boundary ${forbidden}`);
 }
@@ -326,10 +337,11 @@ for (const forbiddenPattern of [
 }
 
 for (const phrase of [
-  "Dashboard request panel is now `Urgent Booking Requests` and displays open customer requests with pickup under 24 hours plus saved Driver TBC jobs inside the 1-hour pickup monitor window.",
-  "Dashboard `Open Urgent` and urgent rows load the selected urgent booking into Dispatch with the existing Driver Job Link panel focused, a visible urgent handoff notice, and keyboard focus on `Create Link` so admin can create and copy the driver link before a driver is assigned.",
+  "Dashboard request panel is now `Urgent Booking Requests` and displays only open customer requests plus saved Driver TBC jobs inside the 1-hour pickup monitor window.",
+  "Dashboard `Open Urgent` and urgent rows load the selected urgent booking into Dispatch with the existing Driver Job Link panel focused, a visible booking handoff notice, and keyboard focus on `Create Link` so admin can create and copy the driver link before a driver is assigned.",
   "Dashboard keeps a secondary `Review` action for the existing Bookings review path; it does not replace the Driver Job Link urgent handoff.",
-  "The Bookings page request panel remains the full queue as `Urgent & New Booking Requests`, with row badges separating urgent under-24h requests from new non-urgent requests.",
+  "The Bookings page request panel remains the queue for open customer requests outside the 1-hour dispatch window as `Urgent & New Booking Requests`, with row badges separating under-24h-but-not-dispatch-window requests from new non-urgent requests.",
+  "Unhandled customer requests are hidden from Current / Upcoming until admin loads them from the Dashboard urgent lane or the Bookings request lane, preventing duplicate cards while preserving the existing post-review booking list.",
   "Day-of-trip jobs are shown as `Today's Jobs` only on Dispatch; Dashboard stays focused on urgent requests, admin notifications, calendar, and booking summaries.",
   "`Today's Jobs` driver report auto-refresh is on by default, still uses the guarded admin driver-status read path, and can be switched off by the operator.",
   "The `Today's Jobs` live map control opens the existing admin-only live-location runtime for assigned jobs in the monitor window and refreshes shared markers every 10 seconds while the sector is open.",

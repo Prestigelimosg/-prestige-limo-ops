@@ -53,10 +53,10 @@ for (const phrase of [
   "Recent and Completed booking lists now render compact expandable rows by default so dispatch can scan more bookings at once while keeping existing details and action buttons available.",
   "The Bookings tab now triggers the same safe Load Bookings read automatically the first time it is opened with an empty loaded list.",
   "Open customer booking requests are surfaced on the Dashboard command centre and above Recent Bookings, using the existing customer request source markers with a bounded fallback for open `CUST-` request references when live rows do not carry those markers.",
-  "The Dashboard is the default admin landing tab, shows a compact `Urgent Booking Requests` alert for open customer requests with pickup under 24 hours plus saved Driver TBC jobs inside the 1-hour pickup monitor window, and routes each row to the correct existing review or Dispatch assignment flow.",
+  "The Dashboard is the default admin landing tab, shows a compact `Urgent Booking Requests` alert only for open customer requests and saved Driver TBC jobs inside the 1-hour pickup monitor window, and routes each row to the existing Dispatch Driver Job Link handoff.",
   "Dashboard initial Load Bookings completion only writes the global status message while the operator is still on Dashboard, so a delayed read cannot overwrite Rates or other tab feedback after navigation.",
-  "The Bookings request row is the review handoff point and can load the selected request into the existing Dispatch form only when the operator chooses `Load this booking`; the handoff focuses the existing Customer Copy section for admin review/send preparation without adding a duplicate write path.",
-  "Loading a customer request into Dispatch now records a bounded browser-local handled-request key so that request leaves the Dashboard urgent queue plus the Bookings `Urgent & New Booking Requests` queue and badge on that admin browser while remaining available in Recent/Active booking lists.",
+  "The Bookings request row is the review handoff point for open customer requests outside the 1-hour dispatch window and can load the selected request into the existing Dispatch form only when the operator chooses `Open in Driver Job Link`; the handoff focuses the existing Driver Job Link section without adding a duplicate write path.",
+  "Loading a customer request into Dispatch now records a bounded browser-local handled-request key so that request leaves the Dashboard urgent queue plus the Bookings `Urgent & New Booking Requests` queue and badge on that admin browser, then becomes available in Current / Upcoming.",
   "Loading a saved booking into Dispatch refreshes the typed operational display once immediately and pauses one background sync tick, keeping the existing guarded read set stable while Customer Copy focuses for review.",
   "The Dashboard now uses compact read-only booking summaries plus `Open` handoff buttons; single-booking driver assignment, status, copy, job-card, and completion work stays in Dispatch/Bookings so page purposes do not duplicate.",
   "`Today's Jobs` is shown below the Dispatch `Assigned Driver` sector for multi-driver scanning and is not rendered on Dashboard.",
@@ -211,7 +211,7 @@ assertIncludes(
   "Bookings tab new request highlight marker",
 );
 assertIncludes(appPage, 'data-bookings-new-request-badge="true"', "Bookings tab new request badge");
-assertIncludes(appPage, "const customerBookingRequestCount = customerBookingRequestBookings.length;", "Bookings badge count");
+assertIncludes(appPage, "const customerBookingRequestCount = bookingTabCustomerBookingRequestBookings.length;", "Bookings badge count");
 assertIncludes(appPage, "visibleCustomerBookingRequestBookings", "Customer request visible list cap");
 assertIncludes(
   appPage,
@@ -233,11 +233,11 @@ for (const customerRequestFragment of [
   "data-new-customer-booking-requests-panel",
   "data-new-customer-booking-request-row",
   "data-new-customer-booking-request-load",
-  "Load this booking",
-  "onClick={() => loadSelectedBooking(requestBooking, { focusCustomerCopy: true })}",
+  "Open in Driver Job Link",
+  "onClick={() => loadSelectedBooking(requestBooking, { focusDriverJobLink: true })}",
   "dispatchLoadFocusTarget",
   "scrollIntoView({ behavior: \"smooth\", block: \"start\" })",
-  "Customer Copy is ready for admin review.",
+  "Driver Job Link is ready for admin action.",
   "{customerBookingRequestsPanel}",
 ]) {
   assertIncludes(appPage, customerRequestFragment, `Customer request auto-load fragment ${customerRequestFragment}`);

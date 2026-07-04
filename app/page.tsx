@@ -15950,16 +15950,30 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       ),
     [handledCustomerBookingRequestKeySet, operationalBookings],
   );
-  const urgentCustomerBookingRequestBookings = useMemo(
+  const dashboardCustomerBookingRequestBookings = useMemo(
     () =>
       customerBookingRequestBookings.filter((bookingRecord) =>
-        bookingRecordIsPickupWithinNextHours(bookingRecord, currentTimeMs, 24),
+        bookingRecordIsInsideActiveJobMonitorWindow(bookingRecord, currentTimeMs),
       ),
     [currentTimeMs, customerBookingRequestBookings],
   );
+  const bookingTabCustomerBookingRequestBookings = useMemo(
+    () =>
+      customerBookingRequestBookings.filter(
+        (bookingRecord) => !bookingRecordIsInsideActiveJobMonitorWindow(bookingRecord, currentTimeMs),
+      ),
+    [currentTimeMs, customerBookingRequestBookings],
+  );
+  const urgentCustomerBookingRequestBookings = useMemo(
+    () =>
+      bookingTabCustomerBookingRequestBookings.filter((bookingRecord) =>
+        bookingRecordIsPickupWithinNextHours(bookingRecord, currentTimeMs, 24),
+      ),
+    [bookingTabCustomerBookingRequestBookings, currentTimeMs],
+  );
   const visibleCustomerBookingRequestBookings = useMemo(
-    () => customerBookingRequestBookings.slice(0, 5),
-    [customerBookingRequestBookings],
+    () => bookingTabCustomerBookingRequestBookings.slice(0, 5),
+    [bookingTabCustomerBookingRequestBookings],
   );
   const urgentUnassignedSavedBookingRequests = useMemo(
     () =>
@@ -15981,7 +15995,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   );
   const dashboardUrgentBookingRequestBookings = useMemo(
     () =>
-      [...urgentCustomerBookingRequestBookings, ...urgentUnassignedSavedBookingRequests].sort(
+      [...dashboardCustomerBookingRequestBookings, ...urgentUnassignedSavedBookingRequests].sort(
         (firstBooking, secondBooking) => {
           const firstPickupTimeMs = bookingRecordPickupDateTimeMs(firstBooking) ?? Number.MAX_SAFE_INTEGER;
           const secondPickupTimeMs = bookingRecordPickupDateTimeMs(secondBooking) ?? Number.MAX_SAFE_INTEGER;
@@ -15989,7 +16003,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           return firstPickupTimeMs - secondPickupTimeMs;
         },
       ),
-    [urgentCustomerBookingRequestBookings, urgentUnassignedSavedBookingRequests],
+    [dashboardCustomerBookingRequestBookings, urgentUnassignedSavedBookingRequests],
   );
   const visibleDashboardUrgentBookingRequestBookings = useMemo(
     () => dashboardUrgentBookingRequestBookings.slice(0, 5),
@@ -16008,12 +16022,30 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       ),
     [urgentCustomerBookingRequestBookings],
   );
+  const unhandledCustomerBookingRequestKeySet = useMemo(
+    () =>
+      new Set(
+        customerBookingRequestBookings
+          .map(getCustomerBookingRequestQueueKey)
+          .filter(Boolean),
+      ),
+    [customerBookingRequestBookings],
+  );
   const filteredRecentBookings = useMemo(
     () =>
       operationalBookings
         .filter((bookingRecord) => !bookingRecordBelongsInCompletedHistoryWithDriverReport(bookingRecord))
+        .filter(
+          (bookingRecord) =>
+            !unhandledCustomerBookingRequestKeySet.has(getCustomerBookingRequestQueueKey(bookingRecord)),
+        )
         .filter((bookingRecord) => bookingMatchesLocalSearch(bookingRecord, bookingsSearchTerm)),
-    [bookingRecordBelongsInCompletedHistoryWithDriverReport, bookingsSearchTerm, operationalBookings],
+    [
+      bookingRecordBelongsInCompletedHistoryWithDriverReport,
+      bookingsSearchTerm,
+      operationalBookings,
+      unhandledCustomerBookingRequestKeySet,
+    ],
   );
   const filteredCompletedBookings = useMemo(
     () =>
@@ -16168,12 +16200,14 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   const todayBookings = activeDashboardBookings.filter(
     (bookingRecord) =>
       getBookingDateKey(bookingRecord) === todayKey &&
-      !urgentUnassignedSavedBookingIdSet.has(String(bookingRecord.id)),
+      !urgentUnassignedSavedBookingIdSet.has(String(bookingRecord.id)) &&
+      !unhandledCustomerBookingRequestKeySet.has(getCustomerBookingRequestQueueKey(bookingRecord)),
   );
   const upcomingBookings = activeDashboardBookings.filter(
     (bookingRecord) =>
       getBookingDateKey(bookingRecord) > todayKey &&
-      !urgentUnassignedSavedBookingIdSet.has(String(bookingRecord.id)),
+      !urgentUnassignedSavedBookingIdSet.has(String(bookingRecord.id)) &&
+      !unhandledCustomerBookingRequestKeySet.has(getCustomerBookingRequestQueueKey(bookingRecord)),
   );
   const calendarExportableBookings = activeDashboardBookings
     .filter((bookingRecord) => getBookingDateKey(bookingRecord) !== "1970-01-01")
@@ -16186,7 +16220,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     buildLoadBookingsOperationalDisplayItems(visibleCustomerBookingRequestBookings, {
       useTypedOperationalOrder: true,
     });
-  const customerBookingRequestCount = customerBookingRequestBookings.length;
+  const customerBookingRequestCount = bookingTabCustomerBookingRequestBookings.length;
   const urgentCustomerBookingRequestCount = urgentCustomerBookingRequestBookings.length;
   const dashboardUrgentBookingRequestDisplayItems =
     buildLoadBookingsOperationalDisplayItems(visibleDashboardUrgentBookingRequestBookings, {
@@ -21812,7 +21846,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         <div>
           <h3 className="text-sm font-semibold text-emerald-950">Urgent &amp; New Booking Requests</h3>
           <p className="text-xs text-emerald-800">
-            Urgent means pickup is under 24 hours; new stays here until reviewed.
+            Requests outside the 1-hour dispatch window stay here until admin loads them.
           </p>
         </div>
         <div className="flex flex-wrap gap-1.5">
@@ -21866,7 +21900,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                 <p className="truncate text-xs text-slate-500">{pickupMetaText}</p>
               </div>
               <div className="min-w-0">
-                <p className="truncate text-slate-800">{passengerText}</p>
+                <p className="truncate text-slate-800">Passenger: {passengerText}</p>
                 <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                   <span
                     className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
@@ -21875,7 +21909,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                         : "bg-emerald-50 text-emerald-900 ring-1 ring-emerald-100"
                     }`}
                   >
-                    {isUrgentRequest ? "Urgent <24h" : "New"}
+                    {isUrgentRequest ? "Urgent >1h" : "New"}
                   </span>
                   <span className="truncate text-xs text-slate-500">
                     {bookingStatusLabel(requestBooking.status)}
@@ -21886,10 +21920,10 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               <button
                 className="min-h-9 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800"
                 data-new-customer-booking-request-load={bookingId}
-                onClick={() => loadSelectedBooking(requestBooking, { focusCustomerCopy: true })}
+                onClick={() => loadSelectedBooking(requestBooking, { focusDriverJobLink: true })}
                 type="button"
               >
-                Load this booking
+                Open in Driver Job Link
               </button>
             </article>
           );
@@ -40165,7 +40199,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                     className="mb-2 rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-950"
                     data-driver-job-link-handoff-notice="true"
                   >
-                    Urgent booking {driverJobLinkHandoffReference} loaded here. Next: Create Link,
+                    Booking {driverJobLinkHandoffReference} loaded here. Next: Create Link,
                     then Copy Link and send it to the driver.
                   </div>
                 ) : null}
@@ -41357,7 +41391,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                 <button
                   className="h-9 rounded-md border border-stone-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:text-slate-400"
                   data-dashboard-review-new-booking-requests="true"
-                  disabled={urgentCustomerBookingRequestCount === 0}
+                  disabled={customerBookingRequestCount === 0}
                   onClick={openCustomerBookingRequestsReview}
                   type="button"
                 >
@@ -41404,6 +41438,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                         </span>
                       </span>
                       <span className="truncate text-slate-800">
+                        Passenger:{" "}
                         {operationalCard.traveler_display_name ||
                           operationalCard.customer_display_name ||
                           "Unknown"}

@@ -681,11 +681,11 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Recent and Completed booking lists now render compact expandable rows by default so dispatch can scan more bookings at once while keeping existing details and action buttons available.
 - The Bookings tab now triggers the same safe Load Bookings read automatically the first time it is opened with an empty loaded list.
 - Open customer booking requests are surfaced on the Dashboard command centre and above Recent Bookings, using the existing customer request source markers with a bounded fallback for open `CUST-` request references when live rows do not carry those markers.
-- The Dashboard is the default admin landing tab, shows a compact `Urgent Booking Requests` alert for open customer requests with pickup under 24 hours plus saved Driver TBC jobs inside the 1-hour pickup monitor window, and routes each row to the correct existing review or Dispatch assignment flow.
+- The Dashboard is the default admin landing tab, shows a compact `Urgent Booking Requests` alert only for open customer requests and saved Driver TBC jobs inside the 1-hour pickup monitor window, and routes each row to the existing Dispatch Driver Job Link handoff.
 - The Dashboard now runs the same existing safe Load Bookings read once on initial command-centre entry when the local booking list is empty, so newly submitted customer requests can appear without first opening the Bookings tab.
 - Dashboard initial Load Bookings completion only writes the global status message while the operator is still on Dashboard, so a delayed read cannot overwrite Rates or other tab feedback after navigation.
-- The Bookings request row is the review handoff point and can load the selected request into the existing Dispatch form only when the operator chooses `Load this booking`; the handoff focuses the existing Customer Copy section for admin review/send preparation without adding a duplicate write path.
-- Loading a customer request into Dispatch now records a bounded browser-local handled-request key so that request leaves the Dashboard urgent queue plus the Bookings `Urgent & New Booking Requests` queue and badge on that admin browser while remaining available in Recent/Active booking lists.
+- The Bookings request row is the review handoff point for open customer requests outside the 1-hour dispatch window and can load the selected request into the existing Dispatch form only when the operator chooses `Open in Driver Job Link`; the handoff focuses the existing Driver Job Link section without adding a duplicate write path.
+- Loading a customer request into Dispatch now records a bounded browser-local handled-request key so that request leaves the Dashboard urgent queue plus the Bookings `Urgent & New Booking Requests` queue and badge on that admin browser, then becomes available in Current / Upcoming.
 - Loading a saved booking into Dispatch refreshes the typed operational display once immediately and pauses one background sync tick, keeping the existing guarded read set stable while Customer Copy focuses for review.
 - The Dashboard now uses compact read-only booking summaries plus `Open` handoff buttons; single-booking driver assignment, status, copy, job-card, and completion work stays in Dispatch/Bookings so page purposes do not duplicate.
 - `Today's Jobs` is shown below the Dispatch `Assigned Driver` sector for multi-driver scanning and is not rendered on Dashboard.
@@ -716,10 +716,11 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Dashboard Urgent Requests And One-Window Active Monitor
 
-- Dashboard request panel is now `Urgent Booking Requests` and displays open customer requests with pickup under 24 hours plus saved Driver TBC jobs inside the 1-hour pickup monitor window.
-- Dashboard `Open Urgent` and urgent rows load the selected urgent booking into Dispatch with the existing Driver Job Link panel focused, a visible urgent handoff notice, and keyboard focus on `Create Link` so admin can create and copy the driver link before a driver is assigned.
+- Dashboard request panel is now `Urgent Booking Requests` and displays only open customer requests plus saved Driver TBC jobs inside the 1-hour pickup monitor window.
+- Dashboard `Open Urgent` and urgent rows load the selected urgent booking into Dispatch with the existing Driver Job Link panel focused, a visible booking handoff notice, and keyboard focus on `Create Link` so admin can create and copy the driver link before a driver is assigned.
 - Dashboard keeps a secondary `Review` action for the existing Bookings review path; it does not replace the Driver Job Link urgent handoff.
-- The Bookings page request panel remains the full queue as `Urgent & New Booking Requests`, with row badges separating urgent under-24h requests from new non-urgent requests.
+- The Bookings page request panel remains the queue for open customer requests outside the 1-hour dispatch window as `Urgent & New Booking Requests`, with row badges separating under-24h-but-not-dispatch-window requests from new non-urgent requests.
+- Unhandled customer requests are hidden from Current / Upcoming until admin loads them from the Dashboard urgent lane or the Bookings request lane, preventing duplicate cards while preserving the existing post-review booking list.
 - Day-of-trip jobs are shown as `Today's Jobs` only on Dispatch; Dashboard stays focused on urgent requests, admin notifications, calendar, and booking summaries.
 - `Today's Jobs` driver report auto-refresh is on by default, still uses the guarded admin driver-status read path, and can be switched off by the operator.
 - The `Today's Jobs` live map control opens the existing admin-only live-location runtime for assigned jobs in the monitor window and refreshes shared markers every 10 seconds while the sector is open.

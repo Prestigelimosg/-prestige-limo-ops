@@ -156,8 +156,19 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - `Apply + Cal` merges only approved request fields into the existing saved booking update path, sends a `PATCH` to `/api/admin-bookings`, then uses the existing Google Calendar upsert path keyed by booking reference. The notification is archived only after the Google Calendar sync succeeds, so a failed calendar sync leaves the request pending for admin review.
 - Service-type amendments are defensive-gated: if a request carries a changed service type, the app loads Dispatch and requires the existing `Service Change Price Review` / `Update + Cal` flow instead of one-click applying the change.
 - Already-issued stored invoice records for the same booking reference block one-click amendment apply and guide admin toward adjustment, credit note, or new invoice review. Existing invoices are not silently mutated.
-- This lane does not add a customer-side direct write, new DB schema, duplicate amendment route/workbench, email/WhatsApp/SMS/Telegram send, Stripe/payment/payout/provider/GPS/live-location behavior, or public/customer/driver exposure of admin amendment internals.
+- This apply lane does not add a customer-side direct write, new DB schema, duplicate amendment route/workbench, customer Email/WhatsApp/SMS/Telegram send, Stripe/payment/payout/provider/GPS/live-location behavior, or public/customer/driver exposure of admin amendment internals.
 - Focused guard coverage lives in `scripts/test-admin-booking-change-request-review-apply-guard.mjs`.
+
+### Admin Customer Amendment Email Alert Runtime Gate
+
+- Customer portal booking change requests now attempt a server-side admin Email alert before creating the existing admin app notification, so the operational order is Email first, then app notification. In other words, the server-side admin Email alert now runs before the admin app notification.
+- The alert reuses the existing admin new-booking Email alert gate/config names: `PRESTIGE_ADMIN_NEW_BOOKING_EMAIL_ALERT_ENABLED=true`, `PRESTIGE_EMAIL_PROVIDER=resend`, `PRESTIGE_ADMIN_NEW_BOOKING_EMAIL_ALERT_TO`, and `RESEND_API_KEY`. The gate remains default-closed and no env value, secret, Vercel env change, Vercel CLI action, or provider activation is added by this code lane.
+- The amendment/cancellation Email body is admin-only and template-limited to safe booking reference, passenger, current service/time/route, requested date/time/route, customer note, and dashboard URL. It does not include customer price, billing, invoice/payment/PDF, payout, PayNow, internal admin/finance notes, parser/debug, raw provider payloads, tokens/secrets, GPS/live location, photo proof, Telegram, WhatsApp, or SMS data.
+- Email alert failure, closed gate, provider timeout, or missing provider config must not fail the customer amendment submission; the existing `admin_app` notification remains the reliable in-app review queue.
+- The customer response still does not expose the internal notification id, provider status, message id, or admin Email recipient. It continues to report that CRM and calendar are unchanged until admin review.
+- There is no customer Email auto-reply in this lane because the customer saved-booking read intentionally excludes customer email/phone. Customer-facing confirmation remains inside the existing portal/app review wording until a separate safe customer-reply channel is approved.
+- This lane does not mutate bookings, CRM, calendar, invoices, payments, payouts, provider dispatch sends, GPS/live-location, driver links, parser behavior, DB schema, or public/customer/driver routes.
+- Focused guard coverage lives in `scripts/test-admin-booking-change-request-email-alert-guard.mjs` and `scripts/test-customer-booking-change-request-review-guard.mjs`.
 
 ### Customer Portal Access Reference Correction
 
@@ -180,7 +191,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The customer route verifies the target booking through `loadCustomerSavedBookings`; completed, cancelled, declined, or out-of-account bookings fail closed.
 - Successful requests create one internal `admin_app` inbox item with workflow area `customer_booking_change_request`, booking reference, passenger, current safe trip fields, and requested safe date/time/pickup/drop-off/note values.
 - The customer response does not expose the internal admin inbox id and explicitly reports `crm_update: false`, `calendar_update: false`, and `external_send: false`.
-- The customer route does not mutate bookings, does not update Google Calendar, and does not create duplicate billing, invoice, PDF, payment, payout, provider, SMS, WhatsApp, Telegram, GPS/live-location, parser, or admin saved-booking behavior.
+- The customer route does not mutate bookings, does not update Google Calendar, and does not create duplicate billing, invoice, PDF, payment, payout, customer provider sends, SMS, WhatsApp, Telegram, GPS/live-location, parser, or admin saved-booking behavior. The admin-only Email alert is handled by the separate gated runtime lane above.
 - Admin App Notifications now show compact request details for customer booking change requests inside the existing admin inbox. Admin still reviews the request, loads the booking, applies approved edits, and uses the existing `Update + Cal` path to update the saved booking and existing calendar event.
 - Guard coverage lives in `scripts/test-customer-booking-change-request-review-guard.mjs`; related public portal/runtime/privacy guards were updated to allow only this approved review wire while preserving the saved-bookings read boundary.
 

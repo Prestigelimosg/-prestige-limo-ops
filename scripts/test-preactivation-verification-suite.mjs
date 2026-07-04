@@ -338,6 +338,10 @@ const guardChecks = [
     script: "scripts/test-customer-booking-change-request-review-guard.mjs",
   },
   {
+    label: "admin booking change request email alert guard",
+    script: "scripts/test-admin-booking-change-request-email-alert-guard.mjs",
+  },
+  {
     label: "Customer Portal saved-bookings authenticated read evidence contract guard",
     script: "scripts/test-customer-portal-saved-bookings-read-evidence-contract-guard.mjs",
   },

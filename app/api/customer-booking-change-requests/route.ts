@@ -1,4 +1,5 @@
 import { createCustomerBookingChangeRequestAdminAppNotification } from "../../../lib/admin-app-notification-persistence";
+import { sendAdminBookingChangeRequestEmailAlert } from "../../../lib/admin-booking-change-request-email-alert";
 import {
   loadCustomerSavedBookings,
   resolveCustomerSavedBookingsBoundaryForPurpose,
@@ -316,6 +317,41 @@ function bookingIsReadOnly(booking: CustomerSavedBookingRecord) {
   return status === "completed" || status === "cancelled" || status === "declined";
 }
 
+function adminBookingChangeRequestAlertInput(
+  parsed: ParsedBookingChangeRequest,
+  booking: CustomerSavedBookingRecord,
+) {
+  return {
+    booking_reference: parsed.booking_reference,
+    current_dropoff_location: booking.dropoff_location,
+    current_pickup_at: booking.pickup_at,
+    current_pickup_location: booking.pickup_location,
+    current_service_type: booking.service_type,
+    passenger_name: booking.passenger_name,
+    request_kind: parsed.request_kind,
+    request_note: parsed.request_note,
+    requested_dropoff_location: parsed.requested_dropoff_location,
+    requested_pickup_date: parsed.requested_pickup_date,
+    requested_pickup_location: parsed.requested_pickup_location,
+    requested_pickup_time: parsed.requested_pickup_time,
+  };
+}
+
+async function createAdminReviewNoticeForBookingChangeRequest(
+  parsed: ParsedBookingChangeRequest,
+  booking: CustomerSavedBookingRecord,
+) {
+  const alertInput = adminBookingChangeRequestAlertInput(parsed, booking);
+
+  try {
+    await sendAdminBookingChangeRequestEmailAlert(alertInput);
+  } catch {
+    // Customer amendment intake must not fail because the admin Email alert channel is unavailable.
+  }
+
+  return createCustomerBookingChangeRequestAdminAppNotification(alertInput);
+}
+
 export async function GET() {
   return blockedResponse();
 }
@@ -383,20 +419,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const notification = await createCustomerBookingChangeRequestAdminAppNotification({
-      booking_reference: parsed.data.booking_reference,
-      current_dropoff_location: booking.dropoff_location,
-      current_pickup_at: booking.pickup_at,
-      current_pickup_location: booking.pickup_location,
-      current_service_type: booking.service_type,
-      passenger_name: booking.passenger_name,
-      request_kind: parsed.data.request_kind,
-      request_note: parsed.data.request_note,
-      requested_dropoff_location: parsed.data.requested_dropoff_location,
-      requested_pickup_date: parsed.data.requested_pickup_date,
-      requested_pickup_location: parsed.data.requested_pickup_location,
-      requested_pickup_time: parsed.data.requested_pickup_time,
-    });
+    const notification = await createAdminReviewNoticeForBookingChangeRequest(parsed.data, booking);
 
     if (!notification.ok) {
       return safeErrorResponse(notification);

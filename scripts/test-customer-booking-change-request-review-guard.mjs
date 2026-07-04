@@ -47,6 +47,8 @@ for (const fragment of [
   "customer-booking-change-request",
   "loadCustomerSavedBookings",
   "bookingIsReadOnly",
+  "sendAdminBookingChangeRequestEmailAlert",
+  "createAdminReviewNoticeForBookingChangeRequest",
   "createCustomerBookingChangeRequestAdminAppNotification",
   "calendar_update: false",
   "crm_update: false",
@@ -83,6 +85,34 @@ for (const forbidden of [
 ]) {
   assertExcludes(routePostBlock, forbidden, `customer change route forbidden ${forbidden}`);
 }
+
+const routeNoticeBlock = sliceBetween(
+  route,
+  "async function createAdminReviewNoticeForBookingChangeRequest",
+  "export async function GET",
+);
+
+assertIncludes(
+  routeNoticeBlock,
+  "sendAdminBookingChangeRequestEmailAlert(alertInput)",
+  "customer change route admin Email alert first",
+);
+assertIncludes(
+  routeNoticeBlock,
+  "createCustomerBookingChangeRequestAdminAppNotification(alertInput)",
+  "customer change route admin app notification second",
+);
+assert.equal(
+  routeNoticeBlock.indexOf("sendAdminBookingChangeRequestEmailAlert(alertInput)") <
+    routeNoticeBlock.indexOf("createCustomerBookingChangeRequestAdminAppNotification(alertInput)"),
+  true,
+  "Customer amendment route must attempt admin Email before admin app notification.",
+);
+assertIncludes(
+  routeNoticeBlock,
+  "Customer amendment intake must not fail because the admin Email alert channel is unavailable.",
+  "customer change route email failure safety",
+);
 
 assertIncludes(
   savedBookingsRead,

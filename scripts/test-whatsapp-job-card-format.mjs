@@ -19,6 +19,18 @@ function assertNoDriverForbiddenFragments(output, label) {
   }
 }
 
+function assertNoIdentityNames(output, names, label) {
+  assert.doesNotMatch(
+    output,
+    /^\s*(?:name|passenger|traveller|traveler|customer|company|booker)\s*:/im,
+    `${label} must not expose identity label lines`,
+  );
+
+  for (const name of names) {
+    assert.doesNotMatch(output, name, `${label} must not expose identity names`);
+  }
+}
+
 const nicoleDeparture = formatWhatsAppJobCard({
   bookingType: "DEP",
   date: "2026-07-02",
@@ -39,12 +51,11 @@ assert.equal(
     "",
     "Jalan Buloh Perindu > SQ708",
     "",
-    "Ms. Nicole",
-    "",
     "1 pax",
   ].join("\n"),
 );
 assertNoDriverForbiddenFragments(nicoleDeparture, "Nicole departure");
+assertNoIdentityNames(nicoleDeparture, [/Ms\. Nicole/i], "Nicole departure");
 
 const arrival = formatWhatsAppJobCard({
   bookingType: "MNG",
@@ -66,12 +77,11 @@ assert.equal(
     "",
     "QF1 > The Outpost Hotel Sentosa",
     "",
-    "Belinda",
-    "",
     "4 pax",
   ].join("\n"),
 );
 assertNoDriverForbiddenFragments(arrival, "arrival");
+assertNoIdentityNames(arrival, [/Belinda/i], "arrival");
 
 const missingVehicleAndFlightDeparture = formatWhatsAppJobCard({
   bookingType: "departure",
@@ -92,12 +102,15 @@ assert.equal(
     "",
     "1 Jalan Buloh Perindu > Changi Airport Terminal 3",
     "",
-    "Ms. Nicole",
-    "",
     "1 pax",
   ].join("\n"),
 );
 assertNoDriverForbiddenFragments(missingVehicleAndFlightDeparture, "missing vehicle/flight departure");
+assertNoIdentityNames(
+  missingVehicleAndFlightDeparture,
+  [/Ms\. Nicole/i],
+  "missing vehicle/flight departure",
+);
 
 const rightSideFlightDeparture = formatWhatsAppJobCard({
   bookingType: "DEP",
@@ -119,12 +132,15 @@ assert.equal(
     "",
     "Intercontinental Robertson > ET639",
     "",
-    "Mr Temitope Taiye Elijah",
-    "",
     "1 pax",
   ].join("\n"),
 );
 assertNoDriverForbiddenFragments(rightSideFlightDeparture, "right-side flight departure");
+assertNoIdentityNames(
+  rightSideFlightDeparture,
+  [/Mr Temitope Taiye Elijah/i],
+  "right-side flight departure",
+);
 
 const multiStopWithChildSeat = formatWhatsAppJobCard({
   bookingType: "TRF",
@@ -149,13 +165,12 @@ assert.equal(
     "",
     "276 Ocean Drive lobby O > 28 Alexandra View > Changi Airport",
     "",
-    "Mr Peter",
-    "",
     "5 pax",
     "Child seat: 1 x booster seat",
   ].join("\n"),
 );
 assertNoDriverForbiddenFragments(multiStopWithChildSeat, "multi-stop child-seat transfer");
+assertNoIdentityNames(multiStopWithChildSeat, [/Mr Peter/i], "multi-stop child-seat transfer");
 
 const dspMultiStopItinerary = formatWhatsAppJobCard({
   bookingType: "DSP",
@@ -179,8 +194,6 @@ assert.equal(
     "",
     "Grand Hyatt > Multi-stop itinerary hidden for privacy > Ritz-Carlton",
     "",
-    "Drew",
-    "",
     "1 pax",
   ].join("\n"),
 );
@@ -190,6 +203,7 @@ assert.doesNotMatch(
   "DSP multi-stop WhatsApp preview must hide detailed itinerary stops",
 );
 assertNoDriverForbiddenFragments(dspMultiStopItinerary, "DSP multi-stop itinerary");
+assertNoIdentityNames(dspMultiStopItinerary, [/Drew/i], "DSP multi-stop itinerary");
 
 const dspPlainStops = formatWhatsAppJobCard({
   bookingType: "DSP",
@@ -212,8 +226,6 @@ assert.equal(
     "",
     "HarbourFront Avenue > One Raffles Quay > Capital Tower > BDC office",
     "",
-    "Drew",
-    "",
     "1 pax",
   ].join("\n"),
 );
@@ -223,5 +235,26 @@ assert.doesNotMatch(
   "DSP plain-stop WhatsApp preview must compact detailed place fragments",
 );
 assertNoDriverForbiddenFragments(dspPlainStops, "DSP plain stops");
+assertNoIdentityNames(dspPlainStops, [/Drew/i], "DSP plain stops");
+
+const identityLeakProbe = formatWhatsAppJobCard({
+  bookingType: "DEP",
+  company: "ACME Customer Account",
+  booker: "William Booker",
+  customerName: "Corporate Customer",
+  date: "2026-07-04",
+  dropoff: "Changi Airport",
+  flight: "SQ1",
+  name: "VIP Passenger",
+  pax: "1",
+  pickup: "Raffles Hotel",
+  time: "0900hrs",
+  vehicle: "E-Class",
+});
+assertNoIdentityNames(
+  identityLeakProbe,
+  [/ACME Customer Account/i, /William Booker/i, /Corporate Customer/i, /VIP Passenger/i],
+  "identity leak probe",
+);
 
 console.log("WhatsApp job card format guard passed.");

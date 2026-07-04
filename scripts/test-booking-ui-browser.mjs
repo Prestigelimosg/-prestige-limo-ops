@@ -1580,7 +1580,7 @@ function assertBookingUiState(state) {
   assert.match(state.visibleText, /Job Card Preview/);
   assert.doesNotMatch(state.jobCardPreview, /Guest details hidden for privacy/);
   assert.doesNotMatch(state.jobCardPreview, /BROWSER UI TEST BOOKER/);
-  assert.match(state.jobCardPreview, /BROWSER UI TEST TRAVELER/);
+  assert.doesNotMatch(state.jobCardPreview, /BROWSER UI TEST TRAVELER/);
   assert.match(state.visibleText, /Driver Dispatch/);
   assert.match(state.driverDispatch, /DRIVER DISPATCH/);
   assert.match(state.visibleText, /Pricing/);
@@ -17372,7 +17372,7 @@ async function runChromeTest() {
     assert.equal(loadedBookingState.fields.dropoff, "Changi Airport T2");
     assert.equal(loadedBookingState.fields.name, "LOADED SAVED TRAVELER");
     assert.match(loadedBookingState.jobCardPreview, /SQ999/);
-    assert.match(loadedBookingState.jobCardPreview, /LOADED SAVED TRAVELER/);
+    assert.doesNotMatch(loadedBookingState.jobCardPreview, /LOADED SAVED TRAVELER/);
     assert.match(loadedBookingState.driverDispatch, /LOADED SAVED DRIVER/);
     assert.match(loadedBookingState.driverDispatch, /LOADED SAVED TRAVELER/);
     assert.doesNotMatch(loadedBookingState.bodyText, /Booking saved successfully/);
@@ -18163,7 +18163,7 @@ async function runChromeTest() {
     assert.equal(completedLoadedBookingState.fields.name, "COMPLETED TEST TRAVELER");
     assert.equal(completedLoadedBookingState.fields.driverName, "COMPLETED TEST DRIVER");
     assert.match(completedLoadedBookingState.jobCardPreview, /SQ888/);
-    assert.match(completedLoadedBookingState.jobCardPreview, /COMPLETED TEST TRAVELER/);
+    assert.doesNotMatch(completedLoadedBookingState.jobCardPreview, /COMPLETED TEST TRAVELER/);
     assert.match(completedLoadedBookingState.driverDispatch, /COMPLETED TEST DRIVER/);
     assert.match(completedLoadedBookingState.driverDispatch, /COMPLETED TEST TRAVELER/);
 

@@ -239,7 +239,6 @@ function formatRouteLine(booking: WhatsAppJobCardBooking, service: string) {
 export function formatWhatsAppJobCard(booking: WhatsAppJobCardBooking) {
   const service = normalizeWhatsAppJobCardService(booking.bookingType);
   const header = `${normalizeWhatsAppJobCardVehicle(booking.vehicle)} - ${service}`;
-  const passengerName = stripPriceFragments(clean(booking.name));
   const paxLine = formatPaxLine(booking.pax);
   const childSeatLine = formatChildSeatLine(booking);
 
@@ -249,8 +248,6 @@ export function formatWhatsAppJobCard(booking: WhatsAppJobCardBooking) {
     formatWhatsAppDateTime(booking.date, booking.time),
     "",
     formatRouteLine(booking, service),
-    "",
-    passengerName,
     "",
     paxLine,
     childSeatLine,

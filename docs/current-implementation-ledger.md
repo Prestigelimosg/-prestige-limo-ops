@@ -333,19 +333,20 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### WhatsApp Job Card Preview Format
 
-- Dispatch `Job Card Preview` now uses the compact WhatsApp job-card format William requested: `VEHICLE - SERVICE`, blank line, `D Mon (Day), HHMMhrs`, blank line, route, blank line, passenger name, then pax/operational notes only when present.
+- Dispatch `Job Card Preview` uses the compact WhatsApp job-card format William requested: `VEHICLE - SERVICE`, blank line, `D Mon (Day), HHMMhrs`, blank line, route, blank line, then pax/operational notes only when present.
+- The WhatsApp job-card target must not show any identity name line or value: no passenger/traveller name, customer/company/account name, booker name, contact name, `Name:`, `Passenger:`, `Customer:`, `Company:`, or `Booker:`. Route/place names remain because the driver still needs pickup/drop-off context.
 - Vehicle defaults to `E / AVF` when no vehicle is stated. The formatter normalizes `E-Class / AVF` to `E / AVF` and maps short service codes as `DEP`, `MNG`, `TRF`, `DSP`, and `DWPU` only when explicitly present.
 - Departure routes prefer `pickup > flight number`; if no flight is present they fall back to `pickup > airport/drop-off`. Arrival routes prefer `flight number > drop-off`. Transfer/hourly routes keep `pickup > stop(s) > destination`.
-- The Job Card Preview scrubber strips customer price fragments such as `$70`, `$55`, or `SGD 70` before the driver-facing copy is shown or copied. This keeps the driver-facing Job Card Preview free of customer price, invoice/payment, payout, PayNow, email, and phone leakage.
+- The Job Card Preview scrubber strips customer price fragments such as `$70`, `$55`, or `SGD 70` before the driver-facing copy is shown or copied. This keeps the driver-facing Job Card Preview free of customer price, invoice/payment, payout, PayNow, email, phone, and identity-name leakage.
 - This change is intentionally limited to `Job Card Preview` / the `jobCard` copy target. Existing Customer Copy, Driver Dispatch, driver job link, invoice/customer portal, calendar save payload, billing, payout, payment, provider, GPS, and live-location paths were not reformatted by this lane.
 - Focused formatter examples locked:
-  - `AVF - DEP / 2 Jul (Thu), 0700hrs / Jalan Buloh Perindu > SQ708 / Ms. Nicole / 1 pax`.
-  - `VVV - MNG / 28 Jun (Sun), 2115hrs / QF1 > The Outpost Hotel Sentosa / Belinda / 4 pax`, with `$70` stripped.
+  - `AVF - DEP / 2 Jul (Thu), 0700hrs / Jalan Buloh Perindu > SQ708 / 1 pax`.
+  - `VVV - MNG / 28 Jun (Sun), 2115hrs / QF1 > The Outpost Hotel Sentosa / 4 pax`, with `$70` and passenger name stripped.
   - Missing vehicle/flight departure defaults to `E / AVF - DEP` and falls back to `Changi Airport Terminal 3`.
-  - `VVV - DEP / 2 Jul (Thu), 2200hrs / Intercontinental Robertson > ET639 / Mr Temitope Taiye Elijah / 1 pax`, with `$55` stripped.
+  - `VVV - DEP / 2 Jul (Thu), 2200hrs / Intercontinental Robertson > ET639 / 1 pax`, with `$55` and passenger name stripped.
   - `E / AVF - TRF` multi-stop with child seat keeps compact route and `Child seat: 1 x booster seat`.
 - Parser guard also locks the pasted `*2 x VVV - DEP* ... Intercontinental Robertson > ET639 ... Mr. Temitope Taiye Elijah $55` sample as `DEP`, `VVV`, `2026-07-02`, `2200hrs`, flight `ET639`, pickup `Intercontinental Robertson`, drop-off `Changi Airport`, passenger `Mr Temitope Taiye Elijah`, pax `1`, and no customer price override.
-- Checks passed: `node --experimental-strip-types scripts/test-whatsapp-job-card-format.mjs`, `node scripts/test-whatsapp-job-card-preview-wiring-guard.mjs`, `npm run test:parser`, `node --check scripts/test-booking-ui-browser.mjs`, `npx tsc --noEmit --pretty false`, `npm run lint` with only the existing `loadBookings` warnings, `npm run build`, and `git diff --check`.
+- Checks passed for the current no-name WhatsApp job-card guard: `node scripts/test-whatsapp-job-card-format.mjs`, `node scripts/test-whatsapp-job-card-preview-wiring-guard.mjs`, `npm run test:booking-ui-browser`, `npm run lint` with only the existing `loadBookings` warnings, `npm run build`, and `git diff --check`.
 - This pass did not push/deploy, use Vercel CLI, change env/DB schema, send email, activate Stripe/payment, send providers, create payouts, or change GPS/live-location behavior.
 
 ### Pickup-Only WhatsApp Timing And Address

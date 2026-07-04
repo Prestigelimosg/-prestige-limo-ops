@@ -4217,6 +4217,41 @@ function undoCompletedStatus(
   return hasBookingDriver(bookingRecord) ? "assigned" : "confirmed";
 }
 
+function adminInternalStatusForBookingStatus(status: BookingStatusValue) {
+  if (status === "assigned") {
+    return "driver_assigned";
+  }
+
+  if (status === "driver_otw" || status === "pob") {
+    return "in_progress";
+  }
+
+  return status;
+}
+
+function applyBookingStatusToLocalRecord(
+  bookingRecord: BookingRecord,
+  nextStatus: BookingStatusValue,
+  updatedAt: string,
+): BookingRecord {
+  const updatedBookingRecord: BookingRecord = {
+    ...bookingRecord,
+    admin_internal_status: adminInternalStatusForBookingStatus(nextStatus),
+    status: nextStatus,
+    updated_at: updatedAt || bookingRecord.updated_at,
+  };
+
+  if (nextStatus === "cancelled" || nextStatus === "completed") {
+    updatedBookingRecord.customer_facing_status = nextStatus;
+  }
+
+  if (nextStatus === "cancelled") {
+    updatedBookingRecord.cancellation_review_status = "cancelled";
+  }
+
+  return updatedBookingRecord;
+}
+
 function bookingStatusLabel(status: string | null) {
   const normalizedStatus = clean(status).toLowerCase();
 
@@ -20611,7 +20646,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         message: {
           tone: statusResult.ok ? "success" : "error",
           text: statusResult.ok
-            ? "Driver job link revoked. Booking status changed to Cancelled."
+            ? "Driver job link revoked. Booking status changed to Cancelled and moved to Completed / History."
             : `Driver job link revoked, but booking status was not changed: ${statusResult.errorText}`,
         },
         oneTimeUrl: "",
@@ -21138,14 +21173,17 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         method: "PATCH",
       });
       const responseBody = (await response.json().catch(() => null)) as AdminSavedBookingStatusResponse | null;
+      const responseBooking = responseBody?.booking ?? null;
+      const responseBookingId = cleanReferenceText(responseBooking?.id);
+      const responseUpdatedAt = cleanReferenceText(responseBooking?.updated_at);
 
       if (
         !response.ok ||
         responseBody?.ok !== true ||
-        !responseBody.booking ||
-        String(responseBody.booking.id) !== bookingStatusReference ||
-        responseBody.booking.status !== nextStatus ||
-        !responseBody.booking.updated_at
+        !responseBooking ||
+        !responseBookingId ||
+        clean(responseBooking.status).toLowerCase() !== nextStatus ||
+        !responseUpdatedAt
       ) {
         const error = readAdminLegacyDataError(
           responseBody,
@@ -21155,21 +21193,65 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         throw new Error(formatSupabaseError(error));
       }
 
+      const statusReferences = Array.from(
+        new Set(
+          [bookingStatusReference, responseBookingId]
+            .map(cleanReferenceText)
+            .filter(Boolean),
+        ),
+      );
+      const matchingBookingIdSet = new Set(
+        bookings
+          .filter((currentBooking) =>
+            statusReferences.some((statusReference) =>
+              bookingRecordMatchesStatusReference(currentBooking, statusReference),
+            ),
+          )
+          .map((currentBooking) => String(currentBooking.id)),
+      );
+
       setBookings((current) =>
         current.map((currentBooking) =>
-          bookingRecordMatchesStatusReference(currentBooking, bookingStatusReference)
-            ? {
-                ...currentBooking,
-                status: nextStatus,
-                updated_at: responseBody.booking?.updated_at || currentBooking.updated_at,
-              }
+          statusReferences.some((statusReference) =>
+            bookingRecordMatchesStatusReference(currentBooking, statusReference),
+          )
+            ? applyBookingStatusToLocalRecord(currentBooking, nextStatus, responseUpdatedAt)
             : currentBooking,
         ),
       );
+      setLoadBookingsTypedOperationalCardsById((current) => {
+        let changed = false;
+        const nextCardsById: Record<string, LoadBookingsOperationalDisplayCard> = {};
+
+        for (const [bookingId, card] of Object.entries(current)) {
+          const matchesStatusReference =
+            matchingBookingIdSet.has(bookingId) ||
+            statusReferences.some(
+              (statusReference) =>
+                cleanReferenceText(bookingId) === statusReference ||
+                cleanReferenceText(card.booking_id) === statusReference ||
+                cleanReferenceText(card.booking_reference) === statusReference,
+            );
+
+          if (matchesStatusReference) {
+            changed = true;
+            nextCardsById[bookingId] = {
+              ...card,
+              audit_summary: responseUpdatedAt ? `Updated ${responseUpdatedAt}` : card.audit_summary,
+              booking_status: nextStatus,
+              updated_at: responseUpdatedAt || card.updated_at,
+            };
+          } else {
+            nextCardsById[bookingId] = card;
+          }
+        }
+
+        return changed ? nextCardsById : current;
+      });
 
       return {
         ok: true,
-        updatedAt: responseBody.booking.updated_at,
+        updatedAt: responseUpdatedAt,
       };
     } catch (error) {
       return {

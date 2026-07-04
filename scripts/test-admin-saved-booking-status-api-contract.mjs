@@ -350,6 +350,26 @@ assert.equal(
   "Driver job link revoke must persist the booking status as cancelled.",
 );
 assert.equal(
+  dashboardSource.includes("Driver job link revoked. Booking status changed to Cancelled and moved to Completed / History."),
+  true,
+  "Driver job link revoke success must tell the admin the cancelled booking moved to Completed / History.",
+);
+assert.equal(
+  dashboardSource.includes("applyBookingStatusToLocalRecord(currentBooking, nextStatus, responseUpdatedAt)"),
+  true,
+  "Saved booking status updates must mirror the new status into the local booking record immediately.",
+);
+assert.equal(
+  dashboardSource.includes("setLoadBookingsTypedOperationalCardsById((current) => {"),
+  true,
+  "Saved booking status updates must also refresh the typed dashboard card status locally.",
+);
+assert.equal(
+  dashboardSource.includes("String(responseBody.booking.id) !== bookingStatusReference"),
+  false,
+  "Saved booking status updates must not reject valid booking-reference responses only because the API identifier shape differs.",
+);
+assert.equal(
   dashboardSource.includes('patchBookingStatusReference(bookingStatusReference, "completed")'),
   true,
   "Driver Job Completed reports must persist the booking status as completed.",

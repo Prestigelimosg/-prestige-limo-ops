@@ -79,6 +79,11 @@ const driverJobLinkMessageBlock = sectionBetween(
   "const driverJobLinkMessage = useMemo",
   "const generatedDispatchCopyMessages = useMemo",
 );
+const bookingStatusPatchBlock = sectionBetween(
+  appPage,
+  "async function patchBookingStatusReference",
+  "async function updateBookingStatusOnly",
+);
 const driverJobLinkRevokeBlock = sectionBetween(
   appPage,
   "async function revokeDriverJobLink()",
@@ -158,12 +163,41 @@ for (const fragment of [
 for (const fragment of [
   "link: null,",
   'patchBookingStatusReference(driverJobLinkBookingReference, "cancelled")',
-  "Driver job link revoked. Booking status changed to Cancelled.",
+  "Driver job link revoked. Booking status changed to Cancelled and moved to Completed / History.",
   "Driver job link revoked, but booking status was not changed:",
   "oneTimeUrl: \"\",",
 ]) {
   assertIncludes(driverJobLinkRevokeBlock, fragment, `driver job link revoke clears preview fragment ${fragment}`);
 }
+
+for (const fragment of [
+  "function adminInternalStatusForBookingStatus",
+  "return \"driver_assigned\";",
+  "return \"in_progress\";",
+  "function applyBookingStatusToLocalRecord",
+  "admin_internal_status: adminInternalStatusForBookingStatus(nextStatus)",
+  "updatedBookingRecord.customer_facing_status = nextStatus;",
+  "updatedBookingRecord.cancellation_review_status = \"cancelled\";",
+]) {
+  assertIncludes(appPage, fragment, `local booking status mirror fragment ${fragment}`);
+}
+
+for (const fragment of [
+  "const responseBookingId = cleanReferenceText(responseBooking?.id);",
+  "clean(responseBooking.status).toLowerCase() !== nextStatus",
+  "const statusReferences = Array.from(",
+  "applyBookingStatusToLocalRecord(currentBooking, nextStatus, responseUpdatedAt)",
+  "setLoadBookingsTypedOperationalCardsById((current) => {",
+  "booking_status: nextStatus,",
+]) {
+  assertIncludes(bookingStatusPatchBlock, fragment, `booking status patch local sync fragment ${fragment}`);
+}
+
+assertExcludes(
+  bookingStatusPatchBlock,
+  "String(responseBody.booking.id) !== bookingStatusReference",
+  "booking status API response identifier validation",
+);
 
 assertIncludes(
   appPage,

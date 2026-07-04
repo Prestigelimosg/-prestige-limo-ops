@@ -2476,7 +2476,11 @@ function DispatcherStatusSummaryBlock({
   flush?: boolean;
   operationalCard?: LoadBookingsOperationalDisplayCard;
 }) {
-  const status = operationalCard?.booking_status || bookingRecord.status;
+  const status = bookingRecordIsCancelledStatus(bookingRecord)
+    ? "cancelled"
+    : bookingRecordIsCompletedStatus(bookingRecord)
+      ? "completed"
+      : operationalCard?.booking_status || bookingRecord.status;
 
   return (
     <div

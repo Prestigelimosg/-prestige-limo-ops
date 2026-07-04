@@ -73,6 +73,11 @@ type AdminBookingCalendarEventParts = {
   version: typeof adminBookingCalendarEventVersion;
 };
 
+type MidnightCalendarDisplayAdjustment = {
+  calendarStartsAt: CalendarDateTimeParts;
+  remark: string;
+};
+
 type BuildAdminBookingCalendarEventPartsResult =
   | {
       data: AdminBookingCalendarEventParts;
@@ -206,6 +211,21 @@ const monthNumbers: Record<string, number> = {
   sep: 9,
   sept: 9,
   september: 9,
+};
+
+const fullMonthNames: Record<number, string> = {
+  1: "January",
+  2: "February",
+  3: "March",
+  4: "April",
+  5: "May",
+  6: "June",
+  7: "July",
+  8: "August",
+  9: "September",
+  10: "October",
+  11: "November",
+  12: "December",
 };
 
 export function buildAdminBookingCalendarEvent(
@@ -359,7 +379,9 @@ function buildAdminBookingCalendarEventParts(
     };
   }
 
-  const endsAt = addMinutes(startsAt, defaultDurationMinutes);
+  const midnightDisplayAdjustment = buildMidnightCalendarDisplayAdjustment(startsAt);
+  const calendarStartsAt = midnightDisplayAdjustment?.calendarStartsAt || startsAt;
+  const endsAt = addMinutes(calendarStartsAt, defaultDurationMinutes);
   const routePoints = splitRoute(textField(booking, "route"));
   const pickupLocation =
     textField(booking, "pickup_address", "pickupLocation", "pickup_location", "pickup") ||
@@ -392,7 +414,11 @@ function buildAdminBookingCalendarEventParts(
   const status = textField(booking, "status");
   const cancelledPrefix = clean(status).toLowerCase() === "cancelled" ? "CANCELLED - " : "";
   const title = limitText(
-    `${cancelledPrefix}${["Prestige", bookingType, titleTarget].filter(Boolean).join(" - ")}`,
+    `${midnightDisplayAdjustment ? "MIDNIGHT JOB - " : ""}${cancelledPrefix}${[
+      "Prestige",
+      bookingType,
+      titleTarget,
+    ].filter(Boolean).join(" - ")}`,
     120,
   );
   const description = buildDescription({
@@ -400,6 +426,7 @@ function buildAdminBookingCalendarEventParts(
     bookingReference,
     companyName,
     dropoffLocation,
+    midnightRemark: midnightDisplayAdjustment?.remark || "",
     pickupLocation,
     route: safeRoute,
     travelerName,
@@ -411,7 +438,7 @@ function buildAdminBookingCalendarEventParts(
     ends_at_local: formatLocalDateTime(endsAt),
     filename,
     location,
-    starts_at_local: formatLocalDateTime(startsAt),
+    starts_at_local: formatLocalDateTime(calendarStartsAt),
     timezone: adminBookingCalendarTimezone,
     title,
   };
@@ -420,7 +447,7 @@ function buildAdminBookingCalendarEventParts(
     data: {
       calendar_event: calendarEvent,
       endsAt,
-      startsAt,
+      startsAt: calendarStartsAt,
       version: adminBookingCalendarEventVersion,
     },
     ok: true,
@@ -516,6 +543,7 @@ function buildDescription({
   bookingReference,
   companyName,
   dropoffLocation,
+  midnightRemark,
   pickupLocation,
   route,
   travelerName,
@@ -524,6 +552,7 @@ function buildDescription({
   bookingReference: string;
   companyName: string;
   dropoffLocation: string;
+  midnightRemark: string;
   pickupLocation: string;
   route: string;
   travelerName: string;
@@ -534,6 +563,7 @@ function buildDescription({
     textField(booking, "driver_contact", "driverContact"),
   ].filter(Boolean);
   const descriptionLines = [
+    midnightRemark,
     ["Booking", bookingReference],
     ["Status", textField(booking, "status")],
     ["Customer", companyName],
@@ -553,9 +583,61 @@ function buildDescription({
   ];
 
   return descriptionLines
-    .map(([label, value]) => (value ? `${label}: ${value}` : ""))
+    .map((line) => {
+      if (typeof line === "string") {
+        return line;
+      }
+
+      const [label, value] = line;
+
+      return value ? `${label}: ${value}` : "";
+    })
     .filter(Boolean)
     .join("\n");
+}
+
+function buildMidnightCalendarDisplayAdjustment(
+  actualStartsAt: CalendarDateTimeParts,
+): MidnightCalendarDisplayAdjustment | null {
+  if (!isMidnightCalendarSafetyWindow(actualStartsAt)) {
+    return null;
+  }
+
+  const calendarStartsAt = previousDayAtLocalTime(actualStartsAt, 23, 30);
+  const actualPickupText = formatActualPickupDisplay(actualStartsAt);
+
+  return {
+    calendarStartsAt,
+    remark: `MIDNIGHT JOB — actual pickup is ${actualPickupText}.`,
+  };
+}
+
+function isMidnightCalendarSafetyWindow(value: CalendarDateTimeParts) {
+  const minutesAfterMidnight = value.hour * 60 + value.minute;
+
+  return minutesAfterMidnight >= 1 && minutesAfterMidnight <= 3 * 60;
+}
+
+function previousDayAtLocalTime(
+  value: CalendarDateTimeParts,
+  hour: number,
+  minute: number,
+) {
+  const date = new Date(Date.UTC(value.year, value.month - 1, value.day) - 24 * 60 * 60 * 1000);
+
+  return {
+    day: date.getUTCDate(),
+    hour,
+    minute,
+    month: date.getUTCMonth() + 1,
+    year: date.getUTCFullYear(),
+  };
+}
+
+function formatActualPickupDisplay(value: CalendarDateTimeParts) {
+  const monthName = fullMonthNames[value.month] || pad(value.month);
+
+  return `${value.day} ${monthName} ${value.year}, ${pad(value.hour)}:${pad(value.minute)}hrs`;
 }
 
 function resolveStartDateTime(booking: Record<string, unknown>) {

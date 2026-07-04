@@ -242,6 +242,97 @@ async function main() {
       assertNoLeaks(body, "safe calendar event response must not leak unsafe fields");
     }
 
+    for (const calendarCase of [
+      {
+        actualPickupText: "5 July 2026, 00:01hrs",
+        expectedEnd: "2026-07-05T01:00:00",
+        expectedIcsStart: /DTSTART:20260704T233000/,
+        expectedStart: "2026-07-04T23:30:00",
+        midnight: true,
+        pickupAt: "2026-07-05T00:01:00+08:00",
+        pickupTime: "0001hrs",
+        reference: "PL-MIDNIGHT-0001",
+      },
+      {
+        actualPickupText: "5 July 2026, 03:00hrs",
+        expectedEnd: "2026-07-05T01:00:00",
+        expectedIcsStart: /DTSTART:20260704T233000/,
+        expectedStart: "2026-07-04T23:30:00",
+        midnight: true,
+        pickupAt: "2026-07-05T03:00:00+08:00",
+        pickupTime: "0300hrs",
+        reference: "PL-MIDNIGHT-0300",
+      },
+      {
+        expectedEnd: "2026-07-05T04:31:00",
+        expectedIcsStart: /DTSTART:20260705T030100/,
+        expectedStart: "2026-07-05T03:01:00",
+        midnight: false,
+        pickupAt: "2026-07-05T03:01:00+08:00",
+        pickupTime: "0301hrs",
+        reference: "PL-NORMAL-0301",
+      },
+      {
+        expectedEnd: "2026-07-05T01:00:00",
+        expectedIcsStart: /DTSTART:20260704T233000/,
+        expectedStart: "2026-07-04T23:30:00",
+        midnight: false,
+        pickupAt: "2026-07-04T23:30:00+08:00",
+        pickupTime: "2330hrs",
+        reference: "PL-NORMAL-2330",
+      },
+      {
+        expectedEnd: "2026-07-05T01:30:00",
+        expectedIcsStart: /DTSTART:20260705T000000/,
+        expectedStart: "2026-07-05T00:00:00",
+        midnight: false,
+        pickupAt: "2026-07-05T00:00:00+08:00",
+        pickupTime: "0000hrs",
+        reference: "PL-NORMAL-0000",
+      },
+    ]) {
+      const payload = safePayload({
+        booking_reference: calendarCase.reference,
+        date: calendarCase.pickupAt.slice(0, 10),
+        job_card: `Booking\n${calendarCase.pickupAt.slice(0, 10)}\nSafe operational text`,
+        pickup_at: calendarCase.pickupAt,
+        pickup_datetime: calendarCase.pickupAt,
+        pickup_time: calendarCase.pickupTime,
+      });
+      const originalPayload = JSON.stringify(payload);
+      const response = await harness.route.POST(requestWithJson(payload));
+      const { body, status } = await readRouteResponse(response);
+
+      assert.equal(status, 200, calendarCase.reference);
+      assert.equal(body.ok, true, calendarCase.reference);
+      assert.equal(body.calendar_event.booking_reference, calendarCase.reference);
+      assert.equal(body.calendar_event.starts_at_local, calendarCase.expectedStart);
+      assert.equal(body.calendar_event.ends_at_local, calendarCase.expectedEnd);
+      assert.match(body.ics, calendarCase.expectedIcsStart);
+      assert.equal(
+        JSON.stringify(payload),
+        originalPayload,
+        "building a calendar event must not mutate the saved booking pickup fields",
+      );
+
+      if (calendarCase.midnight) {
+        assert.match(body.calendar_event.title, /^MIDNIGHT JOB - Prestige/);
+        assert.match(
+          body.calendar_event.description,
+          new RegExp(`MIDNIGHT JOB — actual pickup is ${calendarCase.actualPickupText}\\.`),
+        );
+        assert.match(body.ics, /MIDNIGHT JOB/);
+      } else {
+        assert.doesNotMatch(body.calendar_event.title, /MIDNIGHT JOB/);
+        assert.doesNotMatch(body.calendar_event.description, /MIDNIGHT JOB/);
+      }
+
+      assertNoLeaks(
+        body,
+        `${calendarCase.reference} calendar event response must not leak unsafe fields`,
+      );
+    }
+
     {
       const response = await harness.route.POST(
         requestWithJson(

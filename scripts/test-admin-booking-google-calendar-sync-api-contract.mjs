@@ -452,6 +452,114 @@ try {
     assertNoLeaks(firstEvent, "Google Calendar event request must not include forbidden booking fields");
   }
 
+  for (const calendarCase of [
+    {
+      actualPickupText: "5 July 2026, 00:01hrs",
+      expectedEnd: "2026-07-05T01:00:00",
+      expectedStart: "2026-07-04T23:30:00",
+      midnight: true,
+      pickupAt: "2026-07-05T00:01:00+08:00",
+      pickupTime: "0001hrs",
+      reference: "PL-MIDNIGHT-0001",
+    },
+    {
+      actualPickupText: "5 July 2026, 03:00hrs",
+      expectedEnd: "2026-07-05T01:00:00",
+      expectedStart: "2026-07-04T23:30:00",
+      midnight: true,
+      pickupAt: "2026-07-05T03:00:00+08:00",
+      pickupTime: "0300hrs",
+      reference: "PL-MIDNIGHT-0300",
+    },
+    {
+      expectedEnd: "2026-07-05T04:31:00",
+      expectedStart: "2026-07-05T03:01:00",
+      midnight: false,
+      pickupAt: "2026-07-05T03:01:00+08:00",
+      pickupTime: "0301hrs",
+      reference: "PL-NORMAL-0301",
+    },
+    {
+      expectedEnd: "2026-07-05T01:00:00",
+      expectedStart: "2026-07-04T23:30:00",
+      midnight: false,
+      pickupAt: "2026-07-04T23:30:00+08:00",
+      pickupTime: "2330hrs",
+      reference: "PL-NORMAL-2330",
+    },
+    {
+      expectedEnd: "2026-07-05T01:30:00",
+      expectedStart: "2026-07-05T00:00:00",
+      midnight: false,
+      pickupAt: "2026-07-05T00:00:00+08:00",
+      pickupTime: "0000hrs",
+      reference: "PL-NORMAL-0000",
+    },
+  ]) {
+    setEnv(validEnv());
+    const sourceBooking = safeBooking({
+      booking_reference: calendarCase.reference,
+      date: calendarCase.pickupAt.slice(0, 10),
+      pickup_at: calendarCase.pickupAt,
+      pickup_datetime: calendarCase.pickupAt,
+      pickup_time: calendarCase.pickupTime,
+      traveler_name: `Safe ${calendarCase.reference}`,
+    });
+    const originalBooking = JSON.stringify(sourceBooking);
+    const calls = installFetchMock({ eventStatuses: [200] });
+    const response = await route.POST(
+      requestWithJson({
+        bookings: [sourceBooking],
+        date_label: "midnight-calendar-safety",
+      }),
+    );
+    const { body, status } = await readRouteResponse(response);
+
+    assert.equal(status, 200, calendarCase.reference);
+    assert.equal(body.ok, true, calendarCase.reference);
+    assert.equal(body.sync.event_count, 1, calendarCase.reference);
+    assert.equal(body.sync.events_synced, 1, calendarCase.reference);
+    assert.equal(body.sync.send_updates, "none", calendarCase.reference);
+    assert.equal(
+      JSON.stringify(sourceBooking),
+      originalBooking,
+      "Google sync must not mutate the saved booking pickup fields",
+    );
+
+    const providerCalls = calendarCalls(calls);
+    assert.equal(providerCalls.length, 1, calendarCase.reference);
+    assert.equal(providerCalls[0].method, "POST", calendarCase.reference);
+    assert.equal(providerCalls[0].searchParams.sendUpdates, "none", calendarCase.reference);
+
+    const event = parseJsonBody(providerCalls[0]);
+    assert.equal(event.start.dateTime, calendarCase.expectedStart, calendarCase.reference);
+    assert.equal(event.end.dateTime, calendarCase.expectedEnd, calendarCase.reference);
+    assert.equal(event.start.timeZone, "Asia/Singapore", calendarCase.reference);
+    assert.equal(event.end.timeZone, "Asia/Singapore", calendarCase.reference);
+    assert.equal(event.attendees, undefined, "Google sync must not add guests");
+    assert.equal(
+      event.extendedProperties.private.prestigeBookingReference,
+      calendarCase.reference,
+      calendarCase.reference,
+    );
+
+    if (calendarCase.midnight) {
+      assert.match(event.summary, /^MIDNIGHT JOB - Prestige/);
+      assert.match(
+        event.description,
+        new RegExp(`MIDNIGHT JOB — actual pickup is ${calendarCase.actualPickupText}\\.`),
+      );
+    } else {
+      assert.doesNotMatch(event.summary, /MIDNIGHT JOB/);
+      assert.doesNotMatch(event.description, /MIDNIGHT JOB/);
+    }
+
+    assertNoLeaks(
+      event,
+      `${calendarCase.reference} Google Calendar event request must not include forbidden fields`,
+    );
+  }
+
   {
     setEnv(validEnv());
     const calls = installFetchMock({ eventStatuses: [200, 409, 200] });

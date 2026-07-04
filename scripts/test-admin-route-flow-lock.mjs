@@ -119,12 +119,17 @@ assertIncludes(
 );
 assertIncludes(
   saveBookingBlock,
-  "const calendarSyncResult = adminBookingCalendarReadyForRealSync(booking)",
+  "for (const savedBooking of savedBookings)",
+  "Save Booking + CRM return-trip calendar sync loop",
+);
+assertIncludes(
+  saveBookingBlock,
+  "const calendarSyncResult = adminBookingCalendarReadyForRealSync(savedBooking.bookingValue)",
   "Save Booking + CRM Google Calendar readiness gate",
 );
 assertIncludes(
   saveBookingBlock,
-  "? await autoSyncSavedBookingGoogleCalendar(savedBooking)",
+  "? await autoSyncSavedBookingGoogleCalendar(savedBooking.record)",
   "Save Booking + CRM Google Calendar auto-sync after readiness",
 );
 assertIncludes(

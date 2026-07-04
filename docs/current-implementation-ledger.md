@@ -12,6 +12,15 @@ d0c5e211 Persist Save CRM driver assignment
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Google Calendar Midnight Display Safety
+
+- Google Calendar event payloads now apply a calendar-only safety display rule for Singapore-local pickup times from `00:01` through `03:00` inclusive: the Google event starts at `23:30` on the previous calendar day so admin sees the after-midnight job on the operational night before.
+- The Google Calendar title and description clearly mark these as midnight jobs; the description includes `MIDNIGHT JOB — actual pickup is [actual date/time].`
+- This lane does not change the saved booking pickup time, driver job link pickup time, Customer Copy, Driver Dispatch, invoice/closeout/hourly billing timing, parser behavior, payment/payout, provider sends, GPS/live-location, env, or DB schema.
+- Google Calendar event identity remains keyed by booking reference only, and provider writes continue with `sendUpdates=none` and no attendees/guest email.
+- `00:00` pickup remains unchanged because inspection found no existing calendar-side business rule that treats exactly `00:00` as a midnight pickup. `03:01` and normal `23:xx` pickups also remain at actual time.
+- Focused guard coverage lives in `scripts/test-admin-booking-calendar-event-api-contract.mjs` and `scripts/test-admin-booking-google-calendar-sync-api-contract.mjs`.
+
 ### Linked Return Trip Request Lane
 
 - Admin Dispatch now refreshes the existing active driver job link while a saved booking is loaded and merges the admin-only safe driver-link summary back into the current Dispatch view. Driver `Save & Acknowledge Job` edits for driver name, contact, plate, and vehicle can update the visible admin Driver Dispatch/Customer Copy details without exposing token data or customer/public/driver internals.

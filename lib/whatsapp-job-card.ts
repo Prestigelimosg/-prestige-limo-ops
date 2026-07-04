@@ -41,6 +41,23 @@ function compactLocation(value: string, fallback: string) {
   return compacted || fallback;
 }
 
+function privacySafeDspLocation(value: string, fallback: string) {
+  const compacted = compactLocation(value, fallback)
+    .replace(/\b(?:unit|floor|level|lvl)\s*#?\s*[a-z0-9]+(?:[-/][a-z0-9]+)?\b/gi, " ")
+    .replace(/\b(?:blk|block)\s*\d+[a-z]?\b/gi, " ")
+    .replace(/^(\d+[a-z]?(?:[-/]\d+[a-z]?)?)\s+/i, "")
+    .replace(/\s*,\s*/g, ", ")
+    .replace(/\s+/g, " ")
+    .replace(/^,+\s*/, "")
+    .trim();
+  const firstSafeSegment = compacted
+    .split(",")
+    .map((part) => clean(part))
+    .find(Boolean);
+
+  return firstSafeSegment || fallback;
+}
+
 export function normalizeWhatsAppJobCardVehicle(value: string | null | undefined) {
   const vehicle = clean(value);
 
@@ -153,6 +170,24 @@ function splitExtraStops(value: string | null | undefined) {
     .filter(Boolean);
 }
 
+function parseItineraryStopCount(value: string | null | undefined) {
+  return clean(value)
+    .split(/\s*>\s*/g)
+    .map((stop) => clean(stop))
+    .filter(Boolean)
+    .filter((stop) => /\b(?:at|by)\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)\b|\b\d{3,4}\s*hrs?\b/i.test(stop))
+    .length;
+}
+
+function isDspMultiStopItinerary(booking: WhatsAppJobCardBooking, service: string) {
+  const extraStopCount = Number(clean(booking.extraStopCount));
+
+  return service === "DSP" &&
+    Number.isFinite(extraStopCount) &&
+    extraStopCount >= 2 &&
+    parseItineraryStopCount(booking.extraStopLocation) >= 2;
+}
+
 function formatChildSeatLine(booking: WhatsAppJobCardBooking) {
   if (clean(booking.childSeatRequired).toLowerCase() !== "yes") {
     return "";
@@ -176,9 +211,19 @@ function formatPaxLine(value: string | null | undefined) {
 
 function formatRouteLine(booking: WhatsAppJobCardBooking, service: string) {
   const flight = stripPriceFragments(clean(booking.flight));
-  const pickup = compactLocation(clean(booking.pickup), "Pickup");
-  const dropoff = compactLocation(clean(booking.dropoff), service === "DEP" ? "Changi Airport" : "Drop-off");
-  const extraStops = splitExtraStops(booking.extraStopLocation);
+  const formatLocation = service === "DSP" ? privacySafeDspLocation : compactLocation;
+  const pickup = formatLocation(clean(booking.pickup), "Pickup");
+  const dropoff = formatLocation(clean(booking.dropoff), service === "DEP" ? "Changi Airport" : "Drop-off");
+  const extraStops = service === "DSP"
+    ? clean(booking.extraStopLocation)
+      .split(/\s*>\s*/g)
+      .map((stop) => privacySafeDspLocation(stop, ""))
+      .filter(Boolean)
+    : splitExtraStops(booking.extraStopLocation);
+
+  if (isDspMultiStopItinerary(booking, service)) {
+    return [pickup, "Multi-stop itinerary hidden for privacy", dropoff].filter(Boolean).join(" > ");
+  }
 
   if (service === "DEP") {
     return [pickup, ...extraStops, flight || dropoff || "Changi Airport"].filter(Boolean).join(" > ");

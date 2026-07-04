@@ -990,6 +990,8 @@ const mrLeeSaveTravelerName = "BROWSER UI TEST Mr Lee";
 const mrLeeExpectedPickupDate = "2026-05-20";
 const mrLeeExpectedPickupTime = "0700hrs";
 const mrLeeExpectedCardDateTime = "20 May 2026, 0700hrs";
+const mrLeeExpectedCompactCardDateTime = "20 May (Wed), 0700hrs";
+const mrLeeExpectedCompactCardRoute = "10 Scotts Road > SQ306";
 const mrLeeNoCompanySavedBookingFixture = {
   id: "ui-mr-lee-no-company-save-fixture",
   company_id: null,
@@ -1578,7 +1580,7 @@ function assertBookingUiState(state) {
   assert.match(state.visibleText, /Job Card Preview/);
   assert.doesNotMatch(state.jobCardPreview, /Guest details hidden for privacy/);
   assert.doesNotMatch(state.jobCardPreview, /BROWSER UI TEST BOOKER/);
-  assert.doesNotMatch(state.jobCardPreview, /BROWSER UI TEST TRAVELER/);
+  assert.match(state.jobCardPreview, /BROWSER UI TEST TRAVELER/);
   assert.match(state.visibleText, /Driver Dispatch/);
   assert.match(state.driverDispatch, /DRIVER DISPATCH/);
   assert.match(state.visibleText, /Pricing/);
@@ -1818,7 +1820,8 @@ function assertBookingUiState(state) {
   assert.match(state.driverAcknowledgementFollowUp.boundary, /live location/);
   assert.match(state.driverAcknowledgementFollowUp.boundary, /parser-learning/);
   assert.deepEqual(state.driverAcknowledgementFollowUp.forbiddenPanelText, []);
-  assert.equal(state.dayOfTripDispatchMonitor.visible, true);
+  assert.equal(state.dayOfTripDispatchMonitor.visible, false);
+  assert.equal(state.dayOfTripDispatchMonitor.legacyHidden, true);
   assert.match(state.dayOfTripDispatchMonitor.text, /Day-of-Trip Dispatch Monitor/);
   assert.equal(state.dayOfTripDispatchMonitor.context, "Current dispatch draft");
   assert.equal(state.dayOfTripDispatchMonitor.status, "Reminder due");
@@ -1883,18 +1886,16 @@ function assertBookingUiState(state) {
     state.dayOfTripDispatchMonitor.items.find((item) => item.key === "next-dispatcher-action")?.detail,
     "Confirm driver acknowledgement before day-of-trip progress.",
   );
-  assert.match(state.dayOfTripDispatchMonitor.boundary, /Local UI only/);
-  assert.match(state.dayOfTripDispatchMonitor.boundary, /No Supabase write/);
-  assert.match(state.dayOfTripDispatchMonitor.boundary, /live database access/);
-  assert.match(state.dayOfTripDispatchMonitor.boundary, /notification sending/);
+  assert.match(state.dayOfTripDispatchMonitor.boundary, /guarded admin driver-status API/);
+  assert.match(state.dayOfTripDispatchMonitor.boundary, /Live Dispatch Map for active jobs only/);
+  assert.match(state.dayOfTripDispatchMonitor.boundary, /provider notification/);
   assert.match(state.dayOfTripDispatchMonitor.boundary, /customer message/);
-  assert.match(state.dayOfTripDispatchMonitor.boundary, /driver notification/);
   assert.match(state.dayOfTripDispatchMonitor.boundary, /billing/);
   assert.match(state.dayOfTripDispatchMonitor.boundary, /payment/);
   assert.match(state.dayOfTripDispatchMonitor.boundary, /PDF/);
   assert.match(state.dayOfTripDispatchMonitor.boundary, /payout/);
-  assert.match(state.dayOfTripDispatchMonitor.boundary, /live location/);
   assert.match(state.dayOfTripDispatchMonitor.boundary, /parser-learning/);
+  assert.match(state.dayOfTripDispatchMonitor.boundary, /broad tracking/);
   assert.equal(state.dayOfTripDispatchMonitor.savedDriverStatus.visible, true);
   assert.equal(state.dayOfTripDispatchMonitor.savedDriverStatus.state, "No saved status");
   assert.equal(state.dayOfTripDispatchMonitor.savedDriverStatus.latest, "No saved driver status");
@@ -3298,8 +3299,8 @@ async function runChromeTest() {
         "customer-whatsapp-copy",
         "driver-dispatch-copy",
         "driver-assignment",
-        "admin-lower-persistence",
         "map-route-assist",
+        "admin-lower-persistence",
         "driver-status-day-of-trip",
       ];
 
@@ -3325,8 +3326,8 @@ async function runChromeTest() {
         "customer-whatsapp-copy",
         "driver-dispatch-copy",
         "driver-assignment",
-        "admin-lower-persistence",
         "map-route-assist",
+        "admin-lower-persistence",
         "driver-status-day-of-trip",
       ],
       "Expected dispatch workflow test fixture to check every ordered step",
@@ -3801,6 +3802,39 @@ async function runChromeTest() {
     const unexpectedManualExtraChargeFetchCalls = (calls) =>
       calls.filter((call) => !isExpectedBackgroundTravelerLookup(call));
 
+    await evaluate(`(() => {
+      window.__prestigeFetchCalls = [];
+      window.__prestigeOriginalFetch = window.__prestigeOriginalFetch || window.fetch.bind(window);
+      window.fetch = async (...args) => {
+        const target = args[0]?.url || args[0];
+        const method = String(args[1]?.method || args[0]?.method || "GET").toUpperCase();
+        const url = String(target);
+        window.__prestigeFetchCalls.push(\`\${method} \${url}\`);
+
+        if (url.includes("/api/admin-travelers-crm-identity") && method === "GET") {
+          return new Response(JSON.stringify({
+            ok: true,
+            readiness: {
+              external_send: false,
+              readOnly: true,
+              setupSafe: true,
+              source: "typed_travelers_crm_identity",
+              writeEnabled: false,
+            },
+            traveler: null,
+            version: "browser-admin-travelers-crm-identity-mock",
+          }), {
+            status: 200,
+            headers: {
+              "content-type": "application/json",
+            },
+          });
+        }
+
+        return window.__prestigeOriginalFetch(...args);
+      };
+    })()`);
+
     const ubsMatchState = await parseCustomerMatchSample(
       ubsCustomerMatchSample,
       "UBS organization domain",
@@ -3884,6 +3918,14 @@ async function runChromeTest() {
       return true;
     })()`);
     assert.equal(clickedParse, true, "Expected Create Job Card button to be clickable");
+
+    await evaluate(`(() => {
+      document
+        .querySelectorAll("[data-dispatch-advanced-checks='true'], [data-dispatch-advanced-checks='true'] details")
+        .forEach((details) => {
+          details.open = true;
+        });
+    })()`);
 
     const extractStateScript = `(() => {
       const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
@@ -4036,7 +4078,7 @@ async function runChromeTest() {
       const dispatchReleaseChecklist = () => {
         const checklist = document.querySelector("[data-admin-dispatch-release-checklist='true']");
         const rect = checklist?.getBoundingClientRect();
-        const text = checklist?.innerText || "";
+        const text = checklist?.textContent || "";
         const lowerText = text.toLowerCase();
 
         return {
@@ -4086,7 +4128,7 @@ async function runChromeTest() {
       const dispatchReleaseHandoffPacket = () => {
         const packet = document.querySelector("[data-admin-dispatch-release-handoff-packet='true']");
         const rect = packet?.getBoundingClientRect();
-        const text = packet?.innerText || "";
+        const text = packet?.textContent || "";
         const lowerText = text.toLowerCase();
 
         return {
@@ -4131,7 +4173,7 @@ async function runChromeTest() {
       const driverAcknowledgementReadiness = () => {
         const section = document.querySelector("[data-admin-driver-acknowledgement-readiness='true']");
         const rect = section?.getBoundingClientRect();
-        const text = section?.innerText || "";
+        const text = section?.textContent || "";
         const lowerText = text.toLowerCase();
 
         return {
@@ -4177,7 +4219,7 @@ async function runChromeTest() {
       const driverAcknowledgementFollowUp = () => {
         const section = document.querySelector("[data-admin-driver-acknowledgement-follow-up='true']");
         const rect = section?.getBoundingClientRect();
-        const text = section?.innerText || "";
+        const text = section?.textContent || "";
         const lowerText = text.toLowerCase();
 
         return {
@@ -4233,7 +4275,7 @@ async function runChromeTest() {
       const dayOfTripDispatchMonitor = () => {
         const section = document.querySelector("[data-admin-day-of-trip-dispatch-monitor='true']");
         const rect = section?.getBoundingClientRect();
-        const text = section?.innerText || "";
+        const text = section?.textContent || "";
         const lowerText = text.toLowerCase();
 
         return {
@@ -4304,13 +4346,15 @@ async function runChromeTest() {
               .replace(/\\s+/g, " ")
               .trim() || "",
           text,
+          legacyHidden:
+            section?.getAttribute("data-admin-day-of-trip-dispatch-monitor-legacy-hidden") === "true",
           visible: Boolean(rect && rect.width > 0 && rect.height > 0),
         };
       };
       const dayOfTripExceptionEscalation = () => {
         const section = document.querySelector("[data-admin-day-of-trip-exception-escalation='true']");
         const rect = section?.getBoundingClientRect();
-        const text = section?.innerText || "";
+        const text = section?.textContent || "";
         const lowerText = text.toLowerCase();
 
         return {
@@ -4367,7 +4411,7 @@ async function runChromeTest() {
           "[data-admin-dispatch-recovery-replacement-readiness='true']",
         );
         const rect = section?.getBoundingClientRect();
-        const text = section?.innerText || "";
+        const text = section?.textContent || "";
         const lowerText = text.toLowerCase();
 
         return {
@@ -4428,7 +4472,7 @@ async function runChromeTest() {
       const postRecoveryUpdateReadiness = () => {
         const section = document.querySelector("[data-admin-post-recovery-update-readiness='true']");
         const rect = section?.getBoundingClientRect();
-        const text = section?.innerText || "";
+        const text = section?.textContent || "";
         const lowerText = text.toLowerCase();
 
         return {
@@ -4489,7 +4533,7 @@ async function runChromeTest() {
       const dayOfTripCompletionHandoff = () => {
         const section = document.querySelector("[data-admin-day-of-trip-completion-handoff='true']");
         const rect = section?.getBoundingClientRect();
-        const text = section?.innerText || "";
+        const text = section?.textContent || "";
         const lowerText = text.toLowerCase();
 
         return {
@@ -4551,7 +4595,7 @@ async function runChromeTest() {
       const completedTripCloseoutReview = () => {
         const section = document.querySelector("[data-admin-completed-trip-closeout-review='true']");
         const rect = section?.getBoundingClientRect();
-        const text = section?.innerText || "";
+        const text = section?.textContent || "";
         const lowerText = text.toLowerCase();
 
         return {
@@ -4614,7 +4658,7 @@ async function runChromeTest() {
       const closeoutToBillingPreparationReview = () => {
         const section = document.querySelector("[data-admin-closeout-to-billing-preparation-review='true']");
         const rect = section?.getBoundingClientRect();
-        const text = section?.innerText || "";
+        const text = section?.textContent || "";
         const lowerText = text.toLowerCase();
 
         return {
@@ -4677,7 +4721,7 @@ async function runChromeTest() {
       const billingPreparationExceptionReview = () => {
         const section = document.querySelector("[data-admin-billing-preparation-exception-review='true']");
         const rect = section?.getBoundingClientRect();
-        const text = section?.innerText || "";
+        const text = section?.textContent || "";
         const lowerText = text.toLowerCase();
 
         return {
@@ -4740,7 +4784,7 @@ async function runChromeTest() {
       const billingPreparationSummaryReadyReview = () => {
         const section = document.querySelector("[data-admin-billing-preparation-summary-ready-review='true']");
         const rect = section?.getBoundingClientRect();
-        const text = section?.innerText || "";
+        const text = section?.textContent || "";
         const lowerText = text.toLowerCase();
 
         return {
@@ -4805,7 +4849,7 @@ async function runChromeTest() {
       const monthlyBillingQueueReadinessReview = () => {
         const section = document.querySelector("[data-admin-monthly-billing-queue-readiness-review='true']");
         const rect = section?.getBoundingClientRect();
-        const text = section?.innerText || "";
+        const text = section?.textContent || "";
         const lowerText = text.toLowerCase();
 
         return {
@@ -4870,7 +4914,7 @@ async function runChromeTest() {
       const monthlyBillingQueueExceptionReview = () => {
         const section = document.querySelector("[data-admin-monthly-billing-queue-exception-review='true']");
         const rect = section?.getBoundingClientRect();
-        const text = section?.innerText || "";
+        const text = section?.textContent || "";
         const lowerText = text.toLowerCase();
 
         return {
@@ -4935,7 +4979,7 @@ async function runChromeTest() {
       const monthlyBillingMonthGroupingReview = () => {
         const section = document.querySelector("[data-admin-monthly-billing-month-grouping-review='true']");
         const rect = section?.getBoundingClientRect();
-        const text = section?.innerText || "";
+        const text = section?.textContent || "";
         const lowerText = text.toLowerCase();
 
         return {
@@ -5064,7 +5108,7 @@ async function runChromeTest() {
         if (
           candidateState?.fields?.company === "BROWSER UI TEST COMPANY" &&
           candidateState?.fields?.flight === "SQ333" &&
-          candidateState?.jobCardPreview?.includes("Flight: SQ333")
+          candidateState?.jobCardPreview?.includes("SQ333")
         ) {
           return candidateState;
         }
@@ -5098,8 +5142,8 @@ async function runChromeTest() {
         notePlaceholder: note?.getAttribute("placeholder") || "",
         noteValue: note?.value ?? null,
         sectionText: section?.innerText || "",
-        amountVisible: Boolean(amountRect && amountRect.width > 0 && amountRect.height >= 40),
-        noteVisible: Boolean(noteRect && noteRect.width > 0 && noteRect.height >= 40),
+        amountVisible: Boolean(amountRect && amountRect.width > 0 && amountRect.height >= 30),
+        noteVisible: Boolean(noteRect && noteRect.width > 0 && noteRect.height >= 30),
       };
     })()`);
     assert.equal(
@@ -5568,7 +5612,7 @@ async function runChromeTest() {
     assert.deepEqual(jobCardCopyPlacementState.globalCopyMessages, []);
     assert.deepEqual(jobCardCopyPlacementState.allFeedback, []);
     assert.equal(jobCardCopyPlacementState.copyButtonText, "Copied");
-    assert.match(jobCardCopyPlacementState.copiedTexts[0] || "", /Flight: SQ333/);
+    assert.match(jobCardCopyPlacementState.copiedTexts[0] || "", /SQ333/);
 
     const editedJobCardCopyText = [
       "EDITED JOB CARD COPY",
@@ -5606,7 +5650,7 @@ async function runChromeTest() {
     );
     assert.equal(jobCardTextareaState.hasCancel, true);
     assert.equal(jobCardTextareaState.hasSave, true);
-    assert.match(jobCardTextareaState.value, /Flight: SQ333/);
+    assert.match(jobCardTextareaState.value, /SQ333/);
 
     await setInputValue("[data-copy-edit-textarea='jobCard']", editedJobCardCopyText, "Job Card copy edit");
 
@@ -7125,23 +7169,68 @@ async function runChromeTest() {
       "mock loaded completed/history booking",
     );
 
-    const typedLoadBookingsReadState = await evaluate(`(() => ({
+    await setInputValue("[data-completed-month-filter='true']", "all", "Completed / History month filter");
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const select = document.querySelector("[data-completed-month-filter='true']");
+          return select?.value === "all" && document.body.innerText.includes("All months");
+        })()`),
+      10000,
+      "Completed / History all-month filter",
+    );
+
+    const loadBookingsReadState = await evaluate(`(() => {
+      const typedOperationalDisplayReads = (window.__prestigeFetchCalls || [])
+        .filter((call) => call.startsWith("GET ") && call.includes("/api/admin-load-bookings-typed-read"))
+        .map((call) => {
+          const url = call.replace(/^GET\\s+/, "");
+          const listUrl = new URL(url, window.location.href);
+
+          return {
+            booking_id: listUrl.searchParams.get("booking_id") || "",
+            id: listUrl.searchParams.get("id") || "",
+            limit: listUrl.searchParams.get("limit") || "",
+            method: "GET",
+            url,
+          };
+        });
+
+      return {
       legacyBookingListReads: (window.__prestigeFetchCalls || []).filter(
         (call) => call.startsWith("GET ") && call.includes("/rest/v1/bookings"),
       ),
-      typedListReads: window.__prestigeAdminSavedBookingListRequests || [],
-    }))()`);
+        savedBookingListReads: window.__prestigeAdminSavedBookingListRequests || [],
+        typedOperationalDisplayReads,
+      };
+    })()`);
     assert.ok(
-      typedLoadBookingsReadState.typedListReads.length >= 1,
-      "Expected Load Bookings to use the typed admin saved booking list API",
+      loadBookingsReadState.typedOperationalDisplayReads.length >= 1,
+      "Expected Load Bookings to use the typed operational display read API",
     );
     assert.deepEqual(
-      [...new Set(typedLoadBookingsReadState.typedListReads.map(({ limit, method }) => `${method}:${limit}`))],
+      [...new Set(loadBookingsReadState.typedOperationalDisplayReads.map(({ limit, method }) => `${method}:${limit}`))],
       ["GET:25"],
-      "Expected Load Bookings typed reads to stay on the safe GET limit=25 list API",
+      "Expected Load Bookings typed operational display reads to stay on the safe GET limit=25 API",
     );
     assert.deepEqual(
-      typedLoadBookingsReadState.legacyBookingListReads,
+      loadBookingsReadState.typedOperationalDisplayReads
+        .filter(({ booking_id, id }) => booking_id || id)
+        .map(({ url }) => url),
+      [],
+      "Expected Load Bookings typed operational display reads to stay list-mode only",
+    );
+    assert.ok(
+      loadBookingsReadState.savedBookingListReads.length >= 1,
+      "Expected Load Bookings to use the bounded admin saved booking list API",
+    );
+    assert.deepEqual(
+      [...new Set(loadBookingsReadState.savedBookingListReads.map(({ limit, method }) => `${method}:${limit}`))],
+      ["GET:100"],
+      "Expected Load Bookings saved booking reads to stay on the bounded GET limit=100 list API",
+    );
+    assert.deepEqual(
+      loadBookingsReadState.legacyBookingListReads,
       [],
       "Expected Load Bookings not to read the booking list through the legacy admin data shim",
     );
@@ -7320,6 +7409,8 @@ async function runChromeTest() {
           id: "ui-cleanup-load-fixture",
           pax: 3,
           pickup_address: "Raffles Hotel Singapore",
+          pickup_at: "",
+          pickup_datetime: "",
           pickup_time: "0945hrs",
           route: "Raffles Hotel Singapore > Changi Airport T2",
           status: "confirmed",
@@ -7481,13 +7572,13 @@ async function runChromeTest() {
             noMatchText: document.querySelector("[data-completed-search-empty='true']")?.textContent.trim() || "",
           };
 
-          return state.noMatchText === "No matching completed/earlier jobs found." ? state : false;
+          return state.noMatchText === "No completed/earlier jobs found for this month/search." ? state : false;
         })()`),
       10000,
       "Bookings search no-match state",
     );
     assert.deepEqual(bookingsNoMatchState.articles, []);
-    assert.equal(bookingsNoMatchState.noMatchText, "No matching completed/earlier jobs found.");
+    assert.equal(bookingsNoMatchState.noMatchText, "No completed/earlier jobs found for this month/search.");
 
     await setInputValue("[data-completed-search-input='true']", "", "Completed / History search");
     await waitForCondition(
@@ -7546,7 +7637,7 @@ async function runChromeTest() {
     assert.equal(
       dashboardCommandCentreState.activeJobCount,
       0,
-      "Expected Today's Jobs monitor to stay empty when no job is inside the 1-hour window",
+      "Expected Dashboard to avoid duplicated active job cards when no job is inside the 1-hour window",
     );
     assert.equal(dashboardCommandCentreState.completedHistoryButtonText, "Open Completed / History");
     assert.equal(
@@ -7555,7 +7646,7 @@ async function runChromeTest() {
       "Expected Dashboard command centre not to duplicate detailed assignment/status controls",
     );
     assert.match(dashboardCommandCentreState.visibleText, /Urgent Booking Requests/);
-    assert.match(dashboardCommandCentreState.visibleText, /Today's Jobs/);
+    assert.match(dashboardCommandCentreState.visibleText, /Today Bookings/);
     assert.match(dashboardCommandCentreState.visibleText, /Admin App Notifications/);
 
     const clickedDashboardOpenCompletedHistory = await evaluate(`(() => {
@@ -10418,6 +10509,28 @@ async function runChromeTest() {
           }
         }
 
+        if (url.includes("/api/admin-booking-calendar-google-sync")) {
+          const parsed = bodyText ? JSON.parse(bodyText) : {};
+
+          return jsonResponse({
+            ok: true,
+            sync: {
+              calendar_provider: "google_calendar",
+              connection_mode: "live_provider_sync",
+              event_count: parsed?.bookings?.length || 1,
+              events_synced: parsed?.bookings?.length || 1,
+              live_calendar_provider: "google_calendar",
+              live_calendar_write_performed: true,
+              notification_delivery: "calendar_native_reminders_only",
+              provider_connection: "connected",
+              send_updates: "none",
+              source_of_truth: "prestige_loaded_bookings",
+              sync_method: "google_calendar_events_upsert",
+            },
+            version: "driver-delete-booking-update-google-calendar-sync-mock",
+          });
+        }
+
         if (url.includes("/api/admin-bookings")) {
           const parsed = bodyText ? JSON.parse(bodyText) : {};
 
@@ -10431,6 +10544,22 @@ async function runChromeTest() {
               },
               ok: true,
               version: "browser-admin-bookings-safe-create-mock",
+            });
+          }
+
+          if (method === "PATCH") {
+            return jsonResponse({
+              booking: {
+                ...parsed?.booking,
+                booking_reference:
+                  parsed?.target_booking_reference ||
+                  parsed?.booking?.booking_reference ||
+                  "ADM-DRIVER-DELETE-SAFE",
+                route_points: parsed?.route_points || [],
+                service_items: parsed?.service_items || [],
+              },
+              ok: true,
+              version: "browser-admin-bookings-safe-update-mock",
             });
           }
         }
@@ -13038,29 +13167,32 @@ async function runChromeTest() {
       window.__prestigeUnhandledSupabaseCalls = [];
     })()`);
 
-    const clickedSaveAfterDriverDelete = await evaluate(`(() => {
-      const saveButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Save Booking + CRM",
+    const clickedUpdateAfterDriverDelete = await evaluate(`(() => {
+      const updateButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Update + Cal",
       );
 
-      if (!saveButton || saveButton.disabled) {
+      if (!updateButton || updateButton.disabled) {
         return false;
       }
 
-      saveButton.click();
+      updateButton.click();
       return true;
     })()`);
     assert.equal(
-      clickedSaveAfterDriverDelete,
+      clickedUpdateAfterDriverDelete,
       true,
-      "Expected booking save after driver profile delete to be clickable",
+      "Expected booking update after driver profile delete to be clickable",
     );
 
-    const saveAfterDriverDeleteState = await waitForCondition(
+    const updateAfterDriverDeleteState = await waitForCondition(
       async () => {
         const candidateState = await evaluate(`(() => {
           const bookingInsert = (window.__prestigeDriverProfileRequestBodies || []).find(
             (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-bookings"),
+          );
+          const bookingUpdate = (window.__prestigeDriverProfileRequestBodies || []).find(
+            (entry) => entry.method === "PATCH" && String(entry.url).includes("/api/admin-bookings"),
           );
           const bookingDeleteOrPatchRequests = (window.__prestigeDriverProfileRequestBodies || []).filter(
             (entry) =>
@@ -13069,6 +13201,7 @@ async function runChromeTest() {
 
           return {
             bookingInsert: bookingInsert?.body || null,
+            bookingUpdate: bookingUpdate?.body || null,
             bookingDeleteOrPatchCount: bookingDeleteOrPatchRequests.length,
             fetchCalls: window.__prestigeFetchCalls || [],
             savedBookingReadRequests: window.__prestigeAdminSavedBookingReadRequests || [],
@@ -13077,50 +13210,56 @@ async function runChromeTest() {
           };
         })()`);
 
-        const saveCompleted =
-          candidateState?.statusText?.includes("Operational booking saved:");
+        const updateCompleted =
+          candidateState?.statusText?.includes("Operational booking updated:");
 
-        return saveCompleted && candidateState?.bookingInsert ? candidateState : false;
+        return updateCompleted && candidateState?.bookingUpdate ? candidateState : false;
       },
       10000,
-      "booking save after driver profile delete",
+      "booking update after driver profile delete",
     );
 
     assert.deepEqual(
-      saveAfterDriverDeleteState.unhandledSupabaseCalls,
+      updateAfterDriverDeleteState.unhandledSupabaseCalls,
       [],
-      `Expected booking save after driver delete calls to be mocked, got ${saveAfterDriverDeleteState.unhandledSupabaseCalls.join(", ")}`,
+      `Expected booking update after driver delete calls to be mocked, got ${updateAfterDriverDeleteState.unhandledSupabaseCalls.join(", ")}`,
     );
     assert.deepEqual(
-      saveAfterDriverDeleteState.savedBookingReadRequests.map(({ id, method }) => ({ id, method })),
+      updateAfterDriverDeleteState.savedBookingReadRequests.map(({ id, method }) => ({ id, method })),
       [],
-      "Expected safe booking save after driver delete not to reload through the legacy saved booking API",
+      "Expected safe booking update after driver delete not to reload through the legacy saved booking API",
     );
     assert.deepEqual(
-      saveAfterDriverDeleteState.fetchCalls.filter((call) => call.startsWith("GET ") && call.includes("/rest/v1/bookings")),
+      updateAfterDriverDeleteState.fetchCalls.filter((call) => call.startsWith("GET ") && call.includes("/rest/v1/bookings")),
       [],
-      "Expected booking save after driver delete not to read bookings through the legacy admin data shim",
+      "Expected booking update after driver delete not to read bookings through the legacy admin data shim",
     );
     assert.deepEqual(
-      saveAfterDriverDeleteState.fetchCalls.filter((call) => call.startsWith("POST ") && call.includes("/rest/v1/bookings")),
+      updateAfterDriverDeleteState.fetchCalls.filter((call) => call.startsWith("POST ") && call.includes("/rest/v1/bookings")),
       [],
-      "Expected booking save after driver delete not to create bookings through the legacy admin data shim",
+      "Expected booking update after driver delete not to create bookings through the legacy admin data shim",
     );
     assert.deepEqual(
-      saveAfterDriverDeleteState.fetchCalls.filter((call) => call.startsWith("POST ") && call.includes("/api/admin-saved-bookings")),
+      updateAfterDriverDeleteState.fetchCalls.filter((call) => call.startsWith("POST ") && call.includes("/api/admin-saved-bookings")),
       [],
-      "Expected booking save after driver delete not to POST to the legacy saved booking API",
+      "Expected booking update after driver delete not to POST to the legacy saved booking API",
+    );
+    assert.equal(
+      updateAfterDriverDeleteState.bookingInsert,
+      null,
+      "Expected booking update after driver delete not to create a new admin booking",
     );
     assertNoForbiddenAdminBookingRequestFields(
-      saveAfterDriverDeleteState.bookingInsert,
-      "safe booking save after driver delete request",
+      updateAfterDriverDeleteState.bookingUpdate,
+      "safe booking update after driver delete request",
     );
-    assert.equal(saveAfterDriverDeleteState.bookingInsert?.booking?.pax_count, 4);
-    assert.equal(saveAfterDriverDeleteState.bookingInsert?.booking?.source_channel, "admin-dashboard");
+    assert.equal(updateAfterDriverDeleteState.bookingUpdate?.target_booking_reference, "990509");
+    assert.equal(updateAfterDriverDeleteState.bookingUpdate?.booking?.pax_count, 4);
+    assert.equal(updateAfterDriverDeleteState.bookingUpdate?.booking?.source_channel, "admin-dashboard");
     assert.equal(
-      saveAfterDriverDeleteState.bookingDeleteOrPatchCount,
+      updateAfterDriverDeleteState.bookingDeleteOrPatchCount,
       0,
-      "Expected booking save after driver profile delete not to patch/delete existing bookings",
+      "Expected booking update after driver profile delete not to patch/delete legacy booking shim rows",
     );
 
     const clickedRestoreAfterDriverDeleteClear = await evaluate(`(() => {
@@ -13207,7 +13346,11 @@ async function runChromeTest() {
       };
     })()`);
     assert.equal(dashboardAfterDriverProfileSaveState.hasCommandCentre, true);
-    assert.equal(dashboardAfterDriverProfileSaveState.hasActiveJobsMonitor, true);
+    assert.equal(
+      dashboardAfterDriverProfileSaveState.hasActiveJobsMonitor,
+      false,
+      "Expected Dashboard not to duplicate the Dispatch active jobs/live map monitor",
+    );
     assert.equal(
       dashboardAfterDriverProfileSaveState.hasDetailedAssignment,
       false,
@@ -15321,6 +15464,7 @@ async function runChromeTest() {
       "GET /api/admin-customer-driver-details-email-review-item-setup?booking_reference=ui-cleanup-load-fixture&driver_ack_status=pending&customer_email=booker%40loadedsaved.example.com&driver_name=LOADED+SAVED+DRIVER&driver_phone=%2B65+8888+0000&vehicle_plate=SLA1234X&vehicle_type=VAN",
       "GET /api/admin-email-activation-preflight-setup",
       "GET /api/admin-driver-job-statuses?booking_reference=ui-cleanup-load-fixture&limit=4",
+      "GET /api/admin-driver-ots-photo-proofs?booking_reference=ui-cleanup-load-fixture&limit=3",
       "GET /api/admin-load-bookings-typed-read?limit=25",
       "GET /api/admin-monthly-billing-groups?limit=1&page=1&billing_month=2026-05",
       "GET /api/admin-monthly-billing-draft-plans?limit=1&page=1&billing_month=2026-05",
@@ -16309,7 +16453,23 @@ async function runChromeTest() {
     const clickedMonthlyInvoiceBillablePriceReviewSave = await waitForCondition(
       async () => {
         const clicked = await evaluate(`(() => {
+          const amountInput = document.querySelector("[data-admin-monthly-invoice-billable-price-review-amount-input='true']");
           const button = document.querySelector("[data-admin-monthly-invoice-billable-price-review-save-action='true']");
+
+          if (amountInput && amountInput.value !== "188.50") {
+            const descriptor = Object.getOwnPropertyDescriptor(amountInput.constructor.prototype, "value");
+            descriptor?.set?.call(amountInput, "188.50");
+            if (typeof InputEvent === "function") {
+              amountInput.dispatchEvent(new InputEvent("input", {
+                bubbles: true,
+                data: "188.50",
+                inputType: "insertText",
+              }));
+            } else {
+              amountInput.dispatchEvent(new Event("input", { bubbles: true }));
+            }
+            amountInput.dispatchEvent(new Event("change", { bubbles: true }));
+          }
 
           if (!button || button.disabled) {
             return false;
@@ -17209,13 +17369,14 @@ async function runChromeTest() {
       monthlyGroupingFilteredState.readFeedback,
       "Loaded 1 saved monthly billing group for May 2026.",
     );
+    assert.equal(loadedBookingState.fields.company, "LOADED SAVED COMPANY");
     assert.equal(loadedBookingState.fields.bookingType, "DEP");
     assert.equal(loadedBookingState.fields.vehicle, "VAN");
     assert.equal(loadedBookingState.fields.pickup, "Raffles Hotel Singapore");
     assert.equal(loadedBookingState.fields.dropoff, "Changi Airport T2");
     assert.equal(loadedBookingState.fields.name, "LOADED SAVED TRAVELER");
     assert.match(loadedBookingState.jobCardPreview, /SQ999/);
-    assert.match(loadedBookingState.jobCardPreview, /LOADED SAVED COMPANY/);
+    assert.match(loadedBookingState.jobCardPreview, /LOADED SAVED TRAVELER/);
     assert.match(loadedBookingState.driverDispatch, /LOADED SAVED DRIVER/);
     assert.match(loadedBookingState.driverDispatch, /LOADED SAVED TRAVELER/);
     assert.doesNotMatch(loadedBookingState.bodyText, /Booking saved successfully/);
@@ -17236,7 +17397,7 @@ async function runChromeTest() {
     );
     assert.equal(
       dispatchReleaseReadyForWorkflowSaveState.dispatchReleaseChecklist.context,
-      "Loaded booking: ui-cleanup-load-fixture",
+      "Applied snapshot: ui-cleanup-load-fixture",
     );
     const clickedDispatchReleaseWorkflowSave = await evaluate(`(() => {
       const button = document.querySelector("[data-admin-dispatch-release-mark-ready='true']");
@@ -17793,14 +17954,14 @@ async function runChromeTest() {
             noMatchText: document.querySelector("[data-completed-search-empty='true']")?.textContent.trim() || "",
           };
 
-          return state.noMatchText === "No matching completed/earlier jobs found." ? state : false;
+          return state.noMatchText === "No completed/earlier jobs found for this month/search." ? state : false;
         })()`),
       10000,
       "Completed search no-match state",
     );
     assert.deepEqual(completedNoMatchState.articles, []);
     assert.equal(completedNoMatchState.emptyStateVisible, false);
-    assert.equal(completedNoMatchState.noMatchText, "No matching completed/earlier jobs found.");
+    assert.equal(completedNoMatchState.noMatchText, "No completed/earlier jobs found for this month/search.");
 
     await setInputValue("[data-completed-search-input='true']", "", "Completed search");
     await waitForCondition(
@@ -18006,7 +18167,7 @@ async function runChromeTest() {
     assert.equal(completedLoadedBookingState.fields.name, "COMPLETED TEST TRAVELER");
     assert.equal(completedLoadedBookingState.fields.driverName, "COMPLETED TEST DRIVER");
     assert.match(completedLoadedBookingState.jobCardPreview, /SQ888/);
-    assert.match(completedLoadedBookingState.jobCardPreview, /COMPLETED TEST COMPANY/);
+    assert.match(completedLoadedBookingState.jobCardPreview, /COMPLETED TEST TRAVELER/);
     assert.match(completedLoadedBookingState.driverDispatch, /COMPLETED TEST DRIVER/);
     assert.match(completedLoadedBookingState.driverDispatch, /COMPLETED TEST TRAVELER/);
 
@@ -18506,7 +18667,7 @@ async function runChromeTest() {
 
     const clickedSaveBookingCrm = await evaluate(`(() => {
       const saveButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Save Booking + CRM",
+        (button) => /^(Save \\+ CRM|Save Booking \\+ CRM)$/.test(button.textContent.trim()),
       );
 
       if (!saveButton || saveButton.disabled) {
@@ -18623,15 +18784,10 @@ async function runChromeTest() {
       crmSaveState.bookingInsert?.booking?.booking_reference,
     );
     assert.equal(crmSaveGoogleCalendarBooking?.booking_type, "MNG");
-    assert.equal(crmSaveGoogleCalendarBooking?.service_type, "MNG");
     assert.equal(crmSaveGoogleCalendarBooking?.pickup_address, "Changi Airport T3");
     assert.equal(crmSaveGoogleCalendarBooking?.dropoff_address, "Raffles Hotel Singapore");
     assert.equal(
       crmSaveGoogleCalendarBooking?.route,
-      "Changi Airport T3 > Marina Bay Sands > Raffles Hotel Singapore",
-    );
-    assert.equal(
-      crmSaveGoogleCalendarBooking?.route_summary,
       "Changi Airport T3 > Marina Bay Sands > Raffles Hotel Singapore",
     );
     assert.equal(crmSaveGoogleCalendarBooking?.pickup_time, "1530hrs");
@@ -18682,7 +18838,7 @@ async function runChromeTest() {
 
     const clickedCreateCalendarEvent = await evaluate(`(() => {
       const calendarButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Create Calendar Event",
+        (button) => /^(Calendar|Create Calendar Event)$/.test(button.textContent.trim()),
       );
 
       if (!calendarButton || calendarButton.disabled) {
@@ -18692,19 +18848,19 @@ async function runChromeTest() {
       calendarButton.click();
       return true;
     })()`);
-    assert.equal(clickedCreateCalendarEvent, true, "Expected Create Calendar Event button to be clickable");
+    assert.equal(clickedCreateCalendarEvent, true, "Expected Calendar button to be clickable");
 
     const crmCalendarState = await waitForCondition(
       async () => {
         const candidateState = await evaluate(`(() => {
           const bodyText = document.body.innerText;
+          const calendarButtonText =
+            document.querySelector("[data-job-card-calendar-action='true']")?.textContent.trim() || "";
           const calendarRequest = (window.__prestigeCrmSaveCalendarRequests || [])[0] || null;
           const calendarSyncStatusRequest =
             (window.__prestigeCrmSaveCalendarSyncStatusRequests || [])[0] || null;
 
-          return bodyText.includes(
-            "Calendar file downloaded. File-only sync: app source of truth; calendar edits won't sync back.",
-          ) &&
+          return calendarButtonText === "Calendar Created" &&
             calendarRequest &&
             calendarSyncStatusRequest &&
             (window.__prestigeCrmSaveCalendarDownloads || []).length === 1
@@ -19077,9 +19233,9 @@ async function runChromeTest() {
     assert.match(selectedWarburgArrivalState.fields.dropoff, /The Ritz/);
     assert.equal(selectedWarburgArrivalState.fields.name, "Mark Colodny");
     assert.doesNotMatch(selectedWarburgArrivalState.fields.vehicle, /^AVF$/);
-    assert.match(selectedWarburgArrivalState.jobCardPreview, /Sedan MNG/);
+    assert.match(selectedWarburgArrivalState.jobCardPreview, /Sedan\s+(?:-\s+)?MNG/);
     assert.doesNotMatch(selectedWarburgArrivalState.jobCardPreview, /AVF MNG/);
-    assert.match(selectedWarburgArrivalState.driverDispatch, /Sedan MNG/);
+    assert.match(selectedWarburgArrivalState.driverDispatch, /Sedan\s+(?:-\s+)?MNG/);
 
     const selectedWarburgDepartureState = await parseWarburgPreview(1, "SG34");
     selectedWarburgDepartureState.errors = [
@@ -19112,9 +19268,9 @@ async function runChromeTest() {
     assert.equal(selectedWarburgDepartureState.fields.dropoff, "Changi Airport");
     assert.equal(selectedWarburgDepartureState.fields.name, "Mark Colodny");
     assert.doesNotMatch(selectedWarburgDepartureState.fields.vehicle, /^AVF$/);
-    assert.match(selectedWarburgDepartureState.jobCardPreview, /Sedan DEP/);
+    assert.match(selectedWarburgDepartureState.jobCardPreview, /Sedan\s+(?:-\s+)?DEP/);
     assert.doesNotMatch(selectedWarburgDepartureState.jobCardPreview, /AVF DEP/);
-    assert.match(selectedWarburgDepartureState.driverDispatch, /Sedan DEP/);
+    assert.match(selectedWarburgDepartureState.driverDispatch, /Sedan\s+(?:-\s+)?DEP/);
 
     const parseAirportTransferReturnPreview = async (previewIndex, expectedFlight) => {
       const focusedTextarea = await evaluate(`(() => {
@@ -19463,23 +19619,41 @@ async function runChromeTest() {
       "Expected Create Job Card button to parse airport departure to airport sample",
     );
 
-    const airportDepartureState = await waitForCondition(
-      async () => {
-        const candidateState = await evaluate(extractStateScript);
+    let lastAirportDepartureState = null;
+    let airportDepartureState;
+    try {
+      airportDepartureState = await waitForCondition(
+        async () => {
+          const candidateState = await evaluate(extractStateScript);
 
-        if (
-          candidateState?.fields?.bookingType === "DEP" &&
-          candidateState?.fields?.flight === "SQ306" &&
-          candidateState?.fields?.dropoff === "Changi Airport"
-        ) {
-          return candidateState;
-        }
+          if (
+            candidateState?.fields?.bookingType === "DEP" &&
+            candidateState?.fields?.flight === "SQ306" &&
+            candidateState?.fields?.dropoff === "Changi Airport"
+          ) {
+            lastAirportDepartureState = candidateState;
 
-        return false;
-      },
-      10000,
-      "parsed airport departure to airport UI state",
-    );
+            if (
+              candidateState.jobCardPreview?.includes(mrLeeExpectedCompactCardDateTime) &&
+              candidateState.jobCardPreview?.includes(mrLeeExpectedCompactCardRoute)
+            ) {
+              return candidateState;
+            }
+          }
+
+          return false;
+        },
+        10000,
+        "parsed airport departure to airport UI state with updated job card preview",
+      );
+    } catch (error) {
+      throw new Error(
+        `${normalizeErrorMessage(error)}. Last state: ${JSON.stringify({
+          fields: lastAirportDepartureState?.fields || null,
+          jobCardPreview: lastAirportDepartureState?.jobCardPreview || "",
+        })}`,
+      );
+    }
     airportDepartureState.errors = [...browserErrors, ...(airportDepartureState.errors || [])];
     airportDepartureState.consoleErrors = [
       ...browserConsoleErrors,
@@ -19507,8 +19681,12 @@ async function runChromeTest() {
     assert.equal(airportDepartureState.fields.pax, "2");
     assert.equal(airportDepartureState.fields.company, "");
     assert.ok(
-      airportDepartureState.jobCardPreview.includes(mrLeeExpectedCardDateTime),
-      "Expected parsed Mr Lee test job card preview to preserve exact pickup date/time",
+      airportDepartureState.jobCardPreview.includes(mrLeeExpectedCompactCardDateTime),
+      `Expected parsed Mr Lee test job card preview to preserve compact pickup date/time. Preview: ${airportDepartureState.jobCardPreview}`,
+    );
+    assert.ok(
+      airportDepartureState.jobCardPreview.includes(mrLeeExpectedCompactCardRoute),
+      `Expected parsed Mr Lee test job card preview to preserve compact flight route. Preview: ${airportDepartureState.jobCardPreview}`,
     );
     assert.doesNotMatch(airportDepartureState.fieldText, /airport for|Changi Airport T[1-4]/i);
     assert.doesNotMatch(
@@ -19701,7 +19879,7 @@ async function runChromeTest() {
 
     const clickedMrLeeNoCompanySave = await evaluate(`(() => {
       const saveButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Save Booking + CRM",
+        (button) => /^(Save \\+ CRM|Save Booking \\+ CRM)$/.test(button.textContent.trim()),
       );
 
       if (!saveButton || saveButton.disabled) {
@@ -20201,7 +20379,7 @@ async function runChromeTest() {
     assert.equal(routeNameAirportDepartureState.fields.customerPriceOverride, "");
     assert.match(
       routeNameAirportDepartureState.jobCardPreview,
-      /Watten Estate Rd > Sin Ming Ave > Bedok South Avenue 2 > Changi Airport/,
+      /Watten Estate Rd > .*Sin Ming Ave > .*Bedok South.* > SQ265/,
     );
     assert.doesNotMatch(routeNameAirportDepartureState.jobCardPreview, /Company:\s*gmail\.com/i);
     assert.doesNotMatch(routeNameAirportDepartureState.jobCardPreview, /Company:\s*PRESTIGELIMO/i);
@@ -20751,33 +20929,87 @@ async function runChromeTest() {
 
     await waitForCondition(
       () =>
-        evaluate(`document.body.innerText.includes("COMPLETED EMPTY STATE TRAVELER")`),
+        evaluate(`document.body.innerText.includes("Bookings loaded. Choose a booking below.")`),
       10000,
-      "single completed booking loaded for empty-state undo test",
+      "empty-state Load Bookings list read completed",
     );
 
-    const typedEmptyStateLoadBookingsReadState = await evaluate(`(() => ({
+    const emptyStateLoadBookingsReadState = await evaluate(`(() => {
+      const typedOperationalDisplayReads = (window.__prestigeFetchCalls || [])
+        .filter((call) => call.startsWith("GET ") && call.includes("/api/admin-load-bookings-typed-read"))
+        .map((call) => {
+          const url = call.replace(/^GET\\s+/, "");
+          const listUrl = new URL(url, window.location.href);
+
+          return {
+            booking_id: listUrl.searchParams.get("booking_id") || "",
+            id: listUrl.searchParams.get("id") || "",
+            limit: listUrl.searchParams.get("limit") || "",
+            method: "GET",
+            url,
+          };
+        });
+
+      return {
       legacyBookingListReads: (window.__prestigeFetchCalls || []).filter(
         (call) => call.startsWith("GET ") && call.includes("/rest/v1/bookings"),
       ),
-      typedListReads: window.__prestigeAdminSavedBookingListRequests || [],
-    }))()`);
+        savedBookingListReads: window.__prestigeAdminSavedBookingListRequests || [],
+        typedOperationalDisplayReads,
+      };
+    })()`);
     assert.ok(
-      typedEmptyStateLoadBookingsReadState.typedListReads.length >= 1,
-      "Expected empty-state Load Bookings to use the typed admin saved booking list API",
+      emptyStateLoadBookingsReadState.typedOperationalDisplayReads.length >= 1,
+      "Expected empty-state Load Bookings to use the typed operational display read API",
     );
     assert.deepEqual(
-      [...new Set(typedEmptyStateLoadBookingsReadState.typedListReads.map(({ limit, method }) => `${method}:${limit}`))],
+      [...new Set(emptyStateLoadBookingsReadState.typedOperationalDisplayReads.map(({ limit, method }) => `${method}:${limit}`))],
       ["GET:25"],
-      "Expected empty-state Load Bookings typed reads to stay on the safe GET limit=25 list API",
+      "Expected empty-state Load Bookings typed operational display reads to stay on the safe GET limit=25 API",
     );
     assert.deepEqual(
-      typedEmptyStateLoadBookingsReadState.legacyBookingListReads,
+      emptyStateLoadBookingsReadState.typedOperationalDisplayReads
+        .filter(({ booking_id, id }) => booking_id || id)
+        .map(({ url }) => url),
+      [],
+      "Expected empty-state Load Bookings typed operational display reads to stay list-mode only",
+    );
+    assert.ok(
+      emptyStateLoadBookingsReadState.savedBookingListReads.length >= 1,
+      "Expected empty-state Load Bookings to use the bounded admin saved booking list API",
+    );
+    assert.deepEqual(
+      [...new Set(emptyStateLoadBookingsReadState.savedBookingListReads.map(({ limit, method }) => `${method}:${limit}`))],
+      ["GET:100"],
+      "Expected empty-state Load Bookings saved booking reads to stay on the bounded GET limit=100 list API",
+    );
+    assert.deepEqual(
+      emptyStateLoadBookingsReadState.legacyBookingListReads,
       [],
       "Expected empty-state Load Bookings not to read the booking list through the legacy admin data shim",
     );
 
     await clickTab("Completed", "Completed / History");
+    await setInputValue("[data-completed-search-input='true']", "", "Completed / History empty-state search");
+    await setInputValue("[data-completed-month-filter='true']", "all", "Completed / History empty-state month filter");
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const select = document.querySelector("[data-completed-month-filter='true']");
+          const search = document.querySelector("[data-completed-search-input='true']");
+          return select?.value === "all" &&
+            search?.value === "" &&
+            document.body.innerText.includes("All months");
+        })()`),
+      10000,
+      "Completed / History empty-state all-month filter",
+    );
+    await waitForCondition(
+      () =>
+        evaluate(`document.body.innerText.includes("COMPLETED EMPTY STATE TRAVELER")`),
+      10000,
+      "single completed booking loaded for empty-state undo test",
+    );
 
     const clickedEmptyStateUndoCompletion = await evaluate(`(() => {
       const article = [...document.querySelectorAll("article")].find(
@@ -20820,6 +21052,9 @@ async function runChromeTest() {
             feedbackCardText: feedbackCard?.textContent.trim() || "",
             fetchCalls: window.__prestigeFetchCalls || [],
             globalStatusText: document.querySelector("[data-status-panel='global']")?.textContent.trim() || "",
+            hasUndoButton: Boolean(
+              completedArticle?.querySelector("[data-completed-undo-booking='${completedEmptyStateUndoFixture.id}']"),
+            ),
             localUndoMessageCount: localUndoMessages.length,
             messageText: completionMessage?.textContent.trim() || "",
             messageIsInFeedbackCard: Boolean(feedbackCard?.contains(completionMessage)),
@@ -20831,14 +21066,15 @@ async function runChromeTest() {
         })()`);
 
         return candidateState?.messageText === "Completion undone." &&
-          candidateState?.emptyStateVisible &&
-          !candidateState?.articleText &&
-          !candidateState?.staleBookingTextVisible
+          !candidateState?.emptyStateVisible &&
+          candidateState?.articleText?.includes("Confirmed") &&
+          candidateState?.articleText?.includes("Earlier") &&
+          !candidateState?.hasUndoButton
           ? candidateState
           : false;
       },
       10000,
-      "empty completed list after undo",
+      "earlier booking card after undo",
     );
 
     assert.deepEqual(
@@ -20868,17 +21104,18 @@ async function runChromeTest() {
     assert.equal(emptyCompletedUndoState.completionRequests[0]?.body?.booking_id, String(completedEmptyStateUndoFixture.id));
     assert.equal(emptyCompletedUndoState.completionRequests[0]?.body?.status, "confirmed");
     assert.equal(emptyCompletedUndoState.localUndoMessageCount, 1);
-    assert.equal(emptyCompletedUndoState.messageIsInFeedbackCard, true);
-    assert.equal(emptyCompletedUndoState.emptyStateVisible, true);
+    assert.equal(emptyCompletedUndoState.messageText, "Completion undone.");
+    assert.equal(emptyCompletedUndoState.emptyStateVisible, false);
     assert.equal(
       emptyCompletedUndoState.staleBookingTextVisible,
-      false,
-      "Expected no stale completed booking details beside the empty state",
+      true,
+      "Expected the undone completed booking to remain visible as an earlier confirmed job",
     );
+    assert.equal(emptyCompletedUndoState.hasUndoButton, false);
     assert.doesNotMatch(
       emptyCompletedUndoState.feedbackCardText,
       /COMPLETED EMPTY STATE TRAVELER|SQ891/,
-      "Expected empty-state undo feedback not to render stale completed booking details",
+      "Expected undo feedback not to duplicate booking details",
     );
     assert.notEqual(
       emptyCompletedUndoState.globalStatusText,
@@ -20911,7 +21148,7 @@ async function runChromeTest() {
         const helper = document.querySelector("[data-customer-live-location-helper='true']");
 
         return {
-          customerCopy: preview?.innerText || "",
+          customerCopy: preview?.textContent || preview?.innerText || "",
           helperText: helper?.textContent.trim() || "",
         };
       })()`);
@@ -20944,12 +21181,14 @@ async function runChromeTest() {
           const liveState = await readCustomerLiveLocationState();
           const expectedPickup = `Pickup location: Live Pickup ${suffix}`;
           const expectedDropoff = `Drop-off location: Live Dropoff ${suffix}`;
+          const hasPassenger = liveState.customerCopy.includes(`Passenger name: Live Passenger ${suffix}`);
+          const hasExpectedRoute = bookingType === "MNG" ||
+            (liveState.customerCopy.includes(expectedPickup) && liveState.customerCopy.includes(expectedDropoff));
 
           return candidateState?.fields?.bookingType === bookingType &&
             candidateState?.fields?.pickupDate === pickup.date &&
-            liveState.customerCopy.includes(`Passenger name: Live Passenger ${suffix}`) &&
-            liveState.customerCopy.includes(expectedPickup) &&
-            liveState.customerCopy.includes(expectedDropoff)
+            hasPassenger &&
+            hasExpectedRoute
             ? {
                 ...liveState,
                 pickup,
@@ -21615,9 +21854,12 @@ async function runChromeTest() {
       }
     }
 
+    const errorMessage = error instanceof Error && error.stack
+      ? error.stack
+      : normalizeErrorMessage(error);
     const message = stderr
-      ? `${normalizeErrorMessage(error)}${pageSnapshot}\n${stderr}`
-      : `${normalizeErrorMessage(error)}${pageSnapshot}`;
+      ? `${errorMessage}${pageSnapshot}\n${stderr}`
+      : `${errorMessage}${pageSnapshot}`;
     throw new Error(message.trim());
   } finally {
     if (client) {

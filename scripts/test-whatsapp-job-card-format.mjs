@@ -157,4 +157,71 @@ assert.equal(
 );
 assertNoDriverForbiddenFragments(multiStopWithChildSeat, "multi-stop child-seat transfer");
 
+const dspMultiStopItinerary = formatWhatsAppJobCard({
+  bookingType: "DSP",
+  date: "2026-07-04",
+  dropoff: "Ritz-Carlton",
+  extraStopCount: "5",
+  extraStopLocation:
+    "Ritz-Carlton Singapore by 10am > BDC office at 12pm > Temasek Office, 60B Orchard Road, Tower 2, The Atrium@Orchard at 1:30pm > 8 Marina View, Asia Square Tower 1, #37-01, Singapore 018960 at 3:30pm > Ritz-Carlton at 6pm",
+  name: "Drew",
+  pax: "1",
+  pickup: "Grand Hyatt",
+  time: "1000hrs",
+  vehicle: "AVF",
+});
+assert.equal(
+  dspMultiStopItinerary,
+  [
+    "AVF - DSP",
+    "",
+    "4 Jul (Sat), 1000hrs",
+    "",
+    "Grand Hyatt > Multi-stop itinerary hidden for privacy > Ritz-Carlton",
+    "",
+    "Drew",
+    "",
+    "1 pax",
+  ].join("\n"),
+);
+assert.doesNotMatch(
+  dspMultiStopItinerary,
+  /Temasek Office|Asia Square|60B Orchard|#37-01|018960/,
+  "DSP multi-stop WhatsApp preview must hide detailed itinerary stops",
+);
+assertNoDriverForbiddenFragments(dspMultiStopItinerary, "DSP multi-stop itinerary");
+
+const dspPlainStops = formatWhatsAppJobCard({
+  bookingType: "DSP",
+  date: "2026-07-04",
+  dropoff: "BDC office",
+  extraStopCount: "3",
+  extraStopLocation: "One Raffles Quay, North Tower > Capital Tower",
+  name: "Drew",
+  pax: "1",
+  pickup: "1 HarbourFront Avenue, Keppel Bay Tower",
+  time: "0930hrs",
+  vehicle: "AVF",
+});
+assert.equal(
+  dspPlainStops,
+  [
+    "AVF - DSP",
+    "",
+    "4 Jul (Sat), 0930hrs",
+    "",
+    "HarbourFront Avenue > One Raffles Quay > Capital Tower > BDC office",
+    "",
+    "Drew",
+    "",
+    "1 pax",
+  ].join("\n"),
+);
+assert.doesNotMatch(
+  dspPlainStops,
+  /1 HarbourFront|Keppel Bay Tower|North Tower|#02-01|#39-01/,
+  "DSP plain-stop WhatsApp preview must compact detailed place fragments",
+);
+assertNoDriverForbiddenFragments(dspPlainStops, "DSP plain stops");
+
 console.log("WhatsApp job card format guard passed.");

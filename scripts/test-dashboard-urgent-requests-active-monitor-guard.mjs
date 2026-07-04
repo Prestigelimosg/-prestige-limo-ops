@@ -100,6 +100,16 @@ for (const fragment of [
 }
 
 for (const fragment of [
+  "function getLoadBookingsOperationalPassengerDisplay(",
+  "clean(card.traveler_display_name) ||",
+  '"Passenger not set"',
+  "function getLoadBookingsOperationalRequestDisplayTitle(",
+  "getLoadBookingsOperationalDisplayTitle(card)",
+]) {
+  assertIncludes(appPage, fragment, `booking request passenger display helper fragment ${fragment}`);
+}
+
+for (const fragment of [
   "const dashboardCustomerBookingRequestBookings = useMemo(",
   "bookingRecordIsInsideActiveJobMonitorWindow(bookingRecord, currentTimeMs)",
   "const bookingTabCustomerBookingRequestBookings = useMemo(",
@@ -131,6 +141,8 @@ for (const fragment of [
   "Requests outside the 1-hour dispatch window stay here until admin loads them.",
   'data-new-customer-booking-requests-urgent-count={String(urgentCustomerBookingRequestCount)}',
   'data-new-customer-booking-request-urgency={isUrgentRequest ? "urgent" : "new"}',
+  "const passengerText = getLoadBookingsOperationalPassengerDisplay(operationalCard, requestBooking);",
+  "{getLoadBookingsOperationalRequestDisplayTitle(operationalCard, requestBooking)}",
   "Passenger: {passengerText}",
   "Urgent >1h",
   "New",
@@ -157,7 +169,9 @@ for (const fragment of [
   '"customer-request"',
   '"driver-tbc"',
   'data-dashboard-urgent-booking-request-row={bookingId}',
-  "Passenger:{\" \"}",
+  "const passengerText = getLoadBookingsOperationalPassengerDisplay(operationalCard, bookingRecord);",
+  "{getLoadBookingsOperationalRequestDisplayTitle(operationalCard, bookingRecord)}",
+  "Passenger: {passengerText}",
   "Needs driver link |",
   "loadSelectedBooking(bookingRecord, { focusDriverJobLink: true })",
   "No urgent booking requests or Driver TBC jobs inside the dispatch window.",
@@ -214,8 +228,17 @@ for (const forbidden of [
   "loadSelectedBooking(bookingRecord);",
   "onClick={() => loadSelectedBooking(requestBooking, { focusCustomerCopy: true })}",
   "[...urgentCustomerBookingRequestBookings, ...urgentUnassignedSavedBookingRequests].sort(",
+  "operationalCard.traveler_display_name ||\n            operationalCard.customer_display_name",
+  "operationalCard.traveler_display_name ||\n                          operationalCard.customer_display_name",
 ]) {
   assertExcludes(dashboardUrgentPanel, forbidden, `dashboard urgent-only boundary ${forbidden}`);
+}
+
+for (const forbidden of [
+  "operationalCard.traveler_display_name ||\n            operationalCard.customer_display_name",
+  "operationalCard.traveler_display_name ||\n                          operationalCard.customer_display_name",
+]) {
+  assertExcludes(bookingsRequestPanel, forbidden, `bookings request passenger boundary ${forbidden}`);
 }
 
 assertIncludes(

@@ -69,7 +69,12 @@ const previewFunction = sectionBetween(
   "function customerInvoiceLineDescriptionForPreview(",
   "function issuePreparedCustomerInvoice()",
 );
-const issueLineItem = sectionBetween(requestBodyHelper, "lineItems: [", "reference:");
+const previewLineItem = sectionBetween(previewFunction, "lineItems: [", "previewKey:");
+const requestBodyLineItems = sectionBetween(
+  requestBodyHelper,
+  "lineItems: customerInvoicePreview.lineItems,",
+  "reference:",
+);
 const invoicePrepWorkspace = sectionBetween(
   customersPage,
   'data-customer-invoice-prep-panel="true"',
@@ -171,8 +176,8 @@ for (const fragment of [
 
 assertIncludes(
   requestBodyHelper,
-  "customerInvoicePreview.lineDescription",
-  "invoice request body line description",
+  "lineItems: customerInvoicePreview.lineItems",
+  "invoice request body preview line items",
 );
 
 for (const fragment of [
@@ -185,9 +190,14 @@ for (const fragment of [
 }
 
 assertExcludes(
-  issueLineItem,
+  previewLineItem,
   "customerInvoiceAdjustmentReason",
-  "customer PDF invoice line item should not print the admin adjustment reason",
+  "customer PDF invoice preview line item should not print the admin adjustment reason",
+);
+assertExcludes(
+  requestBodyLineItems,
+  "customerInvoiceAdjustmentReason",
+  "customer PDF invoice request body line item should not print the admin adjustment reason",
 );
 
 for (const fragment of [

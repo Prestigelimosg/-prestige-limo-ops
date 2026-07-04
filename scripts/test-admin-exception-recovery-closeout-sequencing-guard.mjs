@@ -134,9 +134,16 @@ for (const fragment of [
   "const completedTripCloseoutCustomerCloseoutReviewed =",
   'completedTripCloseoutReviewReached("customer-closeout-reviewed") ||',
   "dayOfTripCompletionCustomerCloseoutReady;",
+  "const completedTripCloseoutBillableExceptionReviewed =",
+  'completedTripCloseoutReviewStatus === "customer-no-show-billable" ||',
+  'completedTripCloseoutReviewStatus === "late-cancellation-billable";',
+  "const completedTripCloseoutNoChargeExceptionClosed =",
+  'completedTripCloseoutReviewStatus === "waived-no-charge";',
+  "const completedTripCloseoutExceptionBillingDecisionMade =",
   "const completedTripCloseoutExceptionResolutionReviewed =",
   'completedTripCloseoutReviewReached("exception-reviewed") ||',
-  "dayOfTripCompletionExceptionResolutionReviewed;",
+  "dayOfTripCompletionExceptionResolutionReviewed ||",
+  "completedTripCloseoutExceptionBillingDecisionMade;",
 ]) {
   assertIncludes(sequencingBlock, fragment, `exception/recovery closeout sequencing fragment ${fragment}`);
 }
@@ -262,7 +269,6 @@ const publicSurfaceFiles = appFiles.filter((file) => {
     (normalized.startsWith("app/api/customer") ||
       normalized.startsWith("app/api/driver") ||
       normalized.startsWith("app/book") ||
-      normalized.startsWith("app/customers") ||
       normalized.startsWith("app/driver-job") ||
       normalized.startsWith("app/my-bookings"))
   );

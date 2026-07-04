@@ -243,8 +243,9 @@ for (const fragment of [
 }
 
 for (const fragment of [
-  "Future auto-stop may stop sharing when the resolved assigned job reaches persisted `pob` or `completed`",
-  "Future auto-stop must be scoped to the resolved driver job token and assigned job only",
+  "Driver `Job Completed` now clears the exact active sharing marker for the resolved driver job link by deleting from `driver_live_location_latest_positions` with `driver_job_link_id` scope.",
+  "The completed cleanup is server-side verified through the existing driver job token path, customer-invisible, provider-send-free, and scoped to the resolved assigned job only; one driver's completed event must not stop or expose another driver/job location.",
+  "POB timed stop remains a future separately approved policy; the default planning value remains 5 minutes after persisted POB unless owner separately approves a different value.",
 ]) {
   assertIncludes(pobAutoStopGuard, fragment, `POB auto-stop guard fragment ${fragment}`);
 }

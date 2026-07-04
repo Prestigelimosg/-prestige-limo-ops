@@ -299,9 +299,11 @@ for (const helperPath of noEnvHelperPaths) {
 
 const customerBookingRequestRoute = files["app/api/customer-booking-requests/route.ts"];
 for (const fragment of [
-  "parseCustomerBookingRequestPayload",
-  "createAdminBooking(parsed.data, customerBookingRequestPersistenceAdapterActor",
+  "parseCustomerBookingRequestPayloads",
+  "for (const requestPayload of parsed.data.requests)",
+  "createAdminBooking(requestPayload, customerBookingRequestPersistenceAdapterActor",
   "source_route: \"/book\"",
+  "return_trip_requested: parsed.data.returnTripRequested",
   "customerSafeError",
 ]) {
   assertIncludes(customerBookingRequestRoute, fragment, `customer booking request runtime gate ${fragment}`);

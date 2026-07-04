@@ -132,7 +132,7 @@ for (const phrase of [
   "This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.",
   "`/book` and `/my-bookings` must delegate public API calls to customer-safe adapters instead of owning raw fetch/session plumbing.",
   "Customer client adapters must use `cache: \"no-store\"`, `credentials: \"same-origin\"`, and purpose headers while never manually attaching Cookie, Authorization, customer session-token, admin purpose, or server env-token plumbing.",
-  "`/driver-job/[token]` must keep driver API calls no-store and limited to safe job GET, token-scoped driver-details PATCH, notification GET, issue-alert POST with `issue_type`, and status PATCH with `status` only.",
+  "`/driver-job/[token]` must keep driver API calls no-store and limited to safe job GET, token-scoped driver-details PATCH, notification GET, issue-alert POST with `issue_type`, admin-only OTS photo proof POST, and status PATCH with `status` only.",
   "Driver client code must not expose customer price, billing, invoice/payment, payout comparisons, PayNow payout details, internal finance/admin notes, parser/debug internals, token secrets, or mock QA/dev archive fields.",
   "Public client caller contracts must continue coordinating the existing customer booking page API audit, customer booking memory UI contract, and customer portal saved-bookings adapter contract in the preactivation suite.",
   "No Save Booking + CRM change.",
@@ -247,19 +247,27 @@ for (const [label, source] of [
 }
 
 const driverPage = files[driverPagePath];
-assert.equal(countOccurrences(driverPage, "fetch("), 8, "driver page fetch call count");
-assert.equal(countOccurrences(driverPage, 'cache: "no-store"'), 7, "driver page no-store fetch count");
+assert.equal(countOccurrences(driverPage, "fetch("), 9, "driver page fetch call count");
+assert.equal(countOccurrences(driverPage, 'cache: "no-store"'), 8, "driver page no-store fetch count");
 for (const fragment of [
   "fetch(`/api/driver-job/${encodeURIComponent(token)}`",
   "`/api/driver-job/${encodeURIComponent(token)}/notifications?limit=5&page=1`",
   "fetch(`/api/driver-job/${encodeURIComponent(token)}/issue-alert`",
   "fetch(driverLiveLocationRoute()",
+  "fetch(driverOtsPhotoProofRoute()",
   "fetch(`/api/driver-job/${encodeURIComponent(token)}/status`",
   "driver_contact: nextDetails.contact",
   "driver_name: nextDetails.name",
   "driver_plate_number: nextDetails.plate",
   "driver_vehicle_model: nextDetails.vehicleModel",
   "body: JSON.stringify({ issue_type: issueChoice.value })",
+  "result.proof?.customerVisible !== false",
+  "result.proof?.external_send !== false",
+  "const formData = new FormData();",
+  'formData.append("photo", photoFile);',
+  'type="file"',
+  "navigator.geolocation.watchPosition",
+  "navigator.geolocation.clearWatch",
   "const requestBody: Record<string, unknown> = {\n        status: transitionGuard.status,\n      };",
   "customerVisible !== false",
   "external_send !== false",
@@ -270,7 +278,7 @@ for (const fragment of [
 ]) {
   assertIncludes(driverPage, fragment, `driver page caller ${fragment}`);
 }
-assert.equal(countOccurrences(driverPage, 'method: "POST"'), 2, "driver page POST count");
+assert.equal(countOccurrences(driverPage, 'method: "POST"'), 3, "driver page POST count");
 assert.equal(countOccurrences(driverPage, 'method: "DELETE"'), 1, "driver page DELETE count");
 assert.equal(countOccurrences(driverPage, 'method: "PATCH"'), 2, "driver page PATCH count");
 assertIncludes(driverPage, "const driverPaymentDetailLinePattern =", "driver page pasted payment-detail filter");
@@ -287,8 +295,8 @@ assertIncludes(
 );
 assertExcludes(
   driverPage,
-  /watchPosition|clearWatch|navigator\.mediaDevices|getUserMedia|type=["']file["']|new FormData|URL\.createObjectURL/i,
-  "driver page background live location/photo client APIs",
+  /navigator\.mediaDevices|getUserMedia|URL\.createObjectURL/i,
+  "driver page background media capture/photo preview client APIs",
 );
 
 console.log("Public API client caller boundary guard passed");

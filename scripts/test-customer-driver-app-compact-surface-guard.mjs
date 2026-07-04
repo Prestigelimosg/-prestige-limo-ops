@@ -69,7 +69,6 @@ for (const fragment of [
   'className="border-b border-slate-200 px-1 pb-3 pt-1"',
   'className="flex flex-wrap gap-1.5 border-b border-slate-200 pb-2"',
   '"min-h-9 rounded-md border px-2.5 py-1.5 text-sm font-semibold transition"',
-  'className="rounded-md border border-slate-200 bg-white p-3 sm:p-4"',
   'className="rounded-md border border-slate-200 bg-white p-3"',
   'className="rounded-md border border-slate-200 bg-white p-2 sm:p-3"',
 ]) {

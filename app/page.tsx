@@ -7802,6 +7802,28 @@ function getLoadBookingsOperationalDisplayTitle(card: LoadBookingsOperationalDis
   );
 }
 
+function getLoadBookingsOperationalPassengerDisplay(
+  card: LoadBookingsOperationalDisplayCard,
+  bookingRecord?: BookingRecord,
+) {
+  return (
+    clean(card.traveler_display_name) ||
+    (bookingRecord ? getBookingName(bookingRecord) : "") ||
+    "Passenger not set"
+  );
+}
+
+function getLoadBookingsOperationalRequestDisplayTitle(
+  card: LoadBookingsOperationalDisplayCard,
+  bookingRecord?: BookingRecord,
+) {
+  return (
+    clean(card.traveler_display_name) ||
+    (bookingRecord ? getBookingName(bookingRecord) : "") ||
+    getLoadBookingsOperationalDisplayTitle(card)
+  );
+}
+
 function bookingRecordToForm(bookingRecord: BookingRecord): BookingForm {
   return {
     ...createInitialBooking(),
@@ -21723,10 +21745,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           const routeText =
             operationalCard.route_points_summary ||
             (routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`);
-          const passengerText =
-            operationalCard.traveler_display_name ||
-            operationalCard.customer_display_name ||
-            "Unknown";
+          const passengerText = getLoadBookingsOperationalPassengerDisplay(operationalCard, savedBooking);
           const rowBookingReference =
             cleanReferenceText(savedBooking.booking_reference) ||
             cleanReferenceText(savedBooking.id);
@@ -21996,10 +22015,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             operationalCard.route_points_summary ||
             (routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`);
           const bookingId = String(requestBooking.id);
-          const passengerText =
-            operationalCard.traveler_display_name ||
-            operationalCard.customer_display_name ||
-            "Unknown";
+          const passengerText = getLoadBookingsOperationalPassengerDisplay(operationalCard, requestBooking);
           const isUrgentRequest = urgentCustomerBookingRequestKeySet.has(
             getCustomerBookingRequestQueueKey(requestBooking),
           );
@@ -22018,7 +22034,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             >
               <div className="min-w-0">
                 <p className="truncate font-semibold text-slate-950">
-                  {getLoadBookingsOperationalDisplayTitle(operationalCard)}
+                  {getLoadBookingsOperationalRequestDisplayTitle(operationalCard, requestBooking)}
                 </p>
                 <p className="truncate text-xs text-slate-500">{pickupMetaText}</p>
               </div>
@@ -22114,10 +22130,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           const bookingCompletionMessage = isMarkCompletionMessage(rawBookingCompletionMessage)
             ? rawBookingCompletionMessage
             : null;
-          const passengerText =
-            operationalCard.traveler_display_name ||
-            operationalCard.customer_display_name ||
-            "Unknown";
+          const passengerText = getLoadBookingsOperationalPassengerDisplay(operationalCard, savedBooking);
           const bookerText = operationalCard.booker_display_name || "Unknown";
           const driverText =
             operationalCard.assigned_driver_display_name ||
@@ -22422,10 +22435,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                 isDeleteArchivedJobMessage(rawBookingCompletionMessage)
                 ? rawBookingCompletionMessage
                 : null;
-              const passengerText =
-                operationalCard.traveler_display_name ||
-                operationalCard.customer_display_name ||
-                "Unknown";
+              const passengerText = getLoadBookingsOperationalPassengerDisplay(operationalCard, savedBooking);
               const bookerText = operationalCard.booker_display_name || "Unknown";
               const driverText =
                 operationalCard.assigned_driver_display_name ||
@@ -41650,6 +41660,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                     (routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`);
                   const bookingId = String(bookingRecord.id);
                   const isCustomerRequest = bookingRecordIsCustomerBookingRequest(bookingRecord);
+                  const passengerText = getLoadBookingsOperationalPassengerDisplay(operationalCard, bookingRecord);
 
                   return (
                     <button
@@ -41667,7 +41678,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                     >
                       <span className="min-w-0">
                         <span className="block truncate font-semibold text-slate-950">
-                          {getLoadBookingsOperationalDisplayTitle(operationalCard)}
+                          {getLoadBookingsOperationalRequestDisplayTitle(operationalCard, bookingRecord)}
                         </span>
                         <span className="block truncate text-xs text-slate-500">
                           {operationalCard.pickup_datetime ||
@@ -41675,10 +41686,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                         </span>
                       </span>
                       <span className="truncate text-slate-800">
-                        Passenger:{" "}
-                        {operationalCard.traveler_display_name ||
-                          operationalCard.customer_display_name ||
-                          "Unknown"}
+                        Passenger: {passengerText}
                       </span>
                       <span className="truncate text-slate-700">
                         {isCustomerRequest
@@ -42068,6 +42076,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   const routeText =
                     operationalCard.route_points_summary ||
                     (routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`);
+                  const passengerText = getLoadBookingsOperationalPassengerDisplay(operationalCard, bookingRecord);
 
                   return (
                     <div
@@ -42080,9 +42089,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                           formatPickupDateTime(getBookingDateKey(bookingRecord), bookingRecord.pickup_time)}
                       </span>
                       <span className="truncate text-slate-800">
-                        {operationalCard.traveler_display_name ||
-                          operationalCard.customer_display_name ||
-                          "Unknown"}
+                        {passengerText}
                       </span>
                       <span className="truncate text-slate-700">{routeText}</span>
                       <span

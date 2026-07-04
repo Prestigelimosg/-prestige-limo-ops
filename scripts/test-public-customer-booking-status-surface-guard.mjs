@@ -67,7 +67,7 @@ const contractChecks = [
     script: "scripts/test-public-api-response-privacy-boundary-guard.mjs",
     requiredFragments: [
       "customer booking status response contract",
-      "customer_facing_status: result.data.customer_facing_status",
+      "statuses: result.data.statuses",
       "Public API response privacy boundary guard passed",
     ],
   },

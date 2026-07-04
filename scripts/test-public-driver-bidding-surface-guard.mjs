@@ -145,7 +145,7 @@ const contractChecks = [
     label: "public API client caller boundary guard",
     requiredFragments: [
       "driver page fetch call count",
-      "`/driver-job/[token]` must keep driver API calls no-store and limited to safe job GET, token-scoped driver-details PATCH, notification GET, issue-alert POST with `issue_type`, and status PATCH with `status` only.",
+      "`/driver-job/[token]` must keep driver API calls no-store and limited to safe job GET, token-scoped driver-details PATCH, notification GET, issue-alert POST with `issue_type`, admin-only OTS photo proof POST, and status PATCH with `status` only.",
       "Public API client caller boundary guard passed",
     ],
     script: "scripts/test-public-api-client-caller-boundary-guard.mjs",
@@ -456,10 +456,10 @@ for (const [label, source] of [
 ]) {
   assertExcludes(source, forbiddenPublicCallerPattern, `${label} bidding caller/secret exposure`);
 }
-assert.equal(countOccurrences(files[driverPagePath], "fetch("), 8, "driver job page fetch count must not grow for bidding");
+assert.equal(countOccurrences(files[driverPagePath], "fetch("), 9, "driver job page fetch count must not grow for bidding");
 assert.equal(
   countOccurrences(files[driverPagePath], 'cache: "no-store"'),
-  7,
+  8,
   "driver job page no-store fetch count must match existing safe callers",
 );
 assertIncludes(
@@ -486,6 +486,21 @@ assertIncludes(
   files[driverPagePath],
   "fetch(driverLiveLocationRoute()",
   "driver job page approved live-location caller",
+);
+assertIncludes(
+  files[driverPagePath],
+  "fetch(driverOtsPhotoProofRoute()",
+  "driver job page approved OTS photo proof caller",
+);
+assertIncludes(
+  files[driverPagePath],
+  "result.proof?.customerVisible !== false",
+  "driver job page OTS photo proof remains admin-only",
+);
+assertIncludes(
+  files[driverPagePath],
+  "result.proof?.external_send !== false",
+  "driver job page OTS photo proof does not external-send",
 );
 
 for (const { label, requiredFragments, script } of contractChecks) {

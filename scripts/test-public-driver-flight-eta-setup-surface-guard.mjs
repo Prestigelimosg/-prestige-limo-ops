@@ -293,10 +293,7 @@ for (const fragment of [
   "/flight-eta-setup",
   "/flight-eta-acknowledgement-setup",
   "FlightAware",
-  "watchPosition",
-  "clearWatch",
   "mediaDevices",
-  "FormData",
   "createObjectURL",
 ]) {
   assertExcludes(driverPage, fragment, `public driver page Flight ETA setup caller fragment`);

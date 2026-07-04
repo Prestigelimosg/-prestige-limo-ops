@@ -406,6 +406,10 @@ const guardChecks = [
     script: "scripts/test-invoice-action-safety-shield-guard.mjs",
   },
   {
+    label: "admin app notification refresh no-blink guard",
+    script: "scripts/test-admin-app-notification-refresh-no-blink-guard.mjs",
+  },
+  {
     label: "customer folder job history compact guard",
     script: "scripts/test-customer-folder-job-history-compact-guard.mjs",
   },

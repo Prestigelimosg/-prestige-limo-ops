@@ -13087,14 +13087,20 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       };
     }
 
-    setAdminAppNotificationReadState((current) => ({
-      ...current,
-      message: {
-        tone: "info",
-        text: "Loading saved admin app notifications through the guarded API...",
-      },
-      status: "loading",
-    }));
+    setAdminAppNotificationReadState((current) => {
+      if (current.status === "loaded") {
+        return current;
+      }
+
+      return {
+        ...current,
+        message: {
+          tone: "info",
+          text: "Loading saved admin app notifications through the guarded API...",
+        },
+        status: "loading",
+      };
+    });
 
     void (async () => {
       try {

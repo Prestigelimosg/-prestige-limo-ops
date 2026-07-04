@@ -7737,7 +7737,7 @@ async function runChromeTest() {
       "admin app notification feed",
     );
     assert.equal(adminAppNotificationFeedState.visible, true, "Expected admin app notification feed on Dashboard");
-    assert.equal(adminAppNotificationFeedState.state, "Queued");
+    assert.equal(adminAppNotificationFeedState.state, "Inbox queued");
     assert.equal(
       adminAppNotificationFeedState.feedback,
       "Loaded 1 saved admin app notification.",

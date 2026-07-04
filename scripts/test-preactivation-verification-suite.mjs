@@ -402,6 +402,10 @@ const guardChecks = [
     script: "scripts/test-customer-invoice-test-artifact-archive-guard.mjs",
   },
   {
+    label: "invoice action safety shield guard",
+    script: "scripts/test-invoice-action-safety-shield-guard.mjs",
+  },
+  {
     label: "customer folder job history compact guard",
     script: "scripts/test-customer-folder-job-history-compact-guard.mjs",
   },

@@ -329,6 +329,56 @@ type CustomerDisplayedInvoiceRecord = CustomerLocalInvoiceRecord & {
   storageSource?: "local" | "server";
 };
 
+type InvoiceSafetyActionConfirmation = {
+  action: string;
+  amountLabel?: string;
+  consequence: string;
+  customerName?: string;
+  documentLabel?: string;
+  extraLines?: string[];
+  invoiceNumber?: string;
+  recipientEmail?: string;
+  reference?: string;
+};
+
+function confirmInvoiceSafetyAction({
+  action,
+  amountLabel,
+  consequence,
+  customerName,
+  documentLabel,
+  extraLines = [],
+  invoiceNumber,
+  recipientEmail,
+  reference,
+}: InvoiceSafetyActionConfirmation) {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const detailLines = [
+    documentLabel ? `Document: ${documentLabel}` : "",
+    invoiceNumber ? `Invoice: ${invoiceNumber}` : "",
+    customerName ? `Customer: ${customerName}` : "",
+    reference ? `Reference: ${reference}` : "",
+    amountLabel ? `Amount: ${amountLabel}` : "",
+    recipientEmail ? `Recipient: ${recipientEmail}` : "",
+    ...extraLines,
+  ].filter(Boolean);
+
+  return window.confirm(
+    [
+      `Final invoice action confirmation: ${action}`,
+      "",
+      ...detailLines,
+      "",
+      consequence,
+      "Use only after final admin review.",
+      "Confirm to continue.",
+    ].join("\n"),
+  );
+}
+
 type CustomerBillingDocumentState = "draft" | "issued";
 
 type CustomerInvoiceDraftRecord = {
@@ -3529,6 +3579,23 @@ export default function MockCustomerDashboardPage() {
       return;
     }
 
+    if (
+      !confirmInvoiceSafetyAction({
+        action: "Issue Create Invoice",
+        amountLabel: plainInvoicePreview.amountLabel,
+        consequence: "This creates an issued invoice number, stores the PDF, and starts the PDF download.",
+        customerName: plainInvoicePreview.customerName,
+        documentLabel: "Invoice",
+        reference: plainInvoicePreview.reference,
+      })
+    ) {
+      setPlainInvoiceFeedback(
+        "Create Invoice issue cancelled. No invoice number, PDF, email, payment, or customer folder was changed.",
+      );
+      setPlainInvoiceFeedbackTone("info");
+      return;
+    }
+
     setIssuingCustomerInvoiceKey(plainInvoiceIssueActionKey);
 
     try {
@@ -3589,6 +3656,25 @@ export default function MockCustomerDashboardPage() {
     if (!requestBody) {
       setPlainInvoiceFeedback("Preview first, then email Create Invoice.");
       setPlainInvoiceFeedbackTone("error");
+      return;
+    }
+
+    if (
+      !confirmInvoiceSafetyAction({
+        action: "Email Create Invoice",
+        amountLabel: plainInvoicePreview.amountLabel,
+        consequence:
+          "This creates an issued invoice number, stores the PDF, then sends the invoice email through the guarded route.",
+        customerName: plainInvoicePreview.customerName,
+        documentLabel: "Invoice",
+        recipientEmail,
+        reference: plainInvoicePreview.reference,
+      })
+    ) {
+      setPlainInvoiceFeedback(
+        "Create Invoice email cancelled. No invoice number, PDF, email, payment, or customer folder was changed.",
+      );
+      setPlainInvoiceFeedbackTone("info");
       return;
     }
 
@@ -3904,6 +3990,27 @@ export default function MockCustomerDashboardPage() {
       return;
     }
 
+    const documentLabel = customerBillingDocumentLabel(customerInvoicePreview.documentType);
+
+    if (
+      !confirmInvoiceSafetyAction({
+        action: `${customerBillingDocumentActionLabel()} ${documentLabel}`,
+        amountLabel: customerInvoicePreview.amountLabel,
+        consequence: `This creates an issued ${documentLabel.toLowerCase()} number, stores the PDF, and starts the PDF download.`,
+        customerName: customerInvoicePreview.customerName,
+        documentLabel,
+        extraLines: customerInvoiceAmountEdited
+          ? ["Amount was edited; the admin adjustment reason stays internal and is not printed on the customer PDF."]
+          : [],
+        reference: customerInvoicePreview.reference,
+      })
+    ) {
+      setCustomerInvoiceIssueFeedback(
+        `${documentLabel} issue cancelled. No invoice number, PDF, email, payment, or customer folder was changed.`,
+      );
+      return;
+    }
+
     setIssuingCustomerInvoiceKey(customerInvoicePrepRow.key);
 
     try {
@@ -3980,6 +4087,24 @@ export default function MockCustomerDashboardPage() {
       return;
     }
 
+    const documentLabel = customerBillingDocumentLabel(invoice.documentType || "invoice");
+
+    if (
+      !confirmInvoiceSafetyAction({
+        action: `Email ${documentLabel}`,
+        amountLabel: invoice.amountLabel,
+        consequence: "This sends the stored billing document email to the selected recipient.",
+        customerName: invoice.customerName,
+        documentLabel,
+        invoiceNumber: invoice.invoiceNumber,
+        recipientEmail,
+        reference: invoice.reference,
+      })
+    ) {
+      setCustomerInvoiceIssueFeedback(`${invoice.invoiceNumber} email cancelled. No customer email was sent.`);
+      return;
+    }
+
     setEmailingCustomerInvoiceNumber(invoice.invoiceNumber);
 
     try {
@@ -4018,6 +4143,22 @@ export default function MockCustomerDashboardPage() {
   async function markIssuedCustomerInvoicePaid(invoice: CustomerDisplayedInvoiceRecord) {
     if (invoice.status === "Paid") {
       setCustomerInvoiceIssueFeedback(`${invoice.invoiceNumber} is already marked Paid in this browser.`);
+      return;
+    }
+
+    if (
+      !confirmInvoiceSafetyAction({
+        action: "Mark invoice Paid",
+        amountLabel: invoice.amountLabel,
+        consequence:
+          "This changes the invoice status to Paid only. It does not record bank payment, card payment, provider payment, or payout.",
+        customerName: invoice.customerName,
+        documentLabel: customerBillingDocumentLabel(invoice.documentType || "invoice"),
+        invoiceNumber: invoice.invoiceNumber,
+        reference: invoice.reference,
+      })
+    ) {
+      setCustomerInvoiceIssueFeedback(`${invoice.invoiceNumber} paid mark cancelled. No invoice status changed.`);
       return;
     }
 
@@ -4077,6 +4218,22 @@ export default function MockCustomerDashboardPage() {
   async function markIssuedCustomerInvoiceUnpaid(invoice: CustomerDisplayedInvoiceRecord) {
     if (invoice.status === "Unpaid") {
       setCustomerInvoiceIssueFeedback(`${invoice.invoiceNumber} is already marked Unpaid in this browser.`);
+      return;
+    }
+
+    if (
+      !confirmInvoiceSafetyAction({
+        action: "Mark invoice Unpaid",
+        amountLabel: invoice.amountLabel,
+        consequence:
+          "This changes the invoice status to Unpaid only. It does not reverse a bank payment, card payment, provider payment, or payout.",
+        customerName: invoice.customerName,
+        documentLabel: customerBillingDocumentLabel(invoice.documentType || "invoice"),
+        invoiceNumber: invoice.invoiceNumber,
+        reference: invoice.reference,
+      })
+    ) {
+      setCustomerInvoiceIssueFeedback(`${invoice.invoiceNumber} unpaid mark cancelled. No invoice status changed.`);
       return;
     }
 
@@ -4148,6 +4305,22 @@ export default function MockCustomerDashboardPage() {
       setCustomerInvoiceIssueFeedback(
         `${invoice.invoiceNumber} is a local fallback invoice. Stored credit notes require a stored paid invoice.`,
       );
+      return;
+    }
+
+    if (
+      !confirmInvoiceSafetyAction({
+        action: "Create credit note",
+        amountLabel: invoice.amountLabel,
+        consequence:
+          "This creates a new credit note document and PDF linked to the paid invoice. The paid invoice is not edited or deleted.",
+        customerName: invoice.customerName,
+        documentLabel: "Credit Note",
+        invoiceNumber: invoice.invoiceNumber,
+        reference: invoice.reference,
+      })
+    ) {
+      setCustomerInvoiceIssueFeedback(`${invoice.invoiceNumber} credit note cancelled. No credit note was created.`);
       return;
     }
 
@@ -4279,6 +4452,22 @@ export default function MockCustomerDashboardPage() {
       setCustomerInvoiceIssueFeedback(
         `${invoice.invoiceNumber} is a local fallback quotation. Stored invoice conversion requires a stored quotation.`,
       );
+      return;
+    }
+
+    if (
+      !confirmInvoiceSafetyAction({
+        action: "Convert quotation to invoice",
+        amountLabel: invoice.amountLabel,
+        consequence:
+          "This creates a new issued invoice from the quotation and starts the PDF download. The quotation is not deleted.",
+        customerName: invoice.customerName,
+        documentLabel: "Invoice",
+        invoiceNumber: invoice.invoiceNumber,
+        reference: invoice.reference,
+      })
+    ) {
+      setCustomerInvoiceIssueFeedback(`${invoice.invoiceNumber} conversion cancelled. No invoice was created.`);
       return;
     }
 

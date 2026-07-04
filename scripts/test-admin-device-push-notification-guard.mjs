@@ -155,7 +155,13 @@ assertIncludes(
     "data-admin-device-push-panel",
     "data-admin-device-push-enable",
     "data-admin-device-push-disable",
+    "Device Push Alerts",
     "Phone/Mac browser alert for new booking requests.",
+    "Disable push stops browser alerts only.",
+    "not clear queued inbox items",
+    "Mark read, Dismiss, or Archive",
+    "Enable push",
+    "Disable push",
   ],
   "dashboard device push UI",
 );

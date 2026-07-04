@@ -128,6 +128,53 @@ const adminLegacyTables = {
   travelers: "travelers",
 } as const;
 
+type AdminInvoiceSafetyActionConfirmation = {
+  action: string;
+  accountLabel?: string;
+  amountLabel?: string;
+  consequence: string;
+  extraLines?: string[];
+  invoiceLabel?: string;
+  monthLabel?: string;
+  referenceLabel?: string;
+};
+
+function confirmAdminInvoiceSafetyAction({
+  accountLabel,
+  action,
+  amountLabel,
+  consequence,
+  extraLines = [],
+  invoiceLabel,
+  monthLabel,
+  referenceLabel,
+}: AdminInvoiceSafetyActionConfirmation) {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const detailLines = [
+    invoiceLabel ? `Invoice: ${invoiceLabel}` : "",
+    accountLabel ? `Customer/account: ${accountLabel}` : "",
+    monthLabel ? `Month: ${monthLabel}` : "",
+    referenceLabel ? `Reference: ${referenceLabel}` : "",
+    amountLabel ? `Amount: ${amountLabel}` : "",
+    ...extraLines,
+  ].filter(Boolean);
+
+  return window.confirm(
+    [
+      `Final invoice action confirmation: ${action}`,
+      "",
+      ...detailLines,
+      "",
+      consequence,
+      "Use only after final admin review.",
+      "Confirm to continue.",
+    ].join("\n"),
+  );
+}
+
 type AdminLegacyDataTable = (typeof adminLegacyTables)[keyof typeof adminLegacyTables];
 type AdminLegacyDataMode = "delete" | "insert" | "select" | "update" | "upsert";
 type AdminLegacyDataFilterOperator = "eq" | "ilike";
@@ -27945,6 +27992,35 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       return;
     }
 
+    const reservationAccount = clean(monthlyInvoiceIssueRecordPrimaryRecord.customer_account);
+    const reservationMonth = clean(monthlyInvoiceIssueRecordPrimaryRecord.billing_month);
+    const reservationMonthLabel = adminMonthlyBillingGroupingMonthLabel(reservationMonth);
+    const reservationIssueRecordId = clean(monthlyInvoiceIssueRecordPrimaryRecord.id);
+    const reservationDraftId = clean(monthlyInvoiceIssueRecordPrimaryRecord.draft_id);
+
+    if (
+      !confirmAdminInvoiceSafetyAction({
+        accountLabel: reservationAccount,
+        action: "Reserve monthly invoice number",
+        consequence:
+          "This reserves the next invoice number for the locked monthly issue record. It does not create a PDF, send an invoice, record payment, or create payout.",
+        extraLines: [
+          reservationIssueRecordId ? `Issue record: ${reservationIssueRecordId}` : "",
+          reservationDraftId ? `Draft: ${reservationDraftId}` : "",
+        ].filter(Boolean),
+        monthLabel: reservationMonthLabel,
+      })
+    ) {
+      setAdminMonthlyInvoiceIssueRecordReadState((current) => ({
+        ...current,
+        message: {
+          tone: "info",
+          text: "Monthly invoice number reservation cancelled. No invoice number was reserved.",
+        },
+      }));
+      return;
+    }
+
     setAdminMonthlyInvoiceIssueRecordAction("reserve-invoice-number");
     setAdminMonthlyInvoiceIssueRecordReadState((current) => ({
       ...current,
@@ -41807,7 +41883,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                     : adminAppNotificationReadState.status === "error"
                       ? "Review needed"
                       : adminAppNotificationReadState.notifications.length > 0
-                        ? "Queued"
+                        ? "Inbox queued"
                         : "Clear"}
                 </span>
                 <button
@@ -41829,9 +41905,10 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             >
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
-                  <h4 className="text-sm font-semibold text-slate-950">Device Push</h4>
-                  <p className="hidden text-xs text-slate-600">
-                    Phone/Mac browser alert for new booking requests. No WhatsApp, SMS, GPS, or billing.
+                  <h4 className="text-sm font-semibold text-slate-950">Device Push Alerts</h4>
+                  <p className="text-xs text-slate-600">
+                    Phone/Mac browser alert for new booking requests. Disable push stops browser alerts only. It does
+                    not clear queued inbox items; use Mark read, Dismiss, or Archive on the row.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -41847,7 +41924,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                     onClick={handleAdminDevicePushEnable}
                     type="button"
                   >
-                    {adminDevicePushAction === "enable" ? "Enabling..." : "Enable"}
+                    {adminDevicePushAction === "enable" ? "Enabling..." : "Enable push"}
                   </button>
                   <button
                     className="h-8 rounded-md border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
@@ -41860,7 +41937,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                     onClick={handleAdminDevicePushDisable}
                     type="button"
                   >
-                    {adminDevicePushAction === "disable" ? "Disabling..." : "Disable"}
+                    {adminDevicePushAction === "disable" ? "Disabling..." : "Disable push"}
                   </button>
                 </div>
               </div>

@@ -1,16 +1,27 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-6a8ac273 Alert admin on customer booking amendments
+01fc2ee8 Hide names from WhatsApp job cards
 
 Latest pushed main/staging runtime checkpoint:
-6a8ac273 Alert admin on customer booking amendments
+01fc2ee8 Hide names from WhatsApp job cards
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-6a8ac273 Alert admin on customer booking amendments
+01fc2ee8 Hide names from WhatsApp job cards
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Live Handoff Checkpoint 01fc2ee8
+
+- Current live checkpoint is `01fc2ee8 Hide names from WhatsApp job cards`; `main` and `staging` are aligned to this checkpoint.
+- This docs refresh records current live behavior only. It does not change runtime code, tests, env, DB schema, Supabase, providers, calendar, payment, payout, GPS/live-location runtime, WhatsApp/SMS/Telegram sending, invoice numbers, parser, or package files.
+- WhatsApp Job Card privacy is live: Dispatch `Job Card Preview` / `jobCard` copy hides passenger/traveller names, customer/company/account names, booker names, contact names, and identity labels. The WhatsApp group job card is privacy-safe for driver-group exposure.
+- Driver Dispatch, Customer Copy, Driver Job Link copy, booking fields, and operational admin lists may still show needed passenger/customer/driver names for real operations.
+- Telegram behavior is manual-copy only. The app does not open a Telegram tab, does not perform a Telegram provider send, and cannot send by phone number alone without a Telegram bot `chat_id`.
+- Admin email alert behavior is internal-admin only: alerts go to `info@prestigelimo.sg` for new booking requests plus customer amendment/cancellation requests. Customer and driver messages are not sent by this alert, and booking/calendar/CRM stay unchanged until admin reviews and applies an action.
+- Live-location workflow is driver-consent based: the driver uses the Driver Job Link and taps `Share Location`; admin views current shared location in Dispatch Live Driver Map / the same-window admin map flow. This is not a WhatsApp-style external smooth tracking promise.
+- Go-live caution: Invoice `Issue`, invoice number reservation, invoice PDF/email, `Paid` / `Unpaid`, and Credit Note actions are high-consequence and should be used only after final admin review. Fake/test booking cleanup must target exact references only; no broad deletion.
 
 ### Google Calendar Midnight Display Safety
 
@@ -347,7 +358,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
   - `E / AVF - TRF` multi-stop with child seat keeps compact route and `Child seat: 1 x booster seat`.
 - Parser guard also locks the pasted `*2 x VVV - DEP* ... Intercontinental Robertson > ET639 ... Mr. Temitope Taiye Elijah $55` sample as `DEP`, `VVV`, `2026-07-02`, `2200hrs`, flight `ET639`, pickup `Intercontinental Robertson`, drop-off `Changi Airport`, passenger `Mr Temitope Taiye Elijah`, pax `1`, and no customer price override.
 - Checks passed for the current no-name WhatsApp job-card guard: `node scripts/test-whatsapp-job-card-format.mjs`, `node scripts/test-whatsapp-job-card-preview-wiring-guard.mjs`, `npm run test:booking-ui-browser`, `npm run lint` with only the existing `loadBookings` warnings, `npm run build`, and `git diff --check`.
-- This pass did not push/deploy, use Vercel CLI, change env/DB schema, send email, activate Stripe/payment, send providers, create payouts, or change GPS/live-location behavior.
+- The live checkpoint `01fc2ee8` carries this privacy behavior on `main` and `staging`; it did not use Vercel CLI, change env/DB schema, send email, activate Stripe/payment, send providers, create payouts, or change GPS/live-location behavior.
 
 ### Pickup-Only WhatsApp Timing And Address
 

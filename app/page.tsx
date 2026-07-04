@@ -909,6 +909,15 @@ type AdminDriverJobLinkState = {
   oneTimeUrl: string;
 };
 
+type AdminManualTelegramCopyTarget = "customerDriverDetails" | "driverJobLink";
+
+type AdminManualTelegramCopyState = Message & {
+  external_send: false;
+  loadedReference: string;
+  noProviderSend: true;
+  target: AdminManualTelegramCopyTarget;
+};
+
 type DispatchCopyTarget = "customerCopy" | "driverDispatch" | "jobCard";
 
 type CopyEditState = {
@@ -12748,6 +12757,8 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       message: null,
       oneTimeUrl: "",
     });
+  const [manualTelegramCopyState, setManualTelegramCopyState] =
+    useState<AdminManualTelegramCopyState | null>(null);
 
   useEffect(() => {
     activeTabRef.current = activeTab;
@@ -20438,6 +20449,66 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     await copyDispatchCopy("customerCopy");
   }
 
+  async function copyManualTelegramMessage(target: AdminManualTelegramCopyTarget) {
+    const bookingReference =
+      cleanReferenceText(dispatchReleaseWorkflowBookingReference) ||
+      cleanReferenceText(activeAdminDriverJobLink?.booking_reference) ||
+      cleanReferenceText(loadedBookingId);
+    const targetLabel =
+      target === "customerDriverDetails"
+        ? "Customer driver details Telegram copy"
+        : "Driver job link Telegram copy";
+    const messageText =
+      target === "customerDriverDetails"
+        ? getDispatchCopyText("customerCopy")
+        : driverJobLinkMessage;
+
+    if (target === "driverJobLink" && !clean(adminDriverJobLinkState.oneTimeUrl)) {
+      setManualTelegramCopyState({
+        external_send: false,
+        loadedReference: bookingReference,
+        noProviderSend: true,
+        target,
+        tone: "info",
+        text: "Create a fresh driver job link before copying Telegram text. Existing saved links cannot reveal the token again.",
+      });
+      return;
+    }
+
+    if (!clean(messageText)) {
+      setManualTelegramCopyState({
+        external_send: false,
+        loadedReference: bookingReference,
+        noProviderSend: true,
+        target,
+        tone: "error",
+        text: `${targetLabel} is empty. Load a booking first.`,
+      });
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(messageText);
+      setManualTelegramCopyState({
+        external_send: false,
+        loadedReference: bookingReference,
+        noProviderSend: true,
+        target,
+        tone: "success",
+        text: `${targetLabel} copied. Paste into Telegram manually; no provider message was sent.`,
+      });
+    } catch {
+      setManualTelegramCopyState({
+        external_send: false,
+        loadedReference: bookingReference,
+        noProviderSend: true,
+        target,
+        tone: "error",
+        text: `Copy failed. Select the ${targetLabel.toLowerCase()} text manually.`,
+      });
+    }
+  }
+
   function adminDriverJobLinkFailureMessage(error: unknown) {
     const errorText = error instanceof Error ? error.message : "Unknown driver job link error.";
 
@@ -28107,6 +28178,48 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     adminDriverJobLinkState.message?.tone === "success" &&
     /revoked/i.test(adminDriverJobLinkState.message.text);
   const driverJobLinkCopied = driverJobLinkCopyMessage?.tone === "success";
+  const manualTelegramCopyReference =
+    cleanReferenceText(dispatchReleaseWorkflowBookingReference) ||
+    cleanReferenceText(activeAdminDriverJobLink?.booking_reference) ||
+    cleanReferenceText(loadedBookingId);
+  const manualTelegramCopyStateMatchesReference =
+    !manualTelegramCopyState?.loadedReference ||
+    manualTelegramCopyState.loadedReference === manualTelegramCopyReference;
+  const customerDriverDetailsTelegramCopyState =
+    manualTelegramCopyState?.target === "customerDriverDetails" &&
+    manualTelegramCopyStateMatchesReference
+      ? manualTelegramCopyState
+      : null;
+  const driverJobLinkTelegramCopyState =
+    manualTelegramCopyState?.target === "driverJobLink" &&
+    manualTelegramCopyStateMatchesReference
+      ? manualTelegramCopyState
+      : null;
+  const customerDriverDetailsTelegramCopied =
+    customerDriverDetailsTelegramCopyState?.tone === "success";
+  const driverJobLinkTelegramCopied = driverJobLinkTelegramCopyState?.tone === "success";
+  const customerDriverDetailsTelegramButtonTone: Message["tone"] | null =
+    customerDriverDetailsTelegramCopied
+      ? "success"
+      : customerDriverDetailsTelegramCopyState?.tone === "error"
+        ? "error"
+        : null;
+  const driverJobLinkTelegramButtonTone: Message["tone"] | null =
+    driverJobLinkTelegramCopied
+      ? "success"
+      : driverJobLinkTelegramCopyState?.tone === "error"
+        ? "error"
+        : null;
+  const customerDriverDetailsTelegramButtonLabel =
+    customerDriverDetailsTelegramCopied ? "Telegram copied" : "Telegram";
+  const customerDriverDetailsTelegramStatusText =
+    customerDriverDetailsTelegramCopyState?.tone === "success"
+      ? "Telegram copied"
+      : customerDriverDetailsTelegramCopyState?.tone === "error"
+        ? "Telegram blocked"
+        : "Telegram manual";
+  const driverJobLinkTelegramButtonLabel =
+    driverJobLinkTelegramCopied ? "Telegram copied" : "Telegram";
   const driverJobLinkCreateButtonTone: Message["tone"] | null = driverJobLinkCreated
     ? "success"
     : adminDriverJobLinkState.message?.tone === "error" &&
@@ -39851,6 +39964,27 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                         {adminCustomerDriverDetailsSmsButtonLabel}
                       </button>
                       <button
+                        aria-label="Copy customer driver details for manual Telegram send"
+                        className={`inline-flex min-h-7 w-auto shrink-0 items-center whitespace-nowrap rounded-sm border px-2 py-1 text-left text-xs font-semibold transition disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500 ${
+                          actionFeedbackButtonClass(
+                            customerDriverDetailsTelegramButtonTone,
+                            "border-emerald-200 bg-white text-emerald-800 hover:border-emerald-300 hover:text-emerald-950",
+                          )
+                        }`}
+                        data-admin-customer-driver-details-telegram-manual-copy-action="true"
+                        data-admin-customer-driver-details-telegram-manual-copy-external-send="false"
+                        data-admin-customer-driver-details-telegram-manual-copy-loaded-reference={
+                          manualTelegramCopyReference
+                        }
+                        data-admin-customer-driver-details-telegram-manual-copy-no-provider-send="true"
+                        disabled={!clean(customerCopyText)}
+                        onClick={() => copyManualTelegramMessage("customerDriverDetails")}
+                        title="Copy customer-safe driver details, then paste/send manually in Telegram."
+                        type="button"
+                      >
+                        {customerDriverDetailsTelegramButtonLabel}
+                      </button>
+                      <button
                         aria-label="Send Customer In-App update to the customer"
                         className={`inline-flex min-h-7 w-auto shrink-0 items-center whitespace-nowrap rounded-sm border px-2 py-1 text-left text-xs font-semibold transition disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500 ${
                           actionFeedbackButtonClass(
@@ -39911,6 +40045,18 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                       title={adminCustomerDriverDetailsMultiChannelDisabledStatusTitle}
                     >
                       {adminCustomerDriverDetailsMultiChannelDisabledStatusText}
+                    </span>
+                    <span
+                      className="max-w-full whitespace-nowrap rounded-full bg-white px-1.5 py-0.5 text-left text-[10px] font-semibold uppercase text-slate-700"
+                      data-admin-customer-driver-details-telegram-manual-copy-external-send="false"
+                      data-admin-customer-driver-details-telegram-manual-copy-no-provider-send="true"
+                      data-admin-customer-driver-details-telegram-manual-copy-status="true"
+                      title={
+                        customerDriverDetailsTelegramCopyState?.text ||
+                        "Telegram is manual copy only; the app does not send a provider message."
+                      }
+                    >
+                      {customerDriverDetailsTelegramStatusText}
                     </span>
                     <span
                       className="max-w-full whitespace-nowrap rounded-full bg-white px-1.5 py-0.5 text-left text-[10px] font-semibold uppercase text-slate-700"
@@ -40158,6 +40304,26 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                         {driverJobLinkCopyButtonLabel}
                       </button>
                       <button
+                        className={`min-h-9 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400 ${
+                          actionFeedbackButtonClass(
+                            driverJobLinkTelegramButtonTone,
+                            "border-indigo-300 text-indigo-900 hover:bg-indigo-50",
+                          )
+                        }`}
+                        data-driver-job-link-telegram-manual-copy-button="true"
+                        data-driver-job-link-telegram-manual-copy-external-send="false"
+                        data-driver-job-link-telegram-manual-copy-loaded-reference={
+                          manualTelegramCopyReference
+                        }
+                        data-driver-job-link-telegram-manual-copy-no-provider-send="true"
+                        disabled={!clean(adminDriverJobLinkState.oneTimeUrl)}
+                        onClick={() => copyManualTelegramMessage("driverJobLink")}
+                        title="Copy the driver job link message, then paste/send manually in Telegram."
+                        type="button"
+                      >
+                        {driverJobLinkTelegramButtonLabel}
+                      </button>
+                      <button
                         className={`min-h-9 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 ${
                           actionFeedbackButtonClass(
                             driverJobLinkRevokeButtonTone,
@@ -40180,6 +40346,18 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                         data-copy-feedback="driver-job-link"
                       >
                         {driverJobLinkCopyMessage.text}
+                      </div>
+                    ) : null}
+                    {driverJobLinkTelegramCopyState ? (
+                      <div
+                        className={`rounded-md border px-2 py-1 text-xs font-medium ${statusClass(
+                          driverJobLinkTelegramCopyState.tone,
+                        )}`}
+                        data-driver-job-link-telegram-manual-copy-external-send="false"
+                        data-driver-job-link-telegram-manual-copy-no-provider-send="true"
+                        data-driver-job-link-telegram-manual-copy-status="true"
+                      >
+                        {driverJobLinkTelegramCopyState.text}
                       </div>
                     ) : null}
                     {adminDriverJobLinkState.message?.tone === "error" ? (

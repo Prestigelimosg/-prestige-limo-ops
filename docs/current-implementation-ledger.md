@@ -3699,15 +3699,16 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ## Customer Copy Multi-Channel Existing Workflow Lock
 
 - The existing admin Customer Copy Email/WhatsApp/SMS customer driver-details workflow is locked by `docs/customer-copy-multi-channel-existing-workflow-lock.md`.
-- This lock now reflects the approved current lane: real Email is admin-selected through the already approved gated Resend route; Customer In-App and Driver In-App are admin-selected through the existing in-app notification route; Telegram remains internal-admin only; SMS and WhatsApp remain parked.
-- Do not add duplicate Email, WhatsApp, SMS, customer-message, driver-notification, provider-send, or customer driver-details workflow sectors, buttons, cards, routes, helpers, or shims.
-- Existing surfaces are `data-dispatch-workflow-step="customer-whatsapp-copy"`, `data-copy-edit-button="customerCopy"`, `data-copy-copy-button="customerCopy"`, `data-copy-preview="customerCopy"`, `data-customer-live-location-helper`, `data-admin-customer-driver-details-email-review-item`, the existing compact Email/WhatsApp/SMS controls, the existing Customer In-App control, and `data-admin-email-activation-preflight-status` in `app/page.tsx`.
+- This lock now reflects the approved current lane: real Email is admin-selected through the already approved gated Resend route; Customer In-App and Driver In-App are admin-selected through the existing in-app notification route; Telegram provider sending remains internal-admin only; customer/driver Telegram is manual clipboard preparation in Dispatch; SMS and WhatsApp remain parked.
+- Do not add duplicate Email, WhatsApp, SMS, Telegram, customer-message, driver-notification, provider-send, or customer driver-details workflow sectors, buttons, cards, routes, helpers, or shims.
+- Existing surfaces are `data-dispatch-workflow-step="customer-whatsapp-copy"`, `data-copy-edit-button="customerCopy"`, `data-copy-copy-button="customerCopy"`, `data-copy-preview="customerCopy"`, `data-customer-live-location-helper`, `data-admin-customer-driver-details-email-review-item`, the existing compact Email/WhatsApp/SMS controls, `data-admin-customer-driver-details-telegram-manual-copy-action`, `data-driver-job-link-telegram-manual-copy-button`, the existing Customer In-App control, and `data-admin-email-activation-preflight-status` in `app/page.tsx`.
 - Email now uses the existing approved gated POST route `POST /api/admin-customer-driver-details-email-send-action` from the same compact row.
 - WhatsApp and SMS remain parked on setup-only/no-op GET paths.
 - Customer In-App and Driver In-App remain explicit admin-selected in-app notification actions through `POST /api/admin-customer-driver-app-notifications`.
-- Telegram remains the existing internal-admin alert send path only through `POST /api/admin-telegram-internal-admin-alert-send`.
+- Telegram provider sending remains the existing internal-admin alert send path only through `POST /api/admin-telegram-internal-admin-alert-send`.
+- Customer/driver Telegram controls are manual clipboard-only and keep `external_send=false`, no provider call, no chat ID, no `t.me` URL, no DB write, and no notification write.
 - SMS and WhatsApp sends remain parked unless separately approved.
-- Customer/driver Telegram sends remain parked unless separately approved.
+- Customer/driver Telegram provider sends remain parked unless separately approved.
 - Existing coverage lives in `scripts/test-customer-copy-multi-channel-no-live-guard.mjs`, `scripts/test-admin-customer-driver-details-email-send-action-api-contract.mjs`, `scripts/test-customer-copy-multi-channel-existing-workflow-lock.mjs`, `scripts/test-app-smoke-browser.mjs`, `scripts/test-booking-ui-browser.mjs`, and `scripts/test-mobile-usability-browser.mjs`.
 - This lock adds `scripts/test-customer-copy-multi-channel-existing-workflow-lock.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 

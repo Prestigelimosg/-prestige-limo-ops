@@ -90,6 +90,10 @@ const guardChecks = [
     script: "scripts/test-customer-copy-multi-channel-existing-workflow-lock.mjs",
   },
   {
+    label: "admin manual Telegram copy channel guard",
+    script: "scripts/test-admin-manual-telegram-copy-channel-guard.mjs",
+  },
+  {
     label: "staging deployment approval packet guard",
     script: "scripts/test-staging-deployment-approval-packet-guard.mjs",
   },

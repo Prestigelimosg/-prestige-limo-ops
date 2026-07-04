@@ -5,7 +5,7 @@ Reviewed checkpoint: `6503f2e8 Add operator live app handoff checklist`
 
 ## Scope
 
-This is a readiness audit only. It does not activate Telegram, WhatsApp, SMS, provider credentials, env values, schema, DB writes, dispatch writes, notification rows, customer sends, driver sends, payment, payout, GPS, live-location, PDF, or invoice behavior.
+This is a readiness audit only. It does not activate Telegram provider sends, WhatsApp, SMS, provider credentials, env values, schema, DB writes, dispatch writes, notification rows, customer sends, driver sends, payment, payout, GPS, live-location, PDF, or invoice behavior.
 
 Do not click Telegram `Send Internal Test` or call `POST /api/admin-telegram-internal-admin-alert-send` unless William gives explicit action-time approval for a real internal-admin Telegram test send.
 
@@ -15,7 +15,8 @@ Do not click Telegram `Send Internal Test` or call `POST /api/admin-telegram-int
 - WhatsApp driver-details is parked on setup-only/no-op admin GET route: `GET /api/admin-whatsapp-customer-driver-details-send-disabled-setup`.
 - SMS driver-details is parked on setup-only/no-op admin GET route: `GET /api/admin-sms-customer-driver-details-send-disabled-setup`.
 - Telegram internal-admin alerts have one bounded admin route: `POST /api/admin-telegram-internal-admin-alert-send`.
-- Telegram customer sends, driver sends, live-location sends, webhooks, polling, schedulers, retries, batch sends, and automatic multi-channel fallback are not approved.
+- Telegram customer/driver provider sends, live-location sends, webhooks, polling, schedulers, retries, batch sends, and automatic multi-channel fallback are not approved.
+- Dispatch has admin manual Telegram clipboard controls for customer driver details and driver job link copy. They do not call Telegram, open Telegram URLs, use chat IDs, write notifications, or send provider messages.
 - The old Telegram setup/no-send packet is superseded by the ledger section `Telegram Internal Admin Alert Live Send Activation Lock`.
 
 ## Telegram Boundary
@@ -40,6 +41,7 @@ Customer Copy currently keeps channels separated:
 
 - Email is the only customer driver-details provider send path, and it is gated.
 - WhatsApp and SMS buttons must remain disabled/setup-only checks unless separately approved.
+- Telegram customer/driver buttons must remain manual clipboard-only unless separately approved.
 - Customer In-App and Driver In-App are separate admin-selected in-app actions.
 - No automatic fallback, automatic multi-channel blast, scheduler, retry loop, queue, or batch send is approved.
 
@@ -47,7 +49,7 @@ Customer Copy currently keeps channels separated:
 
 - Use Email only when the recipient is correct and the existing Email route is enabled.
 - Treat WhatsApp/SMS as manual-copy or setup evidence until a separate activation packet is approved.
-- Treat Telegram as internal-admin only; never use it for customer or driver notifications.
+- Treat Telegram provider sending as internal-admin only. For customer driver details and driver job links, use only the Dispatch manual-copy controls, then choose the Telegram recipient yourself outside the app.
 - Never print, screenshot, log, commit, or return provider tokens, chat IDs, cookies, API keys, secrets, or env values.
 - If any provider test fails, close the relevant env gate first, then investigate from the disabled/no-op surface.
 

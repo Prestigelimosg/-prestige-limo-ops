@@ -4300,7 +4300,10 @@ function isMarkCompletionMessage(message: Message | null | undefined) {
     message &&
       (message.text === "Marking booking completed..." ||
         message.text === "Booking marked completed." ||
-        message.text.startsWith("Mark completed failed")),
+        message.text === "Admin confirming completion..." ||
+        message.text === "Admin confirmed completed by phone. Booking moved to Completed / History." ||
+        message.text.startsWith("Mark completed failed") ||
+        message.text.startsWith("Admin confirm completed failed")),
   );
 }
 
@@ -21575,6 +21578,48 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     );
   }
 
+  async function adminConfirmBookingCompletedByPhone(
+    bookingRecord: BookingRecord,
+    context: {
+      driverLabel?: string;
+      latestDriverReportLabel?: string;
+    } = {},
+  ) {
+    const bookingId = String(bookingRecord.id);
+    const bookingStatusReference = bookingRecordStatusReference(bookingRecord);
+    const referenceLabel = compactBookingReference(bookingStatusReference);
+    const driverLabel = clean(context.driverLabel) || clean(bookingRecord.driver_name) || "Driver TBC";
+    const latestDriverReportLabel = clean(context.latestDriverReportLabel) || "No completed driver report";
+    const confirmed = window.confirm(
+      [
+        "Confirm this job is completed?",
+        "",
+        `Reference: ${referenceLabel}`,
+        `Driver: ${driverLabel}`,
+        `Latest driver report: ${latestDriverReportLabel}`,
+        "",
+        "Use this only after you confirmed with the driver.",
+        "This marks the booking Completed, not Cancelled.",
+      ].join("\n"),
+    );
+
+    if (!confirmed) {
+      setBookingCompletionMessage(bookingId, {
+        tone: "info",
+        text: "Admin completion cancelled.",
+      });
+      return;
+    }
+
+    await updateBookingStatusOnly(
+      bookingRecord,
+      "completed",
+      "Admin confirming completion...",
+      "Admin confirmed completed by phone. Booking moved to Completed / History.",
+      "Admin confirm completed failed",
+    );
+  }
+
   async function undoBookingCompleted(bookingRecord: BookingRecord) {
     await updateBookingStatusOnly(
       bookingRecord,
@@ -24603,6 +24648,8 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               activeJobDriverStatusLatest
                 ? activeJobDriverStatusLabel
                 : bookingStatusLabel(activeJobBooking.status);
+            const activeJobCompletionMessage =
+              bookingCompletionMessages[String(activeJobBooking.id)] ?? null;
             const activeJobPickupRiskState = pickupRiskStateForActiveJob(
               activeJobBooking,
               activeJobBookingReference,
@@ -24758,14 +24805,48 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                       "Photo will appear here after driver sends it."}
                   </p>
                 </div>
-                {!isSelectedActiveJob ? (
+                <div
+                  className={`mt-2 grid gap-2 ${!isSelectedActiveJob ? "sm:grid-cols-2" : ""}`}
+                  data-admin-active-job-actions="true"
+                >
+                  {!isSelectedActiveJob ? (
+                    <button
+                      className="h-8 w-full rounded-md border border-lime-300 bg-white px-2 text-xs font-semibold text-lime-950 transition hover:bg-lime-50"
+                      onClick={() => loadSelectedBooking(activeJobBooking)}
+                      type="button"
+                    >
+                      Open in Dispatch
+                    </button>
+                  ) : null}
                   <button
-                    className="mt-2 h-8 w-full rounded-md border border-lime-300 bg-white px-2 text-xs font-semibold text-lime-950 transition hover:bg-lime-50"
-                    onClick={() => loadSelectedBooking(activeJobBooking)}
+                    className="h-8 w-full rounded-md border border-emerald-300 bg-white px-2 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                    data-admin-active-job-confirm-completed={activeJobBookingReference || String(activeJobBooking.id)}
+                    disabled={completingBookingId === String(activeJobBooking.id)}
+                    onClick={() =>
+                      adminConfirmBookingCompletedByPhone(activeJobBooking, {
+                        driverLabel: activeJobDriver,
+                        latestDriverReportLabel: activeJobDriverStatusLabel,
+                      })
+                    }
+                    title="Use only after the driver confirms the trip is finished."
                     type="button"
                   >
-                    Open in Dispatch
+                    {completingBookingId === String(activeJobBooking.id)
+                      ? "Confirming..."
+                      : "Admin confirm completed"}
                   </button>
+                </div>
+                {activeJobCompletionMessage ? (
+                  <p
+                    className={`mt-2 rounded-md border px-2 py-1 text-xs font-semibold ${statusClass(
+                      activeJobCompletionMessage.tone,
+                    )}`}
+                    data-admin-active-job-confirm-completed-message={
+                      activeJobBookingReference || String(activeJobBooking.id)
+                    }
+                  >
+                    {activeJobCompletionMessage.text}
+                  </p>
                 ) : null}
               </article>
             );

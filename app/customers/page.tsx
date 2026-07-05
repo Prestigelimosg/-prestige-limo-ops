@@ -49,6 +49,8 @@ const adminCustomerPortalAccessLinksApiPath = "/api/admin-customer-portal-access
 const adminCompletedBookingCloseoutApiPath = "/api/admin-completed-booking-closeouts";
 const adminDriverJobDspActualTimeSummariesApiPath =
   "/api/admin-driver-job-dsp-actual-time-summaries";
+const customerFolderDispatchHandoffTab = "dispatch";
+const customerFolderDispatchHandoffReferenceParam = "booking_reference";
 const customerInvoiceTestArtifactArchiveAction = "archive_test_invoice";
 const approvedCustomerTestInvoiceArchiveTarget = {
   bookingReference: "ADM-20260702061357",
@@ -1024,6 +1026,27 @@ function customerFolderRowFromSavedAccount(account: RegularCustomerAccountReadRe
 
 function savedBookingReference(booking: RegularCustomerSavedBookingReadRecord) {
   return String(booking.booking_reference ?? "").trim();
+}
+
+function safeCustomerFolderDispatchHandoffReference(booking: RegularCustomerSavedBookingReadRecord) {
+  const reference = savedBookingReference(booking);
+
+  return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(reference) ? reference : "";
+}
+
+function customerFolderJobDispatchHref(booking: RegularCustomerSavedBookingReadRecord) {
+  const bookingReference = safeCustomerFolderDispatchHandoffReference(booking);
+
+  if (!bookingReference) {
+    return "";
+  }
+
+  const params = new URLSearchParams({
+    [customerFolderDispatchHandoffReferenceParam]: bookingReference,
+    tab: customerFolderDispatchHandoffTab,
+  });
+
+  return `/?${params.toString()}`;
 }
 
 function savedBookingCustomerId(booking: RegularCustomerSavedBookingReadRecord) {
@@ -5550,6 +5573,7 @@ export default function MockCustomerDashboardPage() {
                           savedBookingReference(booking) ||
                           `${booking.customer_id || "customer"}-${booking.pickup_at || "job"}`;
                         const isExpanded = expandedCustomerFolderJobReference === bookingReference;
+                        const dispatchHandoffHref = customerFolderJobDispatchHref(booking);
 
                         return (
                           <article
@@ -5599,6 +5623,17 @@ export default function MockCustomerDashboardPage() {
                                   Billing account:{" "}
                                   {savedBookingDisplayText(booking.customer_account, "Not available")}
                                 </p>
+                                {dispatchHandoffHref ? (
+                                  <div className="mt-2 flex flex-wrap gap-2">
+                                    <Link
+                                      className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-950 px-3 text-xs font-bold text-white transition hover:bg-slate-800"
+                                      data-customer-folder-job-open-dispatch={bookingReference}
+                                      href={dispatchHandoffHref}
+                                    >
+                                      Open in Dispatch
+                                    </Link>
+                                  </div>
+                                ) : null}
                               </div>
                             ) : null}
                           </article>

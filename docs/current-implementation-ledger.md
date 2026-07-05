@@ -1036,6 +1036,14 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This is a UI handoff into the existing admin invoice workflow; it does not add a second invoice engine, create invoice numbers, generate PDFs, send invoices, activate payment/provider sending, write DB rows, change env, activate GPS/live location, billing/payout automation, calendar sync, parser changes, or shims.
 - Guard coverage lives in `scripts/test-customers-folder-finder-unbilled-queue-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Customer Folder Dispatch Handoff
+
+- Customer Folder `View jobs` now exposes one safe `Open in Dispatch` handoff for each saved booking row with an exact booking reference.
+- The handoff uses `/?tab=dispatch&booking_reference=...`, performs only guarded admin GET reads, finds one exact booking reference, and then calls the existing Dispatch `loadSelectedBooking` editor/review path.
+- Customer Folder does not expose a delete job button, raw internal booking id, PATCH, DELETE, invoice, payment, provider send, GPS/live-location, parser/debug, or mock archive action.
+- Delete remains limited to the existing Completed / History lane, where the app resolves the internal saved booking id and only deletes completed/cancelled/driver-completed history jobs.
+- Guard coverage lives in `scripts/test-customer-folder-dispatch-handoff-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Customer Trust Path And Portal Invoice Folder Lock
 
 - Customer `/book` and `/my-bookings` request forms both require contact number, passenger name, pickup date, pickup time, pickup location, and drop-off location before submission.

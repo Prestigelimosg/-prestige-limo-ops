@@ -101,6 +101,8 @@ const adminFullDriverProfileRuntimeWriteActionApiPath =
 const adminSavedBookingsApiPath = "/api/admin-saved-bookings";
 const adminBookingsApiPath = "/api/admin-bookings";
 const adminLoadBookingsListLimit = "100";
+const dispatchHandoffReferenceQueryParam = "booking_reference";
+const dispatchHandoffAlternateReferenceQueryParam = "dispatch_booking_reference";
 const saveCrmBillingIdentityReviewReadLimit = 200;
 const adminHandledCustomerBookingRequestsStorageKey =
   "prestige-admin-handled-customer-booking-requests";
@@ -2898,6 +2900,12 @@ function compactBookingReference(value: string | number | null | undefined) {
   }
 
   return `${reference.slice(0, 6)}...${reference.slice(-6)}`;
+}
+
+function cleanDispatchHandoffBookingReference(value: string | number | null | undefined) {
+  const cleaned = cleanReferenceText(value);
+
+  return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(cleaned) ? cleaned : "";
 }
 
 function formatAdminLiveLocationTimestamp(value: string | null | undefined) {
@@ -12404,6 +12412,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     useState<Record<string, Message>>({});
   const [loadedBookingId, setLoadedBookingId] = useState("");
   const loadedBookingIdRef = useRef("");
+  const dispatchHandoffAttemptedReferenceRef = useRef("");
   const [driverProfileDraft, setDriverProfileDraft] =
     useState<DriverProfileDraft>(initialDriverProfileDraft);
   const [mockMidnightChargeOverrideMode, setMockMidnightChargeOverrideMode] =
@@ -18943,6 +18952,148 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       void loadCompanyProfileSettings();
     }
   }
+
+  async function loadDispatchHandoffBookingFromUrl(targetBookingReference: string) {
+    const safeTargetBookingReference = cleanDispatchHandoffBookingReference(targetBookingReference);
+
+    setActiveTab("dispatch");
+
+    if (!safeTargetBookingReference) {
+      setMessage({
+        tone: "error",
+        text: "Customer folder dispatch handoff blocked: booking reference is malformed.",
+      });
+      return;
+    }
+
+    if (typeof fetch !== "function") {
+      setMessage({
+        tone: "error",
+        text: "Customer folder dispatch handoff failed: admin booking read API is not available.",
+      });
+      return;
+    }
+
+    setLoading(true);
+    setMessage({
+      tone: "info",
+      text: `Opening ${safeTargetBookingReference} in Dispatch...`,
+    });
+
+    try {
+      const searchParams = new URLSearchParams({ limit: adminLoadBookingsListLimit });
+      const requestInit = {
+        headers: {
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "GET",
+      } satisfies RequestInit;
+      const savedBookingsResponse = await fetch(
+        `${adminSavedBookingsApiPath}?${searchParams.toString()}`,
+        requestInit,
+      );
+      const savedBookingsBody = (await savedBookingsResponse.json().catch(() => null)) as
+        | AdminSavedBookingReadResponse
+        | null;
+      let loadedBookings =
+        savedBookingsResponse.ok &&
+        savedBookingsBody?.ok === true &&
+        Array.isArray(savedBookingsBody.bookings)
+          ? savedBookingsBody.bookings
+          : [];
+
+      if (loadedBookings.length === 0) {
+        const adminBookingsResponse = await fetch(
+          `${adminBookingsApiPath}?${searchParams.toString()}`,
+          requestInit,
+        );
+        const adminBookingsBody = (await adminBookingsResponse.json().catch(() => null)) as
+          | AdminSavedBookingReadResponse
+          | null;
+
+        if (
+          !adminBookingsResponse.ok ||
+          adminBookingsBody?.ok !== true ||
+          !Array.isArray(adminBookingsBody.bookings)
+        ) {
+          const savedBookingsError = readAdminLegacyDataError(
+            savedBookingsBody,
+            "Admin saved booking list read request failed.",
+          ).message;
+          const adminBookingsError = readAdminLegacyDataError(
+            adminBookingsBody,
+            savedBookingsError,
+          ).message;
+
+          throw new Error(formatSupabaseError(adminBookingsError));
+        }
+
+        loadedBookings = adminBookingsBody.bookings;
+      }
+
+      const targetBooking = findLoadedBookingRecordByReference(
+        loadedBookings,
+        safeTargetBookingReference,
+      );
+
+      if (!targetBooking) {
+        setBookings(sortBookingsNewestFirst(loadedBookings));
+        setMessage({
+          tone: "error",
+          text: `Customer folder dispatch handoff could not find ${safeTargetBookingReference}. Load Bookings, then search the exact reference.`,
+        });
+        return;
+      }
+
+      setBookings(sortBookingsNewestFirst(loadedBookings));
+      loadSelectedBooking(targetBooking, { focusCustomerCopy: true });
+
+      if (typeof window !== "undefined") {
+        window.history.replaceState(null, "", window.location.pathname);
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown dispatch handoff error.";
+
+      setMessage({
+        tone: "error",
+        text: `Customer folder dispatch handoff failed: ${errorMessage}`,
+      });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const searchParams = new URLSearchParams(window.location.search);
+
+    if (searchParams.get("tab") !== "dispatch") {
+      return;
+    }
+
+    const rawTargetBookingReference =
+      searchParams.get(dispatchHandoffReferenceQueryParam) ||
+      searchParams.get(dispatchHandoffAlternateReferenceQueryParam) ||
+      "";
+    const safeTargetBookingReference = cleanDispatchHandoffBookingReference(rawTargetBookingReference);
+
+    if (!rawTargetBookingReference) {
+      setActiveTab("dispatch");
+      return;
+    }
+
+    if (dispatchHandoffAttemptedReferenceRef.current === rawTargetBookingReference) {
+      return;
+    }
+
+    dispatchHandoffAttemptedReferenceRef.current = rawTargetBookingReference;
+    void loadDispatchHandoffBookingFromUrl(safeTargetBookingReference || rawTargetBookingReference);
+    // One-time URL handoff only; rerunning after local state changes can reload the editor unexpectedly.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function openCustomerBookingRequestsReview() {
     selectAppTab("bookings");

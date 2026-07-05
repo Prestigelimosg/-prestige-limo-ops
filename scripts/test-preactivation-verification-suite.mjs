@@ -394,6 +394,10 @@ const guardChecks = [
     script: "scripts/test-customers-folder-finder-unbilled-queue-guard.mjs",
   },
   {
+    label: "customer folder dispatch handoff guard",
+    script: "scripts/test-customer-folder-dispatch-handoff-guard.mjs",
+  },
+  {
     label: "customer trust path invoice portal guard",
     script: "scripts/test-customer-trust-path-invoice-portal-guard.mjs",
   },

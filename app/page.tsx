@@ -3074,6 +3074,18 @@ function bookingRecordPersistedReference(bookingRecord: BookingRecord) {
   return cleanReferenceText(bookingRecord.booking_reference) || cleanReferenceText(bookingRecord.id);
 }
 
+function bookingRecordNumericSavedBookingId(
+  bookingRecord: BookingRecord,
+  operationalCard?: LoadBookingsOperationalDisplayCard,
+) {
+  return (
+    [
+      cleanReferenceText(bookingRecord.id),
+      cleanReferenceText(operationalCard?.booking_id),
+    ].find((candidate) => /^\d+$/.test(candidate)) || ""
+  );
+}
+
 function compactBookingReference(value: string | number | null | undefined) {
   const reference = cleanReferenceText(value);
 
@@ -21867,9 +21879,70 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     return isCompletedStatus || isCancelledStatus || isDriverCompletedHistoryJob;
   }
 
-  async function deleteCompletedHistoryBooking(bookingRecord: BookingRecord) {
-    const bookingId = bookingRecordStableKey(bookingRecord);
-    const deleteBookingId = cleanReferenceText(bookingRecord.id);
+  async function resolveCompletedHistoryDeleteBookingId(
+    bookingRecord: BookingRecord,
+    operationalCard?: LoadBookingsOperationalDisplayCard,
+  ) {
+    const directBookingId = bookingRecordNumericSavedBookingId(bookingRecord, operationalCard);
+
+    if (directBookingId) {
+      return directBookingId;
+    }
+
+    const bookingReference =
+      bookingRecordPersistedReference(bookingRecord) ||
+      cleanReferenceText(operationalCard?.booking_reference) ||
+      cleanReferenceText(operationalCard?.booking_id);
+
+    if (!bookingReference) {
+      return "";
+    }
+
+    const searchParams = new URLSearchParams();
+    searchParams.set("limit", adminLoadBookingsListLimit);
+
+    const response = await fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`, {
+      headers: {
+        "x-prestige-admin-purpose": adminLegacyDataPurpose,
+      },
+      method: "GET",
+    });
+    const responseBody = (await response.json().catch(() => null)) as AdminSavedBookingReadResponse | null;
+
+    if (!response.ok || responseBody?.ok !== true || !Array.isArray(responseBody.bookings)) {
+      const error = readAdminLegacyDataError(
+        responseBody,
+        "Admin saved booking id lookup failed.",
+      );
+
+      throw new Error(formatSupabaseError(error));
+    }
+
+    const matchingIds = Array.from(
+      new Set(
+        responseBody.bookings
+          .filter((candidate) => cleanReferenceText(candidate.booking_reference) === bookingReference)
+          .map((candidate) => bookingRecordNumericSavedBookingId(candidate))
+          .filter(Boolean),
+      ),
+    );
+
+    if (matchingIds.length === 1) {
+      return matchingIds[0];
+    }
+
+    if (matchingIds.length > 1) {
+      throw new Error("Delete job failed safely: multiple saved bookings matched this reference.");
+    }
+
+    return "";
+  }
+
+  async function deleteCompletedHistoryBooking(
+    bookingRecord: BookingRecord,
+    operationalCard?: LoadBookingsOperationalDisplayCard,
+  ) {
+    const bookingId = bookingRecordStableKey(bookingRecord, operationalCard);
     const isCompletedStatus = bookingRecordIsCompletedStatus(bookingRecord);
     const isCancelledStatus = bookingRecordIsCancelledStatus(bookingRecord);
     const isDriverCompletedHistoryJob =
@@ -21879,14 +21952,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       setBookingCompletionMessage(bookingId, {
         tone: "error",
         text: "Delete job failed: only completed, cancelled, or driver-completed jobs can be deleted here.",
-      });
-      return;
-    }
-
-    if (!deleteBookingId) {
-      setBookingCompletionMessage(bookingId, {
-        tone: "error",
-        text: "Delete job failed: saved booking id is missing. Reload bookings, then try again.",
       });
       return;
     }
@@ -21910,6 +21975,12 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     setBookingCompletionMessage(bookingId, { tone: "info", text: "Deleting job..." });
 
     try {
+      const deleteBookingId = await resolveCompletedHistoryDeleteBookingId(bookingRecord, operationalCard);
+
+      if (!deleteBookingId) {
+        throw new Error("saved booking id is missing. Reload bookings, then try again.");
+      }
+
       if (isDriverCompletedHistoryJob) {
         const statusResult = await patchBookingStatusReference(
           bookingRecordStatusReference(bookingRecord),
@@ -21949,10 +22020,21 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         throw new Error(formatSupabaseError(error));
       }
 
+      const deletedBookingReference =
+        bookingRecordPersistedReference(bookingRecord) ||
+        cleanReferenceText(operationalCard?.booking_reference) ||
+        cleanReferenceText(operationalCard?.booking_id);
+
       setBookings((current) =>
-        current.filter((currentBooking) => cleanReferenceText(currentBooking.id) !== deleteBookingId),
+        current.filter((currentBooking) => {
+          const currentBookingId = bookingRecordNumericSavedBookingId(currentBooking);
+          const currentBookingReference = bookingRecordPersistedReference(currentBooking);
+
+          return currentBookingId !== deleteBookingId && currentBookingReference !== deletedBookingReference;
+        }),
       );
       setBookingCompletionMessage(bookingId, { tone: "success", text: "Job deleted." });
+      await loadBookings("Bookings synced.", { silent: true });
     } catch (error) {
       const errorText = error instanceof Error ? error.message : "Unknown archived job delete error.";
       setBookingCompletionMessage(bookingId, {
@@ -22901,7 +22983,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                             className="h-10 rounded-md border border-rose-300 bg-white px-3 text-sm font-semibold text-rose-800 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                             data-completed-delete-booking={bookingId}
                             disabled={deletingCompletedBookingId === bookingId || completingBookingId === bookingId}
-                            onClick={() => deleteCompletedHistoryBooking(savedBooking)}
+                            onClick={() => deleteCompletedHistoryBooking(savedBooking, operationalCard)}
                             type="button"
                           >
                             {deletingCompletedBookingId === bookingId ? "Deleting..." : "Delete"}

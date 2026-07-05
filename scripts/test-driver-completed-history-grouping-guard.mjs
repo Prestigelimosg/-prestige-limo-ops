@@ -85,7 +85,8 @@ for (const fragment of [
 
 for (const fragment of [
   "async function syncBookingCompletedStatusFromDriverReport",
-  'patchBookingStatusReference(bookingStatusReference, "completed")',
+  '"completed",',
+  "matchingBooking,",
   "driverCompletedBookingStatusSyncRequestedRef.current.add(bookingStatusReference)",
   "function DispatcherStatusSummaryBlock",
   "const status = bookingRecordIsCancelledStatus(bookingRecord)",

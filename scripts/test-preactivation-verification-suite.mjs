@@ -230,6 +230,10 @@ const guardChecks = [
     script: "scripts/test-driver-completed-history-grouping-guard.mjs",
   },
   {
+    label: "completed history delete id resolution guard",
+    script: "scripts/test-completed-history-delete-id-resolution-guard.mjs",
+  },
+  {
     label: "customer terms and hourly billing guard",
     script: "scripts/test-customer-terms-hourly-billing-guard.mjs",
   },

@@ -138,7 +138,7 @@ assertIncludes(
 );
 assertIncludes(
   adminDispatcherBoundary,
-  "internalAdminDashboardRefererPathnames.has(refererUrl.pathname)",
+  "internalAdminDashboardRefererPathnames.has(pathname)",
   "Admin dispatcher boundary must check the internal admin referer allowlist.",
 );
 for (const publicRefererPath of ['"/book"', '"/my-bookings"', '"/customers"', '"/driver-job"']) {

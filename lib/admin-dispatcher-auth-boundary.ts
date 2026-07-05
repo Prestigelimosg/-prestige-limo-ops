@@ -20,6 +20,8 @@ export type AdminDispatcherBoundaryResult =
 export const adminBookingPersistencePurpose = "admin-booking-persistence";
 
 type AdminDispatcherBoundaryOptions = {
+  additionalSameOriginRefererPathPrefixes?: readonly string[];
+  additionalSameOriginRefererPathnames?: readonly string[];
   allowServerSessionRoleMethodsWithoutRequestToken?: readonly string[];
 };
 
@@ -33,7 +35,10 @@ function adminBookingPersistenceWritesEnabled() {
   return process.env.PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED === "true";
 }
 
-function hasSameOriginAdminDashboardReferer(request: Request) {
+function hasSameOriginAdminDashboardReferer(
+  request: Request,
+  options: AdminDispatcherBoundaryOptions = {},
+) {
   const requestUrl = new URL(request.url);
   const origin = request.headers.get("origin");
   const referer = request.headers.get("referer");
@@ -48,10 +53,15 @@ function hasSameOriginAdminDashboardReferer(request: Request) {
 
   try {
     const refererUrl = new URL(referer);
+    const pathname = refererUrl.pathname;
+    const additionalPathnames = new Set(options.additionalSameOriginRefererPathnames || []);
+    const additionalPrefixes = options.additionalSameOriginRefererPathPrefixes || [];
 
     return (
       refererUrl.origin === requestUrl.origin &&
-      internalAdminDashboardRefererPathnames.has(refererUrl.pathname)
+      (internalAdminDashboardRefererPathnames.has(pathname) ||
+        additionalPathnames.has(pathname) ||
+        additionalPrefixes.some((prefix) => pathname.startsWith(prefix)))
     );
   } catch {
     return false;
@@ -134,7 +144,7 @@ export function resolveAdminDispatcherBoundary(
 ): AdminDispatcherBoundaryResult {
   const purpose = request.headers.get("x-prestige-admin-purpose");
 
-  if (purpose !== expectedPurpose || !hasSameOriginAdminDashboardReferer(request)) {
+  if (purpose !== expectedPurpose || !hasSameOriginAdminDashboardReferer(request, options)) {
     return {
       ok: false,
       status: 403,

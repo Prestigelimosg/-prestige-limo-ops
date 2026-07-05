@@ -256,7 +256,8 @@ for (const fragment of [
   "const shouldUseTypedOperationalOrder =",
   "options?.useTypedOperationalOrder ?? loadBookingsTypedOperationalCardOrder.length > 0",
   "if (!shouldUseTypedOperationalOrder)",
-  "typedOrder: loadBookingsTypedOperationalCardOrderIndex.get(String(displayItem.bookingRecord.id))",
+  "typedOrder: loadBookingsTypedOperationalCardOrderIndex.get(",
+  "bookingRecordStableKey(displayItem.bookingRecord, displayItem.operationalCard)",
 ]) {
   assertIncludes(operationalDisplayItemBlock, fragment, `operational display item boundary ${fragment}`);
 }
@@ -292,8 +293,7 @@ assertIncludes(
 );
 for (const fragment of [
   "const bookingReference =",
-  "cleanReferenceText(bookingRecord.booking_reference)",
-  "cleanReferenceText(bookingRecord.id)",
+  "bookingRecordPersistedReference(bookingRecord)",
   "setLoadedBookingId(bookingReference)",
 ]) {
   assertIncludes(loadSelectedBookingBlock, fragment, `selected booking legacy id source ${fragment}`);

@@ -1,6 +1,7 @@
 import {
   createAdminBooking,
   type AdminBookingPersistenceUpdateInput,
+  loadAdminBookingByReference,
   listAdminBookings,
   parseAdminBookingPersistencePayload,
   parseAdminBookingUpdatePayload,
@@ -123,6 +124,14 @@ function adminBookingListLimitFromRequest(request: Request) {
   }
 }
 
+function adminBookingReferenceFromRequest(request: Request) {
+  try {
+    return clean(new URL(request.url).searchParams.get("booking_reference"));
+  } catch {
+    return "";
+  }
+}
+
 function normalizedToken(value: unknown) {
   return clean(value).replace(/([a-z])([A-Z])/g, "$1_$2").replace(/[^a-z0-9]+/gi, "_").toLowerCase();
 }
@@ -213,6 +222,21 @@ export async function GET(request: Request) {
     }
 
     const actor = adminDispatcherBoundaryToPersistenceAdapterActor(boundary.context);
+    const bookingReference = adminBookingReferenceFromRequest(request);
+
+    if (bookingReference) {
+      const result = await loadAdminBookingByReference(actor, bookingReference);
+
+      if (!result.ok) {
+        return adminBookingFailureResponse(result);
+      }
+
+      return Response.json({
+        booking: result.data,
+        ok: true,
+      });
+    }
+
     const result = await listAdminBookings(actor, {
       limit: adminBookingListLimitFromRequest(request),
     });

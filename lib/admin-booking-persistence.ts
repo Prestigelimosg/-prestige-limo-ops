@@ -1,5 +1,6 @@
 import {
   createAdminBookingThroughSupabaseAdapter,
+  loadAdminBookingByReferenceThroughSupabaseAdapter,
   listAdminBookingsThroughSupabaseAdapter,
   updateAdminBookingThroughSupabaseAdapter,
   type AdminBookingPersistenceAdapterActor,
@@ -1138,4 +1139,21 @@ export async function listAdminBookings(
   options: AdminBookingListOptions = {},
 ): Promise<AdminBookingResult<AdminBookingPersistenceRecord[]>> {
   return listAdminBookingsThroughSupabaseAdapter(actor, options);
+}
+
+export async function loadAdminBookingByReference(
+  actor: AdminBookingPersistenceAdapterActor,
+  bookingReference: string | null | undefined,
+): Promise<AdminBookingResult<AdminBookingPersistenceRecord>> {
+  const safeBookingReference = validTargetBookingReference(bookingReference);
+
+  if (!safeBookingReference) {
+    return {
+      error: "Missing or malformed target admin booking reference.",
+      ok: false,
+      status: 400,
+    };
+  }
+
+  return loadAdminBookingByReferenceThroughSupabaseAdapter(actor, safeBookingReference);
 }

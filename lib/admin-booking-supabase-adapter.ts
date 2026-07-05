@@ -1412,6 +1412,28 @@ async function fetchAdminBookingByReference(
   };
 }
 
+export async function loadAdminBookingByReferenceThroughSupabaseAdapter(
+  actor: AdminBookingPersistenceAdapterActor,
+  bookingReference: string,
+): Promise<AdminBookingResult<AdminBookingPersistenceRecord>> {
+  const clientResult = getServerOnlySupabaseClient(actor);
+
+  if (!clientResult.ok) {
+    return clientResult;
+  }
+
+  const result = await fetchAdminBookingByReference(clientResult.data, bookingReference);
+
+  if (!result.ok) {
+    return result;
+  }
+
+  return {
+    data: result.data,
+    ok: true,
+  };
+}
+
 async function createAuditLog(
   client: SupabaseClient,
   bookingId: DbIdentifier,

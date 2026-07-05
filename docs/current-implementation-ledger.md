@@ -1039,7 +1039,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Customer Folder Dispatch Handoff
 
 - Customer Folder `View jobs` now exposes one safe `Open in Dispatch` handoff for each saved booking row with an exact booking reference.
-- The handoff uses `/?tab=dispatch&booking_reference=...`, performs only guarded admin GET reads, finds one exact booking reference, and then calls the existing Dispatch `loadSelectedBooking` editor/review path.
+- The handoff uses `/?tab=dispatch&booking_reference=...`, performs one exact guarded admin GET read through `/api/admin-bookings?booking_reference=...`, and then calls the existing Dispatch `loadSelectedBooking` editor/review path.
+- It does not rely on the recent bookings list window, so older customer-folder jobs can still open by exact reference.
 - Customer Folder does not expose a delete job button, raw internal booking id, PATCH, DELETE, invoice, payment, provider send, GPS/live-location, parser/debug, or mock archive action.
 - Delete remains limited to the existing Completed / History lane, where the app resolves the internal saved booking id and only deletes completed/cancelled/driver-completed history jobs.
 - Guard coverage lives in `scripts/test-customer-folder-dispatch-handoff-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.

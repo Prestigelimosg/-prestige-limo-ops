@@ -18981,71 +18981,46 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     });
 
     try {
-      const searchParams = new URLSearchParams({ limit: adminLoadBookingsListLimit });
+      const searchParams = new URLSearchParams({
+        [dispatchHandoffReferenceQueryParam]: safeTargetBookingReference,
+      });
       const requestInit = {
         headers: {
           "x-prestige-admin-purpose": adminLegacyDataPurpose,
         },
         method: "GET",
       } satisfies RequestInit;
-      const savedBookingsResponse = await fetch(
-        `${adminSavedBookingsApiPath}?${searchParams.toString()}`,
-        requestInit,
-      );
-      const savedBookingsBody = (await savedBookingsResponse.json().catch(() => null)) as
+      const response = await fetch(`${adminBookingsApiPath}?${searchParams.toString()}`, requestInit);
+      const responseBody = (await response.json().catch(() => null)) as
         | AdminSavedBookingReadResponse
         | null;
-      let loadedBookings =
-        savedBookingsResponse.ok &&
-        savedBookingsBody?.ok === true &&
-        Array.isArray(savedBookingsBody.bookings)
-          ? savedBookingsBody.bookings
-          : [];
+      const targetBooking = responseBody?.booking ?? null;
+      const responseReference = targetBooking
+        ? bookingRecordPersistedReference(targetBooking)
+        : "";
 
-      if (loadedBookings.length === 0) {
-        const adminBookingsResponse = await fetch(
-          `${adminBookingsApiPath}?${searchParams.toString()}`,
-          requestInit,
+      if (
+        !response.ok ||
+        responseBody?.ok !== true ||
+        !targetBooking ||
+        responseReference !== safeTargetBookingReference
+      ) {
+        const error = readAdminLegacyDataError(
+          responseBody,
+          `Customer folder dispatch handoff could not find ${safeTargetBookingReference}.`,
         );
-        const adminBookingsBody = (await adminBookingsResponse.json().catch(() => null)) as
-          | AdminSavedBookingReadResponse
-          | null;
 
-        if (
-          !adminBookingsResponse.ok ||
-          adminBookingsBody?.ok !== true ||
-          !Array.isArray(adminBookingsBody.bookings)
-        ) {
-          const savedBookingsError = readAdminLegacyDataError(
-            savedBookingsBody,
-            "Admin saved booking list read request failed.",
-          ).message;
-          const adminBookingsError = readAdminLegacyDataError(
-            adminBookingsBody,
-            savedBookingsError,
-          ).message;
-
-          throw new Error(formatSupabaseError(adminBookingsError));
-        }
-
-        loadedBookings = adminBookingsBody.bookings;
+        throw new Error(formatSupabaseError(error));
       }
 
-      const targetBooking = findLoadedBookingRecordByReference(
-        loadedBookings,
-        safeTargetBookingReference,
-      );
+      setBookings((currentBookings) => {
+        const filteredBookings = currentBookings.filter(
+          (currentBooking) =>
+            bookingRecordPersistedReference(currentBooking) !== safeTargetBookingReference,
+        );
 
-      if (!targetBooking) {
-        setBookings(sortBookingsNewestFirst(loadedBookings));
-        setMessage({
-          tone: "error",
-          text: `Customer folder dispatch handoff could not find ${safeTargetBookingReference}. Load Bookings, then search the exact reference.`,
-        });
-        return;
-      }
-
-      setBookings(sortBookingsNewestFirst(loadedBookings));
+        return [targetBooking, ...filteredBookings];
+      });
       loadSelectedBooking(targetBooking, { focusCustomerCopy: true });
 
       if (typeof window !== "undefined") {

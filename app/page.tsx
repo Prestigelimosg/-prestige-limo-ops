@@ -573,6 +573,7 @@ type AdminBookingsListReadResult =
 
 type AdminSavedBookingStatusResponse = {
   booking?: {
+    booking_reference?: string | null;
     id?: string | number;
     status?: BookingStatusValue | string | null;
     updated_at?: string | null;
@@ -21021,8 +21022,16 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         throw new Error(result?.error || "Driver job link revoke failed.");
       }
 
+      const driverJobLinkBookingRecord = findLoadedBookingRecordByReference(
+        bookings,
+        driverJobLinkBookingReference,
+      );
       const statusResult = driverJobLinkBookingReference
-        ? await patchBookingStatusReference(driverJobLinkBookingReference, "cancelled")
+        ? await patchBookingStatusReference(
+            driverJobLinkBookingReference,
+            "cancelled",
+            driverJobLinkBookingRecord ?? undefined,
+          )
         : {
             errorText: "No loaded booking reference was available for status update.",
             ok: false as const,
@@ -21515,6 +21524,24 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     return bookingRecordPersistedReference(bookingRecord);
   }
 
+  function bookingRecordStatusReferenceCandidates(
+    bookingRecord: BookingRecord | null | undefined,
+    extraReferences: Array<string | number | null | undefined> = [],
+  ) {
+    const candidates = [...extraReferences];
+
+    if (bookingRecord) {
+      candidates.push(
+        bookingRecordStatusReference(bookingRecord),
+        bookingRecord.booking_reference,
+        bookingRecord.id,
+        bookingRecordStableKey(bookingRecord),
+      );
+    }
+
+    return Array.from(new Set(candidates.map(cleanReferenceText).filter(Boolean)));
+  }
+
   function bookingRecordMatchesStatusReference(
     bookingRecord: BookingRecord,
     bookingStatusReference: string,
@@ -21523,8 +21550,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
 
     return Boolean(
       cleanedReference &&
-        (cleanReferenceText(bookingRecord.booking_reference) === cleanedReference ||
-          cleanReferenceText(bookingRecord.id) === cleanedReference),
+        bookingRecordStatusReferenceCandidates(bookingRecord).includes(cleanedReference),
     );
   }
 
@@ -21541,6 +21567,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   async function patchBookingStatusReference(
     bookingStatusReference: string,
     nextStatus: BookingStatusValue,
+    sourceBookingRecord?: BookingRecord,
   ): Promise<BookingStatusPatchResult> {
     const cleanedBookingStatusReference = cleanReferenceText(bookingStatusReference);
 
@@ -21573,6 +21600,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       const responseBody = (await response.json().catch(() => null)) as AdminSavedBookingStatusResponse | null;
       const responseBooking = responseBody?.booking ?? null;
       const responseBookingId = cleanReferenceText(responseBooking?.id);
+      const responseBookingReference = cleanReferenceText(responseBooking?.booking_reference);
       const responseUpdatedAt = cleanReferenceText(responseBooking?.updated_at);
 
       if (
@@ -21593,7 +21621,11 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
 
       const statusReferences = Array.from(
         new Set(
-          [cleanedBookingStatusReference, responseBookingId]
+          bookingRecordStatusReferenceCandidates(sourceBookingRecord, [
+            cleanedBookingStatusReference,
+            responseBookingId,
+            responseBookingReference,
+          ])
             .map(cleanReferenceText)
             .filter(Boolean),
         ),
@@ -21674,7 +21706,11 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     setBookingCompletionMessage(bookingId, loadingMessage);
 
     try {
-      const result = await patchBookingStatusReference(bookingStatusReference, nextStatus);
+      const result = await patchBookingStatusReference(
+        bookingStatusReference,
+        nextStatus,
+        bookingRecord,
+      );
 
       if (!result.ok) {
         throw new Error(result.errorText);
@@ -21718,7 +21754,11 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     }
 
     driverCompletedBookingStatusSyncRequestedRef.current.add(bookingStatusReference);
-    const result = await patchBookingStatusReference(bookingStatusReference, "completed");
+    const result = await patchBookingStatusReference(
+      bookingStatusReference,
+      "completed",
+      matchingBooking,
+    );
 
     if (!result.ok) {
       driverCompletedBookingStatusSyncRequestedRef.current.delete(bookingStatusReference);
@@ -21849,6 +21889,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         const statusResult = await patchBookingStatusReference(
           bookingRecordStatusReference(bookingRecord),
           "completed",
+          bookingRecord,
         );
 
         if (!statusResult.ok) {

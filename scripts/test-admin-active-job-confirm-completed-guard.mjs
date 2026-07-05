@@ -37,6 +37,12 @@ const confirmHelper = extractBetween(
   "async function undoBookingCompleted(",
   "admin confirm completed helper",
 );
+const statusPatchHelper = extractBetween(
+  appPage,
+  "function bookingRecordStatusReference(",
+  "async function updateBookingStatusOnly(",
+  "booking status patch helper",
+);
 const todayJobsCard = extractBetween(
   appPage,
   "data-admin-multi-driver-active-job={",
@@ -96,5 +102,25 @@ assert.equal(
   1,
   "Today Jobs admin confirm completed handler must be wired once.",
 );
+
+for (const fragment of [
+  "function bookingRecordStatusReferenceCandidates(",
+  "bookingRecordStableKey(bookingRecord)",
+  "bookingRecordStatusReferenceCandidates(bookingRecord).includes(cleanedReference)",
+  "sourceBookingRecord?: BookingRecord",
+  "responseBookingReference",
+  "bookingRecordStatusReferenceCandidates(sourceBookingRecord, [",
+]) {
+  assertIncludes(statusPatchHelper, fragment, `status patch helper fragment ${fragment}`);
+}
+
+for (const fragment of [
+  "patchBookingStatusReference(\n        bookingStatusReference,\n        nextStatus,\n        bookingRecord,",
+  "patchBookingStatusReference(\n      bookingStatusReference,\n      \"completed\",\n      matchingBooking,",
+  "const driverJobLinkBookingRecord = findLoadedBookingRecordByReference(",
+  "driverJobLinkBookingRecord ?? undefined",
+]) {
+  assertIncludes(appPage, fragment, `status update source-record fragment ${fragment}`);
+}
 
 console.log("Admin active-job confirm completed guard passed");

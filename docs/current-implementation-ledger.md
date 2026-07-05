@@ -334,8 +334,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Admin Dispatch Draft Save Must-Fill Removal
 
-- Admin Dispatch fields no longer show required asterisks; Save + CRM can save an admin draft even when customer/contact/date/route fields are blank.
-- Blank admin draft values are saved through safe `To Confirm` placeholders where the `/api/admin-bookings` contract requires text, while optional Booker email still validates only when typed.
+- Admin Dispatch fields no longer show required asterisks; Save + CRM now blocks blank outbound pickup date/time before writing, so normal operations cannot silently create Dec 2099 draft bookings.
+- Blank admin draft customer/contact/route values still use safe `To Confirm` placeholders where the `/api/admin-bookings` contract requires text, while optional Booker email still validates only when typed.
 - The old Booker WhatsApp / Contact preflight and the old “review warnings before saving” checkbox gate were removed from the admin Save + CRM path.
 - Google Calendar auto-sync is skipped for incomplete admin drafts that do not have real date/time or route details, so placeholder draft saves do not create fake calendar events.
 - Public/customer booking request validation is separate and was not changed by this admin Dispatch draft lane.
@@ -979,8 +979,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The Driver Job Link card no longer renders the active-link status pill, copied success box, or loaded-active-link banner shown below the buttons; only errors remain as separate feedback.
 - The Driver Job Link preview stays empty unless the current create action has returned a fresh one-time URL; revoking a link clears the local link record and preview text.
 - The Job Card Preview action toolbar is compact and wrapped; Save + CRM now sits in its own primary save group, separated from Calendar/Edit/Copy utility buttons and Manual Extra Charges, without changing the save or calendar handlers.
-- Admin Dispatch fields no longer show required asterisks; Save + CRM can save an admin draft even when customer/contact/date/route fields are blank.
-- Blank admin draft values are saved through safe `To Confirm` placeholders where the `/api/admin-bookings` contract requires text, while optional Booker email still validates only when typed.
+- Admin Dispatch fields no longer show required asterisks; Save + CRM now blocks blank outbound pickup date/time before writing, so normal operations cannot silently create Dec 2099 draft bookings.
+- Blank admin draft customer/contact/route values still use safe `To Confirm` placeholders where the `/api/admin-bookings` contract requires text, while optional Booker email still validates only when typed.
 - Google Calendar auto-sync is skipped for incomplete admin drafts that do not have real date/time or route details, so placeholder draft saves do not create fake calendar events.
 - Job Card Preview now shows Save Booking + CRM feedback beside the compact toolbar, so failed/saved state is visible where the operator clicks instead of only in the lower persistence panel.
 - Job Card extra charges, Job Card preview, Driver Dispatch preview, Driver Job Link preview, and admin readiness chips are collapsed behind compact disclosure rows.

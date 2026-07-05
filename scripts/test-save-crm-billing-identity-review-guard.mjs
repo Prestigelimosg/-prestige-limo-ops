@@ -5,6 +5,7 @@ const appSource = readFileSync("app/page.tsx", "utf8");
 const adminBookingsRouteSource = readFileSync("app/api/admin-bookings/route.ts", "utf8");
 const adminBookingPersistenceSource = readFileSync("lib/admin-booking-persistence.ts", "utf8");
 const adminBookingAdapterSource = readFileSync("lib/admin-booking-supabase-adapter.ts", "utf8");
+const adminCustomerAccountsReadSource = readFileSync("lib/admin-customer-accounts-read.ts", "utf8");
 
 function assertIncludes(source, fragment, label) {
   assert.ok(source.includes(fragment), `Missing ${label}: ${fragment}`);
@@ -21,6 +22,13 @@ assertIncludes(appSource, "function saveCrmExplicitCompanyAccount", "explicit co
 assertIncludes(appSource, "function saveCrmDefaultCustomerAccount", "booker-free default customer account helper");
 assertIncludes(appSource, "function getBookingCustomerAccountDisplayName", "loaded booking booker-free account helper");
 assertIncludes(appSource, "function resolveSaveCrmBillingIdentityAccountForSave", "save guard resolver");
+assertIncludes(appSource, "function adminDispatchSaveCrmMissingPickupFields", "missing pickup date/time guard");
+assertIncludes(appSource, "function adminDispatchSaveCrmMissingPickupMessage", "missing pickup guard message");
+assertIncludes(
+  appSource,
+  "No 2099 draft was saved.",
+  "visible no-2099 save guard message",
+);
 assertIncludes(appSource, "fetchRecentAdminBookingPersistenceRecordsForBillingIdentity", "fresh recent booking read before save");
 assertIncludes(appSource, "Same company/booker has other traveler(s)", "visible same company/booker warning");
 assertIncludes(
@@ -129,6 +137,10 @@ const saveBookingSection = appSource.slice(
 );
 assert.ok(saveBookingSection.includes("return null;"), "Save + CRM must stop before write when review is missing.");
 assert.ok(
+  saveBookingSection.includes("if (!validateBooking())"),
+  "Save + CRM must run validation before persistence writes.",
+);
+assert.ok(
   saveBookingSection.includes("customerDisplayNameOverride: billingIdentityResolution.accountLabel"),
   "Save + CRM must pass confirmed billing identity into persisted customer account.",
 );
@@ -141,6 +153,10 @@ assert.ok(
   persistenceSaveSection.includes("resolveSaveCrmBillingIdentityAccountForSave();"),
   "Lower operational snapshot save must share billing identity guard.",
 );
+assert.ok(
+  persistenceSaveSection.includes("adminDispatchSaveCrmMissingPickupMessage("),
+  "Lower operational snapshot save must block missing outbound pickup date/time before write.",
+);
 
 const updateSection = appSource.slice(
   appSource.indexOf("async function updateAppliedAdminBookingOperationalSnapshot()"),
@@ -149,6 +165,31 @@ const updateSection = appSource.slice(
 assert.ok(
   updateSection.includes("resolveSaveCrmBillingIdentityAccountForSave();"),
   "Applied booking update must share billing identity guard.",
+);
+assert.ok(
+  updateSection.includes("adminDispatchSaveCrmMissingPickupMessage("),
+  "Applied booking update must block missing outbound pickup date/time before write.",
+);
+
+assertIncludes(
+  adminCustomerAccountsReadSource,
+  "function customerAccountDisplayLabel",
+  "admin customer account display label helper",
+);
+assertIncludes(
+  adminCustomerAccountsReadSource,
+  "safeText(booking.passenger_name",
+  "admin customer account display includes traveler",
+);
+assertIncludes(
+  adminCustomerAccountsReadSource,
+  "`${customerAccount} [${travelerName}]`",
+  "admin customer account display uses company traveler label",
+);
+assertIncludes(
+  adminCustomerAccountsReadSource,
+  "const key = accountGroupKey(customerId, customerAccount);",
+  "admin customer account grouping still prefers customer id",
 );
 
 console.log("Save + CRM billing identity review guard passed.");

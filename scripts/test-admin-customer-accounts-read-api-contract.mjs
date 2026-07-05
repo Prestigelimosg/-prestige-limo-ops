@@ -275,7 +275,7 @@ const seed = {
       customer_facing_status: "completed",
       customer_id: "customer-ubs",
       dropoff_location: "Private dropoff",
-      passenger_name: "Private Passenger",
+      passenger_name: "Boss Alpha",
       passenger_phone: "+65 8888 0000",
       pickup_at: "2026-06-20T10:00:00.000Z",
       pickup_location: "Private pickup",
@@ -289,7 +289,7 @@ const seed = {
       customer_display_name: "UBS",
       customer_facing_status: "confirmed",
       customer_id: "customer-ubs",
-      passenger_name: "Another Private Passenger",
+      passenger_name: "Boss Beta",
       pickup_at: "2026-06-15T10:00:00.000Z",
       service_type: "Hourly / Disposal",
     },
@@ -420,7 +420,7 @@ try {
   assert.deepEqual(readResult.body.accounts, [
     {
       completed_count: 1,
-      customer_account: "UBS",
+      customer_account: "UBS [Boss Alpha]",
       customer_id: "customer-ubs",
       latest_booking_reference: "UBS-SAFE-002",
       latest_pickup_at: "2026-06-20T10:00:00.000Z",
@@ -503,7 +503,7 @@ try {
 
   assert.equal(limitedResult.status, 200);
   assert.equal(limitedResult.body.accounts.length, 1);
-  assert.equal(limitedResult.body.accounts[0].customer_account, "UBS");
+  assert.equal(limitedResult.body.accounts[0].customer_account, "UBS [Boss Alpha]");
   assert.equal(limitedMock.client.operations.length, 0);
   assert.equal(limitedMock.client.selectHistory.length, 1);
   assertNoLeaks(limitedResult, "limited customer accounts response should stay safe");

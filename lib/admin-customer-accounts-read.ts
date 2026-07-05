@@ -172,6 +172,24 @@ function accountGroupKey(customerId: string | null, customerAccount: string) {
   return customerId || normalizeToken(customerAccount);
 }
 
+function customerAccountDisplayLabel(booking: AdminBookingPersistenceRecord) {
+  const customerAccount = safeText(booking.customer_display_name, 120);
+
+  if (!customerAccount) {
+    return "";
+  }
+
+  const travelerName = safeText(booking.passenger_name, 80);
+  const customerKey = normalizeToken(customerAccount);
+  const travelerKey = normalizeToken(travelerName);
+
+  if (!travelerName || !travelerKey || customerKey.includes(travelerKey)) {
+    return customerAccount;
+  }
+
+  return safeText(`${customerAccount} [${travelerName}]`, 160) || customerAccount;
+}
+
 function statusToken(value: unknown) {
   return normalizeToken(textOrNull(value, 80));
 }
@@ -233,7 +251,7 @@ function toCustomerAccounts(
   const accounts = new Map<string, MutableCustomerAccount>();
 
   for (const booking of bookings) {
-    const customerAccount = safeText(booking.customer_display_name, 160);
+    const customerAccount = customerAccountDisplayLabel(booking);
 
     if (!customerAccount) {
       continue;

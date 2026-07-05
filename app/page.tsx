@@ -8246,6 +8246,36 @@ function adminBookingCalendarReadyForRealSync(bookingValue: BookingForm) {
   );
 }
 
+function adminDispatchSaveCrmMissingPickupFields(bookingValue: BookingForm) {
+  const missingFields: string[] = [];
+
+  if (!clean(bookingValue.date)) {
+    missingFields.push(fieldLabels.date);
+  }
+
+  if (normalizePickupTimeForStorage(bookingValue.time).length < 4) {
+    missingFields.push(fieldLabels.time);
+  }
+
+  return missingFields;
+}
+
+function adminDispatchSaveCrmMissingPickupMessage(
+  bookingValue: BookingForm,
+  actionLabel = "Save + CRM",
+) {
+  const missingPickupFields = adminDispatchSaveCrmMissingPickupFields(bookingValue);
+
+  if (missingPickupFields.length === 0) {
+    return null;
+  }
+
+  return {
+    tone: "error",
+    text: `${actionLabel} needs ${missingPickupFields.join(", ")} before saving. No 2099 draft was saved.`,
+  } satisfies Message;
+}
+
 function isAdminShortNoticeReviewRequired(bookingValue: BookingForm, currentTimeMs: number) {
   const pickupTimeMs = parsePickupDateTimeMs(bookingValue.date, bookingValue.time);
 
@@ -16960,6 +16990,14 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       return false;
     }
 
+    const missingPickupMessage = adminDispatchSaveCrmMissingPickupMessage(booking);
+
+    if (missingPickupMessage) {
+      setMessage(missingPickupMessage);
+      setBookingSaveMessage(missingPickupMessage);
+      return false;
+    }
+
     const returnTripMissingFields = adminDispatchReturnTripMissingFields(booking);
 
     if (returnTripMissingFields.length > 0) {
@@ -19308,6 +19346,18 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   }
 
   async function saveAdminBookingOperationalSnapshot() {
+    const missingPickupMessage = adminDispatchSaveCrmMissingPickupMessage(
+      booking,
+      "Save Operational Snapshot",
+    );
+
+    if (missingPickupMessage) {
+      setAdminBookingPersistenceMessage(missingPickupMessage);
+      setMessage(missingPickupMessage);
+      setBookingSaveMessage(missingPickupMessage);
+      return;
+    }
+
     const billingIdentityResolution = await resolveSaveCrmBillingIdentityAccountForSave();
 
     if (!billingIdentityResolution.ok) {
@@ -20435,6 +20485,18 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         tone: "info",
         text: "Apply a loaded operational snapshot before updating.",
       });
+      return;
+    }
+
+    const missingPickupMessage = adminDispatchSaveCrmMissingPickupMessage(
+      booking,
+      "Update + Cal",
+    );
+
+    if (missingPickupMessage) {
+      setAdminBookingPersistenceMessage(missingPickupMessage);
+      setMessage(missingPickupMessage);
+      setBookingSaveMessage(missingPickupMessage);
       return;
     }
 

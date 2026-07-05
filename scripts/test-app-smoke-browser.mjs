@@ -26245,6 +26245,15 @@ async function runChromeTest() {
           customerRows: [...document.querySelectorAll("[data-customer-row]")].map((row) =>
             row.getAttribute("data-customer-row"),
           ),
+          monthlyBillingQueueVisible: Boolean(document.querySelector("[data-customer-monthly-billing-queue]")),
+          monthlyBillingGroupSelectVisible: Boolean(
+            document.querySelector("[data-customer-monthly-billing-group-select]"),
+          ),
+          monthlyBillingPrepareVisible: Boolean(
+            document.querySelector("[data-customer-monthly-billing-prepare-group]"),
+          ),
+          monthlyBillingQueueText:
+            document.querySelector("[data-customer-monthly-billing-queue]")?.textContent.trim() || "",
           forbiddenText: [
             "driver payout",
             "private crm",
@@ -26805,20 +26814,40 @@ async function runChromeTest() {
       );
       assert.deepEqual(
         dashboardState.customerRows,
-        ["ubs", "ritz-carlton", "vip-customer", "hourly-test-customer"],
-        "Expected customer folder finder to show current customer rows by default",
+        [],
+        "Expected customer folder finder to avoid mock customer rows by default",
       );
       assert.deepEqual(
         dashboardState.links,
-        [
-          "/customers/ubs",
-          "/customers/ritz-carlton",
-          "/customers/vip-customer",
-          "/customers/hourly-test-customer",
-        ],
-        "Expected customer folder finder to link to current customer folders",
+        [],
+        "Expected customer folder finder not to link mock customer folders by default",
       );
       assert.equal(dashboardState.helperVisible, true, "Expected customer folder finder helper");
+      assert.equal(
+        dashboardState.monthlyBillingQueueVisible,
+        true,
+        "Expected real Monthly Billing Queue on customers dashboard",
+      );
+      assert.equal(
+        dashboardState.monthlyBillingGroupSelectVisible,
+        true,
+        "Expected Monthly Billing Queue customer/month selector",
+      );
+      assert.equal(
+        dashboardState.monthlyBillingPrepareVisible,
+        true,
+        "Expected Monthly Billing Queue prepare action",
+      );
+      assert.equal(
+        dashboardState.monthlyBillingQueueText.includes("Monthly Billing Queue"),
+        true,
+        "Expected Monthly Billing Queue heading",
+      );
+      assert.equal(
+        dashboardState.monthlyBillingQueueText.includes("Prepare monthly bill"),
+        true,
+        "Expected Monthly Billing Queue prepare copy",
+      );
       assert.equal(dashboardState.searchInputVisible, true, "Expected visible customer search input");
       assert.equal(
         dashboardState.jobHistoryClarityVisible,
@@ -32148,7 +32177,7 @@ async function runChromeTest() {
       await assertNoMockBookingLifecycleAuditReadinessWorkbenchLeak("/customers mobile");
       await assertNoMockOperationsRiskSlaWatchlistWorkbenchLeak("/customers mobile");
       await assertNoMockQuotePricingReviewReadinessWorkbenchLeak("/customers mobile");
-      assert.equal(mobileDashboardState.rowCount, 4, "Expected current customer rows on mobile by default");
+	      assert.equal(mobileDashboardState.rowCount, 0, "Expected no mock customer rows on mobile by default");
       assert.equal(mobileDashboardState.helperVisible, true, "Expected mobile customer folder finder helper");
       assert.equal(
         mobileDashboardState.internalStaffNoticeVisible,

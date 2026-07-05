@@ -54,13 +54,19 @@ for (const fragment of [
   'data-customer-invoice-workspace-panel="follow-up"',
   'data-customer-summary-strip="true"',
   'data-customer-folder-finder="true"',
+  'data-customer-monthly-billing-queue="true"',
+  'data-customer-monthly-billing-group-select="true"',
+  'data-customer-monthly-billing-prepare-group="true"',
+  'data-customer-monthly-billing-group-summary="true"',
   'data-unbilled-customers-sector="true"',
   'data-customer-billing-workbench-drawer="true"',
   'data-customer-billing-workbench-summary="true"',
   'data-customer-billing-workbench-contents="true"',
   'data-customer-advanced-booking-drawer="true"',
   'data-customer-debug-tools-drawer="true"',
-  "Billing workbench and mock review queues",
+  "Invoice workbench",
+  "Monthly Billing Queue",
+  "Prepare monthly bill",
   "Send Invoice Workbench",
   "Customers & Invoices",
 ]) {
@@ -103,15 +109,26 @@ assert.equal(
 assert.equal(
   customersPage.indexOf('data-customer-folder-finder="true"') <
     customersPage.indexOf('data-unbilled-customers-sector="true"') &&
-    customersPage.indexOf('data-unbilled-customers-sector="true"') <
+    customersPage.indexOf('data-customer-monthly-billing-queue="true"') <
       customersPage.indexOf('data-customer-billing-workbench-drawer="true"') &&
     customersPage.indexOf('data-customer-billing-workbench-drawer="true"') <
       customersPage.indexOf('data-customer-invoice-workspace="true"') &&
     customersPage.indexOf('data-customer-invoice-workspace-panel="follow-up"') <
       customersPage.indexOf('data-customer-advanced-booking-drawer="true"'),
   true,
-  "daily Customers page order must be finder, unbilled checkpoint, collapsed billing workbench drawer, then advanced/support drawers.",
+  "daily Customers page order must be finder, monthly billing queue, collapsed invoice workbench drawer, then advanced/support drawers.",
 );
+
+for (const forbiddenFragment of [
+  "Dropdown selected",
+  "Billing workbench and mock review queues",
+  "All unbilled customers",
+  "Folder pending",
+  "getMockUnbilledCustomerRows()",
+  "localCustomerFolderSavedBookingTargets",
+]) {
+  assertExcludes(customersPage, forbiddenFragment, "customer monthly billing queue cleanup");
+}
 
 for (const forbiddenPattern of [
   /fetch\(|\/api\/|createClient|service_role|process\.env/i,
@@ -124,8 +141,9 @@ for (const forbiddenPattern of [
 }
 
 for (const phrase of [
-  "Customers page daily flow is compact: summary strip, customer finder, and Unbilled Customers checkpoint stay visible for normal operation.",
-  "The invoice workbench, statement previews, outstanding review, and follow-up queues are deliberately collapsed behind the admin-only `Billing workbench and mock review queues` drawer.",
+  "Customers page daily flow is compact: summary strip, customer finder, and Monthly Billing Queue stay visible for normal operation.",
+  "The Monthly Billing Queue groups real closeout-ready saved bookings by customer/month and no longer mixes mock/local draft rows into the visible billing queue.",
+  "The invoice workbench, statement previews, outstanding review, and follow-up queues are deliberately collapsed behind the admin-only `Invoice workbench` drawer.",
   "The duplicate folder handoff support drawer is removed; advanced booking/draft tools and mock logs sit after the daily invoice workflow instead of before it.",
   "This is UI-only structure cleanup; it does not activate invoice/PDF/payment/provider sending, DB writes, env changes, GPS/live location, billing/payout, calendar sync, parser changes, or shims.",
   "Guard coverage lives in `scripts/test-customers-invoice-workspace-cleanup-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",

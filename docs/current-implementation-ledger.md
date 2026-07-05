@@ -821,7 +821,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The old Customer Folder / Job History Handoff support drawer is removed from the normal Customers page flow; the compact finder is now the single customer-folder lookup surface.
 - The compact finder keeps 10-row pages and an `All customers` dropdown with numbered page buttons for 200-plus accounts.
 - The top payment summary is a slim strip instead of four large cards.
-- The billing workbench and mock review queues are collapsed behind an admin-only drawer, leaving the daily visible Customers page focused on the customer folder finder and Unbilled Customers checkpoint.
+- The invoice workbench and old review queues are collapsed behind an admin-only drawer, leaving the daily visible Customers page focused on the customer folder finder and Monthly Billing Queue.
 - No route, API, parser, DB, env, Vercel, provider-send, GPS/live-location, billing/payment/PDF/payout, calendar, or shim behavior is changed.
 - This polish is guarded by `scripts/test-customer-folder-compact-index-guard.mjs` and registered in `scripts/test-preactivation-verification-suite.mjs`.
 
@@ -1015,8 +1015,9 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Customers Invoice Workspace Cleanup
 
-- Customers page daily flow is compact: summary strip, customer finder, and Unbilled Customers checkpoint stay visible for normal operation.
-- The invoice workbench, statement previews, outstanding review, and follow-up queues are deliberately collapsed behind the admin-only `Billing workbench and mock review queues` drawer.
+- Customers page daily flow is compact: summary strip, customer finder, and Monthly Billing Queue stay visible for normal operation.
+- The Monthly Billing Queue groups real closeout-ready saved bookings by customer/month and no longer mixes mock/local draft rows into the visible billing queue.
+- The invoice workbench, statement previews, outstanding review, and follow-up queues are deliberately collapsed behind the admin-only `Invoice workbench` drawer.
 - The duplicate folder handoff support drawer is removed; advanced booking/draft tools and mock logs sit after the daily invoice workflow instead of before it.
 - This is UI-only structure cleanup; it does not activate invoice/PDF/payment/provider sending, DB writes, env changes, GPS/live location, billing/payout, calendar sync, parser changes, or shims.
 - Guard coverage lives in `scripts/test-customers-invoice-workspace-cleanup-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
@@ -1025,13 +1026,13 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 - Customers page now has a visible Customer Folder Finder that searches all loaded customer folders and paginates the compact folder rows 10 per page by default.
 - The finder uses a visible `All customers` dropdown for direct folder selection; it shows 10 customer folders at a time and keeps numbered page buttons inside the dropdown for larger 200-plus account lists.
-- The finder keeps the existing guarded `Load Accounts` control visible as a compact one-line button, with the folder count shown as a small `1-10 of N folders` chip; that same button now refreshes the guarded saved-booking bridge for the existing Unbilled Customers queue without adding a new route/API.
-- A new Unbilled Customers checkpoint sits before the invoice workspace so unbilled draft rows and statement-needed account rows are visible before invoice work starts.
-- Guarded saved-booking reads now check the existing completed closeout status for those references and bridge only closeout-ready saved bookings into the existing Unbilled Customers queue with `Draft amount not set`.
-- Closeout-ready saved-booking rows prefer the matched customer folder slug as the invoice `customerId`, so issued invoices stay visible in the token-scoped customer portal for that folder.
-- Each unbilled row has a compact `Prepare` action that changes through `Preparing` to `Prepared`, loads that exact customer/job into the Send Invoice Workbench prep strip, opens the Statements tab, narrows the Outstanding search to that customer, and focuses the next workbench action.
-- The finder no longer shows a separate page-size dropdown or separate previous/next buttons; the Unbilled Customers list keeps one dropdown plus a compact scrollable row/table, with the duplicate selected-label wording below the dropdown removed.
-- This is a UI handoff into the existing admin monthly billing workflow; it does not add a second invoice engine, create invoice numbers, generate PDFs, send invoices, activate payment/provider sending, write DB rows, change env, activate GPS/live location, billing/payout automation, calendar sync, parser changes, or shims.
+- The finder keeps the existing guarded `Load Accounts` control visible as a compact one-line button, with the folder count shown as a small `1-10 of N folders` chip; that same button now refreshes the guarded saved-booking bridge for the Monthly Billing Queue without adding a new route/API.
+- The Monthly Billing Queue sits before the invoice workspace so completed closeout-ready jobs are visible before invoice work starts.
+- Guarded saved-booking reads now check the existing completed closeout status for those references and bridge only closeout-ready saved bookings into the Monthly Billing Queue with `Draft amount not set`.
+- Closeout-ready saved-booking rows keep the real saved customer/account id as the invoice `customerId`; the old mock folder match fallback is removed from this billing queue.
+- The Monthly Billing Queue has one customer/month group selector plus one primary `Prepare monthly bill` action that fills the existing Create Invoice workbench for admin review.
+- The finder no longer shows noisy selected-dropdown wording; selecting a customer now shows a short `Selected customer` status only.
+- This is a UI handoff into the existing admin invoice workflow; it does not add a second invoice engine, create invoice numbers, generate PDFs, send invoices, activate payment/provider sending, write DB rows, change env, activate GPS/live location, billing/payout automation, calendar sync, parser changes, or shims.
 - Guard coverage lives in `scripts/test-customers-folder-finder-unbilled-queue-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Customer Trust Path And Portal Invoice Folder Lock

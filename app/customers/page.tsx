@@ -58,31 +58,10 @@ const approvedCustomerTestInvoiceArchiveTarget = {
   invoiceNumber: "INV-20260702-0001",
 };
 
-const customerFolderIndexHandoffRows = mockCustomers.map((customer) => {
-  const upcomingJobs = customer.bookingHistory.filter((booking) => booking.jobStatus === "Upcoming").length;
-  const completedJobs = customer.bookingHistory.filter((booking) => booking.jobStatus === "Completed").length;
-
-  return {
-    completedJobs,
-    customerId: customer.id,
-    customerName: customer.companyName,
-    folderHref: `/customers/${customer.id}`,
-    historyRows: customer.bookingHistory.length,
-    upcomingJobs,
-  };
-});
-
 type RegularCustomerSavedBookingReadTarget = {
   customerId: string;
   customerName: string;
 };
-
-const localCustomerFolderSavedBookingTargets: RegularCustomerSavedBookingReadTarget[] = mockCustomers.map(
-  (customer) => ({
-    customerId: customer.id,
-    customerName: customer.companyName,
-  }),
-);
 
 const regularCustomerRouteTypeOptions = [
   "Airport Arrival",
@@ -264,6 +243,8 @@ type MockStatementPreviewEvent = {
 
 type UnbilledCustomerRow = {
   amount: string;
+  billingMonth: string;
+  billingMonthLabel: string;
   billingBreakdown?: string;
   customerFolderHref: string;
   customerId: string;
@@ -275,6 +256,15 @@ type UnbilledCustomerRow = {
   route: string;
   service: string;
   statusLabel: string;
+};
+
+type CustomerMonthlyBillingGroup = {
+  billingMonth: string;
+  billingMonthLabel: string;
+  customerId: string;
+  customerName: string;
+  key: string;
+  rows: UnbilledCustomerRow[];
 };
 
 type CustomerInvoiceDriverActualTimeSummary = {
@@ -571,6 +561,39 @@ function getRegularCustomerVehicleTypeLabel(vehicleType: string) {
 
 function getRegularCustomerBillingMonth(form: RegularCustomerBookingForm) {
   return /^\d{4}-\d{2}/.test(form.pickupDate) ? form.pickupDate.slice(0, 7) : form.billingMonth;
+}
+
+function safeBillingMonth(value: string | null | undefined) {
+  const cleaned = String(value ?? "").trim().slice(0, 7);
+
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(cleaned) ? cleaned : "";
+}
+
+function billingMonthFromPickup(value: string | null | undefined) {
+  const cleaned = String(value ?? "").trim();
+  const directMonth = safeBillingMonth(cleaned);
+
+  if (directMonth) {
+    return directMonth;
+  }
+
+  const parsedDate = cleaned ? new Date(cleaned) : null;
+
+  if (!parsedDate || Number.isNaN(parsedDate.getTime())) {
+    return "";
+  }
+
+  return `${parsedDate.getUTCFullYear()}-${String(parsedDate.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthlyBillingMonthLabel(value: string) {
+  const billingMonth = safeBillingMonth(value);
+
+  if (!billingMonth) {
+    return "Billing month needs review";
+  }
+
+  return formatInvoiceMonth(new Date(`${billingMonth}-01T00:00:00+08:00`));
 }
 
 function getMissingRegularCustomerRequiredFields(form: RegularCustomerBookingForm) {
@@ -974,21 +997,7 @@ function customerInvoiceActionFailureMessage(action: string, rawError: unknown) 
   return `${action} could not complete. Reload the page and try again; no payment, provider send, payout, or GPS action ran.`;
 }
 
-function findMockCustomerForSavedAccount(account: RegularCustomerAccountReadRecord) {
-  const accountId = normalizeCustomerFolderMatch(account.customer_id);
-  const accountName = normalizeCustomerFolderMatch(account.customer_account);
-
-  return (
-    mockCustomers.find(
-      (customer) =>
-        normalizeCustomerFolderMatch(customer.id) === accountId ||
-        normalizeCustomerFolderMatch(customer.companyName) === accountName,
-    ) ?? null
-  );
-}
-
 function customerFolderRowFromSavedAccount(account: RegularCustomerAccountReadRecord) {
-  const matchedCustomer = findMockCustomerForSavedAccount(account);
   const customerAccount = String(account.customer_account ?? "").trim() || "Customer account";
   const customerId = String(account.customer_id ?? "").trim() || customerAccount;
 
@@ -996,7 +1005,7 @@ function customerFolderRowFromSavedAccount(account: RegularCustomerAccountReadRe
     completedJobs: Number(account.completed_count ?? 0),
     customerId,
     customerName: customerAccount,
-    folderHref: matchedCustomer ? `/customers/${matchedCustomer.id}` : "",
+    folderHref: "",
     historyRows: Number(account.saved_booking_count ?? 0),
     latestBookingReference: account.latest_booking_reference ?? null,
     latestPickupAt: account.latest_pickup_at ?? null,
@@ -1012,19 +1021,6 @@ function savedBookingReference(booking: RegularCustomerSavedBookingReadRecord) {
 
 function savedBookingCustomerId(booking: RegularCustomerSavedBookingReadRecord) {
   return String(booking.customer_id ?? "").trim();
-}
-
-function findMockCustomerForSavedBooking(booking: RegularCustomerSavedBookingReadRecord) {
-  const bookingCustomerId = normalizeCustomerFolderMatch(booking.customer_id);
-  const bookingCustomerAccount = normalizeCustomerFolderMatch(booking.customer_account);
-
-  return (
-    mockCustomers.find(
-      (customer) =>
-        normalizeCustomerFolderMatch(customer.id) === bookingCustomerId ||
-        normalizeCustomerFolderMatch(customer.companyName) === bookingCustomerAccount,
-    ) ?? null
-  );
 }
 
 function savedBookingCloseoutIsBillingReady(
@@ -1092,11 +1088,10 @@ function savedBookingUnbilledRow(
     return null;
   }
 
-  const mockCustomer = findMockCustomerForSavedBooking(booking);
-  const customerId = mockCustomer?.id || savedBookingCustomerId(booking) || reference;
+  const billingMonth = safeBillingMonth(booking.booking_month) || billingMonthFromPickup(booking.pickup_at);
+  const customerId = savedBookingCustomerId(booking) || reference;
   const customerName =
     String(booking.customer_account ?? "").trim() ||
-    mockCustomer?.companyName ||
     "Customer/account to confirm";
   const service = String(booking.service_type ?? "").trim() || "Completed transfer";
   const closeoutDisposition = savedBookingCloseoutBillingDispositionLabel(closeout);
@@ -1104,11 +1099,13 @@ function savedBookingUnbilledRow(
 
   return {
     amount: "Draft amount not set",
+    billingMonth,
+    billingMonthLabel: monthlyBillingMonthLabel(billingMonth),
     billingBreakdown:
       closeoutDisposition
         ? `${closeoutDisposition} closeout ready from saved booking. Enter the approved customer amount before previewing or issuing.`
         : "Closeout ready from saved booking. Enter the approved customer amount before previewing or issuing.",
-    customerFolderHref: mockCustomer ? `/customers/${mockCustomer.id}` : "",
+    customerFolderHref: "",
     customerId,
     customerName,
     dateLabel: savedBookingDateLabel(booking),
@@ -1332,35 +1329,6 @@ function getMockStatementPreviewGroups(items: VisibleOutstandingPaymentReviewIte
       };
     })
     .filter((group) => group.items.length > 0);
-}
-
-function getMockUnbilledCustomerRows() {
-  return mockCustomers.flatMap((customer) =>
-    customer.bookingHistory
-      .filter(
-        (booking) =>
-          hasMockBalanceDue(booking.balanceDue) &&
-          (booking.paymentStatus === "Unpaid" ||
-            (customer.accountType === "Monthly Account" &&
-              booking.jobStatus === "Completed" &&
-              booking.paymentStatus !== "Paid")),
-      )
-      .map((booking) => ({
-        amount: booking.balanceDue,
-        customerFolderHref: `/customers/${customer.id}`,
-        customerId: customer.id,
-        customerName: customer.companyName,
-        dateLabel: booking.date,
-        key: `mock-unbilled:${customer.id}:${booking.invoiceNumber}`,
-        reference: booking.invoiceNumber,
-        route: booking.route,
-        service: booking.service,
-        statusLabel:
-          booking.paymentStatus === "Unpaid"
-            ? "Unbilled / needs invoice"
-            : "Monthly statement needed",
-      })),
-  );
 }
 
 const outstandingPaymentReviewItems: OutstandingPaymentReviewItem[] = mockCustomers.flatMap((customer) =>
@@ -1658,11 +1626,13 @@ export default function MockCustomerDashboardPage() {
   const [collectionFollowUpPage, setCollectionFollowUpPage] = useState(1);
   const [monthlyStatementPageSize, setMonthlyStatementPageSize] = useState(10);
   const [monthlyStatementPage, setMonthlyStatementPage] = useState(1);
+  const [selectedMonthlyBillingGroupKey, setSelectedMonthlyBillingGroupKey] = useState("");
+  const [preparingMonthlyBillingGroupKey, setPreparingMonthlyBillingGroupKey] = useState("");
   const [selectedUnbilledCustomerRowKey, setSelectedUnbilledCustomerRowKey] = useState("");
   const [preparingUnbilledCustomerRowKey, setPreparingUnbilledCustomerRowKey] = useState("");
   const [customerInvoicePrepRowKey, setCustomerInvoicePrepRowKey] = useState("");
   const [customerInvoicePrepFeedback, setCustomerInvoicePrepFeedback] = useState(
-    "Choose Prepare from Unbilled Customers to load one customer into the invoice workbench.",
+    "Choose Prepare monthly bill from the Monthly Billing Queue to load a customer/month into the invoice workbench.",
   );
   const [customerInvoiceIssueAmount, setCustomerInvoiceIssueAmount] = useState("");
   const [customerInvoiceIssueDueDate, setCustomerInvoiceIssueDueDate] = useState(() =>
@@ -1734,13 +1704,7 @@ export default function MockCustomerDashboardPage() {
   );
   const customerFolderIndexRows = useMemo(() => {
     if (regularCustomerAccountReadState.status !== "loaded") {
-      return customerFolderIndexHandoffRows.map((row) => ({
-        ...row,
-        latestBookingReference: null as string | null,
-        latestPickupAt: null as string | null,
-        latestServiceType: null as string | null,
-        source: "local-folder-index" as const,
-      }));
+      return [];
     }
 
     return regularCustomerAccountReadState.accounts.map(customerFolderRowFromSavedAccount);
@@ -2028,27 +1992,6 @@ export default function MockCustomerDashboardPage() {
       ...invoicedReferences,
       ...archivedCustomerTestInvoiceReferences,
     ]);
-    const localDraftRows = regularCustomerBookingListItems
-      .filter((item) => item.billingStatus.trim().toLowerCase().includes("unbilled"))
-      .map((item) => {
-        const hourlyInvoiceReview = getRegularCustomerHourlyInvoiceReview(item);
-
-        return {
-          amount: hourlyInvoiceReview?.amountLabel ?? "Draft amount not set",
-          billingBreakdown: hourlyInvoiceReview?.billingBreakdown,
-          customerFolderHref: item.customerFolderHref,
-          customerId: item.customerId,
-          customerName: item.customerName,
-          dateLabel: item.pickupDate || "Date TBC",
-          invoiceLineDescription: hourlyInvoiceReview?.invoiceLineDescription,
-          key: `local-unbilled:${item.id}`,
-          reference: item.customerReference || item.id,
-          route: `${item.pickupLocation || "Pickup TBC"} > ${item.dropoffLocation || "Drop-off TBC"}`,
-          service: item.routeType,
-          statusLabel: hourlyInvoiceReview ? "Hourly auto-calculated" : "Unbilled / draft booking",
-        };
-      })
-      .filter((row) => !suppressedInvoiceReferences.has(normalizedInvoiceReference(row.reference)));
     const closeoutReadySavedBookingRows = regularCustomerSavedBookingReadState.savedBookings
       .map((booking) =>
         savedBookingUnbilledRow(
@@ -2060,30 +2003,82 @@ export default function MockCustomerDashboardPage() {
       )
       .filter((row): row is UnbilledCustomerRow => Boolean(row));
 
-    return [...localDraftRows, ...closeoutReadySavedBookingRows, ...getMockUnbilledCustomerRows()]
+    return closeoutReadySavedBookingRows
       .filter((row) => !suppressedInvoiceReferences.has(normalizedInvoiceReference(row.reference)))
       .sort(
         (firstRow, secondRow) =>
-          parseMockDateValue(firstRow.dateLabel) - parseMockDateValue(secondRow.dateLabel) ||
+          firstRow.billingMonth.localeCompare(secondRow.billingMonth) ||
           firstRow.customerName.localeCompare(secondRow.customerName),
       );
   }, [
     archivedCustomerTestInvoiceReferences,
     issuedCustomerInvoices,
-    regularCustomerBookingListItems,
     regularCustomerSavedBookingBillingReadinessState.closeoutsByReference,
     regularCustomerSavedBookingReadState.savedBookings,
   ]);
+  const customerMonthlyBillingGroups = useMemo<CustomerMonthlyBillingGroup[]>(() => {
+    const groups = new Map<string, CustomerMonthlyBillingGroup>();
+
+    for (const row of unbilledCustomerRows) {
+      const billingMonth = safeBillingMonth(row.billingMonth);
+      const groupKey = [
+        normalizeCustomerFolderMatch(row.customerId || row.customerName),
+        billingMonth || "month-review",
+      ].join("::");
+      const existingGroup = groups.get(groupKey);
+
+      if (existingGroup) {
+        existingGroup.rows.push(row);
+        continue;
+      }
+
+      groups.set(groupKey, {
+        billingMonth,
+        billingMonthLabel: monthlyBillingMonthLabel(billingMonth),
+        customerId: row.customerId,
+        customerName: row.customerName,
+        key: groupKey,
+        rows: [row],
+      });
+    }
+
+    return Array.from(groups.values()).sort(
+      (firstGroup, secondGroup) =>
+        firstGroup.customerName.localeCompare(secondGroup.customerName) ||
+        firstGroup.billingMonth.localeCompare(secondGroup.billingMonth),
+    );
+  }, [unbilledCustomerRows]);
+  const visibleCustomerMonthlyBillingGroups = selectedCustomerFolderFinderRow
+    ? customerMonthlyBillingGroups.filter(
+        (group) =>
+          normalizeCustomerFolderMatch(group.customerId) ===
+            normalizeCustomerFolderMatch(selectedCustomerFolderFinderRow.customerId) ||
+          normalizeCustomerFolderMatch(group.customerName) ===
+            normalizeCustomerFolderMatch(selectedCustomerFolderFinderRow.customerName),
+      )
+    : customerMonthlyBillingGroups;
+  const selectedMonthlyBillingGroup = useMemo(
+    () =>
+      customerMonthlyBillingGroups.find((group) => group.key === selectedMonthlyBillingGroupKey) ??
+      null,
+    [customerMonthlyBillingGroups, selectedMonthlyBillingGroupKey],
+  );
   const selectedUnbilledCustomerRow = useMemo(
     () => unbilledCustomerRows.find((row) => row.key === selectedUnbilledCustomerRowKey) ?? null,
     [selectedUnbilledCustomerRowKey, unbilledCustomerRows],
   );
-  const visibleUnbilledCustomerRows = selectedUnbilledCustomerRow
-    ? [selectedUnbilledCustomerRow]
-    : unbilledCustomerRows;
-  const unbilledCustomersShowingLabel = selectedUnbilledCustomerRow
-    ? `Showing selected unbilled row of ${unbilledCustomerRows.length}`
-    : `Showing all ${unbilledCustomerRows.length} unbilled rows`;
+  const visibleUnbilledCustomerRows =
+    selectedMonthlyBillingGroup?.rows ??
+    (selectedUnbilledCustomerRow ? [selectedUnbilledCustomerRow] : unbilledCustomerRows);
+  const unbilledCustomersShowingLabel = selectedMonthlyBillingGroup
+    ? `${selectedMonthlyBillingGroup.rows.length} job${
+        selectedMonthlyBillingGroup.rows.length === 1 ? "" : "s"
+      } / ${selectedMonthlyBillingGroup.customerName} / ${selectedMonthlyBillingGroup.billingMonthLabel}`
+    : `${unbilledCustomerRows.length} billable job${
+        unbilledCustomerRows.length === 1 ? "" : "s"
+      } in ${customerMonthlyBillingGroups.length} customer/month group${
+        customerMonthlyBillingGroups.length === 1 ? "" : "s"
+      }`;
   const getUnbilledPrepareButtonLabel = (rowKey: string) =>
     preparingUnbilledCustomerRowKey === rowKey
       ? "Preparing"
@@ -2472,22 +2467,19 @@ export default function MockCustomerDashboardPage() {
         tone: "success",
       });
       await loadRegularCustomerSavedBookingsForUnbilledQueue(
-        accounts.length > 0
-          ? accounts
-              .map((account) => {
-                const mockCustomer = findMockCustomerForSavedAccount(account);
-                const customerName = String(account.customer_account ?? "").trim() || mockCustomer?.companyName || "";
-                const customerId = String(account.customer_id ?? "").trim() || mockCustomer?.id || customerName;
+        accounts
+          .map((account) => {
+            const customerName = String(account.customer_account ?? "").trim();
+            const customerId = String(account.customer_id ?? "").trim() || customerName;
 
-                return customerName && customerId
-                  ? {
-                      customerId,
-                      customerName,
-                    }
-                  : null;
-              })
-              .filter((target): target is RegularCustomerSavedBookingReadTarget => Boolean(target))
-          : localCustomerFolderSavedBookingTargets,
+            return customerName && customerId
+              ? {
+                  customerId,
+                  customerName,
+                }
+              : null;
+          })
+          .filter((target): target is RegularCustomerSavedBookingReadTarget => Boolean(target)),
       );
     } catch (error) {
       setRegularCustomerAccountReadState({
@@ -2497,7 +2489,19 @@ export default function MockCustomerDashboardPage() {
         summary: null,
         tone: "error",
       });
-      await loadRegularCustomerSavedBookingsForUnbilledQueue(localCustomerFolderSavedBookingTargets);
+      setRegularCustomerSavedBookingReadState({
+        message: "Saved customer accounts could not be loaded, so monthly billing groups were not loaded.",
+        savedBookings: [],
+        status: "error",
+        summary: null,
+        tone: "error",
+      });
+      setRegularCustomerSavedBookingBillingReadinessState({
+        closeoutsByReference: {},
+        message: "Closeout billing readiness was not checked because saved customer accounts were not loaded.",
+        status: "error",
+        tone: "error",
+      });
     }
   }
 
@@ -2623,7 +2627,7 @@ export default function MockCustomerDashboardPage() {
 
     if (safeTargets.length === 0) {
       setRegularCustomerSavedBookingReadState({
-        message: "No customer folders were available for the Unbilled Customers saved-booking bridge.",
+        message: "No customer accounts were available for the Monthly Billing Queue.",
         savedBookings: [],
         status: "error",
         summary: null,
@@ -2639,7 +2643,7 @@ export default function MockCustomerDashboardPage() {
     }
 
     setRegularCustomerSavedBookingReadState({
-      message: "Loading saved bookings for the existing Unbilled Customers queue...",
+      message: "Loading saved bookings for the Monthly Billing Queue...",
       savedBookings: [],
       status: "loading",
       summary: null,
@@ -2690,7 +2694,7 @@ export default function MockCustomerDashboardPage() {
       const firstFailedRead = reads.find((read) => !read.ok) as { error?: unknown } | undefined;
       setRegularCustomerSavedBookingReadState({
         message: customerAdminReadFailureMessage(
-          "Saved booking read for the Unbilled Customers queue",
+          "Saved booking read for the Monthly Billing Queue",
           firstFailedRead?.error,
         ),
         savedBookings: [],
@@ -2710,8 +2714,8 @@ export default function MockCustomerDashboardPage() {
     setRegularCustomerSavedBookingReadState({
       message:
         returnedCount > 0
-          ? `Loaded ${returnedCount} saved booking${returnedCount === 1 ? "" : "s"} for the Unbilled Customers queue.`
-          : "No saved bookings returned for the Unbilled Customers queue.",
+          ? `Loaded ${returnedCount} saved booking${returnedCount === 1 ? "" : "s"} for the Monthly Billing Queue.`
+          : "No saved bookings returned for the Monthly Billing Queue.",
       savedBookings,
       status: "loaded",
       summary: {
@@ -2800,7 +2804,7 @@ export default function MockCustomerDashboardPage() {
               "Completed closeout billing readiness",
               (closeoutReads.find((item) => !item.ok) as { error?: unknown } | undefined)?.error,
             )
-          : `Verified ${readyCount} closeout-ready saved booking${readyCount === 1 ? "" : "s"} for the existing Unbilled Customers queue.`,
+          : `Verified ${readyCount} closeout-ready saved booking${readyCount === 1 ? "" : "s"} for the Monthly Billing Queue.`,
       status: failedCount === closeoutReads.length ? "error" : "loaded",
       tone: failedCount === closeoutReads.length ? "error" : "success",
     });
@@ -2879,6 +2883,8 @@ export default function MockCustomerDashboardPage() {
 
   function updateCustomerFolderFinderSearch(value: string) {
     setCustomerFolderFinderSelectedId("");
+    setSelectedMonthlyBillingGroupKey("");
+    setSelectedUnbilledCustomerRowKey("");
     setCustomerFolderFinderDropdownOpen(false);
     setSearchTerm(value);
     setCustomerFolderFinderPage(1);
@@ -2886,6 +2892,8 @@ export default function MockCustomerDashboardPage() {
 
   function updateCustomerFolderFinderSelection(value: string) {
     setCustomerFolderFinderSelectedId(value);
+    setSelectedMonthlyBillingGroupKey("");
+    setSelectedUnbilledCustomerRowKey("");
     setCustomerFolderFinderDropdownOpen(false);
     setSearchTerm("");
     setCustomerFolderFinderPage(1);
@@ -2893,6 +2901,8 @@ export default function MockCustomerDashboardPage() {
 
   function showAllCustomerFolderFinderRows(pageNumber = 1) {
     setCustomerFolderFinderSelectedId("");
+    setSelectedMonthlyBillingGroupKey("");
+    setSelectedUnbilledCustomerRowKey("");
     setSearchTerm("");
     setCustomerFolderFinderPage(pageNumber);
   }
@@ -3085,8 +3095,86 @@ export default function MockCustomerDashboardPage() {
     setOutstandingReviewPage(1);
   }
 
-  function updateSelectedUnbilledCustomerRow(value: string) {
-    setSelectedUnbilledCustomerRowKey(value);
+  function updateSelectedMonthlyBillingGroup(value: string) {
+    setSelectedMonthlyBillingGroupKey(value);
+    setSelectedUnbilledCustomerRowKey("");
+  }
+
+  function monthlyBillingGroupReference(group: CustomerMonthlyBillingGroup) {
+    const accountSlug = plainInvoiceSlug(group.customerName).toUpperCase().slice(0, 24) || "CUSTOMER";
+    const monthSlug = group.billingMonth || "MONTH-REVIEW";
+
+    return `MONTHLY-${accountSlug}-${monthSlug}`;
+  }
+
+  function monthlyBillingInvoiceAmountInput(row: UnbilledCustomerRow) {
+    const amountCents = parseInvoiceAmountToCents(row.amount);
+
+    return amountCents ? formatInvoiceAmount(amountCents).replace(/^\$/, "") : "";
+  }
+
+  function monthlyBillingInvoiceLineDescription(row: UnbilledCustomerRow) {
+    return (
+      row.invoiceLineDescription ||
+      `${row.dateLabel} | ${row.service} | ${row.reference}`
+    ).slice(0, customerInvoiceLineDescriptionMaxLength);
+  }
+
+  function prepareMonthlyBillingGroupForInvoice(group: CustomerMonthlyBillingGroup) {
+    if (group.rows.length === 0) {
+      setPlainInvoiceFeedback("No jobs are available in this customer/month group.");
+      setPlainInvoiceFeedbackTone("error");
+      return;
+    }
+
+    const preparedRows = group.rows.slice(0, plainInvoiceMaxLineItems);
+    const overflowCount = Math.max(0, group.rows.length - preparedRows.length);
+    const [firstRow, ...additionalRows] = preparedRows;
+    const referenceList = group.rows.map((row) => row.reference).filter(Boolean);
+
+    setPreparingMonthlyBillingGroupKey(group.key);
+    setPlainInvoiceForm({
+      amount: monthlyBillingInvoiceAmountInput(firstRow),
+      billToEmail: "",
+      billToName: group.customerName,
+      cardFeeApplies: false,
+      cardPaymentEnabled: false,
+      crmCustomerId: group.customerId,
+      crmCustomerName: group.customerName,
+      dueDateIso: invoiceDateInputDaysFromNow(7),
+      isPaid: false,
+      lineDescription: monthlyBillingInvoiceLineDescription(firstRow),
+      lineItems: additionalRows.map((row) => ({
+        amount: monthlyBillingInvoiceAmountInput(row),
+        lineDescription: monthlyBillingInvoiceLineDescription(row),
+      })),
+      reference: monthlyBillingGroupReference(group),
+      route: `${group.rows.length} job${group.rows.length === 1 ? "" : "s"}: ${referenceList.join(", ")}`,
+      service: `Monthly billing - ${group.billingMonthLabel}`,
+    });
+    setPlainInvoicePreview(null);
+    setPlainInvoiceCrmPickerOpen(false);
+    setCustomerInvoiceWorkspaceTab("statements");
+    setPlainInvoiceFeedback(
+      overflowCount > 0
+        ? `${group.customerName} / ${group.billingMonthLabel} loaded with the first ${preparedRows.length} jobs. ${overflowCount} more job${overflowCount === 1 ? "" : "s"} must be prepared in another invoice or after the invoice line-item limit is expanded. Enter approved amounts before Preview, Draft, Issue, or Email.`
+        : `${group.customerName} / ${group.billingMonthLabel} loaded into Create Invoice. Enter approved amounts, review line descriptions, then Preview before Draft, Issue, or Email.`,
+    );
+    setPlainInvoiceFeedbackTone(overflowCount > 0 ? "info" : "success");
+
+    window.setTimeout(() => {
+      const drawer = document.querySelector<HTMLDetailsElement>(
+        "[data-customer-billing-workbench-drawer='true']",
+      );
+
+      if (drawer) {
+        drawer.open = true;
+      }
+
+      plainInvoicePanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      document.querySelector<HTMLElement>("[data-plain-invoice-amount='true']")?.focus();
+      setPreparingMonthlyBillingGroupKey("");
+    }, 150);
   }
 
   async function readCustomerInvoiceDriverActualTimeSummary(bookingReference: string) {
@@ -3157,7 +3245,7 @@ export default function MockCustomerDashboardPage() {
     setCollectionFollowUpPage(1);
     setMonthlyStatementPage(1);
     setCustomerInvoicePrepFeedback(
-      `${row.customerName} loaded from Unbilled Customers. Review the amount and route, then issue only when the invoice is correct.`,
+      `${row.customerName} loaded from the Monthly Billing Queue. Review the amount and route, then issue only when the invoice is correct.`,
     );
     setCustomerInvoiceIssueFeedback(
       suggestedAmountCents
@@ -3259,7 +3347,7 @@ export default function MockCustomerDashboardPage() {
     setOutstandingReviewSearchTerm("");
     setOutstandingReviewPage(1);
     setCustomerInvoicePrepFeedback(
-      "Invoice prep selection cleared. Choose Prepare from Unbilled Customers to load one customer.",
+      "Invoice prep selection cleared. Choose Prepare monthly bill from the Monthly Billing Queue to load a customer/month.",
     );
     setCustomerInvoiceIssueFeedback(
       "Review the amount and due date before issuing. Invoice number is created only when you click issue.",
@@ -3765,7 +3853,7 @@ export default function MockCustomerDashboardPage() {
   function previewPreparedCustomerInvoice() {
     if (!customerInvoicePrepRow) {
       setCustomerInvoiceIssueFeedback(
-        `Choose Prepare from Unbilled Customers before previewing a ${customerBillingDocumentLabel(
+        `Choose Prepare monthly bill from the Monthly Billing Queue before previewing a ${customerBillingDocumentLabel(
           customerInvoiceDocumentType,
         ).toLowerCase()}.`,
       );
@@ -3893,7 +3981,7 @@ export default function MockCustomerDashboardPage() {
 
   async function saveCustomerInvoiceDraft() {
     if (!customerInvoicePrepRow) {
-      setCustomerInvoiceIssueFeedback("Choose Prepare from Unbilled Customers before saving a draft.");
+      setCustomerInvoiceIssueFeedback("Choose Prepare monthly bill from the Monthly Billing Queue before saving a draft.");
       return;
     }
 
@@ -3954,7 +4042,7 @@ export default function MockCustomerDashboardPage() {
 
   async function issuePreparedCustomerInvoice() {
     if (!customerInvoicePrepRow) {
-      setCustomerInvoiceIssueFeedback("Choose Prepare from Unbilled Customers before issuing an invoice.");
+      setCustomerInvoiceIssueFeedback("Choose Prepare monthly bill from the Monthly Billing Queue before issuing an invoice.");
       return;
     }
 
@@ -5154,10 +5242,10 @@ export default function MockCustomerDashboardPage() {
               data-customer-search-helper="true"
             >
               {selectedCustomerFolderFinderRow
-                ? `Dropdown selected ${selectedCustomerFolderFinderRow.customerName}. Open the row below or choose All customer folders to browse ${customerFolderFinderPageSize} per page.`
+                ? `Selected customer: ${selectedCustomerFolderFinderRow.customerName}`
                 : normalizedSearchTerm
-                ? `Search is filtering customer folders locally for "${searchTerm}".`
-                : regularCustomerAccountReadState.message}
+                  ? `Searching customers for "${searchTerm}".`
+                  : regularCustomerAccountReadState.message}
             </p>
             {customerPortalAccessFeedback ? (
               <p
@@ -5284,48 +5372,78 @@ export default function MockCustomerDashboardPage() {
         </section>
 
         <section
-          className="rounded-lg border border-amber-200 bg-white shadow-sm"
+          className="rounded-lg border border-emerald-200 bg-white shadow-sm"
+          data-customer-monthly-billing-queue="true"
           data-unbilled-customers-sector="true"
         >
-          <div className="border-b border-amber-200 bg-amber-50/60 p-4 sm:p-5">
+          <div className="border-b border-emerald-200 bg-emerald-50/60 p-4 sm:p-5">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-800">
-                  Billing checkpoint
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-800">
+                  Admin billing
                 </p>
-                <h2 className="mt-1 text-lg font-bold text-slate-950">Unbilled Customers</h2>
-                <p className="mt-1 max-w-3xl text-sm font-semibold leading-6 text-amber-950">
-                  Review these before sending invoices so unbilled or statement-needed accounts are not missed.
+                <h2 className="mt-1 text-lg font-bold text-slate-950">Monthly Billing Queue</h2>
+                <p className="mt-1 max-w-3xl text-sm font-semibold leading-6 text-emerald-950">
+                  Select a customer/month, review the jobs, then prepare the bill in the invoice workbench.
                 </p>
               </div>
               <p
-                className="rounded-md border border-amber-200 bg-white px-3 py-2 text-sm font-bold text-amber-950"
+                className="rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-bold text-emerald-950"
                 data-unbilled-customers-count="true"
               >
                 {unbilledCustomersShowingLabel}
               </p>
             </div>
             <div
-              className="mt-3"
+              className="mt-3 grid gap-3 lg:grid-cols-[minmax(18rem,1fr)_auto] lg:items-end"
+              data-customer-monthly-billing-controls="true"
               data-unbilled-customers-dropdown="true"
             >
               <label className="text-sm font-semibold text-slate-700">
-                Unbilled customer/job
+                Customer/month group
                 <select
-                  className="mt-1 min-h-10 w-full rounded-md border border-amber-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950 outline-none focus:border-amber-700"
+                  className="mt-1 min-h-10 w-full rounded-md border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950 outline-none focus:border-emerald-700"
+                  data-customer-monthly-billing-group-select="true"
                   data-unbilled-customers-select="true"
-                  onChange={(event) => updateSelectedUnbilledCustomerRow(event.target.value)}
-                  value={selectedUnbilledCustomerRowKey}
+                  onChange={(event) => updateSelectedMonthlyBillingGroup(event.target.value)}
+                  value={selectedMonthlyBillingGroupKey}
                 >
-                  <option value="">All unbilled customers</option>
-                  {unbilledCustomerRows.map((row) => (
-                    <option key={row.key} value={row.key}>
-                      {row.customerName} - {row.reference} - {row.amount}
+                  <option value="">All customer/month groups</option>
+                  {visibleCustomerMonthlyBillingGroups.map((group) => (
+                    <option key={group.key} value={group.key}>
+                      {group.customerName} - {group.billingMonthLabel} - {group.rows.length} job
+                      {group.rows.length === 1 ? "" : "s"}
                     </option>
                   ))}
                 </select>
               </label>
+              <button
+                className="min-h-10 rounded-md border border-emerald-900 bg-emerald-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-100 disabled:text-slate-500"
+                data-customer-monthly-billing-prepare-group="true"
+                disabled={!selectedMonthlyBillingGroup}
+                onClick={() => {
+                  if (selectedMonthlyBillingGroup) {
+                    prepareMonthlyBillingGroupForInvoice(selectedMonthlyBillingGroup);
+                  }
+                }}
+                type="button"
+              >
+                {selectedMonthlyBillingGroup &&
+                preparingMonthlyBillingGroupKey === selectedMonthlyBillingGroup.key
+                  ? "Preparing"
+                  : "Prepare monthly bill"}
+              </button>
             </div>
+            {selectedMonthlyBillingGroup ? (
+              <div
+                className="mt-3 rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold leading-5 text-emerald-950"
+                data-customer-monthly-billing-group-summary="true"
+              >
+                {selectedMonthlyBillingGroup.customerName} / {selectedMonthlyBillingGroup.billingMonthLabel} /{" "}
+                {selectedMonthlyBillingGroup.rows.length} job
+                {selectedMonthlyBillingGroup.rows.length === 1 ? "" : "s"} selected.
+              </div>
+            ) : null}
           </div>
 
           <div className="max-h-72 overflow-auto" data-unbilled-customers-scroll-list="true">
@@ -5334,22 +5452,22 @@ export default function MockCustomerDashboardPage() {
                 className="w-full min-w-[820px] border-collapse text-left text-sm"
                 data-unbilled-customers-list="true"
               >
-                <thead className="sticky top-0 z-10 bg-white">
-                  <tr className="border-b border-amber-100 text-[11px] uppercase tracking-[0.1em] text-slate-500">
-                    <th className="px-3 py-2 font-bold sm:px-4">Customer</th>
-                    <th className="px-3 py-2 font-bold">Status</th>
-                    <th className="px-3 py-2 font-bold">Amount</th>
-                    <th className="px-3 py-2 font-bold">Job / route</th>
-                    <th className="px-3 py-2 text-right font-bold sm:px-4">Action</th>
-                  </tr>
-                </thead>
+	                <thead className="sticky top-0 z-10 bg-white">
+	                  <tr className="border-b border-emerald-100 text-[11px] uppercase tracking-[0.1em] text-slate-500">
+	                    <th className="px-3 py-2 font-bold sm:px-4">Customer</th>
+	                    <th className="px-3 py-2 font-bold">Month</th>
+	                    <th className="px-3 py-2 font-bold">Billing status</th>
+	                    <th className="px-3 py-2 font-bold">Job / route</th>
+	                    <th className="px-3 py-2 text-right font-bold sm:px-4">Action</th>
+	                  </tr>
+	                </thead>
                 <tbody>
                   {visibleUnbilledCustomerRows.map((row) => {
                     const prepareButtonPrepared = isUnbilledPrepareButtonPrepared(row.key);
 
                     return (
                       <tr
-                        className="border-b border-slate-100 text-sm last:border-b-0 hover:bg-amber-50/40"
+	                        className="border-b border-slate-100 text-sm last:border-b-0 hover:bg-emerald-50/40"
                         data-unbilled-customer-row={row.key}
                         key={row.key}
                       >
@@ -5357,70 +5475,63 @@ export default function MockCustomerDashboardPage() {
                           <p className="max-w-[13rem] truncate font-bold text-slate-950">{row.customerName}</p>
                           <p className="max-w-[13rem] truncate text-xs text-slate-500">{row.reference}</p>
                         </td>
-                        <td className="px-3 py-2">
-                          <p className="font-semibold text-amber-950">{row.statusLabel}</p>
-                          {row.billingBreakdown ? (
-                            <p
-                              className="mt-1 max-w-[14rem] text-xs font-semibold leading-4 text-amber-800"
-                              data-unbilled-customer-billing-breakdown={row.key}
-                            >
-                              {row.billingBreakdown}
-                            </p>
-                          ) : null}
-                        </td>
-                        <td className="px-3 py-2 font-bold text-slate-950">{row.amount}</td>
-                        <td className="px-3 py-2">
+	                        <td className="px-3 py-2">
+	                          <p className="font-bold text-slate-950">{row.billingMonthLabel}</p>
+	                          <p className="text-xs font-semibold text-slate-500">{row.amount}</p>
+	                        </td>
+	                        <td className="px-3 py-2">
+	                          <p className="font-semibold text-emerald-950">{row.statusLabel}</p>
+	                          {row.billingBreakdown ? (
+	                            <p
+	                              className="mt-1 max-w-[14rem] text-xs font-semibold leading-4 text-emerald-800"
+	                              data-unbilled-customer-billing-breakdown={row.key}
+	                            >
+	                              {row.billingBreakdown}
+	                            </p>
+	                          ) : null}
+	                        </td>
+	                        <td className="px-3 py-2">
                           <p className="max-w-[18rem] truncate font-semibold text-slate-800">
                             {row.dateLabel} · {row.service}
                           </p>
                           <p className="max-w-[18rem] truncate text-xs text-slate-500">{row.route}</p>
                         </td>
                         <td className="px-3 py-2 text-right sm:px-4">
-                          <div className="inline-flex items-center gap-2">
-                            <button
-                              className={`inline-flex min-h-8 items-center justify-center rounded-md border px-3 text-center text-xs font-bold transition ${
-                                prepareButtonPrepared
-                                  ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-                                  : "border-amber-900 bg-amber-900 text-white hover:bg-amber-800"
-                              }`}
-                              data-unbilled-customer-prepare-invoice={row.key}
-                              onClick={() => prepareCustomerInvoiceFromUnbilled(row)}
-                              type="button"
-                            >
-                              {getUnbilledPrepareButtonLabel(row.key)}
-                            </button>
-                            {row.customerFolderHref ? (
-                              <Link
-                                className="inline-flex min-h-8 items-center justify-center rounded-md border border-amber-300 bg-white px-3 text-center text-xs font-bold text-amber-950 transition hover:border-amber-700"
-                                data-unbilled-customer-open-folder={row.key}
-                                href={row.customerFolderHref}
-                              >
-                                Open
-                              </Link>
-                            ) : (
-                              <span className="text-xs font-semibold text-slate-500">Folder pending</span>
-                            )}
-                          </div>
-                        </td>
+	                          <div className="inline-flex items-center gap-2">
+	                            <button
+	                              className={`inline-flex min-h-8 items-center justify-center rounded-md border px-3 text-center text-xs font-bold transition ${
+	                                prepareButtonPrepared
+	                                  ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+	                                  : "border-slate-300 bg-white text-slate-800 hover:border-slate-700"
+	                              }`}
+	                              data-unbilled-customer-prepare-invoice={row.key}
+	                              onClick={() => prepareCustomerInvoiceFromUnbilled(row)}
+	                              type="button"
+	                            >
+	                              {prepareButtonPrepared ? getUnbilledPrepareButtonLabel(row.key) : "Prepare job"}
+	                            </button>
+	                          </div>
+	                        </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
             ) : (
-              <div className="p-5 text-sm leading-6 text-slate-600" data-unbilled-customers-empty="true">
-                No unbilled customer rows are visible right now.
-              </div>
-            )}
-          </div>
-          <p
-            className="border-t border-amber-100 bg-amber-50/60 px-4 py-3 text-xs font-semibold leading-5 text-amber-950 sm:px-5"
-            data-unbilled-customers-boundary="true"
-          >
-            Review-only checkpoint. Opening a folder does not create invoice numbers, generate invoices/PDFs, send
-            payment requests, write records, call providers, or change payment status.
-          </p>
-        </section>
+	              <div className="p-5 text-sm leading-6 text-slate-600" data-unbilled-customers-empty="true">
+	                No closeout-ready jobs are waiting for monthly billing right now.
+	              </div>
+	            )}
+	          </div>
+	          <p
+	            className="border-t border-emerald-100 bg-emerald-50/60 px-4 py-3 text-xs font-semibold leading-5 text-emerald-950 sm:px-5"
+	            data-unbilled-customers-boundary="true"
+	          >
+	            Admin-only billing queue. Preparing a monthly bill only loads the invoice workbench for staff review;
+	            it does not issue invoices, reserve invoice numbers, email PDFs, create payment links, write payouts,
+	            call providers, or message customers.
+	          </p>
+	        </section>
 
         <details
           className="rounded-lg border border-slate-200 bg-white shadow-sm"
@@ -5430,7 +5541,7 @@ export default function MockCustomerDashboardPage() {
             className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-slate-900 [&::-webkit-details-marker]:hidden"
             data-customer-billing-workbench-summary="true"
           >
-            Billing workbench and mock review queues
+	            Invoice workbench
             <span className="text-xs font-semibold text-slate-500">Collapsed</span>
           </summary>
           <div
@@ -5571,7 +5682,7 @@ export default function MockCustomerDashboardPage() {
                   className="text-sm font-semibold leading-5 text-slate-700"
                   data-customer-invoice-prep-empty="true"
                 >
-                  No customer loaded. Use Prepare in Unbilled Customers to focus one invoice job here.
+	                  No customer loaded. Use Prepare monthly bill from the Monthly Billing Queue to load jobs here.
                 </p>
               )}
               <p

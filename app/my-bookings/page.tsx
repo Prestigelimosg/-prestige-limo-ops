@@ -11,6 +11,10 @@ import {
   loadCustomerPortalDriverTracking,
   type CustomerPortalDriverTrackingResult,
 } from "../../lib/customer-portal-driver-tracking-adapter";
+import {
+  loadCustomerPortalTripUpdates,
+  type CustomerPortalTripUpdatesResult,
+} from "../../lib/customer-portal-trip-updates-adapter";
 import { submitCustomerPortalBookingChangeRequest } from "../../lib/customer-portal-booking-change-request-adapter";
 import {
   fetchCustomerPortalInvoicePdf,
@@ -38,6 +42,7 @@ type PortalSection = "New Booking Request" | "Invoices" | BookingFilter;
 type PortalBookingsLoadState = "blocked" | "loading" | "ready";
 type PortalInvoicesLoadState = "blocked" | "loading" | "stored";
 type DriverTrackingByBookingId = Record<string, CustomerPortalDriverTrackingResult>;
+type TripUpdatesByBookingId = Record<string, CustomerPortalTripUpdatesResult>;
 
 type BookingRequestForm = {
   companyName: string;
@@ -358,6 +363,8 @@ export default function CustomerPortalPage() {
   const [driverTrackingByBookingId, setDriverTrackingByBookingId] =
     useState<DriverTrackingByBookingId>({});
   const [checkingDriverTrackingId, setCheckingDriverTrackingId] = useState("");
+  const [tripUpdatesByBookingId, setTripUpdatesByBookingId] = useState<TripUpdatesByBookingId>({});
+  const [checkingTripUpdatesId, setCheckingTripUpdatesId] = useState("");
   const [bookingPages, setBookingPages] = useState<Record<BookingFilter, number>>(initialBookingPages);
   const [selectedBookingMonths, setSelectedBookingMonths] =
     useState<Record<BookingFilter, string>>(initialSelectedBookingMonths);
@@ -500,6 +507,8 @@ export default function CustomerPortalPage() {
       setChangeRequestDraft(null);
       setDriverTrackingByBookingId({});
       setCheckingDriverTrackingId("");
+      setTripUpdatesByBookingId({});
+      setCheckingTripUpdatesId("");
       setBookingPages({ ...initialBookingPages });
       setSelectedBookingMonths({ ...initialSelectedBookingMonths });
     }
@@ -602,6 +611,7 @@ export default function CustomerPortalPage() {
     setChangeFeedback({});
     setChangeRequestDraft(null);
     setCheckingDriverTrackingId("");
+    setCheckingTripUpdatesId("");
     setBookingPages((current) => ({ ...current, [nextFilter]: 1 }));
     setSelectedBookingMonths((current) => ({ ...current, [nextFilter]: "" }));
   }
@@ -612,6 +622,7 @@ export default function CustomerPortalPage() {
     setChangeFeedback({});
     setChangeRequestDraft(null);
     setCheckingDriverTrackingId("");
+    setCheckingTripUpdatesId("");
     setBookingPages((current) => ({ ...current, [activeFilter]: 1 }));
   }
 
@@ -622,6 +633,7 @@ export default function CustomerPortalPage() {
     setChangeFeedback({});
     setChangeRequestDraft(null);
     setCheckingDriverTrackingId("");
+    setCheckingTripUpdatesId("");
   }
 
   function handlePageChange(direction: "next" | "previous") {
@@ -638,6 +650,36 @@ export default function CustomerPortalPage() {
     setChangeFeedback({});
     setChangeRequestDraft(null);
     setCheckingDriverTrackingId("");
+    setCheckingTripUpdatesId("");
+  }
+
+  async function loadTripUpdatesForBooking(booking: CustomerPortalBooking) {
+    const bookingReference = bookingReferenceFromPortalId(booking.id);
+
+    if (!bookingReference) {
+      setTripUpdatesByBookingId((current) => ({
+        ...current,
+        [booking.id]: {
+          message: "Trip updates are not available for this booking.",
+          status: "blocked",
+          updates: [],
+        },
+      }));
+      return;
+    }
+
+    setCheckingTripUpdatesId(booking.id);
+
+    try {
+      const result = await loadCustomerPortalTripUpdates({ bookingReference });
+
+      setTripUpdatesByBookingId((current) => ({
+        ...current,
+        [booking.id]: result,
+      }));
+    } finally {
+      setCheckingTripUpdatesId("");
+    }
   }
 
   function handleEditRequest(booking: CustomerPortalBooking) {
@@ -1952,7 +1994,13 @@ export default function CustomerPortalPage() {
                             <button
                               className="min-h-10 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-800 transition hover:border-slate-500"
                               data-customer-portal-detail-button={booking.id}
-                              onClick={() => setExpandedBookingId(isExpanded ? "" : booking.id)}
+                              onClick={() => {
+                                setExpandedBookingId(isExpanded ? "" : booking.id);
+
+                                if (!isExpanded) {
+                                  void loadTripUpdatesForBooking(booking);
+                                }
+                              }}
                               type="button"
                             >
                               {isExpanded ? "Hide details" : "View details"}
@@ -2096,6 +2144,8 @@ export default function CustomerPortalPage() {
                   const driverDetails = expandedBooking.driverDetails;
                   const driverTracking = driverTrackingByBookingId[expandedBooking.id];
                   const isCheckingDriverTracking = checkingDriverTrackingId === expandedBooking.id;
+                  const tripUpdates = tripUpdatesByBookingId[expandedBooking.id];
+                  const isCheckingTripUpdates = checkingTripUpdatesId === expandedBooking.id;
 
                   return (
                     <section
@@ -2240,6 +2290,76 @@ export default function CustomerPortalPage() {
                           )}
                         </div>
                       ) : null}
+                      <div
+                        aria-labelledby="customer-trip-updates-title"
+                        className="mt-3 rounded-md border border-sky-200 bg-sky-50 p-3"
+                        data-customer-portal-trip-updates={expandedBooking.id}
+                      >
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <h3 className="text-sm font-semibold text-sky-950" id="customer-trip-updates-title">
+                              Trip Updates
+                            </h3>
+                            <p className="text-xs text-sky-900">
+                              Driver progress appears here when the driver updates the job.
+                            </p>
+                          </div>
+                          <button
+                            className="min-h-10 rounded-md border border-sky-700 bg-white px-3 py-1.5 text-sm font-semibold text-sky-900 transition enabled:hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
+                            data-customer-portal-trip-updates-refresh={expandedBooking.id}
+                            disabled={isCheckingTripUpdates}
+                            onClick={() => void loadTripUpdatesForBooking(expandedBooking)}
+                            type="button"
+                          >
+                            {isCheckingTripUpdates ? "Checking..." : "Refresh updates"}
+                          </button>
+                        </div>
+                        {tripUpdates ? (
+                          <div className="mt-3" data-customer-portal-trip-updates-state={tripUpdates.status}>
+                            <p
+                              className={[
+                                "rounded-md border px-2.5 py-2 text-sm font-medium",
+                                tripUpdates.status === "ready"
+                                  ? "border-emerald-200 bg-white text-emerald-950"
+                                  : tripUpdates.status === "empty"
+                                    ? "border-sky-200 bg-white text-sky-950"
+                                    : "border-amber-200 bg-amber-50 text-amber-950",
+                              ].join(" ")}
+                              data-customer-portal-trip-updates-message={expandedBooking.id}
+                            >
+                              {tripUpdates.message}
+                            </p>
+                            {tripUpdates.updates.length > 0 ? (
+                              <ul className="mt-2 grid gap-2" data-customer-portal-trip-update-list={expandedBooking.id}>
+                                {tripUpdates.updates.map((update) => (
+                                  <li
+                                    className="rounded-md border border-sky-100 bg-white px-3 py-2 text-sm"
+                                    data-customer-portal-trip-update-row={expandedBooking.id}
+                                    key={`${update.id}-${update.title}`}
+                                  >
+                                    <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                                      <div>
+                                        <p className="font-semibold text-slate-950">{update.title}</p>
+                                        <p className="mt-1 text-slate-700">{update.message}</p>
+                                      </div>
+                                      <span className="w-fit rounded-full bg-sky-100 px-2 py-1 text-xs font-semibold text-sky-900">
+                                        {update.status}
+                                      </span>
+                                    </div>
+                                    {update.createdAt ? (
+                                      <p className="mt-2 text-xs text-slate-500">{update.createdAt}</p>
+                                    ) : null}
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <p className="mt-2 text-xs text-sky-900">
+                            Trip updates appear here after the driver starts reporting.
+                          </p>
+                        )}
+                      </div>
                     </section>
                   );
                 })()

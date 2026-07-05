@@ -671,6 +671,7 @@ const customerBookingMemoryApiPattern = /\/api\/customer-booking-memory(?:[/?#]|
 const customerPortalSavedBookingsApiPattern = /\/api\/customer-saved-bookings(?:[/?#]|$)/i;
 const customerPortalChangeRequestApiPattern = /\/api\/customer-booking-change-requests(?:[/?#]|$)/i;
 const customerPortalInvoicesApiPattern = /\/api\/customer-invoices(?:[/?#]|$)/i;
+const customerPortalTripUpdatesApiPattern = /\/api\/customer-app-notifications(?:[/?#]|$)/i;
 const combineAllowedRuntimePatterns = (...patterns) =>
   new RegExp(patterns.map((pattern) => pattern.source).join("|"), "i");
 const customerBookingPageRuntimeAllowedPattern = publicCompanyProfileApiPattern;
@@ -687,6 +688,7 @@ const customerPortalRuntimeAllowedPattern = combineAllowedRuntimePatterns(
   customerPortalSavedBookingsApiPattern,
   customerPortalChangeRequestApiPattern,
   customerPortalInvoicesApiPattern,
+  customerPortalTripUpdatesApiPattern,
 );
 const nativeAppOnlyLanguagePattern =
   /\b(?:native\s+(?:mobile\s+)?app|ios\s+app|android\s+app|app\s+store|play\s+store)\b/i;
@@ -26040,9 +26042,15 @@ async function runChromeTest() {
     const blockedDriverJobIntegrationPattern =
       /api\/admin-bookings?|api\/bookings\/admin|api\/persistence|api\/save-booking|api\/load-booking|supabase|\/rest\/v1\/|api\/live-location|api\/driver-live-location|api\/driver-ots-photo|api\/photo-proof|api\/upload|api\/storage|api\/file|api\/driver-upload|api\/driver-file|api\/driver-exception|api\/driver-replacement|api\/driver-reassign|api\/driver-assignment|api\/driver-cancel|api\/cancel-driver|api\/reassign-driver|api\/flight|api\/reminder|api\/notification|api\/notify|api\/sms|api\/whatsapp|api\/email|api\/telegram|api\/driver-alerts\/telegram|api\/notifications\/telegram|api\/calendar|api\/payment|api\/bank|api\/invoice|api\/pdf|api\/statement|twilio|sendgrid|mailgun|postmark|telegram|api\.telegram\.org|getUpdates|sendMessage|stripe|hitpay|paypal|paynow|googleapis|maps\.google|maps\.gstatic/i;
 
-    const assertNoPaymentIntegrationResources = (resourceCalls, context) => {
+    const blockedCustomerIntegrationCalls = (calls, allowedPattern = null) =>
+      calls.filter(
+        (url) =>
+          blockedCustomerIntegrationPattern.test(url) &&
+          !(allowedPattern && allowedPattern.test(url)),
+      );
+    const assertNoPaymentIntegrationResources = (resourceCalls, context, allowedPattern = null) => {
       assert.deepEqual(
-        resourceCalls.filter((url) => blockedCustomerIntegrationPattern.test(url)),
+        blockedCustomerIntegrationCalls(resourceCalls, allowedPattern),
         [],
         `${context}: expected no payment provider, bank API, calendar API, webhook, notification, WhatsApp, email, SMS, or Supabase resources`,
       );
@@ -35167,7 +35175,11 @@ async function runChromeTest() {
         "/my-bookings desktop load",
       );
       assert.equal(/[A-Z]{2,}-\d{3,}/.test(initialState.text), false, "Expected /my-bookings not to create invoice-style numbers");
-      assertNoPaymentIntegrationResources(initialState.resourceCalls, "customer portal page load");
+      assertNoPaymentIntegrationResources(
+        initialState.resourceCalls,
+        "customer portal page load",
+        customerPortalRuntimeAllowedPattern,
+      );
       await checkTelegramBoundary("/my-bookings desktop");
 
       await clickCustomerPortalRequestEdit("saved-booking-001");
@@ -35241,7 +35253,7 @@ async function runChromeTest() {
         "Expected customer portal Edit submit payload to stay customer-review scoped",
       );
       assert.deepEqual(
-        editState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        blockedCustomerIntegrationCalls(editState.integrationCalls, customerPortalRuntimeAllowedPattern),
         [],
         "Expected Edit action not to call Supabase, payment, bank, notification, or calendar APIs",
       );
@@ -35311,7 +35323,7 @@ async function runChromeTest() {
         "Expected customer portal Cancel submit payload to stay customer-review scoped",
       );
       assert.deepEqual(
-        cancelState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        blockedCustomerIntegrationCalls(cancelState.integrationCalls, customerPortalRuntimeAllowedPattern),
         [],
         "Expected Cancel action not to call Supabase, payment, bank, notification, or calendar APIs",
       );
@@ -35572,7 +35584,7 @@ async function runChromeTest() {
         "Expected Edit action not to change row data",
       );
       assert.deepEqual(
-        changeState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        blockedCustomerIntegrationCalls(changeState.integrationCalls, customerPortalRuntimeAllowedPattern),
         [],
         "Expected Edit action not to call Supabase, payment, bank, notification, or calendar APIs",
       );
@@ -36159,7 +36171,11 @@ async function runChromeTest() {
         await readBrowserPersistenceState("/my-bookings mobile"),
         "/my-bookings mobile",
       );
-      assertNoPaymentIntegrationResources(mobileState.resourceCalls, "mobile customer portal page");
+      assertNoPaymentIntegrationResources(
+        mobileState.resourceCalls,
+        "mobile customer portal page",
+        customerPortalRuntimeAllowedPattern,
+      );
       await checkTelegramBoundary("/my-bookings mobile");
 
       return {

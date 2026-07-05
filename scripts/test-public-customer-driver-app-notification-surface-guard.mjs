@@ -10,6 +10,7 @@ const customerNotificationsRoutePath = "app/api/customer-app-notifications/route
 const driverNotificationsRoutePath = "app/api/driver-job/[token]/notifications/route.ts";
 const adminNotificationsRoutePath = "app/api/admin-customer-driver-app-notifications/route.ts";
 const notificationPersistencePath = "lib/customer-driver-app-notification-persistence.ts";
+const customerPortalTripUpdatesAdapterPath = "lib/customer-portal-trip-updates-adapter.ts";
 const driverPagePath = "app/driver-job/[token]/page.tsx";
 const bookPagePath = "app/book/page.tsx";
 const portalPagePath = "app/my-bookings/page.tsx";
@@ -271,6 +272,7 @@ const allPaths = [
   driverNotificationsRoutePath,
   adminNotificationsRoutePath,
   notificationPersistencePath,
+  customerPortalTripUpdatesAdapterPath,
   driverPagePath,
   bookPagePath,
   portalPagePath,
@@ -287,6 +289,7 @@ const customerNotificationsRoute = files[customerNotificationsRoutePath];
 const driverNotificationsRoute = files[driverNotificationsRoutePath];
 const adminNotificationsRoute = files[adminNotificationsRoutePath];
 const notificationPersistence = files[notificationPersistencePath];
+const customerPortalTripUpdatesAdapter = files[customerPortalTripUpdatesAdapterPath];
 const notificationPersistenceWithoutAllowlist =
   stripForbiddenNotificationAllowlist(notificationPersistence);
 const ledgerSection = sectionBetween(
@@ -296,7 +299,7 @@ const ledgerSection = sectionBetween(
 
 for (const phrase of [
   "Public customer/driver app notification surfaces are guarded across `/api/customer-app-notifications`, `/api/driver-job/[token]/notifications`, `/api/admin-customer-driver-app-notifications`, `lib/customer-driver-app-notification-persistence.ts`, and public client pages.",
-  "This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, auth activation, or new shims.",
+  "This guard approves only the existing notification routes plus the `/my-bookings` customer-safe Trip Updates read adapter; it does not approve endpoint migration, env changes, deployment by CLI, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, auth expansion, or new shims.",
   "`/api/customer-app-notifications` must remain blocked for GET and PATCH by the customer auth-required result by default; the only allowed customer GET read is the disabled-by-default staging evidence path after the customer in-app read gate, staging reference, same-origin customer portal headers, and existing saved-bookings session boundary pass.",
   "`/api/customer-app-notifications` must not parse request bodies, directly read env, create Supabase clients in the route, set cookies, or execute DB writes; any future customer GET evidence DB read must stay isolated in the gated server helper after the route boundary passes.",
   "`/api/driver-job/[token]/notifications` must remain limited to token-scoped GET and PATCH, with PATCH forced to `delivery_surface: \"driver_app\"` before persistence update.",
@@ -304,7 +307,7 @@ for (const phrase of [
   "`/api/admin-customer-driver-app-notifications` must keep GET, POST, and PATCH behind the internal admin/dispatcher boundary, with create/read/update mediated by `lib/customer-driver-app-notification-persistence.ts`.",
   "Customer/driver app notification safe records must stay limited to booking reference, delivery surface, notification type/status, priority, safe title/message/context, workflow area, id, and created/updated timestamps.",
   "Customer/driver app notification surfaces must exclude customer price, billing, invoice/payment/PDF, payout comparisons, PayNow payout details, internal finance/admin notes, parser/debug internals, tokens/secrets, provider/send payloads, live location/photo fields, and mock QA/dev archive fields.",
-  "Public client pages must not call `/api/customer-app-notifications` or `/api/admin-customer-driver-app-notifications`, expose admin purpose/session-token headers, Cookie, Authorization, browser credential storage, or service-role/Supabase env names.",
+  "Public client pages must not directly call `/api/customer-app-notifications` or `/api/admin-customer-driver-app-notifications`; `/my-bookings` may read safe customer trip updates only through `lib/customer-portal-trip-updates-adapter.ts` with same-origin credentials and the customer in-app purpose header. Public pages must not expose admin purpose/session-token headers, Cookie, Authorization, browser credential storage, or service-role/Supabase env names.",
   "This guard coordinates the customer/driver app notification API contract, schema contract, public API method guard, request input guard, response privacy guard, runtime gate guard, client caller guard, and session cookie/cache guard in the preactivation suite.",
   "No Save Booking + CRM change.",
   "No `/api/admin-saved-bookings` change.",
@@ -524,6 +527,28 @@ for (const [label, source] of [
 ]) {
   assertExcludes(source, forbiddenPublicClientPattern, `${label} app notification caller/secret exposure`);
 }
+for (const fragment of [
+  'customerPortalTripUpdatesApiPath = "/api/customer-app-notifications"',
+  'cache: "no-store"',
+  'credentials: "same-origin"',
+  '"x-prestige-customer-purpose": "customer-in-app-notification-read"',
+  "mapCustomerPortalTripUpdatesPayload",
+  "allowedPayloadFields",
+  "allowedUpdateFields",
+  "external_send !== false",
+  "provider_send !== false",
+]) {
+  assertIncludes(
+    customerPortalTripUpdatesAdapter,
+    fragment,
+    `customer portal trip updates adapter safe caller ${fragment}`,
+  );
+}
+assertExcludes(
+  customerPortalTripUpdatesAdapter,
+  /x-prestige-admin-purpose|x-prestige-admin-session-token|Authorization|Bearer|Cookie|document\.cookie|localStorage|sessionStorage|navigator\.credentials|service_role|SUPABASE_SERVICE|PRESTIGE_ADMIN_BOOKING_PERSISTENCE/i,
+  "customer portal trip updates adapter admin/auth exposure",
+);
 assertIncludes(
   files[driverPagePath],
   "`/api/driver-job/${encodeURIComponent(token)}/notifications?limit=5&page=1`",

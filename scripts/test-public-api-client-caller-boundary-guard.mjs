@@ -12,6 +12,7 @@ const customerAdapterPaths = [
   "lib/customer-booking-memory-adapter.ts",
   "lib/customer-portal-driver-tracking-adapter.ts",
   "lib/customer-portal-saved-bookings-adapter.ts",
+  "lib/customer-portal-trip-updates-adapter.ts",
   "lib/customer-portal-invoices-adapter.ts",
   "lib/public-company-profile-adapter.ts",
 ];
@@ -130,12 +131,12 @@ const ledgerSection = sectionBetween(ledger, "### Public API Client Caller Bound
 
 for (const phrase of [
   "Public customer/driver browser caller boundaries are guarded across `/book`, `/my-bookings`, and `/driver-job/[token]` client surfaces plus their customer-safe adapters.",
-  "This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.",
+  "This guard approves only the existing customer-safe adapter reads plus the `/my-bookings` trip-updates adapter read; it does not approve endpoint migration, env changes, deployment by CLI, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.",
   "`/book` and `/my-bookings` must delegate public API calls to customer-safe adapters instead of owning raw fetch/session plumbing.",
   "Customer client adapters must use `cache: \"no-store\"`, `credentials: \"same-origin\"`, and purpose headers while never manually attaching Cookie, Authorization, customer session-token, admin purpose, or server env-token plumbing.",
   "`/driver-job/[token]` must keep driver API calls no-store and limited to safe job GET, token-scoped driver-details PATCH, notification GET, issue-alert POST with `issue_type`, admin-only OTS photo proof POST, and status PATCH with `status` only.",
   "Driver client code must not expose customer price, billing, invoice/payment, payout comparisons, PayNow payout details, internal finance/admin notes, parser/debug internals, token secrets, or mock QA/dev archive fields.",
-  "Public client caller contracts must continue coordinating the existing customer booking page API audit, customer booking memory UI contract, and customer portal saved-bookings adapter contract in the preactivation suite.",
+  "Public client caller contracts must continue coordinating the existing customer booking page API audit, customer booking memory UI contract, customer portal saved-bookings adapter contract, and customer portal trip-updates adapter contract in the preactivation suite.",
   "No Save Booking + CRM change.",
   "No `/api/admin-saved-bookings` change.",
   "Parser behavior and `/api/ai-parse` remain unchanged.",
@@ -228,6 +229,19 @@ for (const fragment of [
   assertIncludes(portalDriverTrackingAdapter, fragment, `customer portal driver tracking adapter caller ${fragment}`);
 }
 
+const portalTripUpdatesAdapter = files["lib/customer-portal-trip-updates-adapter.ts"];
+for (const fragment of [
+  "fetcher(\n      `${customerPortalTripUpdatesApiPath}?booking_reference=${encodeURIComponent(safeReference)}&limit=5&page=1`",
+  'cache: "no-store"',
+  'credentials: "same-origin"',
+  '"x-prestige-customer-purpose": "customer-in-app-notification-read"',
+  'status: "blocked"',
+  'status: "empty"',
+  'status: "ready"',
+]) {
+  assertIncludes(portalTripUpdatesAdapter, fragment, `customer portal trip updates adapter caller ${fragment}`);
+}
+
 const portalInvoicesAdapter = files["lib/customer-portal-invoices-adapter.ts"];
 for (const fragment of [
   "fetcher(customerPortalInvoicesApiPath",
@@ -254,6 +268,7 @@ for (const [label, source] of [
   ["customer booking memory adapter", memoryAdapter],
   ["customer portal saved bookings adapter", portalAdapter],
   ["customer portal driver tracking adapter", portalDriverTrackingAdapter],
+  ["customer portal trip updates adapter", portalTripUpdatesAdapter],
   ["customer portal invoices adapter", portalInvoicesAdapter],
   ["public company profile adapter", publicProfileAdapter],
 ]) {

@@ -57,6 +57,7 @@ const safeDetailLabels = [
   "Car plate",
   "Car type",
   "Route",
+  "Trip Updates",
 ];
 
 const unsafePortalSurfacePattern =
@@ -216,7 +217,7 @@ const ledgerSection = sectionBetween(
 for (const phrase of [
   "Public customer portal saved-booking display/action surfaces are guarded across `/my-bookings`, `lib/customer-portal-saved-bookings-adapter.ts`, `lib/customer-portal-booking-change-request-adapter.ts`, and `lib/customer-saved-bookings-read.ts`.",
   "This guard allows only the approved customer booking change-request review write; it does not approve env changes, deployment by CLI, live provider sends, migrations, direct customer booking mutation, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/GPS activation, UI sectors, or new shims.",
-  "`/my-bookings` saved-booking rows must render only customer-safe status, passenger, pickup/drop-off, service, vehicle, date/time, flight, and optional request-note display fields; the expanded detail view may additionally render a customer-safe assigned-driver details card and gated customer map-link check only when safe driver details are present.",
+  "`/my-bookings` saved-booking rows must render only customer-safe status, passenger, pickup/drop-off, service, vehicle, date/time, flight, and optional request-note display fields; the expanded detail view may additionally render a customer-safe assigned-driver details card, gated customer map-link check, and compact Trip Updates readout for safe customer-app driver progress only.",
   "`/my-bookings` saved-booking actions must stay limited to disabled PDF, customer-safe edit/cancel review request form, and local detail expansion.",
   "The customer PDF control must remain disabled/no-op and must not create files, links, downloads, invoices, payment records, or provider sends.",
   "Edit and cancel controls may submit only through `lib/customer-portal-booking-change-request-adapter.ts` to `/api/customer-booking-change-requests`; they must not mutate bookings, update calendar, or change `/api/customer-saved-bookings`.",
@@ -330,7 +331,9 @@ for (const fragment of [
   "disabled={!canRequestReview}",
   "onClick={() => handleEditRequest(booking)}",
   "onClick={() => handleCancelRequest(booking)}",
-  "onClick={() => setExpandedBookingId(isExpanded ? \"\" : booking.id)}",
+  "onClick={() => {",
+  "setExpandedBookingId(isExpanded ? \"\" : booking.id);",
+  "void loadTripUpdatesForBooking(booking);",
 ]) {
   assertIncludes(portalPage, fragment, `/my-bookings saved-booking action ${fragment}`);
 }
@@ -364,6 +367,8 @@ for (const fragment of [
   "driverDetails.carType",
   "checkCustomerDriverTracking(expandedBooking)",
   "driverTracking.status === \"available\"",
+  "loadTripUpdatesForBooking(expandedBooking)",
+  "tripUpdates.updates.map",
 ]) {
   assertIncludes(detailBlock, fragment, `/my-bookings safe detail binding ${fragment}`);
 }

@@ -22,6 +22,7 @@ export type AdminSavedBookingFutureDraftCleanupDeleteInput = {
 const adminSavedBookingDeletableStatuses = ["completed", "cancelled"] as const;
 
 type AdminSavedBookingDeletableStatus = (typeof adminSavedBookingDeletableStatuses)[number];
+type AdminSavedBookingDeleteStatusColumn = "admin_internal_status" | "status";
 
 export type AdminSavedBookingDeleteRecord = {
   id: string | number;
@@ -30,6 +31,8 @@ export type AdminSavedBookingDeleteRecord = {
 
 type AdminSavedBookingDeleteTargetRecord = AdminSavedBookingDeleteRecord & {
   booking_reference: string;
+  delete_status_column: AdminSavedBookingDeleteStatusColumn;
+  delete_status_value: AdminSavedBookingDeletableStatus;
 };
 
 export type AdminSavedBookingDeleteData = {
@@ -354,37 +357,57 @@ function futureDraftCleanupStatus(value: UnknownRecord) {
   )?.toLowerCase();
 }
 
+function deletableStatusFromValue(value: unknown) {
+  const status = textOrNull(value, 40)?.toLowerCase();
+
+  return adminSavedBookingDeletableStatuses.includes(
+    status as AdminSavedBookingDeletableStatus,
+  )
+    ? (status as AdminSavedBookingDeletableStatus)
+    : null;
+}
+
+function deletableStatusFromRecord(value: UnknownRecord) {
+  return (
+    deletableStatusFromValue(value.status) ||
+    deletableStatusFromValue(value.admin_internal_status) ||
+    deletableStatusFromValue(value.customer_facing_status)
+  );
+}
+
 function toDeleteRecord(value: unknown): AdminSavedBookingDeleteRecord | null {
   const row = asRecord(value);
   const id =
     typeof row.id === "number" && Number.isSafeInteger(row.id)
       ? row.id
       : textOrNull(row.id, 120);
-  const status = textOrNull(row.status, 40)?.toLowerCase();
+  const status = deletableStatusFromRecord(row);
 
-  if (
-    id === null ||
-    !adminSavedBookingDeletableStatuses.includes(
-      status as AdminSavedBookingDeletableStatus,
-    )
-  ) {
+  if (id === null || !status) {
     return null;
   }
 
   return {
     id,
-    status: status as AdminSavedBookingDeletableStatus,
+    status,
   };
 }
 
-function toDeleteTargetRecord(value: unknown): AdminSavedBookingDeleteTargetRecord | null {
+function toDeleteTargetRecord(
+  value: unknown,
+  deleteStatusColumn: AdminSavedBookingDeleteStatusColumn,
+): AdminSavedBookingDeleteTargetRecord | null {
   const booking = toDeleteRecord(value);
-  const bookingReference = validBookingReference(asRecord(value).booking_reference);
+  const row = asRecord(value);
+  const bookingReference = validBookingReference(row.booking_reference);
+  const deleteStatusValue = deletableStatusFromValue(row[deleteStatusColumn]);
 
-  return booking && bookingReference
+  return booking && bookingReference && deleteStatusValue
     ? {
         ...booking,
         booking_reference: bookingReference,
+        delete_status_column: deleteStatusColumn,
+        delete_status_value: deleteStatusValue,
       }
     : null;
 }
@@ -505,18 +528,16 @@ export async function deleteAdminCompletedSavedBooking(
     return clientResult;
   }
 
-  const targetResult = await clientResult.data
-    .from("bookings")
-    .select("id, booking_reference, status")
-    .eq("id", parsed.data.booking_id)
-    .in("status", [...adminSavedBookingDeletableStatuses])
-    .maybeSingle();
+  const targetResult = await findCompletedSavedBookingDeleteTarget(
+    clientResult.data,
+    parsed.data.booking_id,
+  );
 
   if (targetResult.error) {
     return safeDatabaseFailure(safeDeleteError, 500, targetResult.error);
   }
 
-  const target = toDeleteTargetRecord(targetResult.data);
+  const target = targetResult.data;
 
   if (!target) {
     return {
@@ -535,13 +556,10 @@ export async function deleteAdminCompletedSavedBooking(
     return cleanupResult;
   }
 
-  const { data, error } = await clientResult.data
-    .from("bookings")
-    .delete()
-    .eq("id", parsed.data.booking_id)
-    .in("status", [...adminSavedBookingDeletableStatuses])
-    .select("id, status")
-    .maybeSingle();
+  const { data, error } = await deleteCompletedSavedBookingTarget(
+    clientResult.data,
+    target,
+  );
 
   if (error) {
     return safeDatabaseFailure(safeDeleteError, 500, error);
@@ -564,6 +582,77 @@ export async function deleteAdminCompletedSavedBooking(
     },
     ok: true,
   };
+}
+
+async function findCompletedSavedBookingDeleteTarget(
+  client: SavedBookingDeleteClient,
+  bookingId: string,
+): Promise<SavedBookingDeleteSelectResult<AdminSavedBookingDeleteTargetRecord>> {
+  const currentResult = await client
+    .from("bookings")
+    .select("id, booking_reference, admin_internal_status, customer_facing_status")
+    .eq("id", bookingId)
+    .in("admin_internal_status", [...adminSavedBookingDeletableStatuses])
+    .maybeSingle();
+
+  if (currentResult.error) {
+    if (classifyDatabaseFailure(currentResult.error) !== "column_missing") {
+      return {
+        data: null,
+        error: currentResult.error,
+      };
+    }
+  } else {
+    const currentTarget = toDeleteTargetRecord(
+      currentResult.data,
+      "admin_internal_status",
+    );
+
+    if (currentTarget) {
+      return {
+        data: currentTarget,
+        error: null,
+      };
+    }
+  }
+
+  const legacyResult = await client
+    .from("bookings")
+    .select("id, booking_reference, status")
+    .eq("id", bookingId)
+    .in("status", [...adminSavedBookingDeletableStatuses])
+    .maybeSingle();
+
+  if (legacyResult.error) {
+    return {
+      data: null,
+      error: legacyResult.error,
+    };
+  }
+
+  return {
+    data: toDeleteTargetRecord(legacyResult.data, "status"),
+    error: null,
+  };
+}
+
+async function deleteCompletedSavedBookingTarget(
+  client: SavedBookingDeleteClient,
+  target: AdminSavedBookingDeleteTargetRecord,
+): Promise<SavedBookingDeleteSelectResult<unknown>> {
+  const selectedColumns =
+    target.delete_status_column === "admin_internal_status"
+      ? "id, booking_reference, admin_internal_status, customer_facing_status"
+      : "id, booking_reference, status";
+
+  return client
+    .from("bookings")
+    .delete()
+    .eq("id", target.id)
+    .eq("booking_reference", target.booking_reference)
+    .eq(target.delete_status_column, target.delete_status_value)
+    .select(selectedColumns)
+    .maybeSingle();
 }
 
 async function deleteOperationalJobArtifactsForBookingReference(

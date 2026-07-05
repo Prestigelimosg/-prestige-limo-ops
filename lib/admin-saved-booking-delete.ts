@@ -5,9 +5,18 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { AdminBookingPersistenceAdapterActor } from "./admin-booking-supabase-adapter";
 
 export const adminSavedBookingDeleteVersion = "admin-saved-booking-delete-v1";
+export const adminSavedBookingFutureDraftCleanupDeleteScope =
+  "future_draft_2099_exact_refs";
+export const adminSavedBookingFutureDraftCleanupDeleteVersion =
+  "admin-saved-booking-future-draft-cleanup-delete-v1";
 
 export type AdminSavedBookingDeleteInput = {
   booking_id: string;
+};
+
+export type AdminSavedBookingFutureDraftCleanupDeleteInput = {
+  booking_references: string[];
+  cleanup_scope: typeof adminSavedBookingFutureDraftCleanupDeleteScope;
 };
 
 const adminSavedBookingDeletableStatuses = ["completed", "cancelled"] as const;
@@ -22,6 +31,19 @@ export type AdminSavedBookingDeleteRecord = {
 export type AdminSavedBookingDeleteData = {
   booking: AdminSavedBookingDeleteRecord;
   version: typeof adminSavedBookingDeleteVersion;
+};
+
+export type AdminSavedBookingFutureDraftCleanupDeleteRecord = {
+  booking_reference: string;
+  id: string | number;
+  pickup_at: string;
+  status: "draft";
+};
+
+export type AdminSavedBookingFutureDraftCleanupDeleteData = {
+  bookings: AdminSavedBookingFutureDraftCleanupDeleteRecord[];
+  skipped_references: string[];
+  version: typeof adminSavedBookingFutureDraftCleanupDeleteVersion;
 };
 
 type AdminSavedBookingDeleteFailureCategory =
@@ -49,6 +71,10 @@ type SavedBookingDeleteClient = Pick<SupabaseClient, "from">;
 
 const allowedAdapterActorRoles = new Set(["admin", "dispatcher", "system"]);
 const allowedPayloadKeys = new Set(["booking_id"]);
+const allowedFutureDraftCleanupPayloadKeys = new Set([
+  "booking_references",
+  "cleanup_scope",
+]);
 const malformedPayloadError =
   "Admin saved booking delete payload is malformed.";
 const safeActorError =
@@ -60,6 +86,10 @@ const safeSessionActorError =
   "Admin saved booking delete requires a verified admin or dispatcher server session.";
 const safeTargetMissingError =
   "Archived saved booking delete target was not found.";
+const safeFutureDraftCleanupError =
+  "Future draft saved booking cleanup failed safely.";
+const futureDraftCleanupPickupStart = "2099-01-01T00:00:00.000Z";
+const futureDraftCleanupPickupEnd = "2100-01-01T00:00:00.000Z";
 const placeholderConfigPattern =
   /^(?:todo|tbd|n\/a|none|null|undefined|placeholder|change[-_\s]?me|changeme|replace[-_\s]?me|your[-_\s]?.*|example)$/i;
 
@@ -290,6 +320,24 @@ function validBookingId(value: unknown) {
     : null;
 }
 
+function validBookingReference(value: unknown) {
+  const cleaned = textOrNull(value, 160);
+
+  return cleaned && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/.test(cleaned)
+    ? cleaned
+    : null;
+}
+
+function pickupAtIsFutureDraftCleanupDate(value: string | null) {
+  if (!value) {
+    return false;
+  }
+
+  const parsed = new Date(value);
+
+  return Number.isFinite(parsed.getTime()) && parsed.getUTCFullYear() === 2099;
+}
+
 function toDeleteRecord(value: unknown): AdminSavedBookingDeleteRecord | null {
   const row = asRecord(value);
   const id =
@@ -313,6 +361,37 @@ function toDeleteRecord(value: unknown): AdminSavedBookingDeleteRecord | null {
   };
 }
 
+function toFutureDraftCleanupDeleteRecord(
+  value: unknown,
+  expectedReference: string,
+): AdminSavedBookingFutureDraftCleanupDeleteRecord | null {
+  const row = asRecord(value);
+  const id =
+    typeof row.id === "number" && Number.isSafeInteger(row.id)
+      ? row.id
+      : textOrNull(row.id, 120);
+  const bookingReference = textOrNull(row.booking_reference, 160);
+  const pickupAt = textOrNull(row.pickup_at, 120);
+  const status = textOrNull(row.status, 40)?.toLowerCase();
+
+  if (
+    id === null ||
+    bookingReference !== expectedReference ||
+    status !== "draft" ||
+    !pickupAt ||
+    !pickupAtIsFutureDraftCleanupDate(pickupAt)
+  ) {
+    return null;
+  }
+
+  return {
+    booking_reference: bookingReference,
+    id,
+    pickup_at: pickupAt,
+    status: "draft",
+  };
+}
+
 export function parseAdminSavedBookingDeletePayload(
   input: unknown,
 ): AdminSavedBookingDeleteResult<AdminSavedBookingDeleteInput> {
@@ -331,6 +410,52 @@ export function parseAdminSavedBookingDeletePayload(
   return {
     data: {
       booking_id: bookingId,
+    },
+    ok: true,
+  };
+}
+
+export function isAdminSavedBookingFutureDraftCleanupDeletePayload(input: unknown) {
+  const record = asRecord(input);
+
+  return (
+    record.cleanup_scope === adminSavedBookingFutureDraftCleanupDeleteScope ||
+    Array.isArray(record.booking_references)
+  );
+}
+
+export function parseAdminSavedBookingFutureDraftCleanupDeletePayload(
+  input: unknown,
+): AdminSavedBookingDeleteResult<AdminSavedBookingFutureDraftCleanupDeleteInput> {
+  const record = asRecord(input);
+  const unsupportedKey = Object.keys(record).find(
+    (key) => !allowedFutureDraftCleanupPayloadKeys.has(key),
+  );
+  const rawReferences = Array.isArray(record.booking_references)
+    ? record.booking_references
+    : [];
+  const bookingReferences = rawReferences.map(validBookingReference);
+  const uniqueReferences = new Set(bookingReferences.filter(Boolean));
+
+  if (
+    unsupportedKey ||
+    record.cleanup_scope !== adminSavedBookingFutureDraftCleanupDeleteScope ||
+    rawReferences.length === 0 ||
+    rawReferences.length > 20 ||
+    bookingReferences.some((reference) => !reference) ||
+    uniqueReferences.size !== rawReferences.length
+  ) {
+    return {
+      error: malformedPayloadError,
+      ok: false,
+      status: 400,
+    };
+  }
+
+  return {
+    data: {
+      booking_references: bookingReferences as string[],
+      cleanup_scope: adminSavedBookingFutureDraftCleanupDeleteScope,
     },
     ok: true,
   };
@@ -378,6 +503,59 @@ export async function deleteAdminCompletedSavedBooking(
     data: {
       booking,
       version: adminSavedBookingDeleteVersion,
+    },
+    ok: true,
+  };
+}
+
+export async function deleteAdminFutureDraft2099SavedBookingsByReference(
+  input: unknown,
+  actor: AdminBookingPersistenceAdapterActor,
+): Promise<AdminSavedBookingDeleteResult<AdminSavedBookingFutureDraftCleanupDeleteData>> {
+  const parsed = parseAdminSavedBookingFutureDraftCleanupDeletePayload(input);
+
+  if (!parsed.ok) {
+    return parsed;
+  }
+
+  const clientResult = getSavedBookingDeleteClient(actor);
+
+  if (!clientResult.ok) {
+    return clientResult;
+  }
+
+  const bookings: AdminSavedBookingFutureDraftCleanupDeleteRecord[] = [];
+  const skippedReferences: string[] = [];
+
+  for (const bookingReference of parsed.data.booking_references) {
+    const { data, error } = await clientResult.data
+      .from("bookings")
+      .delete()
+      .eq("booking_reference", bookingReference)
+      .eq("status", "draft")
+      .gte("pickup_at", futureDraftCleanupPickupStart)
+      .lt("pickup_at", futureDraftCleanupPickupEnd)
+      .select("id, booking_reference, status, pickup_at")
+      .maybeSingle();
+
+    if (error) {
+      return safeDatabaseFailure(safeFutureDraftCleanupError, 500, error);
+    }
+
+    const booking = toFutureDraftCleanupDeleteRecord(data, bookingReference);
+
+    if (booking) {
+      bookings.push(booking);
+    } else {
+      skippedReferences.push(bookingReference);
+    }
+  }
+
+  return {
+    data: {
+      bookings,
+      skipped_references: skippedReferences,
+      version: adminSavedBookingFutureDraftCleanupDeleteVersion,
     },
     ok: true,
   };

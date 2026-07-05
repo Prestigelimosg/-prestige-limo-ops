@@ -5,7 +5,11 @@ import {
   resolveAdminDispatcherBoundary,
 } from "../../../lib/admin-dispatcher-auth-boundary";
 import { createAdminSavedBooking } from "../../../lib/admin-saved-booking-create";
-import { deleteAdminCompletedSavedBooking } from "../../../lib/admin-saved-booking-delete";
+import {
+  deleteAdminCompletedSavedBooking,
+  deleteAdminFutureDraft2099SavedBookingsByReference,
+  isAdminSavedBookingFutureDraftCleanupDeletePayload,
+} from "../../../lib/admin-saved-booking-delete";
 import {
   loadAdminSavedBookingById,
   loadAdminSavedBookingList,
@@ -174,7 +178,10 @@ export async function DELETE(request: Request) {
     }
 
     const actor = adminDispatcherBoundaryToPersistenceAdapterActor(boundary.context);
-    const result = await deleteAdminCompletedSavedBooking(await readJsonBody(request), actor);
+    const body = await readJsonBody(request);
+    const result = isAdminSavedBookingFutureDraftCleanupDeletePayload(body)
+      ? await deleteAdminFutureDraft2099SavedBookingsByReference(body, actor)
+      : await deleteAdminCompletedSavedBooking(body, actor);
 
     if (!result.ok) {
       return Response.json(
@@ -184,6 +191,15 @@ export async function DELETE(request: Request) {
         },
         { status: result.status },
       );
+    }
+
+    if ("bookings" in result.data) {
+      return Response.json({
+        bookings: result.data.bookings,
+        ok: true,
+        skipped_references: result.data.skipped_references,
+        version: result.data.version,
+      });
     }
 
     return Response.json({

@@ -55,6 +55,12 @@ const todayJobsCard = extractBetween(
   "data-dispatch-live-driver-map=\"true\"",
   "Today's Jobs active-job card",
 );
+const bookingCompletionMessagePrune = extractBetween(
+  appPage,
+  "const bookingCompletionVisibleIds = useMemo(",
+  "async function readCompletedBookingBillingReadinessAudit()",
+  "booking completion message prune",
+);
 
 for (const fragment of [
   "window.confirm(",
@@ -142,6 +148,18 @@ for (const fragment of [
   "driverJobLinkBookingRecord ?? undefined",
 ]) {
   assertIncludes(appPage, fragment, `status update source-record fragment ${fragment}`);
+}
+
+for (const fragment of [
+  "new Set([",
+  "...operationalBookings.map((bookingRecord) => bookingRecordStableKey(bookingRecord)),",
+  "...completedBookings.map((bookingRecord) => bookingRecordStableKey(bookingRecord)),",
+  "setBookingCompletionMessages((current) => {",
+  "message.text === \"Job deleted.\" && isDeleteArchivedJobMessage(message)",
+  "bookingCompletionVisibleIds.has(bookingId)",
+  "return changed ? nextMessages : current;",
+]) {
+  assertIncludes(bookingCompletionMessagePrune, fragment, `booking completion message prune fragment ${fragment}`);
 }
 
 console.log("Admin active-job confirm completed guard passed");

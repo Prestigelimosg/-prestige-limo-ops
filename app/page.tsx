@@ -16374,6 +16374,14 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   const hasCompletedSearch = Boolean(clean(completedSearchTerm));
   const loadedBookingIds = new Set(operationalBookings.map((bookingRecord) => bookingRecordStableKey(bookingRecord)));
   const completedBookingIds = new Set(completedBookings.map((bookingRecord) => bookingRecordStableKey(bookingRecord)));
+  const bookingCompletionVisibleIds = useMemo(
+    () =>
+      new Set([
+        ...operationalBookings.map((bookingRecord) => bookingRecordStableKey(bookingRecord)),
+        ...completedBookings.map((bookingRecord) => bookingRecordStableKey(bookingRecord)),
+      ]),
+    [completedBookings, operationalBookings],
+  );
   const completedTabCompletionMessages = Object.entries(bookingCompletionMessages).filter(
     ([bookingId, completionMessage]) =>
       loadedBookingIds.has(bookingId) &&
@@ -16387,6 +16395,26 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       completionMessage.text === "Job deleted." &&
       isDeleteArchivedJobMessage(completionMessage),
   );
+
+  useEffect(() => {
+    setBookingCompletionMessages((current) => {
+      let changed = false;
+      const nextMessages: Record<string, Message> = {};
+
+      for (const [bookingId, message] of Object.entries(current)) {
+        const keepDeletedFeedback =
+          message.text === "Job deleted." && isDeleteArchivedJobMessage(message);
+
+        if (bookingCompletionVisibleIds.has(bookingId) || keepDeletedFeedback) {
+          nextMessages[bookingId] = message;
+        } else {
+          changed = true;
+        }
+      }
+
+      return changed ? nextMessages : current;
+    });
+  }, [bookingCompletionVisibleIds]);
 
   async function readCompletedBookingBillingReadinessAudit() {
     if (adminCompletedBookingBillingReadinessAuditAction) {

@@ -172,11 +172,31 @@ class MockSupabaseQuery {
     return this;
   }
 
+  gte(column, value) {
+    this.filters.push({
+      column,
+      type: "gte",
+      value,
+    });
+
+    return this;
+  }
+
   in(column, values) {
     this.filters.push({
       column,
       type: "in",
       values,
+    });
+
+    return this;
+  }
+
+  lt(column, value) {
+    this.filters.push({
+      column,
+      type: "lt",
+      value,
     });
 
     return this;
@@ -253,6 +273,14 @@ class MockSupabaseClient {
           return filter.values.map(String).includes(String(row[filter.column]));
         }
 
+        if (filter.type === "gte") {
+          return String(row[filter.column] ?? "") >= String(filter.value);
+        }
+
+        if (filter.type === "lt") {
+          return String(row[filter.column] ?? "") < String(filter.value);
+        }
+
         return String(row[filter.column]) === String(filter.value);
       }),
     );
@@ -317,6 +345,24 @@ const seed = {
       id: "delete-confirmed-1",
       status: "confirmed",
     },
+    {
+      booking_reference: "ADM-CLEANUP-2099-DRAFT",
+      id: "cleanup-draft-2099-1",
+      pickup_at: "2099-12-30T16:00:00+00:00",
+      status: "draft",
+    },
+    {
+      booking_reference: "ADM-CLEANUP-2026-DRAFT",
+      id: "cleanup-draft-2026-1",
+      pickup_at: "2026-12-30T16:00:00+00:00",
+      status: "draft",
+    },
+    {
+      booking_reference: "ADM-CLEANUP-2099-COMPLETED",
+      id: "cleanup-completed-2099-1",
+      pickup_at: "2099-12-30T16:00:00+00:00",
+      status: "completed",
+    },
   ],
 };
 
@@ -326,6 +372,14 @@ try {
   const { deletePersistence, route } = harness;
 
   assert.equal(deletePersistence.adminSavedBookingDeleteVersion, "admin-saved-booking-delete-v1");
+  assert.equal(
+    deletePersistence.adminSavedBookingFutureDraftCleanupDeleteScope,
+    "future_draft_2099_exact_refs",
+  );
+  assert.equal(
+    deletePersistence.adminSavedBookingFutureDraftCleanupDeleteVersion,
+    "admin-saved-booking-future-draft-cleanup-delete-v1",
+  );
   assert.deepEqual(deletePersistence.parseAdminSavedBookingDeletePayload({
     booking_id: "delete-completed-1",
   }), {
@@ -336,6 +390,21 @@ try {
   });
   assert.equal(deletePersistence.parseAdminSavedBookingDeletePayload({}).ok, false);
   assert.equal(deletePersistence.parseAdminSavedBookingDeletePayload({ booking_id: "delete-completed-1", status: "completed" }).ok, false);
+  assert.deepEqual(deletePersistence.parseAdminSavedBookingFutureDraftCleanupDeletePayload({
+    booking_references: ["ADM-CLEANUP-2099-DRAFT"],
+    cleanup_scope: "future_draft_2099_exact_refs",
+  }), {
+    data: {
+      booking_references: ["ADM-CLEANUP-2099-DRAFT"],
+      cleanup_scope: "future_draft_2099_exact_refs",
+    },
+    ok: true,
+  });
+  assert.equal(deletePersistence.parseAdminSavedBookingFutureDraftCleanupDeletePayload({}).ok, false);
+  assert.equal(deletePersistence.parseAdminSavedBookingFutureDraftCleanupDeletePayload({
+    booking_references: ["ADM-CLEANUP-2099-DRAFT", "ADM-CLEANUP-2099-DRAFT"],
+    cleanup_scope: "future_draft_2099_exact_refs",
+  }).ok, false);
 
   setEnv(enabledEnv());
 
@@ -462,6 +531,95 @@ try {
   assert.equal(cancelledMock.client.deleteHistory.length, 1);
   assert.equal(cancelledMock.client.rows.bookings.some((booking) => booking.id === "delete-cancelled-1"), false);
   assertNoUnsafeResponse(cancelledResult, "cancelled response");
+
+  setEnv(enabledEnv());
+
+  const cleanupMock = installMockClient(seed);
+  const cleanupResult = await routeJson(
+    await route.DELETE(
+      deleteRequest("http://localhost/api/admin-saved-bookings", {
+        booking_references: [
+          "ADM-CLEANUP-2099-DRAFT",
+          "ADM-CLEANUP-2026-DRAFT",
+          "ADM-CLEANUP-2099-COMPLETED",
+          "ADM-CLEANUP-MISSING",
+        ],
+        cleanup_scope: "future_draft_2099_exact_refs",
+      }),
+    ),
+  );
+
+  assert.equal(cleanupResult.status, 200);
+  assert.deepEqual(cleanupResult.body, {
+    bookings: [
+      {
+        booking_reference: "ADM-CLEANUP-2099-DRAFT",
+        id: "cleanup-draft-2099-1",
+        pickup_at: "2099-12-30T16:00:00+00:00",
+        status: "draft",
+      },
+    ],
+    ok: true,
+    skipped_references: [
+      "ADM-CLEANUP-2026-DRAFT",
+      "ADM-CLEANUP-2099-COMPLETED",
+      "ADM-CLEANUP-MISSING",
+    ],
+    version: "admin-saved-booking-future-draft-cleanup-delete-v1",
+  });
+  assert.equal(cleanupMock.client.deleteHistory.length, 4);
+  assert.deepEqual(cleanupMock.client.deleteHistory[0].filters, [
+    {
+      column: "booking_reference",
+      type: "eq",
+      value: "ADM-CLEANUP-2099-DRAFT",
+    },
+    {
+      column: "status",
+      type: "eq",
+      value: "draft",
+    },
+    {
+      column: "pickup_at",
+      type: "gte",
+      value: "2099-01-01T00:00:00.000Z",
+    },
+    {
+      column: "pickup_at",
+      type: "lt",
+      value: "2100-01-01T00:00:00.000Z",
+    },
+  ]);
+  assert.equal(
+    cleanupMock.client.rows.bookings.some((booking) => booking.id === "cleanup-draft-2099-1"),
+    false,
+  );
+  assert.equal(
+    cleanupMock.client.rows.bookings.some((booking) => booking.id === "cleanup-draft-2026-1"),
+    true,
+  );
+  assert.equal(
+    cleanupMock.client.rows.bookings.some((booking) => booking.id === "cleanup-completed-2099-1"),
+    true,
+  );
+  assertNoUnsafeResponse(cleanupResult, "future draft cleanup response");
+
+  setEnv(enabledEnv());
+
+  const invalidCleanupMock = installMockClient(seed);
+  const invalidCleanupResult = await routeJson(
+    await route.DELETE(
+      deleteRequest("http://localhost/api/admin-saved-bookings", {
+        booking_references: ["ADM-CLEANUP-2099-DRAFT"],
+        cleanup_scope: "wrong_scope",
+      }),
+    ),
+  );
+
+  assert.equal(invalidCleanupResult.status, 400);
+  assert.equal(invalidCleanupMock.createdClients.length, 0);
+  assertNoDeletes(invalidCleanupMock, "invalid future draft cleanup payload");
+  assertNoUnsafeResponse(invalidCleanupResult, "invalid future draft cleanup response");
 
   setEnv(enabledEnv());
 

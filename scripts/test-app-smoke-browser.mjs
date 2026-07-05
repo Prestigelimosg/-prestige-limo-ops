@@ -34643,65 +34643,6 @@ async function runChromeTest() {
       assert.equal(clicked, true, `Expected customer portal ${section} section to be clickable`);
     };
 
-    const setCustomerPortalRequestField = async (field, value) => {
-      const actualValue = await evaluate(`(() => {
-        const control = document.querySelector(${JSON.stringify(`[data-customer-portal-request-field="${field}"]`)});
-
-        if (!control) {
-          return null;
-        }
-
-        const descriptor = Object.getOwnPropertyDescriptor(control.constructor.prototype, "value");
-        descriptor?.set?.call(control, ${JSON.stringify(value)});
-        control.dispatchEvent(new Event("input", { bubbles: true }));
-        control.dispatchEvent(new Event("change", { bubbles: true }));
-
-        return control.value;
-      })()`);
-      assert.equal(actualValue, value, `Expected customer portal request field ${field} to accept test value`);
-    };
-
-    const setCustomerPortalPickupTime = async (hour, minute) => {
-      const actualValue = await evaluate(`(async () => {
-        const hidden = document.querySelector("[data-customer-portal-request-field='pickupTime']");
-        const hourSelect = document.querySelector("[data-customer-portal-pickup-time-part='hour']");
-        const minuteSelect = document.querySelector("[data-customer-portal-pickup-time-part='minute']");
-
-        if (!hidden || !hourSelect || !minuteSelect) {
-          return null;
-        }
-
-        const setControlValue = (control, nextValue) => {
-          const descriptor = Object.getOwnPropertyDescriptor(control.constructor.prototype, "value");
-          descriptor?.set?.call(control, nextValue);
-          control.dispatchEvent(new Event("input", { bubbles: true }));
-          control.dispatchEvent(new Event("change", { bubbles: true }));
-        };
-
-        setControlValue(hourSelect, ${JSON.stringify(hour)});
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        setControlValue(minuteSelect, ${JSON.stringify(minute)});
-        await new Promise((resolve) => setTimeout(resolve, 0));
-
-        return hidden.value;
-      })()`);
-      assert.equal(actualValue, `${hour}:${minute}`, "Expected customer portal compact pickup time selectors to accept test value");
-    };
-
-    const submitCustomerPortalBookingRequest = async () => {
-      const submitted = await evaluate(`(() => {
-        const button = document.querySelector("[data-customer-portal-submit-request]");
-
-        if (!button) {
-          return false;
-        }
-
-        button.click();
-        return true;
-      })()`);
-      assert.equal(submitted, true, "Expected customer portal booking request submit to be clickable");
-    };
-
     const clickCustomerPortalFilter = async (filter) => {
       const clicked = await evaluate(`(() => {
         const button = document.querySelector(${JSON.stringify(`[data-customer-portal-filter="${filter}"]`)});
@@ -35399,66 +35340,50 @@ async function runChromeTest() {
       });
 
       await clickCustomerPortalSection("New Booking Request");
-      const requestFormState = await waitForCondition(
+      const routedBookingRequestState = await waitForCondition(
         async () => {
-          const candidateState = await readCustomerPortalState();
-          return candidateState.form.visible ? candidateState : false;
+          const candidateState = await evaluate(`(() => {
+            const customerBookingPage = document.querySelector("[data-customer-booking-page]");
+            const submitButton = document.querySelector("[data-customer-booking-submit]");
+
+            return {
+              href: location.href,
+              pathname: location.pathname,
+              submitVisible: Boolean(submitButton),
+              text: document.body?.innerText || "",
+              visible: Boolean(customerBookingPage),
+            };
+          })()`);
+
+          return candidateState.pathname === "/book" && candidateState.visible && candidateState.submitVisible
+            ? candidateState
+            : false;
         },
         10000,
-        "customer portal booking request form",
+        "customer portal New Booking Request route to /book",
       );
-      assert.equal(requestFormState.activeSection, "New Booking Request", "Expected /my-bookings request form tab");
-      assert.equal(requestFormState.form.submitVisible, true, "Expected customer portal request submit button");
       assert.equal(
-        requestFormState.text.includes("Our team will review and confirm your booking shortly. Thank you"),
+        routedBookingRequestState.text.includes("Booking Request"),
         true,
-        "Expected /my-bookings request form to show clear team review notice",
+        "Expected /my-bookings New Booking Request to open the canonical /book form",
       );
       assert.equal(
-        requestFormState.form.nativePickupTimeInputCount,
-        0,
-        "Expected /my-bookings pickup time not to use native time input",
+        routedBookingRequestState.text.includes("Submit Booking Request"),
+        true,
+        "Expected routed /book form to keep the customer-safe submit button",
       );
-      assert.equal(
-        requestFormState.form.fieldState.pickupTime.control,
-        "compact-selects",
-        "Expected visible compact pickup time selects",
+      assertNoCustomerFacingPriceVisibilityLeaks(
+        routedBookingRequestState.text,
+        "/my-bookings New Booking Request /book route",
       );
-      assert.equal(
-        requestFormState.form.fieldState.pickupTime.step,
-        "",
-        "Expected /my-bookings pickup time hidden value not to expose native step UI",
+      assertNoAdminBookingPersistenceLeaks(
+        routedBookingRequestState.text,
+        "/my-bookings New Booking Request /book route",
       );
+
+      const routedBookingPageState = await readCustomerBookingPageState();
       assert.deepEqual(
-        requestFormState.form.pickupMinuteOptions,
-        ["00", "05", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55"],
-        "Expected /my-bookings pickup minute selector to use 5-minute intervals",
-      );
-      assert.deepEqual(
-        Object.fromEntries(
-          Object.entries(requestFormState.form.fieldState).map(([field, state]) => [field, state.required]),
-        ),
-        {
-          companyName: false,
-          contactNo: true,
-          emailAddress: false,
-          passengerName: true,
-          pickupDate: true,
-          pickupTime: true,
-          flightNumber: false,
-          pickupLocation: true,
-          dropoffLocation: true,
-          serviceType: false,
-          vehicleType: false,
-          passengerCount: false,
-          luggage: false,
-          extraStops: false,
-          specialRequest: false,
-        },
-        "Expected /my-bookings request form required/optional fields",
-      );
-      assert.deepEqual(
-        requestFormState.form.serviceOptionLabels,
+        routedBookingPageState.serviceOptionLabels,
         [
           "Please select trip type",
           "Airport Arrival",
@@ -35468,10 +35393,10 @@ async function runChromeTest() {
           "Event / VIP Movement",
           "Other / Need advice",
         ],
-        "Expected /my-bookings customer-facing trip type options",
+        "Expected /my-bookings New Booking Request to reuse /book trip type options",
       );
       assert.deepEqual(
-        requestFormState.form.vehicleOptionLabels,
+        routedBookingPageState.vehicleOptionLabels,
         [
           "Alphard / Vellfire",
           "Mercedes Viano / V-Class",
@@ -35479,103 +35404,30 @@ async function runChromeTest() {
           "Mercedes E-Class",
           "Mercedes S-Class",
         ],
-        "Expected /my-bookings customer-facing vehicle options",
-      );
-      for (const hiddenInternalCode of ["DEP", "MNG", "TRF", "DSP", "AVF", "VVV", "Combi"]) {
-        assert.equal(
-          requestFormState.text.includes(hiddenInternalCode),
-          false,
-          `Expected /my-bookings not to show internal code ${hiddenInternalCode}`,
-        );
-      }
-
-      await submitCustomerPortalBookingRequest();
-      const invalidRequestState = await waitForCondition(
-        async () => {
-          const candidateState = await readCustomerPortalState();
-          return candidateState.form.feedbackText.includes("Please complete contact no.") ? candidateState : false;
-        },
-        10000,
-        "customer portal invalid booking request feedback",
+        "Expected /my-bookings New Booking Request to reuse /book vehicle options",
       );
       assert.deepEqual(
-        invalidRequestState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        routedBookingPageState.serviceOptionLabels.filter((label) => ["DEP", "MNG", "TRF", "DSP"].includes(label)),
         [],
-        "Expected invalid /my-bookings request not to call Supabase, payment, bank, notification, or calendar APIs",
-      );
-      assertNoCustomerPortalPrivacyLeaks(invalidRequestState.text, "/my-bookings invalid request");
-      assertNoAdminBookingPersistenceLeaks(invalidRequestState.text, "/my-bookings invalid request");
-      assertNoPublicRouteRuntimeCalls(
-        invalidRequestState.integrationCalls,
-        invalidRequestState.resourceCalls,
-        "/my-bookings invalid request",
-        customerPortalRuntimeAllowedPattern,
-      );
-      assertNoBrowserPersistenceLeaks(
-        await readBrowserPersistenceState("/my-bookings invalid request"),
-        "/my-bookings invalid request",
-      );
-
-      await setCustomerPortalRequestField("contactNo", "+65 9000 0123");
-      await setCustomerPortalRequestField("passengerName", "Portal Test Passenger");
-      await setCustomerPortalRequestField("pickupDate", "2026-06-15");
-      await setCustomerPortalPickupTime("10", "05");
-      await setCustomerPortalRequestField("pickupLocation", "Portal Test Pickup");
-      await setCustomerPortalRequestField("dropoffLocation", "Portal Test Dropoff");
-      await submitCustomerPortalBookingRequest();
-      const validRequestState = await waitForCondition(
-        async () => {
-          const candidateState = await readCustomerPortalState();
-          return candidateState.form.feedbackText.includes("Booking request received for review") ? candidateState : false;
-        },
-        10000,
-        "customer portal valid booking request feedback",
-      );
-      assert.equal(
-        validRequestState.form.fieldState.pickupTime.value,
-        "10:05",
-        "Expected selecting hour and minute to create HH:mm pickup time",
+        "Expected /my-bookings New Booking Request not to expose internal service codes",
       );
       assert.deepEqual(
-        validRequestState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        [...routedBookingPageState.vehicleOptionLabels, ...routedBookingPageState.vehicleOptionValues].filter((value) =>
+          ["AVF", "VVV", "Combi"].includes(value),
+        ),
         [],
-        "Expected valid /my-bookings request not to call Supabase, payment, bank, notification, or calendar APIs",
+        "Expected /my-bookings New Booking Request not to expose internal vehicle codes",
       );
-      assertNoCustomerPortalPrivacyLeaks(validRequestState.text, "/my-bookings valid request");
-      assertNoAdminBookingPersistenceLeaks(validRequestState.text, "/my-bookings valid request");
-      assertNoPublicRouteRuntimeCalls(
-        validRequestState.integrationCalls,
-        validRequestState.resourceCalls,
-        "/my-bookings valid request",
-        customerPortalRuntimeAllowedPattern,
-      );
-      assertNoBrowserPersistenceLeaks(
-        await readBrowserPersistenceState("/my-bookings valid request"),
-        "/my-bookings valid request",
-      );
-      assert.equal(/[A-Z]{2,}-\d{3,}/.test(validRequestState.text), false, "Expected /my-bookings request not to create invoice-style numbers");
+      await checkTelegramBoundary("/my-bookings New Booking Request /book route");
 
-      await submitCustomerPortalBookingRequest();
-      const repeatedRequestState = await waitForCondition(
+      await setCustomerPortalViewportAndLoad(desktopViewport);
+      await waitForCondition(
         async () => {
           const candidateState = await readCustomerPortalState();
-          return candidateState.form.feedbackText.includes("Booking request received for review") ? candidateState : false;
+          return candidateState.showingText === "Showing 1-10 of 12 bookings" ? candidateState : false;
         },
         10000,
-        "customer portal same-date same-time booking request",
-      );
-      assert.deepEqual(
-        repeatedRequestState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
-        [],
-        "Expected repeated same-date/same-time /my-bookings request not to call Supabase, payment, bank, notification, or calendar APIs",
-      );
-      assertNoCustomerPortalPrivacyLeaks(repeatedRequestState.text, "/my-bookings repeated request");
-      assertNoAdminBookingPersistenceLeaks(repeatedRequestState.text, "/my-bookings repeated request");
-      assertNoPublicRouteRuntimeCalls(
-        repeatedRequestState.integrationCalls,
-        repeatedRequestState.resourceCalls,
-        "/my-bookings repeated request",
-        customerPortalRuntimeAllowedPattern,
+        "customer portal restored after New Booking Request route",
       );
 
       await clickCustomerPortalFilter("Upcoming");

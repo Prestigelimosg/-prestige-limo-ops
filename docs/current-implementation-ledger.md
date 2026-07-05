@@ -12,6 +12,17 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Customer Driver Details Copy + App Link
+
+- Dispatch Customer Copy now has one explicit `Copy + App Link` action in the existing Customer Copy row.
+- The action uses the existing admin customer portal access-link route, requires the saved booking `customer_id` / customer account reference, and refuses to create a link from passenger, booker, company, or display names.
+- The copied text is the current customer-safe driver details plus a signed customer app link for manual sending. It does not send Email, WhatsApp, SMS, Telegram, provider messages, customer in-app notifications, driver notifications, payment/PDF/invoice actions, GPS/live-location writes, parser changes, or broad DB writes.
+- The normal Customer Copy button and manual Telegram buttons remain unchanged; Telegram remains manual clipboard-only with no provider send, no chat ID, no Telegram URL, no notification write, and no portal-link creation inside the Telegram handler.
+
+### Completed Undo Local Status Fix
+
+- When admin undoes a completed booking back to assigned/confirmed, the local `customer_facing_status` now resets from `completed` to the matching active customer-safe status so the card can leave Completed / History immediately instead of waiting for a reload.
+
 ### Live Handoff Checkpoint 01fc2ee8
 
 - Current live checkpoint is `01fc2ee8 Hide names from WhatsApp job cards`; `main` and `staging` are aligned to this checkpoint.
@@ -3723,12 +3734,13 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ## Customer Copy Multi-Channel Existing Workflow Lock
 
 - The existing admin Customer Copy Email/WhatsApp/SMS customer driver-details workflow is locked by `docs/customer-copy-multi-channel-existing-workflow-lock.md`.
-- This lock now reflects the approved current lane: real Email is admin-selected through the already approved gated Resend route; Customer In-App and Driver In-App are admin-selected through the existing in-app notification route; Telegram provider sending remains internal-admin only; customer/driver Telegram is manual clipboard preparation in Dispatch; SMS and WhatsApp remain parked.
+- This lock now reflects the approved current lane: real Email is admin-selected through the already approved gated Resend route; Customer In-App and Driver In-App are admin-selected through the existing in-app notification route; Copy + App Link is an explicit admin-selected customer portal access-link copy action using only the saved booking customer account reference; Telegram provider sending remains internal-admin only; customer/driver Telegram is manual clipboard preparation in Dispatch; SMS and WhatsApp remain parked.
 - Do not add duplicate Email, WhatsApp, SMS, Telegram, customer-message, driver-notification, provider-send, or customer driver-details workflow sectors, buttons, cards, routes, helpers, or shims.
-- Existing surfaces are `data-dispatch-workflow-step="customer-whatsapp-copy"`, `data-copy-edit-button="customerCopy"`, `data-copy-copy-button="customerCopy"`, `data-copy-preview="customerCopy"`, `data-customer-live-location-helper`, `data-admin-customer-driver-details-email-review-item`, the existing compact Email/WhatsApp/SMS controls, `data-admin-customer-driver-details-telegram-manual-copy-action`, `data-driver-job-link-telegram-manual-copy-button`, the existing Customer In-App control, and `data-admin-email-activation-preflight-status` in `app/page.tsx`.
+- Existing surfaces are `data-dispatch-workflow-step="customer-whatsapp-copy"`, `data-copy-edit-button="customerCopy"`, `data-copy-copy-button="customerCopy"`, `data-admin-customer-driver-details-copy-with-portal-link`, `data-copy-preview="customerCopy"`, `data-customer-live-location-helper`, `data-admin-customer-driver-details-email-review-item`, the existing compact Email/WhatsApp/SMS controls, `data-admin-customer-driver-details-telegram-manual-copy-action`, `data-driver-job-link-telegram-manual-copy-button`, the existing Customer In-App control, and `data-admin-email-activation-preflight-status` in `app/page.tsx`.
 - Email now uses the existing approved gated POST route `POST /api/admin-customer-driver-details-email-send-action` from the same compact row.
 - WhatsApp and SMS remain parked on setup-only/no-op GET paths.
 - Customer In-App and Driver In-App remain explicit admin-selected in-app notification actions through `POST /api/admin-customer-driver-app-notifications`.
+- Copy + App Link remains explicit admin-selected manual clipboard preparation through the existing `POST /api/admin-customer-portal-access-links` route; it requires the saved booking `customer_id` / customer account reference and must not fall back to passenger, booker, company, or display names.
 - Telegram provider sending remains the existing internal-admin alert send path only through `POST /api/admin-telegram-internal-admin-alert-send`.
 - Customer/driver Telegram controls are manual clipboard-only and keep `external_send=false`, no provider call, no chat ID, no `t.me` URL, no DB write, and no notification write.
 - SMS and WhatsApp sends remain parked unless separately approved.

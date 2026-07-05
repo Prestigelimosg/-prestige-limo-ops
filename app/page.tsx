@@ -84,6 +84,7 @@ const adminTelegramInternalAdminAlertSendApiPath =
   "/api/admin-telegram-internal-admin-alert-send";
 const adminCustomerDriverAppNotificationsApiPath =
   "/api/admin-customer-driver-app-notifications";
+const adminCustomerPortalAccessLinksApiPath = "/api/admin-customer-portal-access-links";
 const adminCompaniesCrmIdentityApiPath = "/api/admin-companies-crm-identity";
 const adminTravelersCrmIdentityApiPath = "/api/admin-travelers-crm-identity";
 const adminCompanyTravelerCrmRuntimeWriteActionApiPath =
@@ -682,6 +683,7 @@ type BookingRecord = {
   company_id: number | null;
   booker_id: number | null;
   traveler_id: number | null;
+  customer_id?: string | number | null;
   booking_type: string | null;
   service_type?: string | null;
   route_type?: string | null;
@@ -964,6 +966,13 @@ type AdminManualTelegramCopyState = Message & {
   loadedReference: string;
   noProviderSend: true;
   target: AdminManualTelegramCopyTarget;
+};
+
+type CustomerDriverDetailsPortalLinkCopyState = Message & {
+  external_send: false;
+  loadedReference: string;
+  noProviderSend: true;
+  portalLinkCopied: boolean;
 };
 
 type DispatchCopyTarget = "customerCopy" | "driverDispatch" | "jobCard";
@@ -4403,6 +4412,10 @@ function applyBookingStatusToLocalRecord(
 
   if (nextStatus === "cancelled" || nextStatus === "completed") {
     updatedBookingRecord.customer_facing_status = nextStatus;
+  } else if (nextStatus === "assigned") {
+    updatedBookingRecord.customer_facing_status = "driver_assigned";
+  } else if (nextStatus === "confirmed") {
+    updatedBookingRecord.customer_facing_status = "confirmed";
   }
 
   if (nextStatus === "cancelled") {
@@ -13032,6 +13045,8 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     });
   const [manualTelegramCopyState, setManualTelegramCopyState] =
     useState<AdminManualTelegramCopyState | null>(null);
+  const [customerDriverDetailsPortalLinkCopyState, setCustomerDriverDetailsPortalLinkCopyState] =
+    useState<CustomerDriverDetailsPortalLinkCopyState | null>(null);
 
   useEffect(() => {
     activeTabRef.current = activeTab;
@@ -20805,6 +20820,118 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     await copyDispatchCopy("customerCopy");
   }
 
+  function customerDriverDetailsWithPortalLinkText(messageText: string, portalUrl: string) {
+    return [
+      messageText,
+      [
+        "CUSTOMER APP",
+        "View driver details and trip status:",
+        portalUrl,
+      ].join("\n"),
+    ]
+      .map((section) => section.trim())
+      .filter(Boolean)
+      .join("\n\n");
+  }
+
+  async function createCustomerDriverDetailsPortalLink() {
+    const bookingReference = customerDriverDetailsPortalBookingReference;
+    const customerAccountReference = customerDriverDetailsPortalAccountReference;
+
+    if (!bookingReference) {
+      throw new Error("Load a saved booking before copying the customer app link.");
+    }
+
+    if (!dispatchReleaseCustomerCopyReady) {
+      throw new Error("Complete trip and assigned-driver details before copying the customer app link.");
+    }
+
+    if (!customerAccountReference) {
+      throw new Error("Customer app link requires a saved CRM customer account. Use Save + CRM or load the saved booking first.");
+    }
+
+    const response = await fetch(adminCustomerPortalAccessLinksApiPath, {
+      body: JSON.stringify({
+        customerAccountReference,
+        safeDisplayLabel: customerDriverDetailsPortalSafeDisplayLabel || customerAccountReference,
+      }),
+      cache: "no-store",
+      headers: {
+        "Content-Type": "application/json",
+        "x-prestige-admin-purpose": adminLegacyDataPurpose,
+      },
+      method: "POST",
+    });
+    const result = (await response.json().catch(() => null)) as {
+      ok?: boolean;
+      url?: string;
+    } | null;
+    const portalUrl = typeof result?.url === "string" ? result.url.trim() : "";
+
+    if (!response.ok || result?.ok !== true || !portalUrl) {
+      throw new Error("Customer app link could not be created for this saved customer account.");
+    }
+
+    return portalUrl;
+  }
+
+  async function copyCustomerDriverDetailsWithCustomerAppLink() {
+    const bookingReference = customerDriverDetailsPortalBookingReference;
+    const messageText = getDispatchCopyText("customerCopy");
+
+    setCustomerDriverDetailsPortalLinkCopyState({
+      external_send: false,
+      loadedReference: bookingReference,
+      noProviderSend: true,
+      portalLinkCopied: false,
+      tone: "info",
+      text: `Preparing customer app link for ${bookingReference || "loaded booking"}...`,
+    });
+
+    try {
+      if (!clean(messageText)) {
+        throw new Error("Customer copy is empty. Load a saved booking first.");
+      }
+
+      const portalUrl = await createCustomerDriverDetailsPortalLink();
+      await navigator.clipboard.writeText(
+        customerDriverDetailsWithPortalLinkText(messageText, portalUrl),
+      );
+      setCustomerDriverDetailsPortalLinkCopyState({
+        external_send: false,
+        loadedReference: bookingReference,
+        noProviderSend: true,
+        portalLinkCopied: true,
+        tone: "success",
+        text: `Customer driver details and customer app link copied for ${bookingReference}. Paste/send manually; no provider message was sent.`,
+      });
+      setCopyFeedback({
+        target: "customerCopy",
+        tone: "success",
+        text: "Customer copy with app link copied.",
+      });
+    } catch (error) {
+      const errorText =
+        error instanceof Error
+          ? error.message
+          : "Customer app link could not be copied.";
+
+      setCustomerDriverDetailsPortalLinkCopyState({
+        external_send: false,
+        loadedReference: bookingReference,
+        noProviderSend: true,
+        portalLinkCopied: false,
+        tone: "error",
+        text: errorText,
+      });
+      setCopyFeedback({
+        target: "customerCopy",
+        tone: "error",
+        text: errorText,
+      });
+    }
+  }
+
   async function copyManualTelegramMessage(target: AdminManualTelegramCopyTarget) {
     const bookingReference =
       cleanReferenceText(dispatchReleaseWorkflowBookingReference) ||
@@ -23176,6 +23303,26 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   const dispatchReleaseLoadedBookingRecord = loadedBookingId
     ? bookings.find((bookingRecord) => bookingRecordStableKey(bookingRecord) === loadedBookingId) ?? null
     : null;
+  const customerDriverDetailsPortalBookingReference =
+    cleanReferenceText(dispatchReleaseWorkflowBookingReference) ||
+    cleanReferenceText(appliedAdminBookingSnapshot?.booking_reference) ||
+    cleanReferenceText(dispatchReleaseLoadedBookingRecord?.booking_reference) ||
+    cleanReferenceText(loadedBookingId);
+  const customerDriverDetailsPortalLastSavedRecord =
+    lastSuccessfulBookingSaveRef.current?.bookingId === customerDriverDetailsPortalBookingReference
+      ? lastSuccessfulBookingSaveRef.current.record
+      : null;
+  const customerDriverDetailsPortalAccountReference =
+    cleanReferenceText(appliedAdminBookingSnapshot?.customer_id) ||
+    cleanReferenceText(dispatchReleaseLoadedBookingRecord?.customer_id) ||
+    cleanReferenceText(customerDriverDetailsPortalLastSavedRecord?.customer_id);
+  const customerDriverDetailsPortalSafeDisplayLabel =
+    clean(appliedAdminBookingSnapshot?.customer_display_name) ||
+    clean(dispatchReleaseLoadedBookingRecord?.customer_display_name) ||
+    clean(customerDriverDetailsPortalLastSavedRecord?.customer_display_name) ||
+    clean(booking.company) ||
+    clean(booking.booker) ||
+    clean(booking.name);
   const dispatchReleaseTripWarnings = getDispatchReleaseTripWarnings(booking);
   const dispatchReleaseTripComplete = dispatchReleaseTripWarnings.length === 0;
   const dispatchReleaseRawBookingStatus = appliedAdminBookingSnapshot
@@ -28680,6 +28827,29 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   const jobCardCopied = jobCardFeedback?.tone === "success" && /copied/i.test(jobCardFeedback.text);
   const customerCopyCopied =
     customerCopyFeedback?.tone === "success" && /copied/i.test(customerCopyFeedback.text);
+  const customerDriverDetailsPortalLinkCopyMatchesReference =
+    !customerDriverDetailsPortalLinkCopyState?.loadedReference ||
+    customerDriverDetailsPortalLinkCopyState.loadedReference === customerDriverDetailsPortalBookingReference;
+  const customerDriverDetailsPortalLinkCopyDisplayState =
+    customerDriverDetailsPortalLinkCopyMatchesReference
+      ? customerDriverDetailsPortalLinkCopyState
+      : null;
+  const customerDriverDetailsPortalLinkCopyButtonTone: Message["tone"] | null =
+    customerDriverDetailsPortalLinkCopyDisplayState?.tone === "success"
+      ? "success"
+      : customerDriverDetailsPortalLinkCopyDisplayState?.tone === "error"
+        ? "error"
+        : null;
+  const customerDriverDetailsPortalLinkCopyButtonLabel =
+    customerDriverDetailsPortalLinkCopyDisplayState?.tone === "info"
+      ? "Copying link"
+      : customerDriverDetailsPortalLinkCopyDisplayState?.portalLinkCopied
+        ? "Copied + link"
+        : "Copy + App Link";
+  const customerDriverDetailsPortalLinkCopyDisabled =
+    customerDriverDetailsPortalLinkCopyDisplayState?.tone === "info" ||
+    !dispatchReleaseCustomerCopyReady ||
+    !customerDriverDetailsPortalAccountReference;
   const driverDispatchCopied =
     driverDispatchFeedback?.tone === "success" && /copied/i.test(driverDispatchFeedback.text);
   const jobCardEdited = jobCardFeedback?.tone === "success" && /edit saved/i.test(jobCardFeedback.text);
@@ -40417,6 +40587,33 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                       type="button"
                     >
                       {customerCopyCopied ? "Copied" : "Copy"}
+                    </button>
+                    <button
+                      className={`min-h-9 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-500 ${
+                        actionFeedbackButtonClass(
+                          customerDriverDetailsPortalLinkCopyButtonTone,
+                          "border-sky-300 text-sky-900 hover:bg-sky-50",
+                        )
+                      }`}
+                      data-admin-customer-driver-details-copy-with-portal-link="true"
+                      data-admin-customer-driver-details-copy-with-portal-link-external-send="false"
+                      data-admin-customer-driver-details-copy-with-portal-link-loaded-reference={
+                        customerDriverDetailsPortalLinkCopyDisplayState?.loadedReference ||
+                        customerDriverDetailsPortalBookingReference
+                      }
+                      data-admin-customer-driver-details-copy-with-portal-link-no-provider-send="true"
+                      disabled={customerDriverDetailsPortalLinkCopyDisabled}
+                      onClick={copyCustomerDriverDetailsWithCustomerAppLink}
+                      title={
+                        !dispatchReleaseCustomerCopyReady
+                          ? "Complete trip and assigned-driver details first."
+                          : !customerDriverDetailsPortalAccountReference
+                            ? "Save + CRM or load the saved booking before copying a customer app link."
+                            : "Copy customer-safe driver details with a secure customer app link. No provider message is sent."
+                      }
+                      type="button"
+                    >
+                      {customerDriverDetailsPortalLinkCopyButtonLabel}
                     </button>
                   </div>
                   {customerCopyFeedback?.tone === "error" ? (

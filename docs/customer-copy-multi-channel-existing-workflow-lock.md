@@ -1,6 +1,6 @@
 # Customer Copy Multi-Channel Existing Workflow Lock
 
-This document is docs/test-only. It does not approve a duplicate UI/API surface, env changes, deployment, bulk sends, payment/PDF/pricing/payout/auth/location/photo/calendar activation, parser changes, customer/driver portal changes, or new shims.
+This document is docs/test-only. It does not approve a duplicate UI/API surface, env changes, deployment, bulk sends, payment/PDF/pricing/payout/auth/location/photo/calendar activation, parser changes, customer/driver portal page changes, or new shims.
 
 The admin Customer Copy Email/WhatsApp/SMS customer driver-details workflow already exists in the current app. Do not rebuild it as duplicate Email, WhatsApp, SMS, or Telegram workflow sectors.
 Telegram customer/driver use is limited to admin manual clipboard preparation inside the existing Dispatch rows. It does not call Telegram, store chat IDs, open Telegram URLs, or send provider messages.
@@ -9,6 +9,7 @@ Telegram customer/driver use is limited to admin manual clipboard preparation in
 
 - `app/page.tsx` owns the existing Customer Copy section at `data-dispatch-workflow-step="customer-whatsapp-copy"`.
 - `app/page.tsx` owns the existing Customer Copy text edit/copy controls at `data-copy-edit-button="customerCopy"`, `data-copy-copy-button="customerCopy"`, and `data-copy-preview="customerCopy"`.
+- `app/page.tsx` owns the explicit Customer Copy `Copy + App Link` action at `data-admin-customer-driver-details-copy-with-portal-link`; it uses the existing admin customer portal access-link route, requires a saved booking customer account reference, copies the customer-safe driver details plus signed customer app link for manual sending, and keeps `external_send=false`.
 - `app/page.tsx` owns the existing customer live-location helper inside Customer Copy at `data-customer-live-location-helper`.
 - `app/page.tsx` owns the existing compact customer driver-details Email review item at `data-admin-customer-driver-details-email-review-item`.
 - `app/page.tsx` owns the existing Email, WhatsApp, SMS, and manual Telegram controls at `data-admin-customer-driver-details-email-disabled-send-action`, `data-admin-customer-driver-details-whatsapp-disabled-send-action`, `data-admin-customer-driver-details-sms-disabled-send-action`, and `data-admin-customer-driver-details-telegram-manual-copy-action`.
@@ -36,6 +37,7 @@ Approved current lane:
 
 - Email may be triggered only by explicit admin click through `POST /api/admin-customer-driver-details-email-send-action`, using the gated Resend helper and allowlist safeguards.
 - Customer In-App and Driver In-App may be triggered only by explicit admin click through the existing in-app notification route.
+- Customer app link copy may be triggered only by explicit admin click through the existing `POST /api/admin-customer-portal-access-links` route, using the saved booking `customer_id`/customer account reference only; it must not fall back to passenger, booker, company, or display names as the account reference.
 - Telegram provider messages may be sent only through the existing internal-admin alert route.
 - Customer/driver Telegram may only be prepared through the existing admin manual clipboard controls. No Telegram provider send, chat ID, bot token, `t.me` link, external request, app notification, DB write, or public/customer/driver Telegram surface is added.
 - SMS and WhatsApp remain parked setup-only/no-op for now.

@@ -78,6 +78,7 @@ const [
 for (const fragment of [
   "# Customer Copy Multi-Channel Existing Workflow Lock",
   "Email now uses the existing approved gated POST route `POST /api/admin-customer-driver-details-email-send-action` from the same compact row.",
+  "Customer app link copy may be triggered only by explicit admin click through the existing `POST /api/admin-customer-portal-access-links` route, using the saved booking `customer_id`/customer account reference only; it must not fall back to passenger, booker, company, or display names as the account reference.",
   "WhatsApp and SMS remain parked on setup-only/no-op GET paths: `GET /api/admin-whatsapp-customer-driver-details-send-disabled-setup` and `GET /api/admin-sms-customer-driver-details-send-disabled-setup`.",
   "Customer In-App and Driver In-App remain the existing admin-selected app notification path through `POST /api/admin-customer-driver-app-notifications`.",
   "Telegram provider sending remains the existing internal-admin alert send path only: `POST /api/admin-telegram-internal-admin-alert-send`.",
@@ -99,11 +100,22 @@ const customerCopySection = extractBetween(
   'data-dispatch-workflow-step="driver-dispatch-copy"',
   "Customer Copy section",
 );
+const customerPortalLinkCopyHandler = extractBetween(
+  appPage,
+  "async function createCustomerDriverDetailsPortalLink()",
+  "async function copyManualTelegramMessage(",
+  "customer driver details portal link copy handler",
+);
 const appOutsideCustomerCopy = appPage.replace(customerCopySection, "");
 
 for (const fragment of [
   'const adminCustomerDriverDetailsEmailReviewItemApiPath =\n  "/api/admin-customer-driver-details-email-review-item-setup";',
   'const adminCustomerDriverDetailsEmailSendActionApiPath =\n  "/api/admin-customer-driver-details-email-send-action";',
+  'const adminCustomerPortalAccessLinksApiPath = "/api/admin-customer-portal-access-links";',
+  "const customerDriverDetailsPortalAccountReference =",
+  "cleanReferenceText(appliedAdminBookingSnapshot?.customer_id)",
+  "cleanReferenceText(dispatchReleaseLoadedBookingRecord?.customer_id)",
+  "cleanReferenceText(customerDriverDetailsPortalLastSavedRecord?.customer_id)",
   'const adminWhatsAppCustomerDriverDetailsSendDisabledApiPath =\n  "/api/admin-whatsapp-customer-driver-details-send-disabled-setup";',
   'const adminSmsCustomerDriverDetailsSendDisabledApiPath =\n  "/api/admin-sms-customer-driver-details-send-disabled-setup";',
   'const adminEmailActivationPreflightApiPath =\n  "/api/admin-email-activation-preflight-setup";',
@@ -111,6 +123,7 @@ for (const fragment of [
   'const adminCustomerDriverAppNotificationsApiPath =\n  "/api/admin-customer-driver-app-notifications";',
   "async function sendAdminCustomerDriverDetailsEmail()",
   "async function checkAdminCustomerDriverDetailsMessageDisabledSend(",
+  "async function copyCustomerDriverDetailsWithCustomerAppLink()",
   "async function copyManualTelegramMessage(",
   "async function sendAdminCustomerDriverDetailsCustomerInAppNotification()",
   "async function sendAdminCustomerDriverDetailsDriverInAppNotification()",
@@ -119,6 +132,9 @@ for (const fragment of [
   'data-dispatch-workflow-step="customer-whatsapp-copy"',
   'data-copy-edit-button="customerCopy"',
   'data-copy-copy-button="customerCopy"',
+  'data-admin-customer-driver-details-copy-with-portal-link="true"',
+  'data-admin-customer-driver-details-copy-with-portal-link-external-send="false"',
+  'data-admin-customer-driver-details-copy-with-portal-link-no-provider-send="true"',
   'data-copy-preview="customerCopy"',
   'data-customer-live-location-helper="true"',
   'data-admin-customer-driver-details-email-review-item="true"',
@@ -148,6 +164,9 @@ for (const [fragment, expectedCount] of [
   ['data-dispatch-workflow-step="customer-whatsapp-copy"', 1],
   ['data-copy-edit-button="customerCopy"', 1],
   ['data-copy-copy-button="customerCopy"', 1],
+  ['data-admin-customer-driver-details-copy-with-portal-link="true"', 1],
+  ['data-admin-customer-driver-details-copy-with-portal-link-external-send="false"', 1],
+  ['data-admin-customer-driver-details-copy-with-portal-link-no-provider-send="true"', 1],
   ['data-copy-preview="customerCopy"', 1],
   ['data-customer-live-location-helper="true"', 1],
   ['data-admin-customer-driver-details-email-review-item="true"', 1],
@@ -166,6 +185,7 @@ for (const [fragment, expectedCount] of [
 
 for (const fragment of [
   'data-admin-customer-driver-details-email-review-item="true"',
+  'data-admin-customer-driver-details-copy-with-portal-link="true"',
   'data-admin-customer-driver-details-email-disabled-send-action="true"',
   'data-admin-customer-driver-details-whatsapp-disabled-send-action="true"',
   'data-admin-customer-driver-details-sms-disabled-send-action="true"',
@@ -199,6 +219,36 @@ for (const [label, routeSource] of [
 }
 
 for (const fragment of [
+  "const customerAccountReference = customerDriverDetailsPortalAccountReference;",
+  "if (!dispatchReleaseCustomerCopyReady)",
+  "fetch(adminCustomerPortalAccessLinksApiPath",
+  "customerAccountReference,",
+  "safeDisplayLabel: customerDriverDetailsPortalSafeDisplayLabel || customerAccountReference",
+  '"x-prestige-admin-purpose": adminLegacyDataPurpose',
+  "navigator.clipboard.writeText(",
+  "customerDriverDetailsWithPortalLinkText(messageText, portalUrl)",
+  "Paste/send manually; no provider message was sent.",
+  "external_send: false",
+  "noProviderSend: true",
+]) {
+  assertIncludes(customerPortalLinkCopyHandler, fragment, `customer app link copy handler fragment ${fragment}`);
+}
+
+for (const forbidden of [
+  /copyManualTelegramMessage\s*\(/,
+  /adminTelegram/i,
+  /telegram\.org/i,
+  /(?:^|[/:.])t\.me(?:[/:?]|$)/i,
+  /chat_id/i,
+  /sendMessage/i,
+  /sendAdminCustomerDriverDetailsEmail\s*\(/,
+  /adminWhatsAppCustomerDriverDetailsSendDisabledApiPath/,
+  /adminSmsCustomerDriverDetailsSendDisabledApiPath/,
+]) {
+  assertExcludes(customerPortalLinkCopyHandler, forbidden, "customer app link copy handler");
+}
+
+for (const fragment of [
   "Email gated send must include",
   "Customer Copy WhatsApp/SMS disabled-send handlers must use GET.",
   "Customer Copy WhatsApp disabled-send API",
@@ -215,6 +265,7 @@ for (const fragment of [
   "Email now uses the existing approved gated POST route `POST /api/admin-customer-driver-details-email-send-action` from the same compact row.",
   "WhatsApp and SMS remain parked on setup-only/no-op GET paths.",
   "Customer In-App and Driver In-App remain explicit admin-selected in-app notification actions through `POST /api/admin-customer-driver-app-notifications`.",
+  "Copy + App Link remains explicit admin-selected manual clipboard preparation through the existing `POST /api/admin-customer-portal-access-links` route; it requires the saved booking `customer_id` / customer account reference and must not fall back to passenger, booker, company, or display names.",
   "Telegram provider sending remains the existing internal-admin alert send path only through `POST /api/admin-telegram-internal-admin-alert-send`.",
   "Customer/driver Telegram controls are manual clipboard-only and keep `external_send=false`, no provider call, no chat ID, no `t.me` URL, no DB write, and no notification write.",
   "Do not add duplicate Email, WhatsApp, SMS, Telegram, customer-message, driver-notification, provider-send, or customer driver-details workflow sectors, buttons, cards, routes, helpers, or shims.",
@@ -226,7 +277,7 @@ for (const fragment of [
 
 for (const fragment of [
   "[Customer Copy Multi-Channel Existing Workflow Lock](customer-copy-multi-channel-existing-workflow-lock.md)",
-  "existing admin Customer Copy Email/WhatsApp/SMS customer driver-details review row, admin manual Telegram clipboard controls, and no-duplicate rule",
+  "existing admin Customer Copy Email/WhatsApp/SMS customer driver-details review row, explicit Copy + App Link action, admin manual Telegram clipboard controls, and no-duplicate rule",
 ]) {
   assertIncludes(docsIndex, fragment, `docs index Customer Copy lock fragment ${fragment}`);
 }

@@ -58,12 +58,13 @@ try {
     }),
     {
       accuracyLabel: "Accuracy 18m",
+      mapEmbedUrl: "https://www.google.com/maps?q=1.3521,103.8198&z=16&output=embed",
       mapUrl: "https://www.google.com/maps/search/?api=1&query=1.3521,103.8198",
       message: "Driver location is available now.",
       status: "available",
       updatedAt: "2026-07-05T10:30:00.000Z",
     },
-    "Customer-visible bounded coordinates should become a safe map URL.",
+    "Customer-visible bounded coordinates should become safe in-app and fallback map URLs.",
   );
 
   assert.deepEqual(

@@ -1,7 +1,7 @@
 "use client";
 
 import type { FormEvent } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   loadCustomerPortalSavedBookings,
@@ -363,6 +363,7 @@ export default function CustomerPortalPage() {
   const [driverTrackingByBookingId, setDriverTrackingByBookingId] =
     useState<DriverTrackingByBookingId>({});
   const [checkingDriverTrackingId, setCheckingDriverTrackingId] = useState("");
+  const [activeTrackingBookingId, setActiveTrackingBookingId] = useState("");
   const [tripUpdatesByBookingId, setTripUpdatesByBookingId] = useState<TripUpdatesByBookingId>({});
   const [checkingTripUpdatesId, setCheckingTripUpdatesId] = useState("");
   const [bookingPages, setBookingPages] = useState<Record<BookingFilter, number>>(initialBookingPages);
@@ -507,6 +508,7 @@ export default function CustomerPortalPage() {
       setChangeRequestDraft(null);
       setDriverTrackingByBookingId({});
       setCheckingDriverTrackingId("");
+      setActiveTrackingBookingId("");
       setTripUpdatesByBookingId({});
       setCheckingTripUpdatesId("");
       setBookingPages({ ...initialBookingPages });
@@ -611,6 +613,7 @@ export default function CustomerPortalPage() {
     setChangeFeedback({});
     setChangeRequestDraft(null);
     setCheckingDriverTrackingId("");
+    setActiveTrackingBookingId("");
     setCheckingTripUpdatesId("");
     setBookingPages((current) => ({ ...current, [nextFilter]: 1 }));
     setSelectedBookingMonths((current) => ({ ...current, [nextFilter]: "" }));
@@ -622,6 +625,7 @@ export default function CustomerPortalPage() {
     setChangeFeedback({});
     setChangeRequestDraft(null);
     setCheckingDriverTrackingId("");
+    setActiveTrackingBookingId("");
     setCheckingTripUpdatesId("");
     setBookingPages((current) => ({ ...current, [activeFilter]: 1 }));
   }
@@ -633,6 +637,7 @@ export default function CustomerPortalPage() {
     setChangeFeedback({});
     setChangeRequestDraft(null);
     setCheckingDriverTrackingId("");
+    setActiveTrackingBookingId("");
     setCheckingTripUpdatesId("");
   }
 
@@ -650,10 +655,11 @@ export default function CustomerPortalPage() {
     setChangeFeedback({});
     setChangeRequestDraft(null);
     setCheckingDriverTrackingId("");
+    setActiveTrackingBookingId("");
     setCheckingTripUpdatesId("");
   }
 
-  async function loadTripUpdatesForBooking(booking: CustomerPortalBooking) {
+  const loadTripUpdatesForBooking = useCallback(async (booking: CustomerPortalBooking) => {
     const bookingReference = bookingReferenceFromPortalId(booking.id);
 
     if (!bookingReference) {
@@ -679,6 +685,89 @@ export default function CustomerPortalPage() {
       }));
     } finally {
       setCheckingTripUpdatesId("");
+    }
+  }, []);
+
+  const refreshCustomerTrackingForBooking = useCallback(
+    async (booking: CustomerPortalBooking, options: { silent?: boolean } = {}) => {
+      const bookingReference = bookingReferenceFromPortalId(booking.id);
+
+      if (!bookingReference) {
+        setDriverTrackingByBookingId((current) => ({
+          ...current,
+          [booking.id]: {
+            message: "Live location is not available for this booking.",
+            status: "blocked",
+          },
+        }));
+        setTripUpdatesByBookingId((current) => ({
+          ...current,
+          [booking.id]: {
+            message: "Trip updates are not available for this booking.",
+            status: "blocked",
+            updates: [],
+          },
+        }));
+        return;
+      }
+
+      if (!options.silent) {
+        setCheckingDriverTrackingId(booking.id);
+        setCheckingTripUpdatesId(booking.id);
+      }
+
+      try {
+        const [driverTrackingResult, tripUpdatesResult] = await Promise.all([
+          loadCustomerPortalDriverTracking({ bookingReference }),
+          loadCustomerPortalTripUpdates({ bookingReference }),
+        ]);
+
+        setDriverTrackingByBookingId((current) => ({
+          ...current,
+          [booking.id]: driverTrackingResult,
+        }));
+        setTripUpdatesByBookingId((current) => ({
+          ...current,
+          [booking.id]: tripUpdatesResult,
+        }));
+      } finally {
+        if (!options.silent) {
+          setCheckingDriverTrackingId("");
+          setCheckingTripUpdatesId("");
+        }
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!activeTrackingBookingId) {
+      return;
+    }
+
+    const trackingBooking = visibleBookings.find((booking) => booking.id === activeTrackingBookingId);
+
+    if (!trackingBooking) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void refreshCustomerTrackingForBooking(trackingBooking, { silent: true });
+    }, 8000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [activeTrackingBookingId, refreshCustomerTrackingForBooking, visibleBookings]);
+
+  function handleTrackDriver(booking: CustomerPortalBooking) {
+    const nextTrackingBookingId = activeTrackingBookingId === booking.id ? "" : booking.id;
+
+    setExpandedBookingId(booking.id);
+    setActiveTrackingBookingId(nextTrackingBookingId);
+
+    if (nextTrackingBookingId) {
+      void refreshCustomerTrackingForBooking(booking);
     }
   }
 
@@ -750,34 +839,6 @@ export default function CustomerPortalPage() {
           }
         : current,
     );
-  }
-
-  async function checkCustomerDriverTracking(booking: CustomerPortalBooking) {
-    const bookingReference = bookingReferenceFromPortalId(booking.id);
-
-    if (!bookingReference) {
-      setDriverTrackingByBookingId((current) => ({
-        ...current,
-        [booking.id]: {
-          message: "Live location is not available for this booking.",
-          status: "blocked",
-        },
-      }));
-      return;
-    }
-
-    setCheckingDriverTrackingId(booking.id);
-
-    try {
-      const result = await loadCustomerPortalDriverTracking({ bookingReference });
-
-      setDriverTrackingByBookingId((current) => ({
-        ...current,
-        [booking.id]: result,
-      }));
-    } finally {
-      setCheckingDriverTrackingId("");
-    }
   }
 
   async function submitCustomerBookingChangeRequest(
@@ -1995,10 +2056,14 @@ export default function CustomerPortalPage() {
                               className="min-h-10 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-800 transition hover:border-slate-500"
                               data-customer-portal-detail-button={booking.id}
                               onClick={() => {
-                                setExpandedBookingId(isExpanded ? "" : booking.id);
+                                const nextExpandedBookingId = isExpanded ? "" : booking.id;
+
+                                setExpandedBookingId(nextExpandedBookingId);
 
                                 if (!isExpanded) {
                                   void loadTripUpdatesForBooking(booking);
+                                } else if (activeTrackingBookingId === booking.id) {
+                                  setActiveTrackingBookingId("");
                                 }
                               }}
                               type="button"
@@ -2146,6 +2211,16 @@ export default function CustomerPortalPage() {
                   const isCheckingDriverTracking = checkingDriverTrackingId === expandedBooking.id;
                   const tripUpdates = tripUpdatesByBookingId[expandedBooking.id];
                   const isCheckingTripUpdates = checkingTripUpdatesId === expandedBooking.id;
+                  const isTrackingActive = activeTrackingBookingId === expandedBooking.id;
+                  const trackingReady = driverTracking?.status === "available" && Boolean(driverTracking.mapEmbedUrl);
+                  const latestTripUpdate = tripUpdates?.updates[0] || null;
+                  const trackingStatusLabel = trackingReady
+                    ? "Live"
+                    : driverTracking?.status === "not_ready"
+                      ? "Waiting"
+                      : driverTracking?.status === "blocked"
+                        ? "Locked"
+                        : "Standby";
 
                   return (
                     <section
@@ -2246,74 +2321,137 @@ export default function CustomerPortalPage() {
                               </dd>
                             </div>
                           </dl>
-                          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
-                            <button
-                              className="min-h-10 rounded-md border border-emerald-700 bg-white px-3 py-1.5 text-sm font-semibold text-emerald-900 transition enabled:hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
-                              data-customer-portal-driver-location-check={expandedBooking.id}
-                              disabled={isCheckingDriverTracking}
-                              onClick={() => checkCustomerDriverTracking(expandedBooking)}
-                              type="button"
-                            >
-                              {isCheckingDriverTracking ? "Checking..." : "Check live location"}
-                            </button>
-                            {driverTracking?.status === "available" && driverTracking.mapUrl ? (
-                              <a
-                                className="inline-flex min-h-10 items-center justify-center rounded-md border border-sky-700 bg-sky-700 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-sky-800"
-                                data-customer-portal-driver-location-map={expandedBooking.id}
-                                href={driverTracking.mapUrl}
-                                rel="noreferrer"
-                                target="_blank"
-                              >
-                                Open map
-                              </a>
-                            ) : null}
-                          </div>
-                          {driverTracking ? (
-                            <p
-                              className={`mt-2 rounded-md border px-2.5 py-2 text-sm font-medium ${
-                                driverTracking.status === "available"
-                                  ? "border-emerald-200 bg-white text-emerald-950"
-                                  : driverTracking.status === "not_ready"
-                                    ? "border-amber-200 bg-amber-50 text-amber-950"
-                                    : "border-slate-200 bg-white text-slate-700"
-                              }`}
-                              data-customer-portal-driver-location-message={expandedBooking.id}
-                            >
-                              {driverTracking.message}
-                              {driverTracking.updatedAt ? ` Last updated ${driverTracking.updatedAt}.` : ""}
-                              {driverTracking.accuracyLabel ? ` ${driverTracking.accuracyLabel}.` : ""}
-                            </p>
-                          ) : (
-                            <p className="mt-2 text-xs text-emerald-900">
-                              The map link appears only after the driver is on the way and Prestige opens customer viewing.
-                            </p>
-                          )}
                         </div>
                       ) : null}
                       <div
-                        aria-labelledby="customer-trip-updates-title"
+                        aria-labelledby="customer-driver-tracking-title"
                         className="mt-3 rounded-md border border-sky-200 bg-sky-50 p-3"
+                        data-customer-portal-driver-tracking={expandedBooking.id}
                         data-customer-portal-trip-updates={expandedBooking.id}
                       >
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                           <div>
-                            <h3 className="text-sm font-semibold text-sky-950" id="customer-trip-updates-title">
-                              Trip Updates
+                            <h3 className="text-sm font-semibold text-sky-950" id="customer-driver-tracking-title">
+                              Driver Tracking
                             </h3>
-                            <p className="text-xs text-sky-900">
-                              Driver progress appears here when the driver updates the job.
+                            <p className="text-xs text-sky-900" data-customer-portal-trip-updates-title="true">
+                              Trip Updates
                             </p>
                           </div>
-                          <button
-                            className="min-h-10 rounded-md border border-sky-700 bg-white px-3 py-1.5 text-sm font-semibold text-sky-900 transition enabled:hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
-                            data-customer-portal-trip-updates-refresh={expandedBooking.id}
-                            disabled={isCheckingTripUpdates}
-                            onClick={() => void loadTripUpdatesForBooking(expandedBooking)}
-                            type="button"
-                          >
-                            {isCheckingTripUpdates ? "Checking..." : "Refresh updates"}
-                          </button>
+                          <div className="flex flex-wrap gap-2">
+                            {driverDetails ? (
+                              <button
+                                className={[
+                                  "min-h-10 rounded-md border px-3 py-1.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60",
+                                  isTrackingActive
+                                    ? "border-slate-300 bg-white text-slate-800 hover:border-slate-500"
+                                    : "border-sky-700 bg-sky-700 text-white hover:bg-sky-800",
+                                ].join(" ")}
+                                data-customer-portal-driver-tracking-toggle={expandedBooking.id}
+                                disabled={isCheckingDriverTracking || isCheckingTripUpdates}
+                                onClick={() => handleTrackDriver(expandedBooking)}
+                                type="button"
+                              >
+                                {isTrackingActive ? "Close tracking" : "Track driver"}
+                              </button>
+                            ) : null}
+                            <button
+                              className="min-h-10 rounded-md border border-sky-700 bg-white px-3 py-1.5 text-sm font-semibold text-sky-900 transition enabled:hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
+                              data-customer-portal-trip-updates-refresh={expandedBooking.id}
+                              disabled={isCheckingTripUpdates || isCheckingDriverTracking}
+                              onClick={() =>
+                                driverDetails
+                                  ? void refreshCustomerTrackingForBooking(expandedBooking)
+                                  : void loadTripUpdatesForBooking(expandedBooking)
+                              }
+                              type="button"
+                            >
+                              {isCheckingTripUpdates || isCheckingDriverTracking ? "Checking..." : "Refresh"}
+                            </button>
+                          </div>
                         </div>
+
+                        {isTrackingActive ? (
+                          <div
+                            className="mt-3 overflow-hidden rounded-md border border-sky-200 bg-white"
+                            data-customer-portal-driver-tracking-panel={expandedBooking.id}
+                            data-customer-portal-driver-tracking-state={trackingStatusLabel}
+                          >
+                            <div className="flex flex-col gap-2 border-b border-sky-100 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-slate-950">
+                                  {latestTripUpdate?.title || driverTracking?.message || "Driver status to confirm"}
+                                </p>
+                                <p className="mt-1 text-xs text-slate-600">
+                                  {driverDetails
+                                    ? `${driverDetails.driverName || "Driver"} · ${driverDetails.carPlate || "Plate to confirm"}`
+                                    : "Assigned driver to confirm"}
+                                </p>
+                              </div>
+                              <span
+                                className={[
+                                  "w-fit rounded-full px-2.5 py-1 text-xs font-semibold",
+                                  trackingReady
+                                    ? "bg-emerald-100 text-emerald-950"
+                                    : driverTracking?.status === "blocked"
+                                      ? "bg-slate-100 text-slate-700"
+                                      : "bg-amber-100 text-amber-950",
+                                ].join(" ")}
+                              >
+                                {trackingStatusLabel}
+                              </span>
+                            </div>
+                            <div className="relative aspect-[4/3] min-h-72 bg-slate-100 sm:aspect-[16/9]">
+                              {trackingReady && driverTracking?.mapEmbedUrl ? (
+                                <iframe
+                                  className="h-full w-full border-0"
+                                  data-customer-portal-driver-tracking-map={expandedBooking.id}
+                                  loading="lazy"
+                                  referrerPolicy="no-referrer-when-downgrade"
+                                  src={driverTracking.mapEmbedUrl}
+                                  title="Driver live map"
+                                />
+                              ) : (
+                                <div
+                                  className="flex h-full min-h-72 items-center justify-center px-5 text-center text-sm font-semibold text-slate-700"
+                                  data-customer-portal-driver-tracking-placeholder={expandedBooking.id}
+                                >
+                                  {driverTracking?.message ||
+                                    "Tracking appears after the driver is on the way and customer viewing is open."}
+                                </div>
+                              )}
+                            </div>
+                            <div className="grid gap-2 border-t border-sky-100 px-3 py-2 text-xs font-semibold text-slate-700 sm:grid-cols-3">
+                              <span data-customer-portal-driver-tracking-route={expandedBooking.id}>
+                                {expandedBooking.pickupLocation} to {expandedBooking.dropoffLocation}
+                              </span>
+                              <span data-customer-portal-driver-tracking-updated={expandedBooking.id}>
+                                {driverTracking?.updatedAt ? `Updated ${driverTracking.updatedAt}` : "Update pending"}
+                              </span>
+                              <span data-customer-portal-driver-tracking-accuracy={expandedBooking.id}>
+                                {driverTracking?.accuracyLabel || "Location accuracy pending"}
+                              </span>
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {driverTracking && !isTrackingActive ? (
+                          <p
+                            className={`mt-3 rounded-md border px-2.5 py-2 text-sm font-medium ${
+                              driverTracking.status === "available"
+                                ? "border-emerald-200 bg-white text-emerald-950"
+                                : driverTracking.status === "not_ready"
+                                  ? "border-amber-200 bg-amber-50 text-amber-950"
+                                  : "border-slate-200 bg-white text-slate-700"
+                            }`}
+                            data-customer-portal-driver-location-message={expandedBooking.id}
+                          >
+                            {driverTracking.message}
+                            {driverTracking.updatedAt ? ` Last updated ${driverTracking.updatedAt}.` : ""}
+                            {driverTracking.accuracyLabel ? ` ${driverTracking.accuracyLabel}.` : ""}
+                          </p>
+                        ) : null}
+
                         {tripUpdates ? (
                           <div className="mt-3" data-customer-portal-trip-updates-state={tripUpdates.status}>
                             <p
@@ -2355,7 +2493,7 @@ export default function CustomerPortalPage() {
                             ) : null}
                           </div>
                         ) : (
-                          <p className="mt-2 text-xs text-sky-900">
+                          <p className="mt-3 text-xs text-sky-900">
                             Trip updates appear here after the driver starts reporting.
                           </p>
                         )}

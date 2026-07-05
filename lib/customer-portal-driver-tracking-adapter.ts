@@ -2,6 +2,7 @@ export const customerPortalDriverTrackingApiPath = "/api/customer-live-location-
 
 export type CustomerPortalDriverTrackingResult = {
   accuracyLabel?: string;
+  mapEmbedUrl?: string;
   mapUrl?: string;
   message: string;
   status: "available" | "blocked" | "not_ready";
@@ -114,9 +115,12 @@ export function mapCustomerPortalDriverTrackingPayload(payload: unknown): Custom
   const accuracy = boundedAccuracy(marker.accuracy_meters);
 
   if (record.ok === true && record.customerVisible === true && markerCount > 0 && latitude !== null && longitude !== null) {
+    const query = `${latitude},${longitude}`;
+
     return {
       accuracyLabel: accuracy === null ? undefined : `Accuracy ${accuracy}m`,
-      mapUrl: `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`,
+      mapEmbedUrl: `https://www.google.com/maps?q=${query}&z=16&output=embed`,
+      mapUrl: `https://www.google.com/maps/search/?api=1&query=${query}`,
       message: "Driver location is available now.",
       status: "available",
       updatedAt: updatedAt || undefined,

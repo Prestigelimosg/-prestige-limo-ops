@@ -34059,6 +34059,15 @@ async function runChromeTest() {
         "[data-customer-portal-page]",
         `${viewport.label} customer portal route`,
       );
+      await waitForCondition(
+        () =>
+          evaluate(`Boolean(
+            document.querySelector("[data-customer-portal-list]") ||
+              document.querySelector("[data-customer-portal-empty]")
+          )`),
+        10000,
+        `${viewport.label} customer portal booking list`,
+      );
       await evaluate(`(() => {
         window.__customerPortalIntegrationCalls = [];
         window.__customerPortalChangeRequestCalls = [];

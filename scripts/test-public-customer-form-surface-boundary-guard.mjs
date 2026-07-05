@@ -358,6 +358,13 @@ assertIncludes(
   'data-customer-portal-pickup-time="compact-selects"',
   "/my-bookings pickup time request control",
 );
+for (const fragment of [
+  'const isBookRequestLink = section === "New Booking Request";',
+  'data-customer-portal-book-request-link="true"',
+  'href="/book"',
+]) {
+  assertIncludes(portalPage, fragment, `/my-bookings New Booking Request link ${fragment}`);
+}
 assertSafeFormFieldNames(
   extractStaticNameValues(portalPage),
   publicCustomerFormFields,
@@ -367,7 +374,7 @@ assertSafeFormFieldNames(
 for (const fragment of [
   "submitCustomerBookingRequest(form)",
   "data-customer-booking-form=\"true\"",
-  "Admin will review and confirm your booking shortly. Thank you",
+  "Our team will review and confirm your booking shortly. Thank you",
   "This is a booking request only, not a confirmed booking yet.",
   "No price, payment, invoice, PDF, or billing file is created here.",
   "Booking request received. Our team will review and confirm availability.",
@@ -394,7 +401,7 @@ for (const forbiddenPattern of [
 
 for (const fragment of [
   "data-customer-portal-request-form=\"true\"",
-  "Admin will review and confirm your booking shortly. Thank you",
+  "Our team will review and confirm your booking shortly. Thank you",
   "Booking request received for review. This is not confirmed yet.",
   "${companyName} staff will reply to confirm availability.",
 ]) {

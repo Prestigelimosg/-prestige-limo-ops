@@ -1089,17 +1089,34 @@ export default function CustomerPortalPage() {
           data-customer-portal-sections="true"
         >
           {portalSections.map((section) => {
-            const isActive = activeSection === section;
+            const isBookRequestLink = section === "New Booking Request";
+            const isActive = !isBookRequestLink && activeSection === section;
             const isBookingFilter = bookingFilterSet.has(section);
+            const sectionClassName = [
+              "min-h-10 rounded-md border px-2.5 py-1.5 text-sm font-semibold transition",
+              isActive
+                ? "border-slate-950 bg-slate-950 text-white"
+                : "border-slate-300 bg-white text-slate-800 hover:border-slate-500",
+            ].join(" ");
+
+            if (isBookRequestLink) {
+              return (
+                <a
+                  className={sectionClassName}
+                  data-active="false"
+                  data-customer-portal-book-request-link="true"
+                  data-customer-portal-section={section}
+                  href="/book"
+                  key={section}
+                >
+                  {section}
+                </a>
+              );
+            }
 
             return (
               <button
-                className={[
-                  "min-h-10 rounded-md border px-2.5 py-1.5 text-sm font-semibold transition",
-                  isActive
-                    ? "border-slate-950 bg-slate-950 text-white"
-                    : "border-slate-300 bg-white text-slate-800 hover:border-slate-500",
-                ].join(" ")}
+                className={sectionClassName}
                 data-active={isActive ? "true" : "false"}
                 data-customer-portal-filter={isBookingFilter ? section : undefined}
                 data-customer-portal-section={section}

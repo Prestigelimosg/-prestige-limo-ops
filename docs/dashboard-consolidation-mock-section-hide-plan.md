@@ -89,6 +89,8 @@ Stage 4A-287 counted the current internal/admin dashboard surface:
 
 The current shape is useful as a protected prototype, but it is too broad for daily production staff. Production staff should see current operational work first, while mock QA material should move into a clearly separated archive area.
 
+2026-07-05 update: the normal Dispatch surface no longer exposes the visible `Replacement Car / Driver - Mock Only` panel or the visible Telegram internal-admin test panel. Real dispatch recovery readiness and manual Telegram copy lanes remain separate.
+
 ##### B. Proposed Production Dashboard Hierarchy
 
 1. Today / Active Operations

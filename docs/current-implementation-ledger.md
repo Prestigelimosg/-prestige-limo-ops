@@ -3688,13 +3688,20 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The live-send route is admin-dashboard only through the existing same-origin dispatcher boundary and `x-prestige-admin-purpose: admin-booking-persistence`.
 - Live send remains closed unless all server env gates are configured: `PRESTIGE_TELEGRAM_INTERNAL_ADMIN_ALERTS_ENABLED=true`, `PRESTIGE_TELEGRAM_BOT_TOKEN`, `PRESTIGE_TELEGRAM_INTERNAL_ADMIN_ALERTS_DEFAULT_CHAT_ID`, and `PRESTIGE_TELEGRAM_INTERNAL_ADMIN_ALERTS_CHAT_ALLOWLIST`.
 - Chat IDs are server-side only and must be numeric. The configured default chat must be present in the configured allowlist before any provider call is attempted.
-- The admin UI adds one compact `Send Internal Test` action inside the existing Telegram details panel. The browser sends only safe test text and a confirmation marker; it never receives or reads the bot token or chat ID.
+- The normal admin Dispatch UI no longer exposes the old `Telegram Internal Admin Alert` test panel or its `Send Internal Test` action. The guarded server route remains available only as backend/internal-admin activation evidence; customer/driver manual Telegram copy controls are separate and unchanged.
 - The live sender uses Telegram Bot API `sendMessage` only, with protected content and disabled link previews, matching the official Bot API text-message method shape.
 - Provider responses are redacted: the app reports only safe status, whether a provider message id was present, and redacted chat/config booleans. It does not return the token, chat ID, Telegram URL, provider response body, or raw provider error text.
 - The existing mock preview/readiness and disabled-send setup routes remain available as setup/no-op evidence.
 - No Telegram webhook, `getUpdates`, polling, scheduler, retry loop, batch send, DB write, schema change, customer send, driver send, live-location send, payment/PDF/billing/payout, parser, Save Booking + CRM, or `/api/admin-saved-bookings` behavior is added.
 - Customer and driver pages remain free of Telegram controls, Telegram chat mapping, bot tokens, chat IDs, payout/pricing/payment/PDF, parser/debug, and internal admin/finance data.
 - Focused guard coverage: `scripts/test-telegram-internal-admin-alert-live-send-guard.mjs` plus the existing setup-route no-live guard.
+
+## Normal Dispatch Mock/Test Panel Cleanup
+
+- Removed the visible Assigned Driver `Replacement Car / Driver - Mock Only` panel from normal Dispatch.
+- Removed the visible `Telegram Internal Admin Alert` dashboard test panel from normal Dispatch.
+- Real `Dispatch Recovery / Replacement Readiness`, customer/driver manual Telegram copy controls, backend internal-admin Telegram route, Customer Copy, Driver Dispatch, Driver Job Link, and `Copy + App Link` remain intact.
+- Hidden mock replacement draft fields no longer influence real recovery readiness; recovery readiness follows its own status controls.
 
 ## WhatsApp Pre-Activation Completion Audit Lock
 

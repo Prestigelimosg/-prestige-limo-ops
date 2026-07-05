@@ -548,7 +548,6 @@ const requiredVisibleText = [
   "Route Extras & Child Seat",
   "Job Card Preview",
   "Driver Dispatch",
-  "Replacement Car / Driver — Mock Only",
   "Load Bookings",
   "No completed bookings loaded yet.",
   "Operations Dashboard",
@@ -5173,9 +5172,7 @@ async function runChromeTest() {
           );
         }
 
-        await checkTelegramBoundary(`${viewport.label} ${label} admin tab`, {
-          allowMockPreviewUi: label === "Dispatch",
-        });
+        await checkTelegramBoundary(`${viewport.label} ${label} admin tab`);
 
         tabStates.push({
           activeTab: tabState.activeTab,
@@ -25950,6 +25947,94 @@ async function runChromeTest() {
       };
     };
 
+    const checkAssignedDriverMockPanelsRemoved = async () => {
+      const desktopViewport = {
+        height: 900,
+        label: "desktop admin assigned driver mock panel removal",
+        mobile: false,
+        scale: 1,
+        width: 1440,
+      };
+
+      await setCustomerViewportAndLoad(appUrl, desktopViewport);
+      await waitForTabs();
+      await clickTab("Dispatch");
+
+      const state = await evaluate(`(() => {
+        const bodyText = document.body?.innerText || "";
+        const hiddenSelectorPresent = (selector) => Boolean(document.querySelector(selector));
+
+        return {
+          customerAppLinkLanePresent: hiddenSelectorPresent("[data-admin-customer-driver-details-copy-with-portal-link]"),
+          customerTelegramManualCopyLanePresent: hiddenSelectorPresent("[data-admin-customer-driver-details-telegram-manual-copy-action]"),
+          realRecoveryReadinessPresent: hiddenSelectorPresent("[data-admin-dispatch-recovery-replacement-readiness]"),
+          replacementMockPanelPresent: hiddenSelectorPresent("[data-admin-replacement-placeholder]"),
+          replacementMockTextLeaks: [
+            "Replacement Car / Driver — Mock Only",
+            "Save Replacement Details — Mock Only",
+            "Mark Current Driver Cancelled — Mock Only",
+            "Reassign Replacement Later — Future Staff Workflow",
+            "Mock replacement details",
+          ].filter((value) => bodyText.includes(value)),
+          telegramInternalTestPanelPresent: hiddenSelectorPresent("[data-telegram-alert-preview]"),
+          telegramInternalTestSendButtonPresent: hiddenSelectorPresent("[data-telegram-alert-send-test]"),
+          telegramInternalTestTextLeaks: [
+            "Telegram Internal Admin Alert",
+            "Generate Mock Preview",
+            "Send Internal Test",
+            "MOCK-JOB-042",
+            "secure job link placeholder",
+            "Mock only — no Telegram message sent",
+            "Mock preview stays local",
+          ].filter((value) => bodyText.includes(value)),
+        };
+      })()`);
+
+      assert.equal(
+        state.replacementMockPanelPresent,
+        false,
+        "Expected mock-only replacement car/driver panel to be removed from normal Dispatch",
+      );
+      assert.deepEqual(
+        state.replacementMockTextLeaks,
+        [],
+        "Expected no replacement mock-only wording in normal Dispatch",
+      );
+      assert.equal(
+        state.telegramInternalTestPanelPresent,
+        false,
+        "Expected Telegram internal admin alert test panel to be removed from normal Dispatch",
+      );
+      assert.equal(
+        state.telegramInternalTestSendButtonPresent,
+        false,
+        "Expected Telegram internal Send Internal Test button to be removed from normal Dispatch",
+      );
+      assert.deepEqual(
+        state.telegramInternalTestTextLeaks,
+        [],
+        "Expected no Telegram internal test/mock preview wording in normal Dispatch",
+      );
+      assert.equal(
+        state.realRecoveryReadinessPresent,
+        true,
+        "Expected real dispatch recovery replacement readiness DOM to remain available",
+      );
+      assert.equal(
+        state.customerAppLinkLanePresent,
+        true,
+        "Expected customer Copy + App Link lane to remain available",
+      );
+      assert.equal(
+        state.customerTelegramManualCopyLanePresent,
+        true,
+        "Expected customer manual Telegram copy lane to remain available",
+      );
+      await checkTelegramBoundary("assigned driver mock panels removed");
+
+      return state;
+    };
+
     const blockedCustomerIntegrationPattern =
       /api\/admin-bookings?|api\/bookings\/admin|api\/persistence|api\/save-booking|api\/load-booking|stripe|hitpay|paypal|paynow|api\/payment|api\/bank|api\/invoice|api\/pdf|api\/statement|api\/email|api\/sms|api\/calendar|calendar|googleapis|maps\.google|maps\.gstatic|api\/maps|api\/google|openai|chatgpt|api\/openai|api\/ai-parse|graph\.microsoft|outlook|ical|ics|webhook|notification|whatsapp|email|sms|telegram|api\.telegram\.org|getUpdates|sendMessage|supabase|\/rest\/v1\//i;
     const blockedDriverJobIntegrationPattern =
@@ -39161,9 +39246,7 @@ async function runChromeTest() {
       buttonLabels.push(
         ...(await evaluate(`[...document.querySelectorAll("button")].map((button) => button.textContent.trim())`)),
       );
-      await checkTelegramBoundary(`${label} admin tab initial sweep`, {
-        allowMockPreviewUi: label === "Dispatch",
-      });
+      await checkTelegramBoundary(`${label} admin tab initial sweep`);
     }
     await clickTab("Dispatch");
     const internalQaMockArchiveDefault = await checkInternalQaMockArchiveDefaultState(
@@ -39178,7 +39261,7 @@ async function runChromeTest() {
       visibleText: visibleSnapshots.join("\n\n"),
     };
     reporter.step("checking dispatch workflow sections");
-    state.adminTelegramAlertPreview = await checkAdminTelegramAlertPreview();
+    state.assignedDriverMockPanelsRemoved = await checkAssignedDriverMockPanelsRemoved();
     state.hiddenNormalOperationAdvancedSections = await evaluate(`(() => {
       const selectors = [
         "[data-admin-dispatch-release-checklist]",
@@ -39230,7 +39313,6 @@ async function runChromeTest() {
     await waitForTabs();
     reporter.step("checking admin persistence and replacement sections");
     state.adminBookingPersistence = await checkAdminBookingPersistencePrototype();
-    state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];
     for (const viewport of responsiveTabViewports) {
       reporter.step(`responsive admin tabs: ${viewport.label}`);

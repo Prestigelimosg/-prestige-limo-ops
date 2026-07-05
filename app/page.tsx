@@ -80,8 +80,6 @@ const adminSmsCustomerDriverDetailsSendDisabledApiPath =
   "/api/admin-sms-customer-driver-details-send-disabled-setup";
 const adminEmailActivationPreflightApiPath =
   "/api/admin-email-activation-preflight-setup";
-const adminTelegramInternalAdminAlertSendApiPath =
-  "/api/admin-telegram-internal-admin-alert-send";
 const adminCustomerDriverAppNotificationsApiPath =
   "/api/admin-customer-driver-app-notifications";
 const adminCustomerPortalAccessLinksApiPath = "/api/admin-customer-portal-access-links";
@@ -2471,19 +2469,6 @@ type DriverProfileDraft = {
   payoutRules: DriverPayoutRules;
 };
 
-type ReplacementDriverDraft = {
-  driverName: string;
-  driverContact: string;
-  carPlate: string;
-  vehicleModel: string;
-  reason: string;
-  note: string;
-};
-
-type ReplacementDriverFeedback = Message & {
-  action: string;
-};
-
 function getAssignedDriverSummary(
   bookingRecord: BookingRecord,
   operationalCard?: LoadBookingsOperationalDisplayCard,
@@ -2656,132 +2641,6 @@ const initialDriverProfileDraft: DriverProfileDraft = {
   airportPermitNotes: "",
   payoutRules: {},
 };
-
-const initialReplacementDriverDraft: ReplacementDriverDraft = {
-  driverName: "",
-  driverContact: "",
-  carPlate: "",
-  vehicleModel: "",
-  reason: "breakdown",
-  note: "",
-};
-
-const replacementDriverActions = [
-  {
-    feedback:
-      "Mock replacement details saved locally only. No booking, driver assignment, dispatch, Supabase row, or notification was updated.",
-    key: "save",
-    label: "Save Replacement Details — Mock Only",
-  },
-  {
-    feedback:
-      "Mock cancellation note recorded locally only. The current driver assignment was not cancelled in any live system.",
-    key: "cancel",
-    label: "Mark Current Driver Cancelled — Mock Only",
-  },
-  {
-    feedback:
-      "Future staff reassign placeholder acknowledged locally only. No reassign API, dispatch update, or Supabase write was called.",
-    key: "reassign",
-    label: "Reassign Replacement Later — Future Staff Workflow",
-  },
-];
-
-const telegramAlertPreviewSafetyText =
-  "Mock preview stays local. Internal Telegram test sends only through the server env gate and approved chat allowlist. It does not send WhatsApp, SMS, or email, and does not update booking, driver status, Supabase, notification logs, or customer/driver records.";
-
-const telegramAlertPreviewTemplates = [
-  {
-    key: "assignment",
-    label: "New driver job assignment",
-    messageLines: [
-      "Job MOCK-JOB-042: New assignment ready for review.",
-      "Pickup: 27 May 2026, 1530hrs.",
-      "Location: Changi Airport T3 Arrival Pickup.",
-      "Type: MNG / Arrival.",
-      "Open secure job link: [secure job link placeholder].",
-    ],
-  },
-  {
-    key: "acknowledgement",
-    label: "Driver acknowledgement reminder",
-    messageLines: [
-      "Job MOCK-JOB-042: Please acknowledge this assignment in Prestige Limo Ops.",
-      "Pickup: 27 May 2026, 1530hrs.",
-      "Location: Changi Airport T3 Arrival Pickup.",
-      "Type: MNG / Arrival.",
-      "Open secure job link: [secure job link placeholder].",
-    ],
-  },
-  {
-    key: "one-hour",
-    label: "1-hour before pickup reminder",
-    messageLines: [
-      "Job MOCK-JOB-042: Pickup is in about 1 hour.",
-      "Pickup: 27 May 2026, 1530hrs.",
-      "Location: Changi Airport T3 Arrival Pickup.",
-      "Type: MNG / Arrival.",
-      "Open secure job link: [secure job link placeholder].",
-    ],
-  },
-  {
-    key: "otw",
-    label: "OTW reminder",
-    messageLines: [
-      "Job MOCK-JOB-042: Please update OTW in the secure job link when you are on the way.",
-      "Pickup: 27 May 2026, 1530hrs.",
-      "Location: Changi Airport T3 Arrival Pickup.",
-      "Type: MNG / Arrival.",
-      "Open secure job link: [secure job link placeholder].",
-    ],
-  },
-  {
-    key: "ots",
-    label: "OTS reminder",
-    messageLines: [
-      "Job MOCK-JOB-042: Please update OTS in the secure job link once you are on the spot.",
-      "Pickup: 27 May 2026, 1530hrs.",
-      "Location: Changi Airport T3 Arrival Pickup.",
-      "Type: MNG / Arrival.",
-      "Open secure job link: [secure job link placeholder].",
-    ],
-  },
-  {
-    key: "pob",
-    label: "POB reminder",
-    messageLines: [
-      "Job MOCK-JOB-042: Please update POB in the secure job link after passenger on board.",
-      "Pickup: 27 May 2026, 1530hrs.",
-      "Location: Changi Airport T3 Arrival Pickup.",
-      "Type: MNG / Arrival.",
-      "Open secure job link: [secure job link placeholder].",
-    ],
-  },
-  {
-    key: "completed",
-    label: "Job Completed reminder",
-    messageLines: [
-      "Job MOCK-JOB-042: Please mark Job Completed in the secure job link after drop-off.",
-      "Pickup: 27 May 2026, 1530hrs.",
-      "Location: Changi Airport T3 Arrival Pickup.",
-      "Type: MNG / Arrival.",
-      "Open secure job link: [secure job link placeholder].",
-    ],
-  },
-  {
-    key: "replacement",
-    label: "Dispatcher replacement alert",
-    messageLines: [
-      "Job MOCK-JOB-042: Dispatcher replacement review needed.",
-      "Pickup: 27 May 2026, 1530hrs.",
-      "Location: Changi Airport T3 Arrival Pickup.",
-      "Type: MNG / Arrival.",
-      "Open secure job link: [secure job link placeholder].",
-    ],
-  },
-] as const;
-
-type TelegramAlertPreviewType = (typeof telegramAlertPreviewTemplates)[number]["key"];
 
 const rateBookingTypes: Array<keyof Required<RateRules>> = ["MNG", "DEP", "TRF", "DSP"];
 
@@ -12658,19 +12517,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   const loadedBookingIdRef = useRef("");
   const [driverProfileDraft, setDriverProfileDraft] =
     useState<DriverProfileDraft>(initialDriverProfileDraft);
-  const [replacementDriverDraft, setReplacementDriverDraft] =
-    useState<ReplacementDriverDraft>(initialReplacementDriverDraft);
-  const [replacementDriverFeedback, setReplacementDriverFeedback] =
-    useState<ReplacementDriverFeedback | null>(null);
   const [mockMidnightChargeOverrideMode, setMockMidnightChargeOverrideMode] =
     useState<"auto" | "force-on" | "force-off">("auto");
   const [mockMidnightChargeOverrideReason, setMockMidnightChargeOverrideReason] = useState("");
-  const [telegramAlertPreviewType, setTelegramAlertPreviewType] =
-    useState<TelegramAlertPreviewType>("assignment");
-  const [telegramAlertPreviewFeedback, setTelegramAlertPreviewFeedback] =
-    useState<Message | null>(null);
-  const [sendingTelegramInternalAdminAlert, setSendingTelegramInternalAdminAlert] =
-    useState(false);
   const [loadingDrivers, setLoadingDrivers] = useState(false);
   const [loadingDriverAssignmentDisplay, setLoadingDriverAssignmentDisplay] = useState(false);
   const [savingDriverProfile, setSavingDriverProfile] = useState(false);
@@ -15552,17 +15401,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       displayedAdminBookingPersistenceRecords,
       appliedAdminBookingSnapshotReference,
     );
-
-  const telegramAlertPreviewTemplate = useMemo(
-    () =>
-      telegramAlertPreviewTemplates.find((template) => template.key === telegramAlertPreviewType) ||
-      telegramAlertPreviewTemplates[0],
-    [telegramAlertPreviewType],
-  );
-  const telegramAlertPreviewMessage = useMemo(
-    () => telegramAlertPreviewTemplate.messageLines.join("\n"),
-    [telegramAlertPreviewTemplate],
-  );
 
   const route = useMemo(() => {
     const pickup = clean(booking.pickup);
@@ -21324,86 +21162,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     });
   }
 
-  function updateReplacementDriverDraft(field: keyof ReplacementDriverDraft, value: string) {
-    setReplacementDriverDraft((current) => ({
-      ...current,
-      [field]: value,
-    }));
-  }
-
-  function markReplacementDriverPlaceholder(action: (typeof replacementDriverActions)[number]) {
-    setReplacementDriverFeedback({
-      action: action.key,
-      text: action.feedback,
-      tone: "success",
-    });
-  }
-
-  function updateTelegramAlertPreviewType(value: TelegramAlertPreviewType) {
-    setTelegramAlertPreviewType(value);
-    setTelegramAlertPreviewFeedback(null);
-  }
-
-  function generateTelegramAlertMockPreview() {
-    setTelegramAlertPreviewFeedback({
-      text: "Mock only — no Telegram message sent.",
-      tone: "success",
-    });
-  }
-
-  async function sendTelegramInternalAdminTestAlert() {
-    setSendingTelegramInternalAdminAlert(true);
-    setTelegramAlertPreviewFeedback({
-      text: "Sending internal Telegram test...",
-      tone: "info",
-    });
-
-    try {
-      const response = await fetch(adminTelegramInternalAdminAlertSendApiPath, {
-        body: JSON.stringify({
-          action_source: "admin_dashboard_telegram_panel",
-          booking_reference: "TELEGRAM-TEST",
-          confirm_send: "approved_internal_admin_test",
-          event_type: "urgent_review_required",
-          safe_message:
-            "Internal admin Telegram test from Prestige Limo Ops. No booking, driver status, or customer record was changed.",
-          safe_title: "Prestige Telegram internal test",
-        }),
-        cache: "no-store",
-        headers: {
-          "Content-Type": "application/json",
-          "x-prestige-admin-purpose": adminLegacyDataPurpose,
-        },
-        method: "POST",
-      });
-      const result = await response.json().catch(() => null);
-
-      if (response.ok && result?.ok === true && result?.status === "sent") {
-        setTelegramAlertPreviewFeedback({
-          text: "Telegram internal admin test sent.",
-          tone: "success",
-        });
-      } else {
-        setTelegramAlertPreviewFeedback({
-          text:
-            result?.reason === "env_gate_closed" ||
-            result?.reason === "provider_not_configured" ||
-            result?.reason === "chat_not_allowlisted"
-              ? "Telegram not sent. Configure the server env gate, bot token, and allowlisted chat first."
-              : "Telegram internal admin test was not sent.",
-          tone: "error",
-        });
-      }
-    } catch {
-      setTelegramAlertPreviewFeedback({
-        text: "Telegram internal admin test could not be completed.",
-        tone: "error",
-      });
-    } finally {
-      setSendingTelegramInternalAdminAlert(false);
-    }
-  }
-
   async function copyDraftDriverDispatch() {
     await copyDispatchCopy("driverDispatch");
   }
@@ -21805,6 +21563,58 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     );
   }
 
+  function applyBookingStatusLocally(
+    sourceBookingRecord: BookingRecord,
+    extraReferences: Array<string | number | null | undefined>,
+    nextStatus: BookingStatusValue,
+    updatedAt: string,
+  ) {
+    const statusReferences = Array.from(
+      new Set(
+        bookingRecordStatusReferenceCandidates(sourceBookingRecord, extraReferences)
+          .map(cleanReferenceText)
+          .filter(Boolean),
+      ),
+    );
+
+    setBookings((current) =>
+      current.map((currentBooking) =>
+        statusReferences.some((statusReference) =>
+          bookingRecordMatchesStatusReference(currentBooking, statusReference),
+        )
+          ? applyBookingStatusToLocalRecord(currentBooking, nextStatus, updatedAt)
+          : currentBooking,
+      ),
+    );
+    setLoadBookingsTypedOperationalCardsById((current) => {
+      let changed = false;
+      const nextCardsById: Record<string, LoadBookingsOperationalDisplayCard> = {};
+
+      for (const [bookingId, card] of Object.entries(current)) {
+        const matchesStatusReference = statusReferences.some(
+          (statusReference) =>
+            cleanReferenceText(bookingId) === statusReference ||
+            cleanReferenceText(card.booking_id) === statusReference ||
+            cleanReferenceText(card.booking_reference) === statusReference,
+        );
+
+        if (matchesStatusReference) {
+          changed = true;
+          nextCardsById[bookingId] = {
+            ...card,
+            audit_summary: updatedAt ? `Updated ${updatedAt}` : card.audit_summary,
+            booking_status: nextStatus,
+            updated_at: updatedAt || card.updated_at,
+          };
+        } else {
+          nextCardsById[bookingId] = card;
+        }
+      }
+
+      return changed ? nextCardsById : current;
+    });
+  }
+
   type BookingStatusPatchResult =
     | {
         ok: true;
@@ -21870,65 +21680,12 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         throw new Error(formatSupabaseError(error));
       }
 
-      const statusReferences = Array.from(
-        new Set(
-          bookingRecordStatusReferenceCandidates(sourceBookingRecord, [
-            cleanedBookingStatusReference,
-            responseBookingId,
-            responseBookingReference,
-          ])
-            .map(cleanReferenceText)
-            .filter(Boolean),
-        ),
+      applyBookingStatusLocally(
+        sourceBookingRecord || (responseBooking as BookingRecord),
+        [cleanedBookingStatusReference, responseBookingId, responseBookingReference],
+        nextStatus,
+        responseUpdatedAt,
       );
-      const matchingBookingIdSet = new Set(
-        bookings
-          .filter((currentBooking) =>
-            statusReferences.some((statusReference) =>
-              bookingRecordMatchesStatusReference(currentBooking, statusReference),
-            ),
-          )
-          .map((currentBooking) => bookingRecordStableKey(currentBooking)),
-      );
-
-      setBookings((current) =>
-        current.map((currentBooking) =>
-          statusReferences.some((statusReference) =>
-            bookingRecordMatchesStatusReference(currentBooking, statusReference),
-          )
-            ? applyBookingStatusToLocalRecord(currentBooking, nextStatus, responseUpdatedAt)
-            : currentBooking,
-        ),
-      );
-      setLoadBookingsTypedOperationalCardsById((current) => {
-        let changed = false;
-        const nextCardsById: Record<string, LoadBookingsOperationalDisplayCard> = {};
-
-        for (const [bookingId, card] of Object.entries(current)) {
-          const matchesStatusReference =
-            matchingBookingIdSet.has(bookingId) ||
-            statusReferences.some(
-              (statusReference) =>
-                cleanReferenceText(bookingId) === statusReference ||
-                cleanReferenceText(card.booking_id) === statusReference ||
-                cleanReferenceText(card.booking_reference) === statusReference,
-            );
-
-          if (matchesStatusReference) {
-            changed = true;
-            nextCardsById[bookingId] = {
-              ...card,
-              audit_summary: responseUpdatedAt ? `Updated ${responseUpdatedAt}` : card.audit_summary,
-              booking_status: nextStatus,
-              updated_at: responseUpdatedAt || card.updated_at,
-            };
-          } else {
-            nextCardsById[bookingId] = card;
-          }
-        }
-
-        return changed ? nextCardsById : current;
-      });
 
       return {
         ok: true,
@@ -21970,6 +21727,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       const successMessage = { tone: "success", text: successText } satisfies Message;
       setBookingCompletionMessage(bookingId, successMessage);
       await loadBookings("Bookings synced.", { silent: true });
+      applyBookingStatusLocally(bookingRecord, [bookingStatusReference], nextStatus, result.updatedAt);
     } catch (error) {
       const errorText = error instanceof Error ? error.message : "Unknown booking status error.";
       const errorMessage = { tone: "error", text: `${errorPrefix}: ${errorText}` } satisfies Message;
@@ -25817,12 +25575,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     return currentIndex >= 0 && statusIndex >= 0 && currentIndex >= statusIndex;
   };
   const dispatchRecoveryReplacementDriverReviewed =
-    dispatchRecoveryReplacementReached("driver-reviewed") ||
-    (Boolean(clean(replacementDriverDraft.driverName)) &&
-      Boolean(clean(replacementDriverDraft.driverContact)));
+    dispatchRecoveryReplacementReached("driver-reviewed");
   const dispatchRecoveryReplacementVehicleReviewed =
-    dispatchRecoveryReplacementReached("vehicle-reviewed") ||
-    Boolean(clean(replacementDriverDraft.carPlate) || clean(replacementDriverDraft.vehicleModel));
+    dispatchRecoveryReplacementReached("vehicle-reviewed");
   const dispatchRecoveryReplacementCustomerUpdateReady =
     dispatchRecoveryReplacementReached("copy-ready") || !dayOfTripExceptionCustomerUpdateMayBeNeeded;
   const dispatchRecoveryReplacementDispatchCopyReady =
@@ -36774,201 +36529,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   Apply Driver to Draft
                 </button>
               </div>
-              <details
-                className="mt-3 border-t border-sky-200 pt-3"
-                data-admin-replacement-placeholder="true"
-              >
-                <summary className="cursor-pointer list-none text-sm font-semibold text-sky-950">
-                  Replacement Car / Driver — Mock Only
-                </summary>
-                <div className="mt-2 mb-3 flex flex-col gap-1">
-                  <p
-                    className="rounded-md border border-sky-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
-                    data-admin-replacement-boundary="true"
-                  >
-                    Mock/local only. Does not update the real booking, driver assignment, dispatch,
-                    Supabase, or customer/driver notifications.
-                  </p>
-                </div>
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  <label>
-                    <span className="mb-1 block text-sm font-medium text-slate-700">
-                      Replacement driver name
-                    </span>
-                    <input
-                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-                      data-admin-replacement-field="driverName"
-                      onChange={(event) => updateReplacementDriverDraft("driverName", event.target.value)}
-                      placeholder="Replacement driver"
-                      value={replacementDriverDraft.driverName}
-                    />
-                  </label>
-                  <label>
-                    <span className="mb-1 block text-sm font-medium text-slate-700">
-                      Replacement driver contact
-                    </span>
-                    <input
-                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-                      data-admin-replacement-field="driverContact"
-                      onChange={(event) => updateReplacementDriverDraft("driverContact", event.target.value)}
-                      placeholder="Phone / WhatsApp"
-                      type="tel"
-                      value={replacementDriverDraft.driverContact}
-                    />
-                  </label>
-                  <label>
-                    <span className="mb-1 block text-sm font-medium text-slate-700">Replacement car plate</span>
-                    <input
-                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-                      data-admin-replacement-field="carPlate"
-                      onChange={(event) => updateReplacementDriverDraft("carPlate", event.target.value)}
-                      placeholder="Plate"
-                      value={replacementDriverDraft.carPlate}
-                    />
-                  </label>
-                  <label>
-                    <span className="mb-1 block text-sm font-medium text-slate-700">
-                      Replacement vehicle model
-                    </span>
-                    <input
-                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-                      data-admin-replacement-field="vehicleModel"
-                      onChange={(event) => updateReplacementDriverDraft("vehicleModel", event.target.value)}
-                      placeholder="Vehicle model"
-                      value={replacementDriverDraft.vehicleModel}
-                    />
-                  </label>
-                  <label>
-                    <span className="mb-1 block text-sm font-medium text-slate-700">Reason</span>
-                    <select
-                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-                      data-admin-replacement-field="reason"
-                      onChange={(event) => updateReplacementDriverDraft("reason", event.target.value)}
-                      value={replacementDriverDraft.reason}
-                    >
-                      <option value="breakdown">Breakdown</option>
-                      <option value="late-driver">Late driver</option>
-                      <option value="missed-job">Missed job</option>
-                      <option value="other">Other</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span className="mb-1 block text-sm font-medium text-slate-700">Optional note</span>
-                    <input
-                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-                      data-admin-replacement-field="note"
-                      onChange={(event) => updateReplacementDriverDraft("note", event.target.value)}
-                      placeholder="Local note only"
-                      value={replacementDriverDraft.note}
-                    />
-                  </label>
-                </div>
-                <div className="mt-3 grid gap-2 lg:grid-cols-3">
-                  {replacementDriverActions.map((action) => (
-                    <div className="space-y-2" key={action.key}>
-                      <button
-                        className="min-h-10 w-full rounded-md border border-sky-300 bg-white px-3 py-2 text-left text-sm font-semibold text-sky-900 transition hover:bg-sky-50"
-                        data-admin-replacement-action={action.key}
-                        onClick={() => markReplacementDriverPlaceholder(action)}
-                        style={{ minHeight: 40 }}
-                        type="button"
-                      >
-                        {action.label}
-                      </button>
-                      {replacementDriverFeedback?.action === action.key ? (
-                        <p
-                          className={`rounded-md border px-3 py-2 text-xs font-semibold ${statusClass(replacementDriverFeedback.tone)}`}
-                          data-admin-replacement-feedback={action.key}
-                        >
-                          {replacementDriverFeedback.text}
-                        </p>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              </details>
-              <details
-                className="mt-3 border-t border-sky-200 pt-3"
-                data-telegram-alert-preview="true"
-              >
-                <summary
-                  className="cursor-pointer list-none text-sm font-semibold text-sky-950"
-                  data-telegram-alert-title="true"
-                >
-                  Telegram Internal Admin Alert
-                </summary>
-                <div className="mt-2 mb-3 flex flex-col gap-1">
-                  <p
-                    className="rounded-md border border-sky-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
-                    data-telegram-alert-boundary="true"
-                  >
-                    {telegramAlertPreviewSafetyText}
-                  </p>
-                </div>
-                <div className="grid gap-3 lg:grid-cols-[minmax(0,18rem)_1fr]">
-                  <div className="space-y-3">
-                    <label>
-                      <span className="mb-1 block text-sm font-medium text-slate-700">Preview type</span>
-                      <select
-                        className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-                        data-telegram-alert-type="true"
-                        onChange={(event) =>
-                          updateTelegramAlertPreviewType(event.target.value as TelegramAlertPreviewType)
-                        }
-                        value={telegramAlertPreviewType}
-                      >
-                        {telegramAlertPreviewTemplates.map((template) => (
-                          <option key={template.key} value={template.key}>
-                            {template.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <div className="space-y-2">
-                      <button
-                        className="min-h-10 w-full rounded-md border border-sky-300 bg-white px-3 py-2 text-left text-sm font-semibold text-sky-900 transition hover:bg-sky-50"
-                        data-telegram-alert-generate="true"
-                        onClick={generateTelegramAlertMockPreview}
-                        type="button"
-                      >
-                        Generate Mock Preview
-                      </button>
-                      <button
-                        className="min-h-10 w-full rounded-md border border-emerald-300 bg-white px-3 py-2 text-left text-sm font-semibold text-emerald-900 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-70"
-                        data-telegram-alert-send-test="true"
-                        disabled={sendingTelegramInternalAdminAlert}
-                        onClick={sendTelegramInternalAdminTestAlert}
-                        type="button"
-                      >
-                        {sendingTelegramInternalAdminAlert ? "Sending Test" : "Send Internal Test"}
-                      </button>
-                      {telegramAlertPreviewFeedback ? (
-                        <p
-                          className={`rounded-md border px-3 py-2 text-xs font-semibold ${statusClass(telegramAlertPreviewFeedback.tone)}`}
-                          data-telegram-alert-feedback="true"
-                        >
-                          {telegramAlertPreviewFeedback.text}
-                        </p>
-                      ) : null}
-                    </div>
-                  </div>
-                  <div className="rounded-md border border-sky-200 bg-white p-3">
-                    <p className="text-xs font-semibold uppercase text-slate-500">Preview wording</p>
-                    <p
-                      className="mt-1 text-sm font-semibold text-sky-950"
-                      data-telegram-alert-selected-label="true"
-                    >
-                      {telegramAlertPreviewTemplate.label}
-                    </p>
-                    <pre
-                      className="mt-2 whitespace-pre-wrap rounded-md bg-slate-950 p-3 font-mono text-xs leading-5 text-white"
-                      data-telegram-alert-message="true"
-                    >
-                      {telegramAlertPreviewMessage}
-                    </pre>
-                  </div>
-                </div>
-              </details>
             </section>
 
             <div className="order-[61]">{activeJobsMonitorPanel}</div>

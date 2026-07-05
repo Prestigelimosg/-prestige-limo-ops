@@ -220,6 +220,7 @@ for (const phrase of [
   "`PRESTIGE_TELEGRAM_BOT_TOKEN`",
   "`PRESTIGE_TELEGRAM_INTERNAL_ADMIN_ALERTS_DEFAULT_CHAT_ID`",
   "`PRESTIGE_TELEGRAM_INTERNAL_ADMIN_ALERTS_CHAT_ALLOWLIST`",
+  "The normal admin Dispatch UI no longer exposes the old `Telegram Internal Admin Alert` test panel or its `Send Internal Test` action.",
   "No Telegram webhook, `getUpdates`, polling, scheduler, retry loop, batch send, DB write, schema change, customer send, driver send, live-location send, payment/PDF/billing/payout, parser, Save Booking + CRM, or `/api/admin-saved-bookings` behavior is added.",
 ]) {
   assertIncludes(activationSection, phrase, `Telegram activation ledger phrase: ${phrase}`);
@@ -268,13 +269,14 @@ for (const fragment of [
 assertExcludes(routeSource, /api\.telegram\.org|PRESTIGE_TELEGRAM_BOT_TOKEN|chat_id|getUpdates|setWebhook|deleteWebhook/i, "Telegram live send route secret/provider internals");
 
 for (const fragment of [
-  "adminTelegramInternalAdminAlertSendApiPath",
-  "/api/admin-telegram-internal-admin-alert-send",
   "data-telegram-alert-send-test",
+  "data-telegram-alert-preview",
+  "data-telegram-alert-generate",
+  "Telegram Internal Admin Alert",
   "Send Internal Test",
   "approved_internal_admin_test",
 ]) {
-  assertIncludes(appPage, fragment, `Telegram admin UI ${fragment}`);
+  assertExcludes(appPage, fragment, `Removed Telegram internal admin dashboard test UI ${fragment}`);
 }
 assertExcludes(appPage, /PRESTIGE_TELEGRAM|TELEGRAM_BOT_TOKEN|api\.telegram\.org|chat_id|getUpdates|setWebhook|deleteWebhook/i, "Telegram app page provider/env leakage");
 assertIncludes(preactivationSuite, guardScript, "Preactivation suite Telegram live send guard registration");

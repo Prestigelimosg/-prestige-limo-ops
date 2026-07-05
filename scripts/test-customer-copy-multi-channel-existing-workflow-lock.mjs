@@ -119,7 +119,6 @@ for (const fragment of [
   'const adminWhatsAppCustomerDriverDetailsSendDisabledApiPath =\n  "/api/admin-whatsapp-customer-driver-details-send-disabled-setup";',
   'const adminSmsCustomerDriverDetailsSendDisabledApiPath =\n  "/api/admin-sms-customer-driver-details-send-disabled-setup";',
   'const adminEmailActivationPreflightApiPath =\n  "/api/admin-email-activation-preflight-setup";',
-  'const adminTelegramInternalAdminAlertSendApiPath =\n  "/api/admin-telegram-internal-admin-alert-send";',
   'const adminCustomerDriverAppNotificationsApiPath =\n  "/api/admin-customer-driver-app-notifications";',
   "async function sendAdminCustomerDriverDetailsEmail()",
   "async function checkAdminCustomerDriverDetailsMessageDisabledSend(",

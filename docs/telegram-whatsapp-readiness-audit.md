@@ -7,7 +7,7 @@ Reviewed checkpoint: `6503f2e8 Add operator live app handoff checklist`
 
 This is a readiness audit only. It does not activate Telegram provider sends, WhatsApp, SMS, provider credentials, env values, schema, DB writes, dispatch writes, notification rows, customer sends, driver sends, payment, payout, GPS, live-location, PDF, or invoice behavior.
 
-Do not click Telegram `Send Internal Test` or call `POST /api/admin-telegram-internal-admin-alert-send` unless William gives explicit action-time approval for a real internal-admin Telegram test send.
+The normal Dispatch UI no longer exposes the old Telegram `Send Internal Test` panel. Do not call `POST /api/admin-telegram-internal-admin-alert-send` unless William gives explicit action-time approval for a real internal-admin Telegram test send.
 
 ## Current State
 

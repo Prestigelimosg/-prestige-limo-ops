@@ -159,12 +159,17 @@ for (const fragment of [
   "function customerAccountBookingFilter",
   'column: "customer_id"',
   'method: "eq"',
-  'column: "customer_display_name"',
-  'method: "ilike"',
   "bookingQuery.eq(customerFilter.column, customerFilter.value)",
-  "bookingQuery.ilike(customerFilter.column, customerFilter.value)",
 ]) {
   assertIncludes(customerSavedBookingsRead, fragment, `customer saved-bookings auth/isolation fragment ${fragment}`);
+}
+
+for (const fragment of [
+  'column: "customer_display_name"',
+  'method: "ilike"',
+  "bookingQuery.ilike(customerFilter.column, customerFilter.value)",
+]) {
+  assertExcludes(customerSavedBookingsRead, fragment, `customer saved-bookings must not use display-name portal isolation ${fragment}`);
 }
 
 for (const fragment of [

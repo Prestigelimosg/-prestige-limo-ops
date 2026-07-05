@@ -21,6 +21,7 @@ const allowedSavedBookingRecordFields = [
   "booking_month",
   "booking_reference",
   "created_at",
+  "customer_driver_details",
   "customer_facing_status",
   "dropoff_location",
   "passenger_name",
@@ -105,7 +106,7 @@ function extractTypeKeys(source, typeName) {
   const match = source.match(new RegExp(`export\\s+type\\s+${typeName}\\s*=\\s*\\{([\\s\\S]*?)\\n\\};`));
   assert.ok(match, `Expected exported type ${typeName}.`);
 
-  return [...match[1].matchAll(/^\s*([A-Za-z][A-Za-z0-9_]*)\??:\s/gm)].map((item) => item[1]);
+  return [...match[1].matchAll(/^  ([A-Za-z][A-Za-z0-9_]*)\??:\s/gm)].map((item) => item[1]);
 }
 
 function extractSetItems(source, constName) {
@@ -244,14 +245,19 @@ for (const fragment of [
   "function customerAccountBookingFilter",
   'column: "customer_id"',
   'method: "eq"',
-  'column: "customer_display_name"',
-  'method: "ilike"',
   "bookingQuery.eq(customerFilter.column, customerFilter.value)",
-  "bookingQuery.ilike(customerFilter.column, customerFilter.value)",
   "parsed.data.booking_reference && rawRows.length === 0",
   "Targeted booking lookups are isolation checks: a ref outside this account must hard-block.",
 ]) {
   assertIncludes(savedBookingsRead, fragment, `customer saved-bookings read fragment ${fragment}`);
+}
+
+for (const fragment of [
+  'column: "customer_display_name"',
+  'method: "ilike"',
+  "bookingQuery.ilike(customerFilter.column, customerFilter.value)",
+]) {
+  assertExcludes(savedBookingsRead, fragment, `customer saved-bookings read must not use display-name portal isolation ${fragment}`);
 }
 
 assertSameList(

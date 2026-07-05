@@ -2938,10 +2938,7 @@ export default function MockCustomerDashboardPage() {
   }
 
   function customerPortalAccessReferenceForFinderRow(customer: (typeof customerFolderIndexRows)[number]) {
-    return (
-      safeCustomerPortalAccessReferenceCandidate(customer.customerName.trim()) ||
-      safeCustomerPortalAccessReferenceCandidate(customer.customerId.trim())
-    );
+    return safeCustomerPortalAccessReferenceCandidate(customer.customerId.trim());
   }
 
   async function copyCustomerPortalAccessLink(customer: (typeof customerFolderIndexRows)[number]) {

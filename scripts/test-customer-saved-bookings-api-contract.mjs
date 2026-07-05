@@ -517,7 +517,7 @@ function seedSlugCustomerSavedBookingRows() {
         created_at: "2026-06-11T01:00:00.000Z",
         customer_display_name: "UBS",
         customer_facing_status: "confirmed",
-        customer_id: "88888888-8888-4888-8888-888888888888",
+        customer_id: "ubs",
         dropoff_location: "Changi Airport T1",
         passenger_name: "UBS Passenger",
         pickup_at: "2026-06-11T08:00:00.000Z",
@@ -842,10 +842,10 @@ try {
   assert.equal(
     slugCustomerResponse.status,
     200,
-    "Text customer account references should read bookings by customer display name, not UUID customer_id.",
+    "Text customer account references must read bookings by exact customer_id, not display name.",
   );
   assert.deepEqual(slugCustomerMock.client.selectHistory[1].filters, [
-    { column: "customer_display_name", method: "ilike", value: "ubs" },
+    { column: "customer_id", value: "ubs" },
     { column: "pickup_at", method: "gte", value: historyWindowStartIso },
     { column: "booking_reference", value: "CUST-UBS-001" },
   ]);

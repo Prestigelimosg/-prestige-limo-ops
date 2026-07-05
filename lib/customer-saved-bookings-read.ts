@@ -75,8 +75,8 @@ type CustomerSavedBookingsSessionTokenSource =
   | "request-cookie"
   | "request-header";
 type CustomerSavedBookingsAccountFilter = {
-  column: "customer_display_name" | "customer_id";
-  method: "eq" | "ilike";
+  column: "customer_id";
+  method: "eq";
   value: string;
 };
 
@@ -392,17 +392,11 @@ export function customerPortalHistoryWindowStartIso(now = new Date()) {
 function customerAccountBookingFilter(
   customerAccountReference: string,
 ): CustomerSavedBookingsAccountFilter {
-  return safeUuid(customerAccountReference)
-    ? {
-        column: "customer_id",
-        method: "eq",
-        value: customerAccountReference,
-      }
-    : {
-        column: "customer_display_name",
-        method: "ilike",
-        value: customerAccountReference,
-      };
+  return {
+    column: "customer_id",
+    method: "eq",
+    value: customerAccountReference,
+  };
 }
 
 function isPlaceholderConfigValue(value: string) {
@@ -763,10 +757,7 @@ async function readCustomerSavedBookingRowsForSchema({
     .select(selectedColumns)
     .order(pickupColumn, { ascending: false });
 
-  bookingQuery =
-    customerFilter.method === "ilike"
-      ? bookingQuery.ilike(customerFilter.column, customerFilter.value)
-      : bookingQuery.eq(customerFilter.column, customerFilter.value);
+  bookingQuery = bookingQuery.eq(customerFilter.column, customerFilter.value);
 
   bookingQuery = bookingQuery.gte(pickupColumn, historyWindowStartIso);
 

@@ -225,7 +225,6 @@ assertExcludes(publicAccessRoute, forbiddenCustomerPortalAccessSurfacePattern, "
 for (const fragment of [
   "adminCustomerPortalAccessLinksApiPath",
   "customerPortalAccessReferenceForFinderRow",
-  "safeCustomerPortalAccessReferenceCandidate(customer.customerName.trim())",
   "safeCustomerPortalAccessReferenceCandidate(customer.customerId.trim())",
   "data-customer-portal-access-link",
   "data-customer-portal-access-revoke",
@@ -238,6 +237,17 @@ for (const fragment of [
 ]) {
   assertIncludes(customersPage, fragment, `customers page portal access ${fragment}`);
 }
+
+assertExcludes(
+  customersPage,
+  "safeCustomerPortalAccessReferenceCandidate(customer.customerName.trim())",
+  "customer portal access link must not use customer/company display name as the portal account reference",
+);
+assertExcludes(
+  customersPage,
+  "safeCustomerPortalAccessReferenceCandidate(customer.customerName.trim()) ||",
+  "customer portal access link must not fall back from customer/company name to id",
+);
 
 assertExcludes(portalClientSource, "/api/customer-portal-access", "customer portal client must not call access-link route");
 assertExcludes(portalClientSource, "/api/admin-customer-portal-access-links", "customer portal client must not call admin access route");

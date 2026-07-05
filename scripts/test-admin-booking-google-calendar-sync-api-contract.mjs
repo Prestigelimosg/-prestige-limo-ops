@@ -354,7 +354,8 @@ try {
   );
   assert.match(routeSource, /allowServerSessionRoleMethodsWithoutRequestToken:\s*\["POST"\]/);
   assert.match(appSource, /adminBookingCalendarGoogleSyncApiPath/);
-  assert.match(appSource, /data-operations-calendar-sync-google-loaded="true"/);
+  assert.doesNotMatch(appSource, /data-operations-calendar-sync-google-loaded="true"/);
+  assert.doesNotMatch(appSource, /data-operations-calendar-panel="true"/);
   assert.match(
     appSource,
     /function adminBookingPersistenceRecordToCalendarBookingRecord\(\s*record: AdminBookingPersistenceRecord,/,
@@ -369,7 +370,7 @@ try {
   );
   assert.match(appSource, /await autoSyncSavedBookingGoogleCalendar\(savedBooking\);/);
   assert.match(appSource, /await autoSyncSavedBookingGoogleCalendar\(updatedBooking\);/);
-  assert.match(appSource, /Save\/update\s+auto-syncs; Sync Google is backup\./);
+  assert.doesNotMatch(appSource, /Sync Google is backup\./);
   assert.match(calendarPayloadSource, /const pickupDateTime = clean\(bookingRecord\.pickup_at\) \|\| clean\(bookingRecord\.pickup_datetime\);/);
   assert.match(calendarPayloadSource, /const pickupTime = formatPickupTimeFromRecord\(bookingRecord\);/);
   assert.match(calendarPayloadSource, /const bookingReference = getBookingCalendarReference\(bookingRecord\);/);

@@ -163,24 +163,11 @@ assertIncludes(
   "Admin saved bookings parked legacy create route",
 );
 
-const calendarBuildBlock = sliceBetween(
-  appPage,
-  "async function createAndDownloadCalendarEventPayload",
-  "async function createAndDownloadSavedBookingCalendarEvent",
-);
-const calendarSyncStatusBlock = sliceBetween(
-  appPage,
-  "async function loadSavedBookingCalendarSyncStatus",
-  "async function createAndDownloadCalendarEventPayload",
-);
-
-assertIncludes(
-  calendarBuildBlock,
-  "fetch(adminBookingCalendarEventsApiPath",
-  "Create Calendar Event API path",
-);
-assertIncludes(calendarBuildBlock, "downloadIcsFile", "Create Calendar Event ICS download");
-assertIncludes(calendarSyncStatusBlock, 'sync_method: "ics_file_download"', "Calendar sync method");
+assertExcludes(appPage, "async function createAndDownloadCalendarEventPayload", "Manual ICS event UI helper");
+assertExcludes(appPage, "async function loadSavedBookingCalendarSyncStatus", "Manual ICS sync-status UI helper");
+assertExcludes(appPage, "downloadIcsFile", "Manual ICS download helper");
+assertExcludes(appPage, 'data-job-card-calendar-action="true"', "Job Card manual calendar button");
+assertExcludes(appPage, 'data-operations-calendar-panel="true"', "Operations Calendar duplicate panel");
 assertIncludes(calendarEventsRoute, "buildAdminBookingCalendarEvent", "Calendar event route");
 assertIncludes(calendarEventsRoute, "ics: result.data.ics", "Calendar event route ICS response");
 assertIncludes(
@@ -376,7 +363,7 @@ for (const phrase of [
   "Save Booking + CRM does not POST to `/api/admin-saved-bookings`.",
   "Load Bookings legacy read remains separate at `GET /api/admin-saved-bookings`.",
   "Save Booking + CRM and Update Applied Snapshot auto-sync the saved booking one-way to Google Calendar through the guarded Google sync route; Prestige remains the source of truth.",
-  "Create Calendar Event remains the manual ICS/calendar file export path.",
+  "Manual ICS/calendar export controls are removed from the normal admin page; Google Calendar writes stay behind Save + CRM / Update + Cal.",
   "Driver assignment display uses `GET /api/admin-driver-assignment-display`.",
   "Driver Database display/search uses typed display-only state.",
   "Full driver profile save/delete remains parked on the legacy `drivers` shim path.",

@@ -57,8 +57,23 @@ for (const fragment of [
   "autoSyncSavedBookingGoogleCalendar(updatedBooking)",
   'updateAdminAppNotificationStatus(notificationId, "archived")',
   "Google Calendar auto-synced on the same booking reference",
+  "upsertLoadedBookingFromAdminRecord(updatedBooking)",
+  'selectAppTab("bookings")',
 ]) {
   assertIncludes(adminPage, fragment, `admin amendment apply path ${fragment}`);
+}
+
+for (const fragment of [
+  "function upsertLoadedBookingFromAdminRecord(savedRecord: AdminBookingPersistenceRecord)",
+  "adminBookingPersistenceRecordToCalendarBookingRecord(savedRecord)",
+  "bookingRecordPersistedReference(currentBooking) !== updatedBookingReference",
+  "activeChangeRequestAction",
+  "Boolean(activeNotificationAction)",
+  "Boolean(activeChangeRequestAction)",
+  "!changeRequestContext",
+  'data-admin-app-notification-action={action.status}',
+]) {
+  assertIncludes(adminPage, fragment, `admin amendment local UI movement ${fragment}`);
 }
 
 for (const fragment of [
@@ -87,9 +102,21 @@ for (const fragment of [
   'request_review_status: "approved"',
   "Cancellation applied to",
   "Google Calendar auto-synced on the same booking reference as cancelled",
+  'selectAppTab("completed")',
 ]) {
   assertIncludes(adminPage, fragment, `admin cancellation apply safety ${fragment}`);
 }
+
+const changeRequestApplyBlock = sliceBetween(
+  adminPage,
+  "async function handleAdminBookingChangeRequestApply",
+  "const dispatchReleaseWorkflowBookingReference",
+);
+assertIncludes(
+  changeRequestApplyBlock,
+  "openDispatch: false",
+  "Customer amendment/cancellation apply must not open Dispatch by default.",
+);
 
 const customerRoutePostBlock = customerRoute.slice(customerRoute.indexOf("export async function POST"));
 

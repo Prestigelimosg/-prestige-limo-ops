@@ -106,12 +106,8 @@ const adminHandledCustomerBookingRequestsStorageKey =
   "prestige-admin-handled-customer-booking-requests";
 const adminLoadBookingsTypedReadApiPath = "/api/admin-load-bookings-typed-read";
 const adminSavedBookingStatusesApiPath = "/api/admin-saved-booking-statuses";
-const adminBookingCalendarAgendaApiPath = "/api/admin-booking-calendar-agenda";
-const adminBookingCalendarEventsApiPath = "/api/admin-booking-calendar-events";
 const adminBookingCalendarGoogleSyncApiPath =
   "/api/admin-booking-calendar-google-sync";
-const adminBookingCalendarSyncStatusesApiPath =
-  "/api/admin-booking-calendar-sync-statuses";
 const adminMapLocationSearchApiPath = "/api/admin-map-location-search";
 const adminMapRouteEstimatesApiPath = "/api/admin-map-route-estimates";
 const adminActiveJobsMapLocationsApiPath = "/api/admin-active-jobs-map-locations";
@@ -850,56 +846,6 @@ type DriverDeleteMessage = Message & {
   driverId: string;
 };
 
-type AdminBookingCalendarEventResponse = {
-  calendar_event?: {
-    booking_reference?: string | null;
-    description?: string | null;
-    ends_at_local?: string | null;
-    filename?: string | null;
-    location?: string | null;
-    starts_at_local?: string | null;
-    timezone?: string | null;
-    title?: string | null;
-  } | null;
-  error?: string;
-  ics?: string;
-  ok?: boolean;
-};
-
-type AdminBookingCalendarSyncStatus = {
-  calendar_file_matches_saved_booking?: boolean;
-  connection_mode?: "ics_file_only" | string;
-  external_calendar_edits_detectable?: boolean;
-  live_calendar_provider?: "none" | string;
-  live_calendar_write_performed?: boolean;
-  provider_connection?: "not_connected" | string;
-  safe_message?: string;
-  source_of_truth?: "prestige_saved_booking" | string;
-  status?: "calendar_file_current" | "calendar_file_not_created" | "calendar_file_outdated" | string;
-};
-
-type AdminBookingCalendarSyncStatusResponse = {
-  error?: string;
-  ok?: boolean;
-  sync_status?: AdminBookingCalendarSyncStatus | null;
-};
-
-type AdminBookingCalendarAgendaResponse = {
-  agenda?: {
-    connection_mode?: "ics_file_only" | string;
-    event_count?: number | null;
-    filename?: string | null;
-    live_calendar_provider?: "none" | string;
-    live_calendar_write_performed?: boolean;
-    provider_connection?: "not_connected" | string;
-    source_of_truth?: "prestige_loaded_bookings" | string;
-    sync_method?: "ics_file_download" | string;
-  } | null;
-  error?: string;
-  ics?: string;
-  ok?: boolean;
-};
-
 type AdminBookingGoogleCalendarSyncResponse = {
   error?: string;
   ok?: boolean;
@@ -916,14 +862,6 @@ type AdminBookingGoogleCalendarSyncResponse = {
     source_of_truth?: "prestige_loaded_bookings" | string;
     sync_method?: "google_calendar_events_upsert" | string;
   } | null;
-};
-
-type SavedBookingCalendarDownloadResult = {
-  syncStatus: AdminBookingCalendarSyncStatus | null;
-  syncStatusMessage: string;
-};
-type BookingCalendarEventPayload = ReturnType<typeof buildSavedBookingCalendarEventPayload> & {
-  job_card?: string;
 };
 
 type CopyFeedback = Message & {
@@ -7478,46 +7416,6 @@ function buildCompletedBookingBillingReadinessAuditPayload(
   };
 }
 
-function downloadIcsFile(filename: string, ics: string) {
-  if (typeof document === "undefined" || typeof URL === "undefined") {
-    throw new Error("Calendar download is available only in the browser.");
-  }
-
-  const blobUrl = URL.createObjectURL(new Blob([ics], { type: "text/calendar;charset=utf-8" }));
-  const link = document.createElement("a");
-
-  link.href = blobUrl;
-  link.download = filename || "prestige-booking.ics";
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(blobUrl);
-}
-
-function compactCalendarSyncStatusMessage(syncStatus: AdminBookingCalendarSyncStatus | null) {
-  if (!syncStatus) {
-    return "Sync status unavailable; app stays source of truth.";
-  }
-
-  if (syncStatus.status === "calendar_file_current") {
-    return "File-only sync: app source of truth; calendar edits won't sync back.";
-  }
-
-  if (syncStatus.status === "calendar_file_outdated") {
-    return "File-only sync: regenerate after app changes; calendar edits won't sync back.";
-  }
-
-  if (syncStatus.status === "calendar_file_not_created") {
-    return "File-only sync: create the calendar file from the saved booking.";
-  }
-
-  return "File-only sync: app source of truth; calendar edits won't sync back.";
-}
-
-function calendarDownloadedMessage(syncStatusMessage: string) {
-  return `Calendar file downloaded. ${syncStatusMessage}`;
-}
-
 function formatCreatedAt(value: string | null | undefined) {
   if (!value) {
     return "";
@@ -12504,15 +12402,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   >([]);
   const [bookingCompletionMessages, setBookingCompletionMessages] =
     useState<Record<string, Message>>({});
-  const [bookingCalendarMessages, setBookingCalendarMessages] =
-    useState<Record<string, Message>>({});
-  const [bookingCalendarDownloadId, setBookingCalendarDownloadId] = useState<string | null>(null);
-  const [calendarAgendaAction, setCalendarAgendaAction] =
-    useState<"google-loaded" | "loaded" | "today" | null>(null);
-  const [calendarAgendaMessage, setCalendarAgendaMessage] = useState<Message | null>(null);
-  const [jobCardCalendarMessage, setJobCardCalendarMessage] = useState<Message | null>(null);
-  const [jobCardCalendarAction, setJobCardCalendarAction] =
-    useState<"download-calendar" | null>(null);
   const [loadedBookingId, setLoadedBookingId] = useState("");
   const loadedBookingIdRef = useRef("");
   const [driverProfileDraft, setDriverProfileDraft] =
@@ -13743,7 +13632,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     try {
       const record = await loadAdminBookingChangeRequestReviewRecord(context);
       const { amendedBooking, bookingReference } = setAdminBookingChangeRequestFormForReview(record, context, {
-        openDispatch: true,
+        openDispatch: false,
       });
 
       if (isCancellationRequest) {
@@ -13801,6 +13690,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         const updatedBookingReference = clean(updatedBooking.booking_reference) || bookingReference;
 
         markAdminBookingAsActiveForUpdates(updatedBookingReference, updatedBooking);
+        upsertLoadedBookingFromAdminRecord(updatedBooking);
         setAdminBookingPersistenceMessage({
           tone: "info",
           text: `Cancellation applied to ${updatedBookingReference}. Syncing Google Calendar...`,
@@ -13863,6 +13753,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           key: getBookingSaveGuardKey(updatedBookingReference),
           record: updatedBooking,
         };
+        selectAppTab("completed");
         return;
       }
 
@@ -13882,6 +13773,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           message,
           status: "loaded",
         }));
+        selectAppTab("dispatch");
         window.setTimeout(scrollToServiceChangePriceReview, 0);
         return;
       }
@@ -13951,6 +13843,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       const updatedBookingReference = clean(updatedBooking.booking_reference) || bookingReference;
 
       markAdminBookingAsActiveForUpdates(updatedBookingReference, updatedBooking);
+      upsertLoadedBookingFromAdminRecord(updatedBooking);
       setAdminBookingPersistenceMessage({
         tone: "info",
         text: `Amendment applied to ${updatedBookingReference}. Syncing Google Calendar...`,
@@ -14013,6 +13906,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         key: getBookingSaveGuardKey(updatedBookingReference),
         record: updatedBooking,
       };
+      selectAppTab("bookings");
     } catch (error) {
       const message = {
         tone: "error",
@@ -15558,58 +15452,21 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     }
   }
 
-  function currentFormCalendarReference() {
-    const reference = [
-      "draft",
-      clean(booking.date) || "date-tbc",
-      clean(booking.time).replace(/\D/g, "") || "time-tbc",
-      clean(booking.name) || clean(booking.company) || "booking",
-    ]
-      .join("-")
-      .replace(/[^a-z0-9]+/gi, "-")
-      .replace(/^-+|-+$/g, "")
-      .toLowerCase();
+  function upsertLoadedBookingFromAdminRecord(savedRecord: AdminBookingPersistenceRecord) {
+    const updatedBookingRecord = adminBookingPersistenceRecordToCalendarBookingRecord(savedRecord);
+    const updatedBookingReference =
+      bookingRecordPersistedReference(updatedBookingRecord) || clean(savedRecord.booking_reference);
 
-    return reference || "draft-booking";
-  }
-
-  function buildCurrentFormCalendarEventPayload(): BookingCalendarEventPayload | null {
-    const pickup = clean(booking.pickup);
-    const dropoff = clean(booking.dropoff);
-    const pickupDate = clean(booking.date);
-    const pickupTime = clean(booking.time);
-
-    if (!pickupDate || !pickupTime || (!pickup && !dropoff)) {
-      return null;
+    if (!updatedBookingReference) {
+      return;
     }
 
-    const bookingReference = currentFormCalendarReference();
-    const formattedPickupTime = formatPickupTime(pickupTime);
-    const pickupDateTime = `${pickupDate} ${formattedPickupTime}`;
-
-    return {
-      booking_reference: bookingReference,
-      booking_type: clean(booking.bookingType),
-      booker_name: clean(booking.booker),
-      company_name: normalizeCompanyAccount(booking.company, booking.bookerEmail),
-      date: pickupDate,
-      driver_contact: clean(booking.driverContact),
-      driver_name: clean(booking.driverName),
-      driver_plate_number: clean(booking.driverPlate),
-      dropoff_address: dropoff,
-      flight_no: clean(booking.flight),
-      id: bookingReference,
-      job_card: jobCard,
-      pax: Number(clean(booking.pax)) || 1,
-      pickup_address: pickup,
-      pickup_at: pickupDateTime,
-      pickup_datetime: pickupDateTime,
-      pickup_time: formattedPickupTime,
-      route,
-      status: clean(booking.driverName) ? "assigned" : "draft",
-      traveler_name: clean(booking.name),
-      vehicle: clean(booking.vehicle),
-    };
+    setBookings((current) => [
+      updatedBookingRecord,
+      ...current.filter(
+        (currentBooking) => bookingRecordPersistedReference(currentBooking) !== updatedBookingReference,
+      ),
+    ]);
   }
 
   const visibleChildSeatTypeOptions = useMemo(() => {
@@ -16396,13 +16253,8 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       !urgentUnassignedSavedBookingIdSet.has(bookingRecordStableKey(bookingRecord)) &&
       !unhandledCustomerBookingRequestKeySet.has(getCustomerBookingRequestQueueKey(bookingRecord)),
   );
-  const calendarExportableBookings = activeDashboardBookings
-    .filter((bookingRecord) => getBookingDateKey(bookingRecord) !== "1970-01-01")
-    .slice(0, 25);
-  const calendarPreviewBookings = [...todayBookings, ...upcomingBookings].slice(0, 6);
   const todayBookingDisplayItems = buildLoadBookingsOperationalDisplayItems(todayBookings);
   const upcomingBookingDisplayItems = buildLoadBookingsOperationalDisplayItems(upcomingBookings);
-  const calendarPreviewDisplayItems = buildLoadBookingsOperationalDisplayItems(calendarPreviewBookings);
   const customerBookingRequestDisplayItems =
     buildLoadBookingsOperationalDisplayItems(visibleCustomerBookingRequestBookings, {
       useTypedOperationalOrder: true,
@@ -16602,8 +16454,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     setCustomerMatchFeedback(null);
     setSaveCrmBillingIdentityMessage(null);
     setServiceChangePriceReviewMessage(null);
-    setJobCardCalendarAction(null);
-    setJobCardCalendarMessage(null);
   }
 
   function clearParseArtifacts() {
@@ -18686,15 +18536,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         (result) => "skipped" in result && result.skipped,
       );
 
-      if (calendarSyncSkipped) {
-        setCalendarAgendaMessage({
-          tone: "info",
-          text: calendarSyncResults
-            .filter((result) => "skipped" in result && result.skipped)
-            .map((result) => `${result.reference}: ${result.message}`)
-            .join(" "),
-        });
-      }
       const saveMessage = {
         tone: calendarSyncFailed ? "error" : "success",
         text: calendarSyncFailed
@@ -21166,116 +21007,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     await copyDispatchCopy("driverDispatch");
   }
 
-  function setBookingCalendarMessage(bookingId: string, nextMessage: Message) {
-    setBookingCalendarMessages((current) => ({
-      ...current,
-      [bookingId]: nextMessage,
-    }));
-  }
-
-  async function loadSavedBookingCalendarSyncStatus(
-    savedBookingPayload: BookingCalendarEventPayload,
-    calendarEvent: AdminBookingCalendarEventResponse["calendar_event"],
-  ): Promise<AdminBookingCalendarSyncStatus | null> {
-    const response = await fetch(adminBookingCalendarSyncStatusesApiPath, {
-      body: JSON.stringify({
-        calendar_event: calendarEvent ?? null,
-        saved_booking: savedBookingPayload,
-        sync_method: "ics_file_download",
-      }),
-      headers: {
-        "Content-Type": "application/json",
-        "x-prestige-admin-purpose": adminLegacyDataPurpose,
-      },
-      method: "POST",
-    });
-    const result = (await response.json().catch(() => null)) as
-      | AdminBookingCalendarSyncStatusResponse
-      | null;
-
-    if (!response.ok || !result?.ok) {
-      throw new Error(result?.error || "Calendar sync status could not be checked.");
-    }
-
-    return result.sync_status ?? null;
-  }
-
-  async function createAndDownloadCalendarEventPayload(
-    calendarPayload: BookingCalendarEventPayload,
-  ): Promise<SavedBookingCalendarDownloadResult> {
-    const bookingId = String(calendarPayload.booking_reference || calendarPayload.id || "draft-booking");
-    const response = await fetch(adminBookingCalendarEventsApiPath, {
-      body: JSON.stringify(calendarPayload),
-      headers: {
-        "Content-Type": "application/json",
-        "x-prestige-admin-purpose": adminLegacyDataPurpose,
-      },
-      method: "POST",
-    });
-    const result = (await response.json().catch(() => null)) as AdminBookingCalendarEventResponse | null;
-
-    if (!response.ok || !result?.ok || !result.ics) {
-      throw new Error(result?.error || "Calendar event file could not be created.");
-    }
-
-    downloadIcsFile(result.calendar_event?.filename || `prestige-booking-${bookingId}.ics`, result.ics);
-
-    try {
-      const syncStatus = await loadSavedBookingCalendarSyncStatus(
-        calendarPayload,
-        result.calendar_event ?? null,
-      );
-
-      return {
-        syncStatus,
-        syncStatusMessage: compactCalendarSyncStatusMessage(syncStatus),
-      };
-    } catch {
-      return {
-        syncStatus: null,
-        syncStatusMessage: compactCalendarSyncStatusMessage(null),
-      };
-    }
-  }
-
-  async function createAndDownloadSavedBookingCalendarEvent(
-    bookingRecord: BookingRecord,
-  ): Promise<SavedBookingCalendarDownloadResult> {
-    return createAndDownloadCalendarEventPayload(buildSavedBookingCalendarEventPayload(bookingRecord));
-  }
-
-  async function createAndDownloadCalendarAgenda(
-    agendaBookings: BookingRecord[],
-    dateLabel: string,
-  ) {
-    const response = await fetch(adminBookingCalendarAgendaApiPath, {
-      body: JSON.stringify({
-        bookings: agendaBookings.map(buildSavedBookingCalendarEventPayload),
-        date_label: dateLabel,
-      }),
-      headers: {
-        "Content-Type": "application/json",
-        "x-prestige-admin-purpose": adminLegacyDataPurpose,
-      },
-      method: "POST",
-    });
-    const result = (await response.json().catch(() => null)) as AdminBookingCalendarAgendaResponse | null;
-
-    if (!response.ok || !result?.ok || !result.ics) {
-      throw new Error(result?.error || "Calendar agenda file could not be created.");
-    }
-
-    downloadIcsFile(result.agenda?.filename || "prestige-ops-calendar.ics", result.ics);
-
-    return {
-      connectionMode: result.agenda?.connection_mode || "ics_file_only",
-      eventCount: Number(result.agenda?.event_count) || agendaBookings.length,
-      liveCalendarProvider: result.agenda?.live_calendar_provider || "none",
-      liveCalendarWritePerformed: result.agenda?.live_calendar_write_performed === true,
-      providerConnection: result.agenda?.provider_connection || "not_connected",
-    };
-  }
-
   async function createGoogleCalendarSyncAgenda(
     agendaBookings: BookingRecord[],
     dateLabel: string,
@@ -21312,12 +21043,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     const calendarBooking = adminBookingPersistenceRecordToCalendarBookingRecord(savedBooking);
     const bookingReference = getBookingCalendarReference(calendarBooking);
 
-    setCalendarAgendaAction("google-loaded");
-    setCalendarAgendaMessage({
-      tone: "info",
-      text: `Auto-syncing Google Calendar for ${bookingReference}...`,
-    });
-
     try {
       const result = await createGoogleCalendarSyncAgenda(
         [calendarBooking],
@@ -21331,12 +21056,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       const eventCount = result.eventsSynced || result.eventCount;
       const message = synced
         ? `Google Calendar auto-synced for ${bookingReference}. Google reminders included; no guest email sent.`
-        : `Google Calendar auto-sync needs review for ${bookingReference}. Load this booking and use Sync Google as backup.`;
-
-      setCalendarAgendaMessage({
-        tone: synced ? "success" : "info",
-        text: message,
-      });
+        : `Google Calendar auto-sync needs review for ${bookingReference}. Load this booking and use Update + Cal after checking the calendar connection.`;
 
       return {
         eventCount,
@@ -21345,175 +21065,13 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown Google Calendar error.";
-      const message = `Google Calendar auto-sync failed for ${bookingReference}: ${errorMessage}. Booking is saved; load this booking and use Sync Google as backup.`;
-
-      setCalendarAgendaMessage({
-        tone: "error",
-        text: message,
-      });
+      const message = `Google Calendar auto-sync failed for ${bookingReference}: ${errorMessage}. Booking is saved; load this booking and use Update + Cal after checking the calendar connection.`;
 
       return {
         eventCount: 0,
         message,
         ok: false,
       };
-    } finally {
-      setCalendarAgendaAction(null);
-    }
-  }
-
-  async function downloadCalendarAgenda(
-    agendaBookings: BookingRecord[],
-    action: "loaded" | "today",
-    dateLabel: string,
-  ) {
-    if (agendaBookings.length === 0) {
-      setCalendarAgendaMessage({
-        tone: "info",
-        text: "No loaded bookings available for calendar export.",
-      });
-      return;
-    }
-
-    setCalendarAgendaAction(action);
-    setCalendarAgendaMessage({
-      tone: "info",
-      text: "Preparing operations calendar...",
-    });
-
-    try {
-      const result = await createAndDownloadCalendarAgenda(agendaBookings, dateLabel);
-      const fileOnly =
-        result.connectionMode === "ics_file_only" &&
-        result.providerConnection === "not_connected" &&
-        result.liveCalendarProvider === "none" &&
-        !result.liveCalendarWritePerformed;
-
-      setCalendarAgendaMessage({
-        tone: "success",
-        text: `Operations calendar exported with ${result.eventCount} event${
-          result.eventCount === 1 ? "" : "s"
-        }. ${fileOnly ? "File-only; app stays source of truth." : "Review calendar connection status."}`,
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown calendar agenda error.";
-
-      setCalendarAgendaMessage({
-        tone: "error",
-        text: `Calendar export failed: ${errorMessage}`,
-      });
-    } finally {
-      setCalendarAgendaAction(null);
-    }
-  }
-
-  async function syncGoogleCalendarAgenda(
-    agendaBookings: BookingRecord[],
-    dateLabel: string,
-  ) {
-    if (agendaBookings.length === 0) {
-      setCalendarAgendaMessage({
-        tone: "info",
-        text: "No loaded bookings available for Google Calendar sync.",
-      });
-      return;
-    }
-
-    setCalendarAgendaAction("google-loaded");
-    setCalendarAgendaMessage({
-      tone: "info",
-      text: "Syncing Google Calendar...",
-    });
-
-    try {
-      const result = await createGoogleCalendarSyncAgenda(agendaBookings, dateLabel);
-      const synced =
-        result.providerConnection === "connected" &&
-        result.liveCalendarProvider === "google_calendar" &&
-        result.liveCalendarWritePerformed &&
-        result.sendUpdates === "none";
-
-      setCalendarAgendaMessage({
-        tone: "success",
-        text: `Google Calendar synced with ${result.eventsSynced || result.eventCount} event${
-          (result.eventsSynced || result.eventCount) === 1 ? "" : "s"
-        }. ${
-          synced
-            ? "Google reminders included; no guest email sent."
-            : "Review Google Calendar sync status."
-        }`,
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown Google Calendar error.";
-
-      setCalendarAgendaMessage({
-        tone: "error",
-        text: `Google Calendar sync failed: ${errorMessage}`,
-      });
-    } finally {
-      setCalendarAgendaAction(null);
-    }
-  }
-
-  async function downloadSavedBookingCalendarEvent(bookingRecord: BookingRecord) {
-    const bookingId = getBookingCalendarReference(bookingRecord);
-
-    setBookingCalendarDownloadId(bookingId);
-    setBookingCalendarMessage(bookingId, {
-      tone: "info",
-      text: "Preparing calendar file...",
-    });
-
-    try {
-      const downloadResult = await createAndDownloadSavedBookingCalendarEvent(bookingRecord);
-      setBookingCalendarMessage(bookingId, {
-        tone: "success",
-        text: calendarDownloadedMessage(downloadResult.syncStatusMessage),
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown calendar download error.";
-
-      setBookingCalendarMessage(bookingId, {
-        tone: "error",
-        text: `Calendar download failed: ${errorMessage}`,
-      });
-    } finally {
-      setBookingCalendarDownloadId(null);
-    }
-  }
-
-  async function downloadJobCardCalendarEvent() {
-    const calendarPayload = buildCurrentFormCalendarEventPayload();
-
-    if (!calendarPayload) {
-      setJobCardCalendarMessage({
-        tone: "error",
-        text: "Calendar event needs date, time, and pickup or drop-off before download.",
-      });
-      return;
-    }
-
-    setJobCardCalendarAction("download-calendar");
-    setJobCardCalendarMessage({
-      tone: "info",
-      text: "Preparing calendar file...",
-    });
-
-    try {
-      const downloadResult = await createAndDownloadCalendarEventPayload(calendarPayload);
-      setJobCardCalendarMessage({
-        tone: "success",
-        text: calendarDownloadedMessage(downloadResult.syncStatusMessage),
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown calendar download error.";
-
-      setJobCardCalendarMessage({
-        tone: "error",
-        text: `Calendar download failed: ${errorMessage}`,
-      });
-    } finally {
-      setJobCardCalendarAction(null);
     }
   }
 
@@ -22017,45 +21575,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     } finally {
       setDeletingCompletedBookingId(null);
     }
-  }
-
-  function renderBookingCalendarDownloadAction(
-    bookingRecord: BookingRecord,
-    surface: "completed" | "dashboard" | "recent",
-  ) {
-    const bookingId = getBookingCalendarReference(bookingRecord);
-    const calendarMessage = bookingCalendarMessages[bookingId] ?? null;
-    const isDownloading = bookingCalendarDownloadId === bookingId;
-    const downloadInProgress = Boolean(bookingCalendarDownloadId);
-
-    return (
-      <>
-        <button
-          aria-label={`Download calendar event for booking ${bookingId}`}
-          className={`h-10 w-full rounded-md border border-sky-300 bg-white px-3 text-sm font-semibold text-sky-800 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${
-            surface === "dashboard" ? "mt-2" : ""
-          }`}
-          data-booking-calendar-download={bookingId}
-          data-booking-calendar-surface={surface}
-          disabled={downloadInProgress}
-          onClick={() => downloadSavedBookingCalendarEvent(bookingRecord)}
-          title="Download .ics calendar file"
-          type="button"
-        >
-          {isDownloading ? "Calendar..." : "Calendar"}
-        </button>
-        {calendarMessage ? (
-          <p
-            className={`rounded-md border px-3 py-2 text-xs ${statusClass(
-              calendarMessage.tone,
-            )}`}
-            data-booking-calendar-message={bookingId}
-          >
-            {calendarMessage.text}
-          </p>
-        ) : null}
-      </>
-    );
   }
 
   function renderDashboardBookingSummaries(
@@ -22603,7 +22122,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                   >
                     Load this booking
                   </button>
-                  {renderBookingCalendarDownloadAction(savedBooking, "recent")}
                   {!isCompleted ? (
                     <button
                       className="h-10 rounded-md border border-emerald-300 bg-white px-3 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
@@ -22936,7 +22454,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                       >
                         Load this booking
                       </button>
-                      {renderBookingCalendarDownloadAction(savedBooking, "completed")}
                       {isCompletedStatus ? (
                         <>
                           <button
@@ -28612,12 +28129,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     customerCopyFeedback?.tone === "success" && /edit saved/i.test(customerCopyFeedback.text);
   const driverDispatchEdited =
     driverDispatchFeedback?.tone === "success" && /edit saved/i.test(driverDispatchFeedback.text);
-  const jobCardCalendarCreated = jobCardCalendarMessage?.tone === "success";
-  const jobCardCalendarButtonTone: Message["tone"] | null = jobCardCalendarCreated
-    ? "success"
-    : jobCardCalendarMessage?.tone === "error"
-      ? "error"
-      : null;
   const adminCustomerDriverDetailsEmailLoaded =
     adminCustomerDriverDetailsEmailDisabledSendDisplayState.actionStatus === "loaded";
   const adminCustomerDriverDetailsEmailSent =
@@ -39798,28 +39309,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                           {showParserDebug ? "Hide parser debug" : "Show parser debug"}
                         </button>
                       ) : null}
-                      <button
-                        className={`h-8 whitespace-nowrap rounded border px-2.5 text-[11px] font-semibold leading-none transition disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${
-                          actionFeedbackButtonClass(
-                            jobCardCalendarButtonTone,
-                            "border-sky-300 bg-white text-sky-900 hover:bg-sky-50",
-                          )
-                        }`}
-                        data-job-card-calendar-action="true"
-                        disabled={
-                          saving ||
-                          jobCardCalendarAction !== null ||
-                          Boolean(bookingCalendarDownloadId)
-                        }
-                        onClick={downloadJobCardCalendarEvent}
-                        type="button"
-                      >
-                        {jobCardCalendarAction === "download-calendar"
-                          ? "Calendar..."
-                          : jobCardCalendarCreated
-                            ? "Calendar Created"
-                            : "Calendar"}
-                      </button>
                       {jobCardCopyEditState.isEditing ? (
                         <>
                           <button
@@ -40005,16 +39494,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                           {serviceChangePriceReviewMessage.text}
                         </p>
                       ) : null}
-                    </div>
-                  ) : null}
-                  {jobCardCalendarMessage?.tone === "error" ? (
-                    <div
-                      className={`rounded-md border px-2 py-1 text-[11px] font-medium leading-4 ${statusClass(
-                        jobCardCalendarMessage.tone,
-                      )}`}
-                      data-job-card-calendar-feedback="true"
-                    >
-                      {jobCardCalendarMessage.text}
                     </div>
                   ) : null}
                 </div>
@@ -42157,8 +41636,8 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                       : null;
                   const notificationActionDisabled =
                     !notificationId ||
-                    Boolean(adminAppNotificationAction) ||
-                    Boolean(adminBookingChangeRequestReviewAction);
+                    Boolean(activeNotificationAction) ||
+                    Boolean(activeChangeRequestAction);
                   const changeRequestActionDisabled = notificationActionDisabled;
 
                   return (
@@ -42241,33 +41720,35 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                             </button>
                           </div>
                         ) : null}
-                        {[
-                          {
-                            label: "Mark read",
-                            status: "read" as const,
-                          },
-                          {
-                            label: "Dismiss",
-                            status: "dismissed" as const,
-                          },
-                          {
-                            label: "Archive",
-                            status: "archived" as const,
-                          },
-                        ].map((action) => (
-                          <button
-                            className="h-7 rounded-md border border-slate-300 px-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
-                            data-admin-app-notification-action={action.status}
-                            disabled={notificationActionDisabled}
-                            key={action.status}
-                            onClick={() =>
-                              handleAdminAppNotificationStatusUpdate(notificationId, action.status)
-                            }
-                            type="button"
-                          >
-                            {activeNotificationAction === action.status ? "Updating..." : action.label}
-                          </button>
-                        ))}
+                        {!changeRequestContext
+                          ? [
+                              {
+                                label: "Mark read",
+                                status: "read" as const,
+                              },
+                              {
+                                label: "Dismiss",
+                                status: "dismissed" as const,
+                              },
+                              {
+                                label: "Archive",
+                                status: "archived" as const,
+                              },
+                            ].map((action) => (
+                              <button
+                                className="h-7 rounded-md border border-slate-300 px-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                                data-admin-app-notification-action={action.status}
+                                disabled={notificationActionDisabled}
+                                key={action.status}
+                                onClick={() =>
+                                  handleAdminAppNotificationStatusUpdate(notificationId, action.status)
+                                }
+                                type="button"
+                              >
+                                {activeNotificationAction === action.status ? "Updating..." : action.label}
+                              </button>
+                            ))
+                          : null}
                       </div>
                     </div>
                   );
@@ -42289,135 +41770,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               Admin-only read. No external delivery, invoice creation, payment, payout, customer auth,
               or driver auth.
             </p>
-          </section>
-
-          <section
-            aria-label="Operations Calendar"
-            className="mb-4 rounded-md border border-cyan-200 bg-cyan-50/70 p-2 sm:p-3"
-            data-operations-calendar-panel="true"
-          >
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="text-base font-semibold text-cyan-950">Operations Calendar</h3>
-                  <span
-                    className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold uppercase text-cyan-900 ring-1 ring-cyan-200"
-                    data-operations-calendar-loaded-count={String(calendarExportableBookings.length)}
-                  >
-                    {calendarExportableBookings.length} loaded
-                  </span>
-                </div>
-                <p className="mt-1 text-xs text-cyan-900 sm:text-sm">
-                  Today {todayBookings.length} / Upcoming {upcomingBookings.length}. Save/update
-                  auto-syncs; Sync Google is backup.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  className="h-9 rounded-md border border-cyan-300 bg-white px-3 text-sm font-semibold text-cyan-950 transition hover:bg-cyan-50 disabled:cursor-not-allowed disabled:text-slate-400"
-                  data-operations-calendar-export-today="true"
-                  disabled={
-                    todayBookings.length === 0 ||
-                    calendarAgendaAction !== null ||
-                    Boolean(bookingCalendarDownloadId)
-                  }
-                  onClick={() => downloadCalendarAgenda(todayBookings, "today", todayKey)}
-                  type="button"
-                >
-                  {calendarAgendaAction === "today" ? "Exporting..." : "Export Today"}
-                </button>
-                <button
-                  className="h-9 rounded-md border border-cyan-300 bg-white px-3 text-sm font-semibold text-cyan-950 transition hover:bg-cyan-50 disabled:cursor-not-allowed disabled:text-slate-400"
-                  data-operations-calendar-export-loaded="true"
-                  disabled={
-                    calendarExportableBookings.length === 0 ||
-                    calendarAgendaAction !== null ||
-                    Boolean(bookingCalendarDownloadId)
-                  }
-                  onClick={() =>
-                    downloadCalendarAgenda(calendarExportableBookings, "loaded", `loaded-${todayKey}`)
-                  }
-                  type="button"
-                >
-                  {calendarAgendaAction === "loaded" ? "Exporting..." : "Export Loaded"}
-                </button>
-                <button
-                  className="h-9 rounded-md border border-cyan-700 bg-cyan-900 px-3 text-sm font-semibold text-white transition hover:bg-cyan-800 disabled:cursor-not-allowed disabled:border-cyan-200 disabled:bg-white disabled:text-slate-400"
-                  data-operations-calendar-sync-google-loaded="true"
-                  disabled={
-                    calendarExportableBookings.length === 0 ||
-                    calendarAgendaAction !== null ||
-                    Boolean(bookingCalendarDownloadId)
-                  }
-                  onClick={() =>
-                    syncGoogleCalendarAgenda(calendarExportableBookings, `loaded-${todayKey}`)
-                  }
-                  type="button"
-                >
-                  {calendarAgendaAction === "google-loaded" ? "Syncing..." : "Sync Google"}
-                </button>
-              </div>
-            </div>
-
-            {calendarAgendaMessage ? (
-              <div
-                className={`mt-2 rounded-md border px-2 py-1.5 text-xs sm:text-sm ${statusClass(
-                  calendarAgendaMessage.tone,
-                )}`}
-                data-operations-calendar-feedback="true"
-              >
-                {calendarAgendaMessage.text}
-              </div>
-            ) : null}
-
-            {calendarPreviewDisplayItems.length > 0 ? (
-              <div className="mt-3 grid gap-2" data-operations-calendar-agenda-rows="true">
-                {calendarPreviewDisplayItems.map(({ bookingRecord, operationalCard }) => {
-                  const bookingId = bookingRecordStableKey(bookingRecord, operationalCard);
-                  const routePoints = getRoutePoints(bookingRecord);
-                  const pickup = operationalCard.pickup_address || routePoints[0] || "Pickup";
-                  const dropoff =
-                    operationalCard.dropoff_address ||
-                    routePoints[routePoints.length - 1] ||
-                    "Drop-off";
-                  const routeText =
-                    operationalCard.route_points_summary ||
-                    (routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`);
-                  const passengerText = getLoadBookingsOperationalPassengerDisplay(operationalCard, bookingRecord);
-
-                  return (
-                    <div
-                      className="grid gap-1 rounded-md border border-cyan-100 bg-white px-3 py-2 text-sm md:grid-cols-[minmax(8rem,0.7fr)_minmax(10rem,0.8fr)_minmax(12rem,1.2fr)_auto] md:items-center"
-                      data-operations-calendar-agenda-row={bookingId}
-                      key={`operations-calendar-${bookingId}`}
-                    >
-                      <span className="truncate font-semibold text-cyan-950">
-                        {operationalCard.pickup_datetime ||
-                          formatPickupDateTime(getBookingDateKey(bookingRecord), bookingRecord.pickup_time)}
-                      </span>
-                      <span className="truncate text-slate-800">
-                        {passengerText}
-                      </span>
-                      <span className="truncate text-slate-700">{routeText}</span>
-                      <span
-                        className={`w-fit rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${bookingStatusClass(
-                          bookingRecord.status,
-                        )}`}
-                      >
-                        {bookingStatusLabel(bookingRecord.status)}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p
-                className="mt-3 rounded-md border border-cyan-100 bg-white px-3 py-2 text-sm text-slate-600"
-                data-operations-calendar-empty="true"
-              >
-                Load bookings to build the operations calendar.
-              </p>
-            )}
           </section>
 
           <div className="grid gap-3 border-y border-stone-200 py-4 text-center sm:grid-cols-3">

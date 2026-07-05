@@ -527,8 +527,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Save Booking + CRM now preserves safe operational fields needed for dispatch calendar entries: service type, route summary, passenger name, flight number, and assigned driver name/contact/plate.
 - Save Booking + CRM, the operational snapshot save action, and Update Applied Snapshot auto-sync the saved booking one-way to Google Calendar through the existing guarded Google sync route after the admin booking save/update succeeds.
 - Prestige Limo Ops remains the source of truth. Google Calendar edits do not update the app; booking amendments must be made in Prestige, then saved/updated again.
-- The Dashboard command centre now shows Admin App Notifications before Operations Calendar, and Operations Calendar states that save/update auto-syncs while Sync Google remains the loaded-bookings backup.
-- Create Calendar Event remains the manual ICS/calendar-file export path and does not become a provider send path.
+- The Dashboard command centre no longer shows the duplicate Operations Calendar panel; save/update actions auto-sync Google Calendar from the real saved-booking lane.
+- Manual ICS/calendar-file export controls are removed from normal admin operation. They are no longer a visible operator path beside Save + CRM / Update + Cal.
 - Auto-sync uses the same safe calendar payload boundary as loaded-booking Google sync and continues to exclude customer pricing/rates, driver payout, billing/payment/invoice/PDF fields, internal admin/finance notes, parser/debug/mock archive fragments, provider payloads, secrets/tokens, live location, proof/photo, and unsafe notification fragments.
 - This pass did not change Vercel/env/DB schema, send email, activate Stripe/payment, create payouts, send provider jobs, or change GPS/live-location behavior.
 - Focused checks passed: dashboard urgent requests/active monitor guard, admin booking Google Calendar sync API contract, admin booking calendar agenda/event/sync-status API contracts, admin route flow lock guard, staging deployment approval packet guard, `node --check scripts/test-booking-ui-browser.mjs`, `npx tsc --noEmit --pretty false`, `npm run lint` with only the existing `loadBookings` dependency warnings, `npm run build`, and `git diff --check`.
@@ -537,10 +537,9 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 - Source-of-truth fix commits for the live calendar path are `7243c614` (saved-booking pickup time payload), `558f04cf` (same-origin browser calendar download route access), and `ea12f713` (Bookings row calendar identity).
 - Production deployment `dpl_3AYsi2t2QBePo4wut3a17gHQzYeW` completed `READY` and was aliased to `https://app.prestigelimo.sg`.
-- Live Mac Chrome verification on `https://app.prestigelimo.sg` confirmed the Dashboard `Operations Calendar` `Sync Google` action succeeded for 3 loaded events with Google reminders included and no guest email sent.
-- Live Mac Chrome verification confirmed the Dashboard `Export Loaded` action downloaded a 3-event calendar file and kept the file-only source-of-truth warning.
+- Historical live verification previously confirmed the Dashboard `Operations Calendar` `Sync Google` and `Export Loaded` actions. Those normal-page controls are now retired in favor of the saved-booking Google sync lane.
 - Live Mac Chrome verification confirmed the Bookings row calendar action used real booking reference `CUST-20260629234245-ZPJ85L`, downloaded the calendar file, showed success only on the clicked row, and no longer displayed `booking undefined`.
-- Live Mac Chrome verification confirmed loading `CUST-20260629234245-ZPJ85L` into Dispatch and clicking the Job Card calendar action changed the button to `Calendar Created`.
+- Historical live verification previously confirmed the Job Card manual calendar action. That duplicate Job Card calendar button is now removed from normal admin operation.
 - The browser calendar routes now allow same-origin admin dashboard `POST` access through the verified server-session admin/dispatcher role without exposing the private admin session token to the browser; customer/driver referers remain blocked.
 - This pass did not send email, create payment links, activate Stripe/card charges, call transport providers, change GPS/live-location behavior, create payouts, change DB schema, or print/commit Google service-account secrets.
 - No customer or driver surfaces were changed by this wired-path pass; the calendar payload guards continue to reject payout, payment, billing/invoice/PDF, internal admin/finance notes, parser/debug/mock archive, provider payload, secret/token, live-location, proof/photo, and unsafe notification fragments.
@@ -549,7 +548,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Admin Google Calendar Live Sync
 
 - A new guarded route `POST /api/admin-booking-calendar-google-sync` can sync loaded Dashboard booking agenda rows into Google Calendar when the provider gate is configured.
-- The Dashboard `Operations Calendar` panel now keeps the existing file export controls and adds a compact `Sync Google` action for loaded active bookings.
+- The previous Dashboard `Operations Calendar` panel and compact `Sync Google` bulk action are retired from the normal admin page; saved-booking Google writes now stay behind Save + CRM / Update + Cal / approved change-request actions.
 - Google sync reuses the same safe loaded-booking calendar payload contract as the `.ics` agenda export, with the same 25-booking limit and the same forbidden-field rejection for pricing, payout, billing/payment/invoice/PDF, finance/internal/admin notes, parser/debug/mock archive, provider payloads, secrets/tokens, live location, proof/photo, and unsafe notification fragments.
 - The provider integration is default-closed and requires `PRESTIGE_ADMIN_GOOGLE_CALENDAR_SYNC_ENABLED=true`, `PRESTIGE_GOOGLE_CALENDAR_ID`, `PRESTIGE_GOOGLE_CALENDAR_CLIENT_EMAIL`, and `PRESTIGE_GOOGLE_CALENDAR_PRIVATE_KEY` before any Google request can happen. Optional test/override env names are `PRESTIGE_GOOGLE_CALENDAR_TOKEN_URI` and `PRESTIGE_GOOGLE_CALENDAR_API_BASE_URL`.
 - Credentials remain server-only. No downloaded JSON key, private key, access token, service account secret, or provider response body is committed, printed, exposed to the browser, or returned by the API.
@@ -565,12 +564,11 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Mac Chrome visual verification on Google Calendar day view for 2026-07-01 showed the same `Prestige - OPS - Calendar Live Check` event under `Prestige Ops Calendar`.
 - This activation did not send guest/customer/driver email, WhatsApp, Telegram, SMS, Stripe/payment, provider job dispatch, GPS/live location, payout, DB schema changes, or customer/driver-visible internal data. It did create one harmless live calendar check event in the operator-owned `Prestige Ops Calendar`.
 
-### Admin Operations Calendar Agenda Export
+### Retired Admin Operations Calendar Agenda Export UI
 
-- The Dashboard now has an `Operations Calendar` panel in the live operations command centre.
-- The panel summarizes loaded active bookings by `Today` and `Upcoming`, shows the next loaded agenda rows, and keeps the existing per-booking `Calendar` buttons available in booking lists.
-- `Export Today` downloads one `.ics` file for today's loaded active bookings.
-- `Export Loaded` downloads one `.ics` file for up to 25 loaded active bookings from the current dashboard set.
+- The Dashboard no longer has the duplicate `Operations Calendar` panel in the live operations command centre.
+- Per-booking manual `Calendar` buttons and the Job Card Preview manual calendar button are removed from normal admin operation.
+- `Export Today`, `Export Loaded`, and visible bulk `Sync Google` controls are no longer normal operator buttons.
 - The new guarded route is `POST /api/admin-booking-calendar-agenda`; it reuses the same safe saved-booking calendar payload contract as the single-booking calendar export and returns a multi-event calendar file.
 - Each exported calendar event includes calendar-native display reminders 2 hours and 30 minutes before pickup, so the imported calendar can alert the operator from the same event without app push/email/provider delivery.
 - Calendar agenda export is file-only: `connection_mode: ics_file_only`, `provider_connection: not_connected`, `live_calendar_provider: none`, and `live_calendar_write_performed: false`.
@@ -989,7 +987,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer Copy, Job Card, Driver Dispatch, Driver Job Link, Email/WhatsApp/SMS checks, and in-app send controls use result labels only when their existing local state confirms success.
 - The Driver Job Link card no longer renders the active-link status pill, copied success box, or loaded-active-link banner shown below the buttons; only errors remain as separate feedback.
 - The Driver Job Link preview stays empty unless the current create action has returned a fresh one-time URL; revoking a link clears the local link record and preview text.
-- The Job Card Preview action toolbar is compact and wrapped; Save + CRM now sits in its own primary save group, separated from Calendar/Edit/Copy utility buttons and Manual Extra Charges, without changing the save or calendar handlers.
+- The Job Card Preview action toolbar is compact and wrapped; Save + CRM now sits in its own primary save group, separated from Edit/Copy utility buttons and Manual Extra Charges. The duplicate manual calendar file button is removed from normal operation.
 - Admin Dispatch fields no longer show required asterisks; Save + CRM now blocks blank outbound pickup date/time before writing, so normal operations cannot silently create Dec 2099 draft bookings.
 - Blank admin draft customer/contact/route values still use safe `To Confirm` placeholders where the `/api/admin-bookings` contract requires text, while optional Booker email still validates only when typed.
 - Google Calendar auto-sync is skipped for incomplete admin drafts that do not have real date/time or route details, so placeholder draft saves do not create fake calendar events.
@@ -1462,7 +1460,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Load Bookings legacy read remains separate at `GET /api/admin-saved-bookings`.
 - Disabled typed admin booking read/list/detail contract setup exists at `GET /api/admin-booking-read-contract-disabled-setup`; Load Bookings runtime wiring is not active.
 - Save Booking + CRM and Update Applied Snapshot auto-sync the saved booking one-way to Google Calendar through the guarded Google sync route; Prestige remains the source of truth.
-- Create Calendar Event remains the manual ICS/calendar file export path.
+- Manual ICS/calendar export controls are removed from the normal admin page; Google Calendar writes stay behind Save + CRM / Update + Cal.
 - Driver assignment display uses `GET /api/admin-driver-assignment-display`.
 - Driver Database display/search uses typed display-only state.
 - Full driver profile save/delete remains parked on the legacy `drivers` shim path.
@@ -4456,7 +4454,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Save Booking + CRM safe reroute is done at `af57438 Reroute Save Booking CRM to safe admin booking persistence`.
 - Save Booking + CRM now posts to `POST /api/admin-bookings`, no longer posts to `/api/admin-saved-bookings`, uses the safe operational payload builder, and sends the `x-prestige-admin-purpose: admin-booking-persistence` purpose header.
 - The Save Booking + CRM payload keeps operational booking/customer/contact/route/service fields only. Pricing, payout, rates, payment, PDF, billing, `customer_rates`, `driver_payout_rules`, rate overrides, provider/send, auth, photo, live location, internal/debug fields, driver notes, parser internals, and legacy company/traveler CRM write fields remain excluded.
-- Calendar behavior remains separate; Create Calendar Event still uses the file-only calendar path and Save Booking + CRM does not create/update/cancel calendar events.
+- Calendar behavior is now centered on saved-booking Google auto-sync; manual file-only calendar controls are removed from normal admin operation.
 - The reroute did not perform a live POST/write, env change, deployment, migration, Supabase key use, cleanup, `/api/admin-saved-bookings` activation, provider/send/payment/PDF/payout/auth/location/photo/CRM-calendar write, or risky shim write.
 - `PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED` remains closed from the prior staging verification.
 - Proposed first live activation scope remains Admin Save Booking + CRM only, narrowed to the safe admin-only operational persistence contract at `POST /api/admin-bookings`; activation is still blocked until explicit owner approval opens the kill switch again.

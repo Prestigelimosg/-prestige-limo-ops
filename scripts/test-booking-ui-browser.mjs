@@ -7478,148 +7478,24 @@ async function runChromeTest() {
       "Expected Bookings card not to display the saved driver payout range maximum plus extras as the actual payout",
     );
 
-    const clickedRecentCalendarDownload = await evaluate(`(() => {
-      const button = document.querySelector(
-        "[data-booking-calendar-download='ui-cleanup-load-fixture'][data-booking-calendar-surface='completed']",
-      );
-
-      if (!button || button.disabled) {
-        return false;
-      }
-
-      button.click();
-      return true;
-    })()`);
-    assert.equal(clickedRecentCalendarDownload, true, "Expected Completed / History calendar button to be clickable");
-
-    const recentCalendarDownloadState = await waitForCondition(
-      () =>
-        evaluate(`(() => {
-          const request = (window.__prestigeAdminBookingCalendarEventRequests || []).find(
-            (candidate) => candidate.body?.booking_reference === "ui-cleanup-load-fixture",
-          );
-          const syncRequest = (window.__prestigeAdminBookingCalendarSyncStatusRequests || []).find(
-            (candidate) => candidate.body?.saved_booking?.booking_reference === "ui-cleanup-load-fixture",
-          );
-          const message =
-            document
-              .querySelector("[data-booking-calendar-message='ui-cleanup-load-fixture']")
-              ?.textContent.replace(/\\s+/g, " ")
-              .trim() || "";
-          const downloads = window.__prestigeCalendarDownloadClicks || [];
-
-          if (
-            !request ||
-            !syncRequest ||
-            message !== "Calendar file downloaded. File-only sync: app source of truth; calendar edits won't sync back." ||
-            downloads.length === 0
-          ) {
-            return false;
-          }
-
-          return {
-            blobTypes: window.__prestigeCalendarBlobTypes || [],
-            download: downloads[downloads.length - 1],
-            message,
-            request,
-            revokedUrls: window.__prestigeCalendarRevokedUrls || [],
-            syncRequest,
-          };
-        })()`),
-      10000,
-      "Completed / History calendar download",
-    );
+    const completedCalendarDuplicateState = await evaluate(`(() => ({
+      bookingCalendarButtonCount: document.querySelectorAll("[data-booking-calendar-download]").length,
+      bookingCalendarMessageCount: document.querySelectorAll("[data-booking-calendar-message]").length,
+      calendarEventRequestCount: (window.__prestigeAdminBookingCalendarEventRequests || []).length,
+      calendarSyncStatusRequestCount: (window.__prestigeAdminBookingCalendarSyncStatusRequests || []).length,
+      downloadCount: (window.__prestigeCalendarDownloadClicks || []).length,
+    }))()`);
     assert.deepEqual(
+      completedCalendarDuplicateState,
       {
-        body: recentCalendarDownloadState.request.body,
-        hasSessionTokenHeader: Boolean(
-          recentCalendarDownloadState.request.headers["x-prestige-admin-session-token"],
-        ),
-        method: recentCalendarDownloadState.request.method,
-        purpose: recentCalendarDownloadState.request.headers["x-prestige-admin-purpose"] || "",
+        bookingCalendarButtonCount: 0,
+        bookingCalendarMessageCount: 0,
+        calendarEventRequestCount: 0,
+        calendarSyncStatusRequestCount: 0,
+        downloadCount: 0,
       },
-      {
-        body: {
-          booking_reference: "ui-cleanup-load-fixture",
-          booking_type: "DEP",
-          booker_name: "LOADED SAVED BOOKER",
-          company_name: "LOADED SAVED COMPANY",
-          date: "2026-05-28",
-          driver_contact: "+65 8888 0000",
-          driver_name: "LOADED SAVED DRIVER",
-          driver_plate_number: "SLA1234X",
-          dropoff_address: "Changi Airport T2",
-          flight_no: "SQ999",
-          id: "ui-cleanup-load-fixture",
-          pax: 3,
-          pickup_address: "Raffles Hotel Singapore",
-          pickup_at: "",
-          pickup_datetime: "",
-          pickup_time: "0945hrs",
-          route: "Raffles Hotel Singapore > Changi Airport T2",
-          status: "confirmed",
-          traveler_name: "LOADED SAVED TRAVELER",
-          vehicle: "VAN",
-        },
-        hasSessionTokenHeader: false,
-        method: "POST",
-        purpose: "admin-booking-persistence",
-      },
-      "Expected calendar download to POST only safe saved booking fields through the admin ICS route",
+      "Expected duplicate manual Calendar download controls to be removed from Current/Upcoming and Completed cards",
     );
-    assert.deepEqual(
-      {
-        body: recentCalendarDownloadState.syncRequest.body,
-        hasSessionTokenHeader: Boolean(
-          recentCalendarDownloadState.syncRequest.headers["x-prestige-admin-session-token"],
-        ),
-        method: recentCalendarDownloadState.syncRequest.method,
-        purpose: recentCalendarDownloadState.syncRequest.headers["x-prestige-admin-purpose"] || "",
-      },
-      {
-        body: {
-          calendar_event: {
-            booking_reference: "ui-cleanup-load-fixture",
-            ends_at_local: "2026-05-28T11:15:00",
-            filename: "prestige-booking-ui-cleanup-load-fixture.ics",
-            location: "Raffles Hotel Singapore",
-            starts_at_local: "2026-05-28T09:45:00",
-            timezone: "Asia/Singapore",
-            title: "Prestige - DEP - LOADED SAVED TRAVELER",
-          },
-          saved_booking: recentCalendarDownloadState.request.body,
-          sync_method: "ics_file_download",
-        },
-        hasSessionTokenHeader: false,
-        method: "POST",
-        purpose: "admin-booking-persistence",
-      },
-      "Expected calendar sync status to use only the safe saved booking payload and generated event metadata",
-    );
-    assert.equal(
-      /customer_price|customer_rate|billing|invoice|payment|paynow|driver_payout|payout|driver_notes|internal_admin_note|admin_note|parser|raw_ai|token|secret/i.test(
-        JSON.stringify(recentCalendarDownloadState.request.body),
-      ),
-      false,
-      "Expected calendar download payload to omit pricing, payout, billing, parser, notes, and secret fields",
-    );
-    assert.equal(
-      /customer_price|customer_rate|billing|invoice|payment|paynow|driver_payout|payout|driver_notes|internal_admin_note|admin_note|parser|raw_ai|token|secret/i.test(
-        JSON.stringify(recentCalendarDownloadState.syncRequest.body),
-      ),
-      false,
-      "Expected calendar sync status payload to omit pricing, payout, billing, parser, notes, and secret fields",
-    );
-    assert.deepEqual(
-      recentCalendarDownloadState.download,
-      {
-        download: "prestige-booking-ui-cleanup-load-fixture.ics",
-        href: "blob:prestige-calendar-browser-test",
-      },
-      "Expected calendar action to download one .ics file without provider sync",
-    );
-    assert.deepEqual(recentCalendarDownloadState.blobTypes, ["text/calendar;charset=utf-8"]);
-    assert.deepEqual(recentCalendarDownloadState.revokedUrls, ["blob:prestige-calendar-browser-test"]);
 
     await setInputValue("[data-completed-search-input='true']", "luther", "Completed / History search");
     await waitForCondition(
@@ -7836,7 +7712,7 @@ async function runChromeTest() {
             bodyText.includes("Assign driver to this booking") &&
             bodyText.includes("This updates the selected booking only.") &&
             [...document.querySelectorAll("button")].some((button) => button.textContent.trim() === "Assign to this booking") &&
-            Boolean(document.querySelector("[data-booking-calendar-surface='dashboard']")) &&
+            !document.querySelector("[data-booking-calendar-surface='dashboard']") &&
             Boolean(document.querySelector("[data-dashboard-load-booking='true']"));
         })()`),
       10000,
@@ -19193,149 +19069,30 @@ async function runChromeTest() {
       "Expected safe Save Booking + CRM request to keep operational child-seat service item",
     );
 
-    const clickedCreateCalendarEvent = await evaluate(`(() => {
-      const calendarButton = [...document.querySelectorAll("button")].find(
-        (button) => /^(Calendar|Create Calendar Event)$/.test(button.textContent.trim()),
-      );
-
-      if (!calendarButton || calendarButton.disabled) {
-        return false;
-      }
-
-      calendarButton.click();
-      return true;
-    })()`);
-    assert.equal(clickedCreateCalendarEvent, true, "Expected Calendar button to be clickable");
-
-    const crmCalendarState = await waitForCondition(
-      async () => {
-        const candidateState = await evaluate(`(() => {
-          const bodyText = document.body.innerText;
-          const calendarButtonText =
-            document.querySelector("[data-job-card-calendar-action='true']")?.textContent.trim() || "";
-          const calendarRequest = (window.__prestigeCrmSaveCalendarRequests || [])[0] || null;
-          const calendarSyncStatusRequest =
-            (window.__prestigeCrmSaveCalendarSyncStatusRequests || [])[0] || null;
-
-          return calendarButtonText === "Calendar Created" &&
-            calendarRequest &&
-            calendarSyncStatusRequest &&
-            (window.__prestigeCrmSaveCalendarDownloads || []).length === 1
-            ? {
-                bodyText,
-                calendarDownloads: window.__prestigeCrmSaveCalendarDownloads || [],
-                calendarBlobTypes: window.__prestigeCrmSaveCalendarBlobTypes || [],
-                calendarRequest,
-                calendarSyncStatusRequest,
-                fetchCalls: window.__prestigeFetchCalls || [],
-              }
-            : false;
-        })()`);
-
-        return candidateState || false;
-      },
-      10000,
-      "Create Calendar Event file-only download",
-    );
-
-    const disallowedCalendarOrSendCalls = crmCalendarState.fetchCalls.filter((call) => {
-      const [, method = "GET", rawUrl = ""] = call.match(/^(\S+)\s+(.+)$/) || [];
-      const lowerUrl = rawUrl.toLowerCase();
-
-      if (
-        lowerUrl.includes("/api/admin-booking-calendar-events") ||
-        lowerUrl.includes("/api/admin-booking-calendar-sync-statuses")
-      ) {
-        return false;
-      }
-
-      if (/googleapis|icloud|outlook|graph\.microsoft|apple\.com/i.test(lowerUrl)) {
-        return true;
-      }
-
-      const path = lowerUrl.split(/[?#]/)[0] || lowerUrl;
-
-      if (/\/api\/(?:calendar|webhooks?|notifications?|whatsapp|telegram|sms|email|mail|payments?|paynow|pdf)(?:\/|$)/i.test(path)) {
-        return true;
-      }
-
-      if (/\/api\/(?:admin-)?invoices?(?:\/|$)/i.test(path) && method.toUpperCase() !== "GET") {
-        return true;
-      }
-
-      return false;
-    });
+    const duplicateCalendarAfterCrmSaveState = await evaluate(`(() => ({
+      calendarButtonCount: [...document.querySelectorAll("button")].filter(
+        (button) => /^(Calendar|Create Calendar Event|Export Today|Export Loaded|Sync Google)$/.test(button.textContent.trim()),
+      ).length,
+      calendarDownloadControlCount: document.querySelectorAll("[data-booking-calendar-download]").length,
+      jobCardCalendarControlCount: document.querySelectorAll("[data-job-card-calendar-action='true']").length,
+      manualCalendarDownloadCount: (window.__prestigeCrmSaveCalendarDownloads || []).length,
+      manualCalendarEventRequestCount: (window.__prestigeCrmSaveCalendarRequests || []).length,
+      manualCalendarSyncStatusRequestCount: (window.__prestigeCrmSaveCalendarSyncStatusRequests || []).length,
+      operationsCalendarPanelCount: document.querySelectorAll("[data-operations-calendar-panel='true']").length,
+    }))()`);
     assert.deepEqual(
-      disallowedCalendarOrSendCalls,
-      [],
-      `Expected manual calendar file flow not to call messaging, invoice, payment, PDF, or unapproved provider APIs, got ${crmCalendarState.fetchCalls.join(", ")}`,
-    );
-    const crmCalendarDraftReference = "draft-2026-05-27-1530-browser-ui-test-traveler";
-    assert.deepEqual(crmCalendarState.calendarRequest?.body, {
-      booking_reference: crmCalendarDraftReference,
-      booking_type: "MNG",
-      booker_name: "BROWSER UI TEST BOOKER",
-      company_name: "BROWSER UI TEST COMPANY",
-      date: "2026-05-27",
-      driver_contact: "",
-      driver_name: "TEST DRIVER CRM 20260516",
-      driver_plate_number: "",
-      dropoff_address: "Raffles Hotel Singapore",
-      flight_no: "SQ333",
-      id: crmCalendarDraftReference,
-      job_card:
-        "AVF MNG\n" +
-        "27 May 2026, 1530hrs\n" +
-        "Flight: SQ333\n" +
-        "Changi Airport T3 > Marina Bay Sands > Raffles Hotel Singapore\n" +
-        "Company: BROWSER UI TEST COMPANY\n" +
-        "Name: BROWSER UI TEST TRAVELER\n" +
-        "Pax: 2\n" +
-        "Child seat: 2 x booster seat",
-      pax: 2,
-      pickup_address: "Changi Airport T3",
-      pickup_at: "2026-05-27 1530hrs",
-      pickup_datetime: "2026-05-27 1530hrs",
-      pickup_time: "1530hrs",
-      route: "Changi Airport T3 > Marina Bay Sands > Raffles Hotel Singapore",
-      status: "assigned",
-      traveler_name: "BROWSER UI TEST TRAVELER",
-      vehicle: "AVF",
-    });
-    assert.deepEqual(crmCalendarState.calendarSyncStatusRequest?.body, {
-      calendar_event: {
-        booking_reference: crmCalendarDraftReference,
-        ends_at_local: "2026-05-27T17:00:00",
-        filename: `prestige-booking-${crmCalendarDraftReference}.ics`,
-        location: "Changi Airport T3",
-        starts_at_local: "2026-05-27T15:30:00",
-        timezone: "Asia/Singapore",
-        title: "Prestige - MNG - BROWSER UI TEST TRAVELER",
-      },
-      saved_booking: crmCalendarState.calendarRequest?.body,
-      sync_method: "ics_file_download",
-    });
-    assert.equal(
-      /customer_price|customer_rate|billing|invoice|payment|paynow|driver_payout|payout|driver_notes|internal_admin_note|admin_note|parser|raw_ai|token|secret/i.test(
-        JSON.stringify(crmCalendarState.calendarRequest?.body),
-      ),
-      false,
-      "Expected Create Calendar Event payload to omit private finance, parser, notes, and secret fields",
-    );
-    assert.equal(
-      /customer_price|customer_rate|billing|invoice|payment|paynow|driver_payout|payout|driver_notes|internal_admin_note|admin_note|parser|raw_ai|token|secret/i.test(
-        JSON.stringify(crmCalendarState.calendarSyncStatusRequest?.body),
-      ),
-      false,
-      "Expected Create Calendar Event sync status payload to omit private finance, parser, notes, and secret fields",
-    );
-    assert.deepEqual(crmCalendarState.calendarDownloads, [
+      duplicateCalendarAfterCrmSaveState,
       {
-        download: `prestige-booking-${crmCalendarDraftReference}.ics`,
-        href: "blob:prestige-crm-save-calendar-test",
+        calendarButtonCount: 0,
+        calendarDownloadControlCount: 0,
+        jobCardCalendarControlCount: 0,
+        manualCalendarDownloadCount: 0,
+        manualCalendarEventRequestCount: 0,
+        manualCalendarSyncStatusRequestCount: 0,
+        operationsCalendarPanelCount: 0,
       },
-    ]);
-    assert.deepEqual(crmCalendarState.calendarBlobTypes, ["text/calendar;charset=utf-8"]);
+      "Expected duplicate manual Calendar / ICS controls to be removed after Save + CRM; Google auto-sync is the only calendar write lane",
+    );
 
     await clickTab("Bookings", "Current / Upcoming Bookings");
     const safeSaveRecentBookingState = await waitForCondition(

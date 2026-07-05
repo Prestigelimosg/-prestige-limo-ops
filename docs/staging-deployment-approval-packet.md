@@ -69,7 +69,7 @@ Do not proceed if any check fails or if the worktree is dirty.
 - Open staging admin route and confirm core tabs load.
 - Confirm Dispatch, Dashboard, Bookings, Drivers, Completed, and Rates surfaces render without horizontal overflow.
 - Confirm Customer Copy channel buttons remain setup-only/disabled.
-- Confirm Save Booking + CRM auto-syncs Google Calendar, while Create Calendar Event remains the manual ICS export.
+- Confirm Save Booking + CRM auto-syncs Google Calendar; manual ICS export controls are removed from normal admin operation.
 - Confirm `/book`, `/my-bookings`, `/customers`, `/driver-job-demo`, and `/driver-job/[token]` route boundaries do not leak admin/private fields.
 - Run `npm run test:app-smoke-browser` and `npm run test:booking-ui-browser` against staging if an approved `APP_URL` is available.
 

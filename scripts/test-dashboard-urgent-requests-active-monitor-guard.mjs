@@ -207,20 +207,20 @@ assertSourceOrder(
   [
     'aria-label="Urgent Booking Requests"',
     'aria-label="Admin App Notifications"',
-    'aria-label="Operations Calendar"',
   ],
   "dashboard command centre order",
+);
+assertExcludes(
+  dashboardCommandCentrePanel,
+  'aria-label="Operations Calendar"',
+  "Dashboard must not render the duplicate Operations Calendar panel",
 );
 assertExcludes(
   dashboardCommandCentrePanel,
   "{activeJobsMonitorPanel}",
   "Dashboard must not render the Dispatch Today's Jobs monitor",
 );
-assertIncludes(
-  dashboardCommandCentrePanel,
-  "auto-syncs; Sync Google is backup.",
-  "calendar panel auto-sync operator copy",
-);
+assertExcludes(dashboardCommandCentrePanel, "Sync Google", "Dashboard must not show duplicate calendar sync controls");
 
 for (const forbidden of [
   "customerBookingRequestDisplayItems.slice(0, 3)",

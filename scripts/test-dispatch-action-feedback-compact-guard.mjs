@@ -84,6 +84,11 @@ const bookingStatusPatchBlock = sectionBetween(
   "async function patchBookingStatusReference",
   "async function updateBookingStatusOnly",
 );
+const bookingStatusLocalSyncBlock = sectionBetween(
+  appPage,
+  "function applyBookingStatusLocally",
+  "type BookingStatusPatchResult",
+);
 const driverJobLinkRevokeBlock = sectionBetween(
   appPage,
   "async function revokeDriverJobLink()",
@@ -119,7 +124,6 @@ for (const fragment of [
   '"SMS checked"',
   '"In-App queued"',
   '"Driver In-App queued"',
-  '"Calendar Created"',
   '"Created"',
   '"Revoked"',
 ]) {
@@ -184,12 +188,17 @@ for (const fragment of [
 }
 
 for (const fragment of [
-  "const responseBookingId = cleanReferenceText(responseBooking?.id);",
-  "clean(responseBooking.status).toLowerCase() !== nextStatus",
   "const statusReferences = Array.from(",
-  "applyBookingStatusToLocalRecord(currentBooking, nextStatus, responseUpdatedAt)",
+  "applyBookingStatusToLocalRecord(currentBooking, nextStatus, updatedAt)",
   "setLoadBookingsTypedOperationalCardsById((current) => {",
   "booking_status: nextStatus,",
+]) {
+  assertIncludes(bookingStatusLocalSyncBlock, fragment, `booking status local sync fragment ${fragment}`);
+}
+
+for (const fragment of [
+  "const responseBookingId = cleanReferenceText(responseBooking?.id);",
+  "clean(responseBooking.status).toLowerCase() !== nextStatus",
 ]) {
   assertIncludes(bookingStatusPatchBlock, fragment, `booking status patch local sync fragment ${fragment}`);
 }
@@ -323,7 +332,7 @@ for (const phrase of [
   "Customer Copy, Job Card, Driver Dispatch, Driver Job Link, Email/WhatsApp/SMS checks, and in-app send controls use result labels only when their existing local state confirms success.",
   "The Driver Job Link card no longer renders the active-link status pill, copied success box, or loaded-active-link banner shown below the buttons; only errors remain as separate feedback.",
   "The Driver Job Link preview stays empty unless the current create action has returned a fresh one-time URL; revoking a link clears the local link record and preview text.",
-  "The Job Card Preview action toolbar is compact and wrapped; Save + CRM now sits in its own primary save group, separated from Calendar/Edit/Copy utility buttons and Manual Extra Charges, without changing the save or calendar handlers.",
+  "The Job Card Preview action toolbar is compact and wrapped; Save + CRM now sits in its own primary save group, separated from Edit/Copy utility buttons and Manual Extra Charges. The duplicate manual calendar file button is removed from normal operation.",
   "Admin Dispatch fields no longer show required asterisks; Save + CRM now blocks blank outbound pickup date/time before writing, so normal operations cannot silently create Dec 2099 draft bookings.",
   "Blank admin draft customer/contact/route values still use safe `To Confirm` placeholders where the `/api/admin-bookings` contract requires text, while optional Booker email still validates only when typed.",
   "Google Calendar auto-sync is skipped for incomplete admin drafts that do not have real date/time or route details, so placeholder draft saves do not create fake calendar events.",

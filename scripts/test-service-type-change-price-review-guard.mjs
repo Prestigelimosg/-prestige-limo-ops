@@ -60,7 +60,7 @@ const updateAppliedSnapshotSection = sectionBetween(
 const serviceChangePromptSection = sectionBetween(
   appPage,
   'data-service-change-price-review="true"',
-  'data-job-card-calendar-feedback="true"',
+  'data-job-card-readable-summary="true"',
 );
 const issueInvoiceSection = sectionBetween(
   customersPage,

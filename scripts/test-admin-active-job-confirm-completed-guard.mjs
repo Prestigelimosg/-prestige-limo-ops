@@ -43,6 +43,12 @@ const statusPatchHelper = extractBetween(
   "async function updateBookingStatusOnly(",
   "booking status patch helper",
 );
+const todayJobsActiveFilter = extractBetween(
+  appPage,
+  "const dayOfTripActiveJobBookings = operationalBookings",
+  "function getActiveJobBookingReference(",
+  "Today's Jobs active-job filter",
+);
 const todayJobsCard = extractBetween(
   appPage,
   "data-admin-multi-driver-active-job={",
@@ -91,6 +97,20 @@ for (const fragment of [
 ]) {
   assertIncludes(todayJobsCard, fragment, `Today's Jobs card fragment ${fragment}`);
 }
+
+for (const fragment of [
+  "!bookingRecordIsCompletedStatus(bookingRecord)",
+  "!bookingRecordIsCancelledStatus(bookingRecord)",
+  "!bookingRecordHasCompletedDriverReport(bookingRecord)",
+]) {
+  assertIncludes(todayJobsActiveFilter, fragment, `Today's Jobs active filter fragment ${fragment}`);
+}
+
+assertExcludes(
+  todayJobsActiveFilter,
+  'normalizedStatus !== "completed"',
+  "Today's Jobs active filter must use shared completed-status helper",
+);
 
 assert.equal(
   countOccurrences(appPage, "data-admin-active-job-confirm-completed={"),

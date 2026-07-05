@@ -24290,11 +24290,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   const dayOfTripActiveJobBookings = operationalBookings
     .filter(bookingRecordIsDispatchActiveJobsMonitorEligible)
     .filter((bookingRecord) => {
-      const normalizedStatus = clean(bookingRecord.status).toLowerCase();
-
       return (
-        normalizedStatus !== "completed" &&
-        normalizedStatus !== "cancelled" &&
+        !bookingRecordIsCompletedStatus(bookingRecord) &&
+        !bookingRecordIsCancelledStatus(bookingRecord) &&
         !bookingRecordHasCompletedDriverReport(bookingRecord)
       );
     })

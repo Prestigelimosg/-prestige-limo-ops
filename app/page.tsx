@@ -2784,6 +2784,23 @@ const rateLabels: Record<keyof Required<RateRules>, string> = {
   DSP: "DSP / Hourly",
 };
 
+const adminDispatchServiceTypeOptions = [
+  { label: "MNG / Arrival", value: "MNG" },
+  { label: "DEP / Departure", value: "DEP" },
+  { label: "TRF / Point to Point", value: "TRF" },
+  { label: "DSP / Hourly / Disposal", value: "DSP" },
+] as const;
+
+const adminDispatchVehicleTypeOptions = [
+  { label: "E / AVF", value: "AVF" },
+  { label: "S", value: "S" },
+  { label: "VVV", value: "VVV" },
+  { label: "Combi", value: "Combi" },
+] as const;
+
+type AdminDispatchServiceTypeValue = (typeof adminDispatchServiceTypeOptions)[number]["value"];
+type AdminDispatchVehicleTypeValue = (typeof adminDispatchVehicleTypeOptions)[number]["value"];
+
 const customerBookingTypeLabels: Record<keyof Required<RateRules>, string> = {
   MNG: "Arrival",
   DEP: "Departure",
@@ -2911,6 +2928,45 @@ function createInitialBooking(): BookingForm {
     driverPayoutReason: "",
     driverNotes: "",
     driverIncludePayout: "",
+  };
+}
+
+function adminDispatchSafeServiceTypeValue(
+  value: string | null | undefined,
+): AdminDispatchServiceTypeValue {
+  return normalizeBookingType(value) as AdminDispatchServiceTypeValue;
+}
+
+function adminDispatchSafeVehicleTypeValue(
+  value: string | null | undefined,
+): AdminDispatchVehicleTypeValue {
+  const cleanedValue = clean(value);
+  const normalizedValue = cleanedValue.toUpperCase();
+
+  if (!normalizedValue) {
+    return "AVF";
+  }
+
+  if (/\b(?:COMBI|MINI\s*BUS|MINIBUS|HI\s*ROOF|HI-ROOF|BUS)\b/.test(normalizedValue)) {
+    return "Combi";
+  }
+
+  if (/\b(?:VVV|VIANO|VITO|V[-\s]?CLASS|VAN)\b/.test(normalizedValue)) {
+    return "VVV";
+  }
+
+  if (/\b(?:S|S[-\s]?CLASS|MERCEDES\s*S)\b/.test(normalizedValue)) {
+    return "S";
+  }
+
+  return "AVF";
+}
+
+function adminDispatchSelectableBookingForm(bookingForm: BookingForm): BookingForm {
+  return {
+    ...bookingForm,
+    bookingType: adminDispatchSafeServiceTypeValue(bookingForm.bookingType),
+    vehicle: adminDispatchSafeVehicleTypeValue(bookingForm.vehicle),
   };
 }
 
@@ -5383,7 +5439,7 @@ function mergeParsedBookingIntoForm(
     clean(mergedBooking.bookerEmail) || clean(currentBooking.bookerEmail),
   );
 
-  return {
+  return adminDispatchSelectableBookingForm({
     ...currentBooking,
     ...mergedBooking,
     company: safeCompany,
@@ -5394,7 +5450,7 @@ function mergeParsedBookingIntoForm(
         ? parsedName
         : ""),
     name: parsedName,
-  };
+  });
 }
 
 function mergeCrmUpdatesIntoForm(
@@ -5417,12 +5473,12 @@ function mergeCrmUpdatesIntoForm(
     clean(mergedBooking.bookerEmail) || clean(currentBooking.bookerEmail),
   );
 
-  return {
+  return adminDispatchSelectableBookingForm({
     ...currentBooking,
     ...mergedBooking,
     company: safeCompany,
     name: currentName || crmName,
-  };
+  });
 }
 
 function formatDate(value: string) {
@@ -7906,11 +7962,11 @@ function getLoadBookingsOperationalRequestDisplayTitle(
 }
 
 function bookingRecordToForm(bookingRecord: BookingRecord): BookingForm {
-  return {
+  return adminDispatchSelectableBookingForm({
     ...createInitialBooking(),
     ...bookingRecordToOperationalFormFields(bookingRecord),
     ...bookingRecordToFinancePayoutInternalFormFields(bookingRecord),
-  };
+  });
 }
 
 function bookingRecordToOperationalFormFields(bookingRecord: BookingRecord): LoadBookingsOperationalFormFields {
@@ -12315,7 +12371,7 @@ function adminOperationalSnapshotToBookingForm(
   const paxCount = Number(record.pax_count);
 
   return {
-    booking: {
+    booking: adminDispatchSelectableBookingForm({
       ...createInitialBooking(),
       booker: clean(record.contact_display_name) || customerDisplayName,
       bookerContact: contactPhone,
@@ -12337,7 +12393,7 @@ function adminOperationalSnapshotToBookingForm(
       pickup: pickupLocation,
       time: dateTimeParts.time,
       vehicle: clean(record.vehicle_type_or_category) || "AVF",
-    },
+    }),
     ok: true,
     reviewStatus:
       clean(record.short_notice_review_status) ||
@@ -13553,7 +13609,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   ) {
     const bookingRecord = adminBookingPersistenceRecordToCalendarBookingRecord(record);
     const baseBooking = bookingRecordToForm(bookingRecord);
-    const amendedBooking = adminBookingChangeRequestMergeIntoBookingForm(baseBooking, context);
+    const amendedBooking = adminDispatchSelectableBookingForm(
+      adminBookingChangeRequestMergeIntoBookingForm(baseBooking, context),
+    );
     const bookingReference = clean(record.booking_reference) || context.bookingReference;
 
     setBooking(() => amendedBooking);
@@ -16646,25 +16704,27 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       vehicle: clean(sharedContextSource.vehicle),
     };
 
-    setBooking((current) => ({
-      ...current,
-      ...(sharedContext.company ? { company: sharedContext.company } : {}),
-      ...(sharedContext.booker ? { booker: sharedContext.booker } : {}),
-      ...(sharedContext.bookerContact ? { bookerContact: sharedContext.bookerContact } : {}),
-      ...(sharedContext.bookerEmail ? { bookerEmail: sharedContext.bookerEmail } : {}),
-      vehicle: clean(safePreview.vehicle) || sharedContext.vehicle || current.vehicle,
-      name: clean(safePreview.passenger),
-      bookingType: clean(safePreview.type) || current.bookingType,
-      date: clean(safePreview.date),
-      time: clean(safePreview.time),
-      flight: clean(safePreview.flight),
-      pickup: clean(safePreview.pickup),
-      dropoff: clean(safePreview.dropoff),
-      pax: clean(safePreview.pax) || current.pax,
-      childSeatRequired: clean(safePreview.childSeatRequired),
-      childSeatCount: clean(safePreview.childSeatCount),
-      childSeatType: clean(safePreview.childSeatType),
-    }));
+    setBooking((current) =>
+      adminDispatchSelectableBookingForm({
+        ...current,
+        ...(sharedContext.company ? { company: sharedContext.company } : {}),
+        ...(sharedContext.booker ? { booker: sharedContext.booker } : {}),
+        ...(sharedContext.bookerContact ? { bookerContact: sharedContext.bookerContact } : {}),
+        ...(sharedContext.bookerEmail ? { bookerEmail: sharedContext.bookerEmail } : {}),
+        vehicle: clean(safePreview.vehicle) || sharedContext.vehicle || current.vehicle,
+        name: clean(safePreview.passenger),
+        bookingType: clean(safePreview.type) || current.bookingType,
+        date: clean(safePreview.date),
+        time: clean(safePreview.time),
+        flight: clean(safePreview.flight),
+        pickup: clean(safePreview.pickup),
+        dropoff: clean(safePreview.dropoff),
+        pax: clean(safePreview.pax) || current.pax,
+        childSeatRequired: clean(safePreview.childSeatRequired),
+        childSeatCount: clean(safePreview.childSeatCount),
+        childSeatType: clean(safePreview.childSeatType),
+      }),
+    );
     setMessage({
       tone: "success",
       text: "Selected extracted booking. Review before saving.",
@@ -22086,53 +22146,87 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       {message.text}
     </div>
   );
-  const renderDispatchBookingField = (field: keyof BookingForm) => (
-    <div
-      className={
-        field === "pickup" ||
-        field === "dropoff" ||
-        field === "returnPickup" ||
-        field === "returnDropoff"
-          ? "md:col-span-2 xl:col-span-2"
-          : ""
-      }
-      key={field}
-    >
-      <label className="block">
-        <span className="mb-0.5 block text-xs font-semibold text-slate-700">
-          {fieldLabels[field]}
-          {requiredFields.includes(field) ? (
-            <span className="text-red-600"> *</span>
-          ) : null}
-        </span>
-        <input
-          className="h-8 w-full rounded-md border border-stone-300 bg-white px-2 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-          inputMode={
-            field === "pax"
-              ? "numeric"
-              : field === "bookerContact" || field === "driverContact"
-                ? "tel"
-                : undefined
-          }
-          min={field === "pax" ? 1 : undefined}
-          onChange={(event) => update(field, event.target.value)}
-          placeholder={fieldLabels[field]}
-          type={
-            field === "date" || field === "returnDate"
-              ? "date"
-              : field === "bookerEmail"
-                ? "email"
-                : field === "bookerContact" || field === "driverContact"
-                  ? "tel"
-                  : field === "pax"
-                    ? "number"
-                    : "text"
-          }
-          value={booking[field]}
-        />
-      </label>
-    </div>
-  );
+  const renderDispatchBookingField = (field: keyof BookingForm) => {
+    const fieldContainerClass =
+      field === "pickup" ||
+      field === "dropoff" ||
+      field === "returnPickup" ||
+      field === "returnDropoff"
+        ? "md:col-span-2 xl:col-span-2"
+        : "";
+    const isServiceTypeField = field === "bookingType";
+    const isVehicleTypeField = field === "vehicle";
+
+    return (
+      <div className={fieldContainerClass} key={field}>
+        <label className="block">
+          {isServiceTypeField || isVehicleTypeField ? (
+            <>
+              <span className="sr-only">{fieldLabels[field]}</span>
+              <span className="mb-0.5 block text-xs font-semibold text-slate-700">
+                {isServiceTypeField ? "Service Type" : "Vehicle Type"}
+              </span>
+              <select
+                className="h-8 w-full rounded-md border border-stone-300 bg-white px-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                data-admin-booking-field={field}
+                data-admin-booking-service-type-select={isServiceTypeField ? "true" : undefined}
+                data-admin-booking-vehicle-type-select={isVehicleTypeField ? "true" : undefined}
+                onChange={(event) => update(field, event.target.value)}
+                value={
+                  isServiceTypeField
+                    ? adminDispatchSafeServiceTypeValue(booking.bookingType)
+                    : adminDispatchSafeVehicleTypeValue(booking.vehicle)
+                }
+              >
+                {(isServiceTypeField
+                  ? adminDispatchServiceTypeOptions
+                  : adminDispatchVehicleTypeOptions
+                ).map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </>
+          ) : (
+            <>
+              <span className="mb-0.5 block text-xs font-semibold text-slate-700">
+                {fieldLabels[field]}
+                {requiredFields.includes(field) ? (
+                  <span className="text-red-600"> *</span>
+                ) : null}
+              </span>
+              <input
+                className="h-8 w-full rounded-md border border-stone-300 bg-white px-2 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                inputMode={
+                  field === "pax"
+                    ? "numeric"
+                    : field === "bookerContact" || field === "driverContact"
+                      ? "tel"
+                      : undefined
+                }
+                min={field === "pax" ? 1 : undefined}
+                onChange={(event) => update(field, event.target.value)}
+                placeholder={fieldLabels[field]}
+                type={
+                  field === "date" || field === "returnDate"
+                    ? "date"
+                    : field === "bookerEmail"
+                      ? "email"
+                      : field === "bookerContact" || field === "driverContact"
+                        ? "tel"
+                        : field === "pax"
+                          ? "number"
+                          : "text"
+                }
+                value={booking[field]}
+              />
+            </>
+          )}
+        </label>
+      </div>
+    );
+  };
 
   const customerBookingRequestsPanel = customerBookingRequestDisplayItems.length > 0 ? (
     <div

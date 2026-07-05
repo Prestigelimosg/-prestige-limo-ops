@@ -10,6 +10,8 @@ import {
 
 const appUrl = process.env.APP_URL || "http://localhost:3000";
 const driverDemoUrl = new URL("/driver-job-demo", appUrl).toString();
+const driverJobPublicUrl = new URL("/driver-job/mock-driver-job-workflow-order", appUrl).toString();
+const customerBookingUrl = new URL("/book", appUrl).toString();
 const browserName = (process.env.BROWSER || "chrome").toLowerCase();
 const chromeBinary =
   process.env.CHROME_BINARY || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
@@ -3395,6 +3397,87 @@ async function runChromeTest() {
       );
     }
 
+    const adminDispatchDropdownInitialState = await evaluate(`(() => {
+      const serviceSelect = document.querySelector("[data-admin-booking-service-type-select='true']");
+      const vehicleSelect = document.querySelector("[data-admin-booking-vehicle-type-select='true']");
+      const optionState = (select) => [...(select?.querySelectorAll("option") || [])].map((option) => ({
+        label: option.textContent.trim(),
+        value: option.value,
+      }));
+
+      return {
+        serviceOptions: optionState(serviceSelect),
+        serviceTagName: serviceSelect?.tagName || "",
+        serviceValue: serviceSelect?.value || "",
+        vehicleOptions: optionState(vehicleSelect),
+        vehicleTagName: vehicleSelect?.tagName || "",
+        vehicleValue: vehicleSelect?.value || "",
+      };
+    })()`);
+    assert.deepEqual(
+      adminDispatchDropdownInitialState.serviceOptions,
+      [
+        { label: "MNG / Arrival", value: "MNG" },
+        { label: "DEP / Departure", value: "DEP" },
+        { label: "TRF / Point to Point", value: "TRF" },
+        { label: "DSP / Hourly / Disposal", value: "DSP" },
+      ],
+      "Expected admin service type dropdown to expose only fixed safe choices",
+    );
+    assert.deepEqual(
+      adminDispatchDropdownInitialState.vehicleOptions,
+      [
+        { label: "E / AVF", value: "AVF" },
+        { label: "S", value: "S" },
+        { label: "VVV", value: "VVV" },
+        { label: "Combi", value: "Combi" },
+      ],
+      "Expected admin vehicle type dropdown to expose only fixed safe choices",
+    );
+    assert.equal(adminDispatchDropdownInitialState.serviceTagName, "SELECT");
+    assert.equal(adminDispatchDropdownInitialState.vehicleTagName, "SELECT");
+    assert.equal(adminDispatchDropdownInitialState.serviceValue, "MNG");
+    assert.equal(adminDispatchDropdownInitialState.vehicleValue, "AVF");
+
+    await setFieldValueByLabel("Booking type", "DEP", "admin service type dropdown");
+    await setFieldValueByLabel("Vehicle", "Combi", "admin vehicle type dropdown");
+    const adminDispatchDropdownUpdatedState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const serviceSelect = document.querySelector("[data-admin-booking-service-type-select='true']");
+          const vehicleSelect = document.querySelector("[data-admin-booking-vehicle-type-select='true']");
+          const jobCardPreview = document.querySelector("[data-copy-preview='jobCard']")?.textContent || "";
+          const customerCopyPreview = document.querySelector("[data-copy-preview='customerCopy']")?.textContent || "";
+          const driverDispatchPreview = document.querySelector("[data-copy-preview='driverDispatch']")?.textContent || "";
+          const readableSummary = document.querySelector("[data-job-card-readable-summary='true']")?.textContent || "";
+          const valuesReady = serviceSelect?.value === "DEP" && vehicleSelect?.value === "Combi";
+          const previewReady = /Combi\\s*(?:-|\\s)\\s*DEP/.test(jobCardPreview);
+          const customerCopyReady = /Service:\\s*Departure/.test(customerCopyPreview);
+          const driverDispatchReady = /Combi\\s*(?:-|\\s)\\s*DEP/.test(driverDispatchPreview);
+
+          return valuesReady && previewReady && customerCopyReady && driverDispatchReady
+            ? {
+                customerCopyPreview,
+                driverDispatchPreview,
+                jobCardPreview,
+                readableSummary,
+                serviceValue: serviceSelect.value,
+                vehicleValue: vehicleSelect.value,
+              }
+            : null;
+        })()`),
+      5000,
+      "admin service and vehicle dropdown state reflected in job card preview",
+    );
+    assert.equal(adminDispatchDropdownUpdatedState.serviceValue, "DEP");
+    assert.equal(adminDispatchDropdownUpdatedState.vehicleValue, "Combi");
+    assert.match(adminDispatchDropdownUpdatedState.jobCardPreview, /Combi\s*(?:-|\s)\s*DEP/);
+    assert.match(adminDispatchDropdownUpdatedState.customerCopyPreview, /Service:\s*Departure/);
+    assert.match(adminDispatchDropdownUpdatedState.driverDispatchPreview, /Combi\s*(?:-|\s)\s*DEP/);
+
+    await setFieldValueByLabel("Booking type", "MNG", "admin service type reset");
+    await setFieldValueByLabel("Vehicle", "AVF", "admin vehicle type reset");
+
     await evaluate(`window.__prestigeErrors = [];
       window.__prestigeConsoleErrors = [];
       window.addEventListener("error", (event) => window.__prestigeErrors.push(event.message));
@@ -3989,6 +4072,9 @@ async function runChromeTest() {
         if (!control) {
           return "";
         }
+        if (control.getAttribute("data-admin-booking-field")) {
+          return control.value || "";
+        }
 
         if (control.tagName === "SELECT") {
           return control.options[control.selectedIndex]?.textContent.trim() || control.value || "";
@@ -4005,10 +4091,13 @@ async function runChromeTest() {
             if (!control) {
               return "";
             }
+        if (control.getAttribute("data-admin-booking-field")) {
+          return control.value || "";
+        }
 
-            if (control.tagName === "SELECT") {
-              return control.options[control.selectedIndex]?.textContent.trim() || control.value || "";
-            }
+        if (control.tagName === "SELECT") {
+          return control.options[control.selectedIndex]?.textContent.trim() || control.value || "";
+        }
 
             return control.value || "";
           });
@@ -6000,10 +6089,13 @@ async function runChromeTest() {
             if (!control) {
               return "";
             }
+        if (control.getAttribute("data-admin-booking-field")) {
+          return control.value || "";
+        }
 
-            if (control.tagName === "SELECT") {
-              return control.options[control.selectedIndex]?.textContent.trim() || control.value || "";
-            }
+        if (control.tagName === "SELECT") {
+          return control.options[control.selectedIndex]?.textContent.trim() || control.value || "";
+        }
 
             return control.value || "";
           };
@@ -8249,10 +8341,13 @@ async function runChromeTest() {
             if (!control) {
               return "";
             }
+        if (control.getAttribute("data-admin-booking-field")) {
+          return control.value || "";
+        }
 
-            if (control.tagName === "SELECT") {
-              return control.options[control.selectedIndex]?.textContent.trim() || control.value || "";
-            }
+        if (control.tagName === "SELECT") {
+          return control.options[control.selectedIndex]?.textContent.trim() || control.value || "";
+        }
 
             return control.value || "";
           };
@@ -11190,10 +11285,13 @@ async function runChromeTest() {
             if (!control) {
               return "";
             }
+        if (control.getAttribute("data-admin-booking-field")) {
+          return control.value || "";
+        }
 
-            if (control.tagName === "SELECT") {
-              return control.options[control.selectedIndex]?.textContent.trim() || control.value || "";
-            }
+        if (control.tagName === "SELECT") {
+          return control.options[control.selectedIndex]?.textContent.trim() || control.value || "";
+        }
 
             return control.value || "";
           };
@@ -11616,10 +11714,13 @@ async function runChromeTest() {
             if (!control) {
               return "";
             }
+        if (control.getAttribute("data-admin-booking-field")) {
+          return control.value || "";
+        }
 
-            if (control.tagName === "SELECT") {
-              return control.options[control.selectedIndex]?.textContent.trim() || control.value || "";
-            }
+        if (control.tagName === "SELECT") {
+          return control.options[control.selectedIndex]?.textContent.trim() || control.value || "";
+        }
 
             return control.value || "";
           };
@@ -12849,10 +12950,13 @@ async function runChromeTest() {
             if (!control) {
               return "";
             }
+        if (control.getAttribute("data-admin-booking-field")) {
+          return control.value || "";
+        }
 
-            if (control.tagName === "SELECT") {
-              return control.options[control.selectedIndex]?.textContent.trim() || control.value || "";
-            }
+        if (control.tagName === "SELECT") {
+          return control.options[control.selectedIndex]?.textContent.trim() || control.value || "";
+        }
 
             return control.value || "";
           };
@@ -15334,10 +15438,13 @@ async function runChromeTest() {
             if (!control) {
               return "";
             }
+        if (control.getAttribute("data-admin-booking-field")) {
+          return control.value || "";
+        }
 
-            if (control.tagName === "SELECT") {
-              return control.options[control.selectedIndex]?.textContent.trim() || control.value || "";
-            }
+        if (control.tagName === "SELECT") {
+          return control.options[control.selectedIndex]?.textContent.trim() || control.value || "";
+        }
 
             return control.value || "";
           };
@@ -15711,7 +15818,7 @@ async function runChromeTest() {
       "GET /api/admin-booking-workflow-statuses?booking_reference=ui-cleanup-load-fixture&workflow_area=driver_acknowledgement",
       "GET /api/admin-completed-booking-closeouts?booking_reference=ui-cleanup-load-fixture",
       "GET /api/admin-driver-job-links?booking_reference=ui-cleanup-load-fixture&limit=1&link_status=active&page=1",
-      "GET /api/admin-customer-driver-details-email-review-item-setup?booking_reference=ui-cleanup-load-fixture&driver_ack_status=pending&customer_email=booker%40loadedsaved.example.com&driver_name=LOADED+SAVED+DRIVER&driver_phone=%2B65+8888+0000&vehicle_plate=SLA1234X&vehicle_type=VAN",
+      "GET /api/admin-customer-driver-details-email-review-item-setup?booking_reference=ui-cleanup-load-fixture&driver_ack_status=pending&customer_email=booker%40loadedsaved.example.com&driver_name=LOADED+SAVED+DRIVER&driver_phone=%2B65+8888+0000&vehicle_plate=SLA1234X&vehicle_type=VVV",
       "GET /api/admin-email-activation-preflight-setup",
       "GET /api/admin-driver-job-statuses?booking_reference=ui-cleanup-load-fixture&limit=4",
       "GET /api/admin-driver-ots-photo-proofs?booking_reference=ui-cleanup-load-fixture&limit=3",
@@ -17621,7 +17728,7 @@ async function runChromeTest() {
     );
     assert.equal(loadedBookingState.fields.company, "LOADED SAVED COMPANY");
     assert.equal(loadedBookingState.fields.bookingType, "DEP");
-    assert.equal(loadedBookingState.fields.vehicle, "VAN");
+    assert.equal(loadedBookingState.fields.vehicle, "VVV");
     assert.equal(loadedBookingState.fields.pickup, "Raffles Hotel Singapore");
     assert.equal(loadedBookingState.fields.dropoff, "Changi Airport T2");
     assert.equal(loadedBookingState.fields.name, "LOADED SAVED TRAVELER");
@@ -19439,7 +19546,7 @@ async function runChromeTest() {
           if (
             candidateState?.fields?.company === "Warburg Pincus" &&
             candidateState?.fields?.booker === "Jill Van Cook" &&
-            candidateState?.fields?.vehicle === "Sedan" &&
+            candidateState?.fields?.vehicle === "AVF" &&
             candidateState?.fields?.flight === expectedFlight
           ) {
             return candidateState;
@@ -19474,7 +19581,7 @@ async function runChromeTest() {
     );
     assert.equal(selectedWarburgArrivalState.fields.company, "Warburg Pincus");
     assert.equal(selectedWarburgArrivalState.fields.booker, "Jill Van Cook");
-    assert.equal(selectedWarburgArrivalState.fields.vehicle, "Sedan");
+    assert.equal(selectedWarburgArrivalState.fields.vehicle, "AVF");
     assert.equal(selectedWarburgArrivalState.fields.bookingType, "MNG");
     assert.equal(selectedWarburgArrivalState.fields.pickupDate, "2026-02-06");
     assert.equal(selectedWarburgArrivalState.fields.pickupTime, "0730hrs");
@@ -19482,10 +19589,8 @@ async function runChromeTest() {
     assert.equal(selectedWarburgArrivalState.fields.pickup, "Changi Airport");
     assert.match(selectedWarburgArrivalState.fields.dropoff, /The Ritz/);
     assert.equal(selectedWarburgArrivalState.fields.name, "Mark Colodny");
-    assert.doesNotMatch(selectedWarburgArrivalState.fields.vehicle, /^AVF$/);
-    assert.match(selectedWarburgArrivalState.jobCardPreview, /Sedan\s+(?:-\s+)?MNG/);
-    assert.doesNotMatch(selectedWarburgArrivalState.jobCardPreview, /AVF MNG/);
-    assert.match(selectedWarburgArrivalState.driverDispatch, /Sedan\s+(?:-\s+)?MNG/);
+    assert.match(selectedWarburgArrivalState.jobCardPreview, /AVF\s*(?:-|\s)\s*MNG/);
+    assert.match(selectedWarburgArrivalState.driverDispatch, /AVF\s*(?:-|\s)\s*MNG/);
 
     const selectedWarburgDepartureState = await parseWarburgPreview(1, "SG34");
     selectedWarburgDepartureState.errors = [
@@ -19509,7 +19614,7 @@ async function runChromeTest() {
     );
     assert.equal(selectedWarburgDepartureState.fields.company, "Warburg Pincus");
     assert.equal(selectedWarburgDepartureState.fields.booker, "Jill Van Cook");
-    assert.equal(selectedWarburgDepartureState.fields.vehicle, "Sedan");
+    assert.equal(selectedWarburgDepartureState.fields.vehicle, "AVF");
     assert.equal(selectedWarburgDepartureState.fields.bookingType, "DEP");
     assert.equal(selectedWarburgDepartureState.fields.pickupDate, "2026-02-06");
     assert.equal(selectedWarburgDepartureState.fields.pickupTime, "1500hrs");
@@ -19517,10 +19622,8 @@ async function runChromeTest() {
     assert.match(selectedWarburgDepartureState.fields.pickup, /The Ritz/);
     assert.equal(selectedWarburgDepartureState.fields.dropoff, "Changi Airport");
     assert.equal(selectedWarburgDepartureState.fields.name, "Mark Colodny");
-    assert.doesNotMatch(selectedWarburgDepartureState.fields.vehicle, /^AVF$/);
-    assert.match(selectedWarburgDepartureState.jobCardPreview, /Sedan\s+(?:-\s+)?DEP/);
-    assert.doesNotMatch(selectedWarburgDepartureState.jobCardPreview, /AVF DEP/);
-    assert.match(selectedWarburgDepartureState.driverDispatch, /Sedan\s+(?:-\s+)?DEP/);
+    assert.match(selectedWarburgDepartureState.jobCardPreview, /AVF\s*(?:-|\s)\s*DEP/);
+    assert.match(selectedWarburgDepartureState.driverDispatch, /AVF\s*(?:-|\s)\s*DEP/);
 
     const parseAirportTransferReturnPreview = async (previewIndex, expectedFlight) => {
       const focusedTextarea = await evaluate(`(() => {
@@ -20390,7 +20493,7 @@ async function runChromeTest() {
 
         if (
           candidateState?.fields?.flight === "TR288" &&
-          candidateState?.fields?.vehicle === "E-Class" &&
+          candidateState?.fields?.vehicle === "AVF" &&
           candidateState?.fields?.name === "Edien Joy" &&
           candidateState?.fields?.extraStopLocation === "351C Canberra Rd, Singapore 753351"
         ) {
@@ -20423,7 +20526,7 @@ async function runChromeTest() {
     assert.equal(exactDepartureState.fields.bookerContact, "+6580912613");
     assert.equal(exactDepartureState.fields.bookerEmail, "luthergrahambk@gmail.com");
     assert.equal(exactDepartureState.fields.bookingType, "DEP");
-    assert.equal(exactDepartureState.fields.vehicle, "E-Class");
+    assert.equal(exactDepartureState.fields.vehicle, "AVF");
     assert.equal(exactDepartureState.fields.pickupDate, "2026-05-06");
     assert.equal(exactDepartureState.fields.pickupTime, "0800hrs");
     assert.equal(exactDepartureState.fields.flight, "TR288");
@@ -20518,7 +20621,7 @@ async function runChromeTest() {
     assert.equal(routeNameAirportState.fields.bookerContact, "+61419501117");
     assert.equal(routeNameAirportState.fields.bookerEmail, "pj@baonline.com.au");
     assert.equal(routeNameAirportState.fields.bookingType, "MNG");
-    assert.equal(routeNameAirportState.fields.vehicle, "E-Class");
+    assert.equal(routeNameAirportState.fields.vehicle, "AVF");
     assert.equal(routeNameAirportState.fields.pickupDate, "2026-04-30");
     assert.equal(routeNameAirportState.fields.pickupTime, "1530hrs");
     assert.equal(routeNameAirportState.fields.flight, "SQ238");
@@ -21542,6 +21645,61 @@ async function runChromeTest() {
       );
     }
 
+    reporter.step("checking customer booking page does not expose admin-only dispatch dropdowns");
+    const customerBookingLoadEvent = client.once("Page.loadEventFired");
+    await client.send("Page.navigate", { url: customerBookingUrl });
+    await customerBookingLoadEvent;
+    await waitForCondition(
+      () =>
+        evaluate(`(() => Boolean(document.querySelector("[data-customer-booking-field='serviceType']")) &&
+          Boolean(document.querySelector("[data-customer-booking-field='vehicleType']")))()`),
+      10000,
+      "customer booking public trip and vehicle fields",
+    );
+    const customerBookingAdminDropdownLeakState = await evaluate(`(() => ({
+      adminServiceSelectPresent: Boolean(document.querySelector("[data-admin-booking-service-type-select='true']")),
+      adminVehicleSelectPresent: Boolean(document.querySelector("[data-admin-booking-vehicle-type-select='true']")),
+      customerServiceSelectPresent: Boolean(document.querySelector("[data-customer-booking-field='serviceType']")),
+      customerVehicleSelectPresent: Boolean(document.querySelector("[data-customer-booking-field='vehicleType']")),
+    }))()`);
+    assert.deepEqual(
+      customerBookingAdminDropdownLeakState,
+      {
+        adminServiceSelectPresent: false,
+        adminVehicleSelectPresent: false,
+        customerServiceSelectPresent: true,
+        customerVehicleSelectPresent: true,
+      },
+      "Expected /book to keep public controls without exposing admin-only dispatch dropdown hooks",
+    );
+
+    reporter.step("checking public driver job page does not expose admin-only dispatch dropdowns");
+    const driverJobPublicLoadEvent = client.once("Page.loadEventFired");
+    await client.send("Page.navigate", { url: driverJobPublicUrl });
+    await driverJobPublicLoadEvent;
+    await waitForCondition(
+      () =>
+        evaluate(`(() => Boolean(document.querySelector("[data-driver-job-current-status]")) ||
+          document.body.innerText.includes("Job Status"))()`),
+      10000,
+      "public driver job page content",
+    );
+    const driverJobPublicAdminDropdownLeakState = await evaluate(`(() => ({
+      adminServiceSelectPresent: Boolean(document.querySelector("[data-admin-booking-service-type-select='true']")),
+      adminVehicleSelectPresent: Boolean(document.querySelector("[data-admin-booking-vehicle-type-select='true']")),
+      driverStatusPresent: Boolean(document.querySelector("[data-driver-job-current-status]")) ||
+        document.body.innerText.includes("Job Status"),
+    }))()`);
+    assert.deepEqual(
+      driverJobPublicAdminDropdownLeakState,
+      {
+        adminServiceSelectPresent: false,
+        adminVehicleSelectPresent: false,
+        driverStatusPresent: true,
+      },
+      "Expected /driver-job/[token] to avoid admin-only dispatch dropdown hooks",
+    );
+
     reporter.step("checking public driver demo workflow");
     const driverDemoLoadEvent = client.once("Page.loadEventFired");
     await client.send("Page.navigate", { url: driverDemoUrl });
@@ -21568,8 +21726,12 @@ async function runChromeTest() {
         mobile: document.querySelector("[data-driver-demo-mobile]")?.value || "",
         plate: document.querySelector("[data-driver-demo-plate]")?.value || "",
         vehicleModel: document.querySelector("[data-driver-demo-vehicle-model]")?.value || "",
+        adminServiceSelectPresent: Boolean(document.querySelector("[data-admin-booking-service-type-select='true']")),
+        adminVehicleSelectPresent: Boolean(document.querySelector("[data-admin-booking-vehicle-type-select='true']")),
       };
     })()`);
+    assert.equal(driverDemoInitialState.adminServiceSelectPresent, false);
+    assert.equal(driverDemoInitialState.adminVehicleSelectPresent, false);
     assert.deepEqual(
       ["Acknowledge Job", "OTW", "OTS", "POB", "Job Completed"].filter(
         (label) => !driverDemoInitialState.buttonLabels.includes(label),

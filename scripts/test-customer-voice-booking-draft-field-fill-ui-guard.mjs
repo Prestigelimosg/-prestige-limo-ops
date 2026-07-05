@@ -3,6 +3,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
 const bookPagePath = "app/book/page.tsx";
+const customerPortalPagePath = "app/my-bookings/page.tsx";
 const customerBookingLocalVoiceDraftPath = "lib/customer-booking-local-voice-draft.ts";
 const customerRequestAdapterPath = "lib/customer-booking-request-adapter.ts";
 const customerRequestRoutePath = "app/api/customer-booking-requests/route.ts";
@@ -59,6 +60,18 @@ function countMatches(source, fragment) {
   return source.split(fragment).length - 1;
 }
 
+function assertFragmentOrder(source, fragments, label) {
+  let previousIndex = -1;
+
+  for (const fragment of fragments) {
+    const index = source.indexOf(fragment);
+
+    assert.notEqual(index, -1, `${label} must include ${fragment}.`);
+    assert.equal(index > previousIndex, true, `${label} must keep ${fragment} in the expected order.`);
+    previousIndex = index;
+  }
+}
+
 function firstBlock(source, pattern, label) {
   const match = source.match(pattern);
   assert.ok(match, `Expected ${label}.`);
@@ -110,6 +123,7 @@ async function listFiles(root) {
 
 const [
   bookPage,
+  customerPortalPage,
   customerBookingLocalVoiceDraft,
   customerRequestAdapter,
   customerRequestRoute,
@@ -119,6 +133,7 @@ const [
   libFiles,
 ] = await Promise.all([
   readFile(bookPagePath, "utf8"),
+  readFile(customerPortalPagePath, "utf8"),
   readFile(customerBookingLocalVoiceDraftPath, "utf8"),
   readFile(customerRequestAdapterPath, "utf8"),
   readFile(customerRequestRoutePath, "utf8"),
@@ -137,6 +152,24 @@ assert.equal(
   countMatches(bookPage, 'data-customer-booking-portal-link="true"'),
   1,
   "/book must keep exactly one Portal link.",
+);
+assertFragmentOrder(
+  bookPage,
+  [
+    'data-customer-booking-field="extraStops"',
+    'data-customer-booking-return-trip-control="true"',
+    'data-customer-booking-field="specialRequest"',
+  ],
+  "/book customer trip details order",
+);
+assertFragmentOrder(
+  customerPortalPage,
+  [
+    'data-customer-portal-request-field="extraStops"',
+    'data-customer-portal-return-trip-control="true"',
+    'data-customer-portal-request-field="specialRequest"',
+  ],
+  "/my-bookings customer trip details order",
 );
 
 const speakButtonBlock = firstBlock(

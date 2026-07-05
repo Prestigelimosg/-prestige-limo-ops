@@ -1339,6 +1339,82 @@ export default function CustomerPortalPage() {
                     />
                   </label>
 
+                  <label className="text-xs font-semibold text-slate-800">
+                    Trip type
+                    <select
+                      className={fieldClass()}
+                      data-customer-portal-request-field="serviceType"
+                      name="serviceType"
+                      onChange={(event) => updateBookingRequestField("serviceType", event.target.value)}
+                      value={bookingRequestForm.serviceType}
+                    >
+                      <option value="">Please select trip type</option>
+                      {serviceOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="text-xs font-semibold text-slate-800">
+                    Preferred vehicle
+                    <select
+                      className={fieldClass()}
+                      data-customer-portal-request-field="vehicleType"
+                      name="vehicleType"
+                      onChange={(event) => updateBookingRequestField("vehicleType", event.target.value)}
+                      value={bookingRequestForm.vehicleType}
+                    >
+                      <option value="">No preference</option>
+                      {vehicleOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="text-xs font-semibold text-slate-800">
+                    Number of passengers
+                    <input
+                      className={fieldClass()}
+                      data-customer-portal-request-field="passengerCount"
+                      min="1"
+                      name="passengerCount"
+                      onChange={(event) => updateBookingRequestField("passengerCount", event.target.value)}
+                      placeholder="1"
+                      type="number"
+                      value={bookingRequestForm.passengerCount}
+                    />
+                  </label>
+
+                  <label className="text-xs font-semibold text-slate-800">
+                    Luggage
+                    <input
+                      className={fieldClass()}
+                      data-customer-portal-request-field="luggage"
+                      name="luggage"
+                      onChange={(event) => updateBookingRequestField("luggage", event.target.value)}
+                      placeholder="2 suitcases"
+                      type="text"
+                      value={bookingRequestForm.luggage}
+                    />
+                  </label>
+
+                  <label className="text-xs font-semibold text-slate-800 md:col-span-2 xl:col-span-2">
+                    Extra stops
+                    <input
+                      className={fieldClass()}
+                      data-customer-portal-request-field="extraStops"
+                      name="extraStops"
+                      onChange={(event) => updateBookingRequestField("extraStops", event.target.value)}
+                      placeholder="Extra stop name or address if needed"
+                      type="text"
+                      value={bookingRequestForm.extraStops}
+                    />
+                  </label>
+
                   <div
                     className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 md:col-span-2 xl:col-span-4"
                     data-customer-portal-return-trip-control="true"
@@ -1472,82 +1548,6 @@ export default function CustomerPortalPage() {
                       </label>
                     </div>
                   ) : null}
-
-                  <label className="text-xs font-semibold text-slate-800">
-                    Trip type
-                    <select
-                      className={fieldClass()}
-                      data-customer-portal-request-field="serviceType"
-                      name="serviceType"
-                      onChange={(event) => updateBookingRequestField("serviceType", event.target.value)}
-                      value={bookingRequestForm.serviceType}
-                    >
-                      <option value="">Please select trip type</option>
-                      {serviceOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label className="text-xs font-semibold text-slate-800">
-                    Preferred vehicle
-                    <select
-                      className={fieldClass()}
-                      data-customer-portal-request-field="vehicleType"
-                      name="vehicleType"
-                      onChange={(event) => updateBookingRequestField("vehicleType", event.target.value)}
-                      value={bookingRequestForm.vehicleType}
-                    >
-                      <option value="">No preference</option>
-                      {vehicleOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label className="text-xs font-semibold text-slate-800">
-                    Number of passengers
-                    <input
-                      className={fieldClass()}
-                      data-customer-portal-request-field="passengerCount"
-                      min="1"
-                      name="passengerCount"
-                      onChange={(event) => updateBookingRequestField("passengerCount", event.target.value)}
-                      placeholder="1"
-                      type="number"
-                      value={bookingRequestForm.passengerCount}
-                    />
-                  </label>
-
-                  <label className="text-xs font-semibold text-slate-800">
-                    Luggage
-                    <input
-                      className={fieldClass()}
-                      data-customer-portal-request-field="luggage"
-                      name="luggage"
-                      onChange={(event) => updateBookingRequestField("luggage", event.target.value)}
-                      placeholder="2 suitcases"
-                      type="text"
-                      value={bookingRequestForm.luggage}
-                    />
-                  </label>
-
-                  <label className="text-xs font-semibold text-slate-800 md:col-span-2 xl:col-span-2">
-                    Extra stops
-                    <input
-                      className={fieldClass()}
-                      data-customer-portal-request-field="extraStops"
-                      name="extraStops"
-                      onChange={(event) => updateBookingRequestField("extraStops", event.target.value)}
-                      placeholder="Extra stop name or address if needed"
-                      type="text"
-                      value={bookingRequestForm.extraStops}
-                    />
-                  </label>
 
                   <label className="text-xs font-semibold text-slate-800 md:col-span-2 xl:col-span-2">
                     Special request / note

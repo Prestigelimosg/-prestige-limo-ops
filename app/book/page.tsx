@@ -809,6 +809,82 @@ export default function CustomerBookingPage() {
                   />
                 </label>
 
+                <label className="text-xs font-semibold text-slate-800">
+                  Trip type
+                  <select
+                    className={fieldClass()}
+                    data-customer-booking-field="serviceType"
+                    name="serviceType"
+                    onChange={(event) => updateField("serviceType", event.target.value)}
+                    value={form.serviceType}
+                  >
+                    <option value="">Please select trip type</option>
+                    {serviceOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="text-xs font-semibold text-slate-800">
+                  Preferred vehicle
+                  <select
+                    className={fieldClass()}
+                    data-customer-booking-field="vehicleType"
+                    name="vehicleType"
+                    onChange={(event) => updateField("vehicleType", event.target.value)}
+                    value={form.vehicleType}
+                  >
+                    <option value="">No preference</option>
+                    {vehicleOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="text-xs font-semibold text-slate-800">
+                  Number of passengers
+                  <input
+                    className={fieldClass()}
+                    data-customer-booking-field="passengerCount"
+                    min="1"
+                    name="passengerCount"
+                    onChange={(event) => updateField("passengerCount", event.target.value)}
+                    placeholder="1"
+                    type="number"
+                    value={form.passengerCount}
+                  />
+                </label>
+
+                <label className="text-xs font-semibold text-slate-800">
+                  Luggage
+                  <input
+                    className={fieldClass()}
+                    data-customer-booking-field="luggage"
+                    name="luggage"
+                    onChange={(event) => updateField("luggage", event.target.value)}
+                    placeholder="2 large bags, 1 cabin bag"
+                    type="text"
+                    value={form.luggage}
+                  />
+                </label>
+
+                <label className="text-xs font-semibold text-slate-800 md:col-span-2 xl:col-span-2">
+                  Extra stops
+                  <input
+                    className={fieldClass()}
+                    data-customer-booking-field="extraStops"
+                    name="extraStops"
+                    onChange={(event) => updateField("extraStops", event.target.value)}
+                    placeholder="Extra stop name or address if needed"
+                    type="text"
+                    value={form.extraStops}
+                  />
+                </label>
+
                 <div
                   className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 md:col-span-2 xl:col-span-4"
                   data-customer-booking-return-trip-control="true"
@@ -942,82 +1018,6 @@ export default function CustomerBookingPage() {
                     </label>
                   </div>
                 ) : null}
-
-                <label className="text-xs font-semibold text-slate-800">
-                  Trip type
-                  <select
-                    className={fieldClass()}
-                    data-customer-booking-field="serviceType"
-                    name="serviceType"
-                    onChange={(event) => updateField("serviceType", event.target.value)}
-                    value={form.serviceType}
-                  >
-                    <option value="">Please select trip type</option>
-                    {serviceOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="text-xs font-semibold text-slate-800">
-                  Preferred vehicle
-                  <select
-                    className={fieldClass()}
-                    data-customer-booking-field="vehicleType"
-                    name="vehicleType"
-                    onChange={(event) => updateField("vehicleType", event.target.value)}
-                    value={form.vehicleType}
-                  >
-                    <option value="">No preference</option>
-                    {vehicleOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="text-xs font-semibold text-slate-800">
-                  Number of passengers
-                  <input
-                    className={fieldClass()}
-                    data-customer-booking-field="passengerCount"
-                    min="1"
-                    name="passengerCount"
-                    onChange={(event) => updateField("passengerCount", event.target.value)}
-                    placeholder="1"
-                    type="number"
-                    value={form.passengerCount}
-                  />
-                </label>
-
-                <label className="text-xs font-semibold text-slate-800">
-                  Luggage
-                  <input
-                    className={fieldClass()}
-                    data-customer-booking-field="luggage"
-                    name="luggage"
-                    onChange={(event) => updateField("luggage", event.target.value)}
-                    placeholder="2 large bags, 1 cabin bag"
-                    type="text"
-                    value={form.luggage}
-                  />
-                </label>
-
-                <label className="text-xs font-semibold text-slate-800 md:col-span-2 xl:col-span-2">
-                  Extra stops
-                  <input
-                    className={fieldClass()}
-                    data-customer-booking-field="extraStops"
-                    name="extraStops"
-                    onChange={(event) => updateField("extraStops", event.target.value)}
-                    placeholder="Extra stop name or address if needed"
-                    type="text"
-                    value={form.extraStops}
-                  />
-                </label>
 
                 <label className="text-xs font-semibold text-slate-800 md:col-span-2 xl:col-span-2">
                   Special request / note

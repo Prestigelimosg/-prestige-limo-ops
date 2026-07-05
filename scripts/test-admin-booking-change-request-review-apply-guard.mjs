@@ -35,17 +35,28 @@ for (const fragment of [
   "adminBookingChangeRequestKindLabel",
   "adminBookingChangeRequestMergeIntoBookingForm",
   "buildAdminBookingCancellationRequestApplyPayload",
-  "handleAdminBookingChangeRequestReview",
-  "handleAdminBookingChangeRequestReject",
+  "handleAdminBookingChangeRequestCancelDecision",
   "handleAdminBookingChangeRequestApply",
   'data-admin-booking-change-request-review-actions="true"',
-  'data-admin-booking-change-request-review-action="review"',
+  'data-admin-booking-change-request-review-action="accept"',
   'data-admin-booking-change-request-review-action="reject"',
+  'data-admin-booking-change-request-review-action="dismiss"',
+  "Accept + Cal",
+  "Reject + Cal",
+  "Dismiss",
+]) {
+  assertIncludes(adminPage, fragment, `admin amendment review UI ${fragment}`);
+}
+
+for (const forbidden of [
+  'data-admin-booking-change-request-review-action="review"',
   'data-admin-booking-change-request-review-action="apply"',
   "Apply + Cal",
   "Cancel + Cal",
+  "handleAdminBookingChangeRequestReview",
+  "handleAdminBookingChangeRequestReject",
 ]) {
-  assertIncludes(adminPage, fragment, `admin amendment review UI ${fragment}`);
+  assertExcludes(adminPage, forbidden, `admin amendment review UI removed duplicate ${forbidden}`);
 }
 
 for (const fragment of [
@@ -59,6 +70,7 @@ for (const fragment of [
   "Google Calendar auto-synced on the same booking reference",
   "upsertLoadedBookingFromAdminRecord(updatedBooking)",
   'selectAppTab("bookings")',
+  'action: "accept"',
 ]) {
   assertIncludes(adminPage, fragment, `admin amendment apply path ${fragment}`);
 }
@@ -81,7 +93,7 @@ for (const fragment of [
   "adminCustomerInvoiceBlocksBookingAmendment",
   "already exists. Use adjustment, credit note, or new invoice review",
   "Booking, invoice, and Google Calendar were not changed.",
-  "Cancellation apply stopped for",
+  "stopped for ${bookingReference}",
 ]) {
   assertIncludes(adminPage, fragment, `admin amendment invoice safety ${fragment}`);
 }
@@ -100,8 +112,10 @@ for (const fragment of [
   'customer_facing_status: "cancelled"',
   'cancellation_review_status: "cancelled"',
   'request_review_status: "approved"',
-  "Cancellation applied to",
-  "Google Calendar auto-synced on the same booking reference as cancelled",
+  "Reject + Cal",
+  "Booking marked cancelled in Completed / History; Google Calendar auto-synced",
+  'handleAdminBookingChangeRequestCancelDecision(notification, "reject")',
+  'handleAdminBookingChangeRequestCancelDecision(notification, "dismiss")',
   'selectAppTab("completed")',
 ]) {
   assertIncludes(adminPage, fragment, `admin cancellation apply safety ${fragment}`);

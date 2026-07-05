@@ -49,10 +49,11 @@ Current live checkpoint: `01fc2ee8`. `main` and `staging` are aligned to this ch
 
 1. Customer submits an edit/cancel request from the portal; the booking and calendar do not change automatically.
 2. Admin reviews the request in Admin App Notifications.
-3. Use `Review` to compare the request with the saved booking.
-4. Use `Apply + Cal` only when the change is approved and should update the saved booking plus the existing Google Calendar event.
-5. Use `Reject` when the request should not be applied.
-6. Calendar duplicate rule: make changes in Prestige and use `Update + Cal` or `Apply + Cal`; do not create a separate manual calendar event for the same booking reference.
+3. Read the queued request details before choosing one of the three decisions.
+4. Customer change/cancel request rows show exactly three admin buttons: `Accept + Cal`, `Reject + Cal`, and `Dismiss`; there is no separate review/apply/cancel duplicate button lane.
+5. `Accept + Cal` applies the approved amendment to the saved booking plus the existing Google Calendar event, then returns the booking to Current / Upcoming. If the customer request itself is a cancellation, `Accept + Cal` marks the booking cancelled and moves it to Completed / History.
+6. `Reject + Cal` and `Dismiss` mark the booking cancelled, sync the existing Google Calendar event, archive the request, and move the booking to Completed / History.
+7. Calendar duplicate rule: make changes in Prestige and use `Update + Cal`, `Accept + Cal`, or `Reject + Cal`; do not create a separate manual calendar event for the same booking reference.
 
 ## 6. Closeout And Invoice Workflow
 

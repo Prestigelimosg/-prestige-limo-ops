@@ -1399,7 +1399,7 @@ type AdminAppNotificationAction = {
 } | null;
 
 type AdminBookingChangeRequestReviewAction = {
-  action: "apply" | "reject" | "review";
+  action: "accept" | "dismiss" | "reject";
   notificationId: string;
 } | null;
 
@@ -13463,8 +13463,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     }));
   }
 
-  async function handleAdminBookingChangeRequestReview(
+  async function handleAdminBookingChangeRequestCancelDecision(
     notification: AdminAppNotificationRecord,
+    action: "accept" | "dismiss" | "reject",
   ) {
     const notificationId = clean(notification.id);
     const context = adminAppNotificationChangeRequestContext(notification);
@@ -13474,114 +13475,145 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         ...current,
         message: {
           tone: "error",
-          text: "Customer change request review needs a saved notification id and booking reference.",
+          text: "Customer change request cancel decision needs a saved notification id and booking reference.",
         },
       }));
       return;
     }
 
+    const actionLabel =
+      action === "accept" ? "Accept + Cal" : action === "reject" ? "Reject + Cal" : "Dismiss";
     const requestKindLabel = adminBookingChangeRequestKindLabel(context);
-    const requestKindTitle = adminBookingChangeRequestKindTitle(context);
 
     setAdminBookingChangeRequestReviewAction({
-      action: "review",
+      action,
       notificationId,
     });
     setAdminAppNotificationReadState((current) => ({
       ...current,
       message: {
         tone: "info",
-        text: `Loading ${requestKindLabel} review for ${context.bookingReference}...`,
+        text: `${actionLabel}: marking ${requestKindLabel} booking ${context.bookingReference} cancelled and syncing Google Calendar...`,
       },
     }));
 
     try {
       const record = await loadAdminBookingChangeRequestReviewRecord(context);
-      const { bookingReference } = setAdminBookingChangeRequestFormForReview(record, context, {
-        openDispatch: false,
-      });
-      const message = {
-        tone: "success",
-        text: `${requestKindTitle} review loaded for ${bookingReference}. Customer/account is resolved in this row; booking and Google Calendar are unchanged until admin applies or rejects the request.`,
-      } satisfies Message;
+      const bookingReference = clean(record.booking_reference) || context.bookingReference;
+      const blockingInvoices = await loadBlockingCustomerInvoicesForAmendment(bookingReference);
 
-      setMessage(message);
-      setAdminBookingPersistenceMessage(message);
-      setAdminAppNotificationReadState((current) => ({
-        ...current,
-        message,
-        status: "loaded",
-      }));
-    } catch (error) {
-      setAdminAppNotificationReadState((current) => ({
-        ...current,
-        message: {
+      if (blockingInvoices.length > 0) {
+        const invoiceNumber = clean(blockingInvoices[0]?.invoiceNumber) || "issued invoice";
+        const message = {
           tone: "error",
-          text: error instanceof Error ? error.message : "Customer amendment review could not be loaded.",
-        },
-        status: "error",
-      }));
-    } finally {
-      setAdminBookingChangeRequestReviewAction(null);
-    }
-  }
+          text: `${actionLabel} stopped for ${bookingReference}: ${invoiceNumber} already exists. Use adjustment, credit note, or new invoice review before cancelling billed trip details. Booking, invoice, and Google Calendar were not changed.`,
+        } satisfies Message;
 
-  async function handleAdminBookingChangeRequestReject(
-    notification: AdminAppNotificationRecord,
-  ) {
-    const notificationId = clean(notification.id);
-    const context = adminAppNotificationChangeRequestContext(notification);
-    const bookingReference =
-      cleanReferenceText(notification.booking_reference) ||
-      cleanReferenceText(context?.bookingReference);
+        setMessage(message);
+        setAdminBookingPersistenceMessage(message);
+        setAdminAppNotificationReadState((current) => ({
+          ...current,
+          message,
+          status: "loaded",
+        }));
+        return;
+      }
 
-    if (!notificationId) {
-      setAdminAppNotificationReadState((current) => ({
-        ...current,
-        message: {
-          tone: "error",
-          text: "Customer change request rejection needs a saved notification id.",
-        },
-      }));
-      return;
-    }
+      const payload = buildAdminBookingCancellationRequestApplyPayload(record, currentTimeMs);
 
-    const requestKindLabel = context ? adminBookingChangeRequestKindLabel(context) : "change request";
+      if (!payload) {
+        throw new Error(
+          `${actionLabel} needs a complete saved booking for ${bookingReference}. Booking and Google Calendar were not changed.`,
+        );
+      }
 
-    setAdminBookingChangeRequestReviewAction({
-      action: "reject",
-      notificationId,
-    });
-    setAdminAppNotificationReadState((current) => ({
-      ...current,
-      message: {
+      setAdminBookingPersistenceAction("update");
+      setAdminBookingPersistenceMessage({
         tone: "info",
-        text: `Rejecting ${requestKindLabel} request for ${bookingReference || "selected booking"}...`,
-      },
-    }));
+        text: `${actionLabel}: cancelling ${bookingReference}...`,
+      });
 
-    try {
+      const response = await fetch("/api/admin-bookings", {
+        body: JSON.stringify({
+          target_booking_reference: bookingReference,
+          ...payload,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "PATCH",
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.ok) {
+        throw new Error(adminBookingPersistenceFailureDetail(result, "Admin booking cancellation failed."));
+      }
+
+      const updatedBooking = result.booking as AdminBookingPersistenceRecord;
+      const updatedBookingReference = clean(updatedBooking.booking_reference) || bookingReference;
+
+      markAdminBookingAsActiveForUpdates(updatedBookingReference, updatedBooking);
+      upsertLoadedBookingFromAdminRecord(updatedBooking);
+      setAdminBookingPersistenceMessage({
+        tone: "info",
+        text: `${actionLabel}: ${updatedBookingReference} marked cancelled. Syncing Google Calendar...`,
+      });
+
+      const calendarSyncResult = await autoSyncSavedBookingGoogleCalendar(updatedBooking);
+
+      if (!calendarSyncResult.ok) {
+        const message = {
+          tone: "error",
+          text: `${actionLabel}: booking cancelled for ${updatedBookingReference}, but ${calendarSyncResult.message} Notification remains pending until calendar is reviewed.`,
+        } satisfies Message;
+
+        setMessage(message);
+        setBookingSaveMessage(message);
+        setAdminBookingPersistenceMessage(message);
+        setAdminAppNotificationReadState((current) => ({
+          ...current,
+          message,
+          status: "loaded",
+        }));
+        return;
+      }
+
+      let handledId = notificationId;
+
       const updatedNotification = await updateAdminAppNotificationStatus(notificationId, "archived");
-      const handledId = clean(updatedNotification.id) || notificationId;
+      handledId = clean(updatedNotification.id) || notificationId;
+
       const message = {
         tone: "success",
-        text: `Customer ${requestKindLabel} request ${bookingReference ? `for ${bookingReference} ` : ""}rejected/archived. Booking and Google Calendar were not changed.`,
+        text: `${actionLabel} completed for ${updatedBookingReference}. Booking marked cancelled in Completed / History; Google Calendar auto-synced; request archived. No external message was sent.`,
       } satisfies Message;
 
       removeHandledAdminAppNotification(handledId, message);
       setMessage(message);
+      setBookingSaveMessage(message);
       setAdminBookingPersistenceMessage(message);
+      lastSuccessfulBookingSaveRef.current = {
+        bookingId: updatedBookingReference,
+        key: getBookingSaveGuardKey(updatedBookingReference),
+        record: updatedBooking,
+      };
+      selectAppTab("completed");
     } catch (error) {
       setAdminAppNotificationReadState((current) => ({
         ...current,
         message: {
           tone: "error",
-          text: adminAppNotificationFailureMessage(error),
+          text:
+            error instanceof Error
+              ? error.message
+              : `${actionLabel} could not complete. Booking and calendar need review.`,
         },
         status: "error",
       }));
     } finally {
       setAdminBookingChangeRequestReviewAction(null);
+      setAdminBookingPersistenceAction(null);
     }
   }
 
@@ -13617,15 +13649,20 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       return;
     }
 
+    if (isCancellationRequest) {
+      await handleAdminBookingChangeRequestCancelDecision(notification, "accept");
+      return;
+    }
+
     setAdminBookingChangeRequestReviewAction({
-      action: "apply",
+      action: "accept",
       notificationId,
     });
     setAdminAppNotificationReadState((current) => ({
       ...current,
       message: {
         tone: "info",
-        text: `Applying approved ${requestKindLabel} for ${context.bookingReference}...`,
+        text: `Accept + Cal: applying approved ${requestKindLabel} for ${context.bookingReference}...`,
       },
     }));
 
@@ -13634,128 +13671,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       const { amendedBooking, bookingReference } = setAdminBookingChangeRequestFormForReview(record, context, {
         openDispatch: false,
       });
-
-      if (isCancellationRequest) {
-        const blockingInvoices = await loadBlockingCustomerInvoicesForAmendment(bookingReference);
-
-        if (blockingInvoices.length > 0) {
-          const invoiceNumber = clean(blockingInvoices[0]?.invoiceNumber) || "issued invoice";
-          const message = {
-            tone: "error",
-            text: `Cancellation apply stopped for ${bookingReference}: ${invoiceNumber} already exists. Use adjustment, credit note, or new invoice review before cancelling billed trip details. Booking, invoice, and Google Calendar were not changed.`,
-          } satisfies Message;
-
-          setMessage(message);
-          setAdminBookingPersistenceMessage(message);
-          setAdminAppNotificationReadState((current) => ({
-            ...current,
-            message,
-            status: "loaded",
-          }));
-          return;
-        }
-
-        const payload = buildAdminBookingCancellationRequestApplyPayload(record, currentTimeMs);
-
-        if (!payload) {
-          throw new Error(
-            `Cancellation apply needs a complete saved booking for ${bookingReference}. Booking and Google Calendar were not changed.`,
-          );
-        }
-
-        setAdminBookingPersistenceAction("update");
-        setAdminBookingPersistenceMessage({
-          tone: "info",
-          text: `Cancelling approved request for ${bookingReference}...`,
-        });
-
-        const response = await fetch("/api/admin-bookings", {
-          body: JSON.stringify({
-            target_booking_reference: bookingReference,
-            ...payload,
-          }),
-          headers: {
-            "Content-Type": "application/json",
-            "x-prestige-admin-purpose": "admin-booking-persistence",
-          },
-          method: "PATCH",
-        });
-        const result = await response.json().catch(() => null);
-
-        if (!response.ok || !result?.ok) {
-          throw new Error(adminBookingPersistenceFailureDetail(result, "Admin booking cancellation failed."));
-        }
-
-        const updatedBooking = result.booking as AdminBookingPersistenceRecord;
-        const updatedBookingReference = clean(updatedBooking.booking_reference) || bookingReference;
-
-        markAdminBookingAsActiveForUpdates(updatedBookingReference, updatedBooking);
-        upsertLoadedBookingFromAdminRecord(updatedBooking);
-        setAdminBookingPersistenceMessage({
-          tone: "info",
-          text: `Cancellation applied to ${updatedBookingReference}. Syncing Google Calendar...`,
-        });
-
-        const calendarSyncResult = await autoSyncSavedBookingGoogleCalendar(updatedBooking);
-
-        if (!calendarSyncResult.ok) {
-          const message = {
-            tone: "error",
-            text: `Cancellation saved for ${updatedBookingReference}, but ${calendarSyncResult.message} Notification remains pending until calendar is reviewed.`,
-          } satisfies Message;
-
-          setMessage(message);
-          setBookingSaveMessage(message);
-          setAdminBookingPersistenceMessage(message);
-          setAdminAppNotificationReadState((current) => ({
-            ...current,
-            message,
-            status: "loaded",
-          }));
-          return;
-        }
-
-        let handledId = notificationId;
-
-        try {
-          const updatedNotification = await updateAdminAppNotificationStatus(notificationId, "archived");
-          handledId = clean(updatedNotification.id) || notificationId;
-        } catch (error) {
-          const message = {
-            tone: "error",
-            text: `Cancellation applied for ${updatedBookingReference} and Google Calendar auto-synced, but the admin notification could not be archived: ${adminAppNotificationFailureMessage(
-              error,
-            )}`,
-          } satisfies Message;
-
-          setMessage(message);
-          setBookingSaveMessage(message);
-          setAdminBookingPersistenceMessage(message);
-          setAdminAppNotificationReadState((current) => ({
-            ...current,
-            message,
-            status: "error",
-          }));
-          return;
-        }
-
-        const message = {
-          tone: "success",
-          text: `Cancellation applied for ${updatedBookingReference}. Google Calendar auto-synced on the same booking reference as cancelled; request archived. No external message was sent.`,
-        } satisfies Message;
-
-        removeHandledAdminAppNotification(handledId, message);
-        setMessage(message);
-        setBookingSaveMessage(message);
-        setAdminBookingPersistenceMessage(message);
-        lastSuccessfulBookingSaveRef.current = {
-          bookingId: updatedBookingReference,
-          key: getBookingSaveGuardKey(updatedBookingReference),
-          record: updatedBooking,
-        };
-        selectAppTab("completed");
-        return;
-      }
 
       if (adminBookingChangeRequestServiceTypeChanged(context, record)) {
         const oldServiceLabel = serviceChangePriceReviewServiceLabel(
@@ -41688,35 +41603,31 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                             data-admin-booking-change-request-review-actions="true"
                           >
                             <button
-                              className="h-7 rounded-md border border-sky-300 bg-white px-2 text-xs font-semibold text-sky-800 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:text-slate-400"
-                              data-admin-booking-change-request-review-action="review"
-                              disabled={changeRequestActionDisabled}
-                              onClick={() => handleAdminBookingChangeRequestReview(notification)}
-                              type="button"
-                            >
-                              {activeChangeRequestAction === "review" ? "Loading..." : "Review"}
-                            </button>
-                            <button
                               className="h-7 rounded-md border border-rose-200 bg-white px-2 text-xs font-semibold text-rose-800 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:text-slate-400"
                               data-admin-booking-change-request-review-action="reject"
                               disabled={changeRequestActionDisabled}
-                              onClick={() => handleAdminBookingChangeRequestReject(notification)}
+                              onClick={() => handleAdminBookingChangeRequestCancelDecision(notification, "reject")}
                               type="button"
                             >
-                              {activeChangeRequestAction === "reject" ? "Rejecting..." : "Reject"}
+                              {activeChangeRequestAction === "reject" ? "Rejecting..." : "Reject + Cal"}
                             </button>
                             <button
                               className="h-7 rounded-md border border-emerald-300 bg-emerald-700 px-2 text-xs font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
-                              data-admin-booking-change-request-review-action="apply"
+                              data-admin-booking-change-request-review-action="accept"
                               disabled={changeRequestActionDisabled}
                               onClick={() => handleAdminBookingChangeRequestApply(notification)}
                               type="button"
                             >
-                              {activeChangeRequestAction === "apply"
-                                ? "Applying..."
-                                : adminBookingChangeRequestIsCancellation(changeRequestContext)
-                                  ? "Cancel + Cal"
-                                  : "Apply + Cal"}
+                              {activeChangeRequestAction === "accept" ? "Accepting..." : "Accept + Cal"}
+                            </button>
+                            <button
+                              className="h-7 rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                              data-admin-booking-change-request-review-action="dismiss"
+                              disabled={changeRequestActionDisabled}
+                              onClick={() => handleAdminBookingChangeRequestCancelDecision(notification, "dismiss")}
+                              type="button"
+                            >
+                              {activeChangeRequestAction === "dismiss" ? "Dismissing..." : "Dismiss"}
                             </button>
                           </div>
                         ) : null}

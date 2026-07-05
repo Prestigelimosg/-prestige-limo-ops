@@ -55,9 +55,31 @@ for (const fragment of [
   "All customers",
   "10 per page",
   "Open",
+  'data-customer-billing-workbench-drawer="true"',
+  'data-customer-billing-workbench-summary="true"',
+  'data-customer-billing-workbench-contents="true"',
+  "Billing workbench and mock review queues",
 ]) {
   assertIncludes(customerPage, fragment, `compact customer finder fragment ${fragment}`);
 }
+
+const billingDrawerStart = customerPage.indexOf('data-customer-billing-workbench-drawer="true"');
+assert.notEqual(billingDrawerStart, -1, "customer billing workbench drawer must exist");
+assert.equal(
+  customerPage.lastIndexOf("<details", billingDrawerStart) > customerPage.lastIndexOf("</details>", billingDrawerStart),
+  true,
+  "customer billing workbench must be inside a collapsed native details drawer",
+);
+assert.equal(
+  customerPage.indexOf('data-unbilled-customers-sector="true"') < billingDrawerStart,
+  true,
+  "Unbilled Customers checkpoint must stay before the collapsed billing workbench drawer",
+);
+assert.equal(
+  billingDrawerStart < customerPage.indexOf('data-customer-invoice-workspace="true"'),
+  true,
+  "Send Invoice Workbench must stay inside the collapsed billing workbench drawer",
+);
 
 for (const forbiddenFragment of [
   'data-customer-folder-support-drawer="true"',
@@ -89,6 +111,7 @@ for (const phrase of [
   "The old Customer Folder / Job History Handoff support drawer is removed from the normal Customers page flow; the compact finder is now the single customer-folder lookup surface.",
   "The compact finder keeps 10-row pages and an `All customers` dropdown with numbered page buttons for 200-plus accounts.",
   "The top payment summary is a slim strip instead of four large cards.",
+  "The billing workbench and mock review queues are collapsed behind an admin-only drawer, leaving the daily visible Customers page focused on the customer folder finder and Unbilled Customers checkpoint.",
   "No route, API, parser, DB, env, Vercel, provider-send, GPS/live-location, billing/payment/PDF/payout, calendar, or shim behavior is changed.",
   "This polish is guarded by `scripts/test-customer-folder-compact-index-guard.mjs` and registered in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {

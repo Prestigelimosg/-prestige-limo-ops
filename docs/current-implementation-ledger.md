@@ -821,6 +821,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The old Customer Folder / Job History Handoff support drawer is removed from the normal Customers page flow; the compact finder is now the single customer-folder lookup surface.
 - The compact finder keeps 10-row pages and an `All customers` dropdown with numbered page buttons for 200-plus accounts.
 - The top payment summary is a slim strip instead of four large cards.
+- The billing workbench and mock review queues are collapsed behind an admin-only drawer, leaving the daily visible Customers page focused on the customer folder finder and Unbilled Customers checkpoint.
 - No route, API, parser, DB, env, Vercel, provider-send, GPS/live-location, billing/payment/PDF/payout, calendar, or shim behavior is changed.
 - This polish is guarded by `scripts/test-customer-folder-compact-index-guard.mjs` and registered in `scripts/test-preactivation-verification-suite.mjs`.
 
@@ -1014,8 +1015,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Customers Invoice Workspace Cleanup
 
-- Customers page daily flow is compact: summary strip, customer finder, unbilled checkpoint, then invoice workspace.
-- Statement previews are the default tab because this page is the invoice-sending workbench.
+- Customers page daily flow is compact: summary strip, customer finder, and Unbilled Customers checkpoint stay visible for normal operation.
+- The invoice workbench, statement previews, outstanding review, and follow-up queues are deliberately collapsed behind the admin-only `Billing workbench and mock review queues` drawer.
 - The duplicate folder handoff support drawer is removed; advanced booking/draft tools and mock logs sit after the daily invoice workflow instead of before it.
 - This is UI-only structure cleanup; it does not activate invoice/PDF/payment/provider sending, DB writes, env changes, GPS/live location, billing/payout, calendar sync, parser changes, or shims.
 - Guard coverage lives in `scripts/test-customers-invoice-workspace-cleanup-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.

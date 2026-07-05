@@ -55,8 +55,12 @@ for (const fragment of [
   'data-customer-summary-strip="true"',
   'data-customer-folder-finder="true"',
   'data-unbilled-customers-sector="true"',
+  'data-customer-billing-workbench-drawer="true"',
+  'data-customer-billing-workbench-summary="true"',
+  'data-customer-billing-workbench-contents="true"',
   'data-customer-advanced-booking-drawer="true"',
   'data-customer-debug-tools-drawer="true"',
+  "Billing workbench and mock review queues",
   "Send Invoice Workbench",
   "Customers & Invoices",
 ]) {
@@ -100,11 +104,13 @@ assert.equal(
   customersPage.indexOf('data-customer-folder-finder="true"') <
     customersPage.indexOf('data-unbilled-customers-sector="true"') &&
     customersPage.indexOf('data-unbilled-customers-sector="true"') <
+      customersPage.indexOf('data-customer-billing-workbench-drawer="true"') &&
+    customersPage.indexOf('data-customer-billing-workbench-drawer="true"') <
       customersPage.indexOf('data-customer-invoice-workspace="true"') &&
     customersPage.indexOf('data-customer-invoice-workspace-panel="follow-up"') <
       customersPage.indexOf('data-customer-advanced-booking-drawer="true"'),
   true,
-  "daily Customers page order must be finder, unbilled checkpoint, invoice workspace, then advanced/support drawers.",
+  "daily Customers page order must be finder, unbilled checkpoint, collapsed billing workbench drawer, then advanced/support drawers.",
 );
 
 for (const forbiddenPattern of [
@@ -118,8 +124,8 @@ for (const forbiddenPattern of [
 }
 
 for (const phrase of [
-  "Customers page daily flow is compact: summary strip, customer finder, unbilled checkpoint, then invoice workspace.",
-  "Statement previews are the default tab because this page is the invoice-sending workbench.",
+  "Customers page daily flow is compact: summary strip, customer finder, and Unbilled Customers checkpoint stay visible for normal operation.",
+  "The invoice workbench, statement previews, outstanding review, and follow-up queues are deliberately collapsed behind the admin-only `Billing workbench and mock review queues` drawer.",
   "The duplicate folder handoff support drawer is removed; advanced booking/draft tools and mock logs sit after the daily invoice workflow instead of before it.",
   "This is UI-only structure cleanup; it does not activate invoice/PDF/payment/provider sending, DB writes, env changes, GPS/live location, billing/payout, calendar sync, parser changes, or shims.",
   "Guard coverage lives in `scripts/test-customers-invoice-workspace-cleanup-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",

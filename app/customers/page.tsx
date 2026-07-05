@@ -5422,6 +5422,21 @@ export default function MockCustomerDashboardPage() {
           </p>
         </section>
 
+        <details
+          className="rounded-lg border border-slate-200 bg-white shadow-sm"
+          data-customer-billing-workbench-drawer="true"
+        >
+          <summary
+            className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-slate-900 [&::-webkit-details-marker]:hidden"
+            data-customer-billing-workbench-summary="true"
+          >
+            Billing workbench and mock review queues
+            <span className="text-xs font-semibold text-slate-500">Collapsed</span>
+          </summary>
+          <div
+            className="grid gap-4 border-t border-slate-200 p-4 sm:p-5"
+            data-customer-billing-workbench-contents="true"
+          >
         <section
           className="rounded-lg border border-slate-200 bg-white shadow-sm"
           data-customer-invoice-workspace="true"
@@ -7311,6 +7326,8 @@ export default function MockCustomerDashboardPage() {
           </div>
         </section>
         </div>
+          </div>
+        </details>
 
         <details className="rounded-lg border border-slate-200 bg-white shadow-sm" data-customer-advanced-booking-drawer="true">
           <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-slate-900 [&::-webkit-details-marker]:hidden">

@@ -60,8 +60,8 @@ Current live checkpoint: `01fc2ee8`. `main` and `staging` are aligned to this ch
 1. After a completed job, review the Completed Trip Closeout controls.
 2. Mark the job ready only when closeout/billing readiness is correct. `Ready Locally` means admin has reviewed it for billing prep.
 3. Go to `Customers & Invoices` > `Unbilled Customers`.
-4. Use `Prepare` to load one billable customer/job into Send Invoice Workbench.
-5. Review CRM billing account, amount, due date, service, line item(s), card/fee status, and customer/account before `Preview`.
+4. Use `Prepare` to load one billable customer/job, then open the collapsed `Billing workbench and mock review queues` drawer only when invoice prep is approved.
+5. Review CRM billing account, amount, due date, service, line item(s), card/fee status, and customer/account in Send Invoice Workbench before `Preview`.
 6. `Preview` is review-only; it does not issue a number.
 7. `Issue` stores the invoice and starts PDF download. Use only when final.
 8. Invoice `Issue`, invoice number reservation, PDF/email, `Paid` / `Unpaid`, and Credit Note actions are high-consequence. Use them only after final admin review.

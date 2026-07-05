@@ -664,6 +664,89 @@ try {
     assertNoDriverJobLeaks(result);
   }
 
+  {
+    const oldLinkId = "11111111-1111-4111-8111-111111111111";
+    const freshLinkId = "22222222-2222-4222-8222-222222222222";
+    const client = new MockSupabaseClient({
+      driver_job_dsp_actual_time_events: [],
+      driver_job_links: [
+        {
+          booking_reference: "DRV-JOB-API-001",
+          expires_at: validExpiresAt,
+          id: freshLinkId,
+          link_status: "active",
+          revoked_at: null,
+          safe_link_context: {
+            driver_job_payload: {
+              booking_type: "DEP",
+              dropoff_location: "Airport",
+              passenger_name: "Fresh Passenger",
+              pickup_date: "2026-06-09",
+              pickup_location: "Hotel",
+              pickup_time: "0900hrs",
+              route: "Hotel > Airport",
+              status: "assigned",
+            },
+          },
+          token_hash: hashDriverJobLinkToken(validToken),
+        },
+      ],
+      driver_job_status_events: [
+        {
+          actor_label: "verified_driver_job_link",
+          actor_role: "driver",
+          booking_reference: "DRV-JOB-API-001",
+          driver_job_link_id: oldLinkId,
+          occurred_at: "2026-06-07T12:00:00.000Z",
+          safe_status_context: {},
+          safe_status_note: null,
+          source_surface: "driver_job_api",
+          status_source: "driver_job_api",
+          status_value: "completed",
+        },
+      ],
+      driver_live_location_latest_positions: [],
+    });
+    const loaded = await loadDriverJobPayloadThroughStatusPersistence({
+      client,
+      now,
+      token: validToken,
+    });
+    const statusRead = client.selectHistory.find(
+      (query) => query.table === "driver_job_status_events",
+    );
+
+    assert.equal(loaded.ok, true);
+    assert.equal(loaded.payload.reference, "DRV-JOB-API-001");
+    assert.equal(loaded.payload.status, "assigned");
+    assert.deepEqual(loaded.payload.statusHistory, []);
+    assert.deepEqual(
+      statusRead?.filters,
+      [{ column: "driver_job_link_id", value: freshLinkId }],
+      "Fresh driver links must read status history by driver_job_link_id, not only booking_reference.",
+    );
+    assert.equal(client.operations.length, 0);
+    assertNoDriverJobLeaks(loaded);
+
+    const updated = await saveDriverJobStatusThroughStatusPersistence({
+      client,
+      now,
+      status: "OTW",
+      token: validToken,
+    });
+    const insertedStatus = client.operations.find(
+      (operation) => operation.table === "driver_job_status_events",
+    );
+
+    assert.equal(updated.ok, true);
+    assert.equal(updated.status, "driver_otw");
+    assert.equal(updated.payload.status, "driver_otw");
+    assert.equal(insertedStatus?.payload.driver_job_link_id, freshLinkId);
+    assert.equal(insertedStatus?.payload.booking_reference, "DRV-JOB-API-001");
+    assert.equal(insertedStatus?.payload.status_value, "driver_otw");
+    assertNoDriverJobLeaks(updated);
+  }
+
   for (const [token, reason] of [
     ["not-a-real-driver-token", "unauthorized"],
     [expiredToken, "expired"],

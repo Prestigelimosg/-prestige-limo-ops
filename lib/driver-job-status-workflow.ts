@@ -91,7 +91,7 @@ export function guardDriverJobStatusTransition({
   if (!expectedNextStatus) {
     return {
       ok: false,
-      message: "This mock job is already completed. Contact dispatch if this is incorrect.",
+      message: "This job is already completed. Contact dispatch if this is incorrect.",
       reason: "already_completed",
     };
   }

@@ -10227,7 +10227,7 @@ async function runChromeTest() {
       "cancelled completed delete feedback",
     );
     assert.deepEqual(cancelledCompletedDeleteState.confirmMessages, [
-      "Delete this completed job from the app? This cannot be undone.",
+      "Delete this job from Completed / History? This cannot be undone.",
     ]);
     assert.deepEqual(
       cancelledCompletedDeleteState.deleteRequests,
@@ -10294,7 +10294,7 @@ async function runChromeTest() {
           const feedbackCard = document.querySelector("[data-completed-delete-feedback-card='${dashboardCompletionActionFixture.id}']");
           const completionMessage = feedbackCard?.querySelector("[data-booking-completion-message='${dashboardCompletionActionFixture.id}']");
 
-          return !deletedArticle && completionMessage?.textContent.trim() === "Completed job deleted."
+          return !deletedArticle && completionMessage?.textContent.trim() === "Job deleted."
             ? {
                 confirmMessages: window.__prestigeConfirmMessages || [],
                 deleteRequests: window.__prestigeCompletedDeleteRequests || [],
@@ -10310,7 +10310,7 @@ async function runChromeTest() {
       "confirmed completed delete feedback",
     );
     assert.deepEqual(confirmedCompletedDeleteState.confirmMessages, [
-      "Delete this completed job from the app? This cannot be undone.",
+      "Delete this job from Completed / History? This cannot be undone.",
     ]);
     assert.deepEqual(
       confirmedCompletedDeleteState.unhandledSupabaseCalls,
@@ -10349,7 +10349,7 @@ async function runChromeTest() {
       1,
       `Expected one typed completed delete API call, got ${confirmedCompletedDeleteState.fetchCalls.join(", ")}`,
     );
-    assert.match(confirmedCompletedDeleteState.feedbackCardText, /Completed job deleted\./);
+    assert.match(confirmedCompletedDeleteState.feedbackCardText, /Job deleted\./);
     assert.match(
       confirmedCompletedDeleteState.otherCompletedArticleText,
       /COMPLETED TEST TRAVELER/,
@@ -10357,7 +10357,7 @@ async function runChromeTest() {
     );
     assert.notEqual(
       confirmedCompletedDeleteState.globalStatusText,
-      "Completed job deleted.",
+      "Job deleted.",
       "Expected completed delete success feedback not to appear only in the global status panel",
     );
 

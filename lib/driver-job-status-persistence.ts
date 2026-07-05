@@ -859,14 +859,17 @@ async function resolveLinkForToken({
 
 async function loadStatusHistoryForLink(
   client: DriverJobStatusPersistenceClient,
-  bookingReference: string,
+  link: DriverJobLinkPersistenceRow,
 ): Promise<StatusHistoryResult> {
-  const { data, error } = await client
+  const query = client
     .from("driver_job_status_events")
     .select(driverJobStatusEventSelect)
-    .eq("booking_reference", bookingReference)
     .order("occurred_at", { ascending: false })
     .limit(10);
+  const scopedQuery = link.id
+    ? query.eq("driver_job_link_id", link.id)
+    : query.eq("booking_reference", link.booking_reference);
+  const { data, error } = await scopedQuery;
 
   if (error) {
     return {
@@ -898,7 +901,7 @@ export async function loadDriverJobPayloadThroughStatusPersistence(
 
   const statusHistory = await loadStatusHistoryForLink(
     input.client,
-    resolvedLink.link.booking_reference,
+    resolvedLink.link,
   );
 
   if (!statusHistory.ok) {
@@ -933,7 +936,7 @@ export async function saveDriverJobDetailsThroughStatusPersistence(
 
   const statusHistory = await loadStatusHistoryForLink(
     input.client,
-    resolvedLink.link.booking_reference,
+    resolvedLink.link,
   );
 
   if (!statusHistory.ok) {
@@ -1040,7 +1043,7 @@ export async function saveDriverJobStatusThroughStatusPersistence(
 
   const statusHistory = await loadStatusHistoryForLink(
     input.client,
-    resolvedLink.link.booking_reference,
+    resolvedLink.link,
   );
 
   if (!statusHistory.ok) {

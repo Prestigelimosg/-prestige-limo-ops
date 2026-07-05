@@ -28,6 +28,10 @@ export type AdminSavedBookingDeleteRecord = {
   status: AdminSavedBookingDeletableStatus;
 };
 
+type AdminSavedBookingDeleteTargetRecord = AdminSavedBookingDeleteRecord & {
+  booking_reference: string;
+};
+
 export type AdminSavedBookingDeleteData = {
   booking: AdminSavedBookingDeleteRecord;
   version: typeof adminSavedBookingDeleteVersion;
@@ -86,6 +90,8 @@ const safeActorError =
 const safeConfigError =
   "Admin saved booking delete configuration is not ready.";
 const safeDeleteError = "Admin saved booking delete failed safely.";
+const safeDeleteCleanupError =
+  "Admin saved booking operational job cleanup failed safely.";
 const safeSessionActorError =
   "Admin saved booking delete requires a verified admin or dispatcher server session.";
 const safeTargetMissingError =
@@ -371,6 +377,18 @@ function toDeleteRecord(value: unknown): AdminSavedBookingDeleteRecord | null {
   };
 }
 
+function toDeleteTargetRecord(value: unknown): AdminSavedBookingDeleteTargetRecord | null {
+  const booking = toDeleteRecord(value);
+  const bookingReference = validBookingReference(asRecord(value).booking_reference);
+
+  return booking && bookingReference
+    ? {
+        ...booking,
+        booking_reference: bookingReference,
+      }
+    : null;
+}
+
 function toFutureDraftCleanupDeleteRecord(
   value: unknown,
   expectedReference: string,
@@ -487,6 +505,36 @@ export async function deleteAdminCompletedSavedBooking(
     return clientResult;
   }
 
+  const targetResult = await clientResult.data
+    .from("bookings")
+    .select("id, booking_reference, status")
+    .eq("id", parsed.data.booking_id)
+    .in("status", [...adminSavedBookingDeletableStatuses])
+    .maybeSingle();
+
+  if (targetResult.error) {
+    return safeDatabaseFailure(safeDeleteError, 500, targetResult.error);
+  }
+
+  const target = toDeleteTargetRecord(targetResult.data);
+
+  if (!target) {
+    return {
+      error: safeTargetMissingError,
+      ok: false,
+      status: 404,
+    };
+  }
+
+  const cleanupResult = await deleteOperationalJobArtifactsForBookingReference(
+    clientResult.data,
+    target.booking_reference,
+  );
+
+  if (!cleanupResult.ok) {
+    return cleanupResult;
+  }
+
   const { data, error } = await clientResult.data
     .from("bookings")
     .delete()
@@ -514,6 +562,37 @@ export async function deleteAdminCompletedSavedBooking(
       booking,
       version: adminSavedBookingDeleteVersion,
     },
+    ok: true,
+  };
+}
+
+async function deleteOperationalJobArtifactsForBookingReference(
+  client: SavedBookingDeleteClient,
+  bookingReference: string,
+): Promise<AdminSavedBookingDeleteResult<null>> {
+  const cleanupTables = [
+    "customer_driver_app_notification_outbox",
+    "driver_live_location_latest_positions",
+    "driver_live_location_audit_events",
+    "driver_ots_photo_proofs",
+    "driver_job_dsp_actual_time_events",
+    "driver_job_status_events",
+    "driver_job_links",
+  ];
+
+  for (const table of cleanupTables) {
+    const { error } = await client
+      .from(table)
+      .delete()
+      .eq("booking_reference", bookingReference);
+
+    if (error) {
+      return safeDatabaseFailure(safeDeleteCleanupError, 500, error);
+    }
+  }
+
+  return {
+    data: null,
     ok: true,
   };
 }

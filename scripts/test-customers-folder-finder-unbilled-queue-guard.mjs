@@ -71,6 +71,13 @@ for (const fragment of [
   "setCustomerFolderFinderSelectedId(\"\");",
   "function updateCustomerFolderFinderSelection(value: string) {",
   "function showAllCustomerFolderFinderRows(pageNumber = 1) {",
+  "const [customerFolderJobViewState, setCustomerFolderJobViewState] =",
+  "const [expandedCustomerFolderJobReference, setExpandedCustomerFolderJobReference] = useState(\"\");",
+  "function resetCustomerFolderJobView(",
+  "async function viewCustomerFolderJobs(",
+  "readRegularCustomerSavedBookingsForTarget(target, \"customer-id\")",
+  "Copy link",
+  "Portal link copied for",
 ]) {
   assertIncludes(customersPage, fragment, `customer folder finder source fragment ${fragment}`);
 }
@@ -96,7 +103,16 @@ for (const fragment of [
   "min-h-8 whitespace-nowrap",
   "paginatedCustomerFolderFinderRows.map((customer)",
   "Search all customer folders, scan 10 at a time",
-  "Dropdown selected ${selectedCustomerFolderFinderRow.customerName}",
+  "Selected customer: ${selectedCustomerFolderFinderRow.customerName}",
+  'data-customer-folder-finder-view-jobs={customer.customerId}',
+  "View jobs",
+  'data-customer-folder-jobs-panel="true"',
+  'data-customer-folder-jobs-count="true"',
+  'data-customer-folder-jobs-feedback="true"',
+  'data-customer-folder-jobs-list="true"',
+  'data-customer-folder-job-row={bookingReference}',
+  'data-customer-folder-job-view-toggle={bookingReference}',
+  'data-customer-folder-job-details={bookingReference}',
 ]) {
   assertIncludes(folderFinderSection, fragment, `customer folder finder UI fragment ${fragment}`);
 }
@@ -107,10 +123,9 @@ for (const fragment of [
   "type RegularCustomerSavedBookingReadTarget = {",
   "type RegularCustomerSavedBookingCloseoutRecord = {",
   "type RegularCustomerSavedBookingBillingReadinessState = {",
-  "const localCustomerFolderSavedBookingTargets",
+  "regularCustomerAccountReadState.accounts.map(customerFolderRowFromSavedAccount)",
   "function savedBookingCloseoutIsBillingReady(",
   "function savedBookingUnbilledRow(",
-  "function getMockUnbilledCustomerRows() {",
   "const [",
   "regularCustomerSavedBookingBillingReadinessState,",
   "setRegularCustomerSavedBookingBillingReadinessState,",
@@ -121,25 +136,25 @@ for (const fragment of [
   "async function readRegularCustomerSavedBookingsForTarget(",
   "async function loadRegularCustomerSavedBookingsForUnbilledQueue(",
   "await loadRegularCustomerSavedBookingsForUnbilledQueue(",
-  "Loading saved bookings for the existing Unbilled Customers queue...",
+  "Loading saved bookings for the Monthly Billing Queue...",
   "async function loadRegularCustomerSavedBookingBillingReadiness(",
   "fetch(`${adminCompletedBookingCloseoutApiPath}?${params.toString()}`",
   'data-regular-customer-saved-billing-readiness-note="true"',
   "const unbilledCustomerRows = useMemo<UnbilledCustomerRow[]>(() => {",
-  "item.billingStatus.trim().toLowerCase().includes(\"unbilled\")",
   "regularCustomerSavedBookingReadState.savedBookings",
   "regularCustomerSavedBookingBillingReadinessState.closeoutsByReference",
   "savedBookingUnbilledRow(",
   "Closeout ready / amount needed",
   "Draft amount not set",
   "Enter the approved customer amount before previewing or issuing.",
-  "const customerId = mockCustomer?.id || savedBookingCustomerId(booking) || reference;",
+  "const customerId = savedBookingCustomerId(booking) || reference;",
   "const selectedUnbilledCustomerRow = useMemo(",
-  "const visibleUnbilledCustomerRows = selectedUnbilledCustomerRow",
+  "const visibleUnbilledCustomerRows =",
+  "selectedMonthlyBillingGroup?.rows ??",
   "const getUnbilledPrepareButtonLabel = (rowKey: string) =>",
   "\"Preparing\"",
   "\"Prepared\"",
-  "function updateSelectedUnbilledCustomerRow(value: string) {",
+  "function updateSelectedMonthlyBillingGroup(value: string) {",
   "const customerInvoicePrepRow = useMemo(",
   "function prepareCustomerInvoiceFromUnbilled(row: UnbilledCustomerRow) {",
   "setPreparingUnbilledCustomerRowKey(row.key);",
@@ -161,11 +176,10 @@ for (const fragment of [
   'data-unbilled-customers-list="true"',
   'data-unbilled-customer-row={row.key}',
   'data-unbilled-customer-prepare-invoice={row.key}',
-  'data-unbilled-customer-open-folder={row.key}',
   'data-unbilled-customers-boundary="true"',
   "Prepare",
-  "Review these before sending invoices so unbilled or statement-needed accounts are not missed.",
-  "All unbilled customers",
+  "Select a customer/month, review the jobs, then prepare the bill in the invoice workbench.",
+  "All customer/month groups",
   "visibleUnbilledCustomerRows.map((row)",
 ]) {
   assertIncludes(unbilledSection, fragment, `unbilled customers UI fragment ${fragment}`);
@@ -178,6 +192,14 @@ for (const duplicateFragment of [
   assertExcludes(unbilledSection, duplicateFragment, "duplicate unbilled customer selector");
 }
 
+for (const removedFinderFragment of [
+  'data-customer-folder-finder-no-folder',
+  ">Pending</",
+  "Portal invite copied for",
+]) {
+  assertExcludes(folderFinderSection, removedFinderFragment, "removed customer finder placeholder/copy wording");
+}
+
 for (const fragment of [
   'data-customer-invoice-prep-panel="true"',
   'ref={customerInvoicePrepPanelRef}',
@@ -187,7 +209,7 @@ for (const fragment of [
   'data-customer-invoice-prep-clear="true"',
   'data-customer-invoice-prep-empty="true"',
   'data-customer-invoice-prep-feedback="true"',
-  "No customer loaded. Use Prepare in Unbilled Customers to focus one invoice job here.",
+  "No customer loaded. Use Prepare monthly bill from the Monthly Billing Queue to load jobs here.",
 ]) {
   assertIncludes(invoiceWorkspaceSection, fragment, `invoice prep handoff UI fragment ${fragment}`);
 }
@@ -209,13 +231,14 @@ for (const forbiddenPattern of [
 for (const phrase of [
   "Customers page now has a visible Customer Folder Finder that searches all loaded customer folders and paginates the compact folder rows 10 per page by default.",
   "The finder uses a visible `All customers` dropdown for direct folder selection; it shows 10 customer folders at a time and keeps numbered page buttons inside the dropdown for larger 200-plus account lists.",
-  "The finder keeps the existing guarded `Load Accounts` control visible as a compact one-line button, with the folder count shown as a small `1-10 of N folders` chip; that same button now refreshes the guarded saved-booking bridge for the existing Unbilled Customers queue without adding a new route/API.",
-  "A new Unbilled Customers checkpoint sits before the invoice workspace so unbilled draft rows and statement-needed account rows are visible before invoice work starts.",
-  "Guarded saved-booking reads now check the existing completed closeout status for those references and bridge only closeout-ready saved bookings into the existing Unbilled Customers queue with `Draft amount not set`.",
-  "Closeout-ready saved-booking rows prefer the matched customer folder slug as the invoice `customerId`, so issued invoices stay visible in the token-scoped customer portal for that folder.",
-  "Each unbilled row has a compact `Prepare` action that changes through `Preparing` to `Prepared`, loads that exact customer/job into the Send Invoice Workbench prep strip, opens the Statements tab, narrows the Outstanding search to that customer, and focuses the next workbench action.",
-  "The finder no longer shows a separate page-size dropdown or separate previous/next buttons; the Unbilled Customers list keeps one dropdown plus a compact scrollable row/table, with the duplicate selected-label wording below the dropdown removed.",
-  "This is a UI handoff into the existing admin monthly billing workflow; it does not add a second invoice engine, create invoice numbers, generate PDFs, send invoices, activate payment/provider sending, write DB rows, change env, activate GPS/live location, billing/payout automation, calendar sync, parser changes, or shims.",
+  "The finder keeps the existing guarded `Load Accounts` control visible as a compact one-line button, with the folder count shown as a small `1-10 of N folders` chip; that same button now refreshes the guarded saved-booking bridge for the Monthly Billing Queue without adding a new route/API.",
+  "Customer rows no longer show a meaningless `Pending` folder placeholder; `View jobs` opens an inline read-only saved-job panel for that exact saved account id.",
+  "The Monthly Billing Queue sits before the invoice workspace so completed closeout-ready jobs are visible before invoice work starts.",
+  "Guarded saved-booking reads now check the existing completed closeout status for those references and bridge only closeout-ready saved bookings into the Monthly Billing Queue with `Draft amount not set`.",
+  "Customer Finder job reads and closeout-ready saved-booking rows keep the real saved customer/account id as the invoice `customerId`; the old mock folder match fallback is removed from this billing queue.",
+  "The Monthly Billing Queue has one customer/month group selector plus one primary `Prepare monthly bill` action that fills the existing Create Invoice workbench for admin review.",
+  "The finder no longer shows noisy selected-dropdown wording; selecting a customer now shows a short `Selected customer` status only.",
+  "This is a UI handoff into the existing admin invoice workflow; it does not add a second invoice engine, create invoice numbers, generate PDFs, send invoices, activate payment/provider sending, write DB rows, change env, activate GPS/live location, billing/payout automation, calendar sync, parser changes, or shims.",
   "Guard coverage lives in `scripts/test-customers-folder-finder-unbilled-queue-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {
   assertIncludes(ledgerSection, phrase, `ledger phrase: ${phrase}`);

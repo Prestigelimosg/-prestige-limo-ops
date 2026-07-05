@@ -1027,9 +1027,10 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customers page now has a visible Customer Folder Finder that searches all loaded customer folders and paginates the compact folder rows 10 per page by default.
 - The finder uses a visible `All customers` dropdown for direct folder selection; it shows 10 customer folders at a time and keeps numbered page buttons inside the dropdown for larger 200-plus account lists.
 - The finder keeps the existing guarded `Load Accounts` control visible as a compact one-line button, with the folder count shown as a small `1-10 of N folders` chip; that same button now refreshes the guarded saved-booking bridge for the Monthly Billing Queue without adding a new route/API.
+- Customer rows no longer show a meaningless `Pending` folder placeholder; `View jobs` opens an inline read-only saved-job panel for that exact saved account id.
 - The Monthly Billing Queue sits before the invoice workspace so completed closeout-ready jobs are visible before invoice work starts.
 - Guarded saved-booking reads now check the existing completed closeout status for those references and bridge only closeout-ready saved bookings into the Monthly Billing Queue with `Draft amount not set`.
-- Closeout-ready saved-booking rows keep the real saved customer/account id as the invoice `customerId`; the old mock folder match fallback is removed from this billing queue.
+- Customer Finder job reads and closeout-ready saved-booking rows keep the real saved customer/account id as the invoice `customerId`; the old mock folder match fallback is removed from this billing queue.
 - The Monthly Billing Queue has one customer/month group selector plus one primary `Prepare monthly bill` action that fills the existing Create Invoice workbench for admin review.
 - The finder no longer shows noisy selected-dropdown wording; selecting a customer now shows a short `Selected customer` status only.
 - This is a UI handoff into the existing admin invoice workflow; it does not add a second invoice engine, create invoice numbers, generate PDFs, send invoices, activate payment/provider sending, write DB rows, change env, activate GPS/live location, billing/payout automation, calendar sync, parser changes, or shims.

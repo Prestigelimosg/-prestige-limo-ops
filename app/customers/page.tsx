@@ -63,6 +63,8 @@ type RegularCustomerSavedBookingReadTarget = {
   customerName: string;
 };
 
+type RegularCustomerSavedBookingReadMode = "account-or-id" | "customer-id";
+
 const regularCustomerRouteTypeOptions = [
   "Airport Arrival",
   "Airport Departure",
@@ -523,6 +525,11 @@ type RegularCustomerSavedBookingReadState = {
     returned_count?: number | null;
   } | null;
   tone: RegularCustomerBookingFeedbackTone;
+};
+
+type CustomerFolderJobViewState = RegularCustomerSavedBookingReadState & {
+  customerId: string;
+  customerName: string;
 };
 
 type RegularCustomerSavedBookingBillingReadinessState = {
@@ -1074,6 +1081,25 @@ function savedBookingDateLabel(booking: RegularCustomerSavedBookingReadRecord) {
   return String(booking.booking_month ?? "").trim() || "Date TBC";
 }
 
+function savedBookingDisplayText(value: string | null | undefined, fallback = "Not available") {
+  const cleaned = String(value ?? "").trim();
+
+  return cleaned || fallback;
+}
+
+function savedBookingCountLabel(count: number, noun: string) {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+function savedBookingStatusLabel(booking: RegularCustomerSavedBookingReadRecord) {
+  return (
+    [booking.admin_status, booking.customer_status]
+      .map((value) => String(value ?? "").trim())
+      .filter(Boolean)
+      .join(" / ") || "Status unavailable"
+  );
+}
+
 function savedBookingUnbilledRow(
   booking: RegularCustomerSavedBookingReadRecord,
   closeout: RegularCustomerSavedBookingCloseoutRecord | undefined,
@@ -1594,6 +1620,17 @@ export default function MockCustomerDashboardPage() {
       summary: null,
       tone: "info",
     });
+  const [customerFolderJobViewState, setCustomerFolderJobViewState] =
+    useState<CustomerFolderJobViewState>({
+      customerId: "",
+      customerName: "",
+      message: "Click View jobs on a customer row to read that exact saved account's jobs.",
+      savedBookings: [],
+      status: "idle",
+      summary: null,
+      tone: "info",
+    });
+  const [expandedCustomerFolderJobReference, setExpandedCustomerFolderJobReference] = useState("");
   const [
     regularCustomerSavedBookingBillingReadinessState,
     setRegularCustomerSavedBookingBillingReadinessState,
@@ -2593,12 +2630,19 @@ export default function MockCustomerDashboardPage() {
 
   async function readRegularCustomerSavedBookingsForTarget(
     target: RegularCustomerSavedBookingReadTarget,
+    mode: RegularCustomerSavedBookingReadMode = "account-or-id",
   ) {
     const params = new URLSearchParams({
-      customer_account: target.customerName,
-      customer_id: target.customerId,
       limit: "10",
     });
+
+    if (mode === "customer-id" && target.customerId) {
+      params.set("customer_id", target.customerId);
+    } else {
+      params.set("customer_account", target.customerName);
+      params.set("customer_id", target.customerId);
+    }
+
     const response = await fetch(`${adminCustomerSavedBookingsApiPath}?${params.toString()}`, {
       headers: {
         "x-prestige-admin-purpose": "admin-booking-persistence",
@@ -2661,7 +2705,7 @@ export default function MockCustomerDashboardPage() {
         try {
           return {
             ok: true,
-            ...(await readRegularCustomerSavedBookingsForTarget(target)),
+            ...(await readRegularCustomerSavedBookingsForTarget(target, "customer-id")),
           };
         } catch (error) {
           return {
@@ -2881,11 +2925,33 @@ export default function MockCustomerDashboardPage() {
     }
   }
 
+  function resetCustomerFolderJobView(message = "Click View jobs on a customer row to read that exact saved account's jobs.") {
+    setCustomerFolderJobViewState({
+      customerId: "",
+      customerName: "",
+      message,
+      savedBookings: [],
+      status: "idle",
+      summary: null,
+      tone: "info",
+    });
+    setExpandedCustomerFolderJobReference("");
+  }
+
+  function scrollCustomerFolderJobsPanelIntoView() {
+    window.setTimeout(() => {
+      document
+        .querySelector<HTMLElement>("[data-customer-folder-jobs-panel='true']")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
+  }
+
   function updateCustomerFolderFinderSearch(value: string) {
     setCustomerFolderFinderSelectedId("");
     setSelectedMonthlyBillingGroupKey("");
     setSelectedUnbilledCustomerRowKey("");
     setCustomerFolderFinderDropdownOpen(false);
+    resetCustomerFolderJobView();
     setSearchTerm(value);
     setCustomerFolderFinderPage(1);
   }
@@ -2895,6 +2961,7 @@ export default function MockCustomerDashboardPage() {
     setSelectedMonthlyBillingGroupKey("");
     setSelectedUnbilledCustomerRowKey("");
     setCustomerFolderFinderDropdownOpen(false);
+    resetCustomerFolderJobView();
     setSearchTerm("");
     setCustomerFolderFinderPage(1);
   }
@@ -2903,15 +2970,72 @@ export default function MockCustomerDashboardPage() {
     setCustomerFolderFinderSelectedId("");
     setSelectedMonthlyBillingGroupKey("");
     setSelectedUnbilledCustomerRowKey("");
+    resetCustomerFolderJobView();
     setSearchTerm("");
     setCustomerFolderFinderPage(pageNumber);
+  }
+
+  async function viewCustomerFolderJobs(customer: (typeof customerFolderIndexRows)[number]) {
+    setCustomerFolderFinderSelectedId(customer.customerId);
+    setSelectedMonthlyBillingGroupKey("");
+    setSelectedUnbilledCustomerRowKey("");
+    setCustomerFolderFinderDropdownOpen(false);
+    setSearchTerm("");
+    setCustomerFolderFinderPage(1);
+    setExpandedCustomerFolderJobReference("");
+
+    setCustomerFolderJobViewState({
+      customerId: customer.customerId,
+      customerName: customer.customerName,
+      message: `Loading saved jobs for ${customer.customerName} by exact account ID...`,
+      savedBookings: [],
+      status: "loading",
+      summary: null,
+      tone: "info",
+    });
+    scrollCustomerFolderJobsPanelIntoView();
+
+    try {
+      const result = await readRegularCustomerSavedBookingsForTarget(
+        {
+          customerId: customer.customerId,
+          customerName: customer.customerName,
+        },
+        "customer-id",
+      );
+      const savedBookings = result.savedBookings;
+      const returnedCount = Number(result.summary?.returned_count ?? savedBookings.length);
+
+      setCustomerFolderJobViewState({
+        customerId: customer.customerId,
+        customerName: customer.customerName,
+        message:
+          returnedCount > 0
+            ? `Loaded ${savedBookingCountLabel(returnedCount, "saved job")} for ${customer.customerName}.`
+            : `No saved jobs returned for ${customer.customerName}.`,
+        savedBookings,
+        status: "loaded",
+        summary: result.summary,
+        tone: returnedCount > 0 ? "success" : "info",
+      });
+    } catch (error) {
+      setCustomerFolderJobViewState({
+        customerId: customer.customerId,
+        customerName: customer.customerName,
+        message: customerAdminReadFailureMessage(`Saved job read for ${customer.customerName}`, error),
+        savedBookings: [],
+        status: "error",
+        summary: null,
+        tone: "error",
+      });
+    }
   }
 
   function customerPortalAccessButtonLabel(customerId: string) {
     const status = customerPortalAccessCopyStates[customerId];
 
     if (status === "copying") {
-      return "Inviting";
+      return "Copying";
     }
 
     if (status === "copied") {
@@ -2922,7 +3046,7 @@ export default function MockCustomerDashboardPage() {
       return "Failed";
     }
 
-    return "Invite";
+    return "Copy link";
   }
 
   function customerPortalRevokeButtonLabel(customerId: string) {
@@ -2968,7 +3092,7 @@ export default function MockCustomerDashboardPage() {
       [customerPortalCopyStateKey]: "copying",
     }));
     setCustomerPortalAccessFeedback({
-      message: `Preparing portal invite for ${customer.customerName}...`,
+      message: `Preparing portal link for ${customer.customerName}...`,
       tone: "info",
     });
 
@@ -2999,7 +3123,7 @@ export default function MockCustomerDashboardPage() {
         [customerPortalCopyStateKey]: "copied",
       }));
       setCustomerPortalAccessFeedback({
-        message: `Portal invite copied for ${customer.customerName}. Access stays active until revoked; send the copied link manually through an approved channel.`,
+        message: `Portal link copied for ${customer.customerName}. Access stays active until revoked; send the copied link manually through an approved channel.`,
         tone: "success",
       });
     } catch {
@@ -3009,7 +3133,7 @@ export default function MockCustomerDashboardPage() {
       }));
       setCustomerPortalAccessFeedback({
         message:
-          "Customer portal invite was not copied. Check the customer portal access account before sharing.",
+          "Customer portal link was not copied. Check the customer portal access account before sharing.",
         tone: "error",
       });
     }
@@ -5315,14 +5439,15 @@ export default function MockCustomerDashboardPage() {
                             >
                               Open
                             </Link>
-                          ) : (
-                            <span
-                              className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-center text-xs font-bold text-slate-600"
-                              data-customer-folder-finder-no-folder={customer.customerId}
-                            >
-                              Pending
-                            </span>
-                          )}
+                          ) : null}
+                          <button
+                            className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-center text-xs font-bold text-white transition hover:bg-slate-700"
+                            data-customer-folder-finder-view-jobs={customer.customerId}
+                            onClick={() => viewCustomerFolderJobs(customer)}
+                            type="button"
+                          >
+                            View jobs
+                          </button>
                           <button
                             className={`inline-flex min-h-9 items-center justify-center rounded-md border px-3 text-center text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-70 ${
                               customerPortalAccessCopyStates[customer.customerId] === "copied"
@@ -5368,6 +5493,122 @@ export default function MockCustomerDashboardPage() {
                 </div>
               )}
             </div>
+
+            {customerFolderJobViewState.status !== "idle" ? (
+              <section
+                className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3"
+                data-customer-folder-jobs-panel="true"
+              >
+                <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0">
+                    <h3 className="text-base font-bold text-slate-950">
+                      Jobs for {customerFolderJobViewState.customerName || "selected customer"}
+                    </h3>
+                    <p className="mt-0.5 text-xs font-semibold text-slate-600">
+                      Account ID: {customerFolderJobViewState.customerId || "Not selected"}
+                    </p>
+                  </div>
+                  <p
+                    className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-700"
+                    data-customer-folder-jobs-count="true"
+                  >
+                    {savedBookingCountLabel(
+                      Number(
+                        customerFolderJobViewState.summary?.returned_count ??
+                          customerFolderJobViewState.savedBookings.length,
+                      ),
+                      "job",
+                    )}
+                  </p>
+                </div>
+
+                <p
+                  aria-live="polite"
+                  className={`mt-3 rounded-md border px-3 py-2 text-sm font-semibold leading-5 ${regularCustomerBookingFeedbackClass(
+                    customerFolderJobViewState.tone,
+                  )}`}
+                  data-customer-folder-jobs-feedback="true"
+                >
+                  {customerFolderJobViewState.message}
+                </p>
+
+                {customerFolderJobViewState.status === "loaded" &&
+                customerFolderJobViewState.savedBookings.length > 0 ? (
+                  <div className="mt-3 overflow-hidden rounded-md border border-slate-200 bg-white">
+                    <div
+                      aria-hidden="true"
+                      className="hidden grid-cols-[minmax(10rem,1fr)_minmax(9rem,1fr)_minmax(8rem,0.8fr)_6rem] gap-3 border-b border-slate-200 bg-white px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 md:grid"
+                    >
+                      <span>Booking</span>
+                      <span>Pickup / service</span>
+                      <span>Status</span>
+                      <span className="text-right">Action</span>
+                    </div>
+                    <div className="divide-y divide-slate-200" data-customer-folder-jobs-list="true">
+                      {customerFolderJobViewState.savedBookings.map((booking) => {
+                        const bookingReference =
+                          savedBookingReference(booking) ||
+                          `${booking.customer_id || "customer"}-${booking.pickup_at || "job"}`;
+                        const isExpanded = expandedCustomerFolderJobReference === bookingReference;
+
+                        return (
+                          <article
+                            className="grid gap-2 px-3 py-2 text-sm leading-5 md:grid-cols-[minmax(10rem,1fr)_minmax(9rem,1fr)_minmax(8rem,0.8fr)_6rem] md:items-center md:gap-3"
+                            data-customer-folder-job-row={bookingReference}
+                            key={bookingReference}
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate font-bold text-slate-950">
+                                {savedBookingDisplayText(booking.booking_reference, "Reference unavailable")}
+                              </p>
+                              <p className="mt-0.5 truncate text-xs font-semibold text-slate-500">
+                                Account: {savedBookingDisplayText(booking.customer_id, "Not linked")}
+                              </p>
+                            </div>
+                            <p className="min-w-0 text-xs font-semibold text-slate-600">
+                              <span className="block truncate">{savedBookingDateLabel(booking)}</span>
+                              <span className="block truncate">
+                                {savedBookingDisplayText(booking.service_type, "Service not set")}
+                              </span>
+                            </p>
+                            <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
+                              {savedBookingStatusLabel(booking)}
+                            </p>
+                            <div className="flex justify-start md:justify-end">
+                              <button
+                                className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-xs font-bold text-slate-800 transition hover:border-slate-700"
+                                data-customer-folder-job-view-toggle={bookingReference}
+                                onClick={() =>
+                                  setExpandedCustomerFolderJobReference(isExpanded ? "" : bookingReference)
+                                }
+                                type="button"
+                              >
+                                {isExpanded ? "Hide" : "View"}
+                              </button>
+                            </div>
+                            {isExpanded ? (
+                              <div
+                                className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold leading-5 text-slate-700 md:col-span-4"
+                                data-customer-folder-job-details={bookingReference}
+                              >
+                                <p>Reference: {savedBookingDisplayText(booking.booking_reference)}</p>
+                                <p>Pickup: {savedBookingDisplayText(booking.pickup_at, "Not available")}</p>
+                                <p>Service: {savedBookingDisplayText(booking.service_type, "Not available")}</p>
+                                <p>Status: {savedBookingStatusLabel(booking)}</p>
+                                <p>
+                                  Billing account:{" "}
+                                  {savedBookingDisplayText(booking.customer_account, "Not available")}
+                                </p>
+                              </div>
+                            ) : null}
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+              </section>
+            ) : null}
           </div>
         </section>
 

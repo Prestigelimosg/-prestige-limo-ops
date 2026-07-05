@@ -4127,7 +4127,6 @@ async function runChromeTest() {
           ["Book Request", "/book"],
           ["My Bookings", "/my-bookings"],
           ["Customers", "/customers"],
-          ["Token Demo", "/driver-job/mock-driver-job-valid-a"],
         ],
         `${viewport.label}: expected compact admin access links`,
       );
@@ -4135,6 +4134,13 @@ async function runChromeTest() {
         adminHubState.links.some((link) => link.text === "Driver Demo" || link.href === "/driver-job-demo"),
         false,
         `${viewport.label}: expected Driver Demo to stay out of the normal admin access hub`,
+      );
+      assert.equal(
+        adminHubState.links.some(
+          (link) => link.text === "Token Demo" || link.href === "/driver-job/mock-driver-job-valid-a",
+        ),
+        false,
+        `${viewport.label}: expected Token Demo to stay out of the normal admin access hub`,
       );
       assert.equal(
         adminHubState.height <= (viewport.width < 640 ? 190 : 120),

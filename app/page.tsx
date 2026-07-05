@@ -2371,7 +2371,6 @@ const adminAccessLinks = [
   { href: "/book", label: "Book Request" },
   { href: "/my-bookings", label: "My Bookings" },
   { href: "/customers", label: "Customers" },
-  { href: "/driver-job/mock-driver-job-valid-a", label: "Token Demo" },
 ] as const;
 
 type AiDraftBooking = AiParseResult["bookings"][number];

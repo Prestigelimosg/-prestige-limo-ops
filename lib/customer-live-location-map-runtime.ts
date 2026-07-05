@@ -4,6 +4,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import {
   customerLiveLocationMapScaffoldVersion,
+  readCustomerLiveLocationMapSessionToken,
   readCustomerLiveLocationMapGateState,
 } from "./customer-live-location-map-scaffold";
 import { resolveExactTwoCustomerRuntimeSessionMap } from "./customer-runtime-session-map";
@@ -272,6 +273,8 @@ function runtimeClient(env: CustomerLiveLocationMapEnv) {
 }
 
 function customerHeaders(request: Request) {
+  const sessionToken = readCustomerLiveLocationMapSessionToken(request);
+
   return {
     accountReference:
       safeReference(request.headers.get("x-prestige-customer-account-reference")) ||
@@ -280,9 +283,9 @@ function customerHeaders(request: Request) {
       new URL(request.url).searchParams.get("booking_reference"),
     ),
     sessionPresent: Boolean(
-      request.headers.get("x-prestige-customer-session-token")?.trim(),
+      sessionToken,
     ),
-    sessionToken: request.headers.get("x-prestige-customer-session-token")?.trim() || "",
+    sessionToken,
   };
 }
 

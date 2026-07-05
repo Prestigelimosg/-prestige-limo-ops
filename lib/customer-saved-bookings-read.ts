@@ -41,6 +41,12 @@ export type CustomerSavedBookingRecord = {
   booking_month: string | null;
   booking_reference: string;
   created_at: string | null;
+  customer_driver_details: {
+    car_plate: string | null;
+    car_type: string | null;
+    driver_contact: string | null;
+    driver_name: string | null;
+  } | null;
   customer_facing_status: string;
   dropoff_location: string | null;
   passenger_name: string | null;
@@ -83,9 +89,9 @@ const maxSafeTextLength = 500;
 const customerAccountSelect =
   "customer_account_reference, account_status";
 const customerSavedBookingsCurrentSelect =
-  "booking_reference, service_type, pickup_at, pickup_location, dropoff_location, passenger_name, customer_facing_status, created_at, updated_at";
+  "booking_reference, service_type, pickup_at, pickup_location, dropoff_location, passenger_name, customer_facing_status, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, created_at, updated_at";
 const customerSavedBookingsFoundationSelect =
-  "booking_reference, route_type, pickup_datetime, pickup_location, dropoff_location, customer_display_name, customer_facing_status, created_at, updated_at";
+  "booking_reference, route_type, pickup_datetime, pickup_location, dropoff_location, customer_display_name, customer_facing_status, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, created_at, updated_at";
 const customerSavedBookingsAuthRequiredError =
   "Customer saved bookings read requires secure customer account access before saved bookings can be read.";
 const customerSavedBookingsDisabledError =
@@ -703,6 +709,19 @@ function toCustomerSavedBookingRecord(row: UnknownRecord): CustomerSavedBookingR
   const pickupAt = safeDateTextFromDb(row.pickup_at) || safeDateTextFromDb(row.pickup_datetime);
   const serviceType = safeTextFromDb(row.service_type) || safeTextFromDb(row.route_type);
   const passengerName = safeTextFromDb(row.passenger_name) || safeTextFromDb(row.customer_display_name);
+  const driverName = safeTextFromDb(row.driver_name, 160);
+  const driverContact = safeTextFromDb(row.driver_contact, 80);
+  const carPlate = safeTextFromDb(row.driver_plate_number, 80);
+  const carType = safeTextFromDb(row.vehicle_type_or_category, 120);
+  const customerDriverDetails =
+    driverName || driverContact || carPlate || carType
+      ? {
+          car_plate: carPlate,
+          car_type: carType,
+          driver_contact: driverContact,
+          driver_name: driverName,
+        }
+      : null;
 
   if (!bookingReference) {
     return null;
@@ -712,6 +731,7 @@ function toCustomerSavedBookingRecord(row: UnknownRecord): CustomerSavedBookingR
     booking_month: validBookingMonth(pickupAt),
     booking_reference: bookingReference,
     created_at: safeDateTextFromDb(row.created_at),
+    customer_driver_details: customerDriverDetails,
     customer_facing_status: publicSafeStatus(row.customer_facing_status),
     dropoff_location: safeTextFromDb(row.dropoff_location),
     passenger_name: passengerName,

@@ -25,6 +25,7 @@ const currentCustomerDisplayStatuses = [
 ];
 
 const allowedPortalBookingFields = [
+  "driverDetails",
   "dropoffLocation",
   "flightNumber",
   "id",
@@ -41,6 +42,7 @@ const allowedCurrentApiRecordFields = [
   "booking_month",
   "booking_reference",
   "created_at",
+  "customer_driver_details",
   "customer_facing_status",
   "dropoff_location",
   "passenger_name",
@@ -154,25 +156,35 @@ const ledgerSection = sectionBetween(ledger, "### Customer Driver Status Visibil
 
 for (const fragment of [
   "# Customer Driver Status Visibility Contract",
-  "Customer surfaces must not receive raw driver reporting, raw driver issue reports, admin exception state, dispatcher notes, replacement-driver review, live location state, OTS photo/proof state, or internal closeout notes.",
-  "Current customer saved-booking display remains generic and customer-safe.",
+  "Customer surfaces must not receive raw driver reporting, raw driver issue reports, admin exception state, dispatcher notes, replacement-driver review, raw live location state, OTS photo/proof state, or internal closeout notes.",
+  "Current customer saved-booking list display remains generic and customer-safe.",
   "These are customer-facing booking states, not raw driver workflow states.",
-  "Owner direction: do not mix future driver-progress display into `/my-bookings` or the Customer Portal saved-booking list.",
-  "The current customer saved-booking record may use `customer_facing_status` only.",
-  "This current path is referenced only to prove it remains generic and protected. It is not the approved placement for future driver-progress display.",
-  "Future customer driver-progress display is not approved by this contract.",
+  "Owner direction: keep the Customer Portal saved-booking list generic, but allow the expanded booking detail view to show customer-safe assigned-driver details after staff confirmation.",
+  "The current customer saved-booking record may use `customer_facing_status` and optional `customer_driver_details` only.",
+  "This current path is referenced to prove the booking list remains generic and protected while the expanded detail card may show only customer-safe assigned-driver details.",
+  "The current approved `/my-bookings` expanded detail card may show:",
+  "- driver name",
+  "- driver contact",
+  "- car plate",
+  "- car type",
+  "- pickup date/time",
+  "- route",
+  "The card appears from the customer saved-bookings projection only after safe assigned-driver fields exist.",
+  "If those fields are not present, `/my-bookings` shows only the normal booking details and no empty Driver Details card.",
+  "Future customer driver-progress display beyond the details card is not approved by this contract.",
   "Those labels must be derived through a customer-safe projection.",
   "Future customer driver-progress runtime must be separately approved as its own customer-safe status surface or handoff.",
-  "Future customer live-location alert/link direction is a separate handoff, not Customer Portal saved-booking list content.",
-  "For eligible DEP, TRF, and hourly jobs, the target customer alert/link window is 30 minutes before pickup only after owner approval of customer live links.",
+  "Customer live-location viewing is a gated detail-card check, not Customer Portal saved-booking list content.",
+  "For eligible DEP, TRF, and hourly jobs, the customer may receive a map link only after the driver is on the way and Prestige opens customer viewing.",
   "Arrival/MNG customer live location stays disabled unless separately approved.",
   "Customer-visible live location must auto-disable when the driver presses POB or POB is marked; any backend cleanup grace must not leave customer tracking visible after POB.",
-  "This contract does not activate live-location capture, access, route, provider send, notification send, map provider, storage, DB writes, timing automation, or customer link delivery.",
+  "raw coordinates must not be rendered in `/my-bookings`.",
   "No customer surface may show raw issue values",
   "Customer public surfaces may show only customer-safe booking status/progress summaries.",
-  "keep `/my-bookings` and the Customer Portal saved-booking list generic;",
+  "keep the Customer Portal saved-booking list generic;",
+  "keep the current assigned-driver detail card limited to customer-safe driver name, contact, car plate, car type, pickup time, route, and gated map-link check;",
   "use a separately approved customer-safe driver-progress surface or handoff instead of mixing driver progress into the portal by default;",
-  "route customer live-location progress, if approved, through a separate secure time-limited link that opens 30 minutes before pickup for eligible DEP, TRF, and hourly jobs only;",
+  "route customer live-location viewing through the existing gated customer map read and never render raw coordinates in `/my-bookings`;",
   "auto-disable customer-visible live location when the driver presses POB or POB is marked;",
   "keep Arrival/MNG customer live location disabled unless separately approved;",
   "preserve `/my-bookings` adapter allowlists and forbidden-field filtering;",
@@ -307,8 +319,8 @@ for (const forbiddenPortalPattern of [
 }
 
 for (const fragment of [
-  "`/my-bookings` saved-booking rows must render only customer-safe status, passenger, pickup/drop-off, service, vehicle, date/time, flight, and optional request-note display fields.",
-  "Customer saved-booking API and adapter output must stay limited to the approved saved-booking record fields and must exclude customer price, driver payout, PayNow payout, billing, invoice/payment/PDF, internal finance/admin notes, parser/debug, secrets/tokens, provider/send, notification payloads, live location/photo, and mock QA/dev archive fields.",
+  "`/my-bookings` saved-booking rows must render only customer-safe status, passenger, pickup/drop-off, service, vehicle, date/time, flight, and optional request-note display fields; the expanded detail view may additionally render a customer-safe assigned-driver details card and gated customer map-link check only when safe driver details are present.",
+  "Customer saved-booking API and adapter output must stay limited to the approved saved-booking record fields plus optional `customer_driver_details` with driver name, driver contact, car plate, and car type only; it must exclude customer price, driver payout, PayNow payout, billing, invoice/payment/PDF, internal finance/admin notes, parser/debug, secrets/tokens, provider/send, notification payloads, raw live location/photo/proof, and mock QA/dev archive fields.",
   "Public customer portal saved-booking surface guard passed",
 ]) {
   assertIncludes(portalSurfaceGuard, fragment, `public customer portal guard coordination ${fragment}`);
@@ -316,7 +328,7 @@ for (const fragment of [
 
 for (const fragment of [
   "[Customer Driver Status Visibility Contract](customer-driver-status-visibility-contract.md)",
-  "customer-safe visibility boundary for any future 30-minute customer live-location alert/link handoff while keeping Customer Portal saved-bookings generic",
+  "customer-safe visibility boundary for the `/my-bookings` expanded assigned-driver details card, shown only when safe driver details are present, and gated customer map-link check while keeping Customer Portal saved-booking lists generic",
   "with POB auto-disable and without exposing raw driver statuses, issue reports, admin exceptions, replacement review, raw live-location state, photo/proof, finance, payout, billing, or payment data",
 ]) {
   assertIncludes(docsIndex, fragment, `docs index customer driver status link ${fragment}`);
@@ -326,9 +338,11 @@ for (const fragment of [
   "Customer Driver Status Visibility Contract Lock",
   "`docs/customer-driver-status-visibility-contract.md`",
   "`scripts/test-customer-driver-status-visibility-contract.mjs`",
-  "Future customer live-location alert/link direction is a separate handoff, not Customer Portal saved-booking list content; for eligible DEP, TRF, and hourly jobs, the target customer alert/link window is 30 minutes before pickup only after owner approval of customer live links.",
+  "This bounded lock approves only the `/my-bookings` expanded assigned-driver details card when safe driver details are present, optional `customer_driver_details` projection, and existing gated customer map-link read; it does not approve new UI sectors, endpoint migration, env changes, deployment, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/calendar activation, raw GPS exposure, customer message sending, or new shims.",
+  "Owner direction is locked: keep the Customer Portal saved-booking list generic, but allow the expanded booking detail view to show a customer-safe assigned-driver details card only after staff confirmation produces safe assigned-driver details.",
+  "Customer live-location viewing is a gated detail-card check, not Customer Portal saved-booking list content; for eligible DEP, TRF, and hourly jobs, the map link may appear only after the driver is on the way and Prestige opens customer viewing.",
   "Arrival/MNG customer live location stays disabled unless separately approved, and customer-visible live location must auto-disable when the driver presses POB or POB is marked; any backend cleanup grace must not leave customer tracking visible after POB.",
-  "No runtime implementation, UI/API behavior change, UI sector, UI button, endpoint migration, env change, deployment, DB read/write, migration, provider/send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, parser change, Save Booking change, `/api/admin-saved-bookings` change, or new shim is approved by this lock.",
+  "No additional runtime implementation, UI sector, endpoint migration, env change, deployment, DB write, migration, provider/send, payment/PDF/pricing/payout/auth/calendar activation, parser change, Save Booking change, `/api/admin-saved-bookings` change, or new shim is approved by this lock.",
 ]) {
   assertIncludes(ledgerSection, fragment, `ledger customer driver status visibility fragment ${fragment}`);
 }

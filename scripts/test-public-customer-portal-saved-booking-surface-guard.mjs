@@ -12,6 +12,7 @@ const portalChangeRequestAdapterPath = "lib/customer-portal-booking-change-reque
 const savedBookingsReadPath = "lib/customer-saved-bookings-read.ts";
 
 const allowedPortalBookingFields = [
+  "driverDetails",
   "dropoffLocation",
   "flightNumber",
   "id",
@@ -28,6 +29,7 @@ const allowedApiRecordFields = [
   "booking_month",
   "booking_reference",
   "created_at",
+  "customer_driver_details",
   "customer_facing_status",
   "dropoff_location",
   "passenger_name",
@@ -49,6 +51,12 @@ const safeDetailLabels = [
   "Vehicle type",
   "Flight number",
   "Special request / note",
+  "Driver Details",
+  "Driver name",
+  "Driver contact",
+  "Car plate",
+  "Car type",
+  "Route",
 ];
 
 const unsafePortalSurfacePattern =
@@ -92,6 +100,16 @@ const contractChecks = [
       "customer portal saved bookings adapter contract",
       "The customer portal saved-bookings fetch must not attach session-token, authorization, or cookie headers.",
       "Public API client caller boundary guard passed",
+    ],
+    stripTypes: false,
+  },
+  {
+    label: "customer portal driver tracking adapter contract",
+    script: "scripts/test-customer-portal-driver-tracking-adapter.mjs",
+    requiredFragments: [
+      "Customer portal driver tracking adapter contract passed.",
+      "customer-live-location-map-read",
+      "Live location is available only after driver OTW and admin approval.",
     ],
     stripTypes: false,
   },
@@ -198,12 +216,12 @@ const ledgerSection = sectionBetween(
 for (const phrase of [
   "Public customer portal saved-booking display/action surfaces are guarded across `/my-bookings`, `lib/customer-portal-saved-bookings-adapter.ts`, `lib/customer-portal-booking-change-request-adapter.ts`, and `lib/customer-saved-bookings-read.ts`.",
   "This guard allows only the approved customer booking change-request review write; it does not approve env changes, deployment by CLI, live provider sends, migrations, direct customer booking mutation, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/GPS activation, UI sectors, or new shims.",
-  "`/my-bookings` saved-booking rows must render only customer-safe status, passenger, pickup/drop-off, service, vehicle, date/time, flight, and optional request-note display fields.",
+  "`/my-bookings` saved-booking rows must render only customer-safe status, passenger, pickup/drop-off, service, vehicle, date/time, flight, and optional request-note display fields; the expanded detail view may additionally render a customer-safe assigned-driver details card and gated customer map-link check only when safe driver details are present.",
   "`/my-bookings` saved-booking actions must stay limited to disabled PDF, customer-safe edit/cancel review request form, and local detail expansion.",
   "The customer PDF control must remain disabled/no-op and must not create files, links, downloads, invoices, payment records, or provider sends.",
   "Edit and cancel controls may submit only through `lib/customer-portal-booking-change-request-adapter.ts` to `/api/customer-booking-change-requests`; they must not mutate bookings, update calendar, or change `/api/customer-saved-bookings`.",
   "The customer portal saved-bookings adapter must keep using the guarded read endpoint with `cache: \"no-store\"`, `credentials: \"same-origin\"`, and the customer saved-bookings purpose header without manual Cookie, Authorization, customer session-token, or admin headers.",
-  "Customer saved-booking API and adapter output must stay limited to the approved saved-booking record fields and must exclude customer price, driver payout, PayNow payout, billing, invoice/payment/PDF, internal finance/admin notes, parser/debug, secrets/tokens, provider/send, notification payloads, live location/photo, and mock QA/dev archive fields.",
+  "Customer saved-booking API and adapter output must stay limited to the approved saved-booking record fields plus optional `customer_driver_details` with driver name, driver contact, car plate, and car type only; it must exclude customer price, driver payout, PayNow payout, billing, invoice/payment/PDF, internal finance/admin notes, parser/debug, secrets/tokens, provider/send, notification payloads, raw live location/photo/proof, and mock QA/dev archive fields.",
   "This guard coordinates the customer portal saved-bookings adapter contract, customer saved-bookings API contract, public API response privacy guard, and public API client caller guard in the preactivation suite.",
   "No Save Booking + CRM change.",
   "No `/api/admin-saved-bookings` change.",
@@ -318,6 +336,16 @@ for (const fragment of [
 }
 
 const detailBlock = blockBetween(portalPage, 'data-customer-portal-detail={expandedBooking.id}', "</section>");
+assertIncludes(
+  detailBlock,
+  "driverDetails ? (",
+  "/my-bookings Driver Details card must render only after customer-safe driver details are present",
+);
+assertExcludes(
+  detailBlock,
+  /Driver details will appear here after staff confirms the assigned driver\./,
+  "/my-bookings Driver Details card must not render an empty placeholder card",
+);
 for (const label of safeDetailLabels) {
   assertIncludes(detailBlock, label, `/my-bookings safe detail label ${label}`);
 }
@@ -330,6 +358,12 @@ for (const fragment of [
   "expandedBooking.vehicleType",
   'expandedBooking.flightNumber || "Not provided"',
   'expandedBooking.specialRequest || "None provided"',
+  "driverDetails.driverName",
+  "driverDetails.driverContact",
+  "driverDetails.carPlate",
+  "driverDetails.carType",
+  "checkCustomerDriverTracking(expandedBooking)",
+  "driverTracking.status === \"available\"",
 ]) {
   assertIncludes(detailBlock, fragment, `/my-bookings safe detail binding ${fragment}`);
 }
@@ -337,7 +371,7 @@ for (const fragment of [
 const bookingResultsBlock = blockBetween(
   portalPage,
   'aria-labelledby="booking-search-title"',
-  "{expandedBooking ? (",
+  "{expandedBooking",
 );
 const savedBookingVisibleSource = [
   bookingResultsBlock.replace(pdfButtonBlock, ""),
@@ -377,6 +411,7 @@ for (const fragment of [
   "safeText(record.passenger_name) || \"Passenger to confirm\"",
   "safeText(record.pickup_location) || \"Pickup to confirm\"",
   "safeText(record.service_type, 120) || \"Service to confirm\"",
+  "toCustomerPortalDriverDetails(record.customer_driver_details)",
 ]) {
   assertIncludes(portalAdapter, fragment, `customer portal adapter safe behavior ${fragment}`);
 }
@@ -409,12 +444,12 @@ assertExcludes(
 assertSameList(extractSetItems(savedBookingsRead, "allowedQueryParams"), allowedQueryParams, "customer saved bookings query params");
 assertIncludes(
   savedBookingsRead,
-  "booking_reference, service_type, pickup_at, pickup_location, dropoff_location, passenger_name, customer_facing_status, created_at, updated_at",
+  "booking_reference, service_type, pickup_at, pickup_location, dropoff_location, passenger_name, customer_facing_status, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, created_at, updated_at",
   "customer saved bookings current-schema safe DB select",
 );
 assertIncludes(
   savedBookingsRead,
-  "booking_reference, route_type, pickup_datetime, pickup_location, dropoff_location, customer_display_name, customer_facing_status, created_at, updated_at",
+  "booking_reference, route_type, pickup_datetime, pickup_location, dropoff_location, customer_display_name, customer_facing_status, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, created_at, updated_at",
   "customer saved bookings foundation-schema safe DB select",
 );
 assertIncludes(savedBookingsRead, 'refererUrl.pathname !== "/my-bookings"', "customer saved bookings my-bookings referer boundary");

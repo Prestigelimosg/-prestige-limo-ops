@@ -2,7 +2,15 @@ export const customerPortalSavedBookingsApiPath = "/api/customer-saved-bookings"
 
 export type BookingStatus = "Cancelled" | "Completed" | "Confirmed" | "Pending Staff Review" | "Requested";
 
+export type CustomerPortalDriverDetails = {
+  carPlate: string;
+  carType: string;
+  driverContact: string;
+  driverName: string;
+};
+
 export type CustomerPortalBooking = {
+  driverDetails?: CustomerPortalDriverDetails;
   dropoffLocation: string;
   flightNumber?: string;
   id: string;
@@ -37,6 +45,7 @@ const allowedApiRecordFields = new Set([
   "booking_month",
   "booking_reference",
   "created_at",
+  "customer_driver_details",
   "customer_facing_status",
   "dropoff_location",
   "passenger_name",
@@ -44,6 +53,12 @@ const allowedApiRecordFields = new Set([
   "pickup_location",
   "service_type",
   "updated_at",
+]);
+const allowedCustomerDriverDetailFields = new Set([
+  "car_plate",
+  "car_type",
+  "driver_contact",
+  "driver_name",
 ]);
 const allowedApiPayloadFields = new Set(["ok", "pagination", "saved_bookings", "version"]);
 const forbiddenCustomerSavedBookingsFragments = [
@@ -246,6 +261,38 @@ function hasUnsafeApiPayloadKeys(record: UnknownRecord) {
   return Object.keys(record).some((key) => !allowedApiPayloadFields.has(key) || includesForbiddenFragment(key));
 }
 
+function toCustomerPortalDriverDetails(value: unknown): CustomerPortalDriverDetails | undefined {
+  const record = asRecord(value);
+
+  if (!record) {
+    return undefined;
+  }
+
+  if (
+    Object.keys(record).some(
+      (key) => !allowedCustomerDriverDetailFields.has(key) || includesForbiddenFragment(key),
+    )
+  ) {
+    return undefined;
+  }
+
+  const driverName = safeText(record.driver_name, 120) || "";
+  const driverContact = safeText(record.driver_contact, 80) || "";
+  const carPlate = safeText(record.car_plate, 80) || "";
+  const carType = safeText(record.car_type, 120) || "";
+
+  if (!driverName && !driverContact && !carPlate && !carType) {
+    return undefined;
+  }
+
+  return {
+    carPlate,
+    carType,
+    driverContact,
+    driverName,
+  };
+}
+
 function toCustomerPortalBooking(value: unknown): CustomerPortalBooking | null {
   const record = asRecord(value);
 
@@ -259,7 +306,10 @@ function toCustomerPortalBooking(value: unknown): CustomerPortalBooking | null {
     return null;
   }
 
+  const driverDetails = toCustomerPortalDriverDetails(record.customer_driver_details);
+
   return {
+    ...(driverDetails ? { driverDetails } : {}),
     dropoffLocation: safeText(record.dropoff_location) || "Drop-off to confirm",
     id: `saved-${bookingReference}`,
     passengerName: safeText(record.passenger_name) || "Passenger to confirm",

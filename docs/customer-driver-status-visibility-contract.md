@@ -1,12 +1,12 @@
 # Customer Driver Status Visibility Contract
 
-This contract defines how driver/job progress may be shown to customer-facing surfaces. It is docs/test-only and does not approve runtime implementation, UI/API behavior change, new UI sectors, new buttons, endpoint migration, env changes, deployment, DB read/write, migrations, provider sends, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, or new shims.
+This contract defines how driver/job details and progress may be shown to customer-facing surfaces. The current approved runtime scope is bounded to the `/my-bookings` expanded booking details card, optional customer-safe assigned-driver details from the saved-bookings projection, and a gated customer map check that returns a map link only when the server says customer viewing is open. It does not approve new UI sectors, endpoint migration, env changes, deployment by CLI, migrations, provider sends, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/calendar activation, raw GPS exposure, customer message sending, or new shims.
 
 ## Scope
 
-Customer surfaces must not receive raw driver reporting, raw driver issue reports, admin exception state, dispatcher notes, replacement-driver review, live location state, OTS photo/proof state, or internal closeout notes.
+Customer surfaces must not receive raw driver reporting, raw driver issue reports, admin exception state, dispatcher notes, replacement-driver review, raw live location state, OTS photo/proof state, or internal closeout notes.
 
-Current customer saved-booking display remains generic and customer-safe. The current `/my-bookings` saved-booking status surface is limited to:
+Current customer saved-booking list display remains generic and customer-safe. The current `/my-bookings` saved-booking status surface is limited to:
 
 - `Requested`
 - `Pending Staff Review`
@@ -16,7 +16,7 @@ Current customer saved-booking display remains generic and customer-safe. The cu
 
 These are customer-facing booking states, not raw driver workflow states.
 
-Owner direction: do not mix future driver-progress display into `/my-bookings` or the Customer Portal saved-booking list. The portal remains a generic customer booking/status list.
+Owner direction: keep the Customer Portal saved-booking list generic, but allow the expanded booking detail view to show customer-safe assigned-driver details after staff confirmation. The portal must not show raw driver workflow/progress internals.
 
 ## Current Data Boundary
 
@@ -27,13 +27,26 @@ The current customer saved-bookings path is:
 - `lib/customer-saved-bookings-read.ts`
 - `/api/customer-saved-bookings`
 
-This current path is referenced only to prove it remains generic and protected. It is not the approved placement for future driver-progress display.
+This current path is referenced to prove the booking list remains generic and protected while the expanded detail card may show only customer-safe assigned-driver details.
 
-The current customer saved-booking record may use `customer_facing_status` only. It must not expose `driver_otw`, `ots`, `pob`, driver status history, driver issue report type, admin exception category, replacement-driver review, dispatcher note, internal status, or status event rows.
+The current customer saved-booking record may use `customer_facing_status` and optional `customer_driver_details` only. `customer_driver_details` may contain only driver name, driver contact, car plate, and car type. It must not expose `driver_otw`, `ots`, `pob`, driver status history, driver issue report type, admin exception category, replacement-driver review, dispatcher note, internal status, status event rows, payout, finance, invoice, payment, PDF, proof/photo, raw GPS, or token data.
+
+## Current Customer-Safe Driver Details
+
+The current approved `/my-bookings` expanded detail card may show:
+
+- driver name
+- driver contact
+- car plate
+- car type
+- pickup date/time
+- route
+
+The card appears from the customer saved-bookings projection only after safe assigned-driver fields exist. If those fields are not present, `/my-bookings` shows only the normal booking details and no empty Driver Details card.
 
 ## Future Customer-Safe Driver Progress
 
-Future customer driver-progress display is not approved by this contract. If separately approved later, it may only use customer-safe summary labels such as:
+Future customer driver-progress display beyond the details card is not approved by this contract. If separately approved later, it may only use customer-safe summary labels such as:
 
 - `Driver assigned`
 - `Driver on the way`
@@ -47,13 +60,13 @@ Future customer driver-progress runtime must be separately approved as its own c
 
 ## Future Live-Location Handoff Direction
 
-Future customer live-location alert/link direction is a separate handoff, not Customer Portal saved-booking list content.
+Customer live-location viewing is a gated detail-card check, not Customer Portal saved-booking list content.
 
-For eligible DEP, TRF, and hourly jobs, the target customer alert/link window is 30 minutes before pickup only after owner approval of customer live links. Arrival/MNG customer live location stays disabled unless separately approved.
+For eligible DEP, TRF, and hourly jobs, the customer may receive a map link only after the driver is on the way and Prestige opens customer viewing. Arrival/MNG customer live location stays disabled unless separately approved.
 
 Customer-visible live location must auto-disable when the driver presses POB or POB is marked; any backend cleanup grace must not leave customer tracking visible after POB.
 
-This contract does not activate live-location capture, access, route, provider send, notification send, map provider, storage, DB writes, timing automation, or customer link delivery.
+This contract does not activate live-location capture, provider send, notification send, storage writes, timing automation, or customer link delivery. The existing customer map read remains server-gated and must return only a safe map link, message, optional timestamp, and optional accuracy label; raw coordinates must not be rendered in `/my-bookings`.
 
 ## Mapping Rule
 
@@ -95,9 +108,10 @@ Drivers must never see customer price, billing, invoice/payment, payout comparis
 
 If future customer driver-progress visibility is approved, it must:
 
-- keep `/my-bookings` and the Customer Portal saved-booking list generic;
+- keep the Customer Portal saved-booking list generic;
+- keep the current assigned-driver detail card limited to customer-safe driver name, contact, car plate, car type, pickup time, route, and gated map-link check;
 - use a separately approved customer-safe driver-progress surface or handoff instead of mixing driver progress into the portal by default;
-- route customer live-location progress, if approved, through a separate secure time-limited link that opens 30 minutes before pickup for eligible DEP, TRF, and hourly jobs only;
+- route customer live-location viewing through the existing gated customer map read and never render raw coordinates in `/my-bookings`;
 - auto-disable customer-visible live location when the driver presses POB or POB is marked;
 - keep Arrival/MNG customer live location disabled unless separately approved;
 - keep customer summaries separate from raw driver workflow and admin exception states;

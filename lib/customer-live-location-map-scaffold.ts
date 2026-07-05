@@ -8,7 +8,12 @@ type CustomerLiveLocationEnv = Record<string, string | undefined>;
 const closedReason = "customer_live_location_map_scaffold_closed" as const;
 const runtimeNotImplementedReason =
   "customer_live_location_map_runtime_not_implemented_safely" as const;
+const customerSavedBookingsSessionCookieName =
+  "prestige_customer_saved_bookings_session";
+const customerSavedBookingsFallbackSessionCookieName =
+  "prestige_customer_session";
 const allowedRuntimeModes = new Set(["evidence", "runtime"]);
+const safeCookieNamePattern = /^[A-Za-z0-9_][A-Za-z0-9_.:-]{0,79}$/;
 
 function enabled(value: string | undefined) {
   return value === "true";
@@ -20,6 +25,84 @@ function cleanMode(value: string | undefined) {
 
 function configured(value: string | undefined) {
   return Boolean(value?.trim());
+}
+
+function safeCookieName(value: unknown) {
+  if (typeof value !== "string" && typeof value !== "number") {
+    return "";
+  }
+
+  const cleaned = String(value).trim();
+
+  return safeCookieNamePattern.test(cleaned) ? cleaned : "";
+}
+
+function customerSessionCookieNames(env: CustomerLiveLocationEnv = process.env) {
+  const configuredName = safeCookieName(
+    env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_COOKIE_NAME,
+  );
+
+  return configuredName
+    ? [configuredName]
+    : [
+        customerSavedBookingsSessionCookieName,
+        customerSavedBookingsFallbackSessionCookieName,
+      ];
+}
+
+function parseCookieHeader(value: string | null) {
+  const cookies = new Map<string, string[]>();
+
+  if (!value) {
+    return cookies;
+  }
+
+  for (const cookie of value.split(";")) {
+    const trimmed = cookie.trim();
+    const equalsIndex = trimmed.indexOf("=");
+    const rawName = equalsIndex >= 0 ? trimmed.slice(0, equalsIndex).trim() : trimmed;
+    const name = safeCookieName(rawName);
+
+    if (!name) {
+      continue;
+    }
+
+    const rawValue = equalsIndex >= 0 ? trimmed.slice(equalsIndex + 1) : "";
+    let decodedValue = "";
+
+    try {
+      decodedValue = decodeURIComponent(rawValue).trim();
+    } catch {
+      decodedValue = rawValue.trim();
+    }
+
+    if (!decodedValue) {
+      continue;
+    }
+
+    cookies.set(name, [...(cookies.get(name) || []), decodedValue]);
+  }
+
+  return cookies;
+}
+
+export function readCustomerLiveLocationMapSessionToken(
+  request: Request,
+  env: CustomerLiveLocationEnv = process.env,
+) {
+  const headerToken =
+    request.headers.get("x-prestige-customer-session-token")?.trim() || "";
+
+  if (headerToken) {
+    return headerToken;
+  }
+
+  const cookies = parseCookieHeader(request.headers.get("cookie"));
+  const cookieValues = customerSessionCookieNames(env).flatMap(
+    (cookieName) => cookies.get(cookieName) || [],
+  );
+
+  return cookieValues.length === 1 ? cookieValues[0] : "";
 }
 
 export function readCustomerLiveLocationMapGateState(
@@ -144,8 +227,7 @@ export function isCustomerLiveLocationMapRequestBoundaryPresent(
   const headers = request.headers;
   const purpose =
     headers.get("x-prestige-customer-purpose")?.trim().toLowerCase() || "";
-  const sessionToken =
-    headers.get("x-prestige-customer-session-token")?.trim() || "";
+  const sessionToken = readCustomerLiveLocationMapSessionToken(request);
   const origin = headers.get("origin")?.trim() || "";
   const referer = headers.get("referer")?.trim() || "";
   const requestOrigin = new URL(request.url).origin;

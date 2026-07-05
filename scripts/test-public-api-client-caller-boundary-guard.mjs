@@ -10,6 +10,7 @@ const customerPagePaths = ["app/book/page.tsx", "app/my-bookings/page.tsx"];
 const customerAdapterPaths = [
   "lib/customer-booking-request-adapter.ts",
   "lib/customer-booking-memory-adapter.ts",
+  "lib/customer-portal-driver-tracking-adapter.ts",
   "lib/customer-portal-saved-bookings-adapter.ts",
   "lib/customer-portal-invoices-adapter.ts",
   "lib/public-company-profile-adapter.ts",
@@ -171,6 +172,7 @@ const portalPage = files["app/my-bookings/page.tsx"];
 assertExcludes(portalPage, /\bfetch\s*\(/, "/my-bookings raw fetch");
 for (const fragment of [
   "loadCustomerPortalSavedBookings",
+  "loadCustomerPortalDriverTracking",
   "useState<CustomerPortalBooking[]>([])",
   "setPortalBookings(loadedBookings || [])",
   'setPortalBookingsLoadState(loadedBookings === null ? "blocked" : "ready")',
@@ -213,6 +215,19 @@ for (const fragment of [
   assertIncludes(portalAdapter, fragment, `customer portal saved bookings adapter caller ${fragment}`);
 }
 
+const portalDriverTrackingAdapter = files["lib/customer-portal-driver-tracking-adapter.ts"];
+for (const fragment of [
+  "fetcher(\n      `${customerPortalDriverTrackingApiPath}?booking_reference=${encodeURIComponent(safeBookingReference)}`",
+  'cache: "no-store"',
+  'credentials: "same-origin"',
+  '"x-prestige-customer-purpose": "customer-live-location-map-read"',
+  'status: "blocked"',
+  'status: "not_ready"',
+  'status: "available"',
+]) {
+  assertIncludes(portalDriverTrackingAdapter, fragment, `customer portal driver tracking adapter caller ${fragment}`);
+}
+
 const portalInvoicesAdapter = files["lib/customer-portal-invoices-adapter.ts"];
 for (const fragment of [
   "fetcher(customerPortalInvoicesApiPath",
@@ -238,6 +253,7 @@ for (const [label, source] of [
   ["customer booking request adapter", requestAdapter],
   ["customer booking memory adapter", memoryAdapter],
   ["customer portal saved bookings adapter", portalAdapter],
+  ["customer portal driver tracking adapter", portalDriverTrackingAdapter],
   ["customer portal invoices adapter", portalInvoicesAdapter],
   ["public company profile adapter", publicProfileAdapter],
 ]) {

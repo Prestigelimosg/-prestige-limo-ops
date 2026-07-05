@@ -7,6 +7,10 @@ import {
   loadCustomerPortalSavedBookings,
   type CustomerPortalBooking,
 } from "../../lib/customer-portal-saved-bookings-adapter";
+import {
+  loadCustomerPortalDriverTracking,
+  type CustomerPortalDriverTrackingResult,
+} from "../../lib/customer-portal-driver-tracking-adapter";
 import { submitCustomerPortalBookingChangeRequest } from "../../lib/customer-portal-booking-change-request-adapter";
 import {
   fetchCustomerPortalInvoicePdf,
@@ -33,6 +37,7 @@ type InvoiceDownloadState = "downloaded" | "downloading" | "failed";
 type PortalSection = "New Booking Request" | "Invoices" | BookingFilter;
 type PortalBookingsLoadState = "blocked" | "loading" | "ready";
 type PortalInvoicesLoadState = "blocked" | "loading" | "stored";
+type DriverTrackingByBookingId = Record<string, CustomerPortalDriverTrackingResult>;
 
 type BookingRequestForm = {
   companyName: string;
@@ -350,6 +355,9 @@ export default function CustomerPortalPage() {
   const [portalBookings, setPortalBookings] = useState<CustomerPortalBooking[]>([]);
   const [portalBookingsLoadState, setPortalBookingsLoadState] =
     useState<PortalBookingsLoadState>("loading");
+  const [driverTrackingByBookingId, setDriverTrackingByBookingId] =
+    useState<DriverTrackingByBookingId>({});
+  const [checkingDriverTrackingId, setCheckingDriverTrackingId] = useState("");
   const [bookingPages, setBookingPages] = useState<Record<BookingFilter, number>>(initialBookingPages);
   const [selectedBookingMonths, setSelectedBookingMonths] =
     useState<Record<BookingFilter, string>>(initialSelectedBookingMonths);
@@ -490,6 +498,8 @@ export default function CustomerPortalPage() {
       setExpandedBookingId("");
       setChangeFeedback({});
       setChangeRequestDraft(null);
+      setDriverTrackingByBookingId({});
+      setCheckingDriverTrackingId("");
       setBookingPages({ ...initialBookingPages });
       setSelectedBookingMonths({ ...initialSelectedBookingMonths });
     }
@@ -591,6 +601,7 @@ export default function CustomerPortalPage() {
     setExpandedBookingId("");
     setChangeFeedback({});
     setChangeRequestDraft(null);
+    setCheckingDriverTrackingId("");
     setBookingPages((current) => ({ ...current, [nextFilter]: 1 }));
     setSelectedBookingMonths((current) => ({ ...current, [nextFilter]: "" }));
   }
@@ -600,6 +611,7 @@ export default function CustomerPortalPage() {
     setExpandedBookingId("");
     setChangeFeedback({});
     setChangeRequestDraft(null);
+    setCheckingDriverTrackingId("");
     setBookingPages((current) => ({ ...current, [activeFilter]: 1 }));
   }
 
@@ -609,6 +621,7 @@ export default function CustomerPortalPage() {
     setExpandedBookingId("");
     setChangeFeedback({});
     setChangeRequestDraft(null);
+    setCheckingDriverTrackingId("");
   }
 
   function handlePageChange(direction: "next" | "previous") {
@@ -624,6 +637,7 @@ export default function CustomerPortalPage() {
     setExpandedBookingId("");
     setChangeFeedback({});
     setChangeRequestDraft(null);
+    setCheckingDriverTrackingId("");
   }
 
   function handleEditRequest(booking: CustomerPortalBooking) {
@@ -694,6 +708,34 @@ export default function CustomerPortalPage() {
           }
         : current,
     );
+  }
+
+  async function checkCustomerDriverTracking(booking: CustomerPortalBooking) {
+    const bookingReference = bookingReferenceFromPortalId(booking.id);
+
+    if (!bookingReference) {
+      setDriverTrackingByBookingId((current) => ({
+        ...current,
+        [booking.id]: {
+          message: "Live location is not available for this booking.",
+          status: "blocked",
+        },
+      }));
+      return;
+    }
+
+    setCheckingDriverTrackingId(booking.id);
+
+    try {
+      const result = await loadCustomerPortalDriverTracking({ bookingReference });
+
+      setDriverTrackingByBookingId((current) => ({
+        ...current,
+        [booking.id]: result,
+      }));
+    } finally {
+      setCheckingDriverTrackingId("");
+    }
   }
 
   async function submitCustomerBookingChangeRequest(
@@ -2032,54 +2074,159 @@ export default function CustomerPortalPage() {
               )}
             </section>
 
-            {expandedBooking ? (
-              <section
-                aria-labelledby="booking-detail-title"
-                className="rounded-md border border-slate-200 bg-white p-3"
-                data-customer-portal-detail={expandedBooking.id}
-              >
-                <div className="flex flex-col gap-1">
-                  <h2 className="text-base font-semibold text-slate-950" id="booking-detail-title">
-                    Booking Details
-                  </h2>
-                  <p className="text-sm text-slate-600">{expandedBooking.status}</p>
-                </div>
-                <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-                  <div>
-                    <dt className="font-semibold text-slate-600">Pickup date/time</dt>
-                    <dd className="mt-1 text-slate-950">{expandedBooking.pickupDateTime}</dd>
-                  </div>
-                  <div>
-                    <dt className="font-semibold text-slate-600">Passenger name</dt>
-                    <dd className="mt-1 text-slate-950">{expandedBooking.passengerName}</dd>
-                  </div>
-                  <div>
-                    <dt className="font-semibold text-slate-600">Pickup location</dt>
-                    <dd className="mt-1 text-slate-950">{expandedBooking.pickupLocation}</dd>
-                  </div>
-                  <div>
-                    <dt className="font-semibold text-slate-600">Drop-off location</dt>
-                    <dd className="mt-1 text-slate-950">{expandedBooking.dropoffLocation}</dd>
-                  </div>
-                  <div>
-                    <dt className="font-semibold text-slate-600">Type of service</dt>
-                    <dd className="mt-1 text-slate-950">{expandedBooking.serviceType}</dd>
-                  </div>
-                  <div>
-                    <dt className="font-semibold text-slate-600">Vehicle type</dt>
-                    <dd className="mt-1 text-slate-950">{expandedBooking.vehicleType}</dd>
-                  </div>
-                  <div>
-                    <dt className="font-semibold text-slate-600">Flight number</dt>
-                    <dd className="mt-1 text-slate-950">{expandedBooking.flightNumber || "Not provided"}</dd>
-                  </div>
-                  <div>
-                    <dt className="font-semibold text-slate-600">Special request / note</dt>
-                    <dd className="mt-1 text-slate-950">{expandedBooking.specialRequest || "None provided"}</dd>
-                  </div>
-                </dl>
-              </section>
-            ) : null}
+            {expandedBooking
+              ? (() => {
+                  const driverDetails = expandedBooking.driverDetails;
+                  const driverTracking = driverTrackingByBookingId[expandedBooking.id];
+                  const isCheckingDriverTracking = checkingDriverTrackingId === expandedBooking.id;
+
+                  return (
+                    <section
+                      aria-labelledby="booking-detail-title"
+                      className="rounded-md border border-slate-200 bg-white p-3"
+                      data-customer-portal-detail={expandedBooking.id}
+                    >
+                      <div className="flex flex-col gap-1">
+                        <h2 className="text-base font-semibold text-slate-950" id="booking-detail-title">
+                          Booking Details
+                        </h2>
+                        <p className="text-sm text-slate-600">{expandedBooking.status}</p>
+                      </div>
+                      <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                        <div>
+                          <dt className="font-semibold text-slate-600">Pickup date/time</dt>
+                          <dd className="mt-1 text-slate-950">{expandedBooking.pickupDateTime}</dd>
+                        </div>
+                        <div>
+                          <dt className="font-semibold text-slate-600">Passenger name</dt>
+                          <dd className="mt-1 text-slate-950">{expandedBooking.passengerName}</dd>
+                        </div>
+                        <div>
+                          <dt className="font-semibold text-slate-600">Pickup location</dt>
+                          <dd className="mt-1 text-slate-950">{expandedBooking.pickupLocation}</dd>
+                        </div>
+                        <div>
+                          <dt className="font-semibold text-slate-600">Drop-off location</dt>
+                          <dd className="mt-1 text-slate-950">{expandedBooking.dropoffLocation}</dd>
+                        </div>
+                        <div>
+                          <dt className="font-semibold text-slate-600">Type of service</dt>
+                          <dd className="mt-1 text-slate-950">{expandedBooking.serviceType}</dd>
+                        </div>
+                        <div>
+                          <dt className="font-semibold text-slate-600">Vehicle type</dt>
+                          <dd className="mt-1 text-slate-950">{expandedBooking.vehicleType}</dd>
+                        </div>
+                        <div>
+                          <dt className="font-semibold text-slate-600">Flight number</dt>
+                          <dd className="mt-1 text-slate-950">{expandedBooking.flightNumber || "Not provided"}</dd>
+                        </div>
+                        <div>
+                          <dt className="font-semibold text-slate-600">Special request / note</dt>
+                          <dd className="mt-1 text-slate-950">{expandedBooking.specialRequest || "None provided"}</dd>
+                        </div>
+                      </dl>
+                      {driverDetails ? (
+                        <div
+                          aria-labelledby="customer-driver-details-title"
+                          className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3"
+                          data-customer-portal-driver-details-card={expandedBooking.id}
+                        >
+                          <div className="flex flex-col gap-1">
+                            <h3
+                              className="text-sm font-semibold text-emerald-950"
+                              id="customer-driver-details-title"
+                            >
+                              Driver Details
+                            </h3>
+                            <p className="text-xs text-emerald-900">
+                              These details appear after Prestige confirms the assigned driver.
+                            </p>
+                          </div>
+                          <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                            <div>
+                              <dt className="font-semibold text-emerald-900">Driver name</dt>
+                              <dd className="mt-1 text-slate-950">
+                                {driverDetails.driverName || "To confirm"}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="font-semibold text-emerald-900">Driver contact</dt>
+                              <dd className="mt-1 text-slate-950">
+                                {driverDetails.driverContact || "To confirm"}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="font-semibold text-emerald-900">Car plate</dt>
+                              <dd className="mt-1 text-slate-950">
+                                {driverDetails.carPlate || "To confirm"}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="font-semibold text-emerald-900">Car type</dt>
+                              <dd className="mt-1 text-slate-950">
+                                {driverDetails.carType || expandedBooking.vehicleType || "To confirm"}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="font-semibold text-emerald-900">Pickup date/time</dt>
+                              <dd className="mt-1 text-slate-950">{expandedBooking.pickupDateTime}</dd>
+                            </div>
+                            <div>
+                              <dt className="font-semibold text-emerald-900">Route</dt>
+                              <dd className="mt-1 text-slate-950">
+                                {expandedBooking.pickupLocation} to {expandedBooking.dropoffLocation}
+                              </dd>
+                            </div>
+                          </dl>
+                          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                            <button
+                              className="min-h-10 rounded-md border border-emerald-700 bg-white px-3 py-1.5 text-sm font-semibold text-emerald-900 transition enabled:hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                              data-customer-portal-driver-location-check={expandedBooking.id}
+                              disabled={isCheckingDriverTracking}
+                              onClick={() => checkCustomerDriverTracking(expandedBooking)}
+                              type="button"
+                            >
+                              {isCheckingDriverTracking ? "Checking..." : "Check live location"}
+                            </button>
+                            {driverTracking?.status === "available" && driverTracking.mapUrl ? (
+                              <a
+                                className="inline-flex min-h-10 items-center justify-center rounded-md border border-sky-700 bg-sky-700 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-sky-800"
+                                data-customer-portal-driver-location-map={expandedBooking.id}
+                                href={driverTracking.mapUrl}
+                                rel="noreferrer"
+                                target="_blank"
+                              >
+                                Open map
+                              </a>
+                            ) : null}
+                          </div>
+                          {driverTracking ? (
+                            <p
+                              className={`mt-2 rounded-md border px-2.5 py-2 text-sm font-medium ${
+                                driverTracking.status === "available"
+                                  ? "border-emerald-200 bg-white text-emerald-950"
+                                  : driverTracking.status === "not_ready"
+                                    ? "border-amber-200 bg-amber-50 text-amber-950"
+                                    : "border-slate-200 bg-white text-slate-700"
+                              }`}
+                              data-customer-portal-driver-location-message={expandedBooking.id}
+                            >
+                              {driverTracking.message}
+                              {driverTracking.updatedAt ? ` Last updated ${driverTracking.updatedAt}.` : ""}
+                              {driverTracking.accuracyLabel ? ` ${driverTracking.accuracyLabel}.` : ""}
+                            </p>
+                          ) : (
+                            <p className="mt-2 text-xs text-emerald-900">
+                              The map link appears only after the driver is on the way and Prestige opens customer viewing.
+                            </p>
+                          )}
+                        </div>
+                      ) : null}
+                    </section>
+                  );
+                })()
+              : null}
           </>
         )}
       </div>

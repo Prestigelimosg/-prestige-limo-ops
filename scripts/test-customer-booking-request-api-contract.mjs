@@ -209,6 +209,17 @@ const [routeSource, pageSource, bookingPersistenceSource, requestAdapterSource, 
   );
 const requestAdapterAllowedResponseFields =
   requestAdapterSource.match(/const allowedApiRequestFields = new Set\(\[[\s\S]+?\]\);/)?.[0] || "";
+const customerBookingRequestSmokeMockStart = smokeSource.indexOf(
+  'if (url.includes("/api/customer-booking-requests"))',
+);
+const customerBookingRequestSmokeMockEnd = smokeSource.indexOf(
+  'if (url.includes("/api/customer-booking-memory"))',
+  customerBookingRequestSmokeMockStart,
+);
+const customerBookingRequestSmokeMock =
+  customerBookingRequestSmokeMockStart >= 0 && customerBookingRequestSmokeMockEnd > customerBookingRequestSmokeMockStart
+    ? smokeSource.slice(customerBookingRequestSmokeMockStart, customerBookingRequestSmokeMockEnd)
+    : "";
 
 assert.equal(
   /admin_internal_status\s*:|short_notice_review_status\s*:/.test(routeSource.match(/return Response\.json\(\{[\s\S]+?\n    \}\);/)?.[0] || ""),
@@ -226,8 +237,10 @@ assert.equal(
   "/book should consume only customer-safe booking request response fields.",
 );
 assert.equal(
-  smokeSource.includes("short_notice_review_required") &&
-    !/request:\s*\{[\s\S]+?admin_internal_status|request:\s*\{[\s\S]+?short_notice_review_status/.test(smokeSource),
+  customerBookingRequestSmokeMock.includes("short_notice_review_required") &&
+    !/request:\s*\{[\s\S]+?admin_internal_status|request:\s*\{[\s\S]+?short_notice_review_status/.test(
+      customerBookingRequestSmokeMock,
+    ),
   true,
   "Browser smoke mock should use customer-safe booking request response fields.",
 );

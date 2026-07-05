@@ -121,6 +121,7 @@ function customerPortalSmokeSavedBooking({
     booking_month: monthKey,
     booking_reference: bookingReference,
     created_at: customerPortalSmokePickupAt(monthKey, Math.max(1, day - 1), 8, 0),
+    customer_driver_details: null,
     customer_facing_status: status,
     dropoff_location: dropoffLocation,
     passenger_name: passengerName,

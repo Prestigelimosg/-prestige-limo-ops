@@ -122,6 +122,12 @@ try {
         booking_month: "2026-06",
         booking_reference: "SAFE-PORTAL-001",
         created_at: "2026-06-08T01:00:00.000Z",
+        customer_driver_details: {
+          car_plate: "SLA1234X",
+          car_type: "Mercedes E-Class",
+          driver_contact: "+65 8888 0000",
+          driver_name: "Safe Driver",
+        },
         customer_facing_status: "confirmed",
         dropoff_location: "Raffles Singapore",
         passenger_name: "Safe Passenger",
@@ -140,6 +146,12 @@ try {
 
   assert.deepEqual(mapped, [
     {
+      driverDetails: {
+        carPlate: "SLA1234X",
+        carType: "Mercedes E-Class",
+        driverContact: "+65 8888 0000",
+        driverName: "Safe Driver",
+      },
       dropoffLocation: "Raffles Singapore",
       id: "saved-SAFE-PORTAL-001",
       passengerName: "Safe Passenger",

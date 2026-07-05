@@ -747,7 +747,7 @@ function assertSixTableCreateMapping(mock) {
   );
 
   assert.deepEqual(insertedOperation(client, "customers").payload, {
-    display_name: "Safe Ops Account",
+    display_name: "Safe Ops Account / Booker: Safe Ops Contact / Passenger: Safe Passenger",
     status: "active",
   });
   assert.deepEqual(insertedOperation(client, "customer_contacts").payload, {
@@ -1090,6 +1090,59 @@ try {
     JSON.stringify(customerNotificationInsert.payload),
     /contact_phone|contact_email|customer_price|driver_payout|paynow|invoice|payment|pdf|billing|finance|telegram|whatsapp|sms|email|raw_token|token_hash|internal_note|admin_note|mock_qa|archive/i,
     "Expected customer request decision notification insert to stay customer-safe.",
+  );
+
+  const splitCustomerMock = installMockClient();
+  const splitFirst = persistence.parseAdminBookingPersistencePayload(
+    canonicalAdminPayload({
+      booking: {
+        booking_reference: "SAFE-SPLIT-001",
+        contact_display_name: "UBS Desk One",
+        contact_email: "desk-one@example.com",
+        customer_display_name: "UBS",
+        passenger_name: "Traveller One",
+      },
+    }),
+  );
+  const splitSecond = persistence.parseAdminBookingPersistencePayload(
+    canonicalAdminPayload({
+      booking: {
+        booking_reference: "SAFE-SPLIT-002",
+        contact_display_name: "UBS Desk Two",
+        contact_email: "desk-two@example.com",
+        customer_display_name: "UBS",
+        passenger_name: "Traveller Two",
+      },
+    }),
+  );
+
+  assert.equal(splitFirst.ok, true);
+  assert.equal(splitSecond.ok, true);
+  assert.equal(
+    (await adapter.createAdminBookingThroughSupabaseAdapter(splitFirst.data, adminAudit(), adminActor())).ok,
+    true,
+  );
+  assert.equal(
+    (await adapter.createAdminBookingThroughSupabaseAdapter(splitSecond.data, adminAudit(), adminActor())).ok,
+    true,
+  );
+
+  const splitCustomerNames = insertedOperations(splitCustomerMock.client, "customers").map(
+    (operation) => operation.payload.display_name,
+  );
+  const splitBookingCustomerIds = insertedOperations(splitCustomerMock.client, "bookings").map(
+    (operation) => operation.payload.customer_id,
+  );
+
+  assert.deepEqual(splitCustomerNames, [
+    "UBS / Booker: UBS Desk One / Passenger: Traveller One",
+    "UBS / Booker: UBS Desk Two / Passenger: Traveller Two",
+  ]);
+  assert.deepEqual(splitCustomerNames.includes("UBS"), false);
+  assert.notEqual(
+    splitBookingCustomerIds[0],
+    splitBookingCustomerIds[1],
+    "Same company bookings must not share one portal customer_id when booker/passenger differs.",
   );
 
   const currentSchemaPayload = canonicalAdminPayload({

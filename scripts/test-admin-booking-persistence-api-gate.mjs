@@ -623,7 +623,10 @@ function assertSafeCreateOperations(mock, expectedActorRole) {
     "customer_contacts",
     "customers",
   ]);
-  assert.equal(insertedOperation(mock, "customers").payload.display_name, "Gate Safe Account");
+  assert.equal(
+    insertedOperation(mock, "customers").payload.display_name,
+    "Gate Safe Account / Booker: Gate Safe Contact / Passenger: Gate Passenger",
+  );
   assert.equal(insertedOperation(mock, "bookings").payload.booking_reference, "GATE-ADM-001");
   assert.equal(insertedOperation(mock, "bookings").payload.customer_display_name, "Gate Safe Account");
   assert.equal(insertedOperation(mock, "bookings").payload.pickup_at, "2026-06-08T10:30:00+08:00");
@@ -647,7 +650,10 @@ function assertSafeCustomerBookingRequestOperations(mock) {
     "customer_contacts",
     "customers",
   ]);
-  assert.equal(insertedOperation(mock, "customers").payload.display_name, "Gate Customer Company");
+  assert.equal(
+    insertedOperation(mock, "customers").payload.display_name,
+    "Gate Customer Company / Passenger: Gate Customer Passenger",
+  );
 
   const bookingRow = insertedOperation(mock, "bookings").payload;
 
@@ -918,10 +924,14 @@ try {
   assert.equal(customerResult.body.ok, true);
   assert.match(customerResult.body.request.booking_reference, /^CUST-\d{14}-[A-Z0-9]+$/);
   assert.equal(customerResult.body.request.customer_facing_status, "Request Received");
+  assert.equal(customerResult.body.request.return_booking_reference, null);
+  assert.equal(customerResult.body.request.return_trip_requested, false);
   assert.equal(customerResult.body.request.short_notice_review_required, false);
   assert.deepEqual(Object.keys(customerResult.body.request).sort(), [
     "booking_reference",
     "customer_facing_status",
+    "return_booking_reference",
+    "return_trip_requested",
     "short_notice_review_required",
   ]);
   assert.equal(customerMock.createdClients.length, 1);

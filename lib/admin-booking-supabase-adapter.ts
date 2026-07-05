@@ -156,6 +156,36 @@ function textOrNull(value: unknown) {
   return trimmed ? trimmed.slice(0, maxTextLength) : null;
 }
 
+function customerPortalScopedDisplayName(booking: AdminBookingRecordInput) {
+  const accountName = textOrNull(booking.customer_display_name) || "Customer To Confirm";
+  const bookerName = textOrNull(booking.contact_display_name);
+  const passengerName = textOrNull(booking.passenger_name);
+  const bookerEmail = textOrNull(booking.contact_email)?.toLowerCase() || null;
+  const bookerPhone = textOrNull(booking.contact_phone);
+  const scopeParts: string[] = [];
+
+  if (bookerName) {
+    scopeParts.push(`Booker: ${bookerName}`);
+  }
+
+  if (passengerName && passengerName.toLowerCase() !== bookerName?.toLowerCase()) {
+    scopeParts.push(`Passenger: ${passengerName}`);
+  }
+
+  if (!scopeParts.length && bookerEmail) {
+    scopeParts.push(`Booker email: ${bookerEmail}`);
+  }
+
+  if (!scopeParts.length && bookerPhone) {
+    scopeParts.push(`Booker phone: ${bookerPhone}`);
+  }
+
+  return `${accountName} / ${scopeParts.length ? scopeParts.join(" / ") : "Unassigned customer contact"}`.slice(
+    0,
+    maxTextLength,
+  );
+}
+
 function classifyAdapterDatabaseFailure(
   error: unknown,
 ): AdminBookingPersistenceSafeErrorCategory {
@@ -1210,7 +1240,7 @@ async function findOrCreateCustomerId(
   client: SupabaseClient,
   booking: AdminBookingRecordInput,
 ): Promise<AdminBookingResult<DbIdentifier>> {
-  const displayName = textOrNull(booking.customer_display_name) || "Customer To Confirm";
+  const displayName = customerPortalScopedDisplayName(booking);
   const { data: existingRows, error: existingError } = await client
     .from("customers")
     .select("id")

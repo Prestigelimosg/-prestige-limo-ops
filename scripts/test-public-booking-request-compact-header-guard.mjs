@@ -36,7 +36,7 @@ const [bookPage, ledger, preactivationSuite] = await Promise.all([
 for (const fragment of [
   "const hotlineContact =",
   'data-customer-booking-header-note="true"',
-  "Thank you for your request. Admin will review it at our soonest. Hotline: {hotlineContact}.",
+  "Thank you for your request. Our team will review it at our soonest. Hotline: {hotlineContact}.",
   "text-2xl font-bold text-slate-950 sm:text-3xl",
   'data-customer-voice-booking-helper="true"',
   'data-customer-voice-booking-speak-button="true"',

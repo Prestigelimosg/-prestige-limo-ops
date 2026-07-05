@@ -107,7 +107,10 @@ const selectorBlock = sliceBetween(
 );
 
 assertIncludes(selectorBlock, "const fallbackCard = buildLoadBookingsOperationalDisplayCard(bookingRecord);");
-assertIncludes(selectorBlock, "const typedCard = loadBookingsTypedOperationalCardsById[String(bookingRecord.id)];");
+assertIncludes(selectorBlock, "loadBookingsTypedOperationalCardsById[cleanReferenceText(bookingRecord.id)]");
+assertIncludes(selectorBlock, "loadBookingsTypedOperationalCardsById[cleanReferenceText(bookingRecord.booking_reference)]");
+assertIncludes(selectorBlock, "loadBookingsTypedOperationalCardsById[cleanReferenceText(fallbackCard.booking_id)]");
+assertIncludes(selectorBlock, "loadBookingsTypedOperationalCardsById[cleanReferenceText(fallbackCard.booking_reference)]");
 assertIncludes(selectorBlock, "return fallbackCard;");
 assertIncludes(selectorBlock, "return mergeLoadBookingsOperationalDisplayCard(fallbackCard, typedCard);");
 assertExcludes(selectorBlock, "...typedCard", "Operational display selector bulk typed spread");

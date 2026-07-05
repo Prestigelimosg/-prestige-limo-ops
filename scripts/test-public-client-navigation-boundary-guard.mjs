@@ -107,7 +107,8 @@ for (const phrase of [
   "Public customer/driver client navigation is guarded across `/book`, `/my-bookings`, `/driver-job/[token]`, and the driver job demo page.",
   "This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.",
   "`/book` may keep only the existing internal customer portal link to `/my-bookings`.",
-  "`/my-bookings`, `/driver-job/[token]`, and the driver job demo page must not add public outbound links, deep links, app-store/native-app links, admin links, or session-issue links.",
+  "`/my-bookings` may keep only the existing internal New Booking Request link to `/book`.",
+  "`/driver-job/[token]` and the driver job demo page must not add public outbound links, deep links, app-store/native-app links, admin links, or session-issue links.",
   "Public client pages must not call `window.open`, imperative navigation helpers, `mailto:`, `tel:`, SMS/WhatsApp deep links, external HTTP URLs, `/api/admin*`, `/api/customer-portal-sessions`, or `/api/admin-saved-bookings`.",
   "Public navigation contracts must continue coordinating the public route source privacy guard, public API client caller guard, and customer booking page API audit in the preactivation suite.",
   "No Save Booking + CRM change.",
@@ -133,6 +134,17 @@ assert.deepEqual(hrefValues(bookingPage), ["/my-bookings"], "/book public href a
 assert.equal(countOccurrences(bookingPage, "<Link"), 1, "/book public Link count");
 assert.equal(countOccurrences(bookingPage, "</Link>"), 1, "/book public Link closing count");
 
+const customerPortalPage = files["app/my-bookings/page.tsx"];
+assertIncludes(customerPortalPage, 'import Link from "next/link";', "/my-bookings Next Link import");
+assertIncludes(
+  customerPortalPage,
+  'data-customer-portal-book-request-link="true"',
+  "/my-bookings book request link data marker",
+);
+assert.deepEqual(hrefValues(customerPortalPage), ["/book"], "/my-bookings public href allowlist");
+assert.equal(countOccurrences(customerPortalPage, "<Link"), 1, "/my-bookings public Link count");
+assert.equal(countOccurrences(customerPortalPage, "</Link>"), 1, "/my-bookings public Link closing count");
+
 for (const [path, source] of publicPagePaths.map((path) => [path, files[path]])) {
   assertExcludes(source, /<a\b/i, `${path} raw anchor tags`);
   assertExcludes(source, /\btarget=/i, `${path} target attribute`);
@@ -143,7 +155,9 @@ for (const [path, source] of publicPagePaths.map((path) => [path, files[path]]))
   assertExcludes(source, /(?:^|[\s<])(?:formAction|action)=/i, `${path} form action navigation`);
 }
 
-for (const path of publicPagePaths.filter((path) => path !== "app/book/page.tsx")) {
+for (const path of publicPagePaths.filter(
+  (path) => path !== "app/book/page.tsx" && path !== "app/my-bookings/page.tsx",
+)) {
   const source = files[path];
   assert.deepEqual(hrefValues(source), [], `${path} public href allowlist`);
   assertExcludes(source, /from\s+["']next\/link["']/, `${path} Next Link import`);

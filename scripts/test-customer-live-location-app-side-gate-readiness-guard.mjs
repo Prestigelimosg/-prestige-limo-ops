@@ -106,6 +106,8 @@ for (const fragment of [
   "locationStorageEnabled: false",
   "external_send: false",
   "customer-live-location-map-read",
+  "readCustomerLiveLocationMapSessionToken",
+  'request.headers.get("x-prestige-customer-session-token")?.trim() || ""',
 ]) {
   assertIncludes(scaffoldHelper, fragment, `scaffold closed/default fragment ${fragment}`);
 }
@@ -122,7 +124,7 @@ for (const fragment of [
   "PRESTIGE_CUSTOMER_LIVE_LOCATION_MAP_ALLOWED_BOOKING_REFERENCES",
   "PRESTIGE_CUSTOMER_LIVE_LOCATION_MAP_STALE_AFTER_SECONDS",
   "x-prestige-customer-account-reference",
-  "x-prestige-customer-session-token",
+  "readCustomerLiveLocationMapSessionToken(request)",
   "customer_live_location_map_scope_blocked",
   "customer_live_location_map_admin_runtime_gate_closed",
   "customer_live_location_map_customer_auth_blocked",

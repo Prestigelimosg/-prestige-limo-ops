@@ -1041,8 +1041,11 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer Folder `View jobs` now exposes one safe `Open in Dispatch` handoff for each saved booking row with an exact booking reference.
 - The handoff uses `/?tab=dispatch&booking_reference=...`, performs one exact guarded admin GET read through `/api/admin-bookings?booking_reference=...`, and then calls the existing Dispatch `loadSelectedBooking` editor/review path.
 - It does not rely on the recent bookings list window, so older customer-folder jobs can still open by exact reference.
-- Customer Folder does not expose a delete job button, raw internal booking id, PATCH, DELETE, invoice, payment, provider send, GPS/live-location, parser/debug, or mock archive action.
-- Delete remains limited to the existing Completed / History lane, where the app resolves the internal saved booking id and only deletes completed/cancelled/driver-completed history jobs.
+- Customer Folder `View/Edit` now loads the exact booking by reference before showing compact operational edit controls for passenger, pickup time, pickup, drop-off, service, vehicle, driver, driver contact, and plate.
+- Customer Folder save uses the existing guarded `/api/admin-bookings` PATCH path with the loaded booking as the base payload, so account/contact/status fields are preserved and missing required operational fields are reported instead of guessed.
+- Customer Folder delete is visible but locked until that exact loaded booking is completed or cancelled; it uses the exact returned booking id through the existing guarded `/api/admin-saved-bookings` DELETE path and removes the row from the selected customer list only after the API confirms the same id and a completed/cancelled status.
+- Customer Folder still does not expose invoice, payment, payout, provider send, GPS/live-location, parser/debug, mock archive, raw finance, or public/customer/driver auth actions in this row.
+- Active/upcoming customer-folder jobs must be completed or cancelled through the normal operational lane before delete becomes available; this avoids broad deletion or blind row deletion from the list.
 - Guard coverage lives in `scripts/test-customer-folder-dispatch-handoff-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Customer Trust Path And Portal Invoice Folder Lock
@@ -2416,7 +2419,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Public customer/driver client navigation is guarded across `/book`, `/my-bookings`, `/driver-job/[token]`, and the driver job demo page.
 - This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.
 - `/book` may keep only the existing internal customer portal link to `/my-bookings`.
-- `/my-bookings`, `/driver-job/[token]`, and the driver job demo page must not add public outbound links, deep links, app-store/native-app links, admin links, or session-issue links.
+- `/my-bookings` may keep only the existing internal New Booking Request link to `/book`.
+- `/driver-job/[token]` and the driver job demo page must not add public outbound links, deep links, app-store/native-app links, admin links, or session-issue links.
 - Public client pages must not call `window.open`, imperative navigation helpers, `mailto:`, `tel:`, SMS/WhatsApp deep links, external HTTP URLs, `/api/admin*`, `/api/customer-portal-sessions`, or `/api/admin-saved-bookings`.
 - Public navigation contracts must continue coordinating the public route source privacy guard, public API client caller guard, and customer booking page API audit in the preactivation suite.
 - No Save Booking + CRM change.

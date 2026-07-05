@@ -393,8 +393,9 @@ const loadSelectedBookingTypedDisplayRefreshBlock = sliceBetween(
 assertIncludes(loadSelectedBookingBlock, "bookingRecordToForm(bookingRecord)", "selected booking form source");
 for (const fragment of [
   "const bookingReference =",
-  "cleanReferenceText(bookingRecord.booking_reference)",
-  "cleanReferenceText(bookingRecord.id)",
+  "bookingRecordPersistedReference(bookingRecord)",
+  "cleanReferenceText(bookingRecord.flight_no)",
+  "getBookingDateKey(bookingRecord)",
   "setLoadedBookingId(bookingReference)",
 ]) {
   assertIncludes(loadSelectedBookingBlock, fragment, `selected booking legacy id source ${fragment}`);

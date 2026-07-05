@@ -175,7 +175,8 @@ for (const fragment of [
   "regularCustomerSavedBookingBillingReadinessState.closeoutsByReference",
   "regularCustomerSavedBookingReadState.savedBookings",
   'data-customer-invoice-workspace="true"',
-  "Review-only checkpoint. Opening a folder does not create invoice numbers, generate invoices/PDFs, send",
+  "Preparing a monthly bill only loads the invoice workbench for staff review;",
+  "it does not issue invoices, reserve invoice numbers, email PDFs, create payment links, write payouts,",
 ]) {
   assertIncludes(customersPage, fragment, `admin customers invoice checkpoint fragment ${fragment}`);
 }

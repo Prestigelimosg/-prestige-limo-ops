@@ -42,6 +42,8 @@ const summaryCards = [
 
 const adminCustomerAccountsApiPath = "/api/admin-customer-accounts";
 const adminCustomerSavedBookingsApiPath = "/api/admin-customer-saved-bookings";
+const adminBookingsApiPath = "/api/admin-bookings";
+const adminSavedBookingsApiPath = "/api/admin-saved-bookings";
 const adminCustomerInvoicesApiPath = "/api/admin-customer-invoices";
 const adminCustomerInvoicePdfApiPath = "/api/admin-customer-invoice-pdf";
 const adminCustomerInvoiceEmailApiPath = "/api/admin-customer-invoice-email";
@@ -482,6 +484,82 @@ type RegularCustomerSavedBookingReadRecord = {
   service_type?: string | null;
 };
 
+type CustomerFolderExactBookingRoutePoint = {
+  location?: string | null;
+  location_text?: string | null;
+  notes?: string | null;
+  point_type?: "pickup" | "dropoff" | "stop" | "waypoint" | "extra_stop" | string | null;
+  sequence?: number | null;
+  sequence_number?: number | null;
+  timing_note?: string | null;
+};
+
+type CustomerFolderExactBookingServiceItem = {
+  blocks_count?: number | null;
+  item_type?: string | null;
+  notes?: string | null;
+  quantity?: number | null;
+  service_item_type?: string | null;
+};
+
+type CustomerFolderExactBookingRecord = {
+  admin_internal_status?: string | null;
+  booking_reference?: string | null;
+  cancellation_review_status?: string | null;
+  change_review_status?: string | null;
+  contact_display_name?: string | null;
+  contact_email?: string | null;
+  contact_phone?: string | null;
+  customer_display_name?: string | null;
+  customer_facing_status?: string | null;
+  customer_id?: number | string | null;
+  driver_contact?: string | null;
+  driver_name?: string | null;
+  driver_plate_number?: string | null;
+  dropoff_location?: string | null;
+  flight_no?: string | null;
+  id?: number | string | null;
+  luggage_count?: number | null;
+  parser_source_reference?: string | null;
+  passenger_name?: string | null;
+  passenger_phone?: string | null;
+  pax_count?: number | null;
+  pickup_at?: string | null;
+  pickup_datetime?: string | null;
+  pickup_location?: string | null;
+  request_review_status?: string | null;
+  route_points?: CustomerFolderExactBookingRoutePoint[] | null;
+  route_summary?: string | null;
+  route_type?: string | null;
+  service_items?: CustomerFolderExactBookingServiceItem[] | null;
+  service_type?: string | null;
+  short_notice_review_status?: string | null;
+  source_channel?: string | null;
+  source_surface?: string | null;
+  vehicle_type_or_category?: string | null;
+};
+
+type CustomerFolderExactBookingEditForm = {
+  driverContact: string;
+  driverName: string;
+  driverPlateNumber: string;
+  dropoffLocation: string;
+  passengerName: string;
+  pickupDateTime: string;
+  pickupLocation: string;
+  serviceType: string;
+  vehicleType: string;
+};
+
+type CustomerFolderExactBookingEditorState = {
+  booking: CustomerFolderExactBookingRecord | null;
+  bookingReference: string;
+  form: CustomerFolderExactBookingEditForm;
+  message: string;
+  status: "idle" | "loading" | "loaded" | "saving" | "deleting" | "deleted" | "error";
+  tone: RegularCustomerBookingFeedbackTone;
+};
+
 type RegularCustomerSavedBookingCloseoutRecord = {
   billing_prep_readiness?: string | null;
   closeout_status?: string | null;
@@ -545,6 +623,27 @@ const initialRegularCustomerBookingListFilters: RegularCustomerBookingListFilter
   billingMonth: "",
   billingStatus: "",
   customerId: "",
+};
+
+const initialCustomerFolderExactBookingEditForm: CustomerFolderExactBookingEditForm = {
+  driverContact: "",
+  driverName: "",
+  driverPlateNumber: "",
+  dropoffLocation: "",
+  passengerName: "",
+  pickupDateTime: "",
+  pickupLocation: "",
+  serviceType: "",
+  vehicleType: "",
+};
+
+const initialCustomerFolderExactBookingEditorState: CustomerFolderExactBookingEditorState = {
+  booking: null,
+  bookingReference: "",
+  form: initialCustomerFolderExactBookingEditForm,
+  message: "Open a saved job to view, edit, or delete it by exact booking reference.",
+  status: "idle",
+  tone: "info",
 };
 
 const regularCustomerRequiredFields: Array<{
@@ -914,6 +1013,322 @@ function regularCustomerBookingFeedbackClass(tone: RegularCustomerBookingFeedbac
   }
 
   return "border-slate-200 bg-slate-50 text-slate-700";
+}
+
+function cleanCustomerFolderText(value: unknown, maxLength = 1000) {
+  const cleaned = String(value ?? "").replace(/\s+/g, " ").trim();
+
+  return cleaned ? cleaned.slice(0, maxLength) : "";
+}
+
+function customerFolderStatusToken(value: unknown) {
+  return cleanCustomerFolderText(value, 80)
+    .replace(/([a-z])([A-Z])/g, "$1_$2")
+    .replace(/[^a-z0-9]+/gi, "_")
+    .replace(/^_+|_+$/g, "")
+    .toLowerCase();
+}
+
+function customerFolderExactBookingReference(booking: CustomerFolderExactBookingRecord | null | undefined) {
+  return cleanCustomerFolderText(booking?.booking_reference, 160);
+}
+
+function customerFolderExactBookingId(booking: CustomerFolderExactBookingRecord | null | undefined) {
+  const id = booking?.id;
+
+  if (typeof id === "number" && Number.isSafeInteger(id)) {
+    return String(id);
+  }
+
+  return cleanCustomerFolderText(id, 120);
+}
+
+function customerFolderExactBookingPickupDateTime(booking: CustomerFolderExactBookingRecord | null | undefined) {
+  return cleanCustomerFolderText(booking?.pickup_at, 120) || cleanCustomerFolderText(booking?.pickup_datetime, 120);
+}
+
+function customerFolderExactBookingStatusLabel(booking: CustomerFolderExactBookingRecord | null | undefined) {
+  if (!booking) {
+    return "Not loaded";
+  }
+
+  return (
+    [
+      booking.admin_internal_status,
+      booking.customer_facing_status,
+      booking.request_review_status,
+      booking.change_review_status,
+      booking.cancellation_review_status,
+    ]
+      .map((value) => cleanCustomerFolderText(value, 80))
+      .filter(Boolean)
+      .join(" / ") || "Status unavailable"
+  );
+}
+
+function customerFolderExactBookingCanDelete(booking: CustomerFolderExactBookingRecord | null | undefined) {
+  const statusTokens = [
+    customerFolderStatusToken(booking?.admin_internal_status),
+    customerFolderStatusToken(booking?.customer_facing_status),
+  ];
+
+  return statusTokens.includes("completed") || statusTokens.includes("cancelled");
+}
+
+function customerFolderExactBookingDeleteBlockReason(
+  booking: CustomerFolderExactBookingRecord | null | undefined,
+) {
+  if (!booking) {
+    return "Load the exact booking before delete.";
+  }
+
+  if (!customerFolderExactBookingId(booking)) {
+    return "Exact booking id is missing; reload this job before delete.";
+  }
+
+  if (!customerFolderExactBookingCanDelete(booking)) {
+    return "Delete is locked until this exact job is completed or cancelled.";
+  }
+
+  return "";
+}
+
+function customerFolderDateTimeInputValue(value: unknown) {
+  const cleaned = cleanCustomerFolderText(value, 120);
+
+  if (!cleaned) {
+    return "";
+  }
+
+  const localInputMatch = cleaned.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/);
+
+  if (localInputMatch) {
+    return `${localInputMatch[1]}T${localInputMatch[2]}`;
+  }
+
+  const parsed = new Date(cleaned);
+
+  if (!Number.isFinite(parsed.getTime())) {
+    return "";
+  }
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+    minute: "2-digit",
+    month: "2-digit",
+    timeZone: "Asia/Singapore",
+    year: "numeric",
+  }).formatToParts(parsed);
+  const partValue = (type: string) => parts.find((part) => part.type === type)?.value || "";
+  const hour = partValue("hour") === "24" ? "00" : partValue("hour");
+
+  return `${partValue("year")}-${partValue("month")}-${partValue("day")}T${hour}:${partValue("minute")}`;
+}
+
+function customerFolderApiDateTimeFromInput(value: string) {
+  const cleaned = cleanCustomerFolderText(value, 120);
+  const localInputMatch = cleaned.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+
+  if (localInputMatch) {
+    return `${localInputMatch[1]}-${localInputMatch[2]}-${localInputMatch[3]}T${localInputMatch[4]}:${localInputMatch[5]}:00+08:00`;
+  }
+
+  return cleaned;
+}
+
+function customerFolderExactBookingFormFromRecord(
+  booking: CustomerFolderExactBookingRecord,
+): CustomerFolderExactBookingEditForm {
+  return {
+    driverContact: cleanCustomerFolderText(booking.driver_contact, 80),
+    driverName: cleanCustomerFolderText(booking.driver_name, 120),
+    driverPlateNumber: cleanCustomerFolderText(booking.driver_plate_number, 80),
+    dropoffLocation: cleanCustomerFolderText(booking.dropoff_location, 300),
+    passengerName: cleanCustomerFolderText(booking.passenger_name, 160),
+    pickupDateTime: customerFolderDateTimeInputValue(customerFolderExactBookingPickupDateTime(booking)),
+    pickupLocation: cleanCustomerFolderText(booking.pickup_location, 300),
+    serviceType: cleanCustomerFolderText(booking.service_type || booking.route_type, 80),
+    vehicleType: cleanCustomerFolderText(booking.vehicle_type_or_category, 80),
+  };
+}
+
+function customerFolderSafeRoutePointType(value: unknown, fallback: "stop" | "pickup" | "dropoff" = "stop") {
+  const pointType = customerFolderStatusToken(value);
+
+  return ["pickup", "dropoff", "stop", "waypoint", "extra_stop"].includes(pointType)
+    ? (pointType as "pickup" | "dropoff" | "stop" | "waypoint" | "extra_stop")
+    : fallback;
+}
+
+function customerFolderExactBookingRoutePoints(
+  booking: CustomerFolderExactBookingRecord,
+  form: CustomerFolderExactBookingEditForm,
+) {
+  const existingRoutePoints = Array.isArray(booking.route_points) ? booking.route_points : [];
+  const middleRoutePoints = existingRoutePoints
+    .filter((routePoint) => {
+      const pointType = customerFolderSafeRoutePointType(routePoint.point_type);
+
+      return pointType !== "pickup" && pointType !== "dropoff";
+    })
+    .map((routePoint, index) => {
+      const location = cleanCustomerFolderText(routePoint.location_text || routePoint.location, 300);
+      const pointType = customerFolderSafeRoutePointType(routePoint.point_type);
+
+      return location
+        ? {
+            location: location,
+            location_text: location,
+            notes: cleanCustomerFolderText(routePoint.notes || routePoint.timing_note, 300) || null,
+            point_type: pointType,
+            sequence: index + 2,
+            sequence_number: index + 2,
+            timing_note: cleanCustomerFolderText(routePoint.timing_note || routePoint.notes, 300) || null,
+          }
+        : null;
+    })
+    .filter((routePoint): routePoint is NonNullable<typeof routePoint> => Boolean(routePoint));
+  const pickupLocation = cleanCustomerFolderText(form.pickupLocation, 300);
+  const dropoffLocation = cleanCustomerFolderText(form.dropoffLocation, 300);
+
+  return [
+    {
+      location: pickupLocation,
+      location_text: pickupLocation,
+      notes: null,
+      point_type: "pickup" as const,
+      sequence: 1,
+      sequence_number: 1,
+      timing_note: null,
+    },
+    ...middleRoutePoints,
+    {
+      location: dropoffLocation,
+      location_text: dropoffLocation,
+      notes: null,
+      point_type: "dropoff" as const,
+      sequence: middleRoutePoints.length + 2,
+      sequence_number: middleRoutePoints.length + 2,
+      timing_note: null,
+    },
+  ];
+}
+
+function customerFolderExactBookingServiceItems(booking: CustomerFolderExactBookingRecord) {
+  const allowedServiceItemTypes = new Set([
+    "child_seat",
+    "extra_stop",
+    "waiting_time",
+    "midnight_charge",
+    "midnight",
+  ]);
+
+  return (Array.isArray(booking.service_items) ? booking.service_items : [])
+    .map((serviceItem) => {
+      const serviceItemType = customerFolderStatusToken(
+        serviceItem.service_item_type || serviceItem.item_type,
+      );
+      const quantity = Number(serviceItem.quantity ?? 0);
+      const blocksCount = Number(serviceItem.blocks_count ?? 0);
+
+      if (
+        !allowedServiceItemTypes.has(serviceItemType) ||
+        (!Number.isSafeInteger(quantity) && !Number.isSafeInteger(blocksCount)) ||
+        Math.max(quantity || 0, blocksCount || 0) < 1
+      ) {
+        return null;
+      }
+
+      return {
+        blocks_count: Number.isSafeInteger(blocksCount) && blocksCount > 0 ? blocksCount : null,
+        item_type: serviceItemType === "midnight_charge" ? "midnight" : serviceItemType,
+        notes: cleanCustomerFolderText(serviceItem.notes, 300) || null,
+        quantity: Number.isSafeInteger(quantity) && quantity > 0 ? quantity : null,
+        service_item_type: serviceItemType === "midnight" ? "midnight_charge" : serviceItemType,
+      };
+    })
+    .filter((serviceItem): serviceItem is NonNullable<typeof serviceItem> => Boolean(serviceItem));
+}
+
+function customerFolderExactBookingPayload(
+  booking: CustomerFolderExactBookingRecord,
+  form: CustomerFolderExactBookingEditForm,
+) {
+  const bookingReference = customerFolderExactBookingReference(booking);
+  const pickupDateTime = customerFolderApiDateTimeFromInput(form.pickupDateTime);
+  const pickupLocation = cleanCustomerFolderText(form.pickupLocation, 300);
+  const dropoffLocation = cleanCustomerFolderText(form.dropoffLocation, 300);
+  const serviceType = cleanCustomerFolderText(form.serviceType || booking.service_type || booking.route_type, 80);
+  const customerDisplayName = cleanCustomerFolderText(booking.customer_display_name, 160);
+  const contactPhone = cleanCustomerFolderText(booking.contact_phone, 80);
+  const routeSummary = [pickupLocation, dropoffLocation].filter(Boolean).join(" > ");
+  const missingFields = [
+    ["booking reference", bookingReference],
+    ["pickup date/time", pickupDateTime],
+    ["pickup location", pickupLocation],
+    ["drop-off location", dropoffLocation],
+    ["service type", serviceType],
+    ["customer/account", customerDisplayName],
+    ["contact phone", contactPhone],
+  ].filter(([, value]) => !value);
+
+  if (missingFields.length > 0) {
+    return {
+      error: `Cannot save from Customer Dashboard. Missing ${missingFields
+        .map(([label]) => label)
+        .join(", ")}; open Dispatch to repair the full booking first.`,
+      ok: false as const,
+    };
+  }
+
+  return {
+    ok: true as const,
+    payload: {
+      booking: {
+        admin_internal_status: cleanCustomerFolderText(booking.admin_internal_status, 80) || "Draft",
+        booking_reference: bookingReference,
+        cancellation_review_status: cleanCustomerFolderText(booking.cancellation_review_status, 80) || null,
+        change_review_status: cleanCustomerFolderText(booking.change_review_status, 80) || null,
+        contact_display_name: cleanCustomerFolderText(booking.contact_display_name, 160) || null,
+        contact_email: cleanCustomerFolderText(booking.contact_email, 160) || null,
+        contact_phone: contactPhone,
+        customer_display_name: customerDisplayName,
+        customer_facing_status: cleanCustomerFolderText(booking.customer_facing_status, 80) || "Received",
+        customer_id: booking.customer_id ?? null,
+        driver_contact: cleanCustomerFolderText(form.driverContact, 80) || null,
+        driver_name: cleanCustomerFolderText(form.driverName, 120) || null,
+        driver_plate_number: cleanCustomerFolderText(form.driverPlateNumber, 80) || null,
+        dropoff_location: dropoffLocation,
+        flight_no: cleanCustomerFolderText(booking.flight_no, 80) || null,
+        luggage_count: Number.isSafeInteger(booking.luggage_count ?? NaN) ? booking.luggage_count ?? null : null,
+        parser_source_reference: cleanCustomerFolderText(booking.parser_source_reference, 160) || null,
+        passenger_name: cleanCustomerFolderText(form.passengerName, 160) || null,
+        passenger_phone: cleanCustomerFolderText(booking.passenger_phone, 80) || null,
+        pax_count: Number.isSafeInteger(booking.pax_count ?? NaN) ? booking.pax_count ?? null : null,
+        pickup_datetime: pickupDateTime,
+        pickup_location: pickupLocation,
+        request_review_status: cleanCustomerFolderText(booking.request_review_status, 80) || null,
+        route_summary: routeSummary || cleanCustomerFolderText(booking.route_summary, 500) || null,
+        route_type: serviceType,
+        service_type: serviceType,
+        short_notice_review_status: cleanCustomerFolderText(booking.short_notice_review_status, 80) || null,
+        source_channel:
+          cleanCustomerFolderText(booking.source_channel, 80) ||
+          cleanCustomerFolderText(booking.source_surface, 80) ||
+          "admin-dashboard",
+        source_surface:
+          cleanCustomerFolderText(booking.source_surface, 80) ||
+          cleanCustomerFolderText(booking.source_channel, 80) ||
+          "admin-dashboard",
+        vehicle_type_or_category: cleanCustomerFolderText(form.vehicleType, 80) || null,
+      },
+      route_points: customerFolderExactBookingRoutePoints(booking, form),
+      service_items: customerFolderExactBookingServiceItems(booking),
+      target_booking_reference: bookingReference,
+    },
+  };
 }
 
 function normalizeCustomerFolderMatch(value: string | null | undefined) {
@@ -1654,6 +2069,8 @@ export default function MockCustomerDashboardPage() {
       tone: "info",
     });
   const [expandedCustomerFolderJobReference, setExpandedCustomerFolderJobReference] = useState("");
+  const [customerFolderExactBookingEditorState, setCustomerFolderExactBookingEditorState] =
+    useState<CustomerFolderExactBookingEditorState>(initialCustomerFolderExactBookingEditorState);
   const [
     regularCustomerSavedBookingBillingReadinessState,
     setRegularCustomerSavedBookingBillingReadinessState,
@@ -2959,6 +3376,7 @@ export default function MockCustomerDashboardPage() {
       tone: "info",
     });
     setExpandedCustomerFolderJobReference("");
+    setCustomerFolderExactBookingEditorState(initialCustomerFolderExactBookingEditorState);
   }
 
   function scrollCustomerFolderJobsPanelIntoView() {
@@ -2998,6 +3416,322 @@ export default function MockCustomerDashboardPage() {
     setCustomerFolderFinderPage(pageNumber);
   }
 
+  function updateCustomerFolderExactBookingForm(
+    field: keyof CustomerFolderExactBookingEditForm,
+    value: string,
+  ) {
+    setCustomerFolderExactBookingEditorState((current) => ({
+      ...current,
+      form: {
+        ...current.form,
+        [field]: value,
+      },
+      message:
+        current.status === "loaded" || current.status === "error"
+          ? "Review changes, then Save changes. Delete stays locked unless this exact job is completed or cancelled."
+          : current.message,
+      status: current.status === "error" ? "loaded" : current.status,
+      tone: current.status === "error" ? "info" : current.tone,
+    }));
+  }
+
+  async function loadCustomerFolderExactBookingForEdit(
+    booking: RegularCustomerSavedBookingReadRecord,
+  ) {
+    const bookingReference = safeCustomerFolderDispatchHandoffReference(booking);
+
+    if (!bookingReference) {
+      setExpandedCustomerFolderJobReference("");
+      setCustomerFolderExactBookingEditorState({
+        ...initialCustomerFolderExactBookingEditorState,
+        message: "Cannot open this job because the saved booking reference is missing or malformed.",
+        status: "error",
+        tone: "error",
+      });
+      return;
+    }
+
+    if (
+      expandedCustomerFolderJobReference === bookingReference &&
+      customerFolderExactBookingEditorState.status !== "idle"
+    ) {
+      setExpandedCustomerFolderJobReference("");
+      setCustomerFolderExactBookingEditorState(initialCustomerFolderExactBookingEditorState);
+      return;
+    }
+
+    setExpandedCustomerFolderJobReference(bookingReference);
+    setCustomerFolderExactBookingEditorState({
+      ...initialCustomerFolderExactBookingEditorState,
+      bookingReference,
+      message: `Loading exact booking ${bookingReference}...`,
+      status: "loading",
+    });
+
+    try {
+      const params = new URLSearchParams({ booking_reference: bookingReference });
+      const response = await fetch(`${adminBookingsApiPath}?${params.toString()}`, {
+        headers: {
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "GET",
+      });
+      const result = (await response.json().catch(() => null)) as
+        | {
+            booking?: CustomerFolderExactBookingRecord | null;
+            error?: string;
+            ok?: boolean;
+          }
+        | null;
+      const exactBooking = result?.booking ?? null;
+      const exactReference = customerFolderExactBookingReference(exactBooking);
+
+      if (!response.ok || result?.ok !== true || !exactBooking || exactReference !== bookingReference) {
+        throw new Error(result?.error || "Exact booking read failed safely.");
+      }
+
+      setCustomerFolderExactBookingEditorState({
+        booking: exactBooking,
+        bookingReference,
+        form: customerFolderExactBookingFormFromRecord(exactBooking),
+        message: `Exact booking loaded. Status: ${customerFolderExactBookingStatusLabel(exactBooking)}.`,
+        status: "loaded",
+        tone: "success",
+      });
+    } catch (error) {
+      setCustomerFolderExactBookingEditorState({
+        ...initialCustomerFolderExactBookingEditorState,
+        bookingReference,
+        message: customerAdminReadFailureMessage(`Exact booking read for ${bookingReference}`, error),
+        status: "error",
+        tone: "error",
+      });
+    }
+  }
+
+  function mergeCustomerFolderSavedBookingFromExact(
+    currentBooking: RegularCustomerSavedBookingReadRecord,
+    exactBooking: CustomerFolderExactBookingRecord,
+  ): RegularCustomerSavedBookingReadRecord {
+    return {
+      ...currentBooking,
+      admin_status:
+        cleanCustomerFolderText(exactBooking.admin_internal_status, 80) || currentBooking.admin_status,
+      booking_month:
+        cleanCustomerFolderText(exactBooking.pickup_at || exactBooking.pickup_datetime, 120).slice(0, 7) ||
+        currentBooking.booking_month,
+      booking_reference:
+        customerFolderExactBookingReference(exactBooking) || currentBooking.booking_reference,
+      customer_account:
+        cleanCustomerFolderText(exactBooking.customer_display_name, 160) || currentBooking.customer_account,
+      customer_id:
+        cleanCustomerFolderText(exactBooking.customer_id, 80) || currentBooking.customer_id,
+      customer_status:
+        cleanCustomerFolderText(exactBooking.customer_facing_status, 80) || currentBooking.customer_status,
+      pickup_at:
+        cleanCustomerFolderText(exactBooking.pickup_at || exactBooking.pickup_datetime, 120) ||
+        currentBooking.pickup_at,
+      service_type:
+        cleanCustomerFolderText(exactBooking.service_type || exactBooking.route_type, 80) ||
+        currentBooking.service_type,
+    };
+  }
+
+  async function saveCustomerFolderExactBookingEdit() {
+    const exactBooking = customerFolderExactBookingEditorState.booking;
+    const bookingReference =
+      customerFolderExactBookingEditorState.bookingReference ||
+      customerFolderExactBookingReference(exactBooking);
+
+    if (!exactBooking || !bookingReference) {
+      setCustomerFolderExactBookingEditorState((current) => ({
+        ...current,
+        message: "Load the exact booking before saving changes.",
+        status: "error",
+        tone: "error",
+      }));
+      return;
+    }
+
+    const payloadResult = customerFolderExactBookingPayload(
+      exactBooking,
+      customerFolderExactBookingEditorState.form,
+    );
+
+    if (!payloadResult.ok) {
+      setCustomerFolderExactBookingEditorState((current) => ({
+        ...current,
+        message: payloadResult.error,
+        status: "error",
+        tone: "error",
+      }));
+      return;
+    }
+
+    setCustomerFolderExactBookingEditorState((current) => ({
+      ...current,
+      message: `Saving exact booking ${bookingReference}...`,
+      status: "saving",
+      tone: "info",
+    }));
+
+    try {
+      const response = await fetch(adminBookingsApiPath, {
+        body: JSON.stringify(payloadResult.payload),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "PATCH",
+      });
+      const result = (await response.json().catch(() => null)) as
+        | {
+            booking?: CustomerFolderExactBookingRecord | null;
+            error?: string;
+            ok?: boolean;
+          }
+        | null;
+      const updatedBooking = result?.booking ?? null;
+      const updatedReference = customerFolderExactBookingReference(updatedBooking);
+
+      if (!response.ok || result?.ok !== true || !updatedBooking || updatedReference !== bookingReference) {
+        throw new Error(result?.error || "Exact booking update failed safely.");
+      }
+
+      setCustomerFolderExactBookingEditorState({
+        booking: updatedBooking,
+        bookingReference,
+        form: customerFolderExactBookingFormFromRecord(updatedBooking),
+        message: `Saved exact booking ${bookingReference}.`,
+        status: "loaded",
+        tone: "success",
+      });
+      setCustomerFolderJobViewState((current) => ({
+        ...current,
+        message: `Saved exact booking ${bookingReference}.`,
+        savedBookings: current.savedBookings.map((currentBooking) =>
+          savedBookingReference(currentBooking) === bookingReference
+            ? mergeCustomerFolderSavedBookingFromExact(currentBooking, updatedBooking)
+            : currentBooking,
+        ),
+        tone: "success",
+      }));
+    } catch (error) {
+      setCustomerFolderExactBookingEditorState((current) => ({
+        ...current,
+        message: customerAdminReadFailureMessage(`Exact booking update for ${bookingReference}`, error),
+        status: "error",
+        tone: "error",
+      }));
+    }
+  }
+
+  async function deleteCustomerFolderExactBooking() {
+    const exactBooking = customerFolderExactBookingEditorState.booking;
+    const bookingReference =
+      customerFolderExactBookingEditorState.bookingReference ||
+      customerFolderExactBookingReference(exactBooking);
+    const deleteBookingId = customerFolderExactBookingId(exactBooking);
+    const blockReason = customerFolderExactBookingDeleteBlockReason(exactBooking);
+
+    if (!bookingReference || !deleteBookingId || blockReason) {
+      setCustomerFolderExactBookingEditorState((current) => ({
+        ...current,
+        message: blockReason || "Delete job failed: exact booking reference or id is missing.",
+        status: "error",
+        tone: "error",
+      }));
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete completed/cancelled job ${bookingReference} from this customer folder? This removes the job and linked driver artifacts and cannot be undone.`,
+    );
+
+    if (!confirmed) {
+      setCustomerFolderExactBookingEditorState((current) => ({
+        ...current,
+        message: "Delete cancelled.",
+        status: "loaded",
+        tone: "info",
+      }));
+      return;
+    }
+
+    setCustomerFolderExactBookingEditorState((current) => ({
+      ...current,
+      message: `Deleting exact booking ${bookingReference}...`,
+      status: "deleting",
+      tone: "info",
+    }));
+
+    try {
+      const response = await fetch(adminSavedBookingsApiPath, {
+        body: JSON.stringify({ booking_id: deleteBookingId }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "DELETE",
+      });
+      const result = (await response.json().catch(() => null)) as
+        | {
+            booking?: { id?: string | number | null; status?: string | null } | null;
+            error?: string;
+            ok?: boolean;
+          }
+        | null;
+      const responseBookingId = cleanCustomerFolderText(result?.booking?.id, 120);
+      const responseStatus = customerFolderStatusToken(result?.booking?.status);
+
+      if (
+        !response.ok ||
+        result?.ok !== true ||
+        responseBookingId !== deleteBookingId ||
+        !["completed", "cancelled"].includes(responseStatus)
+      ) {
+        throw new Error(result?.error || "Exact booking delete failed safely.");
+      }
+
+      setCustomerFolderJobViewState((current) => {
+        const nextSavedBookings = current.savedBookings.filter(
+          (currentBooking) => savedBookingReference(currentBooking) !== bookingReference,
+        );
+
+        return {
+          ...current,
+          message: `Deleted exact completed/cancelled job ${bookingReference}.`,
+          savedBookings: nextSavedBookings,
+          summary: current.summary
+            ? {
+                ...current.summary,
+                returned_count: Math.max(
+                  0,
+                  Number(current.summary.returned_count ?? nextSavedBookings.length + 1) - 1,
+                ),
+              }
+            : current.summary,
+          tone: "success",
+        };
+      });
+      setExpandedCustomerFolderJobReference("");
+      setCustomerFolderExactBookingEditorState({
+        ...initialCustomerFolderExactBookingEditorState,
+        bookingReference,
+        message: `Deleted exact completed/cancelled job ${bookingReference}.`,
+        status: "deleted",
+        tone: "success",
+      });
+    } catch (error) {
+      setCustomerFolderExactBookingEditorState((current) => ({
+        ...current,
+        message: customerAdminReadFailureMessage(`Exact booking delete for ${bookingReference}`, error),
+        status: "error",
+        tone: "error",
+      }));
+    }
+  }
+
   async function viewCustomerFolderJobs(customer: (typeof customerFolderIndexRows)[number]) {
     setCustomerFolderFinderSelectedId(customer.customerId);
     setSelectedMonthlyBillingGroupKey("");
@@ -3006,6 +3740,7 @@ export default function MockCustomerDashboardPage() {
     setSearchTerm("");
     setCustomerFolderFinderPage(1);
     setExpandedCustomerFolderJobReference("");
+    setCustomerFolderExactBookingEditorState(initialCustomerFolderExactBookingEditorState);
 
     setCustomerFolderJobViewState({
       customerId: customer.customerId,
@@ -5560,7 +6295,7 @@ export default function MockCustomerDashboardPage() {
                   <div className="mt-3 overflow-hidden rounded-md border border-slate-200 bg-white">
                     <div
                       aria-hidden="true"
-                      className="hidden grid-cols-[minmax(10rem,1fr)_minmax(9rem,1fr)_minmax(8rem,0.8fr)_6rem] gap-3 border-b border-slate-200 bg-white px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 md:grid"
+                      className="hidden grid-cols-[minmax(10rem,1fr)_minmax(9rem,1fr)_minmax(8rem,0.8fr)_8rem] gap-3 border-b border-slate-200 bg-white px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 md:grid"
                     >
                       <span>Booking</span>
                       <span>Pickup / service</span>
@@ -5574,10 +6309,26 @@ export default function MockCustomerDashboardPage() {
                           `${booking.customer_id || "customer"}-${booking.pickup_at || "job"}`;
                         const isExpanded = expandedCustomerFolderJobReference === bookingReference;
                         const dispatchHandoffHref = customerFolderJobDispatchHref(booking);
+                        const exactEditorIsCurrent =
+                          isExpanded &&
+                          customerFolderExactBookingEditorState.bookingReference === bookingReference;
+                        const exactEditorStatus = exactEditorIsCurrent
+                          ? customerFolderExactBookingEditorState.status
+                          : "idle";
+                        const exactEditorForm = exactEditorIsCurrent
+                          ? customerFolderExactBookingEditorState.form
+                          : initialCustomerFolderExactBookingEditForm;
+                        const exactBooking = exactEditorIsCurrent
+                          ? customerFolderExactBookingEditorState.booking
+                          : null;
+                        const exactActionInFlight = ["loading", "saving", "deleting"].includes(
+                          exactEditorStatus,
+                        );
+                        const exactDeleteBlockReason = customerFolderExactBookingDeleteBlockReason(exactBooking);
 
                         return (
                           <article
-                            className="grid gap-2 px-3 py-2 text-sm leading-5 md:grid-cols-[minmax(10rem,1fr)_minmax(9rem,1fr)_minmax(8rem,0.8fr)_6rem] md:items-center md:gap-3"
+                            className="grid gap-2 px-3 py-2 text-sm leading-5 md:grid-cols-[minmax(10rem,1fr)_minmax(9rem,1fr)_minmax(8rem,0.8fr)_8rem] md:items-center md:gap-3"
                             data-customer-folder-job-row={bookingReference}
                             key={bookingReference}
                           >
@@ -5602,12 +6353,10 @@ export default function MockCustomerDashboardPage() {
                               <button
                                 className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-xs font-bold text-slate-800 transition hover:border-slate-700"
                                 data-customer-folder-job-view-toggle={bookingReference}
-                                onClick={() =>
-                                  setExpandedCustomerFolderJobReference(isExpanded ? "" : bookingReference)
-                                }
+                                onClick={() => loadCustomerFolderExactBookingForEdit(booking)}
                                 type="button"
                               >
-                                {isExpanded ? "Hide" : "View"}
+                                {isExpanded ? "Close" : "View/Edit"}
                               </button>
                             </div>
                             {isExpanded ? (
@@ -5615,16 +6364,222 @@ export default function MockCustomerDashboardPage() {
                                 className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold leading-5 text-slate-700 md:col-span-4"
                                 data-customer-folder-job-details={bookingReference}
                               >
-                                <p>Reference: {savedBookingDisplayText(booking.booking_reference)}</p>
-                                <p>Pickup: {savedBookingDisplayText(booking.pickup_at, "Not available")}</p>
-                                <p>Service: {savedBookingDisplayText(booking.service_type, "Not available")}</p>
-                                <p>Status: {savedBookingStatusLabel(booking)}</p>
-                                <p>
-                                  Billing account:{" "}
-                                  {savedBookingDisplayText(booking.customer_account, "Not available")}
-                                </p>
-                                {dispatchHandoffHref ? (
-                                  <div className="mt-2 flex flex-wrap gap-2">
+                                <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-4">
+                                  <p>
+                                    <span className="block text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                                      Reference
+                                    </span>
+                                    {savedBookingDisplayText(booking.booking_reference)}
+                                  </p>
+                                  <p>
+                                    <span className="block text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                                      Pickup
+                                    </span>
+                                    {savedBookingDisplayText(booking.pickup_at, "Not available")}
+                                  </p>
+                                  <p>
+                                    <span className="block text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                                      Service
+                                    </span>
+                                    {savedBookingDisplayText(booking.service_type, "Not available")}
+                                  </p>
+                                  <p>
+                                    <span className="block text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                                      Account
+                                    </span>
+                                    {savedBookingDisplayText(booking.customer_account, "Not available")}
+                                  </p>
+                                </div>
+
+                                {exactEditorIsCurrent ? (
+                                  <p
+                                    aria-live="polite"
+                                    className={`mt-2 rounded-md border px-3 py-2 ${regularCustomerBookingFeedbackClass(
+                                      customerFolderExactBookingEditorState.tone,
+                                    )}`}
+                                    data-customer-folder-exact-booking-feedback={bookingReference}
+                                  >
+                                    {customerFolderExactBookingEditorState.message}
+                                  </p>
+                                ) : null}
+
+                                {exactEditorIsCurrent && exactBooking ? (
+                                  <div
+                                    className="mt-3 grid gap-2 md:grid-cols-2 lg:grid-cols-4"
+                                    data-customer-folder-exact-booking-editor={bookingReference}
+                                  >
+                                    <label className="grid gap-1">
+                                      <span className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                                        Passenger
+                                      </span>
+                                      <input
+                                        className="min-h-9 rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-950"
+                                        data-customer-folder-exact-booking-passenger={bookingReference}
+                                        onChange={(event) =>
+                                          updateCustomerFolderExactBookingForm(
+                                            "passengerName",
+                                            event.target.value,
+                                          )
+                                        }
+                                        type="text"
+                                        value={exactEditorForm.passengerName}
+                                      />
+                                    </label>
+                                    <label className="grid gap-1">
+                                      <span className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                                        Pickup date/time
+                                      </span>
+                                      <input
+                                        className="min-h-9 rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-950"
+                                        data-customer-folder-exact-booking-pickup-datetime={bookingReference}
+                                        onChange={(event) =>
+                                          updateCustomerFolderExactBookingForm(
+                                            "pickupDateTime",
+                                            event.target.value,
+                                          )
+                                        }
+                                        type="datetime-local"
+                                        value={exactEditorForm.pickupDateTime}
+                                      />
+                                    </label>
+                                    <label className="grid gap-1">
+                                      <span className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                                        Pickup
+                                      </span>
+                                      <input
+                                        className="min-h-9 rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-950"
+                                        data-customer-folder-exact-booking-pickup={bookingReference}
+                                        onChange={(event) =>
+                                          updateCustomerFolderExactBookingForm(
+                                            "pickupLocation",
+                                            event.target.value,
+                                          )
+                                        }
+                                        type="text"
+                                        value={exactEditorForm.pickupLocation}
+                                      />
+                                    </label>
+                                    <label className="grid gap-1">
+                                      <span className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                                        Drop-off
+                                      </span>
+                                      <input
+                                        className="min-h-9 rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-950"
+                                        data-customer-folder-exact-booking-dropoff={bookingReference}
+                                        onChange={(event) =>
+                                          updateCustomerFolderExactBookingForm(
+                                            "dropoffLocation",
+                                            event.target.value,
+                                          )
+                                        }
+                                        type="text"
+                                        value={exactEditorForm.dropoffLocation}
+                                      />
+                                    </label>
+                                    <label className="grid gap-1">
+                                      <span className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                                        Service
+                                      </span>
+                                      <input
+                                        className="min-h-9 rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-950"
+                                        data-customer-folder-exact-booking-service={bookingReference}
+                                        onChange={(event) =>
+                                          updateCustomerFolderExactBookingForm("serviceType", event.target.value)
+                                        }
+                                        type="text"
+                                        value={exactEditorForm.serviceType}
+                                      />
+                                    </label>
+                                    <label className="grid gap-1">
+                                      <span className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                                        Vehicle
+                                      </span>
+                                      <input
+                                        className="min-h-9 rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-950"
+                                        data-customer-folder-exact-booking-vehicle={bookingReference}
+                                        onChange={(event) =>
+                                          updateCustomerFolderExactBookingForm("vehicleType", event.target.value)
+                                        }
+                                        type="text"
+                                        value={exactEditorForm.vehicleType}
+                                      />
+                                    </label>
+                                    <label className="grid gap-1">
+                                      <span className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                                        Driver
+                                      </span>
+                                      <input
+                                        className="min-h-9 rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-950"
+                                        data-customer-folder-exact-booking-driver={bookingReference}
+                                        onChange={(event) =>
+                                          updateCustomerFolderExactBookingForm("driverName", event.target.value)
+                                        }
+                                        type="text"
+                                        value={exactEditorForm.driverName}
+                                      />
+                                    </label>
+                                    <label className="grid gap-1">
+                                      <span className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                                        Driver contact
+                                      </span>
+                                      <input
+                                        className="min-h-9 rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-950"
+                                        data-customer-folder-exact-booking-driver-contact={bookingReference}
+                                        onChange={(event) =>
+                                          updateCustomerFolderExactBookingForm(
+                                            "driverContact",
+                                            event.target.value,
+                                          )
+                                        }
+                                        type="text"
+                                        value={exactEditorForm.driverContact}
+                                      />
+                                    </label>
+                                    <label className="grid gap-1">
+                                      <span className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                                        Plate
+                                      </span>
+                                      <input
+                                        className="min-h-9 rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-950"
+                                        data-customer-folder-exact-booking-plate={bookingReference}
+                                        onChange={(event) =>
+                                          updateCustomerFolderExactBookingForm(
+                                            "driverPlateNumber",
+                                            event.target.value,
+                                          )
+                                        }
+                                        type="text"
+                                        value={exactEditorForm.driverPlateNumber}
+                                      />
+                                    </label>
+                                  </div>
+                                ) : null}
+
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  {exactEditorIsCurrent && exactBooking ? (
+                                    <>
+                                      <button
+                                        className="inline-flex min-h-9 items-center justify-center rounded-md border border-emerald-500 bg-white px-3 text-xs font-bold text-emerald-800 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+                                        data-customer-folder-exact-booking-save={bookingReference}
+                                        disabled={exactActionInFlight}
+                                        onClick={saveCustomerFolderExactBookingEdit}
+                                        type="button"
+                                      >
+                                        {exactEditorStatus === "saving" ? "Saving" : "Save changes"}
+                                      </button>
+                                      <button
+                                        className="inline-flex min-h-9 items-center justify-center rounded-md border border-rose-300 bg-white px-3 text-xs font-bold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+                                        data-customer-folder-job-delete={bookingReference}
+                                        disabled={exactActionInFlight || Boolean(exactDeleteBlockReason)}
+                                        onClick={deleteCustomerFolderExactBooking}
+                                        title={exactDeleteBlockReason || "Delete completed/cancelled job"}
+                                        type="button"
+                                      >
+                                        {exactEditorStatus === "deleting" ? "Deleting" : "Delete job"}
+                                      </button>
+                                    </>
+                                  ) : null}
+                                  {dispatchHandoffHref ? (
                                     <Link
                                       className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-950 px-3 text-xs font-bold text-white transition hover:bg-slate-800"
                                       data-customer-folder-job-open-dispatch={bookingReference}
@@ -5632,7 +6587,12 @@ export default function MockCustomerDashboardPage() {
                                     >
                                       Open in Dispatch
                                     </Link>
-                                  </div>
+                                  ) : null}
+                                </div>
+                                {exactEditorIsCurrent && exactBooking && exactDeleteBlockReason ? (
+                                  <p className="mt-2 text-[11px] font-semibold text-slate-500">
+                                    {exactDeleteBlockReason}
+                                  </p>
                                 ) : null}
                               </div>
                             ) : null}

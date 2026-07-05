@@ -55,6 +55,21 @@ const customerFolderJobsSection = sectionBetween(
   'data-customer-folder-jobs-panel="true"',
   'data-unbilled-customers-sector="true"',
 );
+const customerFolderExactBookingLoadFunction = sectionBetween(
+  customersPage,
+  "async function loadCustomerFolderExactBookingForEdit",
+  "\n  function mergeCustomerFolderSavedBookingFromExact",
+);
+const customerFolderExactBookingSaveFunction = sectionBetween(
+  customersPage,
+  "async function saveCustomerFolderExactBookingEdit",
+  "\n  async function deleteCustomerFolderExactBooking",
+);
+const customerFolderExactBookingDeleteFunction = sectionBetween(
+  customersPage,
+  "async function deleteCustomerFolderExactBooking",
+  "\n  async function viewCustomerFolderJobs",
+);
 const dispatchHandoffFunction = sectionBetween(
   appPage,
   "async function loadDispatchHandoffBookingFromUrl",
@@ -81,9 +96,23 @@ for (const fragment of [
   'const customerFolderDispatchHandoffReferenceParam = "booking_reference";',
   "function safeCustomerFolderDispatchHandoffReference(",
   "function customerFolderJobDispatchHref(",
+  "function customerFolderExactBookingCanDelete(",
+  "function customerFolderExactBookingDeleteBlockReason(",
+  "function customerFolderExactBookingPayload(",
+  "target_booking_reference: bookingReference,",
+  "async function loadCustomerFolderExactBookingForEdit(",
+  "async function saveCustomerFolderExactBookingEdit()",
+  "async function deleteCustomerFolderExactBooking()",
   "[customerFolderDispatchHandoffReferenceParam]: bookingReference,",
   "tab: customerFolderDispatchHandoffTab,",
+  "fetch(`${adminBookingsApiPath}?${params.toString()}`",
+  "fetch(adminBookingsApiPath, {",
+  "fetch(adminSavedBookingsApiPath, {",
+  "Delete is locked until this exact job is completed or cancelled.",
   'data-customer-folder-job-open-dispatch={bookingReference}',
+  'data-customer-folder-exact-booking-editor={bookingReference}',
+  'data-customer-folder-exact-booking-save={bookingReference}',
+  'data-customer-folder-job-delete={bookingReference}',
   "Open in Dispatch",
 ]) {
   assertIncludes(customersPage, fragment, `customer folder dispatch handoff source ${fragment}`);
@@ -92,19 +121,76 @@ for (const fragment of [
 for (const fragment of [
   'data-customer-folder-job-view-toggle={bookingReference}',
   'data-customer-folder-job-details={bookingReference}',
+  'data-customer-folder-exact-booking-editor={bookingReference}',
+  'data-customer-folder-exact-booking-save={bookingReference}',
+  'data-customer-folder-job-delete={bookingReference}',
   'data-customer-folder-job-open-dispatch={bookingReference}',
+  "View/Edit",
+  "Save changes",
+  "Delete job",
   "Open in Dispatch",
 ]) {
   assertIncludes(customerFolderJobsSection, fragment, `customer folder jobs section ${fragment}`);
 }
 
+for (const fragment of [
+  "const params = new URLSearchParams({ booking_reference: bookingReference });",
+  "fetch(`${adminBookingsApiPath}?${params.toString()}`",
+  "method: \"GET\"",
+  "exactReference !== bookingReference",
+]) {
+  assertIncludes(
+    customerFolderExactBookingLoadFunction,
+    fragment,
+    `customer folder exact booking load ${fragment}`,
+  );
+}
+
+for (const fragment of [
+  "const payloadResult = customerFolderExactBookingPayload(",
+  "fetch(adminBookingsApiPath, {",
+  "method: \"PATCH\"",
+  "updatedReference !== bookingReference",
+]) {
+  assertIncludes(
+    customerFolderExactBookingSaveFunction,
+    fragment,
+    `customer folder exact booking save ${fragment}`,
+  );
+}
+
+for (const fragment of [
+  "const deleteBookingId = customerFolderExactBookingId(exactBooking);",
+  "const blockReason = customerFolderExactBookingDeleteBlockReason(exactBooking);",
+  "if (!bookingReference || !deleteBookingId || blockReason)",
+  "window.confirm(",
+  "fetch(adminSavedBookingsApiPath, {",
+  "body: JSON.stringify({ booking_id: deleteBookingId })",
+  "method: \"DELETE\"",
+  "responseBookingId !== deleteBookingId",
+  "![\"completed\", \"cancelled\"].includes(responseStatus)",
+]) {
+  assertIncludes(
+    customerFolderExactBookingDeleteFunction,
+    fragment,
+    `customer folder exact booking delete ${fragment}`,
+  );
+}
+
 for (const forbiddenFragment of [
-  'data-customer-folder-job-delete',
   "deleteCustomerFolderJob",
   "method: \"DELETE\"",
   "adminSavedBookingsApiPath, {",
 ]) {
-  assertExcludes(customerFolderJobsSection, forbiddenFragment, "customer folder job panel delete wiring");
+  assertExcludes(customerFolderExactBookingLoadFunction, forbiddenFragment, "customer folder exact load mutation boundary");
+}
+
+for (const forbiddenPattern of [
+  /invoice|payment|payout|geolocation|watchPosition|provider|sendMail|telegram|whatsapp/i,
+]) {
+  assertExcludes(customerFolderExactBookingLoadFunction, forbiddenPattern, "customer folder exact load boundary");
+  assertExcludes(customerFolderExactBookingSaveFunction, forbiddenPattern, "customer folder exact save boundary");
+  assertExcludes(customerFolderExactBookingDeleteFunction, forbiddenPattern, "customer folder exact delete boundary");
 }
 
 for (const fragment of [
@@ -195,8 +281,11 @@ for (const phrase of [
   "Customer Folder `View jobs` now exposes one safe `Open in Dispatch` handoff for each saved booking row with an exact booking reference.",
   "The handoff uses `/?tab=dispatch&booking_reference=...`, performs one exact guarded admin GET read through `/api/admin-bookings?booking_reference=...`, and then calls the existing Dispatch `loadSelectedBooking` editor/review path.",
   "It does not rely on the recent bookings list window, so older customer-folder jobs can still open by exact reference.",
-  "Customer Folder does not expose a delete job button, raw internal booking id, PATCH, DELETE, invoice, payment, provider send, GPS/live-location, parser/debug, or mock archive action.",
-  "Delete remains limited to the existing Completed / History lane, where the app resolves the internal saved booking id and only deletes completed/cancelled/driver-completed history jobs.",
+  "Customer Folder `View/Edit` now loads the exact booking by reference before showing compact operational edit controls for passenger, pickup time, pickup, drop-off, service, vehicle, driver, driver contact, and plate.",
+  "Customer Folder save uses the existing guarded `/api/admin-bookings` PATCH path with the loaded booking as the base payload, so account/contact/status fields are preserved and missing required operational fields are reported instead of guessed.",
+  "Customer Folder delete is visible but locked until that exact loaded booking is completed or cancelled; it uses the exact returned booking id through the existing guarded `/api/admin-saved-bookings` DELETE path and removes the row from the selected customer list only after the API confirms the same id and a completed/cancelled status.",
+  "Customer Folder still does not expose invoice, payment, payout, provider send, GPS/live-location, parser/debug, mock archive, raw finance, or public/customer/driver auth actions in this row.",
+  "Active/upcoming customer-folder jobs must be completed or cancelled through the normal operational lane before delete becomes available; this avoids broad deletion or blind row deletion from the list.",
   "Guard coverage lives in `scripts/test-customer-folder-dispatch-handoff-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {
   assertIncludes(ledgerSection, phrase, `customer folder dispatch handoff ledger phrase: ${phrase}`);

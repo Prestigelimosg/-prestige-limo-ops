@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -1196,7 +1197,7 @@ export default function CustomerPortalPage() {
             const isActive = !isBookRequestLink && activeSection === section;
             const isBookingFilter = bookingFilterSet.has(section);
             const sectionClassName = [
-              "min-h-10 rounded-md border px-2.5 py-1.5 text-sm font-semibold transition",
+              "min-h-9 rounded-md border px-2.5 py-1.5 text-sm font-semibold transition",
               isActive
                 ? "border-slate-950 bg-slate-950 text-white"
                 : "border-slate-300 bg-white text-slate-800 hover:border-slate-500",
@@ -1204,7 +1205,7 @@ export default function CustomerPortalPage() {
 
             if (isBookRequestLink) {
               return (
-                <a
+                <Link
                   className={sectionClassName}
                   data-active="false"
                   data-customer-portal-book-request-link="true"
@@ -1213,7 +1214,7 @@ export default function CustomerPortalPage() {
                   key={section}
                 >
                   {section}
-                </a>
+                </Link>
               );
             }
 

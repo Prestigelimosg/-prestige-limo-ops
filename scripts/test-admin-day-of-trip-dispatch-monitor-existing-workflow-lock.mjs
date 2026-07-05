@@ -184,7 +184,7 @@ for (const fragment of [
   "expected no private/customer/driver forbidden text in day-of-trip monitor",
   "expected compact day-of-trip monitor",
   "expected day-of-trip monitor not to create horizontal overflow",
-  "Expected applied snapshot load to show saved driver status through the existing Day-of-Trip Dispatch Monitor",
+  "Expected applied snapshot load to GET dispatch_release and driver_acknowledgement workflow statuses through the guarded API path",
 ]) {
   assertIncludes(appSmoke, fragment, `app smoke day-of-trip monitor fragment ${fragment}`);
 }

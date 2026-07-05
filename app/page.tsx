@@ -7010,6 +7010,27 @@ function sortCompletedHistoryMonthKeysNewestFirst(firstMonthKey: string, secondM
   return firstMonthKey.localeCompare(secondMonthKey);
 }
 
+type CompletedHistoryMonthOption = {
+  count: number;
+  label: string;
+  monthKey: string;
+};
+
+function defaultCompletedHistoryMonthKey(
+  monthOptions: CompletedHistoryMonthOption[],
+  todayKey: string,
+) {
+  const currentMonthKey = /^\d{4}-\d{2}-\d{2}$/.test(todayKey) ? todayKey.slice(0, 7) : "";
+  const latestNonFutureMonth = monthOptions.find((monthOption) => {
+    return (
+      /^\d{4}-\d{2}$/.test(monthOption.monthKey) &&
+      (!currentMonthKey || monthOption.monthKey <= currentMonthKey)
+    );
+  });
+
+  return latestNonFutureMonth?.monthKey || monthOptions[0]?.monthKey || "all";
+}
+
 function adminDriverJobStatusReadStateIsCompleted(
   readState: AdminDriverJobStatusReadState | null | undefined,
 ) {
@@ -16305,7 +16326,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     });
 
     return Array.from(monthCounts.entries())
-      .map(([monthKey, count]) => ({
+      .map(([monthKey, count]): CompletedHistoryMonthOption => ({
         count,
         label: completedHistoryMonthLabel(monthKey),
         monthKey,
@@ -16314,12 +16335,15 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         sortCompletedHistoryMonthKeysNewestFirst(firstOption.monthKey, secondOption.monthKey),
       );
   }, [completedBookings]);
-  const latestCompletedHistoryMonthKey = completedHistoryMonthOptions[0]?.monthKey || "all";
+  const defaultCompletedHistoryMonthKeyValue = defaultCompletedHistoryMonthKey(
+    completedHistoryMonthOptions,
+    todayKey,
+  );
   const selectedCompletedHistoryMonthKey =
     completedMonthFilter === "all" ||
     completedHistoryMonthOptions.some((monthOption) => monthOption.monthKey === completedMonthFilter)
-      ? completedMonthFilter || latestCompletedHistoryMonthKey
-      : latestCompletedHistoryMonthKey;
+      ? completedMonthFilter || defaultCompletedHistoryMonthKeyValue
+      : defaultCompletedHistoryMonthKeyValue;
   const selectedCompletedHistoryMonthLabel =
     selectedCompletedHistoryMonthKey === "all"
       ? "All months"
@@ -21718,6 +21742,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
 
       const successMessage = { tone: "success", text: successText } satisfies Message;
       setBookingCompletionMessage(bookingId, successMessage);
+      await loadBookings("Bookings synced.", { silent: true });
     } catch (error) {
       const errorText = error instanceof Error ? error.message : "Unknown booking status error.";
       const errorMessage = { tone: "error", text: `${errorPrefix}: ${errorText}` } satisfies Message;
@@ -22621,7 +22646,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             <div>
               <h3 className="text-sm font-semibold text-slate-800">Completed / Earlier Jobs</h3>
               <p className="text-xs text-slate-500">
-                Monthly archive by pickup date. Latest month opens first; choose All months for a full search.
+                Monthly archive by pickup date. Latest current/past month opens first; choose All months for a full search.
               </p>
               <p className="mt-1 text-xs font-medium text-slate-600">
                 Showing {visibleCompletedBookings.length} of {filteredCompletedBookings.length} matching jobs in{" "}

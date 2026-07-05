@@ -83,6 +83,8 @@ for (const fragment of [
   "function bookingRecordCompletedHistoryMonthKey",
   "function completedHistoryMonthLabel",
   "function sortCompletedHistoryMonthKeysNewestFirst",
+  "function defaultCompletedHistoryMonthKey",
+  "monthOption.monthKey <= currentMonthKey",
   "function sortBookingHistoryNewestFirst",
   "bookingRecord.admin_internal_status",
   "bookingRecord.customer_facing_status",
@@ -142,7 +144,7 @@ for (const fragment of [
 for (const fragment of [
   'data-completed-history-panel="true"',
   "Completed / Earlier Jobs",
-  "Monthly archive by pickup date. Latest month opens first; choose All months for a full search.",
+  "Monthly archive by pickup date. Latest current/past month opens first; choose All months for a full search.",
   "Showing {visibleCompletedBookings.length} of {filteredCompletedBookings.length} matching jobs in",
   'data-completed-month-filter="true"',
   "Search passenger, company, flight, route, driver, status",
@@ -224,7 +226,7 @@ for (const forbiddenPattern of [
 for (const phrase of [
   "Past pickup-date jobs now leave Current / Upcoming and move into Completed / History alongside completed jobs.",
   "Cancelled/revoked jobs also leave Current / Upcoming and stay searchable in Completed / History with a Cancelled status pill.",
-  "Completed / History defaults to the latest available pickup month, can switch to `All months`, and keeps search available by passenger/company/flight/route/driver/status.",
+  "Completed / History defaults to the latest current/past pickup month so future-dated test rows do not hide live completed jobs; it can switch to `All months` and keeps search available by passenger/company/flight/route/driver/status.",
   "Completed / History rows are grouped under compact monthly headers such as `June 2026`, with known-date months sorted newest first and unknown dates grouped under `Date to confirm`.",
   "The Dashboard no longer renders earlier booking cards; it shows a compact count plus an `Open Completed / History` handoff.",
   "Expanded Current / Upcoming and Completed / History rows use compact detail strips instead of large mini-cards.",

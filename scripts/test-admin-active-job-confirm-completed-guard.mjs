@@ -136,6 +136,7 @@ for (const fragment of [
 
 for (const fragment of [
   "patchBookingStatusReference(\n        bookingStatusReference,\n        nextStatus,\n        bookingRecord,",
+  'await loadBookings("Bookings synced.", { silent: true });',
   "patchBookingStatusReference(\n      bookingStatusReference,\n      \"completed\",\n      matchingBooking,",
   "const driverJobLinkBookingRecord = findLoadedBookingRecordByReference(",
   "driverJobLinkBookingRecord ?? undefined",

@@ -738,7 +738,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 - Past pickup-date jobs now leave Current / Upcoming and move into Completed / History alongside completed jobs.
 - Cancelled/revoked jobs also leave Current / Upcoming and stay searchable in Completed / History with a Cancelled status pill.
-- Completed / History defaults to the latest available pickup month, can switch to `All months`, and keeps search available by passenger/company/flight/route/driver/status.
+- Completed / History defaults to the latest current/past pickup month so future-dated test rows do not hide live completed jobs; it can switch to `All months` and keeps search available by passenger/company/flight/route/driver/status.
 - Completed / History rows are grouped under compact monthly headers such as `June 2026`, with known-date months sorted newest first and unknown dates grouped under `Date to confirm`.
 - The Dashboard no longer renders earlier booking cards; it shows a compact count plus an `Open Completed / History` handoff.
 - Expanded Current / Upcoming and Completed / History rows use compact detail strips instead of large mini-cards.

@@ -400,22 +400,29 @@ const seed = {
       status: "confirmed",
     },
     {
+      admin_internal_status: "draft",
+      booking_reference: "ADM-CLEANUP-2099-CURRENT-DRAFT",
+      customer_facing_status: "pending",
+      id: "cleanup-current-draft-2099-1",
+      pickup_at: "2099-12-30T16:00:00+00:00",
+    },
+    {
       booking_reference: "ADM-CLEANUP-2099-DRAFT",
       id: "cleanup-draft-2099-1",
       pickup_at: "2099-12-30T16:00:00+00:00",
       status: "draft",
     },
     {
+      admin_internal_status: "draft",
       booking_reference: "ADM-CLEANUP-2026-DRAFT",
       id: "cleanup-draft-2026-1",
       pickup_at: "2026-12-30T16:00:00+00:00",
-      status: "draft",
     },
     {
+      admin_internal_status: "completed",
       booking_reference: "ADM-CLEANUP-2099-COMPLETED",
       id: "cleanup-completed-2099-1",
       pickup_at: "2099-12-30T16:00:00+00:00",
-      status: "completed",
     },
   ],
 };
@@ -593,6 +600,7 @@ try {
     await route.DELETE(
       deleteRequest("http://localhost/api/admin-saved-bookings", {
         booking_references: [
+          "ADM-CLEANUP-2099-CURRENT-DRAFT",
           "ADM-CLEANUP-2099-DRAFT",
           "ADM-CLEANUP-2026-DRAFT",
           "ADM-CLEANUP-2099-COMPLETED",
@@ -606,6 +614,12 @@ try {
   assert.equal(cleanupResult.status, 200);
   assert.deepEqual(cleanupResult.body, {
     bookings: [
+      {
+        booking_reference: "ADM-CLEANUP-2099-CURRENT-DRAFT",
+        id: "cleanup-current-draft-2099-1",
+        pickup_at: "2099-12-30T16:00:00+00:00",
+        status: "draft",
+      },
       {
         booking_reference: "ADM-CLEANUP-2099-DRAFT",
         id: "cleanup-draft-2099-1",
@@ -621,8 +635,32 @@ try {
     ],
     version: "admin-saved-booking-future-draft-cleanup-delete-v1",
   });
-  assert.equal(cleanupMock.client.selectHistory.length, 4);
+  assert.equal(cleanupMock.client.selectHistory.length, 8);
   assert.deepEqual(cleanupMock.client.selectHistory[0].filters, [
+    {
+      column: "booking_reference",
+      type: "eq",
+      value: "ADM-CLEANUP-2099-CURRENT-DRAFT",
+    },
+    {
+      column: "admin_internal_status",
+      type: "eq",
+      value: "draft",
+    },
+  ]);
+  assert.deepEqual(cleanupMock.client.selectHistory[1].filters, [
+    {
+      column: "booking_reference",
+      type: "eq",
+      value: "ADM-CLEANUP-2099-DRAFT",
+    },
+    {
+      column: "admin_internal_status",
+      type: "eq",
+      value: "draft",
+    },
+  ]);
+  assert.deepEqual(cleanupMock.client.selectHistory[2].filters, [
     {
       column: "booking_reference",
       type: "eq",
@@ -634,8 +672,30 @@ try {
       value: "draft",
     },
   ]);
-  assert.equal(cleanupMock.client.deleteHistory.length, 1);
+  assert.equal(cleanupMock.client.deleteHistory.length, 3);
   assert.deepEqual(cleanupMock.client.deleteHistory[0].filters, [
+    {
+      column: "booking_reference",
+      type: "eq",
+      value: "ADM-CLEANUP-2099-CURRENT-DRAFT",
+    },
+    {
+      column: "admin_internal_status",
+      type: "eq",
+      value: "draft",
+    },
+    {
+      column: "id",
+      type: "eq",
+      value: "cleanup-current-draft-2099-1",
+    },
+    {
+      column: "pickup_at",
+      type: "eq",
+      value: "2099-12-30T16:00:00+00:00",
+    },
+  ]);
+  assert.deepEqual(cleanupMock.client.deleteHistory[2].filters, [
     {
       column: "booking_reference",
       type: "eq",
@@ -657,6 +717,12 @@ try {
       value: "2099-12-30T16:00:00+00:00",
     },
   ]);
+  assert.equal(
+    cleanupMock.client.rows.bookings.some(
+      (booking) => booking.id === "cleanup-current-draft-2099-1",
+    ),
+    false,
+  );
   assert.equal(
     cleanupMock.client.rows.bookings.some((booking) => booking.id === "cleanup-draft-2099-1"),
     false,

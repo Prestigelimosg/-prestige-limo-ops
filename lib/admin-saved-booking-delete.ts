@@ -68,6 +68,10 @@ type AdminSavedBookingDeleteResult<T> =
 
 type UnknownRecord = Record<string, unknown>;
 type SavedBookingDeleteClient = Pick<SupabaseClient, "from">;
+type SavedBookingDeleteSelectResult<T> = {
+  data: T | null;
+  error: unknown;
+};
 
 const allowedAdapterActorRoles = new Set(["admin", "dispatcher", "system"]);
 const allowedPayloadKeys = new Set(["booking_id"]);
@@ -336,6 +340,14 @@ function pickupAtIsFutureDraftCleanupDate(value: string | null) {
   return Number.isFinite(parsed.getTime()) && parsed.getUTCFullYear() === 2099;
 }
 
+function futureDraftCleanupStatus(value: UnknownRecord) {
+  return (
+    textOrNull(value.status, 40) ||
+    textOrNull(value.admin_internal_status, 40) ||
+    textOrNull(value.customer_facing_status, 40)
+  )?.toLowerCase();
+}
+
 function toDeleteRecord(value: unknown): AdminSavedBookingDeleteRecord | null {
   const row = asRecord(value);
   const id =
@@ -370,7 +382,7 @@ function toFutureDraftCleanupDeleteRecord(
       : textOrNull(row.id, 120);
   const bookingReference = textOrNull(row.booking_reference, 160);
   const pickupAt = textOrNull(row.pickup_at, 120);
-  const status = textOrNull(row.status, 40)?.toLowerCase();
+  const status = futureDraftCleanupStatus(row);
 
   if (
     id === null ||
@@ -506,6 +518,70 @@ export async function deleteAdminCompletedSavedBooking(
   };
 }
 
+async function findFutureDraftCleanupCandidate(
+  client: SavedBookingDeleteClient,
+  bookingReference: string,
+): Promise<SavedBookingDeleteSelectResult<unknown>> {
+  const currentResult = await client
+    .from("bookings")
+    .select(
+      "id, booking_reference, admin_internal_status, customer_facing_status, pickup_at",
+    )
+    .eq("booking_reference", bookingReference)
+    .eq("admin_internal_status", "draft")
+    .maybeSingle();
+
+  if (currentResult.error) {
+    if (classifyDatabaseFailure(currentResult.error) !== "column_missing") {
+      return currentResult;
+    }
+  } else if (currentResult.data) {
+    return currentResult;
+  }
+
+  return client
+    .from("bookings")
+    .select("id, booking_reference, status, pickup_at")
+    .eq("booking_reference", bookingReference)
+    .eq("status", "draft")
+    .maybeSingle();
+}
+
+async function deleteFutureDraftCleanupCandidate(
+  client: SavedBookingDeleteClient,
+  booking: AdminSavedBookingFutureDraftCleanupDeleteRecord,
+): Promise<SavedBookingDeleteSelectResult<unknown>> {
+  const currentResult = await client
+    .from("bookings")
+    .delete()
+    .eq("booking_reference", booking.booking_reference)
+    .eq("admin_internal_status", "draft")
+    .eq("id", booking.id)
+    .eq("pickup_at", booking.pickup_at)
+    .select(
+      "id, booking_reference, admin_internal_status, customer_facing_status, pickup_at",
+    )
+    .maybeSingle();
+
+  if (currentResult.error) {
+    if (classifyDatabaseFailure(currentResult.error) !== "column_missing") {
+      return currentResult;
+    }
+  } else if (currentResult.data) {
+    return currentResult;
+  }
+
+  return client
+    .from("bookings")
+    .delete()
+    .eq("booking_reference", booking.booking_reference)
+    .eq("status", "draft")
+    .eq("id", booking.id)
+    .eq("pickup_at", booking.pickup_at)
+    .select("id, booking_reference, status, pickup_at")
+    .maybeSingle();
+}
+
 export async function deleteAdminFutureDraft2099SavedBookingsByReference(
   input: unknown,
   actor: AdminBookingPersistenceAdapterActor,
@@ -526,12 +602,8 @@ export async function deleteAdminFutureDraft2099SavedBookingsByReference(
   const skippedReferences: string[] = [];
 
   for (const bookingReference of parsed.data.booking_references) {
-    const { data: candidateData, error: candidateError } = await clientResult.data
-      .from("bookings")
-      .select("id, booking_reference, status, pickup_at")
-      .eq("booking_reference", bookingReference)
-      .eq("status", "draft")
-      .maybeSingle();
+    const { data: candidateData, error: candidateError } =
+      await findFutureDraftCleanupCandidate(clientResult.data, bookingReference);
 
     if (candidateError) {
       return safeDatabaseFailure(safeFutureDraftCleanupError, 500, candidateError);
@@ -544,15 +616,10 @@ export async function deleteAdminFutureDraft2099SavedBookingsByReference(
       continue;
     }
 
-    const { data, error } = await clientResult.data
-      .from("bookings")
-      .delete()
-      .eq("booking_reference", bookingReference)
-      .eq("status", "draft")
-      .eq("id", candidate.id)
-      .eq("pickup_at", candidate.pickup_at)
-      .select("id, booking_reference, status, pickup_at")
-      .maybeSingle();
+    const { data, error } = await deleteFutureDraftCleanupCandidate(
+      clientResult.data,
+      candidate,
+    );
 
     if (error) {
       return safeDatabaseFailure(safeFutureDraftCleanupError, 500, error);

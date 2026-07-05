@@ -88,8 +88,6 @@ const safeTargetMissingError =
   "Archived saved booking delete target was not found.";
 const safeFutureDraftCleanupError =
   "Future draft saved booking cleanup failed safely.";
-const futureDraftCleanupPickupStart = "2099-01-01T00:00:00.000Z";
-const futureDraftCleanupPickupEnd = "2100-01-01T00:00:00.000Z";
 const placeholderConfigPattern =
   /^(?:todo|tbd|n\/a|none|null|undefined|placeholder|change[-_\s]?me|changeme|replace[-_\s]?me|your[-_\s]?.*|example)$/i;
 
@@ -528,13 +526,31 @@ export async function deleteAdminFutureDraft2099SavedBookingsByReference(
   const skippedReferences: string[] = [];
 
   for (const bookingReference of parsed.data.booking_references) {
+    const { data: candidateData, error: candidateError } = await clientResult.data
+      .from("bookings")
+      .select("id, booking_reference, status, pickup_at")
+      .eq("booking_reference", bookingReference)
+      .eq("status", "draft")
+      .maybeSingle();
+
+    if (candidateError) {
+      return safeDatabaseFailure(safeFutureDraftCleanupError, 500, candidateError);
+    }
+
+    const candidate = toFutureDraftCleanupDeleteRecord(candidateData, bookingReference);
+
+    if (!candidate) {
+      skippedReferences.push(bookingReference);
+      continue;
+    }
+
     const { data, error } = await clientResult.data
       .from("bookings")
       .delete()
       .eq("booking_reference", bookingReference)
       .eq("status", "draft")
-      .gte("pickup_at", futureDraftCleanupPickupStart)
-      .lt("pickup_at", futureDraftCleanupPickupEnd)
+      .eq("id", candidate.id)
+      .eq("pickup_at", candidate.pickup_at)
       .select("id, booking_reference, status, pickup_at")
       .maybeSingle();
 

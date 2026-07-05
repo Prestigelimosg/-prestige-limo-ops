@@ -154,6 +154,7 @@ class MockSupabaseQuery {
     this.selectedColumns = null;
     this.table = table;
     this.deleteRequested = false;
+    this.selectRequested = false;
   }
 
   delete() {
@@ -210,6 +211,7 @@ class MockSupabaseQuery {
 
   select(columns) {
     this.selectedColumns = columns;
+    this.selectRequested = true;
 
     return this;
   }
@@ -219,16 +221,25 @@ class MockSupabaseQuery {
   }
 
   execute() {
-    if (!this.deleteRequested) {
-      throw new Error(`Unexpected non-delete query for ${this.table}`);
+    if (this.deleteRequested) {
+      return this.client.deleteRows(
+        this.table,
+        this.filters,
+        this.resultMode,
+        this.selectedColumns,
+      );
     }
 
-    return this.client.deleteRows(
-      this.table,
-      this.filters,
-      this.resultMode,
-      this.selectedColumns,
-    );
+    if (this.selectRequested) {
+      return this.client.selectRows(
+        this.table,
+        this.filters,
+        this.resultMode,
+        this.selectedColumns,
+      );
+    }
+
+    throw new Error(`Unexpected query for ${this.table}`);
   }
 }
 
@@ -238,6 +249,7 @@ class MockSupabaseClient {
     this.failures = failures;
     this.operations = [];
     this.rows = clone(seed);
+    this.selectHistory = [];
   }
 
   from(table) {
@@ -285,6 +297,48 @@ class MockSupabaseClient {
       }),
     );
     this.rows[table] = rows.filter((row) => !matches.includes(row));
+
+    return {
+      data: resultMode === "maybeSingle" ? matches[0] ?? null : matches,
+      error: null,
+    };
+  }
+
+  selectRows(table, filters, resultMode, selectedColumns) {
+    const failure = this.failures[`select:${table}`] || this.failures[table] || null;
+
+    this.selectHistory.push({
+      filters: clone(filters),
+      resultMode,
+      selectedColumns,
+      table,
+    });
+
+    if (failure) {
+      return {
+        data: null,
+        error: failure,
+      };
+    }
+
+    const rows = this.rows[table] || [];
+    const matches = rows.filter((row) =>
+      filters.every((filter) => {
+        if (filter.type === "in") {
+          return filter.values.map(String).includes(String(row[filter.column]));
+        }
+
+        if (filter.type === "gte") {
+          return String(row[filter.column] ?? "") >= String(filter.value);
+        }
+
+        if (filter.type === "lt") {
+          return String(row[filter.column] ?? "") < String(filter.value);
+        }
+
+        return String(row[filter.column]) === String(filter.value);
+      }),
+    );
 
     return {
       data: resultMode === "maybeSingle" ? matches[0] ?? null : matches,
@@ -567,7 +621,20 @@ try {
     ],
     version: "admin-saved-booking-future-draft-cleanup-delete-v1",
   });
-  assert.equal(cleanupMock.client.deleteHistory.length, 4);
+  assert.equal(cleanupMock.client.selectHistory.length, 4);
+  assert.deepEqual(cleanupMock.client.selectHistory[0].filters, [
+    {
+      column: "booking_reference",
+      type: "eq",
+      value: "ADM-CLEANUP-2099-DRAFT",
+    },
+    {
+      column: "status",
+      type: "eq",
+      value: "draft",
+    },
+  ]);
+  assert.equal(cleanupMock.client.deleteHistory.length, 1);
   assert.deepEqual(cleanupMock.client.deleteHistory[0].filters, [
     {
       column: "booking_reference",
@@ -580,14 +647,14 @@ try {
       value: "draft",
     },
     {
-      column: "pickup_at",
-      type: "gte",
-      value: "2099-01-01T00:00:00.000Z",
+      column: "id",
+      type: "eq",
+      value: "cleanup-draft-2099-1",
     },
     {
       column: "pickup_at",
-      type: "lt",
-      value: "2100-01-01T00:00:00.000Z",
+      type: "eq",
+      value: "2099-12-30T16:00:00+00:00",
     },
   ]);
   assert.equal(

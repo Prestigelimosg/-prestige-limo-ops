@@ -1357,7 +1357,7 @@ async function ensureCustomerContact(
 async function fetchAdminBookingById(
   client: SupabaseClient,
   bookingId: DbIdentifier,
-): Promise<AdminBookingResult<AdminBookingPersistenceRecord>> {
+): Promise<AdminBookingResult<AdminBookingPersistenceRecord & { id: DbIdentifier }>> {
   const { data, error } = await loadAdminBookingsWithFoundationFallback((selectedColumns) =>
     client
       .from("bookings")
@@ -1366,14 +1366,18 @@ async function fetchAdminBookingById(
       .limit(1)
       .maybeSingle(),
   );
+  const reloadedBookingId = dbIdentifierOrNull(asRecord(data).id);
 
-  if (error || !data) {
+  if (error || !data || !reloadedBookingId) {
     return safeAdapterFailure(safeReloadError, 500, error, "booking_reload");
   }
 
   return {
     ok: true,
-    data: toAdminBookingDto(asRecord(data)),
+    data: {
+      id: reloadedBookingId,
+      ...toAdminBookingDto(asRecord(data)),
+    },
   };
 }
 

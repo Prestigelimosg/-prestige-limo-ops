@@ -277,6 +277,8 @@ for (const fragment of [
 for (const fragment of [
   "export async function loadAdminBookingByReferenceThroughSupabaseAdapter(",
   "const result = await fetchAdminBookingByReference(clientResult.data, bookingReference);",
+  "const reloadedBookingId = dbIdentifierOrNull(asRecord(data).id);",
+  "id: reloadedBookingId,",
 ]) {
   assertIncludes(adapter, fragment, `admin booking adapter exact reference ${fragment}`);
 }
@@ -288,6 +290,7 @@ for (const phrase of [
   "Customer Folder `View/Edit` now loads the exact booking by reference before showing compact operational edit controls for passenger, pickup time, pickup, drop-off, service, vehicle, driver, driver contact, and plate.",
   "`/api/admin-bookings` accepts `/customers` and `/customers/*` as additional same-origin internal admin referers only for this exact customer-folder `GET` read and `PATCH` save path; create `POST` and other admin routes keep their existing referer boundaries.",
   "Customer Folder save uses the existing guarded `/api/admin-bookings` PATCH path with the loaded booking as the base payload, so account/contact/status fields are preserved and missing required operational fields are reported instead of guessed.",
+  "Admin booking update reloads preserve the exact booking id so Customer Folder `Delete job` remains correctly enabled for completed/cancelled jobs immediately after `Save changes`.",
   "Customer Folder delete is visible but locked until that exact loaded booking is completed or cancelled; it uses the exact returned booking id through the existing guarded `/api/admin-saved-bookings` DELETE path and removes the row from the selected customer list only after the API confirms the same id and a completed/cancelled status.",
   "Customer Folder still does not expose invoice, payment, payout, provider send, GPS/live-location, parser/debug, mock archive, raw finance, or public/customer/driver auth actions in this row.",
   "Active/upcoming customer-folder jobs must be completed or cancelled through the normal operational lane before delete becomes available; this avoids broad deletion or blind row deletion from the list.",

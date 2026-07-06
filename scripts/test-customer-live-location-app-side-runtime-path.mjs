@@ -5,6 +5,7 @@ import { join } from "node:path";
 import ts from "typescript";
 
 const scaffoldPath = "lib/customer-live-location-map-scaffold.ts";
+const portalAccessLinkPath = "lib/customer-portal-access-link.ts";
 const runtimeSessionMapPath = "lib/customer-runtime-session-map.ts";
 const runtimePath = "lib/customer-live-location-map-runtime.ts";
 
@@ -31,8 +32,9 @@ function transpileRuntimeModule(source, replacements = []) {
 
 async function writeRuntimeHarness() {
   const tempDir = await mkdtemp(join(tmpdir(), "prestige-customer-live-location-runtime-"));
-  const [scaffold, runtimeSessionMap, runtime] = await Promise.all([
+  const [scaffold, portalAccessLink, runtimeSessionMap, runtime] = await Promise.all([
     readFile(scaffoldPath, "utf8"),
+    readFile(portalAccessLinkPath, "utf8"),
     readFile(runtimeSessionMapPath, "utf8"),
     readFile(runtimePath, "utf8"),
   ]);
@@ -41,6 +43,10 @@ async function writeRuntimeHarness() {
     writeFile(
       join(tempDir, "customer-live-location-map-scaffold.mjs"),
       transpileRuntimeModule(scaffold),
+    ),
+    writeFile(
+      join(tempDir, "customer-portal-access-link.mjs"),
+      transpileRuntimeModule(portalAccessLink),
     ),
     writeFile(
       join(tempDir, "customer-runtime-session-map.mjs"),
@@ -52,6 +58,10 @@ async function writeRuntimeHarness() {
         [
           /from "\.\/customer-live-location-map-scaffold";/g,
           'from "./customer-live-location-map-scaffold.mjs";',
+        ],
+        [
+          /from "\.\/customer-portal-access-link";/g,
+          'from "./customer-portal-access-link.mjs";',
         ],
         [
           /from "\.\/customer-runtime-session-map";/g,
@@ -189,12 +199,23 @@ function customerRequest({ bookingReference, origin, sessionToken }) {
 }
 
 const tempDir = await writeRuntimeHarness();
+const originalPortalAccessEnv = {
+  PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_ACCOUNT_ALLOWLIST:
+    process.env.PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_ACCOUNT_ALLOWLIST,
+  PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_ENABLED:
+    process.env.PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_ENABLED,
+  PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_SECRET:
+    process.env.PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_SECRET,
+};
 
 try {
   const {
     handleCustomerLiveLocationMapRuntimeRequest,
     setCustomerLiveLocationMapRuntimeClientForTests,
   } = await import(join(tempDir, "customer-live-location-map-runtime.mjs"));
+  const { createCustomerPortalAccessLinkToken } = await import(
+    join(tempDir, "customer-portal-access-link.mjs")
+  );
 
   const origin = "https://app.prestigelimo.sg";
   const bookingReference = "DLG-20260625-LIVE";
@@ -317,6 +338,46 @@ try {
   assert.equal(arrivalService.body.marker_count, 1);
   assert.equal(arrivalService.body.customerVisible, true);
 
+  process.env.PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_ENABLED = "true";
+  process.env.PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_SECRET =
+    "customer-portal-access-link-secret-20260706";
+  process.env.PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_ACCOUNT_ALLOWLIST =
+    accountReference;
+  const portalTokenResult = createCustomerPortalAccessLinkToken(accountReference);
+
+  assert.equal(portalTokenResult.ok, true, "portal access token must be created for guard.");
+
+  const portalAccessClient = createQueryClient({
+    bookingRows: [
+      {
+        booking_reference: bookingReference,
+        customer_id: accountReference,
+        route_type: "MNG",
+        service_type: "Arrival",
+      },
+    ],
+    latestRows: [safeLatestPosition],
+    settingRow: baseSetting({ bookingReference, open: false }),
+  });
+  setCustomerLiveLocationMapRuntimeClientForTests(portalAccessClient);
+
+  const portalAccessRead = await handleCustomerLiveLocationMapRuntimeRequest({
+    boundary,
+    env: {
+      PRESTIGE_DRIVER_LIVE_LOCATION_MODE: "runtime",
+    },
+    request: customerRequest({
+      bookingReference,
+      origin,
+      sessionToken: portalTokenResult.data.token,
+    }),
+  });
+
+  assert.equal(portalAccessRead.status, 200);
+  assert.equal(portalAccessRead.body.ok, true);
+  assert.equal(portalAccessRead.body.marker_count, 1);
+  assert.equal(portalAccessRead.body.customerVisible, true);
+
   const customerReadWithoutAdminMapClient = createQueryClient({
     accessRows: [
       {
@@ -392,6 +453,13 @@ try {
   assert.equal(defaultClosed.body.reason, "customer_live_location_map_runtime_gate_closed");
   assert.equal(defaultClosed.body.customerVisible, false);
 } finally {
+  for (const [key, value] of Object.entries(originalPortalAccessEnv)) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
   await rm(tempDir, { force: true, recursive: true });
 }
 

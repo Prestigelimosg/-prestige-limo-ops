@@ -7,6 +7,10 @@ import {
   readCustomerLiveLocationMapSessionToken,
   readCustomerLiveLocationMapGateState,
 } from "./customer-live-location-map-scaffold";
+import {
+  isCustomerPortalAccessToken,
+  resolveCustomerPortalAccessSession,
+} from "./customer-portal-access-link";
 import { resolveExactTwoCustomerRuntimeSessionMap } from "./customer-runtime-session-map";
 
 export const customerLiveLocationMapRuntimeVersion =
@@ -462,6 +466,40 @@ async function resolveCustomerRuntimeAccountReference({
       status: number;
     }
 > {
+  const { sessionToken } = customerHeaders(request);
+  const accountAllowlist = controlledCustomerRuntimeAccountAllowlist(env);
+
+  if (isCustomerPortalAccessToken(sessionToken)) {
+    const portalAccessSession = resolveCustomerPortalAccessSession(sessionToken);
+
+    if (!portalAccessSession.ok) {
+      return {
+        ok: false,
+        reason:
+          portalAccessSession.status === 503
+            ? "customer_live_location_map_customer_auth_config_not_ready"
+            : "customer_live_location_map_customer_auth_blocked",
+        status: portalAccessSession.status === 503 ? 503 : 403,
+      };
+    }
+
+    if (
+      accountAllowlist.length > 0 &&
+      !accountAllowlist.includes(portalAccessSession.data.customer_account_reference)
+    ) {
+      return {
+        ok: false,
+        reason: "customer_live_location_map_customer_auth_blocked",
+        status: 403,
+      };
+    }
+
+    return {
+      accountReference: portalAccessSession.data.customer_account_reference,
+      ok: true,
+    };
+  }
+
   if (!customerSavedBookingsAuthEnabled(env)) {
     return {
       ok: false,
@@ -470,8 +508,6 @@ async function resolveCustomerRuntimeAccountReference({
     };
   }
 
-  const { sessionToken } = customerHeaders(request);
-  const accountAllowlist = controlledCustomerRuntimeAccountAllowlist(env);
   const expectedEntryCount = supportedCustomerRuntimeSessionMapEntryCounts.has(
     accountAllowlist.length,
   )

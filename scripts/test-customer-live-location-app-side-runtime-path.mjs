@@ -343,7 +343,9 @@ try {
     "customer-portal-access-link-secret-20260706";
   process.env.PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_ACCOUNT_ALLOWLIST =
     accountReference;
-  const portalTokenResult = createCustomerPortalAccessLinkToken(accountReference);
+  const portalTokenResult = createCustomerPortalAccessLinkToken(accountReference, {
+    scope: "portal_account",
+  });
 
   assert.equal(portalTokenResult.ok, true, "portal access token must be created for guard.");
 
@@ -365,6 +367,7 @@ try {
     boundary,
     env: {
       PRESTIGE_DRIVER_LIVE_LOCATION_MODE: "runtime",
+      PRESTIGE_CUSTOMER_PORTAL_RUNTIME_ACCOUNT_ALLOWLIST: "DIFFERENT-PILOT-ACCOUNT",
     },
     request: customerRequest({
       bookingReference,

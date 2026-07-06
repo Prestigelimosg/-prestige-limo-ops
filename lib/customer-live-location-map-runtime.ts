@@ -484,6 +484,7 @@ async function resolveCustomerRuntimeAccountReference({
     }
 
     if (
+      portalAccessSession.data.access_scope === "allowlisted" &&
       accountAllowlist.length > 0 &&
       !accountAllowlist.includes(portalAccessSession.data.customer_account_reference)
     ) {

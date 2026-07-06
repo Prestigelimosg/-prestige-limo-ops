@@ -289,22 +289,22 @@ const driverStatusCustomerInAppTemplates: Record<
   completed: {
     message: "Your trip is completed. Thank you for choosing Prestige Limo.",
     statusLabel: "Completed",
-    title: "Trip completed",
+    title: "Completed",
   },
   driver_otw: {
     message: "Your Prestige Limo driver is on the way to pickup.",
-    statusLabel: "I'm on the way",
-    title: "Driver is on the way",
+    statusLabel: "Driver on the way",
+    title: "Driver on the way",
   },
   ots: {
     message: "Your Prestige Limo driver is at the pickup location.",
-    statusLabel: "I've arrived",
-    title: "Driver has arrived",
+    statusLabel: "Driver arrived",
+    title: "Driver arrived",
   },
   pob: {
-    message: "Your trip has started.",
-    statusLabel: "Passenger on board",
-    title: "Passenger on board",
+    message: "Your trip is in progress.",
+    statusLabel: "Trip in progress",
+    title: "Trip in progress",
   },
 };
 const controlledCustomerRuntimeModes = new Set<ControlledCustomerRuntimeMode>([

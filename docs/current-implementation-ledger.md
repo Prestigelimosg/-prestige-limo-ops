@@ -5805,16 +5805,16 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The fanout runs after a persisted `driver_job_status_events` update is accepted for the verified driver job token and queues one fixed safe `customer_app` notification for the same booking/customer scope.
 - Fanout is best-effort; a customer notification insert failure must not undo or hide the accepted driver status event.
 - OTW status queues exactly one safe `customer_app` notification scoped to the correct customer/account/booking.
-- OTW title: `Driver is on the way`.
+- OTW title: `Driver on the way`.
 - OTW message: `Your Prestige Limo driver is on the way to pickup.`
 - OTS status queues exactly one safe `customer_app` notification scoped to the correct customer/account/booking.
-- OTS title: `Driver has arrived`.
+- OTS title: `Driver arrived`.
 - OTS message: `Your Prestige Limo driver is at the pickup location.`
 - POB status queues exactly one safe `customer_app` notification scoped to the correct customer/account/booking.
-- POB title: `Passenger on board`.
-- POB message: `Your trip has started.`
+- POB title: `Trip in progress`.
+- POB message: `Your trip is in progress.`
 - Job Completed status queues exactly one safe `customer_app` notification scoped to the correct customer/account/booking.
-- Job Completed title: `Trip completed`.
+- Job Completed title: `Completed`.
 - Job Completed message: `Your trip is completed. Thank you for choosing Prestige Limo.`
 - Status-triggered customer notifications must be template-only.
 - Status-triggered customer notifications must use the guarded driver status workflow `driver_otw -> ots -> pob -> completed`.

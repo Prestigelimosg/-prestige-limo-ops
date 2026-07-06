@@ -42,7 +42,7 @@ for (const fragment of [
   'data-admin-booking-change-request-review-action="reject"',
   'data-admin-booking-change-request-review-action="dismiss"',
   "Accept + Cal",
-  "Reject + Cal",
+  'activeChangeRequestAction === "reject" ? "Rejecting..." : "Reject"',
   "Dismiss",
 ]) {
   assertIncludes(adminPage, fragment, `admin amendment review UI ${fragment}`);
@@ -53,6 +53,7 @@ for (const forbidden of [
   'data-admin-booking-change-request-review-action="apply"',
   "Apply + Cal",
   "Cancel + Cal",
+  "Reject + Cal",
   "handleAdminBookingChangeRequestReview",
   "handleAdminBookingChangeRequestReject",
 ]) {
@@ -74,11 +75,11 @@ const dismissActionIndex = changeRequestActionsBlock.indexOf(
   'data-admin-booking-change-request-review-action="dismiss"',
 );
 assert.ok(acceptActionIndex >= 0, "Accept + Cal action must be present in change request actions.");
-assert.ok(rejectActionIndex >= 0, "Reject + Cal action must be present in change request actions.");
+assert.ok(rejectActionIndex >= 0, "Reject action must be present in change request actions.");
 assert.ok(dismissActionIndex >= 0, "Dismiss action must be present in change request actions.");
 assert.ok(
   acceptActionIndex < rejectActionIndex && rejectActionIndex < dismissActionIndex,
-  "Customer change/cancel request actions must render in order: Accept + Cal, Reject + Cal, Dismiss.",
+  "Customer change/cancel request actions must render in order: Accept + Cal, Reject, Dismiss.",
 );
 assert.equal(
   [...changeRequestActionsBlock.matchAll(/data-admin-booking-change-request-review-action=/g)].length,
@@ -139,7 +140,7 @@ for (const fragment of [
   'customer_facing_status: "cancelled"',
   'cancellation_review_status: "cancelled"',
   'request_review_status: "approved"',
-  "Reject + Cal",
+  'action === "accept" ? "Accept + Cal" : action === "reject" ? "Reject" : "Dismiss"',
   "Booking marked cancelled in Completed / History; Google Calendar auto-synced",
   'handleAdminBookingChangeRequestCancelDecision(notification, "reject")',
   'handleAdminBookingChangeRequestCancelDecision(notification, "dismiss")',

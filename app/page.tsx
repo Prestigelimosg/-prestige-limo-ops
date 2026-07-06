@@ -13512,8 +13512,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       return;
     }
 
-    const actionLabel =
-      action === "accept" ? "Accept + Cal" : action === "reject" ? "Reject + Cal" : "Dismiss";
+    const actionLabel = action === "accept" ? "Accept + Cal" : action === "reject" ? "Reject" : "Dismiss";
     const requestKindLabel = adminBookingChangeRequestKindLabel(context);
 
     setAdminBookingChangeRequestReviewAction({
@@ -41896,7 +41895,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                               onClick={() => handleAdminBookingChangeRequestCancelDecision(notification, "reject")}
                               type="button"
                             >
-                              {activeChangeRequestAction === "reject" ? "Rejecting..." : "Reject + Cal"}
+                              {activeChangeRequestAction === "reject" ? "Rejecting..." : "Reject"}
                             </button>
                             <button
                               className="h-7 rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"

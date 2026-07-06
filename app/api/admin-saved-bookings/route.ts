@@ -50,7 +50,10 @@ function isProductionRuntime() {
 }
 
 function requireAdminDispatcherBoundary(request: Request): AdminDispatcherBoundaryCheck {
+  const customerFolderDeleteMethod = request.method === "DELETE";
   const boundary = resolveAdminDispatcherBoundary(request, adminBookingPersistencePurpose, {
+    additionalSameOriginRefererPathPrefixes: customerFolderDeleteMethod ? ["/customers/"] : [],
+    additionalSameOriginRefererPathnames: customerFolderDeleteMethod ? ["/customers"] : [],
     allowServerSessionRoleMethodsWithoutRequestToken: ["DELETE"],
   });
 

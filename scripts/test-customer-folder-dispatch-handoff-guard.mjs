@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 
 const appPagePath = "app/page.tsx";
 const adminBookingsRoutePath = "app/api/admin-bookings/route.ts";
+const adminSavedBookingsRoutePath = "app/api/admin-saved-bookings/route.ts";
 const customersPagePath = "app/customers/page.tsx";
 const persistencePath = "lib/admin-booking-persistence.ts";
 const adapterPath = "lib/admin-booking-supabase-adapter.ts";
@@ -35,6 +36,7 @@ function sectionBetween(source, startFragment, endFragment) {
 const [
   appPage,
   adminBookingsRoute,
+  adminSavedBookingsRoute,
   customersPage,
   persistence,
   adapter,
@@ -43,6 +45,7 @@ const [
 ] = await Promise.all([
   readFile(appPagePath, "utf8"),
   readFile(adminBookingsRoutePath, "utf8"),
+  readFile(adminSavedBookingsRoutePath, "utf8"),
   readFile(customersPagePath, "utf8"),
   readFile(persistencePath, "utf8"),
   readFile(adapterPath, "utf8"),
@@ -177,6 +180,15 @@ for (const fragment of [
   );
 }
 
+for (const fragment of [
+  'const customerFolderDeleteMethod = request.method === "DELETE";',
+  'additionalSameOriginRefererPathPrefixes: customerFolderDeleteMethod ? ["/customers/"] : [],',
+  'additionalSameOriginRefererPathnames: customerFolderDeleteMethod ? ["/customers"] : [],',
+  'allowServerSessionRoleMethodsWithoutRequestToken: ["DELETE"],',
+]) {
+  assertIncludes(adminSavedBookingsRoute, fragment, `admin saved bookings customer-folder delete boundary ${fragment}`);
+}
+
 for (const forbiddenFragment of [
   "deleteCustomerFolderJob",
   "method: \"DELETE\"",
@@ -292,6 +304,7 @@ for (const phrase of [
   "Customer Folder save uses the existing guarded `/api/admin-bookings` PATCH path with the loaded booking as the base payload, so account/contact/status fields are preserved and missing required operational fields are reported instead of guessed.",
   "Admin booking update reloads preserve the exact booking id so Customer Folder `Delete job` remains correctly enabled for completed/cancelled jobs immediately after `Save changes`.",
   "Customer Folder delete is visible but locked until that exact loaded booking is completed or cancelled; it uses the exact returned booking id through the existing guarded `/api/admin-saved-bookings` DELETE path and removes the row from the selected customer list only after the API confirms the same id and a completed/cancelled status.",
+  "`/api/admin-saved-bookings` accepts `/customers` and `/customers/*` as additional same-origin internal admin referers only for Customer Folder `DELETE`; list/create reads keep their existing admin boundaries.",
   "Customer Folder still does not expose invoice, payment, payout, provider send, GPS/live-location, parser/debug, mock archive, raw finance, or public/customer/driver auth actions in this row.",
   "Active/upcoming customer-folder jobs must be completed or cancelled through the normal operational lane before delete becomes available; this avoids broad deletion or blind row deletion from the list.",
   "Guard coverage lives in `scripts/test-customer-folder-dispatch-handoff-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",

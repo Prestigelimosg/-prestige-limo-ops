@@ -51,6 +51,8 @@ for (const fragment of [
   'data-customer-folder-finder-page-numbers="true"',
   'data-customer-folder-finder-list="true"',
   'data-customer-folder-finder-row={customer.customerFolderKey}',
+  'data-customer-folder-finder-feedback="true"',
+  'className={`mt-2 text-xs font-semibold leading-5 ${',
   "function customerFolderLatestPickupDisplay",
   "function customerFolderLatestSummary",
   "compactCustomerBookingReference(customer.latestBookingReference, \"\")",
@@ -146,6 +148,7 @@ assertIncludes(ledger, ledgerHeading, "ledger compact customer folder heading");
 for (const phrase of [
   "The old Customer Folder / Job History Handoff support drawer is removed from the normal Customers page flow; the compact finder is now the single customer-folder lookup surface.",
   "The compact finder keeps 10-row pages and an `All customers` dropdown with numbered page buttons for 200-plus accounts.",
+  "Finder load/search/selected feedback is a quiet one-line status under the controls, not a large success card, so the customer table stays visually dominant.",
   "The fake top payment summary strip is removed from the daily Customers page.",
   "The invoice workbench is collapsed behind an admin-only drawer, leaving the daily visible Customers page focused on the customer folder finder and Monthly Billing Queue.",
   "The mock statement, outstanding, follow-up, advanced booking, and support log drawers are not rendered in normal operation.",

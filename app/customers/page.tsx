@@ -3916,7 +3916,7 @@ export default function MockCustomerDashboardPage() {
   }
 
   async function viewCustomerFolderJobs(customer: (typeof customerFolderIndexRows)[number]) {
-    setCustomerFolderFinderSelectedId(customer.customerId);
+    setCustomerFolderFinderSelectedId(customer.customerFolderKey);
     setSelectedMonthlyBillingGroupKey("");
     setSelectedUnbilledCustomerRowKey("");
     setCustomerFolderFinderDropdownOpen(false);
@@ -6124,9 +6124,13 @@ export default function MockCustomerDashboardPage() {
 
             <p
               aria-live="polite"
-              className={`mt-3 rounded-md border px-3 py-2 text-sm font-semibold leading-5 ${regularCustomerBookingFeedbackClass(
-                regularCustomerAccountReadState.tone,
-              )}`}
+              className={`mt-2 text-xs font-semibold leading-5 ${
+                regularCustomerAccountReadState.tone === "error"
+                  ? "text-rose-700"
+                  : regularCustomerAccountReadState.status === "loading"
+                    ? "text-slate-700"
+                    : "text-slate-500"
+              }`}
               data-customer-folder-finder-feedback="true"
               data-customer-search-helper="true"
             >

@@ -1369,6 +1369,101 @@ function resolveCustomerInAppNotificationRuntimeBoundary(
   };
 }
 
+function resolveCustomerInAppNotificationPortalAccessBoundary(
+  request: Request,
+): AdminBookingResult<{
+  auth_user_id: string;
+  booking_reference: string;
+  customer_account_reference: string;
+  mode: "server-session-cookie";
+  runtime_gate: ControlledCustomerRuntimeGate;
+}> {
+  const requestUrl = new URL(request.url);
+  const origin = request.headers.get("origin");
+  const referer = request.headers.get("referer");
+  const purpose = request.headers.get("x-prestige-customer-purpose");
+
+  if (purpose !== "customer-in-app-notification-read") {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  if (origin && origin !== requestUrl.origin) {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  if (!referer) {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  try {
+    const refererUrl = new URL(referer);
+
+    if (refererUrl.origin !== requestUrl.origin || refererUrl.pathname !== "/my-bookings") {
+      return customerAppNotificationsRequireAuthResult();
+    }
+  } catch {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  const unsafeParams = [...requestUrl.searchParams.entries()].filter(
+    ([key, value]) =>
+      !allowedCustomerInAppNotificationReadQueryParams.has(key) ||
+      includesForbiddenFragment(key) ||
+      includesForbiddenFragment(value),
+  );
+
+  if (unsafeParams.length > 0) {
+    return {
+      error: "Customer app notification read includes fields outside the approved read scope.",
+      ok: false,
+      status: 400,
+    };
+  }
+
+  const bookingReference = safeIdentifier(
+    requestUrl.searchParams.get("booking_reference"),
+    maxBookingReferenceLength,
+  );
+
+  if (!bookingReference) {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  const providedToken = readCustomerSavedBookingsSessionToken(request);
+
+  if (!isCustomerPortalAccessToken(providedToken.token)) {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  const portalAccessSession = resolveCustomerPortalAccessSession(providedToken.token);
+
+  if (!portalAccessSession.ok) {
+    return portalAccessSession.status === 503
+      ? {
+          error: customerInAppRuntimeConfigError,
+          ok: false,
+          status: 503,
+        }
+      : customerAppNotificationsRequireAuthResult();
+  }
+
+  const customerAccountReference = portalAccessSession.data.customer_account_reference;
+
+  return {
+    data: {
+      auth_user_id: portalAccessSession.data.auth_user_id,
+      booking_reference: bookingReference,
+      customer_account_reference: customerAccountReference,
+      mode: "server-session-cookie",
+      runtime_gate: {
+        account_allowlist: new Set([customerAccountReference]),
+        mode: "one-customer",
+      },
+    },
+    ok: true,
+  };
+}
+
 function parseCustomerInAppNotificationReadLimit(value: string | null) {
   const parsed = value === null || value === "" ? defaultCustomerInAppNotificationReadLimit : Number(value);
 
@@ -1801,6 +1896,36 @@ export async function readCustomerAppNotificationsForControlledRuntime(
   const boundary = resolveCustomerInAppNotificationRuntimeBoundary(request, gate.data);
 
   if (!boundary.ok) {
+    return customerInAppNotificationReadError(boundary.error, boundary.status);
+  }
+
+  const result = await loadCustomerAppNotificationsForControlledRuntime(request, boundary.data);
+
+  if (!result.ok) {
+    return customerInAppNotificationReadError(result.error, result.status);
+  }
+
+  return customerInAppNotificationReadHandled(200, {
+    delivery_surface: "customer_app",
+    external_send: false,
+    notification_count: result.data.notifications.length,
+    notifications: result.data.notifications,
+    ok: true,
+    provider_send: false,
+    version: customerInAppNotificationRuntimeVersion,
+  });
+}
+
+export async function readCustomerAppNotificationsForPortalAccessRuntime(
+  request: Request,
+): Promise<CustomerInAppNotificationReadEvidenceResult> {
+  const boundary = resolveCustomerInAppNotificationPortalAccessBoundary(request);
+
+  if (!boundary.ok) {
+    if (boundary.status === 403) {
+      return customerInAppNotificationReadNotHandled();
+    }
+
     return customerInAppNotificationReadError(boundary.error, boundary.status);
   }
 

@@ -1140,6 +1140,114 @@ try {
       "Expected fallback driver status response to avoid internal notification/link/GPS/finance fields",
     );
 
+    setEnv({
+      ...validEnv(),
+      PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_ACCOUNT_ALLOWLIST: undefined,
+      PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_ENABLED: undefined,
+      PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_MODE: undefined,
+    });
+    const customerPortalRuntimeClosedFallbackMock = installMockClient({
+      [notificationTable]: [],
+      bookings: [
+        {
+          booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
+          customer_id: "customer-runtime-account-001",
+        },
+      ],
+      customer_access_accounts: [
+        {
+          account_status: "active",
+          customer_account_reference: "customer-runtime-account-001",
+        },
+      ],
+      driver_job_status_events: [
+        {
+          booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
+          occurred_at: "2026-07-06T10:12:00.000Z",
+          status_value: "driver_otw",
+        },
+      ],
+    });
+    const customerPortalRuntimeClosedFallback = await responseJson(
+      await customerRoute.GET(
+        new Request(
+          "http://localhost/api/customer-app-notifications?booking_reference=BOOK-CUST-DRIVER-NOTIFY-001&limit=5&page=1",
+          {
+            headers: {
+              cookie: `prestige_customer_saved_bookings_session=${portalToken}`,
+              referer:
+                "http://localhost/my-bookings?booking=BOOK-CUST-DRIVER-NOTIFY-001&tracking=1",
+              "x-prestige-customer-purpose": "customer-in-app-notification-read",
+            },
+          },
+        ),
+      ),
+    );
+
+    assert.equal(customerPortalRuntimeClosedFallback.status, 200);
+    assert.deepEqual(
+      customerPortalRuntimeClosedFallback.body.notifications.map((notification) => ({
+        booking_reference: notification.booking_reference,
+        delivery_surface: notification.delivery_surface,
+        notification_type: notification.notification_type,
+        safe_message: notification.safe_message,
+        safe_title: notification.safe_title,
+      })),
+      [
+        {
+          booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
+          delivery_surface: "customer_app",
+          notification_type: "driver_status",
+          safe_message: "Your Prestige Limo driver is on the way to pickup.",
+          safe_title: "Driver on the way",
+        },
+      ],
+      "Expected portal app link to read safe driver status even when legacy customer in-app runtime is off",
+    );
+    assert.deepEqual(
+      customerPortalRuntimeClosedFallbackMock.client.selectHistory.map((entry) => ({
+        filters: entry.filters,
+        table: entry.table,
+      })),
+      [
+        {
+          filters: [
+            {
+              column: "customer_account_reference",
+              type: "eq",
+              value: "customer-runtime-account-001",
+            },
+            { column: "account_status", type: "eq", value: "active" },
+          ],
+          table: "customer_access_accounts",
+        },
+        {
+          filters: [
+            { column: "customer_id", type: "eq", value: "customer-runtime-account-001" },
+            { column: "booking_reference", type: "eq", value: "BOOK-CUST-DRIVER-NOTIFY-001" },
+          ],
+          table: "bookings",
+        },
+        {
+          filters: [
+            { column: "delivery_surface", type: "eq", value: "customer_app" },
+            { column: "booking_reference", type: "eq", value: "BOOK-CUST-DRIVER-NOTIFY-001" },
+          ],
+          table: notificationTable,
+        },
+        {
+          filters: [{ column: "booking_reference", type: "eq", value: "BOOK-CUST-DRIVER-NOTIFY-001" }],
+          table: "driver_job_status_events",
+        },
+      ],
+      "Expected portal runtime-closed fallback to keep active account, exact booking ownership, and exact status filters",
+    );
+    assert.equal(
+      unsafeNotificationLeakPattern.test(JSON.stringify(customerPortalRuntimeClosedFallback.body)),
+      false,
+      "Expected portal runtime-closed fallback to avoid internal notification/link/GPS/finance fields",
+    );
+
     const driverToken = "safe-driver-notification-token";
     const driverLinkId = "11111111-1111-4111-8111-111111111111";
     setEnv(validEnv());

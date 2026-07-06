@@ -4803,7 +4803,12 @@ function saveCrmExplicitCompanyAccount(bookingValue: BookingForm) {
 }
 
 function saveCrmDefaultCustomerAccount(bookingValue: BookingForm) {
-  return saveCrmExplicitCompanyAccount(bookingValue) || clean(bookingValue.name);
+  const companyAccount = saveCrmExplicitCompanyAccount(bookingValue);
+  const travelerName = clean(bookingValue.name);
+
+  return companyAccount && travelerName
+    ? formatTravelerBillingAccountLabel(companyAccount, travelerName)
+    : companyAccount || travelerName;
 }
 
 function uniqueBillingTravelerNames(names: string[]) {
@@ -4866,7 +4871,7 @@ function buildSaveCrmBillingIdentityReview(
 
   const needsTravelerName = !travelerName;
 
-  if (!needsTravelerName && conflictingTravelerNames.length === 0) {
+  if (!needsTravelerName) {
     return null;
   }
 
@@ -15351,7 +15356,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           ...saveCrmBillingIdentityMessage,
           text:
             clean(saveCrmBillingIdentityMessage.text).startsWith("Billing identity review required.")
-              ? `Billing identity review required. Same company/booker has other traveler(s): ${saveCrmBillingIdentityReview.conflictingTravelerNames.join(
+              ? `Billing identity review required. Existing traveler(s) under this billing/contact identity: ${saveCrmBillingIdentityReview.conflictingTravelerNames.join(
                   ", ",
                 )}. Confirm ${saveCrmBillingIdentityReview.accountLabel}, then Save + CRM again.`
               : saveCrmBillingIdentityMessage.text,
@@ -16790,7 +16795,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     if (review.needsTravelerName) {
       const relatedTravelerWarning =
         review.conflictingTravelerNames.length > 0
-          ? ` Same company/booker already has traveler(s): ${review.conflictingTravelerNames.join(", ")}.`
+          ? ` Existing traveler(s) under this billing/contact identity: ${review.conflictingTravelerNames.join(", ")}.`
           : "";
       const message = {
         tone: "error",
@@ -16808,7 +16813,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     if (saveCrmBillingIdentityConfirmation?.key !== review.key) {
       const message = {
         tone: "error",
-        text: `Billing identity review required. Same company/booker has other traveler(s): ${review.conflictingTravelerNames.join(
+        text: `Billing identity review required. Existing traveler(s) under this billing/contact identity: ${review.conflictingTravelerNames.join(
           ", ",
         )}. Confirm ${review.accountLabel}, then Save + CRM again.`,
       } satisfies Message;
@@ -22754,7 +22759,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       safeDriverVehicleModelDisplay(assignedDriverRecord?.vehicle_type),
   ].filter(Boolean).join(" / ");
   const dispatchReadableBillingAccount =
-    clean(confirmedSaveCrmBillingIdentity?.accountLabel) || clean(booking.company) || "Account not set";
+    clean(confirmedSaveCrmBillingIdentity?.accountLabel) ||
+    saveCrmDefaultCustomerAccount(booking) ||
+    "Account not set";
   const dispatchReadableSummaryItems = [
     { label: "Billing account", value: dispatchReadableBillingAccount },
     { label: "Passenger", value: clean(booking.name) || "Passenger not set" },
@@ -39621,7 +39628,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                             <>
                               {saveCrmBillingIdentityReview.conflictingTravelerNames.length > 0 ? (
                                 <p className="break-words font-medium normal-case tracking-normal">
-                                  Same company/booker has other traveler(s):{" "}
+                                  Existing traveler(s) under this billing/contact identity:{" "}
                                   {saveCrmBillingIdentityReview.conflictingTravelerNames.join(", ")}.
                                 </p>
                               ) : (

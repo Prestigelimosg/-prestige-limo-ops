@@ -30,7 +30,11 @@ assertIncludes(
   "visible no-2099 save guard message",
 );
 assertIncludes(appSource, "fetchRecentAdminBookingPersistenceRecordsForBillingIdentity", "fresh recent booking read before save");
-assertIncludes(appSource, "Same company/booker has other traveler(s)", "visible same company/booker warning");
+assertIncludes(
+  appSource,
+  "Existing traveler(s) under this billing/contact identity",
+  "visible traveler-key billing warning",
+);
 assertIncludes(
   appSource,
   "Passenger/traveler name is required before Save + CRM can choose the billing account.",
@@ -38,8 +42,8 @@ assertIncludes(
 );
 assertIncludes(
   appSource,
-  "if (!needsTravelerName && conflictingTravelerNames.length === 0)",
-  "blank traveler must create a blocking review even without prior conflicts",
+  "if (!needsTravelerName) {\n    return null;",
+  "passenger/traveler name is the billing key and should not require same company/booker confirmation",
 );
 assertIncludes(
   appSource,
@@ -49,7 +53,12 @@ assertIncludes(
 assertIncludes(
   appSource,
   "saveCrmDefaultCustomerAccount(bookingValue) ||\n    adminDraftCustomerFallback",
-  "Save + CRM persisted customer account must stay booker-free",
+  "Save + CRM persisted customer account must stay booker-free and use the passenger-scoped default",
+);
+assertIncludes(
+  appSource,
+  "formatTravelerBillingAccountLabel(companyAccount, travelerName)",
+  "Save + CRM persisted customer account must be scoped by passenger/traveler when company is present",
 );
 assertIncludes(
   appSource,
@@ -113,8 +122,8 @@ assertIncludes(
 );
 assertIncludes(
   appSource,
-  "Confirm ${saveCrmBillingIdentityReview.accountLabel}, then Save + CRM again.",
-  "stale billing identity confirmation account label guard",
+  "Existing traveler(s) under this billing/contact identity: ${saveCrmBillingIdentityReview.conflictingTravelerNames.join",
+  "stale billing identity message must derive from current traveler-key review",
 );
 assertIncludes(appSource, "customerDisplayNameOverride", "customer display override option");
 assertIncludes(appSource, "clean(options.customerDisplayNameOverride)", "override applied before default customer account");

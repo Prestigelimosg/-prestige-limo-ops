@@ -1035,6 +1035,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The Monthly Billing Queue sits before the invoice workspace so completed closeout-ready jobs are visible before invoice work starts.
 - Guarded saved-booking reads now check the existing completed closeout status for those references and bridge only closeout-ready saved bookings into the Monthly Billing Queue with `Draft amount not set`.
 - Customer Finder job reads and closeout-ready saved-booking rows keep the real saved customer/account id as the invoice `customerId`; the old mock folder match fallback is removed from this billing queue.
+- Monthly Billing Queue groups only by the saved billing account ID plus billing month; it does not fall back to company, booker, passenger, display name, or booking reference.
+- Closeout-ready jobs without a saved billing account ID are held behind an `account review needed` count instead of being prepared under the wrong customer.
 - The Monthly Billing Queue has one customer/month group selector plus one primary `Prepare monthly bill` action that fills the existing Create Invoice workbench for admin review.
 - The finder no longer shows noisy selected-dropdown wording; selecting a customer now shows a short `Selected customer` status only.
 - This is a UI handoff into the existing admin invoice workflow; it does not add a second invoice engine, create invoice numbers, generate PDFs, send invoices, activate payment/provider sending, write DB rows, change env, activate GPS/live location, billing/payout automation, calendar sync, parser changes, or shims.

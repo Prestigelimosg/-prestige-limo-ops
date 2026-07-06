@@ -148,7 +148,11 @@ for (const fragment of [
   "Closeout ready / amount needed",
   "Draft amount not set",
   "Enter the approved customer amount before previewing or issuing.",
-  "const customerId = savedBookingCustomerId(booking) || reference;",
+  "const customerId = savedBookingCustomerId(booking);",
+  "if (!customerId) {\n    return null;\n  }",
+  "const customerMonthlyBillingAccountReviewCount = useMemo(() => {",
+  "firstRow.customerId.localeCompare(secondRow.customerId)",
+  "const billingAccountKey = normalizeCustomerFolderMatch(row.customerId);",
   "const selectedUnbilledCustomerRow = useMemo(",
   "const visibleUnbilledCustomerRows =",
   "selectedMonthlyBillingGroup?.rows ??",
@@ -179,11 +183,31 @@ for (const fragment of [
   'data-unbilled-customer-prepare-invoice={row.key}',
   'data-unbilled-customers-boundary="true"',
   "Prepare",
-  "Select a customer/month, review the jobs, then prepare the bill in the invoice workbench.",
-  "All customer/month groups",
+  "Select one saved billing account and month, review the jobs, then prepare the bill in the invoice",
+  "All billing account/month groups",
+  "Same company names stay separate by saved account ID.",
+  'data-customer-monthly-billing-account-review-count="true"',
+  "Account {row.customerId}",
   "visibleUnbilledCustomerRows.map((row)",
 ]) {
   assertIncludes(unbilledSection, fragment, `unbilled customers UI fragment ${fragment}`);
+}
+
+for (const forbiddenStrictBillingFragment of [
+  "const customerId = savedBookingCustomerId(booking) || reference;",
+  "normalizeCustomerFolderMatch(row.customerId || row.customerName)",
+  "normalizeCustomerFolderMatch(group.customerName) ===",
+]) {
+  assertExcludes(
+    unbilledSection,
+    forbiddenStrictBillingFragment,
+    "strict monthly billing account grouping must not fall back to names or references",
+  );
+  assertExcludes(
+    customersPage,
+    forbiddenStrictBillingFragment,
+    "strict monthly billing account grouping must not fall back to names or references",
+  );
 }
 
 for (const duplicateFragment of [
@@ -243,6 +267,8 @@ for (const phrase of [
   "The Monthly Billing Queue sits before the invoice workspace so completed closeout-ready jobs are visible before invoice work starts.",
   "Guarded saved-booking reads now check the existing completed closeout status for those references and bridge only closeout-ready saved bookings into the Monthly Billing Queue with `Draft amount not set`.",
   "Customer Finder job reads and closeout-ready saved-booking rows keep the real saved customer/account id as the invoice `customerId`; the old mock folder match fallback is removed from this billing queue.",
+  "Monthly Billing Queue groups only by the saved billing account ID plus billing month; it does not fall back to company, booker, passenger, display name, or booking reference.",
+  "Closeout-ready jobs without a saved billing account ID are held behind an `account review needed` count instead of being prepared under the wrong customer.",
   "The Monthly Billing Queue has one customer/month group selector plus one primary `Prepare monthly bill` action that fills the existing Create Invoice workbench for admin review.",
   "The finder no longer shows noisy selected-dropdown wording; selecting a customer now shows a short `Selected customer` status only.",
   "This is a UI handoff into the existing admin invoice workflow; it does not add a second invoice engine, create invoice numbers, generate PDFs, send invoices, activate payment/provider sending, write DB rows, change env, activate GPS/live location, billing/payout automation, calendar sync, parser changes, or shims.",

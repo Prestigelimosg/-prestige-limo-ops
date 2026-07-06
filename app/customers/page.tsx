@@ -1591,10 +1591,15 @@ function savedBookingUnbilledRow(
   }
 
   const billingMonth = safeBillingMonth(booking.booking_month) || billingMonthFromPickup(booking.pickup_at);
-  const customerId = savedBookingCustomerId(booking) || reference;
+  const customerId = savedBookingCustomerId(booking);
+
+  if (!customerId) {
+    return null;
+  }
+
   const customerName =
     String(booking.customer_account ?? "").trim() ||
-    "Customer/account to confirm";
+    customerId;
   const service = String(booking.service_type ?? "").trim() || "Completed transfer";
   const closeoutDisposition = savedBookingCloseoutBillingDispositionLabel(closeout);
   const billableServiceLabel = closeoutDisposition || service;
@@ -2519,6 +2524,7 @@ export default function MockCustomerDashboardPage() {
       .sort(
         (firstRow, secondRow) =>
           firstRow.billingMonth.localeCompare(secondRow.billingMonth) ||
+          firstRow.customerId.localeCompare(secondRow.customerId) ||
           firstRow.customerName.localeCompare(secondRow.customerName),
       );
   }, [
@@ -2532,8 +2538,14 @@ export default function MockCustomerDashboardPage() {
 
     for (const row of unbilledCustomerRows) {
       const billingMonth = safeBillingMonth(row.billingMonth);
+      const billingAccountKey = normalizeCustomerFolderMatch(row.customerId);
+
+      if (!billingAccountKey) {
+        continue;
+      }
+
       const groupKey = [
-        normalizeCustomerFolderMatch(row.customerId || row.customerName),
+        billingAccountKey,
         billingMonth || "month-review",
       ].join("::");
       const existingGroup = groups.get(groupKey);
@@ -2559,13 +2571,39 @@ export default function MockCustomerDashboardPage() {
         firstGroup.billingMonth.localeCompare(secondGroup.billingMonth),
     );
   }, [unbilledCustomerRows]);
+  const customerMonthlyBillingAccountReviewCount = useMemo(() => {
+    const invoicedReferences = invoicedReferenceSetFrom(issuedCustomerInvoices);
+    const suppressedInvoiceReferences = new Set([
+      ...invoicedReferences,
+      ...archivedCustomerTestInvoiceReferences,
+    ]);
+
+    return regularCustomerSavedBookingReadState.savedBookings.filter((booking) => {
+      const reference = savedBookingReference(booking);
+
+      if (!reference || savedBookingCustomerId(booking)) {
+        return false;
+      }
+
+      if (suppressedInvoiceReferences.has(normalizedInvoiceReference(reference))) {
+        return false;
+      }
+
+      return savedBookingCloseoutIsBillingReady(
+        regularCustomerSavedBookingBillingReadinessState.closeoutsByReference[reference],
+      );
+    }).length;
+  }, [
+    archivedCustomerTestInvoiceReferences,
+    issuedCustomerInvoices,
+    regularCustomerSavedBookingBillingReadinessState.closeoutsByReference,
+    regularCustomerSavedBookingReadState.savedBookings,
+  ]);
   const visibleCustomerMonthlyBillingGroups = selectedCustomerFolderFinderRow
     ? customerMonthlyBillingGroups.filter(
         (group) =>
           normalizeCustomerFolderMatch(group.customerId) ===
-            normalizeCustomerFolderMatch(selectedCustomerFolderFinderRow.customerId) ||
-          normalizeCustomerFolderMatch(group.customerName) ===
-            normalizeCustomerFolderMatch(selectedCustomerFolderFinderRow.customerName),
+          normalizeCustomerFolderMatch(selectedCustomerFolderFinderRow.customerId),
       )
     : customerMonthlyBillingGroups;
   const selectedMonthlyBillingGroup = useMemo(
@@ -6454,7 +6492,8 @@ export default function MockCustomerDashboardPage() {
                 </p>
                 <h2 className="mt-1 text-lg font-bold text-slate-950">Monthly Billing Queue</h2>
                 <p className="mt-1 max-w-3xl text-sm font-semibold leading-6 text-emerald-950">
-                  Select a customer/month, review the jobs, then prepare the bill in the invoice workbench.
+                  Select one saved billing account and month, review the jobs, then prepare the bill in the invoice
+                  workbench. Same company names stay separate by saved account ID.
                 </p>
               </div>
               <p
@@ -6470,7 +6509,7 @@ export default function MockCustomerDashboardPage() {
               data-unbilled-customers-dropdown="true"
             >
               <label className="text-sm font-semibold text-slate-700">
-                Customer/month group
+                Billing account/month
                 <select
                   className="mt-1 min-h-10 w-full rounded-md border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950 outline-none focus:border-emerald-700"
                   data-customer-monthly-billing-group-select="true"
@@ -6478,10 +6517,11 @@ export default function MockCustomerDashboardPage() {
                   onChange={(event) => updateSelectedMonthlyBillingGroup(event.target.value)}
                   value={selectedMonthlyBillingGroupKey}
                 >
-                  <option value="">All customer/month groups</option>
+                  <option value="">All billing account/month groups</option>
                   {visibleCustomerMonthlyBillingGroups.map((group) => (
                     <option key={group.key} value={group.key}>
-                      {group.customerName} - {group.billingMonthLabel} - {group.rows.length} job
+                      {group.customerName} - Account {group.customerId} - {group.billingMonthLabel} -{" "}
+                      {group.rows.length} job
                       {group.rows.length === 1 ? "" : "s"}
                     </option>
                   ))}
@@ -6509,10 +6549,20 @@ export default function MockCustomerDashboardPage() {
                 className="mt-3 rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold leading-5 text-emerald-950"
                 data-customer-monthly-billing-group-summary="true"
               >
-                {selectedMonthlyBillingGroup.customerName} / {selectedMonthlyBillingGroup.billingMonthLabel} /{" "}
-                {selectedMonthlyBillingGroup.rows.length} job
+                {selectedMonthlyBillingGroup.customerName} / Account {selectedMonthlyBillingGroup.customerId} /{" "}
+                {selectedMonthlyBillingGroup.billingMonthLabel} / {selectedMonthlyBillingGroup.rows.length} job
                 {selectedMonthlyBillingGroup.rows.length === 1 ? "" : "s"} selected.
               </div>
+            ) : null}
+            {customerMonthlyBillingAccountReviewCount > 0 ? (
+              <p
+                className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-950"
+                data-customer-monthly-billing-account-review-count="true"
+              >
+                {customerMonthlyBillingAccountReviewCount} closeout-ready job
+                {customerMonthlyBillingAccountReviewCount === 1 ? "" : "s"} need a saved billing account ID before
+                monthly billing. Open the exact booking and fix the customer account before preparing an invoice.
+              </p>
             ) : null}
           </div>
 
@@ -6543,6 +6593,9 @@ export default function MockCustomerDashboardPage() {
                       >
                         <td className="px-3 py-2 sm:px-4">
                           <p className="max-w-[13rem] truncate font-bold text-slate-950">{row.customerName}</p>
+                          <p className="max-w-[13rem] truncate text-xs font-semibold text-slate-500">
+                            Account {row.customerId}
+                          </p>
                           <p className="max-w-[13rem] truncate text-xs text-slate-500">{row.reference}</p>
                         </td>
 	                        <td className="px-3 py-2">

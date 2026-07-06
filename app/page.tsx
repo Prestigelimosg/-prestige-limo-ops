@@ -15347,6 +15347,18 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     saveCrmBillingIdentityConfirmation?.key === saveCrmBillingIdentityReview.key
       ? saveCrmBillingIdentityConfirmation
       : null;
+  const displayedSaveCrmBillingIdentityMessage =
+    saveCrmBillingIdentityMessage && saveCrmBillingIdentityReview
+      ? {
+          ...saveCrmBillingIdentityMessage,
+          text:
+            clean(saveCrmBillingIdentityMessage.text).startsWith("Billing identity review required.")
+              ? `Billing identity review required. Same company/booker has other traveler(s): ${saveCrmBillingIdentityReview.conflictingTravelerNames.join(
+                  ", ",
+                )}. Confirm ${saveCrmBillingIdentityReview.accountLabel}, then Save + CRM again.`
+              : saveCrmBillingIdentityMessage.text,
+        }
+      : saveCrmBillingIdentityMessage;
   const saveCrmBillingIdentityAccountOverride =
     confirmedSaveCrmBillingIdentity?.accountLabel || "";
   const serviceChangePriceReview = useMemo(
@@ -22779,8 +22791,8 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       : []),
   ];
   const jobCardSaveFeedbackDuplicatesBillingIdentity =
-    Boolean(bookingSaveMessage && saveCrmBillingIdentityMessage && saveCrmBillingIdentityReview) &&
-    clean(bookingSaveMessage?.text) === clean(saveCrmBillingIdentityMessage?.text);
+    Boolean(bookingSaveMessage && displayedSaveCrmBillingIdentityMessage && saveCrmBillingIdentityReview) &&
+    clean(bookingSaveMessage?.text) === clean(displayedSaveCrmBillingIdentityMessage?.text);
   const showDriverJobLinkCopy = Boolean(cleanReferenceText(dispatchReleaseWorkflowBookingReference));
   const dispatchReleaseLoadedBookingRecord = loadedBookingId
     ? bookings.find((bookingRecord) => bookingRecordStableKey(bookingRecord) === loadedBookingId) ?? null

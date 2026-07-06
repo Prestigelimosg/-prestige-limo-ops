@@ -78,6 +78,16 @@ assertExcludes(
 );
 assertIncludes(appSource, 'data-save-crm-billing-identity-review="true"', "visible review panel");
 assertIncludes(appSource, 'data-save-crm-billing-identity-confirm="true"', "visible admin confirmation button");
+assertIncludes(
+  appSource,
+  "displayedSaveCrmBillingIdentityMessage",
+  "visible billing identity message derived from current review",
+);
+assertIncludes(
+  appSource,
+  "Confirm ${saveCrmBillingIdentityReview.accountLabel}, then Save + CRM again.",
+  "stale billing identity confirmation account label guard",
+);
 assertIncludes(appSource, "customerDisplayNameOverride", "customer display override option");
 assertIncludes(appSource, "clean(options.customerDisplayNameOverride)", "override applied before default customer account");
 assertIncludes(appSource, "resolveSaveCrmBillingIdentityAccountForSave();", "save/update calls resolver");

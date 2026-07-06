@@ -259,6 +259,16 @@ assertIncludes(appPage, "return `${totalCount} alerts`;", "Bookings badge combin
 assertIncludes(appPage, "function locateBookingsTabAlert()", "Bookings badge locator helper");
 assertIncludes(
   appPage,
+  'event.target.closest(\'[data-bookings-new-request-badge="true"]\')',
+  "Bookings tab locator only triggers from badge click",
+);
+assertIncludes(
+  appPage,
+  "if (isBookingsTab && showBookingsRequestBadge && clickedAlertBadge)",
+  "Bookings tab normal click still opens Bookings when badge is present",
+);
+assertIncludes(
+  appPage,
   'markAdminAlertLocatorHighlight("admin-app-notification", changeRequestNotificationId);',
   "Bookings badge highlights exact admin notification row",
 );

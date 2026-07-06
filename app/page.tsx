@@ -28745,11 +28745,15 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                 data-bookings-tab-new-requests={showBookingsRequestBadge ? "true" : undefined}
                 data-bookings-tab-total-alerts={isBookingsTab ? String(bookingsTabAttentionCount) : undefined}
                 data-bookings-tab-urgent-under-one-hour={isBookingsTab ? String(bookingsTabUrgentUnderOneHourCount) : undefined}
-                onClick={() => {
-                  if (isBookingsTab && showBookingsRequestBadge) {
-                    locateBookingsTabAlert();
-                    return;
-                  }
+	                onClick={(event) => {
+	                  const clickedAlertBadge =
+	                    event.target instanceof HTMLElement &&
+	                    Boolean(event.target.closest('[data-bookings-new-request-badge="true"]'));
+
+	                  if (isBookingsTab && showBookingsRequestBadge && clickedAlertBadge) {
+	                    locateBookingsTabAlert();
+	                    return;
+	                  }
 
                   selectAppTab(tab.id);
                 }}

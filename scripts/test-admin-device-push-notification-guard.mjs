@@ -159,7 +159,7 @@ assertIncludes(
     "Phone/Mac browser alert for new booking requests.",
     "Disable push stops browser alerts only.",
     "not clear queued inbox items",
-    "Mark read, Dismiss, or Archive",
+    "Clear, Dismiss, or Archive",
     "Enable push",
     "Disable push",
   ],

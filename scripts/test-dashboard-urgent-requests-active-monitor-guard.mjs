@@ -163,7 +163,7 @@ for (const fragment of [
   "loadSelectedBooking(firstBooking, { focusDriverJobLink: true })",
   'data-dashboard-review-new-booking-requests="true"',
   "disabled={customerBookingRequestCount === 0}",
-  "onClick={openCustomerBookingRequestsReview}",
+  "onClick={() => openCustomerBookingRequestsReview()}",
   "dashboardUrgentBookingRequestDisplayItems.map",
   'data-dashboard-urgent-booking-request-kind=',
   '"customer-request"',

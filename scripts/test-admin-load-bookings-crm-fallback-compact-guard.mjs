@@ -67,7 +67,7 @@ for (const phrase of [
   "The lower Dispatch saved-record finder and internal advanced checks stay in the source as an archived `Optional Workflow Tools` block, but the block is hidden from normal operation so it cannot distract dispatch with unused saved-record or readiness panels.",
   "Dispatch internal readiness, handoff, follow-up, day-of-trip monitor, recovery, exception, closeout-review, and billing-prep panels remain colocated under the archived optional workflow block and nested `Advanced Checks` disclosure for guard coverage, while the default operator view stays focused on daily trip work.",
   "The `Today's Jobs` driver report readout is read-only and does not create driver status events, notification rows, provider sends, GPS/live-location records, billing/payment/PDF/invoice/payout records, or a duplicate single-booking Dispatch workflow.",
-  "The Bookings tab shows one compact pulsing alert badge/highlight after open customer booking requests or queued customer change/cancel requests are detected. The count combines both existing sources and exposes separate safe data markers for booking-request count, change-request count, and total alert count; no sound, browser notification, polling loop, provider send, or new route is added.",
+  "The Bookings tab shows one compact pulsing alert badge/highlight after open customer booking requests, queued customer change/cancel requests, or under-1-hour urgent Driver TBC jobs are detected. The badge labels single-source alerts as `change`, `new`, or `urgent`, falls back to compact combined `alerts`, and exposes separate safe data markers for booking-request count, change-request count, urgent under-1-hour count, and total alert count; no sound, browser notification, polling loop, provider send, or new route is added.",
 ]) {
   assertIncludes(ledgerSection, phrase, `Load Bookings fallback ledger phrase ${phrase}`);
 }
@@ -193,11 +193,20 @@ assertIncludes(
   "Dashboard initial auto-load empty-list boundary",
 );
 assertIncludes(appPage, "function selectAppTab(nextTab: AppTab)", "Admin tab selection helper");
-assertIncludes(appPage, "function openCustomerBookingRequestsReview()", "Dashboard request review handoff helper");
+assertIncludes(
+  appPage,
+  "function openCustomerBookingRequestsReview(options: { highlight?: boolean } = {})",
+  "Dashboard request review handoff helper",
+);
 assertIncludes(appPage, 'selectAppTab("bookings");', "Dashboard request handoff opens Bookings");
 assertIncludes(
   appPage,
-  'querySelector(\'[data-new-customer-booking-requests-panel="true"]\')',
+  "onClick={() => openCustomerBookingRequestsReview()}",
+  "Dashboard review button calls request handoff helper",
+);
+assertIncludes(
+  appPage,
+  'scrollToAdminAlertLocatorTarget("new-booking-requests")',
   "Dashboard request handoff scrolls to request panel",
 );
 assertIncludes(
@@ -225,6 +234,11 @@ assertIncludes(
   'data-bookings-tab-total-alerts={isBookingsTab ? String(bookingsTabAttentionCount) : undefined}',
   "Bookings tab total attention count marker",
 );
+assertIncludes(
+  appPage,
+  'data-bookings-tab-urgent-under-one-hour={isBookingsTab ? String(bookingsTabUrgentUnderOneHourCount) : undefined}',
+  "Bookings tab urgent under-one-hour count marker",
+);
 assertIncludes(appPage, 'data-bookings-new-request-badge="true"', "Bookings tab new request badge");
 assertIncludes(appPage, "const customerBookingRequestCount = bookingTabCustomerBookingRequestBookings.length;", "Bookings badge count");
 assertIncludes(
@@ -234,8 +248,34 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  "const bookingsTabAttentionCount = customerBookingRequestCount + customerBookingChangeRequestCount;",
+  "customerBookingRequestCount + customerBookingChangeRequestCount + bookingsTabUrgentUnderOneHourCount;",
   "Bookings badge combined attention count",
+);
+assertIncludes(appPage, "adminBookingsTabAlertBadgeLabel", "Bookings badge meaningful alert label helper");
+assertIncludes(appPage, "return `${changeRequestCount} change", "Bookings badge change wording");
+assertIncludes(appPage, "return `${newBookingRequestCount} new`;", "Bookings badge new wording");
+assertIncludes(appPage, "return `${urgentBookingRequestCount} urgent`;", "Bookings badge urgent wording");
+assertIncludes(appPage, "return `${totalCount} alerts`;", "Bookings badge combined wording");
+assertIncludes(appPage, "function locateBookingsTabAlert()", "Bookings badge locator helper");
+assertIncludes(
+  appPage,
+  'markAdminAlertLocatorHighlight("admin-app-notification", changeRequestNotificationId);',
+  "Bookings badge highlights exact admin notification row",
+);
+assertIncludes(
+  appPage,
+  'scrollToAdminAlertLocatorTarget("admin-app-notification", changeRequestNotificationId);',
+  "Bookings badge scrolls to exact admin notification row",
+);
+assertIncludes(
+  appPage,
+  'openCustomerBookingRequestsReview({ highlight: true });',
+  "Bookings badge locates new booking request panel",
+);
+assertIncludes(
+  appPage,
+  "openDashboardUrgentBookingRequestsReview();",
+  "Bookings badge locates urgent under-one-hour dashboard panel",
 );
 assertIncludes(appPage, "animate-pulse rounded-full", "Bookings tab alert badge pulse");
 assertIncludes(appPage, "visibleCustomerBookingRequestBookings", "Customer request visible list cap");

@@ -1551,6 +1551,31 @@ function savedBookingDisplayText(value: string | null | undefined, fallback = "N
   return cleaned || fallback;
 }
 
+function compactCustomerBookingReference(value: string | null | undefined, fallback = "Not available") {
+  const reference = savedBookingDisplayText(value, "");
+
+  if (!reference) {
+    return fallback;
+  }
+
+  if (reference.length <= 16) {
+    return reference;
+  }
+
+  const structuredReference = reference.match(/^([A-Za-z]+)-(\d{8})(\d{4,6})(?:-([A-Za-z0-9]{4,10}))?$/);
+
+  if (structuredReference) {
+    const prefix = structuredReference[1].toUpperCase();
+    const suffix = structuredReference[4]?.toUpperCase() || reference.slice(-6).toUpperCase();
+
+    return `${prefix}-${suffix}`;
+  }
+
+  const prefix = reference.split("-")[0]?.slice(0, 6).toUpperCase() || reference.slice(0, 6);
+
+  return `${prefix}-${reference.slice(-6)}`;
+}
+
 function savedBookingCountLabel(count: number, noun: string) {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
@@ -6171,8 +6196,11 @@ export default function MockCustomerDashboardPage() {
                             key={bookingReference}
                           >
                             <div className="min-w-0">
-                              <p className="truncate font-bold text-slate-950">
-                                {savedBookingDisplayText(booking.booking_reference, "Reference unavailable")}
+                              <p
+                                className="truncate font-bold text-slate-950"
+                                title={savedBookingDisplayText(booking.booking_reference, "Reference unavailable")}
+                              >
+                                {compactCustomerBookingReference(booking.booking_reference, "Reference unavailable")}
                               </p>
                               <p className="mt-0.5 truncate text-xs font-semibold text-slate-500">
                                 Account: {savedBookingDisplayText(booking.customer_id, "Not linked")}
@@ -6562,7 +6590,9 @@ export default function MockCustomerDashboardPage() {
                           <p className="max-w-[13rem] truncate text-xs font-semibold text-slate-500">
                             Account {row.customerId}
                           </p>
-                          <p className="max-w-[13rem] truncate text-xs text-slate-500">{row.reference}</p>
+                          <p className="max-w-[13rem] truncate text-xs text-slate-500" title={row.reference}>
+                            {compactCustomerBookingReference(row.reference)}
+                          </p>
                         </td>
 	                        <td className="px-3 py-2">
 	                          <p className="font-bold text-slate-950">{row.billingMonthLabel}</p>
@@ -6699,7 +6729,9 @@ export default function MockCustomerDashboardPage() {
                       Invoice prep
                     </p>
                     <p className="truncate font-bold text-slate-950">{customerInvoicePrepRow.customerName}</p>
-                    <p className="truncate text-xs text-slate-500">{customerInvoicePrepRow.reference}</p>
+                    <p className="truncate text-xs text-slate-500" title={customerInvoicePrepRow.reference}>
+                      {compactCustomerBookingReference(customerInvoicePrepRow.reference)}
+                    </p>
                   </div>
                   <div className="min-w-0">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Amount</p>

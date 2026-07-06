@@ -2899,7 +2899,18 @@ function compactBookingReference(value: string | number | null | undefined) {
     return reference || "No ref";
   }
 
-  return `${reference.slice(0, 6)}...${reference.slice(-6)}`;
+  const structuredReference = reference.match(/^([A-Za-z]+)-(\d{8})(\d{4,6})(?:-([A-Za-z0-9]{4,10}))?$/);
+
+  if (structuredReference) {
+    const prefix = structuredReference[1].toUpperCase();
+    const suffix = structuredReference[4]?.toUpperCase() || reference.slice(-6).toUpperCase();
+
+    return `${prefix}-${suffix}`;
+  }
+
+  const prefix = reference.split("-")[0]?.slice(0, 6).toUpperCase() || reference.slice(0, 6);
+
+  return `${prefix}-${reference.slice(-6)}`;
 }
 
 function cleanDispatchHandoffBookingReference(value: string | number | null | undefined) {
@@ -4288,6 +4299,15 @@ function isDeleteArchivedJobMessage(message: Message | null | undefined) {
         message.text === "Deleting job..." ||
         message.text === "Job deleted." ||
         message.text.startsWith("Delete job failed")),
+  );
+}
+
+function isCompletedHistoryBillingReadyMessage(message: Message | null | undefined) {
+  return Boolean(
+    message &&
+      (message.text.startsWith("Saving billing readiness for") ||
+        message.text.startsWith("Billing readiness saved for") ||
+        message.text.startsWith("Billing readiness failed")),
   );
 }
 
@@ -12485,6 +12505,8 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   const [serviceChangePriceReviewMessage, setServiceChangePriceReviewMessage] =
     useState<Message | null>(null);
   const [deletingCompletedBookingId, setDeletingCompletedBookingId] = useState<string | null>(null);
+  const [completedHistoryBillingReadyBookingId, setCompletedHistoryBillingReadyBookingId] =
+    useState<string | null>(null);
   const [copyEditStates, setCopyEditStates] =
     useState<Record<DispatchCopyTarget, CopyEditState>>(createInitialCopyEditStates);
   const [copyFeedback, setCopyFeedback] = useState<CopyFeedback | null>(null);
@@ -20096,6 +20118,63 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       return;
     }
 
+    setCompletedBookingCloseoutAction("save-completed-closeout");
+    setCompletedTripCloseoutReviewMessage({
+      tone: "info",
+      text: `Saving completed closeout for ${bookingReference}...`,
+    });
+
+    try {
+      const response = await fetch(adminCompletedBookingCloseoutApiPath, {
+        body: JSON.stringify(
+          buildCompletedTripCloseoutReviewPayload({
+            bookingReference,
+            nextStatus,
+            safeCloseoutNote: completedTripCloseoutReviewNote,
+          }),
+        ),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "POST",
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.error || "Completed closeout save failed.");
+      }
+
+      const savedCloseout = result.closeout as AdminCompletedBookingCloseoutRecord;
+      setCompletedBookingCloseoutRecord(savedCloseout);
+      setCompletedTripCloseoutReviewStatus(
+        completedTripCloseoutReviewStatusFromApi(savedCloseout),
+      );
+      setCompletedTripCloseoutReviewMessage({
+        tone: "success",
+        text: `Completed closeout saved for ${bookingReference}: ${adminCompletedBookingCloseoutDisplayLabel(
+          savedCloseout,
+        )}.`,
+      });
+    } catch (error) {
+      setCompletedTripCloseoutReviewMessage({
+        tone: "error",
+        text: adminCompletedBookingCloseoutFailureMessage(error),
+      });
+    } finally {
+      setCompletedBookingCloseoutAction(null);
+    }
+  }
+
+  function buildCompletedTripCloseoutReviewPayload({
+    bookingReference,
+    nextStatus,
+    safeCloseoutNote,
+  }: {
+    bookingReference: string;
+    nextStatus: CompletedTripCloseoutReviewStatus;
+    safeCloseoutNote?: string;
+  }) {
     const selectedLabel =
       completedTripCloseoutReviewOptions.find((option) => option.value === nextStatus)?.label ||
       "Completed closeout";
@@ -20156,60 +20235,19 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             ? "Admin marked closeout waived with no charge after review."
             : "Admin updated completed closeout from the existing closeout review control.";
 
-    setCompletedBookingCloseoutAction("save-completed-closeout");
-    setCompletedTripCloseoutReviewMessage({
-      tone: "info",
-      text: `Saving completed closeout for ${bookingReference}...`,
-    });
-
-    try {
-      const response = await fetch(adminCompletedBookingCloseoutApiPath, {
-        body: JSON.stringify({
-          billing_prep_readiness: billingPrepReadiness,
-          booking_reference: bookingReference,
-          closeout_status: closeoutStatus,
-          completed_job_status: completedJobStatus,
-          dsp_actual_hours_readiness: dspActualHoursReadiness,
-          extra_charges_readiness: extraChargesReadiness,
-          safe_closeout_context: {
-            closeout_summary: closeoutSummary,
-            next_action: closeoutNextAction,
-          },
-          safe_closeout_note:
-            clean(completedTripCloseoutReviewNote) ||
-            fallbackCloseoutNote,
-        }),
-        headers: {
-          "Content-Type": "application/json",
-          "x-prestige-admin-purpose": adminLegacyDataPurpose,
-        },
-        method: "POST",
-      });
-      const result = await response.json().catch(() => null);
-
-      if (!response.ok || !result?.ok) {
-        throw new Error(result?.error || "Completed closeout save failed.");
-      }
-
-      const savedCloseout = result.closeout as AdminCompletedBookingCloseoutRecord;
-      setCompletedBookingCloseoutRecord(savedCloseout);
-      setCompletedTripCloseoutReviewStatus(
-        completedTripCloseoutReviewStatusFromApi(savedCloseout),
-      );
-      setCompletedTripCloseoutReviewMessage({
-        tone: "success",
-        text: `Completed closeout saved for ${bookingReference}: ${adminCompletedBookingCloseoutDisplayLabel(
-          savedCloseout,
-        )}.`,
-      });
-    } catch (error) {
-      setCompletedTripCloseoutReviewMessage({
-        tone: "error",
-        text: adminCompletedBookingCloseoutFailureMessage(error),
-      });
-    } finally {
-      setCompletedBookingCloseoutAction(null);
-    }
+    return {
+      billing_prep_readiness: billingPrepReadiness,
+      booking_reference: bookingReference,
+      closeout_status: closeoutStatus,
+      completed_job_status: completedJobStatus,
+      dsp_actual_hours_readiness: dspActualHoursReadiness,
+      extra_charges_readiness: extraChargesReadiness,
+      safe_closeout_context: {
+        closeout_summary: closeoutSummary,
+        next_action: closeoutNextAction,
+      },
+      safe_closeout_note: clean(safeCloseoutNote) || fallbackCloseoutNote,
+    };
   }
 
   async function updateAppliedAdminBookingOperationalSnapshot() {
@@ -21442,6 +21480,98 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     );
   }
 
+  async function markCompletedHistoryBookingBillingReady(
+    bookingRecord: BookingRecord,
+    operationalCard?: LoadBookingsOperationalDisplayCard,
+  ) {
+    const bookingId = bookingRecordStableKey(bookingRecord, operationalCard);
+    const bookingReference =
+      bookingRecordPersistedReference(bookingRecord) ||
+      cleanReferenceText(operationalCard?.booking_reference) ||
+      cleanReferenceText(operationalCard?.booking_id);
+    const referenceLabel = compactBookingReference(bookingReference);
+
+    if (!bookingRecordIsCompletedStatus(bookingRecord)) {
+      setBookingCompletionMessage(bookingId, {
+        tone: "error",
+        text: "Billing readiness failed: only completed jobs can be marked billing ready here.",
+      });
+      return;
+    }
+
+    if (!bookingReference) {
+      setBookingCompletionMessage(bookingId, {
+        tone: "error",
+        text: "Billing readiness failed: saved booking reference is missing.",
+      });
+      return;
+    }
+
+    if (typeof fetch !== "function") {
+      setBookingCompletionMessage(bookingId, {
+        tone: "error",
+        text: "Billing readiness failed: completed closeout API is not available.",
+      });
+      return;
+    }
+
+    setCompletedHistoryBillingReadyBookingId(bookingId);
+    setBookingCompletionMessage(bookingId, {
+      tone: "info",
+      text: `Saving billing readiness for ${referenceLabel}...`,
+    });
+
+    try {
+      const response = await fetch(adminCompletedBookingCloseoutApiPath, {
+        body: JSON.stringify(
+          buildCompletedTripCloseoutReviewPayload({
+            bookingReference,
+            nextStatus: "ready-locally",
+            safeCloseoutNote:
+              "Admin marked completed job billing ready from Completed / History.",
+          }),
+        ),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "POST",
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.error || "Completed closeout save failed.");
+      }
+
+      const savedCloseout = result.closeout as AdminCompletedBookingCloseoutRecord;
+      const savedCloseoutReference = cleanReferenceText(savedCloseout?.booking_reference);
+
+      if (savedCloseoutReference && savedCloseoutReference !== bookingReference) {
+        throw new Error("Completed closeout save returned a different booking reference.");
+      }
+
+      setCompletedBookingCloseoutRecord(savedCloseout);
+
+      if (clean(dispatchReleaseWorkflowBookingReference) === bookingReference) {
+        setCompletedTripCloseoutReviewStatus(
+          completedTripCloseoutReviewStatusFromApi(savedCloseout),
+        );
+      }
+
+      setBookingCompletionMessage(bookingId, {
+        tone: "success",
+        text: `Billing readiness saved for ${referenceLabel}. Monthly Billing Queue can pick it up.`,
+      });
+    } catch (error) {
+      setBookingCompletionMessage(bookingId, {
+        tone: "error",
+        text: `Billing readiness failed: ${adminCompletedBookingCloseoutFailureMessage(error)}`,
+      });
+    } finally {
+      setCompletedHistoryBillingReadyBookingId(null);
+    }
+  }
+
   function bookingRecordCanBeDeletedFromCompletedHistory(bookingRecord: BookingRecord) {
     const isCompletedStatus = bookingRecordIsCompletedStatus(bookingRecord);
     const isCancelledStatus = bookingRecordIsCancelledStatus(bookingRecord);
@@ -22361,7 +22491,8 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
               const rawBookingCompletionMessage = bookingCompletionMessages[bookingId] ?? null;
               const bookingCompletionMessage =
                 isUndoCompletionMessage(rawBookingCompletionMessage) ||
-                isDeleteArchivedJobMessage(rawBookingCompletionMessage)
+                isDeleteArchivedJobMessage(rawBookingCompletionMessage) ||
+                isCompletedHistoryBillingReadyMessage(rawBookingCompletionMessage)
                 ? rawBookingCompletionMessage
                 : null;
               const passengerText = getLoadBookingsOperationalPassengerDisplay(operationalCard, savedBooking);
@@ -22500,11 +22631,28 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                           <button
                             className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                             data-completed-undo-booking={bookingId}
-                            disabled={completingBookingId === bookingId || deletingCompletedBookingId === bookingId}
+                            disabled={
+                              completingBookingId === bookingId ||
+                              deletingCompletedBookingId === bookingId ||
+                              completedHistoryBillingReadyBookingId === bookingId
+                            }
                             onClick={() => undoBookingCompleted(savedBooking)}
                             type="button"
                           >
                             {completingBookingId === bookingId ? "Undoing..." : "Undo completed"}
+                          </button>
+                          <button
+                            className="h-10 rounded-md border border-emerald-300 bg-white px-3 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                            data-completed-billing-ready-booking={bookingId}
+                            disabled={
+                              completingBookingId === bookingId ||
+                              deletingCompletedBookingId === bookingId ||
+                              completedHistoryBillingReadyBookingId === bookingId
+                            }
+                            onClick={() => markCompletedHistoryBookingBillingReady(savedBooking, operationalCard)}
+                            type="button"
+                          >
+                            {completedHistoryBillingReadyBookingId === bookingId ? "Saving..." : "Billing ready"}
                           </button>
                         </>
                       ) : null}
@@ -22513,7 +22661,11 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                           <button
                             className="h-10 rounded-md border border-rose-300 bg-white px-3 text-sm font-semibold text-rose-800 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                             data-completed-delete-booking={bookingId}
-                            disabled={deletingCompletedBookingId === bookingId || completingBookingId === bookingId}
+                            disabled={
+                              deletingCompletedBookingId === bookingId ||
+                              completingBookingId === bookingId ||
+                              completedHistoryBillingReadyBookingId === bookingId
+                            }
                             onClick={() => deleteCompletedHistoryBooking(savedBooking, operationalCard)}
                             type="button"
                           >

@@ -234,6 +234,10 @@ const guardChecks = [
     script: "scripts/test-completed-history-delete-id-resolution-guard.mjs",
   },
   {
+    label: "completed history billing ready reference display guard",
+    script: "scripts/test-completed-history-billing-ready-reference-display-guard.mjs",
+  },
+  {
     label: "customer terms and hourly billing guard",
     script: "scripts/test-customer-terms-hourly-billing-guard.mjs",
   },

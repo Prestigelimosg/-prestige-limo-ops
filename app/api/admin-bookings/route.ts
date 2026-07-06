@@ -69,9 +69,10 @@ type AdminDispatcherBoundaryCheck =
     };
 
 function requireAdminDispatcherBoundary(request: Request): AdminDispatcherBoundaryCheck {
+  const customerFolderExactEditMethod = request.method === "GET" || request.method === "PATCH";
   const boundary = resolveAdminDispatcherBoundary(request, adminBookingPersistencePurpose, {
-    additionalSameOriginRefererPathPrefixes: ["/customers/"],
-    additionalSameOriginRefererPathnames: ["/customers"],
+    additionalSameOriginRefererPathPrefixes: customerFolderExactEditMethod ? ["/customers/"] : [],
+    additionalSameOriginRefererPathnames: customerFolderExactEditMethod ? ["/customers"] : [],
     allowServerSessionRoleMethodsWithoutRequestToken: ["POST", "PATCH"],
   });
 

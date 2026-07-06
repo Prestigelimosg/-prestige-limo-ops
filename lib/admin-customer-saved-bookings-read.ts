@@ -105,6 +105,17 @@ function normalizeToken(value: string) {
   return value.replace(/([a-z])([A-Z])/g, "$1_$2").replace(/[^a-z0-9]+/gi, "_").toLowerCase();
 }
 
+function normalizeAccountScopeKey(value: string) {
+  const scopeParts = value
+    .split(/__+/)
+    .map((part) => normalizeToken(part).replace(/^_+|_+$/g, ""))
+    .filter(Boolean);
+
+  return scopeParts.length > 1
+    ? scopeParts.join("__")
+    : normalizeToken(value).replace(/^_+|_+$/g, "");
+}
+
 function includesForbiddenSafeTextFragment(value: string) {
   const normalized = normalizeToken(value);
 
@@ -191,7 +202,10 @@ function bookingMatchesCustomer(
     return true;
   }
 
-  return accountScopeFromBooking(booking).key === normalizeToken(params.account_scope_key);
+  return (
+    normalizeAccountScopeKey(accountScopeFromBooking(booking).key) ===
+    normalizeAccountScopeKey(params.account_scope_key)
+  );
 }
 
 function toSafeSavedBooking(
@@ -274,7 +288,7 @@ export function parseAdminCustomerSavedBookingsReadParams(
 
   return {
     data: {
-      account_scope_key: accountScopeKey ? normalizeToken(accountScopeKey) : null,
+      account_scope_key: accountScopeKey ? normalizeAccountScopeKey(accountScopeKey) : null,
       customer_account: customerAccount,
       customer_id: customerId,
       limit,

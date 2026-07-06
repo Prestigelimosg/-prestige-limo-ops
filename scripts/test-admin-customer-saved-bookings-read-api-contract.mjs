@@ -321,6 +321,22 @@ try {
   assert.equal(reader.adminCustomerSavedBookingsReadVersion, "admin-customer-saved-bookings-read-v1");
   assert.deepEqual(
     reader.parseAdminCustomerSavedBookingsReadParams({
+      account_scope_key: "codex_booker__codex_return_passenger20260703",
+      customer_id: "69",
+      limit: "5",
+    }),
+    {
+      data: {
+        account_scope_key: "codex_booker__codex_return_passenger20260703",
+        customer_account: null,
+        customer_id: "69",
+        limit: 5,
+      },
+      ok: true,
+    },
+  );
+  assert.deepEqual(
+    reader.parseAdminCustomerSavedBookingsReadParams({
       customer_account: "UBS",
       limit: "5",
     }),
@@ -456,6 +472,72 @@ try {
   assert.equal(scopedReadMock.client.operations.length, 0);
   assert.equal(scopedReadMock.client.selectHistory.length, 1);
   assertNoLeaks(scopedReadResult, "scoped saved bookings read response should stay safe");
+
+  setEnv(enabledEnv());
+
+  const scopedBookerTravellerSeed = {
+    bookings: [
+      ...seed.bookings,
+      {
+        admin_internal_status: "confirmed",
+        booking_reference: "CODEX-RETURN-OUT",
+        contact_display_name: "Codex Booker",
+        customer_display_name: "Codex Return Test Account 20260703 [Codex Return. Passenger20260703]",
+        customer_facing_status: "request_received",
+        customer_id: "69",
+        passenger_name: "Codex Return. Passenger20260703",
+        pickup_at: "2026-07-15T07:00:00+00:00",
+        service_type: "MNG",
+      },
+      {
+        admin_internal_status: "confirmed",
+        booking_reference: "CODEX-RETURN-RET",
+        contact_display_name: "Codex Booker",
+        customer_display_name: "Codex Return Test Account 20260703 [Codex Return. Passenger20260703]",
+        customer_facing_status: "request_received",
+        customer_id: "69",
+        passenger_name: "Codex Return. Passenger20260703",
+        pickup_at: "2026-07-16T07:00:00+00:00",
+        service_type: "MNG",
+      },
+    ],
+  };
+  const scopedBookerTravellerMock = installMockClient(scopedBookerTravellerSeed);
+  const scopedBookerTravellerResult = await readRouteResponse(
+    await route.GET(
+      new Request(
+        "http://localhost/api/admin-customer-saved-bookings?customer_id=69&account_scope_key=codex_booker__codex_return_passenger20260703&limit=10",
+        {
+          headers: customerSurfaceHeaders({ referer: "http://localhost/customers" }),
+        },
+      ),
+    ),
+  );
+
+  assert.equal(scopedBookerTravellerResult.status, 200);
+  assert.equal(scopedBookerTravellerResult.body.ok, true);
+  assert.deepEqual(scopedBookerTravellerResult.body.summary, {
+    matched_count: 2,
+    recent_read_count: 5,
+    returned_count: 2,
+  });
+  assert.deepEqual(
+    scopedBookerTravellerResult.body.saved_bookings.map((booking) => booking.booking_reference),
+    ["CODEX-RETURN-RET", "CODEX-RETURN-OUT"],
+  );
+  assert.deepEqual(
+    scopedBookerTravellerResult.body.saved_bookings.map((booking) => booking.account_scope_key),
+    [
+      "codex_booker__codex_return_passenger20260703",
+      "codex_booker__codex_return_passenger20260703",
+    ],
+  );
+  assert.equal(scopedBookerTravellerMock.client.operations.length, 0);
+  assert.equal(scopedBookerTravellerMock.client.selectHistory.length, 1);
+  assertNoLeaks(
+    scopedBookerTravellerResult,
+    "booker/traveller scoped saved bookings read response should stay safe",
+  );
 
   setEnv(enabledEnv());
 

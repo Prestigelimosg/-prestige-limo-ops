@@ -16205,6 +16205,10 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       useTypedOperationalOrder: true,
     });
   const customerBookingRequestCount = bookingTabCustomerBookingRequestBookings.length;
+  const customerBookingChangeRequestCount = adminAppNotificationReadState.notifications.filter((notification) =>
+    Boolean(adminAppNotificationChangeRequestContext(notification)),
+  ).length;
+  const bookingsTabAttentionCount = customerBookingRequestCount + customerBookingChangeRequestCount;
   const urgentCustomerBookingRequestCount = urgentCustomerBookingRequestBookings.length;
   const dashboardUrgentBookingRequestDisplayItems =
     buildLoadBookingsOperationalDisplayItems(visibleDashboardUrgentBookingRequestBookings, {
@@ -28540,7 +28544,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           {appTabs.map((tab) => {
             const selected = activeTab === tab.id;
             const isBookingsTab = tab.id === "bookings";
-            const showBookingsRequestBadge = isBookingsTab && customerBookingRequestCount > 0;
+            const showBookingsRequestBadge = isBookingsTab && bookingsTabAttentionCount > 0;
             const highlightBookingsTab = showBookingsRequestBadge && !selected;
 
             return (
@@ -28556,7 +28560,10 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                 key={tab.id}
                 data-app-tab={tab.id}
                 data-bookings-tab-autoload={tab.id === "bookings" ? "true" : undefined}
+                data-bookings-tab-change-requests={isBookingsTab ? String(customerBookingChangeRequestCount) : undefined}
+                data-bookings-tab-new-booking-requests={isBookingsTab ? String(customerBookingRequestCount) : undefined}
                 data-bookings-tab-new-requests={showBookingsRequestBadge ? "true" : undefined}
+                data-bookings-tab-total-alerts={isBookingsTab ? String(bookingsTabAttentionCount) : undefined}
                 onClick={() => selectAppTab(tab.id)}
                 role="tab"
                 style={{ minHeight: 44 }}
@@ -28565,12 +28572,12 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                 <span data-app-tab-label="true">{tab.label}</span>
                 {showBookingsRequestBadge ? (
                   <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-bold leading-none ${
+                    className={`animate-pulse rounded-full px-2 py-0.5 text-[10px] font-bold leading-none ${
                       selected ? "bg-white text-slate-950" : "bg-emerald-600 text-white"
                     }`}
                     data-bookings-new-request-badge="true"
                   >
-                    {customerBookingRequestCount} new
+                    {bookingsTabAttentionCount} alert{bookingsTabAttentionCount === 1 ? "" : "s"}
                   </span>
                 ) : null}
               </button>

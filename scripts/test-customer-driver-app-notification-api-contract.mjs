@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
@@ -13,6 +13,8 @@ const customerAuthRequiredMessage =
 const disabledDriverNotificationMessage =
   "Driver app notification persistence is not enabled on this server.";
 const serverSessionToken = "mock-customer-driver-notification-session-token";
+const portalAccessSecret =
+  "mock-customer-driver-notification-portal-secret-0001";
 const serviceRoleSentinel = "SUPABASE_SERVICE_ROLE_KEY_CUSTOMER_DRIVER_NOTIFICATION_SENTINEL";
 const supabaseUrlSentinel = "https://customer-driver-notification-contract.supabase.co";
 const notificationTable = "customer_driver_app_notification_outbox";
@@ -28,6 +30,8 @@ const unsafeNotificationLeakPattern =
 const sourceFiles = [
   "lib/customer-runtime-session-map.ts",
   "lib/customer-driver-app-notification-persistence.ts",
+  "lib/customer-portal-access-account.ts",
+  "lib/customer-portal-access-link.ts",
   "lib/admin-booking-supabase-adapter.ts",
   "lib/admin-booking-persistence.ts",
   "lib/admin-dispatcher-auth-boundary.ts",
@@ -59,6 +63,12 @@ const originalEnv = {
     process.env.PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_ENABLED,
   PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_MODE:
     process.env.PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_MODE,
+  PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_ACCOUNT_ALLOWLIST:
+    process.env.PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_ACCOUNT_ALLOWLIST,
+  PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_ENABLED:
+    process.env.PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_ENABLED,
+  PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_SECRET:
+    process.env.PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_SECRET,
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
   SUPABASE_URL: process.env.SUPABASE_URL,
 };
@@ -101,6 +111,10 @@ function validEnv() {
       "customer-runtime-account-001",
     PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_ENABLED: "true",
     PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_MODE: "one-customer",
+    PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_ACCOUNT_ALLOWLIST:
+      "customer-runtime-account-001",
+    PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_ENABLED: "true",
+    PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_SECRET: portalAccessSecret,
     PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED: "true",
     SUPABASE_SERVICE_ROLE_KEY: serviceRoleSentinel,
     SUPABASE_URL: supabaseUrlSentinel,
@@ -124,6 +138,24 @@ function routeContext(token) {
 
 function tokenHash(token) {
   return createHash("sha256").update(token.trim(), "utf8").digest("hex");
+}
+
+function encodeJsonSegment(value) {
+  return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
+}
+
+function createPortalAccessToken(account) {
+  const payloadSegment = encodeJsonSegment({
+    account,
+    iat: Math.floor(Date.now() / 1000),
+    scope: "portal_account",
+    type: "customer-portal-access-link-v1",
+  });
+  const signatureSegment = createHmac("sha256", portalAccessSecret)
+    .update(payloadSegment)
+    .digest("base64url");
+
+  return `portal_access_v1.${payloadSegment}.${signatureSegment}`;
 }
 
 function transpileTypescript(source, filename) {
@@ -336,6 +368,7 @@ class MockSupabaseClient {
       [notificationTable]: [],
       bookings: [],
       customer_access_accounts: [],
+      driver_job_status_events: [],
       driver_job_links: [],
     };
     this.updateHistory = [];
@@ -887,6 +920,225 @@ try {
     assert.equal(customerGet.body.error, customerAuthRequiredMessage);
     assert.equal(customerPatch.body.error, customerAuthRequiredMessage);
     assert.equal(customerGetMock.createdClients.length, 0, "Customer route must not create a Supabase client");
+
+    setEnv(validEnv());
+    const portalToken = createPortalAccessToken("customer-runtime-account-001");
+    const customerPortalReadMock = installMockClient({
+      [notificationTable]: [
+        seededNotification({
+          booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
+          delivery_surface: "customer_app",
+          id: "notification-customer-driver-status",
+          notification_status: "queued",
+          notification_type: "driver_status",
+          safe_context: {
+            external_send: false,
+            provider_send: false,
+            source: "driver_job_status",
+            status_key: "driver_otw",
+            status_label: "Driver on the way",
+          },
+          safe_message: "Your Prestige Limo driver is on the way to pickup.",
+          safe_title: "Driver on the way",
+          workflow_area: "driver_status_customer_in_app",
+        }),
+        seededNotification({
+          booking_reference: "BOOK-CUST-DRIVER-NOTIFY-OTHER",
+          delivery_surface: "customer_app",
+          id: "notification-other-customer-hidden",
+          notification_type: "driver_status",
+          safe_title: "Other driver status",
+        }),
+      ],
+      bookings: [
+        {
+          booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
+          customer_id: "customer-runtime-account-001",
+        },
+      ],
+      customer_access_accounts: [
+        {
+          account_status: "active",
+          customer_account_reference: "customer-runtime-account-001",
+        },
+      ],
+    });
+    const customerPortalRead = await responseJson(
+      await customerRoute.GET(
+        new Request(
+          "http://localhost/api/customer-app-notifications?booking_reference=BOOK-CUST-DRIVER-NOTIFY-001&limit=5&page=1",
+          {
+            headers: {
+              cookie: `prestige_customer_saved_bookings_session=${portalToken}`,
+              referer:
+                "http://localhost/my-bookings?booking=BOOK-CUST-DRIVER-NOTIFY-001&tracking=1",
+              "x-prestige-customer-purpose": "customer-in-app-notification-read",
+            },
+          },
+        ),
+      ),
+    );
+
+    assert.equal(customerPortalRead.status, 200);
+    assert.deepEqual(
+      customerPortalRead.body.notifications.map((notification) => ({
+        booking_reference: notification.booking_reference,
+        delivery_surface: notification.delivery_surface,
+        notification_type: notification.notification_type,
+        safe_message: notification.safe_message,
+        safe_title: notification.safe_title,
+      })),
+      [
+        {
+          booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
+          delivery_surface: "customer_app",
+          notification_type: "driver_status",
+          safe_message: "Your Prestige Limo driver is on the way to pickup.",
+          safe_title: "Driver on the way",
+        },
+      ],
+      "Expected customer portal access cookie to read only its booking-scoped driver status update",
+    );
+    assert.deepEqual(
+      customerPortalReadMock.client.selectHistory.map((entry) => ({
+        filters: entry.filters,
+        table: entry.table,
+      })),
+      [
+        {
+          filters: [
+            {
+              column: "customer_account_reference",
+              type: "eq",
+              value: "customer-runtime-account-001",
+            },
+            { column: "account_status", type: "eq", value: "active" },
+          ],
+          table: "customer_access_accounts",
+        },
+        {
+          filters: [
+            { column: "customer_id", type: "eq", value: "customer-runtime-account-001" },
+            { column: "booking_reference", type: "eq", value: "BOOK-CUST-DRIVER-NOTIFY-001" },
+          ],
+          table: "bookings",
+        },
+        {
+          filters: [
+            { column: "delivery_surface", type: "eq", value: "customer_app" },
+            { column: "booking_reference", type: "eq", value: "BOOK-CUST-DRIVER-NOTIFY-001" },
+          ],
+          table: notificationTable,
+        },
+      ],
+      "Expected customer portal notification read to require active account and exact booking ownership before notification read",
+    );
+    assert.equal(unsafeNotificationLeakPattern.test(JSON.stringify(customerPortalRead.body)), false);
+
+    setEnv(validEnv());
+    const customerPortalStatusFallbackMock = installMockClient({
+      [notificationTable]: [],
+      bookings: [
+        {
+          booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
+          customer_id: "customer-runtime-account-001",
+        },
+      ],
+      customer_access_accounts: [
+        {
+          account_status: "active",
+          customer_account_reference: "customer-runtime-account-001",
+        },
+      ],
+      driver_job_status_events: [
+        {
+          booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
+          occurred_at: "2026-07-06T10:12:00.000Z",
+          status_value: "driver_otw",
+        },
+      ],
+    });
+    const customerPortalStatusFallback = await responseJson(
+      await customerRoute.GET(
+        new Request(
+          "http://localhost/api/customer-app-notifications?booking_reference=BOOK-CUST-DRIVER-NOTIFY-001&limit=5&page=1",
+          {
+            headers: {
+              cookie: `prestige_customer_saved_bookings_session=${portalToken}`,
+              referer:
+                "http://localhost/my-bookings?booking=BOOK-CUST-DRIVER-NOTIFY-001&tracking=1",
+              "x-prestige-customer-purpose": "customer-in-app-notification-read",
+            },
+          },
+        ),
+      ),
+    );
+
+    assert.equal(customerPortalStatusFallback.status, 200);
+    assert.deepEqual(
+      customerPortalStatusFallback.body.notifications.map((notification) => ({
+        booking_reference: notification.booking_reference,
+        created_at: notification.created_at,
+        delivery_surface: notification.delivery_surface,
+        notification_type: notification.notification_type,
+        safe_message: notification.safe_message,
+        safe_title: notification.safe_title,
+      })),
+      [
+        {
+          booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
+          created_at: "2026-07-06T10:12:00.000Z",
+          delivery_surface: "customer_app",
+          notification_type: "driver_status",
+          safe_message: "Your Prestige Limo driver is on the way to pickup.",
+          safe_title: "Driver on the way",
+        },
+      ],
+      "Expected customer portal notification read to fall back to customer-safe driver status events",
+    );
+    assert.deepEqual(
+      customerPortalStatusFallbackMock.client.selectHistory.map((entry) => ({
+        filters: entry.filters,
+        table: entry.table,
+      })),
+      [
+        {
+          filters: [
+            {
+              column: "customer_account_reference",
+              type: "eq",
+              value: "customer-runtime-account-001",
+            },
+            { column: "account_status", type: "eq", value: "active" },
+          ],
+          table: "customer_access_accounts",
+        },
+        {
+          filters: [
+            { column: "customer_id", type: "eq", value: "customer-runtime-account-001" },
+            { column: "booking_reference", type: "eq", value: "BOOK-CUST-DRIVER-NOTIFY-001" },
+          ],
+          table: "bookings",
+        },
+        {
+          filters: [
+            { column: "delivery_surface", type: "eq", value: "customer_app" },
+            { column: "booking_reference", type: "eq", value: "BOOK-CUST-DRIVER-NOTIFY-001" },
+          ],
+          table: notificationTable,
+        },
+        {
+          filters: [{ column: "booking_reference", type: "eq", value: "BOOK-CUST-DRIVER-NOTIFY-001" }],
+          table: "driver_job_status_events",
+        },
+      ],
+      "Expected customer portal fallback to read driver status only after active account and exact booking ownership checks",
+    );
+    assert.equal(
+      unsafeNotificationLeakPattern.test(JSON.stringify(customerPortalStatusFallback.body)),
+      false,
+      "Expected fallback driver status response to avoid internal notification/link/GPS/finance fields",
+    );
 
     const driverToken = "safe-driver-notification-token";
     const driverLinkId = "11111111-1111-4111-8111-111111111111";

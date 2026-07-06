@@ -10,6 +10,11 @@ import {
   checkAdminBookingPersistenceStagingConfigReadiness,
   type AdminBookingPersistenceAdapterActor,
 } from "./admin-booking-supabase-adapter";
+import { assertActiveCustomerPortalAccessAccount } from "./customer-portal-access-account";
+import {
+  isCustomerPortalAccessToken,
+  resolveCustomerPortalAccessSession,
+} from "./customer-portal-access-link";
 import {
   hashDriverJobLinkToken,
   isDriverJobLinkExpiryOutsideAllowedWindow,
@@ -1259,13 +1264,52 @@ function resolveCustomerInAppNotificationRuntimeBoundary(
     return customerAppNotificationsRequireAuthResult();
   }
 
+  const providedToken = readCustomerSavedBookingsSessionToken(request);
+
+  if (isCustomerPortalAccessToken(providedToken.token)) {
+    const portalAccessSession = resolveCustomerPortalAccessSession(
+      providedToken.token,
+      runtimeGate,
+    );
+
+    if (!portalAccessSession.ok) {
+      return portalAccessSession.status === 503
+        ? {
+            error: customerInAppRuntimeConfigError,
+            ok: false,
+            status: 503,
+          }
+        : customerAppNotificationsRequireAuthResult();
+    }
+
+    const effectiveRuntimeGate =
+      portalAccessSession.data.access_scope === "allowlisted"
+        ? runtimeGate
+        : {
+            ...runtimeGate,
+            account_allowlist: new Set([
+              portalAccessSession.data.customer_account_reference,
+            ]),
+          };
+
+    return {
+      data: {
+        auth_user_id: portalAccessSession.data.auth_user_id,
+        booking_reference: bookingReference,
+        customer_account_reference: portalAccessSession.data.customer_account_reference,
+        mode: "server-session-cookie",
+        runtime_gate: effectiveRuntimeGate,
+      },
+      ok: true,
+    };
+  }
+
   if (process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_ENABLED !== "true") {
     return customerAppNotificationsRequireAuthResult();
   }
 
   const mode = configValueOrNull(process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_MODE);
   const expectedToken = configValueOrNull(process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_TOKEN);
-  const providedToken = readCustomerSavedBookingsSessionToken(request);
 
   if (mode !== "server-session-token") {
     return customerAppNotificationsRequireAuthResult();
@@ -1400,6 +1444,73 @@ function toCustomerInAppNotificationReadEvidenceRecord(
   };
 }
 
+function customerInAppNotificationFromDriverStatusEvent(
+  bookingReference: string,
+  value: unknown,
+): CustomerInAppNotificationReadEvidenceRecord | null {
+  const record = asRecord(value);
+  const status = safeIdentifier(
+    record.status_value,
+    maxWorkflowAreaLength,
+  ) as DriverStatusCustomerInAppStatus | null;
+  const template = status ? driverStatusCustomerInAppTemplates[status] : null;
+  const occurredAt = safeDateText(record.occurred_at);
+
+  if (!status || !template || !occurredAt) {
+    return null;
+  }
+
+  return {
+    booking_reference: bookingReference,
+    created_at: occurredAt,
+    delivery_surface: "customer_app",
+    notification_status: "queued",
+    notification_type: "driver_status",
+    priority: "normal",
+    safe_context: {
+      external_send: false,
+      provider_send: false,
+      source: "driver_job_status",
+      status_key: status,
+      status_label: template.statusLabel,
+    },
+    safe_message: template.message,
+    safe_title: template.title,
+    updated_at: occurredAt,
+    workflow_area: "driver_status_customer_in_app",
+  };
+}
+
+async function loadCustomerSafeDriverStatusEventsForBookingReference(
+  client: NotificationClient,
+  bookingReference: string,
+  limit: number,
+): Promise<AdminBookingResult<{
+  notifications: CustomerInAppNotificationReadEvidenceRecord[];
+}>> {
+  const { data, error } = await client
+    .from("driver_job_status_events")
+    .select(driverJobStatusEventQuickReplySelect)
+    .eq("booking_reference", bookingReference)
+    .order("occurred_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    return safeAdapterFailure(safeCustomerInAppReadError, 500, error);
+  }
+
+  return {
+    data: {
+      notifications: asArray(data)
+        .map((row) => customerInAppNotificationFromDriverStatusEvent(bookingReference, row))
+        .filter(
+          (record): record is CustomerInAppNotificationReadEvidenceRecord => Boolean(record),
+        ),
+    },
+    ok: true,
+  };
+}
+
 async function loadCustomerAppNotificationsForBookingReference(
   client: NotificationClient,
   request: Request,
@@ -1430,13 +1541,21 @@ async function loadCustomerAppNotificationsForBookingReference(
     return safeAdapterFailure(safeCustomerInAppReadError, 500, error);
   }
 
+  const notifications = asArray(data)
+    .map(toCustomerInAppNotificationReadEvidenceRecord)
+    .filter((record): record is CustomerInAppNotificationReadEvidenceRecord => Boolean(record));
+
+  if (notifications.length === 0) {
+    return loadCustomerSafeDriverStatusEventsForBookingReference(
+      client,
+      bookingReference,
+      limit,
+    );
+  }
+
   return {
     data: {
-      notifications: asArray(data)
-        .map(toCustomerInAppNotificationReadEvidenceRecord)
-        .filter(
-          (record): record is CustomerInAppNotificationReadEvidenceRecord => Boolean(record),
-        ),
+      notifications,
     },
     ok: true,
   };
@@ -1637,6 +1756,15 @@ async function loadCustomerAppNotificationsForControlledRuntime(
     !accountReference.data ||
     !customerAccountAllowedByControlledRuntime(accountReference.data, boundary.runtime_gate)
   ) {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  const activeAccessAccount = await assertActiveCustomerPortalAccessAccount(
+    accountReference.data,
+    clientResult.data,
+  );
+
+  if (!activeAccessAccount.ok) {
     return customerAppNotificationsRequireAuthResult();
   }
 

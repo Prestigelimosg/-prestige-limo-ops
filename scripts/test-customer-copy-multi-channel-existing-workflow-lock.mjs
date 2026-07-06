@@ -226,6 +226,7 @@ for (const fragment of [
   '"x-prestige-admin-purpose": adminLegacyDataPurpose',
   "navigator.clipboard.writeText(",
   "customerDriverDetailsWithPortalLinkText(messageText, portalUrl)",
+  "portalUrl,",
   "Paste/send manually; no provider message was sent.",
   "external_send: false",
   "noProviderSend: true",

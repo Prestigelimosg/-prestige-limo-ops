@@ -911,6 +911,7 @@ type CustomerDriverDetailsPortalLinkCopyState = Message & {
   loadedReference: string;
   noProviderSend: true;
   portalLinkCopied: boolean;
+  portalUrl: string;
 };
 
 type DispatchCopyTarget = "customerCopy" | "driverDispatch" | "jobCard";
@@ -20651,6 +20652,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       loadedReference: bookingReference,
       noProviderSend: true,
       portalLinkCopied: false,
+      portalUrl: "",
       tone: "info",
       text: `Preparing customer app link for ${bookingReference || "loaded booking"}...`,
     });
@@ -20669,6 +20671,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         loadedReference: bookingReference,
         noProviderSend: true,
         portalLinkCopied: true,
+        portalUrl,
         tone: "success",
         text: `Customer driver details and customer app link copied for ${bookingReference}. Paste/send manually; no provider message was sent.`,
       });
@@ -20688,6 +20691,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         loadedReference: bookingReference,
         noProviderSend: true,
         portalLinkCopied: false,
+        portalUrl: "",
         tone: "error",
         text: errorText,
       });
@@ -39866,6 +39870,26 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                       data-copy-feedback="customer-copy"
                     >
                       {customerCopyFeedback.text}
+                    </div>
+                  ) : null}
+                  {customerDriverDetailsPortalLinkCopyDisplayState ? (
+                    <div
+                      className={`max-w-full rounded-md border px-2 py-1 text-xs font-medium ${statusClass(
+                        customerDriverDetailsPortalLinkCopyDisplayState.tone,
+                      )}`}
+                      data-admin-customer-driver-details-copy-with-portal-link-feedback="true"
+                      data-admin-customer-driver-details-copy-with-portal-link-feedback-external-send="false"
+                      data-admin-customer-driver-details-copy-with-portal-link-feedback-no-provider-send="true"
+                    >
+                      <div>{customerDriverDetailsPortalLinkCopyDisplayState.text}</div>
+                      {customerDriverDetailsPortalLinkCopyDisplayState.portalUrl ? (
+                        <div
+                          className="mt-1 break-all font-mono text-[11px] font-semibold"
+                          data-admin-customer-driver-details-copy-with-portal-link-url="true"
+                        >
+                          {customerDriverDetailsPortalLinkCopyDisplayState.portalUrl}
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
                 </div>

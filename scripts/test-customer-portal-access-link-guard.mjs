@@ -120,7 +120,7 @@ for (const phrase of [
   "The Copy + App Link action creates or reactivates one server-side `customer_access_accounts` row for that saved booking customer account, then copies a signed portal-account link.",
   "The new portal-account link does not carry a link expiry; access is stopped by changing the server-side access account away from `active`.",
   "The guarded revoke route remains available at the backend, but the normal Customers finder row does not show portal invite/revoke controls.",
-  "Opening the link sets the existing customer saved-bookings HttpOnly Secure SameSite=Lax Priority=High cookie and redirects to `/my-bookings`.",
+  "Opening the link sets the existing customer saved-bookings HttpOnly Secure SameSite=Lax Priority=High cookie and redirects to `/my-bookings`, preserving a safe booking/tracking query when the admin copied the link from a loaded booking.",
   "`/my-bookings` still calls only the existing saved-bookings and stored-invoice read adapters with same-origin credentials and purpose headers.",
   "Portal reads remain scoped to the signed customer account and require `customer_access_accounts.account_status = active` before booking, invoice, PDF, or amendment reads proceed.",
   "Customer portal booking history is read from the existing `bookings` table and filtered to the last 12 calendar months by pickup date; older rows stay admin-side and are not deleted.",
@@ -229,7 +229,9 @@ assert.deepEqual(exportedMethods(publicAccessRoute), ["DELETE", "GET", "PATCH", 
 assertIncludes(publicAccessRoute, "resolveCustomerPortalAccessSession(token)", "public access route token validation");
 assertIncludes(publicAccessRoute, "assertActiveCustomerPortalAccessAccount", "public access route active account check");
 assertIncludes(publicAccessRoute, "customerPortalAccessCookieHeader(token)", "public access route cookie creation");
-assertIncludes(publicAccessRoute, "NextResponse.redirect(new URL(\"/my-bookings\", request.url)", "public access route redirect");
+assertIncludes(publicAccessRoute, "customerPortalRedirectUrl(request)", "public access route redirect");
+assertIncludes(publicAccessRoute, "redirectUrl.searchParams.set(\"booking\", bookingReference)", "public access route booking deep-link");
+assertIncludes(publicAccessRoute, "redirectUrl.searchParams.set(\"tracking\", \"1\")", "public access route tracking deep-link");
 assertIncludes(publicAccessRoute, "response.headers.set(\"Set-Cookie\", cookie.data)", "public access route Set-Cookie");
 assertIncludes(publicAccessRoute, "\"Cache-Control\": \"no-store\"", "public access route no-store blocked response");
 assertExcludes(publicAccessRoute, /@supabase\/supabase-js|\bcreateClient\b|\.(?:from|insert|upsert|update|delete|rpc)\s*\(/, "public access route DB/provider path");
@@ -258,6 +260,7 @@ for (const fragment of [
   "const customerAccountReference = customerDriverDetailsPortalAccountReference;",
   "if (!dispatchReleaseCustomerCopyReady)",
   "fetch(adminCustomerPortalAccessLinksApiPath",
+  "bookingReference,",
   "customerAccountReference,",
   "safeDisplayLabel: customerDriverDetailsPortalSafeDisplayLabel || customerAccountReference",
   '"x-prestige-admin-purpose": adminLegacyDataPurpose',
@@ -285,5 +288,9 @@ assertExcludes(
 assertExcludes(portalClientSource, "/api/customer-portal-access", "customer portal client must not call access-link route");
 assertExcludes(portalClientSource, "/api/admin-customer-portal-access-links", "customer portal client must not call admin access route");
 assertExcludes(portalClientSource, forbiddenClientAuthPattern, "customer portal client auth plumbing");
+assertIncludes(portalClientSource, "readCustomerPortalBookingDeepLink", "customer portal booking deep-link read");
+assertIncludes(portalClientSource, "setExpandedBookingId(targetBooking.id)", "customer portal booking deep-link opens detail");
+assertIncludes(portalClientSource, "setActiveTrackingBookingId(targetBooking.id)", "customer portal booking deep-link opens tracking");
+assertIncludes(portalClientSource, "refreshCustomerTrackingForBooking(targetBooking)", "customer portal booking deep-link loads driver reporting");
 
 console.log("Customer portal access link guard passed");

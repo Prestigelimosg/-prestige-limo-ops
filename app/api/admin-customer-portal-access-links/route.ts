@@ -28,6 +28,16 @@ function safeFailureResponse() {
   );
 }
 
+function safeBookingReference(value: unknown) {
+  if (typeof value !== "string" && typeof value !== "number") {
+    return "";
+  }
+
+  const cleaned = String(value).replace(/\s+/g, " ").trim();
+
+  return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(cleaned) ? cleaned : "";
+}
+
 async function readJsonBody(request: Request): Promise<Record<string, unknown>> {
   try {
     const body = await request.json();
@@ -49,6 +59,7 @@ export async function POST(request: Request) {
     }
 
     const body = await readJsonBody(request);
+    const bookingReference = safeBookingReference(body.bookingReference);
     const account = await ensureAdminCustomerPortalAccessAccount(
       {
         customerAccountReference: body.customerAccountReference,
@@ -73,6 +84,11 @@ export async function POST(request: Request) {
       `/api/customer-portal-access/${encodeURIComponent(result.data.token)}`,
       request.url,
     );
+
+    if (bookingReference) {
+      url.searchParams.set("booking", bookingReference);
+      url.searchParams.set("tracking", "1");
+    }
 
     return Response.json({
       accountStatus: account.data.account_status,

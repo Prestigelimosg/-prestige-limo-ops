@@ -24,6 +24,30 @@ function blockedResponse() {
   );
 }
 
+function safeBookingReference(value: string | null) {
+  const cleaned = value?.replace(/\s+/g, " ").trim() || "";
+
+  return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(cleaned) ? cleaned : "";
+}
+
+function customerPortalRedirectUrl(request: Request) {
+  const requestUrl = new URL(request.url);
+  const redirectUrl = new URL("/my-bookings", request.url);
+  const bookingReference =
+    safeBookingReference(requestUrl.searchParams.get("booking")) ||
+    safeBookingReference(requestUrl.searchParams.get("booking_reference"));
+
+  if (bookingReference) {
+    redirectUrl.searchParams.set("booking", bookingReference);
+
+    if (requestUrl.searchParams.get("tracking") === "1") {
+      redirectUrl.searchParams.set("tracking", "1");
+    }
+  }
+
+  return redirectUrl;
+}
+
 export async function GET(
   request: Request,
   context: { params: Promise<{ token: string }> },
@@ -50,7 +74,7 @@ export async function GET(
       return blockedResponse();
     }
 
-    const response = NextResponse.redirect(new URL("/my-bookings", request.url), {
+    const response = NextResponse.redirect(customerPortalRedirectUrl(request), {
       status: 303,
     });
 

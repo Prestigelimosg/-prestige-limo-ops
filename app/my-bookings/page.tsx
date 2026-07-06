@@ -170,6 +170,42 @@ function bookingReferenceFromPortalId(value: string) {
   return value.startsWith("saved-") ? value.slice("saved-".length) : "";
 }
 
+function bookingFilterForBooking(booking: CustomerPortalBooking): BookingFilter {
+  if (booking.status === "Completed") {
+    return "Completed";
+  }
+
+  if (booking.status === "Cancelled") {
+    return "Cancelled";
+  }
+
+  return "Upcoming";
+}
+
+function safePortalBookingReference(value: string | null) {
+  const cleaned = value?.replace(/\s+/g, " ").trim() || "";
+
+  return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(cleaned) ? cleaned : "";
+}
+
+function readCustomerPortalBookingDeepLink() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const bookingReference =
+    safePortalBookingReference(params.get("booking")) ||
+    safePortalBookingReference(params.get("booking_reference"));
+
+  return bookingReference
+    ? {
+        bookingReference,
+        openTracking: params.get("tracking") === "1",
+      }
+    : null;
+}
+
 function customerPortalInvoiceFolder(invoice: CustomerPortalInvoiceRecord): InvoiceFolder {
   if (invoice.documentType === "quotation") {
     return "Quotations";
@@ -236,6 +272,7 @@ export default function CustomerPortalPage() {
   const [activeTrackingBookingId, setActiveTrackingBookingId] = useState("");
   const [tripUpdatesByBookingId, setTripUpdatesByBookingId] = useState<TripUpdatesByBookingId>({});
   const [checkingTripUpdatesId, setCheckingTripUpdatesId] = useState("");
+  const [deepLinkApplied, setDeepLinkApplied] = useState(false);
   const [bookingPages, setBookingPages] = useState<Record<BookingFilter, number>>(initialBookingPages);
   const [selectedBookingMonths, setSelectedBookingMonths] =
     useState<Record<BookingFilter, string>>(initialSelectedBookingMonths);
@@ -361,6 +398,7 @@ export default function CustomerPortalPage() {
       setActiveTrackingBookingId("");
       setTripUpdatesByBookingId({});
       setCheckingTripUpdatesId("");
+      setDeepLinkApplied(false);
       setBookingPages({ ...initialBookingPages });
       setSelectedBookingMonths({ ...initialSelectedBookingMonths });
     }
@@ -589,6 +627,91 @@ export default function CustomerPortalPage() {
     },
     [],
   );
+
+  useEffect(() => {
+    if (deepLinkApplied || portalBookingsLoadState !== "ready") {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      const deepLink = readCustomerPortalBookingDeepLink();
+
+      if (!deepLink) {
+        setDeepLinkApplied(true);
+        return;
+      }
+
+      const targetBookingId = `saved-${deepLink.bookingReference}`;
+      const targetBooking = portalBookings.find((booking) => booking.id === targetBookingId);
+
+      if (!targetBooking) {
+        setDeepLinkApplied(true);
+        return;
+      }
+
+      const targetFilter = bookingFilterForBooking(targetBooking);
+      const targetMonth = targetFilter === "Upcoming" ? "" : getBookingMonthInfo(targetBooking).key;
+      const selectedMonth =
+        targetFilter !== "Upcoming" && targetMonth && targetMonth !== currentPortalMonth.key
+          ? targetMonth
+          : "";
+      const targetScopedBookings = portalBookings
+        .filter((booking) => rowMatchesFilter(booking, targetFilter))
+        .filter((booking) => {
+          if (targetFilter === "Upcoming") {
+            return true;
+          }
+
+          return getBookingMonthInfo(booking).key === (selectedMonth || currentPortalMonth.key);
+        });
+      const targetIndex = Math.max(
+        0,
+        targetScopedBookings.findIndex((booking) => booking.id === targetBooking.id),
+      );
+
+      setActiveSection(targetFilter);
+      setSearchQuery("");
+      setExpandedBookingId(targetBooking.id);
+      setChangeFeedback({});
+      setChangeRequestDraft(null);
+      setCheckingDriverTrackingId("");
+      setCheckingTripUpdatesId("");
+      setBookingPages({
+        ...initialBookingPages,
+        [targetFilter]: Math.floor(targetIndex / visibleBookingLimit) + 1,
+      });
+      setSelectedBookingMonths({
+        ...initialSelectedBookingMonths,
+        [targetFilter]: selectedMonth,
+      });
+
+      if (deepLink.openTracking) {
+        setActiveTrackingBookingId(targetBooking.id);
+        void refreshCustomerTrackingForBooking(targetBooking);
+      } else {
+        setActiveTrackingBookingId("");
+        void loadTripUpdatesForBooking(targetBooking);
+      }
+
+      setDeepLinkApplied(true);
+      window.setTimeout(() => {
+        document
+          .querySelector(`[data-customer-portal-detail="${targetBooking.id}"]`)
+          ?.scrollIntoView({ block: "start" });
+      }, 0);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [
+    currentPortalMonth.key,
+    deepLinkApplied,
+    loadTripUpdatesForBooking,
+    portalBookings,
+    portalBookingsLoadState,
+    refreshCustomerTrackingForBooking,
+  ]);
 
   useEffect(() => {
     if (!activeTrackingBookingId) {

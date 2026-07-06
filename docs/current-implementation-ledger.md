@@ -159,7 +159,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The Copy + App Link action creates or reactivates one server-side `customer_access_accounts` row for that saved booking customer account, then copies a signed portal-account link.
 - The new portal-account link does not carry a link expiry; access is stopped by changing the server-side access account away from `active`.
 - The guarded revoke route remains available at the backend, but the normal Customers finder row does not show portal invite/revoke controls.
-- Opening the link sets the existing customer saved-bookings HttpOnly Secure SameSite=Lax Priority=High cookie and redirects to `/my-bookings`.
+- Opening the link sets the existing customer saved-bookings HttpOnly Secure SameSite=Lax Priority=High cookie and redirects to `/my-bookings`, preserving a safe booking/tracking query when the admin copied the link from a loaded booking.
 - `/my-bookings` still calls only the existing saved-bookings and stored-invoice read adapters with same-origin credentials and purpose headers.
 - Portal reads remain scoped to the signed customer account and require `customer_access_accounts.account_status = active` before booking, invoice, PDF, or amendment reads proceed.
 - Customer portal booking history is read from the existing `bookings` table and filtered to the last 12 calendar months by pickup date; older rows stay admin-side and are not deleted.

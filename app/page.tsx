@@ -20620,6 +20620,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
 
     const response = await fetch(adminCustomerPortalAccessLinksApiPath, {
       body: JSON.stringify({
+        bookingReference,
         customerAccountReference,
         safeDisplayLabel: customerDriverDetailsPortalSafeDisplayLabel || customerAccountReference,
       }),

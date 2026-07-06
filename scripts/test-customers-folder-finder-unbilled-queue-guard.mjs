@@ -76,8 +76,8 @@ for (const fragment of [
   "function resetCustomerFolderJobView(",
   "async function viewCustomerFolderJobs(",
   "readRegularCustomerSavedBookingsForTarget(target, \"customer-id\")",
-  "Copy link",
-  "Portal link copied for",
+  "function groupCustomerFolderSavedBookingsByMonth(",
+  "const customerFolderSavedBookingMonthGroups = useMemo(",
 ]) {
   assertIncludes(customersPage, fragment, `customer folder finder source fragment ${fragment}`);
 }
@@ -110,6 +110,7 @@ for (const fragment of [
   'data-customer-folder-jobs-count="true"',
   'data-customer-folder-jobs-feedback="true"',
   'data-customer-folder-jobs-list="true"',
+  'data-customer-folder-job-month-group={group.key}',
   'data-customer-folder-job-row={bookingReference}',
   'data-customer-folder-job-view-toggle={bookingReference}',
   'data-customer-folder-job-details={bookingReference}',
@@ -194,8 +195,12 @@ for (const duplicateFragment of [
 
 for (const removedFinderFragment of [
   'data-customer-folder-finder-no-folder',
+  'data-customer-portal-access-link',
+  'data-customer-portal-access-revoke',
   ">Pending</",
+  "Copy link",
   "Portal invite copied for",
+  "Portal link copied for",
 ]) {
   assertExcludes(folderFinderSection, removedFinderFragment, "removed customer finder placeholder/copy wording");
 }
@@ -233,6 +238,8 @@ for (const phrase of [
   "The finder uses a visible `All customers` dropdown for direct folder selection; it shows 10 customer folders at a time and keeps numbered page buttons inside the dropdown for larger 200-plus account lists.",
   "The finder keeps the existing guarded `Load Accounts` control visible as a compact one-line button, with the folder count shown as a small `1-10 of N folders` chip; that same button now refreshes the guarded saved-booking bridge for the Monthly Billing Queue without adding a new route/API.",
   "Customer rows no longer show a meaningless `Pending` folder placeholder; `View jobs` opens an inline read-only saved-job panel for that exact saved account id.",
+  "Customer finder rows no longer expose portal invite/revoke controls; customer app link copying stays in the existing Dispatch Customer Copy `Copy + App Link` lane.",
+  "The inline saved-job panel groups jobs by booking month before the exact job `View/Edit`, safe `Delete job`, and `Open in Dispatch` controls.",
   "The Monthly Billing Queue sits before the invoice workspace so completed closeout-ready jobs are visible before invoice work starts.",
   "Guarded saved-booking reads now check the existing completed closeout status for those references and bridge only closeout-ready saved bookings into the Monthly Billing Queue with `Draft amount not set`.",
   "Customer Finder job reads and closeout-ready saved-booking rows keep the real saved customer/account id as the invoice `customerId`; the old mock folder match fallback is removed from this billing queue.",

@@ -47,7 +47,6 @@ const adminSavedBookingsApiPath = "/api/admin-saved-bookings";
 const adminCustomerInvoicesApiPath = "/api/admin-customer-invoices";
 const adminCustomerInvoicePdfApiPath = "/api/admin-customer-invoice-pdf";
 const adminCustomerInvoiceEmailApiPath = "/api/admin-customer-invoice-email";
-const adminCustomerPortalAccessLinksApiPath = "/api/admin-customer-portal-access-links";
 const adminCompletedBookingCloseoutApiPath = "/api/admin-completed-booking-closeouts";
 const adminDriverJobDspActualTimeSummariesApiPath =
   "/api/admin-driver-job-dsp-actual-time-summaries";
@@ -454,13 +453,6 @@ type RegularCustomerDraftInvoicePreview = {
 };
 
 type RegularCustomerBookingFeedbackTone = "error" | "info" | "success";
-type CustomerPortalAccessCopyStatus = "copied" | "copying" | "error";
-type CustomerPortalAccessRevokeStatus = "error" | "revoked" | "revoking";
-
-type CustomerPortalAccessFeedback = {
-  message: string;
-  tone: RegularCustomerBookingFeedbackTone;
-};
 
 type RegularCustomerMockSaveReview = {
   billingMonth: string;
@@ -610,6 +602,12 @@ type RegularCustomerSavedBookingReadState = {
 type CustomerFolderJobViewState = RegularCustomerSavedBookingReadState & {
   customerId: string;
   customerName: string;
+};
+
+type CustomerFolderSavedBookingMonthGroup = {
+  bookings: RegularCustomerSavedBookingReadRecord[];
+  key: string;
+  label: string;
 };
 
 type RegularCustomerSavedBookingBillingReadinessState = {
@@ -1464,6 +1462,46 @@ function customerFolderJobDispatchHref(booking: RegularCustomerSavedBookingReadR
   return `/?${params.toString()}`;
 }
 
+function customerFolderSavedBookingMonthKey(booking: RegularCustomerSavedBookingReadRecord) {
+  return safeBillingMonth(booking.booking_month) || billingMonthFromPickup(booking.pickup_at) || "needs-review";
+}
+
+function customerFolderSavedBookingMonthLabel(key: string) {
+  return key === "needs-review" ? "Date needs review" : monthlyBillingMonthLabel(key);
+}
+
+function groupCustomerFolderSavedBookingsByMonth(
+  bookings: RegularCustomerSavedBookingReadRecord[],
+): CustomerFolderSavedBookingMonthGroup[] {
+  const groups = new Map<string, CustomerFolderSavedBookingMonthGroup>();
+
+  bookings.forEach((booking) => {
+    const key = customerFolderSavedBookingMonthKey(booking);
+    const group =
+      groups.get(key) ||
+      ({
+        bookings: [],
+        key,
+        label: customerFolderSavedBookingMonthLabel(key),
+      } satisfies CustomerFolderSavedBookingMonthGroup);
+
+    group.bookings.push(booking);
+    groups.set(key, group);
+  });
+
+  return [...groups.values()].sort((firstGroup, secondGroup) => {
+    if (firstGroup.key === "needs-review") {
+      return 1;
+    }
+
+    if (secondGroup.key === "needs-review") {
+      return -1;
+    }
+
+    return secondGroup.key.localeCompare(firstGroup.key);
+  });
+}
+
 function savedBookingCustomerId(booking: RegularCustomerSavedBookingReadRecord) {
   return String(booking.customer_id ?? "").trim();
 }
@@ -1966,14 +2004,6 @@ export default function MockCustomerDashboardPage() {
   const [customerFolderFinderDropdownOpen, setCustomerFolderFinderDropdownOpen] = useState(false);
   const [plainInvoiceCrmPickerOpen, setPlainInvoiceCrmPickerOpen] = useState(false);
   const [plainInvoiceCrmSearchTerm, setPlainInvoiceCrmSearchTerm] = useState("");
-  const [customerPortalAccessCopyStates, setCustomerPortalAccessCopyStates] = useState<
-    Record<string, CustomerPortalAccessCopyStatus>
-  >({});
-  const [customerPortalAccessRevokeStates, setCustomerPortalAccessRevokeStates] = useState<
-    Record<string, CustomerPortalAccessRevokeStatus>
-  >({});
-  const [customerPortalAccessFeedback, setCustomerPortalAccessFeedback] =
-    useState<CustomerPortalAccessFeedback | null>(null);
   const [regularCustomerBookingForm, setRegularCustomerBookingForm] = useState<RegularCustomerBookingForm>(
     initialRegularCustomerBookingForm,
   );
@@ -2272,6 +2302,10 @@ export default function MockCustomerDashboardPage() {
   const customerFolderFinderDropdownLabel = selectedCustomerFolderFinderRow
     ? selectedCustomerFolderFinderRow.customerName
     : `All customers - page ${currentCustomerFolderFinderDropdownPage} of ${customerFolderFinderDropdownTotalPages}`;
+  const customerFolderSavedBookingMonthGroups = useMemo(
+    () => groupCustomerFolderSavedBookingsByMonth(customerFolderJobViewState.savedBookings),
+    [customerFolderJobViewState.savedBookings],
+  );
   const visibleOutstandingPaymentReviewItems = useMemo(
     () =>
       outstandingPaymentReviewItems
@@ -3784,174 +3818,6 @@ export default function MockCustomerDashboardPage() {
         savedBookings: [],
         status: "error",
         summary: null,
-        tone: "error",
-      });
-    }
-  }
-
-  function customerPortalAccessButtonLabel(customerId: string) {
-    const status = customerPortalAccessCopyStates[customerId];
-
-    if (status === "copying") {
-      return "Copying";
-    }
-
-    if (status === "copied") {
-      return "Copied";
-    }
-
-    if (status === "error") {
-      return "Failed";
-    }
-
-    return "Copy link";
-  }
-
-  function customerPortalRevokeButtonLabel(customerId: string) {
-    const status = customerPortalAccessRevokeStates[customerId];
-
-    if (status === "revoking") {
-      return "Revoking";
-    }
-
-    if (status === "revoked") {
-      return "Revoked";
-    }
-
-    if (status === "error") {
-      return "Failed";
-    }
-
-    return "Revoke";
-  }
-
-  function safeCustomerPortalAccessReferenceCandidate(value: string) {
-    return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(value) ? value : "";
-  }
-
-  function customerPortalAccessReferenceForFinderRow(customer: (typeof customerFolderIndexRows)[number]) {
-    return safeCustomerPortalAccessReferenceCandidate(customer.customerId.trim());
-  }
-
-  async function copyCustomerPortalAccessLink(customer: (typeof customerFolderIndexRows)[number]) {
-    const customerAccountReference = customerPortalAccessReferenceForFinderRow(customer);
-    const customerPortalCopyStateKey = customer.customerId.trim() || customerAccountReference;
-
-    if (!customerAccountReference) {
-      setCustomerPortalAccessFeedback({
-        message: "Customer portal link needs a saved customer account reference first.",
-        tone: "error",
-      });
-      return;
-    }
-
-    setCustomerPortalAccessCopyStates((currentStates) => ({
-      ...currentStates,
-      [customerPortalCopyStateKey]: "copying",
-    }));
-    setCustomerPortalAccessFeedback({
-      message: `Preparing portal link for ${customer.customerName}...`,
-      tone: "info",
-    });
-
-    try {
-      const response = await fetch(adminCustomerPortalAccessLinksApiPath, {
-        body: JSON.stringify({
-          customerAccountReference,
-          safeDisplayLabel: customer.customerName,
-        }),
-        cache: "no-store",
-        headers: {
-          "Content-Type": "application/json",
-          "x-prestige-admin-purpose": "admin-booking-persistence",
-        },
-        method: "POST",
-      });
-      const result = await response.json().catch(() => null);
-      const url = typeof result?.url === "string" ? result.url : "";
-
-      if (!response.ok || result?.ok !== true || !url) {
-        throw new Error("portal-link-blocked");
-      }
-
-      await navigator.clipboard.writeText(url);
-
-      setCustomerPortalAccessCopyStates((currentStates) => ({
-        ...currentStates,
-        [customerPortalCopyStateKey]: "copied",
-      }));
-      setCustomerPortalAccessFeedback({
-        message: `Portal link copied for ${customer.customerName}. Access stays active until revoked; send the copied link manually through an approved channel.`,
-        tone: "success",
-      });
-    } catch {
-      setCustomerPortalAccessCopyStates((currentStates) => ({
-        ...currentStates,
-        [customerPortalCopyStateKey]: "error",
-      }));
-      setCustomerPortalAccessFeedback({
-        message:
-          "Customer portal link was not copied. Check the customer portal access account before sharing.",
-        tone: "error",
-      });
-    }
-  }
-
-  async function revokeCustomerPortalAccess(customer: (typeof customerFolderIndexRows)[number]) {
-    const customerAccountReference = customerPortalAccessReferenceForFinderRow(customer);
-    const customerPortalStateKey = customer.customerId.trim() || customerAccountReference;
-
-    if (!customerAccountReference) {
-      setCustomerPortalAccessFeedback({
-        message: "Customer portal access needs a saved customer account reference first.",
-        tone: "error",
-      });
-      return;
-    }
-
-    setCustomerPortalAccessRevokeStates((currentStates) => ({
-      ...currentStates,
-      [customerPortalStateKey]: "revoking",
-    }));
-    setCustomerPortalAccessFeedback({
-      message: `Revoking portal access for ${customer.customerName}...`,
-      tone: "info",
-    });
-
-    try {
-      const response = await fetch(adminCustomerPortalAccessLinksApiPath, {
-        body: JSON.stringify({
-          action: "revoke",
-          customerAccountReference,
-        }),
-        cache: "no-store",
-        headers: {
-          "Content-Type": "application/json",
-          "x-prestige-admin-purpose": "admin-booking-persistence",
-        },
-        method: "PATCH",
-      });
-      const result = await response.json().catch(() => null);
-
-      if (!response.ok || result?.ok !== true || result?.accountStatus !== "revoked") {
-        throw new Error("portal-revoke-blocked");
-      }
-
-      setCustomerPortalAccessRevokeStates((currentStates) => ({
-        ...currentStates,
-        [customerPortalStateKey]: "revoked",
-      }));
-      setCustomerPortalAccessFeedback({
-        message: `Portal access revoked for ${customer.customerName}. Bookings and invoices were not deleted.`,
-        tone: "success",
-      });
-    } catch {
-      setCustomerPortalAccessRevokeStates((currentStates) => ({
-        ...currentStates,
-        [customerPortalStateKey]: "error",
-      }));
-      setCustomerPortalAccessFeedback({
-        message: "Customer portal access was not revoked. Check the account and try again.",
         tone: "error",
       });
     }
@@ -6129,18 +5995,6 @@ export default function MockCustomerDashboardPage() {
                   ? `Searching customers for "${searchTerm}".`
                   : regularCustomerAccountReadState.message}
             </p>
-            {customerPortalAccessFeedback ? (
-              <p
-                aria-live="polite"
-                className={`mt-2 rounded-md border px-3 py-2 text-sm font-semibold leading-5 ${regularCustomerBookingFeedbackClass(
-                  customerPortalAccessFeedback.tone,
-                )}`}
-                data-customer-portal-access-link-feedback="true"
-              >
-                {customerPortalAccessFeedback.message}
-              </p>
-            ) : null}
-
             <div
               aria-live="polite"
               className="mt-4 overflow-hidden rounded-md border border-slate-200"
@@ -6150,18 +6004,17 @@ export default function MockCustomerDashboardPage() {
                 <div>
                   <div
                     aria-hidden="true"
-                    className="hidden grid-cols-[minmax(12rem,1.4fr)_7rem_8rem_minmax(12rem,1fr)_14rem] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 md:grid"
+                    className="hidden grid-cols-[minmax(12rem,1.4fr)_8rem_minmax(12rem,1fr)_8rem] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 md:grid"
                   >
                     <span>Customer</span>
                     <span>Jobs</span>
-                    <span>Status</span>
                     <span>Latest</span>
                     <span className="text-right">Actions</span>
                   </div>
                   <div className="divide-y divide-slate-200" data-customer-folder-finder-list="true">
                     {paginatedCustomerFolderFinderRows.map((customer) => (
                       <article
-                        className="grid gap-2 bg-white px-3 py-2 text-sm leading-5 transition hover:bg-slate-50 md:grid-cols-[minmax(12rem,1.4fr)_7rem_8rem_minmax(12rem,1fr)_14rem] md:items-center md:gap-3"
+                        className="grid gap-2 bg-white px-3 py-2 text-sm leading-5 transition hover:bg-slate-50 md:grid-cols-[minmax(12rem,1.4fr)_8rem_minmax(12rem,1fr)_8rem] md:items-center md:gap-3"
                         data-customer-folder-finder-row={customer.customerId}
                         data-customer-row={customer.customerId}
                         key={customer.customerId}
@@ -6174,11 +6027,13 @@ export default function MockCustomerDashboardPage() {
                             Account: {customer.customerId}
                           </p>
                         </div>
-                        <p className="font-semibold text-slate-800">
-                          {customer.historyRows} job{customer.historyRows === 1 ? "" : "s"}
-                        </p>
-                        <p className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">
-                          {customer.upcomingJobs} up / {customer.completedJobs} done
+                        <p className="font-semibold leading-5 text-slate-800">
+                          <span className="block">
+                            {customer.historyRows} job{customer.historyRows === 1 ? "" : "s"}
+                          </span>
+                          <span className="block text-xs uppercase tracking-[0.1em] text-slate-500">
+                            {customer.upcomingJobs} up / {customer.completedJobs} done
+                          </span>
                         </p>
                         <p className="min-w-0 truncate text-xs font-semibold text-slate-600">
                           {customer.source === "saved-account-read"
@@ -6188,16 +6043,6 @@ export default function MockCustomerDashboardPage() {
                             : "Local folder ready"}
                         </p>
                         <div className="flex flex-wrap gap-2 md:justify-end">
-                          {customer.folderHref ? (
-                            <Link
-                              className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-center text-xs font-bold text-white transition hover:bg-slate-700"
-                              data-customer-folder-finder-link={customer.customerId}
-                              data-open-customer-folder={customer.customerId}
-                              href={customer.folderHref}
-                            >
-                              Open
-                            </Link>
-                          ) : null}
                           <button
                             className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-center text-xs font-bold text-white transition hover:bg-slate-700"
                             data-customer-folder-finder-view-jobs={customer.customerId}
@@ -6206,36 +6051,16 @@ export default function MockCustomerDashboardPage() {
                           >
                             View jobs
                           </button>
-                          <button
-                            className={`inline-flex min-h-9 items-center justify-center rounded-md border px-3 text-center text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-70 ${
-                              customerPortalAccessCopyStates[customer.customerId] === "copied"
-                                ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-                                : customerPortalAccessCopyStates[customer.customerId] === "error"
-                                  ? "border-rose-300 bg-rose-50 text-rose-800"
-                                  : "border-sky-300 bg-white text-sky-900 hover:border-sky-700"
-                            }`}
-                            data-customer-portal-access-link={customer.customerId}
-                            disabled={customerPortalAccessCopyStates[customer.customerId] === "copying"}
-                            onClick={() => copyCustomerPortalAccessLink(customer)}
-                            type="button"
-                          >
-                            {customerPortalAccessButtonLabel(customer.customerId)}
-                          </button>
-                          <button
-                            className={`inline-flex min-h-9 items-center justify-center rounded-md border px-3 text-center text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-70 ${
-                              customerPortalAccessRevokeStates[customer.customerId] === "revoked"
-                                ? "border-amber-300 bg-amber-50 text-amber-900"
-                                : customerPortalAccessRevokeStates[customer.customerId] === "error"
-                                  ? "border-rose-300 bg-rose-50 text-rose-800"
-                                  : "border-slate-300 bg-white text-slate-700 hover:border-slate-700"
-                            }`}
-                            data-customer-portal-access-revoke={customer.customerId}
-                            disabled={customerPortalAccessRevokeStates[customer.customerId] === "revoking"}
-                            onClick={() => revokeCustomerPortalAccess(customer)}
-                            type="button"
-                          >
-                            {customerPortalRevokeButtonLabel(customer.customerId)}
-                          </button>
+                          {customer.folderHref ? (
+                            <Link
+                              className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-center text-xs font-bold text-slate-800 transition hover:border-slate-700"
+                              data-customer-folder-finder-link={customer.customerId}
+                              data-open-customer-folder={customer.customerId}
+                              href={customer.folderHref}
+                            >
+                              Open folder
+                            </Link>
+                          ) : null}
                         </div>
                       </article>
                     ))}
@@ -6303,7 +6128,13 @@ export default function MockCustomerDashboardPage() {
                       <span className="text-right">Action</span>
                     </div>
                     <div className="divide-y divide-slate-200" data-customer-folder-jobs-list="true">
-                      {customerFolderJobViewState.savedBookings.map((booking) => {
+                      {customerFolderSavedBookingMonthGroups.map((group) => (
+                        <div data-customer-folder-job-month-group={group.key} key={group.key}>
+                          <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                            {group.label} - {savedBookingCountLabel(group.bookings.length, "job")}
+                          </div>
+                          <div className="divide-y divide-slate-200">
+                            {group.bookings.map((booking) => {
                         const bookingReference =
                           savedBookingReference(booking) ||
                           `${booking.customer_id || "customer"}-${booking.pickup_at || "job"}`;
@@ -6598,7 +6429,10 @@ export default function MockCustomerDashboardPage() {
                             ) : null}
                           </article>
                         );
-                      })}
+                            })}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ) : null}

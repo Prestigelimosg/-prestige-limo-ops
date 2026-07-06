@@ -155,16 +155,16 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Customer Portal Access Link Lock
 
-- Admin can create a compact customer portal invite link from the Customers finder row.
-- The invite action creates or reactivates one server-side `customer_access_accounts` row for that customer account, then copies a signed portal-account link.
+- Admin can create a compact customer app link from Dispatch Customer Copy after assigned-driver details are ready.
+- The Copy + App Link action creates or reactivates one server-side `customer_access_accounts` row for that saved booking customer account, then copies a signed portal-account link.
 - The new portal-account link does not carry a link expiry; access is stopped by changing the server-side access account away from `active`.
-- Admin can revoke portal access from the same compact Customers row action without deleting bookings, invoices, PDFs, CRM data, or calendar events.
+- The guarded revoke route remains available at the backend, but the normal Customers finder row does not show portal invite/revoke controls.
 - Opening the link sets the existing customer saved-bookings HttpOnly Secure SameSite=Lax Priority=High cookie and redirects to `/my-bookings`.
 - `/my-bookings` still calls only the existing saved-bookings and stored-invoice read adapters with same-origin credentials and purpose headers.
 - Portal reads remain scoped to the signed customer account and require `customer_access_accounts.account_status = active` before booking, invoice, PDF, or amendment reads proceed.
 - Customer portal booking history is read from the existing `bookings` table and filtered to the last 12 calendar months by pickup date; older rows stay admin-side and are not deleted.
 - The public access route verifies the signed account is active before setting the cookie and does not create invoices, generate PDFs, send providers, send email, activate Stripe/payment, expose billing internals, expose customer price, expose driver payout, or expose parser/debug/mock archive data.
-- The customer portal invite UI only copies the link for manual use in an approved channel; it does not send email, WhatsApp, SMS, Telegram, provider messages, payment links, or customer notifications.
+- The customer app link UI only copies the customer-safe driver details plus link for manual use in an approved channel; it does not send email, WhatsApp, SMS, Telegram, provider messages, payment links, or customer notifications.
 - No Save Booking + CRM change.
 - No `/api/admin-saved-bookings` change.
 - Parser behavior and `/api/ai-parse` remain unchanged.
@@ -822,6 +822,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The compact finder keeps 10-row pages and an `All customers` dropdown with numbered page buttons for 200-plus accounts.
 - The top payment summary is a slim strip instead of four large cards.
 - The invoice workbench and old review queues are collapsed behind an admin-only drawer, leaving the daily visible Customers page focused on the customer folder finder and Monthly Billing Queue.
+- The normal finder row has one primary `View jobs` action and no portal invite/revoke controls; customer app links stay in Dispatch Customer Copy `Copy + App Link`.
+- Customer Folder `View jobs` groups the selected account's saved jobs by booking month before the exact `View/Edit`, `Save changes`, safe `Delete job`, and `Open in Dispatch` controls.
 - No route, API, parser, DB, env, Vercel, provider-send, GPS/live-location, billing/payment/PDF/payout, calendar, or shim behavior is changed.
 - This polish is guarded by `scripts/test-customer-folder-compact-index-guard.mjs` and registered in `scripts/test-preactivation-verification-suite.mjs`.
 
@@ -1028,6 +1030,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The finder uses a visible `All customers` dropdown for direct folder selection; it shows 10 customer folders at a time and keeps numbered page buttons inside the dropdown for larger 200-plus account lists.
 - The finder keeps the existing guarded `Load Accounts` control visible as a compact one-line button, with the folder count shown as a small `1-10 of N folders` chip; that same button now refreshes the guarded saved-booking bridge for the Monthly Billing Queue without adding a new route/API.
 - Customer rows no longer show a meaningless `Pending` folder placeholder; `View jobs` opens an inline read-only saved-job panel for that exact saved account id.
+- Customer finder rows no longer expose portal invite/revoke controls; customer app link copying stays in the existing Dispatch Customer Copy `Copy + App Link` lane.
+- The inline saved-job panel groups jobs by booking month before the exact job `View/Edit`, safe `Delete job`, and `Open in Dispatch` controls.
 - The Monthly Billing Queue sits before the invoice workspace so completed closeout-ready jobs are visible before invoice work starts.
 - Guarded saved-booking reads now check the existing completed closeout status for those references and bridge only closeout-ready saved bookings into the Monthly Billing Queue with `Draft amount not set`.
 - Customer Finder job reads and closeout-ready saved-booking rows keep the real saved customer/account id as the invoice `customerId`; the old mock folder match fallback is removed from this billing queue.

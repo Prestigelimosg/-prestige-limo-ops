@@ -11,6 +11,7 @@ const customerBoundaryPath = "lib/customer-saved-bookings-read.ts";
 const adminRoutePath = "app/api/admin-customer-portal-access-links/route.ts";
 const invoicePersistencePath = "lib/customer-invoice-record-persistence.ts";
 const publicAccessRoutePath = "app/api/customer-portal-access/[token]/route.ts";
+const appPagePath = "app/page.tsx";
 const customersPagePath = "app/customers/page.tsx";
 const portalPagePath = "app/my-bookings/page.tsx";
 const portalSavedBookingsAdapterPath = "lib/customer-portal-saved-bookings-adapter.ts";
@@ -68,6 +69,7 @@ const files = Object.fromEntries(
       adminRoutePath,
       invoicePersistencePath,
       publicAccessRoutePath,
+      appPagePath,
       customersPagePath,
       portalPagePath,
       portalSavedBookingsAdapterPath,
@@ -84,6 +86,7 @@ const customerBoundary = files[customerBoundaryPath];
 const adminRoute = files[adminRoutePath];
 const invoicePersistence = files[invoicePersistencePath];
 const publicAccessRoute = files[publicAccessRoutePath];
+const appPage = files[appPagePath];
 const customersPage = files[customersPagePath];
 const portalClientSource = [
   files[portalPagePath],
@@ -101,18 +104,28 @@ const invoicePortalAccessProofFunction = sectionBetween(
   "export async function verifyIssuedCustomerInvoiceAccountForPortalAccess",
   "\nexport async function updateAdminCustomerInvoiceStatus",
 );
+const customerPortalLinkCopyHandler = sectionBetween(
+  appPage,
+  "async function createCustomerDriverDetailsPortalLink()",
+  "\n  async function copyManualTelegramMessage",
+);
+const customerFinderSection = sectionBetween(
+  customersPage,
+  'data-customer-folder-finder="true"',
+  'data-unbilled-customers-sector="true"',
+);
 
 for (const phrase of [
-  "Admin can create a compact customer portal invite link from the Customers finder row.",
-  "The invite action creates or reactivates one server-side `customer_access_accounts` row for that customer account, then copies a signed portal-account link.",
+  "Admin can create a compact customer app link from Dispatch Customer Copy after assigned-driver details are ready.",
+  "The Copy + App Link action creates or reactivates one server-side `customer_access_accounts` row for that saved booking customer account, then copies a signed portal-account link.",
   "The new portal-account link does not carry a link expiry; access is stopped by changing the server-side access account away from `active`.",
-  "Admin can revoke portal access from the same compact Customers row action without deleting bookings, invoices, PDFs, CRM data, or calendar events.",
+  "The guarded revoke route remains available at the backend, but the normal Customers finder row does not show portal invite/revoke controls.",
   "Opening the link sets the existing customer saved-bookings HttpOnly Secure SameSite=Lax Priority=High cookie and redirects to `/my-bookings`.",
   "`/my-bookings` still calls only the existing saved-bookings and stored-invoice read adapters with same-origin credentials and purpose headers.",
   "Portal reads remain scoped to the signed customer account and require `customer_access_accounts.account_status = active` before booking, invoice, PDF, or amendment reads proceed.",
   "Customer portal booking history is read from the existing `bookings` table and filtered to the last 12 calendar months by pickup date; older rows stay admin-side and are not deleted.",
   "The public access route verifies the signed account is active before setting the cookie and does not create invoices, generate PDFs, send providers, send email, activate Stripe/payment, expose billing internals, expose customer price, expose driver payout, or expose parser/debug/mock archive data.",
-  "The customer portal invite UI only copies the link for manual use in an approved channel; it does not send email, WhatsApp, SMS, Telegram, provider messages, payment links, or customer notifications.",
+  "The customer app link UI only copies the customer-safe driver details plus link for manual use in an approved channel; it does not send email, WhatsApp, SMS, Telegram, provider messages, payment links, or customer notifications.",
   "No Save Booking + CRM change.",
   "No `/api/admin-saved-bookings` change.",
   "Parser behavior and `/api/ai-parse` remain unchanged.",
@@ -224,31 +237,46 @@ assertExcludes(publicAccessRoute, forbiddenCustomerPortalAccessSurfacePattern, "
 
 for (const fragment of [
   "adminCustomerPortalAccessLinksApiPath",
-  "customerPortalAccessReferenceForFinderRow",
-  "safeCustomerPortalAccessReferenceCandidate(customer.customerId.trim())",
-  "data-customer-portal-access-link",
-  "data-customer-portal-access-revoke",
-  "navigator.clipboard.writeText(url)",
-  "Copy link",
-  "Copying",
-  "Portal link copied for",
-  "Access stays active until revoked",
-  "revokeCustomerPortalAccess",
-  "\"Content-Type\": \"application/json\"",
-  "\"x-prestige-admin-purpose\": \"admin-booking-persistence\"",
+  "const customerDriverDetailsPortalAccountReference =",
+  "cleanReferenceText(appliedAdminBookingSnapshot?.customer_id)",
+  "cleanReferenceText(dispatchReleaseLoadedBookingRecord?.customer_id)",
+  "cleanReferenceText(customerDriverDetailsPortalLastSavedRecord?.customer_id)",
+  "copyCustomerDriverDetailsWithCustomerAppLink",
+  'data-admin-customer-driver-details-copy-with-portal-link="true"',
+  'data-admin-customer-driver-details-copy-with-portal-link-external-send="false"',
+  'data-admin-customer-driver-details-copy-with-portal-link-no-provider-send="true"',
+  "Copy + App Link",
+  "Copying link",
+  "Copied + link",
 ]) {
-  assertIncludes(customersPage, fragment, `customers page portal access ${fragment}`);
+  assertIncludes(appPage, fragment, `dispatch customer app link ${fragment}`);
+}
+
+for (const fragment of [
+  "const customerAccountReference = customerDriverDetailsPortalAccountReference;",
+  "if (!dispatchReleaseCustomerCopyReady)",
+  "fetch(adminCustomerPortalAccessLinksApiPath",
+  "customerAccountReference,",
+  "safeDisplayLabel: customerDriverDetailsPortalSafeDisplayLabel || customerAccountReference",
+  '"x-prestige-admin-purpose": adminLegacyDataPurpose',
+  "navigator.clipboard.writeText(",
+  "customerDriverDetailsWithPortalLinkText(messageText, portalUrl)",
+  "Paste/send manually; no provider message was sent.",
+  "external_send: false",
+  "noProviderSend: true",
+]) {
+  assertIncludes(customerPortalLinkCopyHandler, fragment, `dispatch customer app link handler ${fragment}`);
 }
 
 assertExcludes(
-  customersPage,
-  "safeCustomerPortalAccessReferenceCandidate(customer.customerName.trim())",
-  "customer portal access link must not use customer/company display name as the portal account reference",
+  customerPortalLinkCopyHandler,
+  /copyManualTelegramMessage\s*\(|telegram\.org|t\.me|chat_id|sendMessage|sendAdminCustomerDriverDetailsEmail\s*\(/i,
+  "customer app link copy handler must not call provider/message sends",
 );
 assertExcludes(
-  customersPage,
-  "safeCustomerPortalAccessReferenceCandidate(customer.customerName.trim()) ||",
-  "customer portal access link must not fall back from customer/company name to id",
+  customerFinderSection,
+  /data-customer-portal-access-link|data-customer-portal-access-revoke|Portal link copied for|Copy link/,
+  "customers finder row must not expose portal invite/revoke controls",
 );
 
 assertExcludes(portalClientSource, "/api/customer-portal-access", "customer portal client must not call access-link route");

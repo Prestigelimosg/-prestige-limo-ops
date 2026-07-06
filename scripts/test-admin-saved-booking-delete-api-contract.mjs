@@ -386,6 +386,50 @@ function assertNoDeletes(mock, label) {
 }
 
 const seed = {
+  booking_route_points: [
+    {
+      booking_id: "delete-completed-1",
+      id: "route-delete-completed-1",
+    },
+    {
+      booking_id: "delete-current-completed-1",
+      id: "route-delete-current-completed-1",
+    },
+    {
+      booking_id: "delete-cancelled-1",
+      id: "route-delete-cancelled-1",
+    },
+    {
+      booking_id: "delete-current-cancelled-1",
+      id: "route-delete-current-cancelled-1",
+    },
+    {
+      booking_id: "keep-other-1",
+      id: "route-keep-other-1",
+    },
+  ],
+  booking_service_items: [
+    {
+      booking_id: "delete-completed-1",
+      id: "service-delete-completed-1",
+    },
+    {
+      booking_id: "delete-current-completed-1",
+      id: "service-delete-current-completed-1",
+    },
+    {
+      booking_id: "delete-cancelled-1",
+      id: "service-delete-cancelled-1",
+    },
+    {
+      booking_id: "delete-current-cancelled-1",
+      id: "service-delete-current-cancelled-1",
+    },
+    {
+      booking_id: "keep-other-1",
+      id: "service-keep-other-1",
+    },
+  ],
   bookings: [
     {
       booking_reference: "ADM-DELETE-COMPLETED-1",
@@ -700,6 +744,8 @@ try {
   assert.deepEqual(
     currentValidMock.client.deleteHistory.map(({ filters, table }) => ({ filters, table })),
     [
+      "booking_service_items",
+      "booking_route_points",
       "customer_driver_app_notification_outbox",
       "driver_live_location_latest_positions",
       "driver_live_location_audit_events",
@@ -728,6 +774,14 @@ try {
                 value: "completed",
               },
             ]
+          : ["booking_service_items", "booking_route_points"].includes(table)
+            ? [
+                {
+                  column: "booking_id",
+                  type: "eq",
+                  value: "delete-current-completed-1",
+                },
+              ]
           : [
               {
                 column: "booking_reference",
@@ -749,6 +803,15 @@ try {
     ),
     false,
   );
+  for (const table of ["booking_service_items", "booking_route_points"]) {
+    assert.equal(
+      currentValidMock.client.rows[table].some(
+        (row) => row.booking_id === "delete-current-completed-1",
+      ),
+      false,
+      `${table} exact current booking children must be gone after delete.`,
+    );
+  }
   for (const table of [
     "customer_driver_app_notification_outbox",
     "driver_live_location_latest_positions",
@@ -766,6 +829,20 @@ try {
       `${table} exact current booking artifacts must be gone after delete.`,
     );
   }
+  assert.equal(
+    currentValidMock.client.rows.booking_route_points.some(
+      (row) => row.booking_id === "keep-other-1",
+    ),
+    true,
+    "Current delete must keep unrelated route points.",
+  );
+  assert.equal(
+    currentValidMock.client.rows.booking_service_items.some(
+      (row) => row.booking_id === "keep-other-1",
+    ),
+    true,
+    "Current delete must keep unrelated service items.",
+  );
   assert.equal(
     currentValidMock.client.rows.driver_job_links.some(
       (row) => row.booking_reference === "ADM-KEEP-OTHER",
@@ -829,6 +906,8 @@ try {
   assert.deepEqual(
     validMock.client.deleteHistory.map(({ filters, table }) => ({ filters, table })),
     [
+      "booking_service_items",
+      "booking_route_points",
       "customer_driver_app_notification_outbox",
       "driver_live_location_latest_positions",
       "driver_live_location_audit_events",
@@ -857,6 +936,14 @@ try {
                 value: "completed",
               },
             ]
+          : ["booking_service_items", "booking_route_points"].includes(table)
+            ? [
+                {
+                  column: "booking_id",
+                  type: "eq",
+                  value: "delete-completed-1",
+                },
+              ]
           : [
               {
                 column: "booking_reference",
@@ -870,6 +957,13 @@ try {
   );
   assert.equal(validMock.client.deleteHistory.at(-1)?.selectedColumns, "id, booking_reference, status");
   assert.equal(validMock.client.rows.bookings.some((booking) => booking.id === "delete-completed-1"), false);
+  for (const table of ["booking_service_items", "booking_route_points"]) {
+    assert.equal(
+      validMock.client.rows[table].some((row) => row.booking_id === "delete-completed-1"),
+      false,
+      `${table} exact booking children must be gone after delete.`,
+    );
+  }
   for (const table of [
     "customer_driver_app_notification_outbox",
     "driver_live_location_latest_positions",
@@ -887,6 +981,16 @@ try {
       `${table} exact booking artifacts must be gone after delete.`,
     );
   }
+  assert.equal(
+    validMock.client.rows.booking_route_points.some((row) => row.booking_id === "keep-other-1"),
+    true,
+    "Unrelated route points must not be deleted.",
+  );
+  assert.equal(
+    validMock.client.rows.booking_service_items.some((row) => row.booking_id === "keep-other-1"),
+    true,
+    "Unrelated service items must not be deleted.",
+  );
   assert.equal(
     validMock.client.rows.customer_driver_app_notification_outbox.some(
       (row) => row.booking_reference === "ADM-KEEP-OTHER",
@@ -921,8 +1025,20 @@ try {
     ok: true,
     version: "admin-saved-booking-delete-v1",
   });
-  assert.equal(cancelledMock.client.deleteHistory.length, 8);
+  assert.equal(cancelledMock.client.deleteHistory.length, 10);
   assert.equal(cancelledMock.client.rows.bookings.some((booking) => booking.id === "delete-cancelled-1"), false);
+  assert.equal(
+    cancelledMock.client.rows.booking_route_points.some(
+      (row) => row.booking_id === "delete-cancelled-1",
+    ),
+    false,
+  );
+  assert.equal(
+    cancelledMock.client.rows.booking_service_items.some(
+      (row) => row.booking_id === "delete-cancelled-1",
+    ),
+    false,
+  );
   assert.equal(
     cancelledMock.client.rows.customer_driver_app_notification_outbox.some(
       (row) => row.booking_reference === "ADM-DELETE-CANCELLED-1",
@@ -957,7 +1073,7 @@ try {
     ok: true,
     version: "admin-saved-booking-delete-v1",
   });
-  assert.equal(currentCancelledMock.client.deleteHistory.length, 8);
+  assert.equal(currentCancelledMock.client.deleteHistory.length, 10);
   assert.deepEqual(currentCancelledMock.client.selectHistory[0].filters, [
     {
       column: "id",
@@ -973,6 +1089,18 @@ try {
   assert.equal(
     currentCancelledMock.client.rows.bookings.some(
       (booking) => booking.id === "delete-current-cancelled-1",
+    ),
+    false,
+  );
+  assert.equal(
+    currentCancelledMock.client.rows.booking_route_points.some(
+      (row) => row.booking_id === "delete-current-cancelled-1",
+    ),
+    false,
+  );
+  assert.equal(
+    currentCancelledMock.client.rows.booking_service_items.some(
+      (row) => row.booking_id === "delete-current-cancelled-1",
     ),
     false,
   );
@@ -1170,7 +1298,7 @@ try {
 
   assert.equal(failureResult.status, 500);
   assert.equal(failureResult.body.error, "Admin saved booking delete failed safely.");
-  assert.equal(failureMock.client.deleteHistory.length, 8);
+  assert.equal(failureMock.client.deleteHistory.length, 10);
   assert.equal(
     failureMock.client.rows.bookings.some((booking) => booking.id === "delete-completed-1"),
     true,

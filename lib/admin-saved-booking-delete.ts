@@ -547,6 +547,15 @@ export async function deleteAdminCompletedSavedBooking(
     };
   }
 
+  const childCleanupResult = await deleteSavedBookingChildRowsForBookingId(
+    clientResult.data,
+    target.id,
+  );
+
+  if (!childCleanupResult.ok) {
+    return childCleanupResult;
+  }
+
   const cleanupResult = await deleteOperationalJobArtifactsForBookingReference(
     clientResult.data,
     target.booking_reference,
@@ -653,6 +662,26 @@ async function deleteCompletedSavedBookingTarget(
     .eq(target.delete_status_column, target.delete_status_value)
     .select(selectedColumns)
     .maybeSingle();
+}
+
+async function deleteSavedBookingChildRowsForBookingId(
+  client: SavedBookingDeleteClient,
+  bookingId: string | number,
+): Promise<AdminSavedBookingDeleteResult<null>> {
+  const cleanupTables = ["booking_service_items", "booking_route_points"];
+
+  for (const table of cleanupTables) {
+    const { error } = await client.from(table).delete().eq("booking_id", bookingId);
+
+    if (error) {
+      return safeDatabaseFailure(safeDeleteCleanupError, 500, error);
+    }
+  }
+
+  return {
+    data: null,
+    ok: true,
+  };
 }
 
 async function deleteOperationalJobArtifactsForBookingReference(

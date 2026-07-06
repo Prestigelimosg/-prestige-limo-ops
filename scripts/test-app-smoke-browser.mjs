@@ -33297,8 +33297,8 @@ async function runChromeTest() {
         "Flight number if any",
         "Pickup location",
         "Drop-off location",
-        "Trip type",
-        "Preferred vehicle",
+        "Type of service",
+        "Vehicle type",
         "Number of passengers",
         "Luggage",
         "Extra stops",
@@ -33381,7 +33381,7 @@ async function runChromeTest() {
       assert.deepEqual(
         initialState.serviceOptionLabels,
         [
-          "Please select trip type",
+          "Please select service type",
           "Airport Arrival",
           "Airport Departure",
           "Point-to-Point Transfer",
@@ -35552,7 +35552,7 @@ async function runChromeTest() {
       assert.deepEqual(
         routedBookingPageState.serviceOptionLabels,
         [
-          "Please select trip type",
+          "Please select service type",
           "Airport Arrival",
           "Airport Departure",
           "Point-to-Point Transfer",

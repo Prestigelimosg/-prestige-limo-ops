@@ -62,7 +62,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 - The admin Dispatch intake forms and public `/book` request form use slimmer operator/customer rows; `/my-bookings` now links to `/book` instead of rendering a duplicate request form.
 - Admin Dispatch keeps the same Booking Details, Pickup / Drop-off / Vehicle, Pricing, Route Extras & Child Seat, and Assigned Driver fields, but uses compact four-column desktop grids where safe so operators see more without scrolling.
-- Public `/book` keeps the visible customer-safe fields and the approved return-trip expansion with slim control height and dense desktop grid treatment.
+- Public `/book` keeps the visible customer-safe fields and the approved return-trip expansion with slim control height and dense desktop grid treatment. The customer form labels the public selectors as `Type of service` and `Vehicle type`, and the return-trip checkbox remains below Extra stops.
 - This is a UI-only density pass: it does not change booking submit handlers, CRM/calendar save behavior, return-trip pairing, invoices, PDFs, payments, payouts, provider sends, GPS/live-location, env, or DB schema.
 - Focused guard coverage lives in `scripts/test-admin-customer-booking-form-slim-layout-guard.mjs`.
 

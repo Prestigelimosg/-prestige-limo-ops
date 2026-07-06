@@ -123,8 +123,8 @@ const requiredFieldLabels: Record<keyof BookingRequestForm, string> = {
   returnFlightNumber: "Return flight number if any",
   returnPickupLocation: "Return pickup location",
   returnDropoffLocation: "Return drop-off location",
-  serviceType: "Trip type",
-  vehicleType: "Preferred vehicle",
+  serviceType: "Type of service",
+  vehicleType: "Vehicle type",
   passengerCount: "Number of passengers",
   luggage: "Luggage",
   extraStops: "Extra stops",
@@ -810,7 +810,7 @@ export default function CustomerBookingPage() {
                 </label>
 
                 <label className="text-xs font-semibold text-slate-800">
-                  Trip type
+                  Type of service
                   <select
                     className={fieldClass()}
                     data-customer-booking-field="serviceType"
@@ -818,7 +818,7 @@ export default function CustomerBookingPage() {
                     onChange={(event) => updateField("serviceType", event.target.value)}
                     value={form.serviceType}
                   >
-                    <option value="">Please select trip type</option>
+                    <option value="">Please select service type</option>
                     {serviceOptions.map((option) => (
                       <option key={option} value={option}>
                         {option}
@@ -828,7 +828,7 @@ export default function CustomerBookingPage() {
                 </label>
 
                 <label className="text-xs font-semibold text-slate-800">
-                  Preferred vehicle
+                  Vehicle type
                   <select
                     className={fieldClass()}
                     data-customer-booking-field="vehicleType"

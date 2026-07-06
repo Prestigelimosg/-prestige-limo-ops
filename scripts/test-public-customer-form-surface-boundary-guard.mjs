@@ -350,6 +350,9 @@ for (const fragment of [
   "This is a booking request only, not a confirmed booking yet.",
   "No price, payment, invoice, PDF, or billing file is created here.",
   "Booking request received. Our team will review and confirm availability.",
+  "Type of service",
+  "Please select service type",
+  "Vehicle type",
 ]) {
   assertIncludes(bookPage, fragment, `/book form surface ${fragment}`);
 }
@@ -357,9 +360,18 @@ for (const fragment of [
 for (const removedFragment of [
   "Prestige Limo will review and confirm your booking shortly.",
   "This is a booking request only. It is not confirmed until Prestige confirms it.",
+  "Trip type",
+  "Preferred vehicle",
+  "Please select trip type",
 ]) {
   assertExcludes(bookPage, removedFragment, `/book removed request notice ${removedFragment}`);
 }
+
+assert.equal(
+  bookPage.indexOf("Extra stops") < bookPage.indexOf('data-customer-booking-return-trip-control="true"'),
+  true,
+  "/book return-trip checkbox must remain below Extra stops.",
+);
 
 for (const forbiddenPattern of [
   /\bfetch\s*\(/,

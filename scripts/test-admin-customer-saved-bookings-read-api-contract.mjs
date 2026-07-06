@@ -277,6 +277,7 @@ const seed = {
     {
       admin_internal_status: "completed",
       booking_reference: "UBS-SAFE-002",
+      contact_display_name: "PA Lee",
       contact_email: "private@example.test",
       contact_phone: "+65 9999 0000",
       customer_display_name: "UBS",
@@ -293,6 +294,7 @@ const seed = {
     {
       admin_internal_status: "confirmed",
       booking_reference: "UBS-SAFE-001",
+      contact_display_name: "PA Lee",
       contact_phone: "+65 7777 0000",
       customer_display_name: "UBS",
       customer_facing_status: "confirmed",
@@ -321,13 +323,13 @@ try {
   assert.equal(reader.adminCustomerSavedBookingsReadVersion, "admin-customer-saved-bookings-read-v1");
   assert.deepEqual(
     reader.parseAdminCustomerSavedBookingsReadParams({
-      account_scope_key: "codex_booker__codex_return_passenger20260703",
+      account_scope_key: "codex_return_passenger20260703",
       customer_id: "69",
       limit: "5",
     }),
     {
       data: {
-        account_scope_key: "codex_booker__codex_return_passenger20260703",
+        account_scope_key: "codex_return_passenger20260703",
         customer_account: null,
         customer_id: "69",
         limit: 5,
@@ -414,7 +416,7 @@ try {
   assert.deepEqual(readResult.body.saved_bookings, [
     {
       account_scope_key: "private_passenger",
-      account_scope_label: "Traveller: Private Passenger",
+      account_scope_label: "Passenger: Private Passenger / Booker: PA Lee",
       admin_status: "completed",
       booking_month: "2026-06",
       booking_reference: "UBS-SAFE-002",
@@ -427,7 +429,7 @@ try {
     },
     {
       account_scope_key: "another_private_passenger",
-      account_scope_label: "Traveller: Another Private Passenger",
+      account_scope_label: "Passenger: Another Private Passenger / Booker: PA Lee",
       admin_status: "confirmed",
       booking_month: "2026-06",
       booking_reference: "UBS-SAFE-001",
@@ -506,7 +508,7 @@ try {
   const scopedBookerTravellerResult = await readRouteResponse(
     await route.GET(
       new Request(
-        "http://localhost/api/admin-customer-saved-bookings?customer_id=69&account_scope_key=codex_booker__codex_return_passenger20260703&limit=10",
+        "http://localhost/api/admin-customer-saved-bookings?customer_id=69&account_scope_key=codex_return_passenger20260703&limit=10",
         {
           headers: customerSurfaceHeaders({ referer: "http://localhost/customers" }),
         },
@@ -528,15 +530,15 @@ try {
   assert.deepEqual(
     scopedBookerTravellerResult.body.saved_bookings.map((booking) => booking.account_scope_key),
     [
-      "codex_booker__codex_return_passenger20260703",
-      "codex_booker__codex_return_passenger20260703",
+      "codex_return_passenger20260703",
+      "codex_return_passenger20260703",
     ],
   );
   assert.equal(scopedBookerTravellerMock.client.operations.length, 0);
   assert.equal(scopedBookerTravellerMock.client.selectHistory.length, 1);
   assertNoLeaks(
     scopedBookerTravellerResult,
-    "booker/traveller scoped saved bookings read response should stay safe",
+    "passenger-scoped saved bookings read response should stay safe",
   );
 
   setEnv(enabledEnv());

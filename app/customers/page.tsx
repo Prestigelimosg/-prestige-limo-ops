@@ -248,6 +248,7 @@ type UnbilledCustomerRow = {
   dateLabel: string;
   invoiceLineDescription?: string;
   key: string;
+  needsScopeReview: boolean;
   reference: string;
   route: string;
   service: string;
@@ -262,6 +263,7 @@ type CustomerMonthlyBillingGroup = {
   customerId: string;
   customerName: string;
   key: string;
+  needsScopeReview: boolean;
   rows: UnbilledCustomerRow[];
 };
 
@@ -1675,6 +1677,7 @@ function savedBookingUnbilledRow(
     customerId;
   const accountScopeKey = String(booking.account_scope_key ?? "").trim();
   const accountScopeLabel = String(booking.account_scope_label ?? "").trim();
+  const needsScopeReview = customerBillingScopeNeedsReview(accountScopeKey, accountScopeLabel);
   const service = String(booking.service_type ?? "").trim() || "Completed transfer";
   const closeoutDisposition = savedBookingCloseoutBillingDispositionLabel(closeout);
   const billableServiceLabel = closeoutDisposition || service;
@@ -1695,6 +1698,7 @@ function savedBookingUnbilledRow(
     dateLabel: savedBookingDateLabel(booking),
     invoiceLineDescription: `${billableServiceLabel} - ${reference}`,
     key: `saved-closeout-unbilled:${reference}`,
+    needsScopeReview,
     reference,
     route: "Saved booking route in Dispatch",
     service: billableServiceLabel,
@@ -1702,6 +1706,17 @@ function savedBookingUnbilledRow(
       ? "Closeout exception ready / amount needed"
       : "Closeout ready / amount needed",
   };
+}
+
+function customerBillingScopeNeedsReview(accountScopeKey: string, accountScopeLabel: string) {
+  const normalizedKey = normalizeCustomerFolderMatch(accountScopeKey);
+  const normalizedLabel = accountScopeLabel.toLowerCase();
+
+  return (
+    !normalizedKey ||
+    normalizedKey === normalizeCustomerFolderMatch("booker_traveller_not_set") ||
+    (!normalizedLabel.includes("passenger:") && !normalizedLabel.includes("traveller:"))
+  );
 }
 
 function hasMockBalanceDue(balanceDue: string) {
@@ -2640,6 +2655,7 @@ export default function MockCustomerDashboardPage() {
 
       if (existingGroup) {
         existingGroup.rows.push(row);
+        existingGroup.needsScopeReview ||= row.needsScopeReview;
         continue;
       }
 
@@ -2651,6 +2667,7 @@ export default function MockCustomerDashboardPage() {
         customerId: row.customerId,
         customerName: row.customerName,
         key: groupKey,
+        needsScopeReview: row.needsScopeReview,
         rows: [row],
       });
     }
@@ -2667,8 +2684,7 @@ export default function MockCustomerDashboardPage() {
       ...invoicedReferences,
       ...archivedCustomerTestInvoiceReferences,
     ]);
-
-    return regularCustomerSavedBookingReadState.savedBookings.filter((booking) => {
+    const missingCustomerAccountCount = regularCustomerSavedBookingReadState.savedBookings.filter((booking) => {
       const reference = savedBookingReference(booking);
 
       if (!reference || savedBookingCustomerId(booking)) {
@@ -2683,11 +2699,15 @@ export default function MockCustomerDashboardPage() {
         regularCustomerSavedBookingBillingReadinessState.closeoutsByReference[reference],
       );
     }).length;
+    const unsafeScopeCount = unbilledCustomerRows.filter((row) => row.needsScopeReview).length;
+
+    return missingCustomerAccountCount + unsafeScopeCount;
   }, [
     archivedCustomerTestInvoiceReferences,
     issuedCustomerInvoices,
     regularCustomerSavedBookingBillingReadinessState.closeoutsByReference,
     regularCustomerSavedBookingReadState.savedBookings,
+    unbilledCustomerRows,
   ]);
   const visibleCustomerMonthlyBillingGroups = selectedCustomerFolderFinderRow
     ? customerMonthlyBillingGroups.filter((group) => {
@@ -4026,6 +4046,14 @@ export default function MockCustomerDashboardPage() {
       return;
     }
 
+    if (group.needsScopeReview) {
+      setPlainInvoiceFeedback(
+        "Monthly bill prep is blocked until every job in this group has a passenger/traveller billing scope. Open the exact booking and save the passenger before preparing an invoice.",
+      );
+      setPlainInvoiceFeedbackTone("error");
+      return;
+    }
+
     const preparedRows = group.rows.slice(0, plainInvoiceMaxLineItems);
     const overflowCount = Math.max(0, group.rows.length - preparedRows.length);
     const [firstRow, ...additionalRows] = preparedRows;
@@ -4108,6 +4136,13 @@ export default function MockCustomerDashboardPage() {
   }
 
   async function prepareCustomerInvoiceFromUnbilled(row: UnbilledCustomerRow) {
+    if (row.needsScopeReview) {
+      setCustomerInvoicePrepFeedback(
+        "Invoice prep is blocked until this job has a passenger/traveller billing scope. Open the exact booking and save the passenger before preparing an invoice.",
+      );
+      return;
+    }
+
     const suggestedAmountCents = parseInvoiceAmountToCents(row.amount);
     const baseCalculation = getCustomerInvoiceRowCalculatedAmount(row);
     const bookingReference = validCustomerInvoiceDriverTimingReference(row.reference);
@@ -6632,7 +6667,7 @@ export default function MockCustomerDashboardPage() {
                 <h2 className="mt-1 text-lg font-bold text-slate-950">Monthly Billing Queue</h2>
                 <p className="mt-1 max-w-3xl text-sm font-semibold leading-6 text-emerald-950">
                   Select one saved billing account and month, review the jobs, then prepare the bill in the invoice
-                  workbench. Same company names stay separate by saved account ID.
+                  workbench. Same company names stay separate by saved account ID and passenger scope.
                 </p>
               </div>
               <p
@@ -6672,13 +6707,18 @@ export default function MockCustomerDashboardPage() {
                 <button
                   className="min-h-10 rounded-md border border-emerald-900 bg-emerald-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-100 disabled:text-slate-500"
                   data-customer-monthly-billing-prepare-group="true"
-                  disabled={preparingMonthlyBillingGroupKey === selectedMonthlyBillingGroup.key}
+                  disabled={
+                    selectedMonthlyBillingGroup.needsScopeReview ||
+                    preparingMonthlyBillingGroupKey === selectedMonthlyBillingGroup.key
+                  }
                   onClick={() => prepareMonthlyBillingGroupForInvoice(selectedMonthlyBillingGroup)}
                   type="button"
                 >
                   {preparingMonthlyBillingGroupKey === selectedMonthlyBillingGroup.key
                     ? "Preparing"
-                    : "Prepare monthly bill"}
+                    : selectedMonthlyBillingGroup.needsScopeReview
+                      ? "Review scope"
+                      : "Prepare monthly bill"}
                 </button>
               ) : null}
             </div>
@@ -6701,8 +6741,9 @@ export default function MockCustomerDashboardPage() {
                 data-customer-monthly-billing-account-review-count="true"
               >
                 {customerMonthlyBillingAccountReviewCount} closeout-ready job
-                {customerMonthlyBillingAccountReviewCount === 1 ? "" : "s"} need a saved billing account ID before
-                monthly billing. Open the exact booking and fix the customer account before preparing an invoice.
+                {customerMonthlyBillingAccountReviewCount === 1 ? "" : "s"} need a saved billing account ID or
+                passenger scope before monthly billing. Open the exact booking and fix the customer account before
+                preparing an invoice.
               </p>
             ) : null}
           </div>
@@ -6741,7 +6782,11 @@ export default function MockCustomerDashboardPage() {
                             <p className="max-w-[13rem] truncate text-xs font-semibold text-emerald-800">
                               {row.accountScopeLabel}
                             </p>
-                          ) : null}
+                          ) : (
+                            <p className="max-w-[13rem] truncate text-xs font-semibold text-amber-700">
+                              Passenger scope needs review
+                            </p>
+                          )}
                           <p className="max-w-[13rem] truncate text-xs text-slate-500" title={row.reference}>
                             {compactCustomerBookingReference(row.reference)}
                           </p>
@@ -6768,21 +6813,26 @@ export default function MockCustomerDashboardPage() {
                           <p className="max-w-[18rem] truncate text-xs text-slate-500">{row.route}</p>
                         </td>
                         <td className="px-3 py-2 text-right sm:px-4">
-	                          <div className="inline-flex items-center gap-2">
-	                            <button
-	                              className={`inline-flex min-h-8 items-center justify-center rounded-md border px-3 text-center text-xs font-bold transition ${
-	                                prepareButtonPrepared
-	                                  ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-	                                  : "border-slate-300 bg-white text-slate-800 hover:border-slate-700"
-	                              }`}
-	                              data-unbilled-customer-prepare-invoice={row.key}
-	                              onClick={() => prepareCustomerInvoiceFromUnbilled(row)}
-	                              type="button"
-	                            >
-	                              {prepareButtonPrepared ? getUnbilledPrepareButtonLabel(row.key) : "Prepare job"}
-	                            </button>
-	                          </div>
-	                        </td>
+                          <div className="inline-flex items-center gap-2">
+                            <button
+                              className={`inline-flex min-h-8 items-center justify-center rounded-md border px-3 text-center text-xs font-bold transition disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-100 disabled:text-slate-500 ${
+                                prepareButtonPrepared
+                                  ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                                  : "border-slate-300 bg-white text-slate-800 hover:border-slate-700"
+                              }`}
+                              data-unbilled-customer-prepare-invoice={row.key}
+                              disabled={row.needsScopeReview}
+                              onClick={() => prepareCustomerInvoiceFromUnbilled(row)}
+                              type="button"
+                            >
+                              {row.needsScopeReview
+                                ? "Review scope"
+                                : prepareButtonPrepared
+                                  ? getUnbilledPrepareButtonLabel(row.key)
+                                  : "Prepare job"}
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     );
                   })}

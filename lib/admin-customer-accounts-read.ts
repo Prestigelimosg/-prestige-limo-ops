@@ -165,7 +165,7 @@ function filterAccountsBySearch(accounts: AdminCustomerAccountSafeRecord[], sear
 
   return accounts.filter((account) => {
     const scopeSearchText = (account.account_scope_label || "")
-      .replace(/\b(Booker|Traveller):/gi, "")
+      .replace(/\b(Booker|Passenger|Traveller):/gi, "")
       .toLowerCase();
     const customerIdSearchText = (account.customer_id || "")
       .replace(/^customer[-_]?/i, "")
@@ -191,13 +191,12 @@ function accountScopeFromBooking(booking: AdminBookingPersistenceRecord) {
   const bookerKey = normalizeToken(bookerName);
   const travellerKey = normalizeToken(travellerName);
   const labelParts = [
-    bookerName ? `Booker: ${bookerName}` : null,
-    travellerName && travellerKey !== bookerKey ? `Traveller: ${travellerName}` : null,
+    travellerName ? `Passenger: ${travellerName}` : null,
+    bookerName && bookerKey !== travellerKey ? `Booker: ${bookerName}` : null,
   ].filter((value): value is string => Boolean(value));
-  const keyParts = [bookerKey, travellerKey].filter(Boolean);
 
   return {
-    key: keyParts.length > 0 ? keyParts.join("__") : "booker_traveller_not_set",
+    key: travellerKey || (bookerKey ? `booker_${bookerKey}` : "booker_traveller_not_set"),
     label: labelParts.length > 0 ? labelParts.join(" / ") : null,
   };
 }

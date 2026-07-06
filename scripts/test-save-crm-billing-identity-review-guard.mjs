@@ -226,7 +226,7 @@ assertIncludes(
 assertIncludes(
   adminCustomerAccountsReadSource,
   "safeText(booking.contact_display_name",
-  "admin customer account scope includes booker",
+  "admin customer account scope keeps booker as context",
 );
 assertIncludes(
   adminCustomerAccountsReadSource,
@@ -235,8 +235,18 @@ assertIncludes(
 );
 assertIncludes(
   adminCustomerAccountsReadSource,
+  "travellerName ? `Passenger: ${travellerName}`",
+  "admin customer account scope labels passenger first",
+);
+assertIncludes(
+  adminCustomerAccountsReadSource,
+  "key: travellerKey || (bookerKey ? `booker_${bookerKey}` : \"booker_traveller_not_set\")",
+  "admin customer account scope keys by passenger before booker",
+);
+assertIncludes(
+  adminCustomerAccountsReadSource,
   "customerFolderKey(customerId, customerAccount, accountScope.key)",
-  "admin customer account grouping includes scoped booker/traveller identity",
+  "admin customer account grouping includes scoped passenger identity",
 );
 assertIncludes(
   adminCustomerAccountsReadSource,

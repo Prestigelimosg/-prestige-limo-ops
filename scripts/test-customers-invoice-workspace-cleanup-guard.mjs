@@ -42,17 +42,13 @@ const invoiceWorkspace = sectionBetween(
 const ledgerSection = sectionBetween(ledger, "### Customers Invoice Workspace Cleanup", "\n### ");
 
 for (const fragment of [
-  "const customerInvoiceWorkspaceTabs = [",
-  '{ label: "Statements", value: "statements" }',
-  '{ label: "Outstanding", value: "outstanding" }',
-  '{ label: "Follow-up", value: "follow-up" }',
-  'useState<CustomerInvoiceWorkspaceTab>("statements")',
+  'const customerInvoiceWorkspaceTabs: Array<{ label: string; value: CustomerInvoiceWorkspaceTab }> = [];',
+  'useState<CustomerInvoiceWorkspaceTab>("create-invoice")',
+  "const showLegacyMockCustomerWorkbench = false;",
   'data-customer-invoice-workspace="true"',
-  'data-customer-invoice-workspace-tabs="true"',
   'data-customer-invoice-workspace-panel="statements"',
   'data-customer-invoice-workspace-panel="outstanding"',
   'data-customer-invoice-workspace-panel="follow-up"',
-  'data-customer-summary-strip="true"',
   'data-customer-folder-finder="true"',
   'data-customer-monthly-billing-queue="true"',
   'data-customer-monthly-billing-group-select="true"',
@@ -82,28 +78,28 @@ assertIncludes(
 assert.equal(
   (customersPage.match(/data-monthly-statement-preview="true"/g) ?? []).length,
   1,
-  "customers page must render one Monthly Account Statement Preview section only.",
+  "customers page legacy archive must keep one Monthly Account Statement Preview section while it is not exposed.",
 );
 
 assert.equal(
-  customersPage.indexOf('useState<CustomerInvoiceWorkspaceTab>("statements")') <
+  customersPage.indexOf('useState<CustomerInvoiceWorkspaceTab>("create-invoice")') <
     customersPage.indexOf('data-customer-invoice-workspace-panel="statements"'),
   true,
-  "statement previews must be the default invoice workspace tab.",
+  "legacy statement previews must not be the default invoice workspace tab.",
 );
 
 assert.equal(
-  customersPage.indexOf('data-customer-debug-tools-drawer="true"') <
-    customersPage.indexOf('data-mock-payment-event-log="true"'),
+  customersPage.indexOf("const showLegacyMockCustomerWorkbench = false;") <
+    customersPage.indexOf('data-customer-advanced-booking-drawer="true"'),
   true,
-  "mock payment event log must sit inside the collapsed support drawer.",
+  "legacy customer mock workbench must be behind the false render gate.",
 );
 
 assert.equal(
-  customersPage.indexOf('data-customer-debug-tools-drawer="true"') <
-    customersPage.indexOf("Invoice Number Guardrails"),
+  customersPage.indexOf("const showLegacyMockCustomerWorkbench = false;") <
+    customersPage.indexOf('data-customer-debug-tools-drawer="true"'),
   true,
-  "invoice guardrails must sit inside the collapsed support drawer.",
+  "legacy customer support/mock logs must be behind the false render gate.",
 );
 
 assert.equal(
@@ -118,14 +114,17 @@ assert.equal(
     customersPage.indexOf('data-customer-monthly-billing-queue="true"') <
       customersPage.indexOf('data-customer-billing-workbench-drawer="true"') &&
     customersPage.indexOf('data-customer-billing-workbench-drawer="true"') <
-      customersPage.indexOf('data-customer-invoice-workspace="true"') &&
-    customersPage.indexOf('data-customer-invoice-workspace-panel="follow-up"') <
-      customersPage.indexOf('data-customer-advanced-booking-drawer="true"'),
+      customersPage.indexOf('data-customer-invoice-workspace="true"'),
   true,
-  "daily Customers page order must be finder, monthly billing queue, collapsed invoice workbench drawer, then advanced/support drawers.",
+  "daily Customers page order must be finder, monthly billing queue, then collapsed invoice workbench drawer.",
 );
 
 for (const forbiddenFragment of [
+  'data-customer-summary-strip="true"',
+  '{ label: "Statements", value: "statements" }',
+  '{ label: "Outstanding", value: "outstanding" }',
+  '{ label: "Follow-up", value: "follow-up" }',
+  'useState<CustomerInvoiceWorkspaceTab>("statements")',
   "Dropdown selected",
   "Billing workbench and mock review queues",
   "All unbilled customers",
@@ -147,10 +146,10 @@ for (const forbiddenPattern of [
 }
 
 for (const phrase of [
-  "Customers page daily flow is compact: summary strip, customer finder, and Monthly Billing Queue stay visible for normal operation.",
+  "Customers page daily flow is compact: customer finder and Monthly Billing Queue stay visible for normal operation; the fake payment summary strip is removed.",
   "The Monthly Billing Queue groups real closeout-ready saved bookings by saved billing account/month and no longer mixes mock/local draft rows into the visible billing queue.",
-  "The invoice workbench, statement previews, outstanding review, and follow-up queues are deliberately collapsed behind the admin-only `Invoice workbench` drawer.",
-  "The duplicate folder handoff support drawer is removed; advanced booking/draft tools and mock logs sit after the daily invoice workflow instead of before it.",
+  "The invoice workbench no longer exposes the mock statement, outstanding, or follow-up tabs in daily operation.",
+  "The duplicate folder handoff support drawer, advanced booking mock drawer, and mock logs are removed from the rendered daily customer dashboard.",
   "This is UI-only structure cleanup; it does not activate invoice/PDF/payment/provider sending, DB writes, env changes, GPS/live location, billing/payout, calendar sync, parser changes, or shims.",
   "Guard coverage lives in `scripts/test-customers-invoice-workspace-cleanup-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {

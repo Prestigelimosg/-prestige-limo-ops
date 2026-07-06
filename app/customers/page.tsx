@@ -5,7 +5,6 @@ import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   collectionRules,
   mockCustomers,
-  mockPaymentSummary,
   type MockCustomer,
   type MockCustomerBooking,
   type MockPaymentStatus,
@@ -32,13 +31,6 @@ import {
   type CustomerLocalInvoiceRecord,
   type CustomerLocalInvoiceStatus,
 } from "../../lib/customer-local-invoices";
-
-const summaryCards = [
-  { label: "Total Outstanding", value: mockPaymentSummary.totalOutstanding },
-  { label: "Overdue", value: mockPaymentSummary.overdue },
-  { label: "Paid This Month", value: mockPaymentSummary.paidThisMonth },
-  { label: "Follow-ups Today", value: mockPaymentSummary.followUpsToday },
-];
 
 const adminCustomerAccountsApiPath = "/api/admin-customer-accounts";
 const adminCustomerSavedBookingsApiPath = "/api/admin-customer-saved-bookings";
@@ -150,13 +142,9 @@ const outstandingReviewPageSizeOptions = [10, 25];
 const customerQueuePageSizeOptions = [10, 25];
 const customerFolderFinderPageSize = 10;
 const customerBillingDocumentPageSize = 5;
-const customerInvoiceWorkspaceTabs = [
-  { label: "Statements", value: "statements" },
-  { label: "Outstanding", value: "outstanding" },
-  { label: "Follow-up", value: "follow-up" },
-] as const;
+type CustomerInvoiceWorkspaceTab = "create-invoice" | "statements" | "outstanding" | "follow-up";
 
-type CustomerInvoiceWorkspaceTab = (typeof customerInvoiceWorkspaceTabs)[number]["value"];
+const customerInvoiceWorkspaceTabs: Array<{ label: string; value: CustomerInvoiceWorkspaceTab }> = [];
 
 const mockTodayDateValue = Date.UTC(2026, 4, 25);
 
@@ -2201,7 +2189,7 @@ export default function MockCustomerDashboardPage() {
   );
   const [customerBillingDocumentPage, setCustomerBillingDocumentPage] = useState(1);
   const [customerInvoiceWorkspaceTab, setCustomerInvoiceWorkspaceTab] =
-    useState<CustomerInvoiceWorkspaceTab>("statements");
+    useState<CustomerInvoiceWorkspaceTab>("create-invoice");
   const [mockFollowUpSectionFeedback, setMockFollowUpSectionFeedback] = useState(
     "Mock follow-up controls only. Use the buttons to simulate collection follow-up without sending messages.",
   );
@@ -5833,6 +5821,8 @@ export default function MockCustomerDashboardPage() {
     return regularCustomerBookingMissingFields.includes(field);
   }
 
+  const showLegacyMockCustomerWorkbench = false;
+
   return (
     <main className="min-h-screen bg-stone-50 px-4 py-6 text-slate-950 sm:px-6 lg:px-8">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
@@ -5842,8 +5832,8 @@ export default function MockCustomerDashboardPage() {
             <div>
               <h1 className="text-3xl font-bold tracking-normal text-slate-950">Customers & Invoices</h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-                Work from customer account, statement, outstanding balance, and follow-up queues before sending
-                invoices from the approved invoice workflow.
+                Find the exact customer account, review saved jobs, prepare monthly billing, and issue invoices from
+                the approved invoice workflow.
               </p>
             </div>
             <div
@@ -5858,27 +5848,6 @@ export default function MockCustomerDashboardPage() {
             </div>
           </div>
         </header>
-
-        <section
-          aria-label="Customer payment summary"
-          className="rounded-md border border-slate-200 bg-white px-3 py-2 shadow-sm"
-          data-customer-summary-strip="true"
-        >
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            {summaryCards.map((card) => (
-              <div
-                className="flex min-h-10 items-center justify-between gap-3 rounded-md bg-slate-50 px-3 py-2"
-                data-customer-summary-card={card.label}
-                key={card.label}
-              >
-                <p className="truncate text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-                  {card.label}
-                </p>
-                <p className="text-sm font-bold text-slate-950">{card.value}</p>
-              </div>
-            ))}
-          </div>
-        </section>
 
         <section
           className="rounded-lg border border-slate-200 bg-white shadow-sm"
@@ -6680,8 +6649,8 @@ export default function MockCustomerDashboardPage() {
                 </p>
                 <h2 className="mt-1 text-lg font-bold text-slate-950">Send Invoice Workbench</h2>
                 <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
-                  Use Statements first when preparing invoices. Outstanding balances and follow-up queues stay one
-                  click away.
+                  Load one exact customer/month from the Monthly Billing Queue or create a manual billing document,
+                  then preview before any draft, issue, PDF, email, paid, unpaid, or credit action.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2 lg:justify-end">
@@ -6693,29 +6662,27 @@ export default function MockCustomerDashboardPage() {
                 >
                   Create Invoice
                 </button>
-                <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
-                  {mockStatementPreviewGroups.length} statement preview
-                  {mockStatementPreviewGroups.length === 1 ? "" : "s"}
-                </p>
               </div>
             </div>
-            <div className="mt-4 flex flex-wrap gap-2" data-customer-invoice-workspace-tabs="true">
-              {customerInvoiceWorkspaceTabs.map((tab) => (
-                <button
-                  className={`min-h-10 rounded-md border px-3 py-2 text-sm font-bold transition ${
-                    customerInvoiceWorkspaceTab === tab.value
-                      ? "border-slate-900 bg-slate-900 text-white"
-                      : "border-slate-300 bg-white text-slate-800 hover:border-slate-500 hover:bg-slate-50"
-                  }`}
-                  data-customer-invoice-workspace-tab={tab.value}
-                  key={tab.value}
-                  onClick={() => setCustomerInvoiceWorkspaceTab(tab.value)}
-                  type="button"
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
+            {customerInvoiceWorkspaceTabs.length > 0 ? (
+              <div className="mt-4 flex flex-wrap gap-2" data-customer-invoice-workspace-tabs="true">
+                {customerInvoiceWorkspaceTabs.map((tab) => (
+                  <button
+                    className={`min-h-10 rounded-md border px-3 py-2 text-sm font-bold transition ${
+                      customerInvoiceWorkspaceTab === tab.value
+                        ? "border-slate-900 bg-slate-900 text-white"
+                        : "border-slate-300 bg-white text-slate-800 hover:border-slate-500 hover:bg-slate-50"
+                    }`}
+                    data-customer-invoice-workspace-tab={tab.value}
+                    key={tab.value}
+                    onClick={() => setCustomerInvoiceWorkspaceTab(tab.value)}
+                    type="button"
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
             <div
               className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2"
               data-customer-invoice-prep-panel="true"
@@ -7877,6 +7844,8 @@ export default function MockCustomerDashboardPage() {
           </div>
         </section>
 
+        {showLegacyMockCustomerWorkbench ? (
+          <>
         <div
           className={customerInvoiceWorkspaceTab === "statements" ? "" : "hidden"}
           data-customer-invoice-workspace-panel="statements"
@@ -8557,9 +8526,13 @@ export default function MockCustomerDashboardPage() {
           </div>
         </section>
         </div>
+          </>
+        ) : null}
           </div>
         </details>
 
+        {showLegacyMockCustomerWorkbench ? (
+          <>
         <details className="rounded-lg border border-slate-200 bg-white shadow-sm" data-customer-advanced-booking-drawer="true">
           <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-slate-900 [&::-webkit-details-marker]:hidden">
             Advanced booking and draft invoice tools
@@ -10383,6 +10356,8 @@ export default function MockCustomerDashboardPage() {
         </section>
           </div>
         </details>
+          </>
+        ) : null}
       </div>
     </main>
   );

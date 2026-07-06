@@ -820,8 +820,9 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 - The old Customer Folder / Job History Handoff support drawer is removed from the normal Customers page flow; the compact finder is now the single customer-folder lookup surface.
 - The compact finder keeps 10-row pages and an `All customers` dropdown with numbered page buttons for 200-plus accounts.
-- The top payment summary is a slim strip instead of four large cards.
-- The invoice workbench and old review queues are collapsed behind an admin-only drawer, leaving the daily visible Customers page focused on the customer folder finder and Monthly Billing Queue.
+- The fake top payment summary strip is removed from the daily Customers page.
+- The invoice workbench is collapsed behind an admin-only drawer, leaving the daily visible Customers page focused on the customer folder finder and Monthly Billing Queue.
+- The mock statement, outstanding, follow-up, advanced booking, and support log drawers are not rendered in normal operation.
 - The normal finder row has one primary `View jobs` action and no portal invite/revoke controls; customer app links stay in Dispatch Customer Copy `Copy + App Link`.
 - Customer Folder `View jobs` groups the selected account's saved jobs by booking month before the exact `View/Edit`, `Save changes`, safe `Delete job`, and `Open in Dispatch` controls.
 - No route, API, parser, DB, env, Vercel, provider-send, GPS/live-location, billing/payment/PDF/payout, calendar, or shim behavior is changed.
@@ -1017,10 +1018,10 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Customers Invoice Workspace Cleanup
 
-- Customers page daily flow is compact: summary strip, customer finder, and Monthly Billing Queue stay visible for normal operation.
+- Customers page daily flow is compact: customer finder and Monthly Billing Queue stay visible for normal operation; the fake payment summary strip is removed.
 - The Monthly Billing Queue groups real closeout-ready saved bookings by saved billing account/month and no longer mixes mock/local draft rows into the visible billing queue.
-- The invoice workbench, statement previews, outstanding review, and follow-up queues are deliberately collapsed behind the admin-only `Invoice workbench` drawer.
-- The duplicate folder handoff support drawer is removed; advanced booking/draft tools and mock logs sit after the daily invoice workflow instead of before it.
+- The invoice workbench no longer exposes the mock statement, outstanding, or follow-up tabs in daily operation.
+- The duplicate folder handoff support drawer, advanced booking mock drawer, and mock logs are removed from the rendered daily customer dashboard.
 - This is UI-only structure cleanup; it does not activate invoice/PDF/payment/provider sending, DB writes, env changes, GPS/live location, billing/payout, calendar sync, parser changes, or shims.
 - Guard coverage lives in `scripts/test-customers-invoice-workspace-cleanup-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 

@@ -41,7 +41,6 @@ const finderSection = sectionBetween(
 );
 
 for (const fragment of [
-  'data-customer-summary-strip="true"',
   'data-customer-folder-finder="true"',
   'data-customer-folder-finder-select="true"',
   'data-customer-folder-finder-count="true"',
@@ -91,6 +90,11 @@ assert.equal(
 );
 
 for (const forbiddenFragment of [
+  'data-customer-summary-strip="true"',
+  '{ label: "Statements", value: "statements" }',
+  '{ label: "Outstanding", value: "outstanding" }',
+  '{ label: "Follow-up", value: "follow-up" }',
+  'useState<CustomerInvoiceWorkspaceTab>("statements")',
   'data-customer-folder-support-drawer="true"',
   'data-customer-folder-index-handoff="true"',
   "Customer folder support list",
@@ -131,8 +135,9 @@ assertIncludes(ledger, ledgerHeading, "ledger compact customer folder heading");
 for (const phrase of [
   "The old Customer Folder / Job History Handoff support drawer is removed from the normal Customers page flow; the compact finder is now the single customer-folder lookup surface.",
   "The compact finder keeps 10-row pages and an `All customers` dropdown with numbered page buttons for 200-plus accounts.",
-  "The top payment summary is a slim strip instead of four large cards.",
-  "The invoice workbench and old review queues are collapsed behind an admin-only drawer, leaving the daily visible Customers page focused on the customer folder finder and Monthly Billing Queue.",
+  "The fake top payment summary strip is removed from the daily Customers page.",
+  "The invoice workbench is collapsed behind an admin-only drawer, leaving the daily visible Customers page focused on the customer folder finder and Monthly Billing Queue.",
+  "The mock statement, outstanding, follow-up, advanced booking, and support log drawers are not rendered in normal operation.",
   "The normal finder row has one primary `View jobs` action and no portal invite/revoke controls; customer app links stay in Dispatch Customer Copy `Copy + App Link`.",
   "Customer Folder `View jobs` groups the selected account's saved jobs by booking month before the exact `View/Edit`, `Save changes`, safe `Delete job`, and `Open in Dispatch` controls.",
   "No route, API, parser, DB, env, Vercel, provider-send, GPS/live-location, billing/payment/PDF/payout, calendar, or shim behavior is changed.",

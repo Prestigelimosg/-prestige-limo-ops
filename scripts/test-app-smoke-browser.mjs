@@ -26809,8 +26809,8 @@ async function runChromeTest() {
 
       assert.deepEqual(
         dashboardState.summaryCards,
-        ["Total Outstanding", "Overdue", "Paid This Month", "Follow-ups Today"],
-        "Expected customer dashboard summary cards",
+        [],
+        "Expected customer dashboard fake summary cards to stay removed",
       );
       assert.deepEqual(
         dashboardState.customerRows,

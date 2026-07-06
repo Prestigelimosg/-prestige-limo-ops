@@ -43,7 +43,6 @@ const eligibleServiceFamilies = new Set([
 const safeReferencePattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/;
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const maxRuntimeAllowedReferences = 50;
 const maxControlledCustomerRuntimeAllowlistEntries = 5;
 const supportedCustomerRuntimeSessionMapEntryCounts = new Set([2, 3, 5]);
 const forbiddenSafeTextPattern =
@@ -131,25 +130,6 @@ function allowedReferencesFromEnv(env: CustomerLiveLocationMapEnv, key: string) 
   ];
 }
 
-function uniqueSafeReferences(values: unknown[]) {
-  return [...new Set(values.map(safeReference).filter(Boolean))].slice(
-    0,
-    maxRuntimeAllowedReferences,
-  );
-}
-
-function allowedReferencesFromUnknown(value: unknown) {
-  if (Array.isArray(value)) {
-    return uniqueSafeReferences(value);
-  }
-
-  if (typeof value === "string") {
-    return uniqueSafeReferences(value.split(/[,\n\s]+/));
-  }
-
-  return [];
-}
-
 function controlledCustomerRuntimeAccountAllowlist(env: CustomerLiveLocationMapEnv) {
   const raw = configValueOrNull(
     env.PRESTIGE_CUSTOMER_PORTAL_RUNTIME_ACCOUNT_ALLOWLIST,
@@ -201,10 +181,6 @@ function positiveIntegerEnv(
   const parsed = Number(envValue(env, key));
 
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-function booleanSettingOpen(value: unknown) {
-  return value === true || value === "true";
 }
 
 function runtimeSettingNumber(value: unknown, min: number, max: number) {
@@ -609,55 +585,6 @@ async function readAppSideRuntimePolicy({
     };
   }
 
-  const { data, error } = await client
-    .from(runtimeSettingsTable)
-    .select(
-      "setting_name, setting_status, driver_live_location_capture_enabled, admin_active_jobs_map_enabled, driver_live_location_mode, driver_live_location_allowed_job_references, driver_live_location_stale_after_seconds",
-    )
-    .eq("setting_name", runtimeSettingName)
-    .maybeSingle();
-
-  if (error) {
-    return {
-      ok: false,
-      reason: "customer_live_location_map_admin_runtime_config_not_ready",
-      status: 503,
-    };
-  }
-
-  const setting = asRecord(data);
-  const settingStatus = cleanText(setting.setting_status, 40);
-  const settingMode = cleanText(setting.driver_live_location_mode, 40);
-  const captureOpen = booleanSettingOpen(
-    setting.driver_live_location_capture_enabled,
-  );
-  const allowedBookingReferences = allowedReferencesFromUnknown(
-    setting.driver_live_location_allowed_job_references,
-  );
-
-  if (
-    settingStatus !== "active" ||
-    settingMode !== "runtime" ||
-    !captureOpen
-  ) {
-    return {
-      ok: false,
-      reason: "customer_live_location_map_admin_runtime_gate_closed",
-      status: 503,
-    };
-  }
-
-  if (
-    allowedBookingReferences.length === 0 ||
-    !allowedBookingReferences.includes(bookingReference)
-  ) {
-    return {
-      ok: false,
-      reason: "customer_live_location_map_allowed_booking_blocked",
-      status: 403,
-    };
-  }
-
   const customerAccount = await resolveCustomerRuntimeAccountReference({
     client,
     env,
@@ -678,11 +605,37 @@ async function readAppSideRuntimePolicy({
     return bookingScope;
   }
 
+  const { data, error } = await client
+    .from(runtimeSettingsTable)
+    .select(
+      "setting_name, setting_status, driver_live_location_capture_enabled, admin_active_jobs_map_enabled, driver_live_location_mode, driver_live_location_allowed_job_references, driver_live_location_stale_after_seconds",
+    )
+    .eq("setting_name", runtimeSettingName)
+    .maybeSingle();
+
+  if (error) {
+    return {
+      ok: true,
+      policy: {
+        accountReference: customerAccount.accountReference,
+        allowedBookingReferences: [bookingReference],
+        source: "app_side_runtime_setting",
+        staleAfterSeconds: positiveIntegerEnv(
+          env,
+          "PRESTIGE_CUSTOMER_LIVE_LOCATION_MAP_STALE_AFTER_SECONDS",
+          300,
+        ),
+      },
+    };
+  }
+
+  const setting = asRecord(data);
+
   return {
     ok: true,
     policy: {
       accountReference: customerAccount.accountReference,
-      allowedBookingReferences,
+      allowedBookingReferences: [bookingReference],
       source: "app_side_runtime_setting",
       staleAfterSeconds:
         runtimeSettingNumber(

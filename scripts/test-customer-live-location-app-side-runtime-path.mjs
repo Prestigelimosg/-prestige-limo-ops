@@ -349,22 +349,37 @@ try {
   assert.equal(customerReadWithoutAdminMap.body.marker_count, 1);
   assert.equal(customerReadWithoutAdminMap.body.customerVisible, true);
 
-  const closedGateClient = createQueryClient({
+  const customerReadWithoutCaptureClient = createQueryClient({
+    accessRows: [
+      {
+        account_status: "active",
+        auth_user_id: authUserId,
+        customer_account_reference: accountReference,
+      },
+    ],
+    bookingRows: [
+      {
+        booking_reference: bookingReference,
+        customer_id: accountReference,
+        route_type: "MNG",
+        service_type: "Arrival",
+      },
+    ],
+    latestRows: [safeLatestPosition],
     settingRow: baseSetting({ bookingReference, open: false }),
   });
-  setCustomerLiveLocationMapRuntimeClientForTests(closedGateClient);
+  setCustomerLiveLocationMapRuntimeClientForTests(customerReadWithoutCaptureClient);
 
-  const closedGate = await handleCustomerLiveLocationMapRuntimeRequest({
+  const customerReadWithoutCapture = await handleCustomerLiveLocationMapRuntimeRequest({
     boundary,
     env: baseEnv({ accountReference, authUserId, sessionToken }),
     request: customerRequest({ bookingReference, origin, sessionToken }),
   });
 
-  assert.equal(closedGate.status, 503);
-  assert.equal(
-    closedGate.body.reason,
-    "customer_live_location_map_admin_runtime_gate_closed",
-  );
+  assert.equal(customerReadWithoutCapture.status, 200);
+  assert.equal(customerReadWithoutCapture.body.ok, true);
+  assert.equal(customerReadWithoutCapture.body.marker_count, 1);
+  assert.equal(customerReadWithoutCapture.body.customerVisible, true);
 
   setCustomerLiveLocationMapRuntimeClientForTests(client);
   const defaultClosed = await handleCustomerLiveLocationMapRuntimeRequest({

@@ -125,7 +125,6 @@ for (const fragment of [
   "x-prestige-customer-account-reference",
   "readCustomerLiveLocationMapSessionToken(request)",
   "customer_live_location_map_scope_blocked",
-  "customer_live_location_map_admin_runtime_gate_closed",
   "customer_live_location_map_customer_auth_blocked",
   "customer_live_location_map_service_blocked",
   "booking_reference_label: \"scoped\"",

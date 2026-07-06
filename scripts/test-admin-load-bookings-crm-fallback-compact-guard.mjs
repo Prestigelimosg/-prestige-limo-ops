@@ -257,6 +257,11 @@ assertIncludes(appPage, "return `${newBookingRequestCount} new`;", "Bookings bad
 assertIncludes(appPage, "return `${urgentBookingRequestCount} urgent`;", "Bookings badge urgent wording");
 assertIncludes(appPage, "return `${totalCount} alerts`;", "Bookings badge combined wording");
 assertIncludes(appPage, "function locateBookingsTabAlert()", "Bookings badge locator helper");
+assertIncludes(appPage, "bookingsTabAlertTypeCount", "Bookings badge mixed alert type count");
+assertIncludes(appPage, 'data-bookings-alert-menu="true"', "Bookings badge mixed alert menu");
+assertIncludes(appPage, 'data-bookings-alert-menu-option="change"', "Bookings badge change menu option");
+assertIncludes(appPage, 'data-bookings-alert-menu-option="new"', "Bookings badge new menu option");
+assertIncludes(appPage, 'data-bookings-alert-menu-option="urgent"', "Bookings badge urgent menu option");
 assertIncludes(
   appPage,
   'event.target.closest(\'[data-bookings-new-request-badge="true"]\')',

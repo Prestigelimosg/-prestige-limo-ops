@@ -12652,6 +12652,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     notificationId?: string;
     target: AdminAlertLocatorTarget;
   } | null>(null);
+  const [bookingsAlertMenuOpen, setBookingsAlertMenuOpen] = useState(false);
   const [adminAppNotificationReadRevision, setAdminAppNotificationReadRevision] = useState(0);
   const [adminAppNotificationAction, setAdminAppNotificationAction] =
     useState<AdminAppNotificationAction>(null);
@@ -16302,6 +16303,11 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     totalCount: bookingsTabAttentionCount,
     urgentBookingRequestCount: bookingsTabUrgentUnderOneHourCount,
   });
+  const bookingsTabAlertTypeCount = [
+    customerBookingChangeRequestCount,
+    customerBookingRequestCount,
+    bookingsTabUrgentUnderOneHourCount,
+  ].filter((count) => count > 0).length;
   const urgentCustomerBookingRequestCount = urgentCustomerBookingRequestBookings.length;
   const dashboardUrgentBookingRequestDisplayItems =
     buildLoadBookingsOperationalDisplayItems(visibleDashboardUrgentBookingRequestBookings, {
@@ -19241,21 +19247,31 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   }
 
   function openDashboardUrgentBookingRequestsReview() {
+    setBookingsAlertMenuOpen(false);
     selectAppTab("dashboard");
     markAdminAlertLocatorHighlight("urgent-booking-requests");
     scrollToAdminAlertLocatorTarget("urgent-booking-requests");
   }
 
-  function locateBookingsTabAlert() {
+  function openBookingsTabChangeRequestAlert() {
     const changeRequestNotification = adminAppNotificationReadState.notifications.find((notification) =>
       Boolean(adminAppNotificationChangeRequestContext(notification)),
     );
     const changeRequestNotificationId = clean(changeRequestNotification?.id);
 
     if (changeRequestNotification && changeRequestNotificationId) {
+      setBookingsAlertMenuOpen(false);
       selectAppTab("dashboard");
       markAdminAlertLocatorHighlight("admin-app-notification", changeRequestNotificationId);
       scrollToAdminAlertLocatorTarget("admin-app-notification", changeRequestNotificationId);
+      return true;
+    }
+
+    return false;
+  }
+
+  function locateBookingsTabAlert() {
+    if (openBookingsTabChangeRequestAlert()) {
       return;
     }
 
@@ -28727,9 +28743,10 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
             const showBookingsRequestBadge = isBookingsTab && bookingsTabAttentionCount > 0;
             const highlightBookingsTab = showBookingsRequestBadge && !selected;
 
-            return (
-              <button
-                aria-selected={selected}
+	            return (
+	              <div className="relative w-full" key={tab.id}>
+	              <button
+	                aria-selected={selected}
                 className={`flex min-h-11 w-full items-center justify-center gap-1.5 rounded px-2 py-1 text-xs font-semibold transition ${
                   selected
                     ? "bg-slate-950 text-white"
@@ -28737,26 +28754,31 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                       ? "border border-emerald-300 bg-emerald-50 text-emerald-950 shadow-[0_0_0_2px_rgba(16,185,129,0.18)] hover:bg-emerald-100"
                     : "border border-stone-200 bg-white text-slate-700 hover:bg-stone-50"
                 }`}
-                key={tab.id}
-                data-app-tab={tab.id}
+	                data-app-tab={tab.id}
                 data-bookings-tab-autoload={tab.id === "bookings" ? "true" : undefined}
                 data-bookings-tab-change-requests={isBookingsTab ? String(customerBookingChangeRequestCount) : undefined}
                 data-bookings-tab-new-booking-requests={isBookingsTab ? String(customerBookingRequestCount) : undefined}
                 data-bookings-tab-new-requests={showBookingsRequestBadge ? "true" : undefined}
-                data-bookings-tab-total-alerts={isBookingsTab ? String(bookingsTabAttentionCount) : undefined}
-                data-bookings-tab-urgent-under-one-hour={isBookingsTab ? String(bookingsTabUrgentUnderOneHourCount) : undefined}
-	                onClick={(event) => {
-	                  const clickedAlertBadge =
-	                    event.target instanceof HTMLElement &&
-	                    Boolean(event.target.closest('[data-bookings-new-request-badge="true"]'));
+	                data-bookings-tab-total-alerts={isBookingsTab ? String(bookingsTabAttentionCount) : undefined}
+	                data-bookings-tab-urgent-under-one-hour={isBookingsTab ? String(bookingsTabUrgentUnderOneHourCount) : undefined}
+		                onClick={(event) => {
+		                  const clickedAlertBadge =
+		                    event.target instanceof HTMLElement &&
+		                    Boolean(event.target.closest('[data-bookings-new-request-badge="true"]'));
 
-	                  if (isBookingsTab && showBookingsRequestBadge && clickedAlertBadge) {
-	                    locateBookingsTabAlert();
-	                    return;
-	                  }
+		                  if (isBookingsTab && showBookingsRequestBadge && clickedAlertBadge) {
+		                    if (bookingsTabAlertTypeCount > 1) {
+		                      setBookingsAlertMenuOpen((isOpen) => !isOpen);
+		                      return;
+		                    }
 
-                  selectAppTab(tab.id);
-                }}
+		                    locateBookingsTabAlert();
+		                    return;
+		                  }
+
+	                  setBookingsAlertMenuOpen(false);
+	                  selectAppTab(tab.id);
+	                }}
                 role="tab"
                 style={{ minHeight: 44 }}
                 type="button"
@@ -28770,9 +28792,56 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                     data-bookings-new-request-badge="true"
                   >
                     {bookingsTabAlertBadgeLabel}
-                  </span>
-                ) : null}
-              </button>
+	                  </span>
+	                ) : null}
+	              </button>
+		                {isBookingsTab && showBookingsRequestBadge && bookingsAlertMenuOpen ? (
+		                  <div
+		                    className="absolute left-1/2 top-full z-30 mt-1 grid min-w-36 -translate-x-1/2 gap-1 rounded-md border border-emerald-200 bg-white p-1 text-left text-xs font-semibold text-slate-800 shadow-lg"
+		                    data-bookings-alert-menu="true"
+		                  >
+		                    {customerBookingChangeRequestCount > 0 ? (
+		                      <button
+		                        className="cursor-pointer rounded px-2 py-1.5 hover:bg-emerald-50"
+		                        data-bookings-alert-menu-option="change"
+		                        onClick={(event) => {
+		                          event.stopPropagation();
+		                          openBookingsTabChangeRequestAlert();
+		                        }}
+		                        type="button"
+		                      >
+		                        {customerBookingChangeRequestCount} change
+		                      </button>
+		                    ) : null}
+		                    {customerBookingRequestCount > 0 ? (
+		                      <button
+		                        className="cursor-pointer rounded px-2 py-1.5 hover:bg-emerald-50"
+		                        data-bookings-alert-menu-option="new"
+		                        onClick={(event) => {
+		                          event.stopPropagation();
+		                          openCustomerBookingRequestsReview({ highlight: true });
+		                        }}
+		                        type="button"
+		                      >
+		                        {customerBookingRequestCount} new
+		                      </button>
+		                    ) : null}
+		                    {bookingsTabUrgentUnderOneHourCount > 0 ? (
+		                      <button
+		                        className="cursor-pointer rounded px-2 py-1.5 hover:bg-emerald-50"
+		                        data-bookings-alert-menu-option="urgent"
+		                        onClick={(event) => {
+		                          event.stopPropagation();
+		                          openDashboardUrgentBookingRequestsReview();
+		                        }}
+		                        type="button"
+		                      >
+		                        {bookingsTabUrgentUnderOneHourCount} urgent
+		                      </button>
+		                    ) : null}
+		                  </div>
+		                ) : null}
+		              </div>
             );
           })}
         </nav>

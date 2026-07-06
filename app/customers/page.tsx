@@ -2144,7 +2144,7 @@ export default function MockCustomerDashboardPage() {
   const [preparingUnbilledCustomerRowKey, setPreparingUnbilledCustomerRowKey] = useState("");
   const [customerInvoicePrepRowKey, setCustomerInvoicePrepRowKey] = useState("");
   const [customerInvoicePrepFeedback, setCustomerInvoicePrepFeedback] = useState(
-    "Choose Prepare monthly bill from the Monthly Billing Queue to load a customer/month into the invoice workbench.",
+    "Choose Prepare monthly bill from the Monthly Billing Queue to load a billing account/month into the invoice workbench.",
   );
   const [customerInvoiceIssueAmount, setCustomerInvoiceIssueAmount] = useState("");
   const [customerInvoiceIssueDueDate, setCustomerInvoiceIssueDueDate] = useState(() =>
@@ -2625,7 +2625,7 @@ export default function MockCustomerDashboardPage() {
       } / ${selectedMonthlyBillingGroup.customerName} / ${selectedMonthlyBillingGroup.billingMonthLabel}`
     : `${unbilledCustomerRows.length} billable job${
         unbilledCustomerRows.length === 1 ? "" : "s"
-      } in ${customerMonthlyBillingGroups.length} customer/month group${
+      } in ${customerMonthlyBillingGroups.length} billing account/month group${
         customerMonthlyBillingGroups.length === 1 ? "" : "s"
       }`;
   const getUnbilledPrepareButtonLabel = (rowKey: string) =>
@@ -3908,7 +3908,7 @@ export default function MockCustomerDashboardPage() {
 
   function prepareMonthlyBillingGroupForInvoice(group: CustomerMonthlyBillingGroup) {
     if (group.rows.length === 0) {
-      setPlainInvoiceFeedback("No jobs are available in this customer/month group.");
+      setPlainInvoiceFeedback("No jobs are available in this billing account/month group.");
       setPlainInvoiceFeedbackTone("error");
       return;
     }
@@ -4133,7 +4133,7 @@ export default function MockCustomerDashboardPage() {
     setOutstandingReviewSearchTerm("");
     setOutstandingReviewPage(1);
     setCustomerInvoicePrepFeedback(
-      "Invoice prep selection cleared. Choose Prepare monthly bill from the Monthly Billing Queue to load a customer/month.",
+      "Invoice prep selection cleared. Choose Prepare monthly bill from the Monthly Billing Queue to load a billing account/month.",
     );
     setCustomerInvoiceIssueFeedback(
       "Review the amount and due date before issuing. Invoice number is created only when you click issue.",

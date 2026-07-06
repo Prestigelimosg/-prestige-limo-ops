@@ -26831,7 +26831,7 @@ async function runChromeTest() {
       assert.equal(
         dashboardState.monthlyBillingGroupSelectVisible,
         true,
-        "Expected Monthly Billing Queue customer/month selector",
+        "Expected Monthly Billing Queue billing account/month selector",
       );
       assert.equal(
         dashboardState.monthlyBillingPrepareVisible,

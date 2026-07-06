@@ -142,7 +142,7 @@ for (const forbiddenPattern of [
 
 for (const phrase of [
   "Customers page daily flow is compact: summary strip, customer finder, and Monthly Billing Queue stay visible for normal operation.",
-  "The Monthly Billing Queue groups real closeout-ready saved bookings by customer/month and no longer mixes mock/local draft rows into the visible billing queue.",
+  "The Monthly Billing Queue groups real closeout-ready saved bookings by saved billing account/month and no longer mixes mock/local draft rows into the visible billing queue.",
   "The invoice workbench, statement previews, outstanding review, and follow-up queues are deliberately collapsed behind the admin-only `Invoice workbench` drawer.",
   "The duplicate folder handoff support drawer is removed; advanced booking/draft tools and mock logs sit after the daily invoice workflow instead of before it.",
   "This is UI-only structure cleanup; it does not activate invoice/PDF/payment/provider sending, DB writes, env changes, GPS/live location, billing/payout, calendar sync, parser changes, or shims.",

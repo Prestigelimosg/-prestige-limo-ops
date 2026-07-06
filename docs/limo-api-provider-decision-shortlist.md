@@ -61,7 +61,7 @@ Recommended owner decision:
 - Use Browser Geolocation through a secure driver job link for any later prototype.
 - Use Supabase Realtime or server polling later only after schema and security review.
 - Use Google Maps or Mapbox for map display after pricing and Singapore address testing.
-- Keep Arrival/MNG customer live location disabled.
+- Allow Arrival/MNG customer live location only through the scoped customer Driver Tracking panel after OTW and driver location sharing.
 - Auto-end live location when POB is marked.
 
 Why this is safest:
@@ -133,7 +133,7 @@ These rules should protect any future API provider work:
 - No secrets should be exposed in browser code.
 - Webhooks must be verified before trusting payment, notification, flight, or provider events.
 - Live location links must be job-scoped and expiring.
-- Arrival/MNG customer live location must remain disabled unless separately approved later.
+- Arrival/MNG customer live location stays scoped to the customer Driver Tracking panel and must not become a broad external tracking send.
 - Driver payout must not be exposed.
 - Private CRM notes must not leak into customer, driver, or public views.
 - Public links must not expose all customer history.

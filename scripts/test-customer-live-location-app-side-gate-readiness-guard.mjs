@@ -58,8 +58,7 @@ for (const phrase of [
   "Any future Vercel env or dashboard gate work must be separately approved, explicitly scoped by exact gate names, intended values, target environment, cleanup/rollback window, and post-rollback proof.",
   "App-side/admin-controlled runtime gates, once implemented for customer live location, must be disabled by default, admin/dispatcher-only for writes, same-origin protected, audited, scoped to explicit customer/account and booking references or a small approved allowlist, and rollbackable without a redeploy.",
   "No customer live map exposure may occur without same-origin customer headers, customer session token, account scope, booking scope, eligible service type, stale/offline handling, POB/completed stop behavior, no-forbidden-field proof, and explicit activation/evidence approval.",
-  "MNG/Arrival remains blocked for customer live-location links/maps.",
-  "Future eligible service families remain DEP/DEPARTURE, TRF/TRANSFER, DSP, and HOURLY only after separate approval.",
+  "MNG/Arrival, DEP/Departure, TRF/Transfer, and DSP/Hourly are eligible only through the scoped customer Driver Tracking panel after OTW and driver location sharing.",
   "Customer-visible output must not expose raw driver tokens, raw provider payloads, pricing, payout, PayNow, payout preferences, `driver_payout_rules`, `customer_rates`, billing/payment/PDF/invoice, internal/admin notes, parser/debug fields, secrets/tokens/cookies/JWTs, admin internals, raw booking IDs, customer contact data, Save Booking internals, `/api/admin-saved-bookings` internals, OTS/photo/storage, calendar data, or mock QA/dev archive.",
   "Future evidence must prove closed-by-default behavior, no Vercel CLI dependence, app-side/admin-controlled gate open/close where supported, blocked anonymous/wrong-customer/cross-origin access, single scoped customer map marker, stale/offline behavior, POB/completed rollback/stop behavior, cleanup zero rows, and no provider sends.",
   "This guard adds `scripts/test-customer-live-location-app-side-gate-readiness-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.",
@@ -194,7 +193,7 @@ for (const forbiddenPhrase of [
   "customer live map is active",
   "customer-wide live map is active",
   "all customers may track drivers",
-  "MNG/Arrival is eligible",
+  "all customers may track drivers",
   "provider sends are enabled",
   "Vercel CLI is required",
 ]) {

@@ -29,7 +29,17 @@ const runtimeSettingName = "driver_live_location_runtime";
 const customerAccessAccountsTable = "customer_access_accounts";
 const bookingsTable = "bookings";
 const allowedRuntimeModes = new Set(["evidence", "runtime"]);
-const eligibleServiceFamilies = new Set(["dep", "departure", "trf", "transfer", "dsp", "hourly"]);
+const eligibleServiceFamilies = new Set([
+  "arr",
+  "arrival",
+  "dep",
+  "departure",
+  "dsp",
+  "hourly",
+  "mng",
+  "trf",
+  "transfer",
+]);
 const safeReferencePattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/;
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -621,7 +631,6 @@ async function readAppSideRuntimePolicy({
   const captureOpen = booleanSettingOpen(
     setting.driver_live_location_capture_enabled,
   );
-  const adminMapOpen = booleanSettingOpen(setting.admin_active_jobs_map_enabled);
   const allowedBookingReferences = allowedReferencesFromUnknown(
     setting.driver_live_location_allowed_job_references,
   );
@@ -629,8 +638,7 @@ async function readAppSideRuntimePolicy({
   if (
     settingStatus !== "active" ||
     settingMode !== "runtime" ||
-    !captureOpen ||
-    !adminMapOpen
+    !captureOpen
   ) {
     return {
       ok: false,

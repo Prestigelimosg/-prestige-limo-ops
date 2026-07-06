@@ -2617,6 +2617,7 @@ const customerBookingTypeLabels: Record<keyof Required<RateRules>, string> = {
 };
 
 const customerLiveLocationEligibleTypes = new Set<ReturnType<typeof normalizeBookingType>>([
+  "MNG",
   "DEP",
   "TRF",
   "DSP",
@@ -12283,7 +12284,7 @@ function customerLiveLocationState(
   if (!customerLiveLocationEligibleTypes.has(bookingType)) {
     return {
       copyLine: "",
-      helperText: "Customer live location link is not available for Arrival bookings.",
+      helperText: "Customer live location link is not available for this service type.",
     };
   }
 

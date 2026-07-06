@@ -91,6 +91,25 @@ const forbiddenTripUpdateFragments = [
 const driverTripUpdatesPendingMessage =
   "Trip updates appear here after the driver starts reporting from the job link.";
 
+function formatSingaporeDateTime(value: string) {
+  const timestamp = Date.parse(value);
+
+  if (!Number.isFinite(timestamp)) {
+    return value;
+  }
+
+  return `${new Intl.DateTimeFormat("en-SG", {
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+    hourCycle: "h23",
+    minute: "2-digit",
+    month: "short",
+    timeZone: "Asia/Singapore",
+    year: "numeric",
+  }).format(new Date(timestamp))} SGT`;
+}
+
 function asRecord(value: unknown): UnknownRecord {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as UnknownRecord)
@@ -169,8 +188,10 @@ function mapTripUpdate(value: unknown): CustomerPortalTripUpdate | null {
     return null;
   }
 
+  const createdAt = safeText(record.created_at, 80) || safeText(record.updated_at, 80);
+
   return {
-    createdAt: safeText(record.created_at, 80) || safeText(record.updated_at, 80),
+    createdAt: createdAt ? formatSingaporeDateTime(createdAt) : "",
     id:
       safeText(record.created_at, 80) ||
       `${safeText(record.notification_type, 80)}:${title}:${message}`.slice(0, 180),

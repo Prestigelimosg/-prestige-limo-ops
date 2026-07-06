@@ -21317,29 +21317,7 @@ async function runChromeTest() {
     const customerCopyInternalPattern =
       /\b(?:AVF|VVV|Combi|Alphard|Vellfire|V-Class|V Class|Viano|minibus|mini bus|car type|vehicle type|service vehicle|MNG|DEP|TRF|DSP)\b|Payout|driver payout|internal payout|override reason/i;
 
-    const mngLiveLocationState = await setLiveLocationScenarioBooking({
-      bookingType: "MNG",
-      offsetMinutes: 20,
-      passengerSuffix: "inside",
-    });
-    assert.equal(
-      mngLiveLocationState.helperText,
-      "Customer live location link is not available for Arrival bookings.",
-    );
-    assert.match(mngLiveLocationState.customerCopy, /Service: Arrival/);
-    assert.doesNotMatch(
-      mngLiveLocationState.customerCopy,
-      liveLocationNoLinkPattern,
-      "Expected MNG / Arrival Customer Copy never to include a live location link",
-    );
-    assert.doesNotMatch(
-      mngLiveLocationState.customerCopy,
-      /Live Waypoint Arrival inside/,
-      "Expected Arrival Customer Copy to omit route extras",
-    );
-    assert.match(mngLiveLocationState.customerCopy, /Passenger name: Live Passenger Arrival inside/);
-
-    for (const bookingType of ["DEP", "TRF", "DSP"]) {
+    for (const bookingType of ["MNG", "DEP", "TRF", "DSP"]) {
       const beforeWindowState = await setLiveLocationScenarioBooking({
         bookingType,
         offsetMinutes: 90,
@@ -21356,19 +21334,21 @@ async function runChromeTest() {
         liveLocationNoLinkPattern,
         `Expected ${bookingType} before-window Customer Copy not to include a live location link`,
       );
-      assert.match(
-        beforeWindowState.customerCopy,
-        new RegExp(beforeWindowState.pickupText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
-        `Expected ${bookingType} before-window Customer Copy to keep pickup location`,
-      );
-      assert.match(
-        beforeWindowState.customerCopy,
-        new RegExp(beforeWindowState.dropoffText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
-        `Expected ${bookingType} before-window Customer Copy to keep drop-off location`,
-      );
+      if (bookingType !== "MNG") {
+        assert.match(
+          beforeWindowState.customerCopy,
+          new RegExp(beforeWindowState.pickupText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+          `Expected ${bookingType} before-window Customer Copy to keep pickup location`,
+        );
+        assert.match(
+          beforeWindowState.customerCopy,
+          new RegExp(beforeWindowState.dropoffText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+          `Expected ${bookingType} before-window Customer Copy to keep drop-off location`,
+        );
+      }
     }
 
-    for (const bookingType of ["DEP", "TRF", "DSP"]) {
+    for (const bookingType of ["MNG", "DEP", "TRF", "DSP"]) {
       const insideWindowState = await setLiveLocationScenarioBooking({
         bookingType,
         offsetMinutes: 20,
@@ -21385,16 +21365,18 @@ async function runChromeTest() {
         liveLocationNoLinkPattern,
         `Expected ${bookingType} inside-window Customer Copy not to copy a fake live location link`,
       );
-      assert.match(
-        insideWindowState.customerCopy,
-        new RegExp(insideWindowState.pickupText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
-        `Expected ${bookingType} inside-window Customer Copy to keep pickup location`,
-      );
-      assert.match(
-        insideWindowState.customerCopy,
-        new RegExp(insideWindowState.dropoffText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
-        `Expected ${bookingType} inside-window Customer Copy to keep drop-off location`,
-      );
+      if (bookingType !== "MNG") {
+        assert.match(
+          insideWindowState.customerCopy,
+          new RegExp(insideWindowState.pickupText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+          `Expected ${bookingType} inside-window Customer Copy to keep pickup location`,
+        );
+        assert.match(
+          insideWindowState.customerCopy,
+          new RegExp(insideWindowState.dropoffText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+          `Expected ${bookingType} inside-window Customer Copy to keep drop-off location`,
+        );
+      }
       assert.doesNotMatch(
         insideWindowState.customerCopy,
         customerCopyInternalPattern,

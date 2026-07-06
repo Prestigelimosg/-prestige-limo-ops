@@ -212,7 +212,7 @@ No API secrets should be exposed in browser/client code. Browser-safe publishabl
 
 - Driver live location must be job-scoped.
 - Customer live location links must expire.
-- Arrival/MNG customer live location must stay disabled.
+- Arrival/MNG customer live location stays scoped to the customer Driver Tracking panel after OTW and driver location sharing.
 - Driver payout must not be exposed through customer, driver, or public links.
 - Private CRM notes must not be exposed through customer, driver, or public links.
 - Public links must not expose all customer history.

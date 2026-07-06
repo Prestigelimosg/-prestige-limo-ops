@@ -64,6 +64,25 @@ const forbiddenDriverTrackingFragments = [
 const driverLiveLocationPendingMessage =
   "Live location appears after the driver presses OTW and shares location.";
 
+function formatSingaporeDateTime(value: string) {
+  const timestamp = Date.parse(value);
+
+  if (!Number.isFinite(timestamp)) {
+    return value;
+  }
+
+  return `${new Intl.DateTimeFormat("en-SG", {
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+    hourCycle: "h23",
+    minute: "2-digit",
+    month: "short",
+    timeZone: "Asia/Singapore",
+    year: "numeric",
+  }).format(new Date(timestamp))} SGT`;
+}
+
 function asRecord(value: unknown): UnknownRecord {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as UnknownRecord)
@@ -125,7 +144,7 @@ export function mapCustomerPortalDriverTrackingPayload(payload: unknown): Custom
       mapUrl: `https://www.google.com/maps/search/?api=1&query=${query}`,
       message: "Driver location is available now.",
       status: "available",
-      updatedAt: updatedAt || undefined,
+      updatedAt: updatedAt ? formatSingaporeDateTime(updatedAt) : undefined,
     };
   }
 

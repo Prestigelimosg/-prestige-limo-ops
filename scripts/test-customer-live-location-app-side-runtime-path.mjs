@@ -149,9 +149,9 @@ function createQueryClient({
   };
 }
 
-function baseSetting({ bookingReference, open = true }) {
+function baseSetting({ adminMapOpen = true, bookingReference, open = true }) {
   return {
-    admin_active_jobs_map_enabled: open,
+    admin_active_jobs_map_enabled: adminMapOpen,
     driver_live_location_allowed_job_references: [bookingReference],
     driver_live_location_capture_enabled: open,
     driver_live_location_mode: "runtime",
@@ -285,7 +285,7 @@ try {
   assert.equal(wrongCustomer.body.reason, "customer_live_location_map_customer_auth_blocked");
   assert.equal(wrongCustomer.body.customerVisible, false);
 
-  const blockedServiceClient = createQueryClient({
+  const arrivalServiceClient = createQueryClient({
     accessRows: [
       {
         account_status: "active",
@@ -304,17 +304,50 @@ try {
     latestRows: [safeLatestPosition],
     settingRow: baseSetting({ bookingReference }),
   });
-  setCustomerLiveLocationMapRuntimeClientForTests(blockedServiceClient);
+  setCustomerLiveLocationMapRuntimeClientForTests(arrivalServiceClient);
 
-  const blockedService = await handleCustomerLiveLocationMapRuntimeRequest({
+  const arrivalService = await handleCustomerLiveLocationMapRuntimeRequest({
     boundary,
     env: baseEnv({ accountReference, authUserId, sessionToken }),
     request: customerRequest({ bookingReference, origin, sessionToken }),
   });
 
-  assert.equal(blockedService.status, 403);
-  assert.equal(blockedService.body.reason, "customer_live_location_map_service_blocked");
-  assert.equal(blockedService.body.customerVisible, false);
+  assert.equal(arrivalService.status, 200);
+  assert.equal(arrivalService.body.ok, true);
+  assert.equal(arrivalService.body.marker_count, 1);
+  assert.equal(arrivalService.body.customerVisible, true);
+
+  const customerReadWithoutAdminMapClient = createQueryClient({
+    accessRows: [
+      {
+        account_status: "active",
+        auth_user_id: authUserId,
+        customer_account_reference: accountReference,
+      },
+    ],
+    bookingRows: [
+      {
+        booking_reference: bookingReference,
+        customer_id: accountReference,
+        route_type: "MNG",
+        service_type: "Arrival",
+      },
+    ],
+    latestRows: [safeLatestPosition],
+    settingRow: baseSetting({ adminMapOpen: false, bookingReference }),
+  });
+  setCustomerLiveLocationMapRuntimeClientForTests(customerReadWithoutAdminMapClient);
+
+  const customerReadWithoutAdminMap = await handleCustomerLiveLocationMapRuntimeRequest({
+    boundary,
+    env: baseEnv({ accountReference, authUserId, sessionToken }),
+    request: customerRequest({ bookingReference, origin, sessionToken }),
+  });
+
+  assert.equal(customerReadWithoutAdminMap.status, 200);
+  assert.equal(customerReadWithoutAdminMap.body.ok, true);
+  assert.equal(customerReadWithoutAdminMap.body.marker_count, 1);
+  assert.equal(customerReadWithoutAdminMap.body.customerVisible, true);
 
   const closedGateClient = createQueryClient({
     settingRow: baseSetting({ bookingReference, open: false }),

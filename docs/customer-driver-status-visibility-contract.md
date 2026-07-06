@@ -62,7 +62,7 @@ The customer tracking panel must stay out of the Customer Portal saved-booking l
 
 Customer live-location viewing is a gated detail-card tracking panel, not Customer Portal saved-booking list content.
 
-For eligible DEP, TRF, and hourly jobs, the customer may view the in-app map only after the driver presses OTW and shares location through the scoped customer app link. Arrival/MNG customer live location stays disabled unless separately approved.
+For MNG/Arrival, DEP/Departure, TRF/Transfer, and DSP/Hourly jobs, the customer may view the in-app map only after the driver presses OTW and shares location through the scoped customer app link.
 
 Customer-visible live location must auto-disable when the driver presses POB or POB is marked; any backend cleanup grace must not leave customer tracking visible after POB.
 
@@ -113,7 +113,7 @@ Customer driver-progress visibility must:
 - use one customer-safe Driver Tracking panel in the expanded booking detail instead of adding a duplicate customer tracking page;
 - route customer live-location viewing through the existing gated customer map read and never render raw coordinates in `/my-bookings`;
 - auto-disable customer-visible live location when the driver presses POB or POB is marked;
-- keep Arrival/MNG customer live location disabled unless separately approved;
+- allow MNG/Arrival, DEP/Departure, TRF/Transfer, and DSP/Hourly customer live location only through the scoped Driver Tracking panel after OTW and driver location sharing;
 - keep customer summaries separate from raw driver workflow and admin exception states;
 - keep customer issue/update wording separately approved and customer-safe;
 - preserve `/my-bookings` adapter allowlists and forbidden-field filtering;

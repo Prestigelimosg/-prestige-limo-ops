@@ -46,6 +46,8 @@ export function buildAdminLiveLocationSetupFoundation(
 ): AdminLiveLocationSetupResult {
   const serviceCode = normalizeServiceCode(input.service_code);
   const serviceEligibility =
+    serviceCode === "MNG" ||
+    serviceCode === "ARRIVAL" ||
     serviceCode === "DEP" ||
     serviceCode === "DEPARTURE" ||
     serviceCode === "TRF" ||

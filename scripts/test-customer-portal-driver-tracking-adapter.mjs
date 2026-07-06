@@ -62,7 +62,7 @@ try {
       mapUrl: "https://www.google.com/maps/search/?api=1&query=1.3521,103.8198",
       message: "Driver location is available now.",
       status: "available",
-      updatedAt: "2026-07-05T10:30:00.000Z",
+      updatedAt: "05 Jul 2026, 18:30 SGT",
     },
     "Customer-visible bounded coordinates should become safe in-app and fallback map URLs.",
   );

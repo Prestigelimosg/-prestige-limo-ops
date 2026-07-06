@@ -66,17 +66,6 @@ const bookRequiredFields = [
   "dropoffLocation",
 ];
 
-const portalRequiredFields = [
-  "contactNo",
-  "passengerName",
-  "pickupDate",
-  "pickupTime",
-  "pickupLocation",
-  "dropoffLocation",
-];
-
-const portalRequestFieldAttributes = publicCustomerFormFields;
-
 const forbiddenFormFieldFragments = [
   "admin_finance",
   "admin_note",
@@ -291,14 +280,14 @@ const requestAdapter = files[requestAdapterPath];
 const ledgerSection = sectionBetween(ledger, "### Public Customer Form Surface Boundary Guard Lock");
 
 for (const phrase of [
-  "Public customer booking request form surfaces are guarded across `/book`, `/my-bookings`, and `lib/customer-booking-request-adapter.ts`.",
+  "Public customer booking request form surface is guarded on `/book`; `/my-bookings` may only link to `/book` for new booking requests.",
   "This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.",
-  "`/book` and `/my-bookings` `BookingRequestForm` keys must stay limited to request-only customer trip/contact fields.",
+  "`/book` `BookingRequestForm` keys must stay limited to request-only customer trip/contact fields.",
   "`/book` required fields must stay limited to contact number, passenger name, pickup date, pickup time, pickup location, and drop-off location.",
-  "`/my-bookings` new-request required fields must stay limited to contact number, passenger name, pickup date, and pickup time.",
+  "`/my-bookings` must not define or submit a duplicate new-request form.",
   "Customer request field data attributes and static control names must stay on the approved form-field allowlist and must not introduce pricing, payout, PayNow, billing, invoice, payment/PDF, provider/send, auth, location-photo, calendar, parser/debug, token/secret, internal/admin finance/note, mock archive, or rate fields.",
   "`/book` continues to submit through `submitCustomerBookingRequest` and the customer-safe adapter, not raw fetch/session/admin plumbing.",
-  "`/my-bookings` new-request form remains local review-only and does not submit to customer booking request persistence.",
+  "`/my-bookings` new-request link must not submit to customer booking request persistence.",
   "Customer request copy must remain request-only and must not create a price, payment, invoice, PDF, or billing file from these forms.",
   "The customer request adapter may submit only the approved API payload fields and must not forward `specialRequest` or finance/internal/free-note fields.",
   "This guard coordinates the customer booking page API audit, public route source privacy guard, public API request input guard, and customer booking request adapter contract in the preactivation suite.",
@@ -332,32 +321,6 @@ assertSafeFormFieldNames(
   "/book static form control names",
 );
 
-assertSameList(extractTypeKeys(portalPage, "BookingRequestForm"), publicCustomerFormFields, "/my-bookings BookingRequestForm fields");
-assertSameList(
-  extractObjectKeys(portalPage, "initialBookingRequestForm"),
-  publicCustomerFormFields,
-  "/my-bookings initial request form fields",
-);
-assertSameList(
-  extractArrayItems(portalPage, "requiredBookingRequestFields"),
-  portalRequiredFields,
-  "/my-bookings required request fields",
-);
-assertSameList(
-  extractAttributeValues(portalPage, "data-customer-portal-request-field"),
-  portalRequestFieldAttributes,
-  "/my-bookings customer portal request field attributes",
-);
-assertSafeFormFieldNames(
-  extractAttributeValues(portalPage, "data-customer-portal-request-field"),
-  portalRequestFieldAttributes,
-  "/my-bookings customer portal request field attributes",
-);
-assertIncludes(
-  portalPage,
-  'data-customer-portal-pickup-time="compact-selects"',
-  "/my-bookings pickup time request control",
-);
 for (const fragment of [
   'const isBookRequestLink = section === "New Booking Request";',
   'data-customer-portal-book-request-link="true"',
@@ -365,11 +328,20 @@ for (const fragment of [
 ]) {
   assertIncludes(portalPage, fragment, `/my-bookings New Booking Request link ${fragment}`);
 }
-assertSafeFormFieldNames(
-  extractStaticNameValues(portalPage),
-  publicCustomerFormFields,
-  "/my-bookings static form control names",
-);
+
+for (const removedPortalFragment of [
+  "type BookingRequestForm =",
+  "initialBookingRequestForm",
+  "requiredBookingRequestFields",
+  "data-customer-portal-request-form",
+  "data-customer-portal-request-field",
+  "data-customer-portal-submit-request",
+  "handleBookingRequestSubmit",
+  "data-customer-portal-pickup-time",
+  "data-customer-portal-book-request-handoff",
+]) {
+  assertExcludes(portalPage, removedPortalFragment, `/my-bookings removed duplicate request form ${removedPortalFragment}`);
+}
 
 for (const fragment of [
   "submitCustomerBookingRequest(form)",
@@ -400,18 +372,18 @@ for (const forbiddenPattern of [
 }
 
 for (const fragment of [
-  "data-customer-portal-request-form=\"true\"",
-  "Our team will review and confirm your booking shortly. Thank you",
-  "Booking request received for review. This is not confirmed yet.",
-  "${companyName} staff will reply to confirm availability.",
+  'data-customer-portal-book-request-link="true"',
+  'href="/book"',
 ]) {
-  assertIncludes(portalPage, fragment, `/my-bookings form surface ${fragment}`);
+  assertIncludes(portalPage, fragment, `/my-bookings booking request handoff ${fragment}`);
 }
 
 for (const removedFragment of [
   "Mobile web trip view for your confirmed and requested rides. Use request review for changes.",
   "Prestige Limo will review and confirm your booking shortly.",
   "This is a booking request only. It is not confirmed until Prestige confirms it.",
+  "Booking request received for review. This is not confirmed yet.",
+  "${companyName} staff will reply to confirm availability.",
 ]) {
   assertExcludes(portalPage, removedFragment, `/my-bookings removed copy ${removedFragment}`);
 }

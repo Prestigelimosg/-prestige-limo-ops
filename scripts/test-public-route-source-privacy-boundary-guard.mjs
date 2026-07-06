@@ -115,8 +115,18 @@ assertIncludes(
 );
 assertIncludes(
   customerPortalPage,
-  "Booking request received for review. This is not confirmed yet. ${companyName} staff will reply to confirm availability.",
-  "customer portal request-only feedback",
+  'data-customer-portal-book-request-link="true"',
+  "customer portal booking request handoff link",
+);
+assertIncludes(
+  customerPortalPage,
+  'href="/book"',
+  "customer portal booking request handoff target",
+);
+assertExcludes(
+  customerPortalPage,
+  "data-customer-portal-request-form",
+  "customer portal duplicate request form",
 );
 
 assertNoLineMatches(

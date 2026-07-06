@@ -162,15 +162,18 @@ assertFragmentOrder(
   ],
   "/book customer trip details order",
 );
-assertFragmentOrder(
-  customerPortalPage,
-  [
-    'data-customer-portal-request-field="extraStops"',
-    'data-customer-portal-return-trip-control="true"',
-    'data-customer-portal-request-field="specialRequest"',
-  ],
-  "/my-bookings customer trip details order",
-);
+for (const removedPortalRequestFragment of [
+  'data-customer-portal-request-field="extraStops"',
+  'data-customer-portal-return-trip-control="true"',
+  'data-customer-portal-request-field="specialRequest"',
+  'data-customer-portal-voice-booking-speak-button="true"',
+]) {
+  assertExcludes(
+    customerPortalPage,
+    removedPortalRequestFragment,
+    `/my-bookings removed duplicate voice/request fragment ${removedPortalRequestFragment}`,
+  );
+}
 
 const speakButtonBlock = firstBlock(
   bookPage,

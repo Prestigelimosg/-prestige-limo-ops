@@ -60,9 +60,9 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Admin And Customer Booking Form Slimming
 
-- The admin Dispatch intake forms, public `/book` request form, and customer portal New Booking Request form now use slimmer operator/customer rows: shorter input controls, tighter section padding, denser desktop grids, compact return-trip rows, and shorter notes fields.
+- The admin Dispatch intake forms and public `/book` request form use slimmer operator/customer rows; `/my-bookings` now links to `/book` instead of rendering a duplicate request form.
 - Admin Dispatch keeps the same Booking Details, Pickup / Drop-off / Vehicle, Pricing, Route Extras & Child Seat, and Assigned Driver fields, but uses compact four-column desktop grids where safe so operators see more without scrolling.
-- Public and portal customer booking forms keep the same visible customer-safe fields and the approved return-trip expansion, but use the same slim control height and dense desktop grid treatment.
+- Public `/book` keeps the visible customer-safe fields and the approved return-trip expansion with slim control height and dense desktop grid treatment.
 - This is a UI-only density pass: it does not change booking submit handlers, CRM/calendar save behavior, return-trip pairing, invoices, PDFs, payments, payouts, provider sends, GPS/live-location, env, or DB schema.
 - Focused guard coverage lives in `scripts/test-admin-customer-booking-form-slim-layout-guard.mjs`.
 
@@ -2467,14 +2467,14 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No env change, DB write, migration, provider/send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/button/card addition, or new shim was included.
 
 ### Public Customer Form Surface Boundary Guard Lock
-- Public customer booking request form surfaces are guarded across `/book`, `/my-bookings`, and `lib/customer-booking-request-adapter.ts`.
+- Public customer booking request form surface is guarded on `/book`; `/my-bookings` may only link to `/book` for new booking requests.
 - This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.
-- `/book` and `/my-bookings` `BookingRequestForm` keys must stay limited to request-only customer trip/contact fields.
+- `/book` `BookingRequestForm` keys must stay limited to request-only customer trip/contact fields.
 - `/book` required fields must stay limited to contact number, passenger name, pickup date, pickup time, pickup location, and drop-off location.
-- `/my-bookings` new-request required fields must stay limited to contact number, passenger name, pickup date, and pickup time.
+- `/my-bookings` must not define or submit a duplicate new-request form.
 - Customer request field data attributes and static control names must stay on the approved form-field allowlist and must not introduce pricing, payout, PayNow, billing, invoice, payment/PDF, provider/send, auth, location-photo, calendar, parser/debug, token/secret, internal/admin finance/note, mock archive, or rate fields.
 - `/book` continues to submit through `submitCustomerBookingRequest` and the customer-safe adapter, not raw fetch/session/admin plumbing.
-- `/my-bookings` new-request form remains local review-only and does not submit to customer booking request persistence.
+- `/my-bookings` new-request link must not submit to customer booking request persistence.
 - Customer request copy must remain request-only and must not create a price, payment, invoice, PDF, or billing file from these forms.
 - The customer request adapter may submit only the approved API payload fields and must not forward `specialRequest` or finance/internal/free-note fields.
 - This guard coordinates the customer booking page API audit, public route source privacy guard, public API request input guard, and customer booking request adapter contract in the preactivation suite.
@@ -5880,7 +5880,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Customer/Driver App Compact Surface Polish Lock
 - This lane compacts the existing Customer Portal and Driver Job app surfaces only.
 - No runtime route, helper, DB, env, provider-send, GPS/location, billing/payment/PDF/payout, or production activation behavior is changed.
-- Customer Portal keeps the same `/my-bookings` request, search, pagination, detail expansion, and local review controls.
+- Customer Portal keeps `/my-bookings` for search, pagination, detail expansion, and local review controls; the New Booking Request tab links to `/book` so there is only one public booking form.
 - Driver Job keeps the same job summary, driver detail acknowledgement, App Updates, Live Location disabled controls, status workflow, Report Issue, and status timing controls while hiding noisy activity-log and saved-status-history panels from drivers.
 - The customer header/guidance and section tabs are compact bands/rows rather than giant cards.
 - The driver status, live-location, updates, and detail sections use compact spacing and shorter controls.

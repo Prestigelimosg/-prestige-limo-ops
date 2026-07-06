@@ -43,7 +43,7 @@ const ledgerSection = sectionBetween(
 for (const phrase of [
   "This lane compacts the existing Customer Portal and Driver Job app surfaces only.",
   "No runtime route, helper, DB, env, provider-send, GPS/location, billing/payment/PDF/payout, or production activation behavior is changed.",
-  "Customer Portal keeps the same `/my-bookings` request, search, pagination, detail expansion, and local review controls.",
+  "Customer Portal keeps `/my-bookings` for search, pagination, detail expansion, and local review controls; the New Booking Request tab links to `/book` so there is only one public booking form.",
   "Driver Job keeps the same job summary, driver detail acknowledgement, App Updates, Live Location disabled controls, status workflow, Report Issue, and status timing controls while hiding noisy activity-log and saved-status-history panels from drivers.",
   "The customer header/guidance and section tabs are compact bands/rows rather than giant cards.",
   "The driver status, live-location, updates, and detail sections use compact spacing and shorter controls.",
@@ -63,16 +63,22 @@ assertIncludes(
 for (const fragment of [
   'data-customer-portal-page="true"',
   'data-customer-portal-sections="true"',
-  'data-customer-portal-request-form="true"',
-  'data-customer-portal-request-notice="true"',
+  'data-customer-portal-book-request-link="true"',
   'className="mx-auto flex w-full max-w-5xl flex-col gap-3"',
   'className="border-b border-slate-200 px-1 pb-3 pt-1"',
   'className="flex flex-wrap gap-1.5 border-b border-slate-200 pb-2"',
   '"min-h-9 rounded-md border px-2.5 py-1.5 text-sm font-semibold transition"',
   'className="rounded-md border border-slate-200 bg-white p-3"',
-  'className="rounded-md border border-slate-200 bg-white p-2 sm:p-3"',
 ]) {
   assertIncludes(customerPortalPage, fragment, `/my-bookings compact UI fragment ${fragment}`);
+}
+
+for (const removedFragment of [
+  'data-customer-portal-request-form="true"',
+  'data-customer-portal-request-notice="true"',
+  "data-customer-portal-book-request-handoff",
+]) {
+  assertExcludes(customerPortalPage, removedFragment, `/my-bookings removed duplicate request fragment ${removedFragment}`);
 }
 
 for (const fragment of [

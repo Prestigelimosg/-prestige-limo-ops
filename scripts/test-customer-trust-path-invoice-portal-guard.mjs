@@ -58,11 +58,6 @@ const bookRequiredFieldsSection = sectionBetween(
   "const requiredFields: Array<keyof BookingRequestForm> = [",
   "];",
 );
-const portalRequiredFieldsSection = sectionBetween(
-  portalPage,
-  "const requiredBookingRequestFields: Array<keyof BookingRequestForm> = [",
-  "];",
-);
 const portalInvoiceSection = sectionBetween(
   portalPage,
   'activeSection === "Invoices"',
@@ -99,14 +94,20 @@ for (const field of [
   '"dropoffLocation"',
 ]) {
   assertIncludes(bookRequiredFieldsSection, field, `public /book required field ${field}`);
-  assertIncludes(portalRequiredFieldsSection, field, `customer portal request required field ${field}`);
 }
 
-assertIncludes(
-  portalPage,
+for (const removedPortalRequestFragment of [
+  "const requiredBookingRequestFields: Array<keyof BookingRequestForm> = [",
   "Please complete contact no., passenger name, pickup date, pickup time, pickup location, and drop-off location before submitting your request.",
-  "customer portal route-field validation message",
-);
+  "data-customer-portal-request-form",
+  "data-customer-portal-submit-request",
+]) {
+  assertExcludes(
+    portalPage,
+    removedPortalRequestFragment,
+    `customer portal duplicate request form removed ${removedPortalRequestFragment}`,
+  );
+}
 
 for (const fragment of [
   'type InvoiceFolder = "Credit Notes" | "Paid Invoices" | "Quotations" | "Unpaid Invoices";',

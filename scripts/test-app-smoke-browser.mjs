@@ -34171,6 +34171,11 @@ async function runChromeTest() {
         const requestFeedback = document.querySelector("[data-customer-portal-request-feedback]");
         const pickupTime = document.querySelector("[data-customer-portal-request-field='pickupTime']");
         const pickupTimeControl = document.querySelector("[data-customer-portal-pickup-time]");
+        const bookRequestLink = document.querySelector("[data-customer-portal-book-request-link]");
+        const bookRequestLinkRect = bookRequestLink?.getBoundingClientRect();
+        const bookRequestHandoff = document.querySelector("[data-customer-portal-book-request-handoff]");
+        const bookRequestHandoffRect = bookRequestHandoff?.getBoundingClientRect();
+        const bookRequestHandoffLink = document.querySelector("[data-customer-portal-book-request-handoff-link]");
         const previousPageButton = document.querySelector("[data-customer-portal-prev]");
         const nextPageButton = document.querySelector("[data-customer-portal-next]");
         const monthButtons = [...document.querySelectorAll("[data-customer-portal-month-button]")];
@@ -34570,6 +34575,12 @@ async function runChromeTest() {
               .filter((option) => option.value)
               .map((option) => option.textContent.trim()),
             visible: Boolean(requestForm),
+          },
+          bookingRequestHandoff: {
+            handoffLinkHref: bookRequestHandoffLink?.getAttribute("href") || "",
+            handoffVisible: Boolean(bookRequestHandoffRect && bookRequestHandoffRect.width > 0 && bookRequestHandoffRect.height > 0),
+            linkHref: bookRequestLink?.getAttribute("href") || "",
+            linkVisible: Boolean(bookRequestLinkRect && bookRequestLinkRect.width > 0 && bookRequestLinkRect.height > 0),
           },
           guidance: {
             height: Math.round(guidanceRect?.height || 0),
@@ -35189,6 +35200,27 @@ async function runChromeTest() {
         initialState.sectionLabels,
         ["New Booking Request", "Invoices", "Upcoming", "Completed", "Cancelled"],
         "Expected /my-bookings to expose the customer portal sections",
+      );
+      assert.deepEqual(
+        initialState.bookingRequestHandoff,
+        {
+          handoffLinkHref: "",
+          handoffVisible: false,
+          linkHref: "/book",
+          linkVisible: true,
+        },
+        "Expected /my-bookings New Booking Request to be a compact link to /book",
+      );
+      assert.equal(initialState.form.visible, false, "Expected /my-bookings not to render a duplicate request form");
+      assert.equal(
+        initialState.form.submitVisible,
+        false,
+        "Expected /my-bookings not to expose a duplicate submit request button",
+      );
+      assert.equal(
+        initialState.form.nativePickupTimeInputCount,
+        0,
+        "Expected /my-bookings not to render duplicate pickup time controls",
       );
       assert.deepEqual(
         initialState.rows.filter((row) => ["Completed", "Cancelled"].includes(row.status)).map((row) => row.status),

@@ -5,6 +5,7 @@ const appPagePath = "app/page.tsx";
 const adminBookingsRoutePath = "app/api/admin-bookings/route.ts";
 const adminSavedBookingsRoutePath = "app/api/admin-saved-bookings/route.ts";
 const customersPagePath = "app/customers/page.tsx";
+const adminCustomerSavedBookingsReadPath = "lib/admin-customer-saved-bookings-read.ts";
 const persistencePath = "lib/admin-booking-persistence.ts";
 const adapterPath = "lib/admin-booking-supabase-adapter.ts";
 const ledgerPath = "docs/current-implementation-ledger.md";
@@ -38,6 +39,7 @@ const [
   adminBookingsRoute,
   adminSavedBookingsRoute,
   customersPage,
+  adminCustomerSavedBookingsRead,
   persistence,
   adapter,
   ledger,
@@ -47,6 +49,7 @@ const [
   readFile(adminBookingsRoutePath, "utf8"),
   readFile(adminSavedBookingsRoutePath, "utf8"),
   readFile(customersPagePath, "utf8"),
+  readFile(adminCustomerSavedBookingsReadPath, "utf8"),
   readFile(persistencePath, "utf8"),
   readFile(adapterPath, "utf8"),
   readFile(ledgerPath, "utf8"),
@@ -291,8 +294,23 @@ for (const fragment of [
   "const result = await fetchAdminBookingByReference(clientResult.data, bookingReference);",
   "const reloadedBookingId = dbIdentifierOrNull(asRecord(data).id);",
   "id: reloadedBookingId,",
+  "function bookingCustomerIdentityChanged(",
+  "const existingCustomerId = dbIdentifierOrNull(existing.customer_id);",
+  "if (!customerId || bookingCustomerIdentityChanged(existing, input.booking))",
 ]) {
   assertIncludes(adapter, fragment, `admin booking adapter exact reference ${fragment}`);
+}
+
+for (const fragment of [
+  "const customerFolderSavedBookingSourceReadLimit = 200;",
+  "listAdminBookings(actor, {",
+  "limit: customerFolderSavedBookingSourceReadLimit,",
+]) {
+  assertIncludes(
+    adminCustomerSavedBookingsRead,
+    fragment,
+    `customer folder saved booking read depth ${fragment}`,
+  );
 }
 
 for (const phrase of [

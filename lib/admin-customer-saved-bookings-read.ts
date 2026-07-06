@@ -44,6 +44,7 @@ type UnknownRecord = Record<string, unknown>;
 
 const defaultLimit = 10;
 const maxLimit = 25;
+const customerFolderSavedBookingSourceReadLimit = 200;
 const maxSafeTextLength = 160;
 const malformedParamsError = "Admin customer saved bookings read parameters are malformed.";
 const forbiddenParamsError =
@@ -253,7 +254,9 @@ export async function loadAdminCustomerSavedBookings(
     return parsed;
   }
 
-  const bookingsResult = await listAdminBookings(actor);
+  const bookingsResult = await listAdminBookings(actor, {
+    limit: customerFolderSavedBookingSourceReadLimit,
+  });
 
   if (!bookingsResult.ok) {
     return bookingsResult;

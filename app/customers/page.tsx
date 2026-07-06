@@ -1576,6 +1576,48 @@ function compactCustomerBookingReference(value: string | null | undefined, fallb
   return `${prefix}-${reference.slice(-6)}`;
 }
 
+function customerFolderLatestPickupDisplay(value: string | null | undefined) {
+  const pickupAt = savedBookingDisplayText(value, "");
+
+  if (!pickupAt) {
+    return "";
+  }
+
+  const parsedPickupAt = new Date(pickupAt);
+
+  if (Number.isNaN(parsedPickupAt.getTime())) {
+    return pickupAt;
+  }
+
+  const parts = new Intl.DateTimeFormat("en-SG", {
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+    minute: "2-digit",
+    month: "short",
+    timeZone: "Asia/Singapore",
+    year: "numeric",
+  }).formatToParts(parsedPickupAt);
+  const partValue = (type: string) => parts.find((part) => part.type === type)?.value || "";
+  const hour = partValue("hour") === "24" ? "00" : partValue("hour");
+
+  return `${partValue("day")} ${partValue("month")} ${partValue("year")}, ${hour}${partValue("minute")}hrs`;
+}
+
+function customerFolderLatestSummary(customer: {
+  latestBookingReference?: string | null;
+  latestPickupAt?: string | null;
+  latestServiceType?: string | null;
+}) {
+  const summaryParts = [
+    customerFolderLatestPickupDisplay(customer.latestPickupAt),
+    savedBookingDisplayText(customer.latestServiceType, ""),
+    compactCustomerBookingReference(customer.latestBookingReference, ""),
+  ].filter(Boolean);
+
+  return summaryParts.join(" | ") || "Latest saved service not available";
+}
+
 function savedBookingCountLabel(count: number, noun: string) {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
@@ -6067,11 +6109,22 @@ export default function MockCustomerDashboardPage() {
                             {customer.upcomingJobs} up / {customer.completedJobs} done
                           </span>
                         </p>
-                        <p className="min-w-0 truncate text-xs font-semibold text-slate-600">
+                        <p
+                          className="min-w-0 truncate text-xs font-semibold text-slate-600"
+                          title={
+                            customer.source === "saved-account-read"
+                              ? [
+                                  customer.latestPickupAt,
+                                  customer.latestServiceType,
+                                  customer.latestBookingReference,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" | ")
+                              : "Local folder ready"
+                          }
+                        >
                           {customer.source === "saved-account-read"
-                            ? [customer.latestPickupAt, customer.latestServiceType, customer.latestBookingReference]
-                                .filter(Boolean)
-                                .join(" | ") || "Latest saved service not available"
+                            ? customerFolderLatestSummary(customer)
                             : "Local folder ready"}
                         </p>
                         <div className="flex flex-wrap gap-2 md:justify-end">

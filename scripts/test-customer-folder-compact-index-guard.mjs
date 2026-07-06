@@ -51,6 +51,10 @@ for (const fragment of [
   'data-customer-folder-finder-page-numbers="true"',
   'data-customer-folder-finder-list="true"',
   'data-customer-folder-finder-row={customer.customerId}',
+  "function customerFolderLatestPickupDisplay",
+  "function customerFolderLatestSummary",
+  "compactCustomerBookingReference(customer.latestBookingReference, \"\")",
+  "customerFolderLatestSummary(customer)",
   "All customers",
   "10 per page",
   "Open folder",
@@ -114,6 +118,7 @@ for (const forbiddenFragment of [
   "Billing workbench and mock review queues",
   "All unbilled customers",
   "Folder pending",
+  "? [customer.latestPickupAt, customer.latestServiceType, customer.latestBookingReference]",
   "getMockUnbilledCustomerRows()",
   "localCustomerFolderSavedBookingTargets",
   "lg:grid-cols-3",
@@ -128,6 +133,12 @@ for (const forbiddenPattern of [
 ]) {
   assertExcludes(finderSection, forbiddenPattern, "customer folder compact finder privacy boundary");
 }
+
+assertExcludes(
+  finderSection,
+  /\?\s*\[\s*customer\.latestPickupAt,\s*customer\.latestServiceType,\s*customer\.latestBookingReference\s*\]\s*\.filter\(Boolean\)\s*\.join\(" \| "\)\s*\|\|/s,
+  "customer folder latest visible row raw reference rendering",
+);
 
 const ledgerHeading = "### Customer Folder Compact Index UI Lock";
 assertIncludes(ledger, ledgerHeading, "ledger compact customer folder heading");

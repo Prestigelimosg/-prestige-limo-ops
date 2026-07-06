@@ -1086,7 +1086,7 @@ function customerFolderDateTimeInputValue(value: unknown) {
     return "";
   }
 
-  const localInputMatch = cleaned.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/);
+  const localInputMatch = cleaned.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})$/);
 
   if (localInputMatch) {
     return `${localInputMatch[1]}T${localInputMatch[2]}`;

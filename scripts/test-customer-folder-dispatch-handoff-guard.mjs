@@ -104,6 +104,7 @@ for (const fragment of [
   "function customerFolderJobDispatchHref(",
   "function customerFolderExactBookingCanDelete(",
   "function customerFolderExactBookingDeleteBlockReason(",
+  "cleaned.match(/^(\\d{4}-\\d{2}-\\d{2})T(\\d{2}:\\d{2})$/)",
   "function customerFolderExactBookingPayload(",
   "target_booking_reference: bookingReference,",
   "async function loadCustomerFolderExactBookingForEdit(",

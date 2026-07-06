@@ -188,9 +188,16 @@ const adminChangeHelper = sliceBetween(
 for (const fragment of [
   'workflow_area: "customer_booking_change_request"',
   'delivery_surface: "admin_app"',
-  "Load the booking, review the requested values, then use Update + Cal only after approval.",
+  "Review the requested values, then choose Accept + Cal, Reject, or Dismiss.",
 ]) {
   assertIncludes(adminChangeHelper, fragment, `existing admin notification helper ${fragment}`);
+}
+
+for (const fragment of [
+  "adminBookingChangeRequestDisplayMessage",
+  "? adminBookingChangeRequestDisplayMessage(changeRequestContext)",
+]) {
+  assertIncludes(adminPage, fragment, `admin change request display override ${fragment}`);
 }
 
 for (const forbidden of [

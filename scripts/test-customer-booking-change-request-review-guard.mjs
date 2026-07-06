@@ -159,7 +159,7 @@ for (const fragment of [
   'notification_type: "booking_workflow"',
   'safe_title: "Customer booking change request"',
   'workflow_area: "customer_booking_change_request"',
-  "Load the booking, review the requested values, then use Update + Cal only after approval.",
+  "Review the requested values, then choose Accept + Cal, Reject, or Dismiss.",
   'delivery_surface: "admin_app"',
   'source_surface: "system"',
 ]) {

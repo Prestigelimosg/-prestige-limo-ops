@@ -1109,7 +1109,7 @@ export async function createCustomerBookingChangeRequestAdminAppNotification(
       workflow_area: "customer_booking_change_request",
     },
     safe_message:
-      `${requestLabel} request received. Load the booking, review the requested values, then use Update + Cal only after approval.`,
+      `${requestLabel} request received. Review the requested values, then choose Accept + Cal, Reject, or Dismiss.`,
     safe_title: "Customer booking change request",
     workflow_area: "customer_booking_change_request",
   });

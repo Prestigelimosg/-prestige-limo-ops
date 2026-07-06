@@ -9557,6 +9557,12 @@ function adminBookingChangeRequestKindTitle(context: AdminBookingChangeRequestCo
   return adminBookingChangeRequestIsCancellation(context) ? "Cancellation" : "Amendment";
 }
 
+function adminBookingChangeRequestDisplayMessage(context: AdminBookingChangeRequestContext) {
+  const requestKindTitle = adminBookingChangeRequestKindTitle(context);
+
+  return `${requestKindTitle} request received. Review the requested values, then choose Accept + Cal, Reject, or Dismiss.`;
+}
+
 function adminBookingChangeRequestServiceTypeChanged(
   context: AdminBookingChangeRequestContext,
   record: AdminBookingPersistenceRecord,
@@ -41799,12 +41805,14 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                 {adminAppNotificationReadState.notifications.slice(0, 5).map((notification, index) => {
                   const notificationId = clean(notification.id);
                   const title = clean(notification.safe_title) || "Admin app notification";
-                  const message = clean(notification.safe_message) || "No safe notification message recorded.";
 	                  const notificationType = adminAppNotificationDisplayLabel(notification.notification_type);
 	                  const notificationPriority = adminAppNotificationPriorityLabel(notification.priority);
 	                  const notificationStatus = adminAppNotificationDisplayLabel(notification.notification_status);
 	                  const createdTime = adminAppNotificationTimeLabel(notification.created_at);
 	                  const changeRequestContext = adminAppNotificationChangeRequestContext(notification);
+                  const message = changeRequestContext
+                    ? adminBookingChangeRequestDisplayMessage(changeRequestContext)
+                    : clean(notification.safe_message) || "No safe notification message recorded.";
                   const loadedChangeRequestBookingRecord = changeRequestContext
                     ? findAdminBookingPersistenceRecordByReference(
                         adminBookingPersistenceRecords,

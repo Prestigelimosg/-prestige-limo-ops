@@ -92,7 +92,7 @@ try {
       reason: "customer_live_location_map_no_active_position",
     }),
     {
-      message: "Driver has not shared an active location yet.",
+      message: "Driver has not shared live location yet.",
       status: "not_ready",
     },
     "Customer-visible reads without an active marker should stay not-ready.",
@@ -104,7 +104,7 @@ try {
       ok: false,
     }),
     {
-      message: "Live location is available only after driver OTW and admin approval.",
+      message: "Live location appears after the driver presses OTW and shares location.",
       status: "blocked",
     },
     "Closed customer visibility should stay blocked.",

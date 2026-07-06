@@ -111,7 +111,7 @@ const contractChecks = [
     requiredFragments: [
       "Customer portal driver tracking adapter contract passed.",
       "customer-live-location-map-read",
-      "Live location is available only after driver OTW and admin approval.",
+      "Live location appears after the driver presses OTW and shares location.",
     ],
     stripTypes: false,
   },

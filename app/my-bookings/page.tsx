@@ -1611,7 +1611,7 @@ export default function CustomerPortalPage() {
                                   data-customer-portal-driver-tracking-placeholder={expandedBooking.id}
                                 >
                                   {driverTracking?.message ||
-                                    "Tracking appears after the driver is on the way and customer viewing is open."}
+                                    "Tracking appears after the driver presses OTW and shares location."}
                                 </div>
                               )}
                             </div>

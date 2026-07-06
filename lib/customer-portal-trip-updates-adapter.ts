@@ -88,6 +88,8 @@ const forbiddenTripUpdateFragments = [
   "token_hash",
   "whatsapp",
 ];
+const driverTripUpdatesPendingMessage =
+  "Trip updates appear here after the driver starts reporting from the job link.";
 
 function asRecord(value: unknown): UnknownRecord {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -192,7 +194,7 @@ export function mapCustomerPortalTripUpdatesPayload(
     hasUnsafeKeys(record, allowedPayloadFields)
   ) {
     return {
-      message: "Trip updates appear here after Prestige confirms customer app access.",
+      message: driverTripUpdatesPendingMessage,
       status: "blocked",
       updates: [],
     };
@@ -251,7 +253,7 @@ export async function loadCustomerPortalTripUpdates({
 
     if (!response.ok) {
       return {
-        message: "Trip updates appear here after Prestige confirms customer app access.",
+        message: driverTripUpdatesPendingMessage,
         status: "blocked",
         updates: [],
       };

@@ -175,7 +175,7 @@ for (const fragment of [
   "Those labels must be derived through a customer-safe projection.",
   "The customer tracking panel must stay out of the Customer Portal saved-booking list. It appears only after opening one booking detail.",
   "Customer live-location viewing is a gated detail-card tracking panel, not Customer Portal saved-booking list content.",
-  "For eligible DEP, TRF, and hourly jobs, the customer may view the in-app map only after the driver is on the way and Prestige opens customer viewing.",
+  "For eligible DEP, TRF, and hourly jobs, the customer may view the in-app map only after the driver presses OTW and shares location through the scoped customer app link.",
   "Arrival/MNG customer live location stays disabled unless separately approved.",
   "Customer-visible live location must auto-disable when the driver presses POB or POB is marked; any backend cleanup grace must not leave customer tracking visible after POB.",
   "raw coordinates must not be rendered as customer-visible text in `/my-bookings`.",
@@ -340,7 +340,7 @@ for (const fragment of [
   "`scripts/test-customer-driver-status-visibility-contract.mjs`",
   "This bounded lock approves only the `/my-bookings` expanded assigned-driver details card when safe driver details are present, optional `customer_driver_details` projection, and one approved Driver Tracking panel that combines the existing gated customer map read with compact Trip Updates; it does not approve any additional customer/admin sectors, endpoint migration, env changes, deployment, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/calendar activation, raw GPS exposure, customer message sending, or new shims.",
   "Owner direction is locked: keep the Customer Portal saved-booking list generic, but allow the expanded booking detail view to show a customer-safe assigned-driver details card and one Driver Tracking panel only after staff confirmation produces safe assigned-driver details.",
-  "Customer live-location viewing is a gated detail-card Driver Tracking panel, not Customer Portal saved-booking list content; for eligible DEP, TRF, and hourly jobs, the in-app map may appear only after the driver is on the way and Prestige opens customer viewing.",
+  "Customer live-location viewing is a gated detail-card Driver Tracking panel, not Customer Portal saved-booking list content; for eligible DEP, TRF, and hourly jobs, the in-app map may appear only after the driver presses OTW and shares location through the scoped customer app link.",
   "Arrival/MNG customer live location stays disabled unless separately approved, and customer-visible live location must auto-disable when the driver presses POB or POB is marked; any backend cleanup grace must not leave customer tracking visible after POB.",
   "This bounded lock approves only the existing `/my-bookings` Driver Tracking panel; no additional runtime implementation, duplicate customer tracking page, endpoint migration, env change, deployment, DB write, migration, provider/send, payment/PDF/pricing/payout/auth/calendar activation, parser change, Save Booking change, `/api/admin-saved-bookings` change, or new shim is approved by this lock.",
 ]) {

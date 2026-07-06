@@ -535,6 +535,7 @@ for (const fragment of [
   "mapCustomerPortalTripUpdatesPayload",
   "allowedPayloadFields",
   "allowedUpdateFields",
+  "Trip updates appear here after the driver starts reporting from the job link.",
   "external_send !== false",
   "provider_send !== false",
 ]) {
@@ -548,6 +549,11 @@ assertExcludes(
   customerPortalTripUpdatesAdapter,
   /x-prestige-admin-purpose|x-prestige-admin-session-token|Authorization|Bearer|Cookie|document\.cookie|localStorage|sessionStorage|navigator\.credentials|service_role|SUPABASE_SERVICE|PRESTIGE_ADMIN_BOOKING_PERSISTENCE/i,
   "customer portal trip updates adapter admin/auth exposure",
+);
+assertExcludes(
+  customerPortalTripUpdatesAdapter,
+  "Prestige confirms customer app access",
+  "customer trip updates must not imply a separate admin approval step",
 );
 assertIncludes(
   files[driverPagePath],

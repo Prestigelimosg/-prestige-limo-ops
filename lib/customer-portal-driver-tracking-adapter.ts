@@ -61,6 +61,8 @@ const forbiddenDriverTrackingFragments = [
   "token_hash",
   "whatsapp",
 ];
+const driverLiveLocationPendingMessage =
+  "Live location appears after the driver presses OTW and shares location.";
 
 function asRecord(value: unknown): UnknownRecord {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -131,14 +133,14 @@ export function mapCustomerPortalDriverTrackingPayload(payload: unknown): Custom
     return {
       message:
         reason === "customer_live_location_map_no_active_position"
-          ? "Driver has not shared an active location yet."
+          ? "Driver has not shared live location yet."
           : "Driver location is not ready yet.",
       status: "not_ready",
     };
   }
 
   return {
-    message: "Live location is available only after driver OTW and admin approval.",
+    message: driverLiveLocationPendingMessage,
     status: "blocked",
   };
 }
@@ -176,7 +178,7 @@ export async function loadCustomerPortalDriverTracking({
 
     if (!response.ok) {
       return {
-        message: "Live location is available only after driver OTW and admin approval.",
+        message: driverLiveLocationPendingMessage,
         status: "blocked",
       };
     }

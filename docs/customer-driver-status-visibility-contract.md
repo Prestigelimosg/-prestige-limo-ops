@@ -62,7 +62,7 @@ The customer tracking panel must stay out of the Customer Portal saved-booking l
 
 Customer live-location viewing is a gated detail-card tracking panel, not Customer Portal saved-booking list content.
 
-For eligible DEP, TRF, and hourly jobs, the customer may view the in-app map only after the driver is on the way and Prestige opens customer viewing. Arrival/MNG customer live location stays disabled unless separately approved.
+For eligible DEP, TRF, and hourly jobs, the customer may view the in-app map only after the driver presses OTW and shares location through the scoped customer app link. Arrival/MNG customer live location stays disabled unless separately approved.
 
 Customer-visible live location must auto-disable when the driver presses POB or POB is marked; any backend cleanup grace must not leave customer tracking visible after POB.
 

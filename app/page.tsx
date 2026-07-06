@@ -41729,15 +41729,6 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                             data-admin-booking-change-request-review-actions="true"
                           >
                             <button
-                              className="h-7 rounded-md border border-rose-200 bg-white px-2 text-xs font-semibold text-rose-800 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:text-slate-400"
-                              data-admin-booking-change-request-review-action="reject"
-                              disabled={changeRequestActionDisabled}
-                              onClick={() => handleAdminBookingChangeRequestCancelDecision(notification, "reject")}
-                              type="button"
-                            >
-                              {activeChangeRequestAction === "reject" ? "Rejecting..." : "Reject + Cal"}
-                            </button>
-                            <button
                               className="h-7 rounded-md border border-emerald-300 bg-emerald-700 px-2 text-xs font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
                               data-admin-booking-change-request-review-action="accept"
                               disabled={changeRequestActionDisabled}
@@ -41745,6 +41736,15 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                               type="button"
                             >
                               {activeChangeRequestAction === "accept" ? "Accepting..." : "Accept + Cal"}
+                            </button>
+                            <button
+                              className="h-7 rounded-md border border-rose-200 bg-white px-2 text-xs font-semibold text-rose-800 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                              data-admin-booking-change-request-review-action="reject"
+                              disabled={changeRequestActionDisabled}
+                              onClick={() => handleAdminBookingChangeRequestCancelDecision(notification, "reject")}
+                              type="button"
+                            >
+                              {activeChangeRequestAction === "reject" ? "Rejecting..." : "Reject + Cal"}
                             </button>
                             <button
                               className="h-7 rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"

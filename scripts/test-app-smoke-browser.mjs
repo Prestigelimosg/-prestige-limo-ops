@@ -26835,8 +26835,8 @@ async function runChromeTest() {
       );
       assert.equal(
         dashboardState.monthlyBillingPrepareVisible,
-        true,
-        "Expected Monthly Billing Queue prepare action",
+        false,
+        "Expected Monthly Billing Queue prepare action to stay hidden until a billing account/month is selected",
       );
       assert.equal(
         dashboardState.monthlyBillingQueueText.includes("Monthly Billing Queue"),
@@ -26844,9 +26844,9 @@ async function runChromeTest() {
         "Expected Monthly Billing Queue heading",
       );
       assert.equal(
-        dashboardState.monthlyBillingQueueText.includes("Prepare monthly bill"),
+        dashboardState.monthlyBillingQueueText.includes("Same company names stay separate by saved account ID."),
         true,
-        "Expected Monthly Billing Queue prepare copy",
+        "Expected Monthly Billing Queue strict account grouping copy",
       );
       assert.equal(dashboardState.searchInputVisible, true, "Expected visible customer search input");
       assert.equal(

@@ -73,6 +73,12 @@ for (const fragment of [
   assertIncludes(customersPage, fragment, `customers invoice workspace fragment ${fragment}`);
 }
 
+assertIncludes(
+  customersPage,
+  "{selectedMonthlyBillingGroup ? (",
+  "Monthly Billing Queue prepare action must be conditional on selecting an exact billing account/month group.",
+);
+
 assert.equal(
   (customersPage.match(/data-monthly-statement-preview="true"/g) ?? []).length,
   1,

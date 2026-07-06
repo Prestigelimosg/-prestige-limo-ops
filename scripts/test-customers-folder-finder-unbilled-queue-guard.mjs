@@ -270,6 +270,7 @@ for (const phrase of [
   "Monthly Billing Queue groups only by the saved billing account ID plus billing month; it does not fall back to company, booker, passenger, display name, or booking reference.",
   "Closeout-ready jobs without a saved billing account ID are held behind an `account review needed` count instead of being prepared under the wrong customer.",
   "The Monthly Billing Queue has one billing account/month group selector plus one primary `Prepare monthly bill` action that fills the existing Create Invoice workbench for admin review.",
+  "The `Prepare monthly bill` action stays hidden until admin selects an exact billing account/month group, so the normal Customer dashboard does not show a disabled/noisy prepare button when there are no billable jobs.",
   "The finder no longer shows noisy selected-dropdown wording; selecting a customer now shows a short `Selected customer` status only.",
   "This is a UI handoff into the existing admin invoice workflow; it does not add a second invoice engine, create invoice numbers, generate PDFs, send invoices, activate payment/provider sending, write DB rows, change env, activate GPS/live location, billing/payout automation, calendar sync, parser changes, or shims.",
   "Guard coverage lives in `scripts/test-customers-folder-finder-unbilled-queue-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",

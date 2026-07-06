@@ -6527,22 +6527,19 @@ export default function MockCustomerDashboardPage() {
                   ))}
                 </select>
               </label>
-              <button
-                className="min-h-10 rounded-md border border-emerald-900 bg-emerald-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-100 disabled:text-slate-500"
-                data-customer-monthly-billing-prepare-group="true"
-                disabled={!selectedMonthlyBillingGroup}
-                onClick={() => {
-                  if (selectedMonthlyBillingGroup) {
-                    prepareMonthlyBillingGroupForInvoice(selectedMonthlyBillingGroup);
-                  }
-                }}
-                type="button"
-              >
-                {selectedMonthlyBillingGroup &&
-                preparingMonthlyBillingGroupKey === selectedMonthlyBillingGroup.key
-                  ? "Preparing"
-                  : "Prepare monthly bill"}
-              </button>
+              {selectedMonthlyBillingGroup ? (
+                <button
+                  className="min-h-10 rounded-md border border-emerald-900 bg-emerald-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-100 disabled:text-slate-500"
+                  data-customer-monthly-billing-prepare-group="true"
+                  disabled={preparingMonthlyBillingGroupKey === selectedMonthlyBillingGroup.key}
+                  onClick={() => prepareMonthlyBillingGroupForInvoice(selectedMonthlyBillingGroup)}
+                  type="button"
+                >
+                  {preparingMonthlyBillingGroupKey === selectedMonthlyBillingGroup.key
+                    ? "Preparing"
+                    : "Prepare monthly bill"}
+                </button>
+              ) : null}
             </div>
             {selectedMonthlyBillingGroup ? (
               <div

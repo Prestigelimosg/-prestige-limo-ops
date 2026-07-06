@@ -59,6 +59,33 @@ for (const forbidden of [
   assertExcludes(adminPage, forbidden, `admin amendment review UI removed duplicate ${forbidden}`);
 }
 
+const changeRequestActionsBlock = sliceBetween(
+  adminPage,
+  'data-admin-booking-change-request-review-actions="true"',
+  "!changeRequestContext",
+);
+const acceptActionIndex = changeRequestActionsBlock.indexOf(
+  'data-admin-booking-change-request-review-action="accept"',
+);
+const rejectActionIndex = changeRequestActionsBlock.indexOf(
+  'data-admin-booking-change-request-review-action="reject"',
+);
+const dismissActionIndex = changeRequestActionsBlock.indexOf(
+  'data-admin-booking-change-request-review-action="dismiss"',
+);
+assert.ok(acceptActionIndex >= 0, "Accept + Cal action must be present in change request actions.");
+assert.ok(rejectActionIndex >= 0, "Reject + Cal action must be present in change request actions.");
+assert.ok(dismissActionIndex >= 0, "Dismiss action must be present in change request actions.");
+assert.ok(
+  acceptActionIndex < rejectActionIndex && rejectActionIndex < dismissActionIndex,
+  "Customer change/cancel request actions must render in order: Accept + Cal, Reject + Cal, Dismiss.",
+);
+assert.equal(
+  [...changeRequestActionsBlock.matchAll(/data-admin-booking-change-request-review-action=/g)].length,
+  3,
+  "Customer change/cancel request rows must expose exactly three review actions.",
+);
+
 for (const fragment of [
   'new URLSearchParams({ limit: "200" })',
   'fetch(`/api/admin-bookings?${params.toString()}`',

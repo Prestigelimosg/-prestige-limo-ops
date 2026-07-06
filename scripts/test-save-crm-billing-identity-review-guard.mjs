@@ -173,23 +173,28 @@ assert.ok(
 
 assertIncludes(
   adminCustomerAccountsReadSource,
-  "function customerAccountDisplayLabel",
-  "admin customer account display label helper",
+  "function accountScopeFromBooking",
+  "admin customer account scope helper",
+);
+assertIncludes(
+  adminCustomerAccountsReadSource,
+  "safeText(booking.contact_display_name",
+  "admin customer account scope includes booker",
 );
 assertIncludes(
   adminCustomerAccountsReadSource,
   "safeText(booking.passenger_name",
-  "admin customer account display includes traveler",
+  "admin customer account scope includes traveller",
 );
 assertIncludes(
   adminCustomerAccountsReadSource,
-  "`${customerAccount} [${travelerName}]`",
-  "admin customer account display uses company traveler label",
+  "customerFolderKey(customerId, customerAccount, accountScope.key)",
+  "admin customer account grouping includes scoped booker/traveller identity",
 );
 assertIncludes(
   adminCustomerAccountsReadSource,
-  "const key = accountGroupKey(customerId, customerAccount);",
-  "admin customer account grouping still prefers customer id",
+  "account_scope_key",
+  "admin customer account safe record exposes scoped identity key for admin grouping",
 );
 
 console.log("Save + CRM billing identity review guard passed.");

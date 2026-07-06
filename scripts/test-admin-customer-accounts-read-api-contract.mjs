@@ -11,7 +11,7 @@ const serverSessionToken = "mock-admin-customer-accounts-session-token";
 const serviceRoleSentinel = "SUPABASE_SERVICE_ROLE_KEY_CUSTOMER_ACCOUNTS_SENTINEL";
 const supabaseUrlSentinel = "https://customer-accounts-contract.supabase.co";
 const unsafeAccountsLeakPattern =
-  /contact_phone|contact_email|passenger|pickup_location|dropoff_location|route_summary|driver_payout|paynow|pay_now|invoice|payment|pdf|payout|finance|parser_debug|raw_ai|parser_prompt|live_location|proof|photo|telegram|whatsapp|sms|email_payload|notification|mock_archive|mock_qa|dev_workbench|internal_admin_note|admin_note|server_secret|token_hash|raw_token|service_role/i;
+  /contact_phone|contact_email|pickup_location|dropoff_location|route_summary|driver_payout|paynow|pay_now|invoice|payment|pdf|payout|finance|parser_debug|raw_ai|parser_prompt|live_location|proof|photo|telegram|whatsapp|sms|email_payload|notification|mock_archive|mock_qa|dev_workbench|internal_admin_note|admin_note|server_secret|token_hash|raw_token|service_role/i;
 const safeApiLeakPattern =
   /SUPABASE_SERVICE_ROLE_KEY_CUSTOMER_ACCOUNTS_SENTINEL|mock-admin-customer-accounts-session-token|customer-accounts-contract\.supabase\.co|server-only|server_only|stack|sql|secret|api_key|createClient/i;
 const sourceFiles = [
@@ -414,24 +414,30 @@ try {
   assert.equal(readResult.body.version, "admin-customer-accounts-read-v1");
   assert.deepEqual(readResult.body.summary, {
     recent_read_count: 4,
-    returned_count: 2,
-    total_account_count: 2,
+    returned_count: 3,
+    total_account_count: 3,
   });
   assert.deepEqual(readResult.body.accounts, [
     {
+      account_scope_key: "boss_alpha",
+      account_scope_label: "Traveller: Boss Alpha",
       completed_count: 1,
-      customer_account: "UBS [Boss Alpha]",
+      customer_account: "UBS",
+      customer_folder_key: "customer-ubs::boss_alpha",
       customer_id: "customer-ubs",
       latest_booking_reference: "UBS-SAFE-002",
       latest_pickup_at: "2026-06-20T10:00:00.000Z",
       latest_service_type: "Airport Arrival",
-      saved_booking_count: 2,
+      saved_booking_count: 1,
       source: "admin_booking_persistence",
-      upcoming_count: 1,
+      upcoming_count: 0,
     },
     {
+      account_scope_key: "booker_traveller_not_set",
+      account_scope_label: null,
       completed_count: 1,
       customer_account: "Ritz Carlton",
+      customer_folder_key: "customer-ritz::booker_traveller_not_set",
       customer_id: "customer-ritz",
       latest_booking_reference: "RITZ-SAFE-001",
       latest_pickup_at: "2026-06-18T10:00:00.000Z",
@@ -439,6 +445,20 @@ try {
       saved_booking_count: 1,
       source: "admin_booking_persistence",
       upcoming_count: 0,
+    },
+    {
+      account_scope_key: "boss_beta",
+      account_scope_label: "Traveller: Boss Beta",
+      completed_count: 0,
+      customer_account: "UBS",
+      customer_folder_key: "customer-ubs::boss_beta",
+      customer_id: "customer-ubs",
+      latest_booking_reference: "UBS-SAFE-001",
+      latest_pickup_at: "2026-06-15T10:00:00.000Z",
+      latest_service_type: "Hourly / Disposal",
+      saved_booking_count: 1,
+      source: "admin_booking_persistence",
+      upcoming_count: 1,
     },
   ]);
   assert.equal(readMock.client.operations.length, 0);
@@ -463,7 +483,7 @@ try {
   assert.deepEqual(searchResult.body.summary, {
     recent_read_count: 4,
     returned_count: 1,
-    total_account_count: 2,
+    total_account_count: 3,
   });
   assert.deepEqual(searchResult.body.accounts.map((account) => account.customer_account), [
     "Ritz Carlton",
@@ -503,7 +523,8 @@ try {
 
   assert.equal(limitedResult.status, 200);
   assert.equal(limitedResult.body.accounts.length, 1);
-  assert.equal(limitedResult.body.accounts[0].customer_account, "UBS [Boss Alpha]");
+  assert.equal(limitedResult.body.accounts[0].customer_account, "UBS");
+  assert.equal(limitedResult.body.accounts[0].account_scope_key, "boss_alpha");
   assert.equal(limitedMock.client.operations.length, 0);
   assert.equal(limitedMock.client.selectHistory.length, 1);
   assertNoLeaks(limitedResult, "limited customer accounts response should stay safe");

@@ -11,7 +11,7 @@ const serverSessionToken = "mock-admin-customer-saved-bookings-session-token";
 const serviceRoleSentinel = "SUPABASE_SERVICE_ROLE_KEY_CUSTOMER_SAVED_BOOKINGS_SENTINEL";
 const supabaseUrlSentinel = "https://customer-saved-bookings-contract.supabase.co";
 const unsafeSavedBookingsLeakPattern =
-  /contact_phone|contact_email|passenger|pickup_location|dropoff_location|route_summary|driver_payout|paynow|pay_now|invoice|payment|pdf|payout|finance|parser_debug|raw_ai|parser_prompt|live_location|proof|photo|telegram|whatsapp|sms|email_payload|notification|mock_archive|mock_qa|dev_workbench|internal_admin_note|admin_note|server_secret|token_hash|raw_token|service_role/i;
+  /contact_phone|contact_email|pickup_location|dropoff_location|route_summary|driver_payout|paynow|pay_now|invoice|payment|pdf|payout|finance|parser_debug|raw_ai|parser_prompt|live_location|proof|photo|telegram|whatsapp|sms|email_payload|notification|mock_archive|mock_qa|dev_workbench|internal_admin_note|admin_note|server_secret|token_hash|raw_token|service_role/i;
 const safeApiLeakPattern =
   /SUPABASE_SERVICE_ROLE_KEY_CUSTOMER_SAVED_BOOKINGS_SENTINEL|mock-admin-customer-saved-bookings-session-token|customer-saved-bookings-contract\.supabase\.co|server-only|server_only|stack|sql|secret|api_key|createClient/i;
 const sourceFiles = [
@@ -326,6 +326,7 @@ try {
     }),
     {
       data: {
+        account_scope_key: null,
         customer_account: "UBS",
         customer_id: null,
         limit: 5,
@@ -396,6 +397,8 @@ try {
   });
   assert.deepEqual(readResult.body.saved_bookings, [
     {
+      account_scope_key: "private_passenger",
+      account_scope_label: "Traveller: Private Passenger",
       admin_status: "completed",
       booking_month: "2026-06",
       booking_reference: "UBS-SAFE-002",
@@ -407,6 +410,8 @@ try {
       source: "admin_booking_persistence",
     },
     {
+      account_scope_key: "another_private_passenger",
+      account_scope_label: "Traveller: Another Private Passenger",
       admin_status: "confirmed",
       booking_month: "2026-06",
       booking_reference: "UBS-SAFE-001",
@@ -422,6 +427,35 @@ try {
   assert.equal(readMock.client.selectHistory.length, 1);
   assert.equal(readMock.client.selectHistory[0].table, "bookings");
   assertNoLeaks(readResult, "saved bookings read response should stay safe");
+
+  setEnv(enabledEnv());
+
+  const scopedReadMock = installMockClient(seed);
+  const scopedReadResult = await readRouteResponse(
+    await route.GET(
+      new Request(
+        "http://localhost/api/admin-customer-saved-bookings?customer_id=customer-ubs&account_scope_key=private_passenger&limit=10",
+        {
+          headers: sessionHeaders(),
+        },
+      ),
+    ),
+  );
+
+  assert.equal(scopedReadResult.status, 200);
+  assert.equal(scopedReadResult.body.ok, true);
+  assert.deepEqual(scopedReadResult.body.summary, {
+    matched_count: 1,
+    recent_read_count: 3,
+    returned_count: 1,
+  });
+  assert.deepEqual(
+    scopedReadResult.body.saved_bookings.map((booking) => booking.booking_reference),
+    ["UBS-SAFE-002"],
+  );
+  assert.equal(scopedReadMock.client.operations.length, 0);
+  assert.equal(scopedReadMock.client.selectHistory.length, 1);
+  assertNoLeaks(scopedReadResult, "scoped saved bookings read response should stay safe");
 
   setEnv(enabledEnv());
 

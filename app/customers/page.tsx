@@ -54,6 +54,7 @@ const approvedCustomerTestInvoiceArchiveTarget = {
 };
 
 type RegularCustomerSavedBookingReadTarget = {
+  accountScopeKey?: string;
   customerId: string;
   customerName: string;
 };
@@ -235,6 +236,8 @@ type MockStatementPreviewEvent = {
 };
 
 type UnbilledCustomerRow = {
+  accountScopeKey: string;
+  accountScopeLabel: string;
   amount: string;
   billingMonth: string;
   billingMonthLabel: string;
@@ -252,6 +255,8 @@ type UnbilledCustomerRow = {
 };
 
 type CustomerMonthlyBillingGroup = {
+  accountScopeKey: string;
+  accountScopeLabel: string;
   billingMonth: string;
   billingMonthLabel: string;
   customerId: string;
@@ -454,6 +459,8 @@ type RegularCustomerMockSaveReview = {
 };
 
 type RegularCustomerSavedBookingReadRecord = {
+  account_scope_key?: string | null;
+  account_scope_label?: string | null;
   admin_status?: string | null;
   booking_month?: string | null;
   booking_reference?: string | null;
@@ -553,8 +560,11 @@ type RegularCustomerSavedBookingCloseoutRecord = {
 };
 
 type RegularCustomerAccountReadRecord = {
+  account_scope_key?: string | null;
+  account_scope_label?: string | null;
   completed_count?: number | null;
   customer_account?: string | null;
+  customer_folder_key?: string | null;
   customer_id?: string | null;
   latest_booking_reference?: string | null;
   latest_pickup_at?: string | null;
@@ -1410,9 +1420,17 @@ function customerInvoiceActionFailureMessage(action: string, rawError: unknown) 
 function customerFolderRowFromSavedAccount(account: RegularCustomerAccountReadRecord) {
   const customerAccount = String(account.customer_account ?? "").trim() || "Customer account";
   const customerId = String(account.customer_id ?? "").trim() || customerAccount;
+  const accountScopeKey = String(account.account_scope_key ?? "").trim();
+  const accountScopeLabel = String(account.account_scope_label ?? "").trim();
+  const customerFolderKey =
+    String(account.customer_folder_key ?? "").trim() ||
+    [customerId, accountScopeKey || "booker_traveller_not_set"].join("::");
 
   return {
+    accountScopeKey,
+    accountScopeLabel,
     completedJobs: Number(account.completed_count ?? 0),
+    customerFolderKey,
     customerId,
     customerName: customerAccount,
     folderHref: "",
@@ -1655,11 +1673,15 @@ function savedBookingUnbilledRow(
   const customerName =
     String(booking.customer_account ?? "").trim() ||
     customerId;
+  const accountScopeKey = String(booking.account_scope_key ?? "").trim();
+  const accountScopeLabel = String(booking.account_scope_label ?? "").trim();
   const service = String(booking.service_type ?? "").trim() || "Completed transfer";
   const closeoutDisposition = savedBookingCloseoutBillingDispositionLabel(closeout);
   const billableServiceLabel = closeoutDisposition || service;
 
   return {
+    accountScopeKey,
+    accountScopeLabel,
     amount: "Draft amount not set",
     billingMonth,
     billingMonthLabel: monthlyBillingMonthLabel(billingMonth),
@@ -2063,6 +2085,7 @@ export default function MockCustomerDashboardPage() {
   const [customerFolderFinderSelectedId, setCustomerFolderFinderSelectedId] = useState("");
   const [customerFolderFinderDropdownOpen, setCustomerFolderFinderDropdownOpen] = useState(false);
   const [plainInvoiceCrmPickerOpen, setPlainInvoiceCrmPickerOpen] = useState(false);
+  const [selectedPlainInvoiceCrmFolderKey, setSelectedPlainInvoiceCrmFolderKey] = useState("");
   const [plainInvoiceCrmSearchTerm, setPlainInvoiceCrmSearchTerm] = useState("");
   const [regularCustomerBookingForm, setRegularCustomerBookingForm] = useState<RegularCustomerBookingForm>(
     initialRegularCustomerBookingForm,
@@ -2290,16 +2313,23 @@ export default function MockCustomerDashboardPage() {
       plainInvoiceCrmAccountReadState.status,
     ],
   );
+  const selectedPlainInvoiceCrmAccountOption = useMemo(
+    () =>
+      plainInvoiceCrmAccountOptions.find(
+        (account) => account.customerFolderKey === selectedPlainInvoiceCrmFolderKey,
+      ) || null,
+    [plainInvoiceCrmAccountOptions, selectedPlainInvoiceCrmFolderKey],
+  );
   const selectedCustomerFolderFinderRow = useMemo(
     () =>
       customerFolderIndexRows.find(
-        (row) => row.customerId === customerFolderFinderSelectedId,
+        (row) => row.customerFolderKey === customerFolderFinderSelectedId,
       ) ?? null,
     [customerFolderFinderSelectedId, customerFolderIndexRows],
   );
   const filteredCustomers = useMemo(() => {
     return customerFolderIndexRows.filter((row) => {
-      if (customerFolderFinderSelectedId && row.customerId !== customerFolderFinderSelectedId) {
+      if (customerFolderFinderSelectedId && row.customerFolderKey !== customerFolderFinderSelectedId) {
         return false;
       }
 
@@ -2310,6 +2340,7 @@ export default function MockCustomerDashboardPage() {
       return [
         row.customerName,
         row.customerId,
+        row.accountScopeLabel,
         row.latestBookingReference ?? "",
         row.latestPickupAt ?? "",
         row.latestServiceType ?? "",
@@ -2594,6 +2625,7 @@ export default function MockCustomerDashboardPage() {
     for (const row of unbilledCustomerRows) {
       const billingMonth = safeBillingMonth(row.billingMonth);
       const billingAccountKey = normalizeCustomerFolderMatch(row.customerId);
+      const billingScopeKey = normalizeCustomerFolderMatch(row.accountScopeKey || "booker_traveller_not_set");
 
       if (!billingAccountKey) {
         continue;
@@ -2601,6 +2633,7 @@ export default function MockCustomerDashboardPage() {
 
       const groupKey = [
         billingAccountKey,
+        billingScopeKey,
         billingMonth || "month-review",
       ].join("::");
       const existingGroup = groups.get(groupKey);
@@ -2611,6 +2644,8 @@ export default function MockCustomerDashboardPage() {
       }
 
       groups.set(groupKey, {
+        accountScopeKey: row.accountScopeKey,
+        accountScopeLabel: row.accountScopeLabel,
         billingMonth,
         billingMonthLabel: monthlyBillingMonthLabel(billingMonth),
         customerId: row.customerId,
@@ -2655,11 +2690,17 @@ export default function MockCustomerDashboardPage() {
     regularCustomerSavedBookingReadState.savedBookings,
   ]);
   const visibleCustomerMonthlyBillingGroups = selectedCustomerFolderFinderRow
-    ? customerMonthlyBillingGroups.filter(
-        (group) =>
+    ? customerMonthlyBillingGroups.filter((group) => {
+        const selectedScopeKey =
+          selectedCustomerFolderFinderRow.accountScopeKey || "booker_traveller_not_set";
+
+        return (
           normalizeCustomerFolderMatch(group.customerId) ===
-          normalizeCustomerFolderMatch(selectedCustomerFolderFinderRow.customerId),
-      )
+            normalizeCustomerFolderMatch(selectedCustomerFolderFinderRow.customerId) &&
+          normalizeCustomerFolderMatch(group.accountScopeKey || "booker_traveller_not_set") ===
+            normalizeCustomerFolderMatch(selectedScopeKey)
+        );
+      })
     : customerMonthlyBillingGroups;
   const selectedMonthlyBillingGroup = useMemo(
     () =>
@@ -2677,7 +2718,11 @@ export default function MockCustomerDashboardPage() {
   const unbilledCustomersShowingLabel = selectedMonthlyBillingGroup
     ? `${selectedMonthlyBillingGroup.rows.length} job${
         selectedMonthlyBillingGroup.rows.length === 1 ? "" : "s"
-      } / ${selectedMonthlyBillingGroup.customerName} / ${selectedMonthlyBillingGroup.billingMonthLabel}`
+      } / ${selectedMonthlyBillingGroup.customerName}${
+        selectedMonthlyBillingGroup.accountScopeLabel
+          ? ` / ${selectedMonthlyBillingGroup.accountScopeLabel}`
+          : ""
+      } / ${selectedMonthlyBillingGroup.billingMonthLabel}`
     : `${unbilledCustomerRows.length} billable job${
         unbilledCustomerRows.length === 1 ? "" : "s"
       } in ${customerMonthlyBillingGroups.length} billing account/month group${
@@ -2788,7 +2833,13 @@ export default function MockCustomerDashboardPage() {
     Boolean(plainInvoicePreview) &&
     plainInvoicePreview?.previewKey === plainInvoiceCurrentPreviewKey;
   const plainInvoiceCrmPickerLabel =
-    plainInvoiceForm.crmCustomerName.trim() ||
+    (selectedPlainInvoiceCrmAccountOption
+      ? `${selectedPlainInvoiceCrmAccountOption.customerName}${
+          selectedPlainInvoiceCrmAccountOption.accountScopeLabel
+            ? ` / ${selectedPlainInvoiceCrmAccountOption.accountScopeLabel}`
+            : ""
+        }`
+      : plainInvoiceForm.crmCustomerName.trim()) ||
     (plainInvoiceCrmAccountOptions.length > 0
       ? "Manual bill-to (no CRM link)"
       : plainInvoiceCrmAccountReadState.status === "loaded"
@@ -3059,6 +3110,20 @@ export default function MockCustomerDashboardPage() {
         ? (result.accounts as RegularCustomerAccountReadRecord[])
         : [];
       const returnedCount = Number(result.summary?.returned_count ?? accounts.length);
+      const accountReadTargets: RegularCustomerSavedBookingReadTarget[] = accounts.flatMap((account) => {
+        const customerName = String(account.customer_account ?? "").trim();
+        const customerId = String(account.customer_id ?? "").trim() || customerName;
+
+        return customerName && customerId
+          ? [
+              {
+                accountScopeKey: String(account.account_scope_key ?? "").trim(),
+                customerId,
+                customerName,
+              },
+            ]
+          : [];
+      });
 
       setRegularCustomerAccountReadState({
         accounts,
@@ -3070,21 +3135,7 @@ export default function MockCustomerDashboardPage() {
         summary: result.summary || null,
         tone: "success",
       });
-      await loadRegularCustomerSavedBookingsForUnbilledQueue(
-        accounts
-          .map((account) => {
-            const customerName = String(account.customer_account ?? "").trim();
-            const customerId = String(account.customer_id ?? "").trim() || customerName;
-
-            return customerName && customerId
-              ? {
-                  customerId,
-                  customerName,
-                }
-              : null;
-          })
-          .filter((target): target is RegularCustomerSavedBookingReadTarget => Boolean(target)),
-      );
+      await loadRegularCustomerSavedBookingsForUnbilledQueue(accountReadTargets);
     } catch (error) {
       setRegularCustomerAccountReadState({
         accounts: [],
@@ -3208,6 +3259,10 @@ export default function MockCustomerDashboardPage() {
     } else {
       params.set("customer_account", target.customerName);
       params.set("customer_id", target.customerId);
+    }
+
+    if (target.accountScopeKey) {
+      params.set("account_scope_key", target.accountScopeKey);
     }
 
     const response = await fetch(`${adminCustomerSavedBookingsApiPath}?${params.toString()}`, {
@@ -3455,6 +3510,7 @@ export default function MockCustomerDashboardPage() {
 
     try {
       const result = await readRegularCustomerSavedBookingsForTarget({
+        accountScopeKey: "",
         customerId: selectedRegularCustomer.id,
         customerName: selectedRegularCustomer.companyName,
       });
@@ -3883,6 +3939,7 @@ export default function MockCustomerDashboardPage() {
     try {
       const result = await readRegularCustomerSavedBookingsForTarget(
         {
+          accountScopeKey: customer.accountScopeKey,
           customerId: customer.customerId,
           customerName: customer.customerName,
         },
@@ -3943,9 +4000,10 @@ export default function MockCustomerDashboardPage() {
 
   function monthlyBillingGroupReference(group: CustomerMonthlyBillingGroup) {
     const accountSlug = plainInvoiceSlug(group.customerName).toUpperCase().slice(0, 24) || "CUSTOMER";
+    const scopeSlug = plainInvoiceSlug(group.accountScopeKey).toUpperCase().slice(0, 16) || "GENERAL";
     const monthSlug = group.billingMonth || "MONTH-REVIEW";
 
-    return `MONTHLY-${accountSlug}-${monthSlug}`;
+    return `MONTHLY-${accountSlug}-${scopeSlug}-${monthSlug}`;
   }
 
   function monthlyBillingInvoiceAmountInput(row: UnbilledCustomerRow) {
@@ -3972,6 +4030,9 @@ export default function MockCustomerDashboardPage() {
     const overflowCount = Math.max(0, group.rows.length - preparedRows.length);
     const [firstRow, ...additionalRows] = preparedRows;
     const referenceList = group.rows.map((row) => row.reference).filter(Boolean);
+    const groupLabel = group.accountScopeLabel
+      ? `${group.customerName} / ${group.accountScopeLabel}`
+      : group.customerName;
 
     setPreparingMonthlyBillingGroupKey(group.key);
     setPlainInvoiceForm({
@@ -3993,13 +4054,14 @@ export default function MockCustomerDashboardPage() {
       route: `${group.rows.length} job${group.rows.length === 1 ? "" : "s"}: ${referenceList.join(", ")}`,
       service: `Monthly billing - ${group.billingMonthLabel}`,
     });
+    setSelectedPlainInvoiceCrmFolderKey(group.key);
     setPlainInvoicePreview(null);
     setPlainInvoiceCrmPickerOpen(false);
     setCustomerInvoiceWorkspaceTab("statements");
     setPlainInvoiceFeedback(
       overflowCount > 0
-        ? `${group.customerName} / ${group.billingMonthLabel} loaded with the first ${preparedRows.length} jobs. ${overflowCount} more job${overflowCount === 1 ? "" : "s"} must be prepared in another invoice or after the invoice line-item limit is expanded. Enter approved amounts before Preview, Draft, Issue, or Email.`
-        : `${group.customerName} / ${group.billingMonthLabel} loaded into Create Invoice. Enter approved amounts, review line descriptions, then Preview before Draft, Issue, or Email.`,
+        ? `${groupLabel} / ${group.billingMonthLabel} loaded with the first ${preparedRows.length} jobs. ${overflowCount} more job${overflowCount === 1 ? "" : "s"} must be prepared in another invoice or after the invoice line-item limit is expanded. Enter approved amounts before Preview, Draft, Issue, or Email.`
+        : `${groupLabel} / ${group.billingMonthLabel} loaded into Create Invoice. Enter approved amounts, review line descriptions, then Preview before Draft, Issue, or Email.`,
     );
     setPlainInvoiceFeedbackTone(overflowCount > 0 ? "info" : "success");
 
@@ -4211,6 +4273,10 @@ export default function MockCustomerDashboardPage() {
     field: K,
     value: PlainInvoiceForm[K],
   ) {
+    if (field === "billToName") {
+      setSelectedPlainInvoiceCrmFolderKey("");
+    }
+
     setPlainInvoiceForm((currentForm) => {
       const nextForm = {
         ...currentForm,
@@ -4235,10 +4301,11 @@ export default function MockCustomerDashboardPage() {
     });
   }
 
-  function updatePlainInvoiceCrmBillingAccount(customerId: string) {
+  function updatePlainInvoiceCrmBillingAccount(customerFolderKey: string) {
     const selectedAccount =
-      plainInvoiceCrmAccountOptions.find((account) => account.customerId === customerId) || null;
+      plainInvoiceCrmAccountOptions.find((account) => account.customerFolderKey === customerFolderKey) || null;
 
+    setSelectedPlainInvoiceCrmFolderKey(selectedAccount?.customerFolderKey || "");
     setPlainInvoiceForm((currentForm) => ({
       ...currentForm,
       billToName: selectedAccount?.customerName || currentForm.billToName,
@@ -5992,14 +6059,14 @@ export default function MockCustomerDashboardPage() {
                         customerFolderFinderDropdownRows.map((customer) => (
                           <button
                             className={`grid w-full gap-1 px-3 py-2 text-left text-sm transition hover:bg-slate-50 ${
-                              customer.customerId === customerFolderFinderSelectedId
+                              customer.customerFolderKey === customerFolderFinderSelectedId
                                 ? "bg-emerald-50 text-emerald-950"
                                 : "bg-white text-slate-900"
                             }`}
-                            data-customer-folder-finder-dropdown-page-row={customer.customerId}
-                            aria-selected={customer.customerId === customerFolderFinderSelectedId}
-                            key={customer.customerId}
-                            onClick={() => updateCustomerFolderFinderSelection(customer.customerId)}
+                            data-customer-folder-finder-dropdown-page-row={customer.customerFolderKey}
+                            aria-selected={customer.customerFolderKey === customerFolderFinderSelectedId}
+                            key={customer.customerFolderKey}
+                            onClick={() => updateCustomerFolderFinderSelection(customer.customerFolderKey)}
                             role="option"
                             type="button"
                           >
@@ -6089,9 +6156,9 @@ export default function MockCustomerDashboardPage() {
                     {paginatedCustomerFolderFinderRows.map((customer) => (
                       <article
                         className="grid gap-2 bg-white px-3 py-2 text-sm leading-5 transition hover:bg-slate-50 md:grid-cols-[minmax(12rem,1.4fr)_8rem_minmax(12rem,1fr)_8rem] md:items-center md:gap-3"
-                        data-customer-folder-finder-row={customer.customerId}
-                        data-customer-row={customer.customerId}
-                        key={customer.customerId}
+                        data-customer-folder-finder-row={customer.customerFolderKey}
+                        data-customer-row={customer.customerFolderKey}
+                        key={customer.customerFolderKey}
                       >
                         <div className="min-w-0">
                           <h3 className="truncate text-sm font-bold text-slate-950 sm:text-base">
@@ -6100,6 +6167,11 @@ export default function MockCustomerDashboardPage() {
                           <p className="mt-0.5 truncate text-xs text-slate-500">
                             Account: {customer.customerId}
                           </p>
+                          {customer.accountScopeLabel ? (
+                            <p className="mt-0.5 truncate text-xs font-semibold text-emerald-800">
+                              Scope: {customer.accountScopeLabel}
+                            </p>
+                          ) : null}
                         </div>
                         <p className="font-semibold leading-5 text-slate-800">
                           <span className="block">
@@ -6130,7 +6202,7 @@ export default function MockCustomerDashboardPage() {
                         <div className="flex flex-wrap gap-2 md:justify-end">
                           <button
                             className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-center text-xs font-bold text-white transition hover:bg-slate-700"
-                            data-customer-folder-finder-view-jobs={customer.customerId}
+                            data-customer-folder-finder-view-jobs={customer.customerFolderKey}
                             onClick={() => viewCustomerFolderJobs(customer)}
                             type="button"
                           >
@@ -6175,6 +6247,11 @@ export default function MockCustomerDashboardPage() {
                     <p className="mt-0.5 text-xs font-semibold text-slate-600">
                       Account ID: {customerFolderJobViewState.customerId || "Not selected"}
                     </p>
+                    {selectedCustomerFolderFinderRow?.accountScopeLabel ? (
+                      <p className="mt-0.5 text-xs font-semibold text-emerald-800">
+                        Scope: {selectedCustomerFolderFinderRow.accountScopeLabel}
+                      </p>
+                    ) : null}
                   </div>
                   <p
                     className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-700"
@@ -6308,6 +6385,14 @@ export default function MockCustomerDashboardPage() {
                                     </span>
                                     {savedBookingDisplayText(booking.customer_account, "Not available")}
                                   </p>
+                                  {booking.account_scope_label ? (
+                                    <p>
+                                      <span className="block text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                                        Scope
+                                      </span>
+                                      {savedBookingDisplayText(booking.account_scope_label, "Not available")}
+                                    </p>
+                                  ) : null}
                                 </div>
 
                                 {exactEditorIsCurrent ? (
@@ -6570,7 +6655,9 @@ export default function MockCustomerDashboardPage() {
                   <option value="">All billing account/month groups</option>
                   {visibleCustomerMonthlyBillingGroups.map((group) => (
                     <option key={group.key} value={group.key}>
-                      {group.customerName} - Account {group.customerId} - {group.billingMonthLabel} -{" "}
+                      {group.customerName}
+                      {group.accountScopeLabel ? ` - ${group.accountScopeLabel}` : ""} - Account{" "}
+                      {group.customerId} - {group.billingMonthLabel} -{" "}
                       {group.rows.length} job
                       {group.rows.length === 1 ? "" : "s"}
                     </option>
@@ -6597,6 +6684,9 @@ export default function MockCustomerDashboardPage() {
                 data-customer-monthly-billing-group-summary="true"
               >
                 {selectedMonthlyBillingGroup.customerName} / Account {selectedMonthlyBillingGroup.customerId} /{" "}
+                {selectedMonthlyBillingGroup.accountScopeLabel
+                  ? `${selectedMonthlyBillingGroup.accountScopeLabel} / `
+                  : ""}
                 {selectedMonthlyBillingGroup.billingMonthLabel} / {selectedMonthlyBillingGroup.rows.length} job
                 {selectedMonthlyBillingGroup.rows.length === 1 ? "" : "s"} selected.
               </div>
@@ -6643,6 +6733,11 @@ export default function MockCustomerDashboardPage() {
                           <p className="max-w-[13rem] truncate text-xs font-semibold text-slate-500">
                             Account {row.customerId}
                           </p>
+                          {row.accountScopeLabel ? (
+                            <p className="max-w-[13rem] truncate text-xs font-semibold text-emerald-800">
+                              {row.accountScopeLabel}
+                            </p>
+                          ) : null}
                           <p className="max-w-[13rem] truncate text-xs text-slate-500" title={row.reference}>
                             {compactCustomerBookingReference(row.reference)}
                           </p>
@@ -7229,9 +7324,9 @@ export default function MockCustomerDashboardPage() {
                             role="listbox"
                           >
                             <button
-                              aria-selected={!plainInvoiceForm.crmCustomerId}
+                              aria-selected={!selectedPlainInvoiceCrmFolderKey && !plainInvoiceForm.crmCustomerId}
                               className={`grid w-full gap-0.5 px-3 py-2 text-left text-xs normal-case tracking-normal transition hover:bg-slate-50 ${
-                                plainInvoiceForm.crmCustomerId
+                                selectedPlainInvoiceCrmFolderKey || plainInvoiceForm.crmCustomerId
                                   ? "bg-white text-slate-900"
                                   : "bg-emerald-50 text-emerald-950"
                               }`}
@@ -7245,19 +7340,24 @@ export default function MockCustomerDashboardPage() {
                             </button>
                             {plainInvoiceCrmAccountOptions.map((account) => (
                               <button
-                                aria-selected={account.customerId === plainInvoiceForm.crmCustomerId}
+                                aria-selected={account.customerFolderKey === selectedPlainInvoiceCrmFolderKey}
                                 className={`grid w-full gap-0.5 px-3 py-2 text-left text-xs normal-case tracking-normal transition hover:bg-slate-50 ${
-                                  account.customerId === plainInvoiceForm.crmCustomerId
+                                  account.customerFolderKey === selectedPlainInvoiceCrmFolderKey
                                     ? "bg-emerald-50 text-emerald-950"
                                     : "bg-white text-slate-900"
                                 }`}
-                                data-plain-invoice-crm-result={account.customerId}
-                                key={account.customerId}
-                                onClick={() => updatePlainInvoiceCrmBillingAccount(account.customerId)}
+                                data-plain-invoice-crm-result={account.customerFolderKey}
+                                key={account.customerFolderKey}
+                                onClick={() => updatePlainInvoiceCrmBillingAccount(account.customerFolderKey)}
                                 role="option"
                                 type="button"
                               >
                                 <span className="font-bold">{account.customerName}</span>
+                                {account.accountScopeLabel ? (
+                                  <span className="font-semibold text-emerald-700">
+                                    {account.accountScopeLabel}
+                                  </span>
+                                ) : null}
                                 <span className="font-semibold text-slate-500">
                                   {account.customerId} | {account.historyRows} booking
                                   {account.historyRows === 1 ? "" : "s"}

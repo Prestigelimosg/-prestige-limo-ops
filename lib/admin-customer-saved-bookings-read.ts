@@ -11,12 +11,15 @@ export const adminCustomerSavedBookingsReadVersion =
   "admin-customer-saved-bookings-read-v1";
 
 export type AdminCustomerSavedBookingsReadParams = {
+  account_scope_key: string | null;
   customer_account: string | null;
   customer_id: string | null;
   limit: number;
 };
 
 export type AdminCustomerSavedBookingSafeRecord = {
+  account_scope_key: string;
+  account_scope_label: string | null;
   admin_status: string | null;
   booking_month: string | null;
   booking_reference: string;
@@ -153,17 +156,42 @@ function normalizeForMatch(value: unknown) {
   return safeText(value)?.replace(/[^a-z0-9]+/gi, "").toLowerCase() || "";
 }
 
+function accountScopeFromBooking(booking: AdminBookingPersistenceRecord) {
+  const bookerName = safeText(booking.contact_display_name, 80);
+  const travellerName = safeText(booking.passenger_name, 80);
+  const bookerKey = normalizeToken(bookerName || "");
+  const travellerKey = normalizeToken(travellerName || "");
+  const labelParts = [
+    bookerName ? `Booker: ${bookerName}` : null,
+    travellerName && travellerKey !== bookerKey ? `Traveller: ${travellerName}` : null,
+  ].filter((value): value is string => Boolean(value));
+  const keyParts = [bookerKey, travellerKey].filter(Boolean);
+
+  return {
+    key: keyParts.length > 0 ? keyParts.join("__") : "booker_traveller_not_set",
+    label: labelParts.length > 0 ? labelParts.join(" / ") : null,
+  };
+}
+
 function bookingMatchesCustomer(
   booking: AdminBookingPersistenceRecord,
   params: AdminCustomerSavedBookingsReadParams,
 ) {
   const customerId = normalizeForMatch(booking.customer_id);
   const customerAccount = normalizeForMatch(booking.customer_display_name);
-
-  return (
+  const baseMatches =
     (params.customer_id && customerId === normalizeForMatch(params.customer_id)) ||
-    (params.customer_account && customerAccount === normalizeForMatch(params.customer_account))
-  );
+    (params.customer_account && customerAccount === normalizeForMatch(params.customer_account));
+
+  if (!baseMatches) {
+    return false;
+  }
+
+  if (!params.account_scope_key) {
+    return true;
+  }
+
+  return accountScopeFromBooking(booking).key === normalizeToken(params.account_scope_key);
 }
 
 function toSafeSavedBooking(
@@ -175,7 +203,11 @@ function toSafeSavedBooking(
     return null;
   }
 
+  const accountScope = accountScopeFromBooking(booking);
+
   return {
+    account_scope_key: accountScope.key,
+    account_scope_label: accountScope.label,
     admin_status: safeStatus(booking.admin_internal_status),
     booking_month: validBookingMonth(booking.pickup_at || booking.pickup_datetime),
     booking_reference: bookingReference,
@@ -204,10 +236,16 @@ export function parseAdminCustomerSavedBookingsReadParams(
     customerIdValue === undefined || customerIdValue === null || customerIdValue === ""
       ? null
       : safeText(customerIdValue, 120);
+  const accountScopeKeyValue = readParamsValue(params, "account_scope_key");
+  const accountScopeKey =
+    accountScopeKeyValue === undefined || accountScopeKeyValue === null || accountScopeKeyValue === ""
+      ? null
+      : safeText(accountScopeKeyValue, 220);
 
   if (
     (customerAccountValue && !customerAccount) ||
-    (customerIdValue && !customerId)
+    (customerIdValue && !customerId) ||
+    (accountScopeKeyValue && !accountScopeKey)
   ) {
     return {
       error: forbiddenParamsError,
@@ -236,6 +274,7 @@ export function parseAdminCustomerSavedBookingsReadParams(
 
   return {
     data: {
+      account_scope_key: accountScopeKey ? normalizeToken(accountScopeKey) : null,
       customer_account: customerAccount,
       customer_id: customerId,
       limit,

@@ -15,8 +15,11 @@ export type AdminCustomerAccountsReadParams = {
 };
 
 export type AdminCustomerAccountSafeRecord = {
+  account_scope_key: string;
+  account_scope_label: string | null;
   completed_count: number;
   customer_account: string;
+  customer_folder_key: string;
   customer_id: string | null;
   latest_booking_reference: string | null;
   latest_pickup_at: string | null;
@@ -153,41 +156,60 @@ function searchText(value: unknown) {
   return includesForbiddenSafeTextFragment(cleaned) ? false : cleaned;
 }
 
-function filterAccountsBySearch(
-  accounts: AdminCustomerAccountSafeRecord[],
-  search: string | null,
-) {
+function filterAccountsBySearch(accounts: AdminCustomerAccountSafeRecord[], search: string | null) {
   const normalizedSearch = search?.trim().toLowerCase();
 
   if (!normalizedSearch) {
     return accounts;
   }
 
-  return accounts.filter((account) =>
-    account.customer_account.toLowerCase().startsWith(normalizedSearch),
-  );
+  return accounts.filter((account) => {
+    const scopeSearchText = (account.account_scope_label || "")
+      .replace(/\b(Booker|Traveller):/gi, "")
+      .toLowerCase();
+    const customerIdSearchText = (account.customer_id || "")
+      .replace(/^customer[-_]?/i, "")
+      .toLowerCase();
+    const accountSearchText = [
+      account.customer_account,
+      customerIdSearchText,
+      account.latest_booking_reference || "",
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    return (
+      accountSearchText.includes(normalizedSearch) ||
+      scopeSearchText.includes(normalizedSearch)
+    );
+  });
 }
 
-function accountGroupKey(customerId: string | null, customerAccount: string) {
-  return customerId || normalizeToken(customerAccount);
+function accountScopeFromBooking(booking: AdminBookingPersistenceRecord) {
+  const bookerName = safeText(booking.contact_display_name, 80);
+  const travellerName = safeText(booking.passenger_name, 80);
+  const bookerKey = normalizeToken(bookerName);
+  const travellerKey = normalizeToken(travellerName);
+  const labelParts = [
+    bookerName ? `Booker: ${bookerName}` : null,
+    travellerName && travellerKey !== bookerKey ? `Traveller: ${travellerName}` : null,
+  ].filter((value): value is string => Boolean(value));
+  const keyParts = [bookerKey, travellerKey].filter(Boolean);
+
+  return {
+    key: keyParts.length > 0 ? keyParts.join("__") : "booker_traveller_not_set",
+    label: labelParts.length > 0 ? labelParts.join(" / ") : null,
+  };
+}
+
+function customerFolderKey(customerId: string | null, customerAccount: string, accountScopeKey: string) {
+  const accountKey = customerId || normalizeToken(customerAccount);
+
+  return [accountKey, accountScopeKey].filter(Boolean).join("::");
 }
 
 function customerAccountDisplayLabel(booking: AdminBookingPersistenceRecord) {
-  const customerAccount = safeText(booking.customer_display_name, 120);
-
-  if (!customerAccount) {
-    return "";
-  }
-
-  const travelerName = safeText(booking.passenger_name, 80);
-  const customerKey = normalizeToken(customerAccount);
-  const travelerKey = normalizeToken(travelerName);
-
-  if (!travelerName || !travelerKey || customerKey.includes(travelerKey)) {
-    return customerAccount;
-  }
-
-  return safeText(`${customerAccount} [${travelerName}]`, 160) || customerAccount;
+  return safeText(booking.customer_display_name, 120) || "";
 }
 
 function statusToken(value: unknown) {
@@ -233,8 +255,11 @@ function updateLatestBooking(account: MutableCustomerAccount, booking: AdminBook
 
 function toSafeAccount(account: MutableCustomerAccount): AdminCustomerAccountSafeRecord {
   return {
+    account_scope_key: account.account_scope_key,
+    account_scope_label: account.account_scope_label,
     completed_count: account.completed_count,
     customer_account: account.customer_account,
+    customer_folder_key: account.customer_folder_key,
     customer_id: account.customer_id,
     latest_booking_reference: account.latest_booking_reference,
     latest_pickup_at: account.latest_pickup_at,
@@ -258,12 +283,16 @@ function toCustomerAccounts(
     }
 
     const customerId = safeText(booking.customer_id, 120);
-    const key = accountGroupKey(customerId, customerAccount);
+    const accountScope = accountScopeFromBooking(booking);
+    const key = customerFolderKey(customerId, customerAccount, accountScope.key);
     const current =
       accounts.get(key) ||
       ({
+        account_scope_key: accountScope.key,
+        account_scope_label: accountScope.label,
         completed_count: 0,
         customer_account: customerAccount,
+        customer_folder_key: key,
         customer_id: customerId,
         latest_booking_reference: null,
         latest_pickup_at: null,

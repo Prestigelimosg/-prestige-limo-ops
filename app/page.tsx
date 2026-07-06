@@ -4782,7 +4782,6 @@ function saveCrmBillingRecordBookerTokens(
   record: AdminBookingPersistenceRecord | BookingRecord,
 ) {
   return [
-    clean(record.contact_display_name) || clean((record as BookingRecord).bookers?.booker_name),
     clean(record.contact_phone) || clean((record as BookingRecord).bookers?.phone),
     clean(record.contact_email) || clean((record as BookingRecord).bookers?.email),
   ].filter(Boolean);
@@ -4790,7 +4789,6 @@ function saveCrmBillingRecordBookerTokens(
 
 function saveCrmCurrentBookerTokens(bookingValue: BookingForm) {
   return [
-    clean(bookingValue.booker),
     clean(bookingValue.bookerContact),
     clean(bookingValue.bookerEmail),
   ].filter(Boolean);

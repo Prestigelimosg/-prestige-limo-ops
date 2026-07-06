@@ -56,6 +56,34 @@ assertIncludes(
   "billingIdentityMatches(customerDisplayName, bookerDisplayName)",
   "loaded booking display must filter customer/account values that equal booker/contact",
 );
+const billingRecordBookerTokensSection = appSource.slice(
+  appSource.indexOf("function saveCrmBillingRecordBookerTokens"),
+  appSource.indexOf("function saveCrmCurrentBookerTokens"),
+);
+const currentBookerTokensSection = appSource.slice(
+  appSource.indexOf("function saveCrmCurrentBookerTokens"),
+  appSource.indexOf("function saveCrmBillingBookerLabel"),
+);
+assertExcludes(
+  billingRecordBookerTokensSection,
+  "clean(record.contact_display_name) || clean((record as BookingRecord).bookers?.booker_name)",
+  "billing identity review must not match on booker display name alone",
+);
+assertExcludes(
+  currentBookerTokensSection,
+  "clean(bookingValue.booker),",
+  "billing identity review must not match on current booker display name alone",
+);
+assertIncludes(
+  billingRecordBookerTokensSection,
+  "clean(record.contact_phone) || clean((record as BookingRecord).bookers?.phone)",
+  "billing identity review may still match strong booker phone identity",
+);
+assertIncludes(
+  billingRecordBookerTokensSection,
+  "clean(record.contact_email) || clean((record as BookingRecord).bookers?.email)",
+  "billing identity review may still match strong booker email identity",
+);
 assertIncludes(
   appSource,
   "return clean(record.passenger_name);",

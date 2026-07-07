@@ -202,11 +202,11 @@ async function main() {
     assert.match(appSource, /function getBookingCalendarReference\(bookingRecord: BookingRecord\)/);
     assert.match(
       appSource,
-      /async function downloadSavedBookingCalendarEvent\([\s\S]*?const bookingId = getBookingCalendarReference\(bookingRecord\);/,
+      /function buildSavedBookingCalendarEventPayload\(bookingRecord: BookingRecord\)[\s\S]*?const bookingReference = getBookingCalendarReference\(bookingRecord\);/,
     );
     assert.match(
       appSource,
-      /function renderBookingCalendarDownloadAction\([\s\S]*?const bookingId = getBookingCalendarReference\(bookingRecord\);/,
+      /async function autoSyncSavedBookingGoogleCalendar\(savedBooking: AdminBookingPersistenceRecord\)[\s\S]*?const bookingReference = getBookingCalendarReference\(calendarBooking\);/,
     );
     assert.match(calendarPayloadSource, /booking_reference: bookingReference/);
     assert.match(calendarPayloadSource, /id: cleanReferenceText\(bookingRecord\.id\) \|\| bookingReference/);
@@ -224,7 +224,7 @@ async function main() {
       assert.equal(body.calendar_event.ends_at_local, "2026-06-15T17:00:00");
       assert.equal(body.calendar_event.timezone, "Asia/Singapore");
       assert.equal(body.calendar_event.filename, "prestige-booking-pl-2026-0615-001.ics");
-      assert.match(body.calendar_event.title, /Prestige - MNG - Safe Traveler/);
+      assert.match(body.calendar_event.title, /SLV1234 > Safe Traveler - MNG - Prestige/);
       assert.match(body.calendar_event.description, /Booking: PL-2026-0615-001/);
       assert.match(body.calendar_event.description, /Pickup: Changi Airport Terminal 3/);
       assert.match(body.calendar_event.description, /Driver: Safe Driver \/ SLV1234 \/ \+65 9000 0000/);
@@ -232,7 +232,7 @@ async function main() {
       assert.match(body.ics, /BEGIN:VEVENT/);
       assert.match(body.ics, /DTSTART:20260615T153000/);
       assert.match(body.ics, /DTEND:20260615T170000/);
-      assert.match(body.ics, /SUMMARY:Prestige - MNG - Safe Traveler/);
+      assert.match(body.ics, /SUMMARY:SLV1234 > Safe Traveler - MNG - Prestige/);
       assert.equal((body.ics.match(/BEGIN:VALARM/g) || []).length, 2);
       assert.match(body.ics, /ACTION:DISPLAY/);
       assert.match(body.ics, /TRIGGER:-PT2H/);
@@ -316,7 +316,7 @@ async function main() {
       );
 
       if (calendarCase.midnight) {
-        assert.match(body.calendar_event.title, /^MIDNIGHT JOB - Prestige/);
+        assert.match(body.calendar_event.title, /^MIDNIGHT JOB - SLV1234 > Safe Traveler - MNG - Prestige/);
         assert.match(
           body.calendar_event.description,
           new RegExp(`MIDNIGHT JOB — actual pickup is ${calendarCase.actualPickupText}\\.`),
@@ -345,9 +345,9 @@ async function main() {
 
       assert.equal(status, 200);
       assert.equal(body.ok, true);
-      assert.match(body.calendar_event.title, /^CANCELLED - Prestige - MNG - Safe Traveler/);
+      assert.match(body.calendar_event.title, /^CANCELLED - SLV1234 > Safe Traveler - MNG - Prestige/);
       assert.match(body.calendar_event.description, /Status: cancelled/);
-      assert.match(body.ics, /SUMMARY:CANCELLED - Prestige - MNG - Safe Traveler/);
+      assert.match(body.ics, /SUMMARY:CANCELLED - SLV1234 > Safe Traveler - MNG - Prestige/);
       assertNoLeaks(body, "cancelled calendar event response must not leak unsafe fields");
     }
 

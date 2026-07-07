@@ -475,6 +475,21 @@ type BookingForm = {
   driverIncludePayout: string;
 };
 
+function draftDriverAssignmentSignature(booking: Pick<
+  BookingForm,
+  "driverContact" | "driverId" | "driverName" | "driverPlate" | "driverVehicleModel"
+>) {
+  const parts = [
+    clean(booking.driverId),
+    clean(booking.driverName),
+    clean(booking.driverContact),
+    clean(booking.driverPlate),
+    clean(booking.driverVehicleModel),
+  ];
+
+  return parts.some(Boolean) ? parts.join("|") : "";
+}
+
 type LoadBookingsOperationalFormFields = Pick<
   BookingForm,
   | "booker"
@@ -12449,6 +12464,7 @@ function companyProfileSettingsFailureMessage(action: "load" | "save", rawError:
 export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const showSetupReadinessArchive = false;
   const [booking, setBooking] = useState<BookingForm>(() => createInitialBooking());
+  const [appliedDraftDriverAssignmentSignature, setAppliedDraftDriverAssignmentSignature] = useState("");
   const [activeTab, setActiveTab] = useState<AppTab>(initialTab);
   const activeTabRef = useRef<AppTab>(initialTab);
   const [isInternalQaMockArchiveOpen, setIsInternalQaMockArchiveOpen] = useState(false);
@@ -15661,6 +15677,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     assignedDriverId && (!assignedDriverRecord || assignedDriverIsInactive),
   );
   const assignedDriverPlate = clean(booking.driverPlate) || clean(assignedDriverRecord?.plate_number);
+  const currentDraftDriverAssignmentSignature = draftDriverAssignmentSignature(booking);
+  const draftDriverAssignmentApplied = Boolean(
+    currentDraftDriverAssignmentSignature &&
+      currentDraftDriverAssignmentSignature === appliedDraftDriverAssignmentSignature,
+  );
   const customerLiveLocation = useMemo(
     () => customerLiveLocationState(booking, currentTimeMs),
     [booking, currentTimeMs],
@@ -16696,6 +16717,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   }
 
   function applyDriverToBooking(driverId: string) {
+    setAppliedDraftDriverAssignmentSignature("");
+
     if (!driverId) {
       setBooking((current) => ({
         ...current,
@@ -21253,11 +21276,21 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   }
 
   function assignDraftDriver() {
+    if (draftDriverAssignmentApplied) {
+      setAppliedDraftDriverAssignmentSignature("");
+      setMessage({
+        tone: "success",
+        text: "Driver draft assignment reopened for changes. Select or edit driver details, then Apply Driver to Draft.",
+      });
+      return;
+    }
+
     if (!clean(booking.driverName)) {
       setMessage({ tone: "error", text: "Enter a driver name before assigning this draft." });
       return;
     }
 
+    setAppliedDraftDriverAssignmentSignature(currentDraftDriverAssignmentSignature);
     setMessage({
       tone: "success",
       text: "Driver applied to draft. Save booking to keep this assignment.",
@@ -36491,11 +36524,19 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   Include payout in dispatch
                 </label>
                 <button
-                  className="h-8 rounded-md border border-sky-300 bg-white px-3 text-xs font-semibold text-sky-900 transition hover:bg-sky-50"
+                  aria-pressed={draftDriverAssignmentApplied}
+                  className={`h-8 rounded-md border px-3 text-xs font-semibold transition ${
+                    draftDriverAssignmentApplied
+                      ? "border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100"
+                      : "border-sky-300 bg-white text-sky-900 hover:bg-sky-50"
+                  }`}
+                  data-admin-draft-driver-assignment-state={
+                    draftDriverAssignmentApplied ? "applied" : "ready"
+                  }
                   onClick={assignDraftDriver}
                   type="button"
                 >
-                  Apply Driver to Draft
+                  {draftDriverAssignmentApplied ? "Applied / Cancel to Revise" : "Apply Driver to Draft"}
                 </button>
               </div>
             </section>

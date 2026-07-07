@@ -411,14 +411,14 @@ function buildAdminBookingCalendarEventParts(
     textField(booking, "company_name") ||
     nestedTextField(booking, "companies", "company_name", "name");
   const titleTarget = travelerName || companyName || bookingReference;
+  const driverPlateNumber = textField(booking, "driver_plate_number", "driverPlate", "plate");
   const status = textField(booking, "status");
   const cancelledPrefix = clean(status).toLowerCase() === "cancelled" ? "CANCELLED - " : "";
+  const titleCore = driverPlateNumber
+    ? `${driverPlateNumber} > ${[titleTarget, bookingType, "Prestige"].filter(Boolean).join(" - ")}`
+    : ["Prestige", bookingType, titleTarget].filter(Boolean).join(" - ");
   const title = limitText(
-    `${midnightDisplayAdjustment ? "MIDNIGHT JOB - " : ""}${cancelledPrefix}${[
-      "Prestige",
-      bookingType,
-      titleTarget,
-    ].filter(Boolean).join(" - ")}`,
+    `${midnightDisplayAdjustment ? "MIDNIGHT JOB - " : ""}${cancelledPrefix}${titleCore}`,
     120,
   );
   const description = buildDescription({

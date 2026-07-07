@@ -105,8 +105,16 @@ export async function GET(request: Request) {
     const allowedOrigins = readAllowedOrigins();
     const origin = requestOrigin(request);
 
-    if (provider !== browserMapProvider || !apiKey) {
-      return closedResponse("admin_active_jobs_browser_map_not_configured");
+    if (provider !== browserMapProvider) {
+      return closedResponse("admin_active_jobs_browser_map_provider_gate_missing");
+    }
+
+    if (!apiKey) {
+      return closedResponse("admin_active_jobs_browser_map_browser_key_missing");
+    }
+
+    if (allowedOrigins.length === 0) {
+      return closedResponse("admin_active_jobs_browser_map_allowed_origins_missing");
     }
 
     if (!origin || !allowedOrigins.includes(origin)) {

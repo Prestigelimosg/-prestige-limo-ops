@@ -3853,6 +3853,33 @@ function adminActiveJobsBrowserMapMarkerLabel(entry: AdminActiveJobsBrowserMapMa
   };
 }
 
+function adminActiveJobsBrowserMapConfigMessage(result: AdminActiveJobsMapBrowserConfigResponse | null) {
+  const reason = clean(result?.reason);
+  const error = clean(result?.error);
+
+  if (reason === "admin_active_jobs_browser_map_provider_gate_missing") {
+    return "Embedded map off: browser provider gate is missing. Set the admin active-jobs browser provider to google_maps_javascript; per-driver Open Map remains available.";
+  }
+
+  if (reason === "admin_active_jobs_browser_map_browser_key_missing") {
+    return "Embedded map off: browser-safe Google Maps key is missing. Per-driver Open Map remains available.";
+  }
+
+  if (reason === "admin_active_jobs_browser_map_allowed_origins_missing") {
+    return "Embedded map off: allowed browser origins are missing. Per-driver Open Map remains available.";
+  }
+
+  if (/origin is not allowed/i.test(error)) {
+    return "Embedded map off: this admin origin is not allowed for the browser map key. Per-driver Open Map remains available.";
+  }
+
+  if (reason || error) {
+    return `Embedded map off: ${reason || error}. Per-driver Open Map remains available.`;
+  }
+
+  return "Embedded map off. Open each driver in Google Maps until browser-safe map setup is enabled.";
+}
+
 function AdminActiveJobsBrowserMap({
   activeJobs,
   apiKey,
@@ -13036,7 +13063,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             mapId: "",
             message: {
               tone: "info",
-              text: "Embedded map off. Open each driver in Google Maps until browser-safe map setup is enabled.",
+              text: adminActiveJobsBrowserMapConfigMessage(result),
             },
             status: "off",
           });

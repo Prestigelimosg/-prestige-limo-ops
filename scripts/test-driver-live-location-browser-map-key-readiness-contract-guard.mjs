@@ -165,7 +165,9 @@ for (const fragment of [
   "PRESTIGE_GOOGLE_MAPS_BROWSER_MAP_ID",
   'const browserMapProvider = "google_maps_javascript";',
   "allowedOrigins.includes(origin)",
-  "admin_active_jobs_browser_map_not_configured",
+  "admin_active_jobs_browser_map_provider_gate_missing",
+  "admin_active_jobs_browser_map_browser_key_missing",
+  "admin_active_jobs_browser_map_allowed_origins_missing",
   "Admin active-jobs browser map origin is not allowed.",
   "customerVisible: false",
   "external_send: false",
@@ -175,7 +177,7 @@ for (const fragment of [
 
 assertOrder(
   browserConfigRoute,
-  "provider !== browserMapProvider || !apiKey",
+  "provider !== browserMapProvider",
   "apiKey,",
   "browser config route closed gate before key response",
 );

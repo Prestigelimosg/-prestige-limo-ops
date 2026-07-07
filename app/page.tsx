@@ -15813,6 +15813,9 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     isDspItinerary,
     itineraryDisplayStops,
   ]);
+  const driverJobLinkPreviewText =
+    driverJobLinkMessage ||
+    "Create Link to generate the one-time driver job link preview for this booking.";
 
   const generatedDispatchCopyMessages = useMemo(
     () => ({
@@ -40554,7 +40557,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
                     className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-md bg-indigo-50 p-2.5 text-xs leading-5 text-slate-900"
                     data-copy-preview="driverJobLink"
                   >
-                    {driverJobLinkMessage}
+                    {driverJobLinkPreviewText}
                   </pre>
                 </details>
               </div>

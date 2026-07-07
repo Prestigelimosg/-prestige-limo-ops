@@ -3526,6 +3526,82 @@ function assertMultiBookingDoesNotBlend(sampleInput, label) {
 assertMultiBookingDoesNotBlend(liveBugSamples[0].input, 'multi-case dispatcher list');
 assertMultiBookingDoesNotBlend(liveBugSamples[2].input, 'need 2 cars tomorrow');
 
+const repeatedPickupAddressCombiMessage = `Combi
+
+Hi William, other arrangements I require for 9 July
+Pick Up Address: Frasers Tower Level 1 Lobby to Ion Mall taxi drop off (depart with Group CEO car)
+Time: 16:30
+8 persons
+
+Pickup Address: Ngee Ann City Tower B pick up to National Gallery, drop off Supreme Court – if no rain.
+If raining, Coleman street.
+(depart with Group CEO car)
+Time: 18:45 to 19:00
+7 persons
+
+ 
+Pickup Address: Frasers Towers, drop off Supreme Court – if no rain.
+If raining, Coleman street.
+Time: 18:10
+10 persons`;
+const parsedRepeatedPickupAddressCombi = parseJobCardBookingMessage(
+  repeatedPickupAddressCombiMessage,
+  { referenceDate: new Date(2026, 6, 7, 10, 0, 0) },
+) ?? {};
+assert.equal(parsedRepeatedPickupAddressCombi.success, false);
+assert.equal(parsedRepeatedPickupAddressCombi.multipleBookingsDetected, true);
+assert.equal(
+  parsedRepeatedPickupAddressCombi.parserWarning,
+  'Multiple bookings detected. Please select one extracted booking.',
+);
+assert.equal(parsedRepeatedPickupAddressCombi.vehicle, 'Combi');
+assert.equal(parsedRepeatedPickupAddressCombi.pickup ?? '', '');
+assert.equal(parsedRepeatedPickupAddressCombi.dropoff ?? '', '');
+assert.deepEqual(parsedRepeatedPickupAddressCombi.extractedBookingsPreview, [
+  {
+    passenger: '',
+    company: '',
+    booker: '',
+    vehicle: 'Combi',
+    date: '2026-07-09',
+    time: '1630hrs',
+    type: 'TRF',
+    flight: '',
+    pickup: 'Frasers Tower Level 1 Lobby',
+    dropoff: 'Ion Mall taxi drop off',
+    pax: '8',
+  },
+  {
+    passenger: '',
+    company: '',
+    booker: '',
+    vehicle: 'Combi',
+    date: '2026-07-09',
+    time: '1845hrs',
+    type: 'TRF',
+    flight: '',
+    pickup: 'Ngee Ann City Tower B',
+    dropoff: 'Supreme Court - if no rain; Coleman street if raining',
+    pax: '7',
+    extraStopCount: '1',
+    extraStopLocation: 'National Gallery',
+  },
+  {
+    passenger: '',
+    company: '',
+    booker: '',
+    vehicle: 'Combi',
+    date: '2026-07-09',
+    time: '1810hrs',
+    type: 'TRF',
+    flight: '',
+    pickup: 'Frasers Towers',
+    dropoff: 'Supreme Court - if no rain; Coleman street if raining',
+    pax: '10',
+  },
+]);
+assertMultiBookingDoesNotBlend(repeatedPickupAddressCombiMessage, 'repeated pickup address combi jobs');
+
 const naturalRoundTripAirportBookingSample =
   'Hi, can I book an airport transfer and pick up - 5 people + bags. We will need one forward facing booster seat. Pick up date 02 July at 6am SQ938. Return flight on the 10th July SQ939. mr. peter. 276 ocean drive lobb o';
 const parsedNaturalRoundTripAirportBooking = parseJobCardBookingMessage(

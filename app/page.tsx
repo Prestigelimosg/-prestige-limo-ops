@@ -2342,6 +2342,8 @@ type ParsedBooking = Partial<BookingForm> & {
     pickup?: string;
     dropoff?: string;
     pax?: string;
+    extraStopCount?: string;
+    extraStopLocation?: string;
     childSeatRequired?: string;
     childSeatCount?: string;
     childSeatType?: string;
@@ -2364,6 +2366,8 @@ type ParsedDebugBooking = BookingForm & {
     pickup?: string;
     dropoff?: string;
     pax?: string;
+    extraStopCount?: string;
+    extraStopLocation?: string;
     childSeatRequired?: string;
     childSeatCount?: string;
     childSeatType?: string;
@@ -16571,6 +16575,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         pickup: clean(safePreview.pickup),
         dropoff: clean(safePreview.dropoff),
         pax: clean(safePreview.pax) || current.pax,
+        extraStopCount: clean(safePreview.extraStopCount),
+        extraStopLocation: clean(safePreview.extraStopLocation),
         childSeatRequired: clean(safePreview.childSeatRequired),
         childSeatCount: clean(safePreview.childSeatCount),
         childSeatType: clean(safePreview.childSeatType),
@@ -35890,6 +35896,12 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                               <p className="sm:col-span-2">
                                 <strong>Route:</strong> {routeText || "Not detected"}
                               </p>
+                              {clean(preview.extraStopLocation) ? (
+                                <p className="sm:col-span-2">
+                                  <strong>Extra stop:</strong>{" "}
+                                  {[preview.extraStopCount, preview.extraStopLocation].filter(Boolean).join(" x ")}
+                                </p>
+                              ) : null}
                               {clean(preview.childSeatRequired) === "yes" ? (
                                 <p className="sm:col-span-2">
                                   <strong>Child seat:</strong>{" "}

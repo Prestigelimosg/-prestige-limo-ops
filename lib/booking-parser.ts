@@ -69,6 +69,13 @@ type MultiStopItineraryDetails = {
   extraStopLocation: string;
 };
 
+type PickupAddressSectionRoute = {
+  pickup: string;
+  dropoff: string;
+  extraStopCount?: string;
+  extraStopLocation?: string;
+};
+
 type TerminalFlightLineDetails = {
   passenger: string;
   flight: string;
@@ -408,11 +415,16 @@ function extractNamedPassengerLine(line: string) {
   return "";
 }
 
+function isPickupAddressSectionLine(line: string) {
+  return /^(?:pick\s*up|pickup|pick-up)\s+address\s*[:=-]/i.test(clean(line));
+}
+
 function detectMultipleBookings(text: string, cleanedLines: string[]) {
   const structuredBookingForm = /\bbooking\s+form\s+name\s*[:=-]|\broute\s+name\s*[:=-]|\bclient\s+details\s*:/i.test(text);
   const listItems = structuredBookingForm
     ? []
     : cleanedLines.filter((line) => /^(?:\d+[.)]\s+|[-*•]\s+)/.test(line));
+  const pickupAddressSections = cleanedLines.filter(isPickupAddressSectionLine);
   const flights = detectAllFlights(text);
   const namedPassengers = Array.from(new Set(
     cleanedLines
@@ -429,6 +441,7 @@ function detectMultipleBookings(text: string, cleanedLines: string[]) {
   }
 
   return hasCrewTransferRequestSections(text) ||
+    pickupAddressSections.length > 1 ||
     listItems.length > 1 ||
     flights.length > 1 ||
     namedPassengers.length > 1 ||
@@ -524,6 +537,12 @@ function detectTerminalFlightLineDetails(text: string, selectedFlight = ""): Ter
 }
 
 function splitPotentialBookings(text: string, cleanedLines: string[]) {
+  const pickupAddressSections = splitPickupAddressRequestSections(cleanedLines);
+
+  if (pickupAddressSections.length > 1) {
+    return pickupAddressSections;
+  }
+
   const listLines = cleanedLines
     .filter((line) => /^(?:\d+[.)]\s+|[-*•]\s+)/.test(line))
     .map((line) => clean(line.replace(/^(?:\d+[.)]\s+|[-*•]\s+)/, "")))
@@ -542,6 +561,113 @@ function splitPotentialBookings(text: string, cleanedLines: string[]) {
   const passengerLines = cleanedLines.filter((line) => extractNamedPassengerLine(line));
 
   return passengerLines.length > 1 ? passengerLines : cleanedLines;
+}
+
+function splitPickupAddressRequestSections(cleanedLines: string[]) {
+  const pickupIndexes = cleanedLines
+    .map((line, index) => isPickupAddressSectionLine(line) ? index : -1)
+    .filter((index) => index >= 0);
+
+  if (pickupIndexes.length < 2) {
+    return [];
+  }
+
+  const sharedContextLines = cleanedLines.slice(0, pickupIndexes[0]);
+
+  return pickupIndexes
+    .map((startIndex, sectionIndex) => {
+      const endIndex = pickupIndexes[sectionIndex + 1] ?? cleanedLines.length;
+      return [...sharedContextLines, ...cleanedLines.slice(startIndex, endIndex)]
+        .map(clean)
+        .filter(Boolean)
+        .join("\n");
+    })
+    .filter(Boolean);
+}
+
+function stripDispatchRouteNote(value: string) {
+  return clean(value)
+    .replace(/\s*\([^)]*\bdepart\b[^)]*\)/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function appendConditionalRainDropoff(dropoff: string, sectionText: string) {
+  const rainDropoff = cleanLocation(firstMatch(sectionText, [
+    /\bif\s+raining,?\s+(.+?)(?=\.|\n|$)/i,
+  ]));
+
+  if (!dropoff || !rainDropoff || dropoff.toLowerCase().includes(rainDropoff.toLowerCase())) {
+    return dropoff;
+  }
+
+  return `${dropoff}; ${rainDropoff} if raining`;
+}
+
+function cleanPickupAddressRouteLocation(value: string) {
+  return cleanLocation(stripDispatchRouteNote(value).replace(/[\u2013\u2014]/g, "-"));
+}
+
+function detectPickupAddressSectionRoute(sectionText: string): PickupAddressSectionRoute | null {
+  const rawPickupAddress = lineValue(sectionText, [
+    "pickup address",
+    "pick up address",
+    "pick-up address",
+  ]);
+  const routeText = stripDispatchRouteNote(rawPickupAddress);
+
+  if (!routeText) {
+    return null;
+  }
+
+  const pickupExtraStopDropoffMatch = routeText.match(
+    /^(.+?)\s+pick\s*up\s+to\s+(.+?),\s*drop\s*off\s+(.+)$/i,
+  );
+
+  if (
+    pickupExtraStopDropoffMatch?.[1] &&
+    pickupExtraStopDropoffMatch[2] &&
+    pickupExtraStopDropoffMatch[3]
+  ) {
+    const pickup = cleanPickupAddressRouteLocation(pickupExtraStopDropoffMatch[1]);
+    const extraStopLocation = cleanPickupAddressRouteLocation(pickupExtraStopDropoffMatch[2]);
+    const dropoff = appendConditionalRainDropoff(
+      cleanPickupAddressRouteLocation(pickupExtraStopDropoffMatch[3]),
+      sectionText,
+    );
+
+    return {
+      pickup,
+      dropoff,
+      ...(extraStopLocation ? { extraStopCount: "1", extraStopLocation } : {}),
+    };
+  }
+
+  const commaDropoffMatch = routeText.match(/^(.+?),\s*drop\s*off\s+(.+)$/i);
+
+  if (commaDropoffMatch?.[1] && commaDropoffMatch[2]) {
+    return {
+      pickup: cleanPickupAddressRouteLocation(commaDropoffMatch[1]),
+      dropoff: appendConditionalRainDropoff(
+        cleanPickupAddressRouteLocation(commaDropoffMatch[2]),
+        sectionText,
+      ),
+    };
+  }
+
+  const toRouteMatch = routeText.match(/^(.+?)\s+to\s+(.+)$/i);
+
+  if (toRouteMatch?.[1] && toRouteMatch[2]) {
+    return {
+      pickup: cleanPickupAddressRouteLocation(toRouteMatch[1]),
+      dropoff: appendConditionalRainDropoff(
+        cleanPickupAddressRouteLocation(toRouteMatch[2]),
+        sectionText,
+      ),
+    };
+  }
+
+  return null;
 }
 
 function detectSignatureBooker(text: string) {
@@ -639,6 +765,47 @@ function buildCrewTransferRequestPreview(text: string, referenceDate: Date) {
       pickup: rawRoute.pickup,
       dropoff: rawRoute.dropoff,
       ...(pax ? { pax } : {}),
+    };
+  });
+}
+
+function buildPickupAddressRequestPreview(text: string, cleanedLines: string[], referenceDate: Date) {
+  const pickupAddressSections = splitPickupAddressRequestSections(cleanedLines);
+
+  if (pickupAddressSections.length < 2) {
+    return [];
+  }
+
+  const sharedContext = detectSharedTransferRequestContext(text);
+  const contextDate = parseDateFromText(text, referenceDate);
+  const sharedVehicle = sharedContext.vehicle || detectVehicle(text);
+
+  return pickupAddressSections.map((section) => {
+    const sectionText = normalizeIntentText(section);
+    const flight = detectFlight(sectionText);
+    const pickupAddressRoute = detectPickupAddressSectionRoute(sectionText);
+    const route = pickupAddressRoute || detectRoute(sectionText, flight);
+    const rawTime = parseTimeFromText(sectionText);
+    const type = lineValue(sectionText, ["booking type", "type", "job type"]) ||
+      (!flight && route.pickup && route.dropoff ? "TRF" : detectBookingType(sectionText, flight, route));
+    const passenger = detectName(sectionText, flight) || sharedContext.passenger;
+    const date = parseDateFromText(sectionText, referenceDate) || contextDate;
+    const pax = detectExplicitPax(sectionText);
+
+    return {
+      passenger,
+      company: sharedContext.company,
+      booker: sharedContext.booker,
+      vehicle: sharedVehicle,
+      date,
+      time: formatTimeForState(rawTime) || rawTime,
+      type,
+      flight,
+      pickup: route.pickup,
+      dropoff: route.dropoff,
+      ...(pax ? { pax } : {}),
+      ...(pickupAddressRoute?.extraStopCount ? { extraStopCount: pickupAddressRoute.extraStopCount } : {}),
+      ...(pickupAddressRoute?.extraStopLocation ? { extraStopLocation: pickupAddressRoute.extraStopLocation } : {}),
     };
   });
 }
@@ -887,6 +1054,7 @@ function buildExtractedBookingsPreview(text: string, cleanedLines: string[], ref
   const hasMultipleFlights = detectAllFlights(text).length > 1;
   const airportStandbyPreview = hasExplicitList || hasMultipleFlights ? [] : buildAirportStandbyPreview(text, referenceDate);
   const crewTransferPreview = buildCrewTransferRequestPreview(text, referenceDate);
+  const pickupAddressPreview = buildPickupAddressRequestPreview(text, cleanedLines, referenceDate);
   const separatedTransferPreview = buildSeparatedTransferRequestPreview(text, referenceDate);
   const airportReturnTransferPreview = buildAirportReturnTransferPreview(text, referenceDate);
   const contextDate = parseDateFromText(text, referenceDate);
@@ -898,6 +1066,10 @@ function buildExtractedBookingsPreview(text: string, cleanedLines: string[], ref
 
   if (separatedTransferPreview.length > 0) {
     return separatedTransferPreview;
+  }
+
+  if (pickupAddressPreview.length > 0) {
+    return pickupAddressPreview;
   }
 
   if (airportReturnTransferPreview.length > 0) {

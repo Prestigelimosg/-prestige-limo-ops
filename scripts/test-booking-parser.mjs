@@ -3602,6 +3602,60 @@ assert.deepEqual(parsedRepeatedPickupAddressCombi.extractedBookingsPreview, [
 ]);
 assertMultiBookingDoesNotBlend(repeatedPickupAddressCombiMessage, 'repeated pickup address combi jobs');
 
+const addOnTripsVehicleSectionMessage = `Evelyn
+
+@⁨PrestigeLimo.Sg⁩  2 more add on trips for 9th July:
+
+1 Alphard (5.30pm - 7.00pm) - need to store luggage on car
+pickup 5.30pm from Frasers Tower to ION
+pickup 7.00pm from ION to Airport (JAL036, 21:50 JL36)
+Alphard short dsp
+
+
+1 4-seater, 7.00pm pick up from ION to Supreme Court unless raining, alight at Coleman Street
+AVF Trf`;
+const parsedAddOnTripsVehicleSection = parseJobCardBookingMessage(
+  addOnTripsVehicleSectionMessage,
+  { referenceDate: new Date(2026, 6, 7, 10, 0, 0) },
+) ?? {};
+assert.equal(parsedAddOnTripsVehicleSection.success, false);
+assert.equal(parsedAddOnTripsVehicleSection.multipleBookingsDetected, true);
+assert.equal(
+  parsedAddOnTripsVehicleSection.parserWarning,
+  'Multiple bookings detected. Please select one extracted booking.',
+);
+assert.equal(parsedAddOnTripsVehicleSection.pickup ?? '', '');
+assert.equal(parsedAddOnTripsVehicleSection.dropoff ?? '', '');
+assert.deepEqual(parsedAddOnTripsVehicleSection.extractedBookingsPreview, [
+  {
+    passenger: '',
+    company: '',
+    booker: '',
+    vehicle: 'AVF',
+    date: '2026-07-09',
+    time: '1730hrs',
+    type: 'DSP',
+    flight: 'JL36',
+    pickup: 'Frasers Tower',
+    dropoff: 'Changi Airport',
+    extraStopCount: '1',
+    extraStopLocation: 'ION',
+  },
+  {
+    passenger: '',
+    company: '',
+    booker: '',
+    vehicle: 'AVF',
+    date: '2026-07-09',
+    time: '1900hrs',
+    type: 'TRF',
+    flight: '',
+    pickup: 'ION',
+    dropoff: 'Supreme Court; Coleman Street if raining',
+  },
+]);
+assertMultiBookingDoesNotBlend(addOnTripsVehicleSectionMessage, 'add-on trips vehicle sections');
+
 const naturalRoundTripAirportBookingSample =
   'Hi, can I book an airport transfer and pick up - 5 people + bags. We will need one forward facing booster seat. Pick up date 02 July at 6am SQ938. Return flight on the 10th July SQ939. mr. peter. 276 ocean drive lobb o';
 const parsedNaturalRoundTripAirportBooking = parseJobCardBookingMessage(

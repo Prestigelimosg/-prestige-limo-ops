@@ -35,8 +35,8 @@ assertIncludes(
 );
 assertIncludes(
   adminPage,
-  'export default function Home({ initialTab = "dashboard" }: HomeProps = {})',
-  "Root admin app must still default normal visits to Dashboard.",
+  'export default function Home({ initialTab = "dispatch" }: HomeProps = {})',
+  "Root admin app must still default normal visits to Dispatch.",
 );
 assertIncludes(
   adminPage,

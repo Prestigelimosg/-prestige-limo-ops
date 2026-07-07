@@ -12383,7 +12383,7 @@ function companyProfileSettingsFailureMessage(action: "load" | "save", rawError:
   return `Company settings could not be ${actionLabel}. Reload Company Settings and try again.`;
 }
 
-export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
+export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const showSetupReadinessArchive = false;
   const [booking, setBooking] = useState<BookingForm>(() => createInitialBooking());
   const [activeTab, setActiveTab] = useState<AppTab>(initialTab);

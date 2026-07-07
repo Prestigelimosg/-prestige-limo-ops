@@ -976,7 +976,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Dispatch `Today's Jobs` only lists jobs inside the one-hour-before-pickup monitor window.
 - Dashboard Upcoming booking rows show assigned driver name/contact/plate/vehicle details when available.
 - `Today's Jobs` driver report auto-refresh has an explicit 10-second on/off switch, defaults on, and manual Refresh remains available.
-- Customers payment review rows are compact by default; the mock payment controls and long notes stay collapsed until `View details` is opened.
+- The old Customers mock payment review rows stay removed from the daily Customers page.
 - No app smoke, provider send, external notification delivery, GPS/live location, billing/payment/PDF/invoice/payout, env, DB schema, parser, calendar, or duplicate workflow sector was added.
 - Guard coverage lives in `scripts/test-admin-dashboard-live-followup-fixes-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 

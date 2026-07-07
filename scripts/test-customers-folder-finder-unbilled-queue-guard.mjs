@@ -47,7 +47,7 @@ const unbilledSection = sectionBetween(
 const invoiceWorkspaceSection = sectionBetween(
   customersPage,
   'data-customer-invoice-workspace="true"',
-  'data-customer-advanced-booking-drawer="true"',
+  "</main>",
 );
 const ledgerSection = sectionBetween(
   ledger,
@@ -141,7 +141,6 @@ for (const fragment of [
   "Loading saved bookings for the Monthly Billing Queue...",
   "async function loadRegularCustomerSavedBookingBillingReadiness(",
   "fetch(`${adminCompletedBookingCloseoutApiPath}?${params.toString()}`",
-  'data-regular-customer-saved-billing-readiness-note="true"',
   "const unbilledCustomerRows = useMemo<UnbilledCustomerRow[]>(() => {",
   "regularCustomerSavedBookingReadState.savedBookings",
   "regularCustomerSavedBookingBillingReadinessState.closeoutsByReference",
@@ -221,6 +220,10 @@ for (const forbiddenStrictBillingFragment of [
 for (const duplicateFragment of [
   'data-unbilled-customers-selected-label="true"',
   "preparedUnbilledCustomerLabel",
+  'data-customer-advanced-booking-drawer="true"',
+  'data-customer-debug-tools-drawer="true"',
+  'data-regular-customer-booking-list-preview="true"',
+  'data-monthly-statement-preview="true"',
 ]) {
   assertExcludes(unbilledSection, duplicateFragment, "duplicate unbilled customer selector");
 }

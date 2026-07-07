@@ -7258,21 +7258,31 @@ function bookingRecordIsOpenCustomerBookingRequest(bookingRecord: BookingRecord)
     return false;
   }
 
-  const status = clean(bookingRecord.status).toLowerCase();
+  const statusValues = [
+    bookingRecord.status,
+    bookingRecord.admin_internal_status,
+    bookingRecord.customer_facing_status,
+    bookingRecord.request_review_status,
+  ].map((value) => clean(value).toLowerCase()).filter(Boolean);
 
-  return ![
+  const closedStatuses = new Set([
     "cancelled",
     "canceled",
     "completed",
     "complete",
     "declined",
+    "declined internally",
     "rejected",
     "confirmed",
+    "ready for confirmation",
+    "approved",
     "released",
     "closed",
     "job completed",
     "job_completed",
-  ].includes(status);
+  ]);
+
+  return !statusValues.some((status) => closedStatuses.has(status));
 }
 
 const dispatchActiveJobsMonitorUnassignedDriverLabels = new Set([
@@ -15979,11 +15989,17 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   const customerBookingRequestBookings = useMemo(
     () =>
       operationalBookings.filter(
-        (bookingRecord) =>
-          bookingRecordIsOpenCustomerBookingRequest(bookingRecord) &&
-          !handledCustomerBookingRequestKeySet.has(getCustomerBookingRequestQueueKey(bookingRecord)),
+        (bookingRecord) => {
+          const pickupTimeMs = bookingRecordPickupDateTimeMs(bookingRecord);
+
+          return (
+            bookingRecordIsOpenCustomerBookingRequest(bookingRecord) &&
+            (pickupTimeMs === null || pickupTimeMs >= currentTimeMs) &&
+            !handledCustomerBookingRequestKeySet.has(getCustomerBookingRequestQueueKey(bookingRecord))
+          );
+        },
       ),
-    [handledCustomerBookingRequestKeySet, operationalBookings],
+    [currentTimeMs, handledCustomerBookingRequestKeySet, operationalBookings],
   );
   const dashboardCustomerBookingRequestBookings = useMemo(
     () =>

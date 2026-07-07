@@ -54,6 +54,8 @@ for (const phrase of [
   "Recent and Completed booking lists now render compact expandable rows by default so dispatch can scan more bookings at once while keeping existing details and action buttons available.",
   "The Bookings tab now triggers the same safe Load Bookings read automatically the first time it is opened with an empty loaded list.",
   "Open customer booking requests are surfaced on the Dashboard command centre and above Recent Bookings only when the saved booking carries the customer request source markers; a `CUST-` reference alone does not create a new-request badge because older test/demo rows can share that prefix.",
+  "The new-request badge open/closed check reads `status`, `admin_internal_status`, `customer_facing_status`, and `request_review_status`, so approved, declined, confirmed, released, cancelled, completed, and closed customer request rows do not remain counted as new.",
+  "Customer request rows with past pickup times are excluded from the new-request badge, so stale pending test/demo requests do not keep a live mobile alert alive.",
   "The Dashboard is the default admin landing tab, shows a compact `Urgent Booking Requests` alert only for open customer requests and saved Driver TBC jobs inside the 1-hour pickup monitor window, and routes each row to the existing Dispatch Driver Job Link handoff.",
   "Dashboard initial Load Bookings completion only writes the global status message while the operator is still on Dashboard, so a delayed read cannot overwrite Rates or other tab feedback after navigation.",
   "The Bookings request row is the review handoff point for open customer requests outside the 1-hour dispatch window and can load the selected request into the existing Dispatch form only when the operator chooses `Open in Driver Job Link`; the handoff focuses the existing Driver Job Link section without adding a duplicate write path.",
@@ -152,7 +154,15 @@ assertExcludes(
 );
 assertIncludes(appPage, '"confirmed"', "Confirmed customer request exclusion");
 assertIncludes(appPage, '"released"', "Released customer request exclusion");
+assertIncludes(appPage, "bookingRecord.admin_internal_status", "Admin internal status request exclusion");
+assertIncludes(appPage, "bookingRecord.customer_facing_status", "Customer facing status request exclusion");
+assertIncludes(appPage, "bookingRecord.request_review_status", "Request review status request exclusion");
+assertIncludes(appPage, '"ready for confirmation"', "Approved internal request exclusion");
+assertIncludes(appPage, '"approved"', "Approved request review exclusion");
+assertIncludes(appPage, '"declined internally"', "Declined internal request exclusion");
 assertIncludes(appPage, "function bookingRecordIsOpenCustomerBookingRequest", "Open customer request classifier");
+assertIncludes(appPage, "const pickupTimeMs = bookingRecordPickupDateTimeMs(bookingRecord);", "Customer request pickup freshness");
+assertIncludes(appPage, "pickupTimeMs === null || pickupTimeMs >= currentTimeMs", "Customer request past pickup exclusion");
 assertIncludes(appPage, "handledCustomerBookingRequestKeys", "Handled customer request state");
 assertIncludes(appPage, "handledCustomerBookingRequestKeySet", "Handled customer request filter set");
 assertIncludes(

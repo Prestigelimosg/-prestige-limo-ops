@@ -12363,7 +12363,7 @@ function customerLiveLocationState(
   if (!customerLiveLocationEligibleTypes.has(bookingType)) {
     return {
       copyLine: "",
-      helperText: "Customer live location link is not available for this service type.",
+      helperText: "Customer app link can still be copied; live location is not available for this service type.",
     };
   }
 
@@ -12372,7 +12372,7 @@ function customerLiveLocationState(
   if (pickupTimeMs === null) {
     return {
       copyLine: "",
-      helperText: "Customer live location link requires pickup date and time.",
+      helperText: "Customer app link can still be copied after booking and driver details are ready; live location requires pickup date and time.",
     };
   }
 
@@ -12381,21 +12381,21 @@ function customerLiveLocationState(
   if (currentTimeMs < windowStartMs) {
     return {
       copyLine: "",
-      helperText: "Customer live location link becomes available 30 minutes before pickup.",
+      helperText: "Customer app link can be copied now; live location appears only when ready around 30 minutes before pickup.",
     };
   }
 
   if (currentTimeMs > pickupTimeMs) {
     return {
       copyLine: "",
-      helperText: "Customer live location link is only available within 30 minutes before pickup.",
+      helperText: "Customer app link remains available for trip status; live location is only available within 30 minutes before pickup.",
     };
   }
 
   if (!secureLink) {
     return {
       copyLine: "",
-      helperText: "Customer live location link requires secure driver live location setup.",
+      helperText: "Customer app link can still be copied; live location appears only after secure driver location setup is ready.",
     };
   }
 
@@ -20837,6 +20837,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       [
         "CUSTOMER APP",
         "View driver details and trip status:",
+        "Live location appears in the customer app only when ready, usually around 30 minutes before pickup, after the driver shares location.",
         portalUrl,
       ].join("\n"),
     ]
@@ -40199,15 +40200,16 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                         customerDriverDetailsPortalLinkCopyDisplayState?.loadedReference ||
                         customerDriverDetailsPortalBookingReference
                       }
+                      data-admin-customer-driver-details-copy-with-portal-link-live-location-required="false"
                       data-admin-customer-driver-details-copy-with-portal-link-no-provider-send="true"
                       disabled={customerDriverDetailsPortalLinkCopyDisabled}
                       onClick={copyCustomerDriverDetailsWithCustomerAppLink}
                       title={
                         !dispatchReleaseCustomerCopyReady
-                          ? "Complete trip and assigned-driver details first."
+                          ? "Complete trip and assigned-driver details first. Live location is not required for the app link."
                           : !customerDriverDetailsPortalAccountReference
                             ? "Save + CRM or load the saved booking before copying a customer app link."
-                            : "Copy customer-safe driver details with a secure customer app link. No provider message is sent."
+                            : "Copy customer-safe driver details with a customer app link. Live location appears only when ready; no provider message is sent."
                       }
                       type="button"
                     >

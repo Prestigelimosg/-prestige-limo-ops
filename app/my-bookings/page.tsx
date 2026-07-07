@@ -1529,13 +1529,40 @@ export default function CustomerPortalPage() {
                   const tripUpdates = tripUpdatesByBookingId[expandedBooking.id];
                   const isCheckingTripUpdates = checkingTripUpdatesId === expandedBooking.id;
                   const isTrackingActive = activeTrackingBookingId === expandedBooking.id;
-                  const trackingReady = driverTracking?.status === "available" && Boolean(driverTracking.mapEmbedUrl);
                   const latestTripUpdate = tripUpdates?.updates[0] || null;
+                  const latestTripStatus = [
+                    latestTripUpdate?.title,
+                    latestTripUpdate?.status,
+                    latestTripUpdate?.message,
+                  ]
+                    .filter(Boolean)
+                    .join(" ")
+                    .toLowerCase();
+                  const tripStatusStopsCustomerTracking =
+                    latestTripStatus.includes("passenger onboard") ||
+                    latestTripStatus.includes("trip in progress") ||
+                    latestTripStatus.includes("completed");
+                  const safeDriverTracking =
+                    tripStatusStopsCustomerTracking && driverTracking
+                      ? {
+                          ...driverTracking,
+                          accuracyLabel: "",
+                          mapEmbedUrl: "",
+                          message:
+                            latestTripStatus.includes("completed")
+                              ? "Live location is no longer available after trip completion."
+                              : "Live location is no longer available after passenger onboard.",
+                          status: "blocked" as const,
+                          updatedAt: driverTracking.updatedAt,
+                        }
+                      : driverTracking;
+                  const trackingReady =
+                    safeDriverTracking?.status === "available" && Boolean(safeDriverTracking.mapEmbedUrl);
                   const trackingStatusLabel = trackingReady
                     ? "Live"
-                    : driverTracking?.status === "not_ready"
+                    : safeDriverTracking?.status === "not_ready"
                       ? "Waiting"
-                      : driverTracking?.status === "blocked"
+                      : safeDriverTracking?.status === "blocked"
                         ? "Locked"
                         : "Standby";
 
@@ -1697,7 +1724,7 @@ export default function CustomerPortalPage() {
                             <div className="flex flex-col gap-2 border-b border-sky-100 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
                               <div className="min-w-0">
                                 <p className="text-sm font-semibold text-slate-950">
-                                  {latestTripUpdate?.title || driverTracking?.message || "Driver status to confirm"}
+                                  {latestTripUpdate?.title || safeDriverTracking?.message || "Driver status to confirm"}
                                 </p>
                                 <p className="mt-1 text-xs text-slate-600">
                                   {driverDetails
@@ -1710,7 +1737,7 @@ export default function CustomerPortalPage() {
                                   "w-fit rounded-full px-2.5 py-1 text-xs font-semibold",
                                   trackingReady
                                     ? "bg-emerald-100 text-emerald-950"
-                                    : driverTracking?.status === "blocked"
+                                    : safeDriverTracking?.status === "blocked"
                                       ? "bg-slate-100 text-slate-700"
                                       : "bg-amber-100 text-amber-950",
                                 ].join(" ")}
@@ -1719,13 +1746,13 @@ export default function CustomerPortalPage() {
                               </span>
                             </div>
                             <div className="relative aspect-[4/3] min-h-72 bg-slate-100 sm:aspect-[16/9]">
-                              {trackingReady && driverTracking?.mapEmbedUrl ? (
+                              {trackingReady && safeDriverTracking?.mapEmbedUrl ? (
                                 <iframe
                                   className="h-full w-full border-0"
                                   data-customer-portal-driver-tracking-map={expandedBooking.id}
                                   loading="lazy"
                                   referrerPolicy="no-referrer-when-downgrade"
-                                  src={driverTracking.mapEmbedUrl}
+                                  src={safeDriverTracking.mapEmbedUrl}
                                   title="Driver live map"
                                 />
                               ) : (
@@ -1733,7 +1760,7 @@ export default function CustomerPortalPage() {
                                   className="flex h-full min-h-72 items-center justify-center px-5 text-center text-sm font-semibold text-slate-700"
                                   data-customer-portal-driver-tracking-placeholder={expandedBooking.id}
                                 >
-                                  {driverTracking?.message ||
+                                  {safeDriverTracking?.message ||
                                     "Tracking appears after the driver presses OTW and shares location."}
                                 </div>
                               )}
@@ -1743,29 +1770,29 @@ export default function CustomerPortalPage() {
                                 {expandedBooking.pickupLocation} to {expandedBooking.dropoffLocation}
                               </span>
                               <span data-customer-portal-driver-tracking-updated={expandedBooking.id}>
-                                {driverTracking?.updatedAt ? `Updated ${driverTracking.updatedAt}` : "Update pending"}
+                                {safeDriverTracking?.updatedAt ? `Updated ${safeDriverTracking.updatedAt}` : "Update pending"}
                               </span>
                               <span data-customer-portal-driver-tracking-accuracy={expandedBooking.id}>
-                                {driverTracking?.accuracyLabel || "Location accuracy pending"}
+                                {safeDriverTracking?.accuracyLabel || "Location accuracy pending"}
                               </span>
                             </div>
                           </div>
                         ) : null}
 
-                        {driverTracking && !isTrackingActive ? (
+                        {safeDriverTracking && !isTrackingActive ? (
                           <p
                             className={`mt-3 rounded-md border px-2.5 py-2 text-sm font-medium ${
-                              driverTracking.status === "available"
+                              safeDriverTracking.status === "available"
                                 ? "border-emerald-200 bg-white text-emerald-950"
-                                : driverTracking.status === "not_ready"
+                                : safeDriverTracking.status === "not_ready"
                                   ? "border-amber-200 bg-amber-50 text-amber-950"
                                   : "border-slate-200 bg-white text-slate-700"
                             }`}
                             data-customer-portal-driver-location-message={expandedBooking.id}
                           >
-                            {driverTracking.message}
-                            {driverTracking.updatedAt ? ` Last updated ${driverTracking.updatedAt}.` : ""}
-                            {driverTracking.accuracyLabel ? ` ${driverTracking.accuracyLabel}.` : ""}
+                            {safeDriverTracking.message}
+                            {safeDriverTracking.updatedAt ? ` Last updated ${safeDriverTracking.updatedAt}.` : ""}
+                            {safeDriverTracking.accuracyLabel ? ` ${safeDriverTracking.accuracyLabel}.` : ""}
                           </p>
                         ) : null}
 

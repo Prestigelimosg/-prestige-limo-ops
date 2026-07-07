@@ -307,9 +307,9 @@ const driverStatusCustomerInAppTemplates: Record<
     title: "Driver arrived",
   },
   pob: {
-    message: "Your trip is in progress.",
-    statusLabel: "Trip in progress",
-    title: "Trip in progress",
+    message: "Passenger is onboard. Your trip is in progress.",
+    statusLabel: "Passenger onboard",
+    title: "Passenger onboard",
   },
 };
 const controlledCustomerRuntimeModes = new Set<ControlledCustomerRuntimeMode>([

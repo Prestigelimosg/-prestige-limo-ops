@@ -208,8 +208,9 @@ for (const fragment of [
 }
 
 for (const fragment of [
-  "the customer can receive a live location link 30 minutes before pickup",
-  "For Arrival/MNG jobs, customer live location is not used.",
+  "For DEP, MNG, TRF, and hourly/DSP jobs, the customer can view live location only through the scoped customer portal/app link after driver assignment, driver-link open, OTW, and active non-stale driver sharing.",
+  "Arrival/MNG live location uses manual arrival readiness plus driver sharing wording; do not claim flight API or ETA monitoring is active.",
+  "Arrival/MNG customer live location stays scoped to manual arrival readiness plus driver sharing; no flight API/ETA monitoring is claimed.",
   "Live location should auto-end when POB is marked.",
   "Driver location auto-ends at POB.",
   "No live location production behavior is implemented in this task.",

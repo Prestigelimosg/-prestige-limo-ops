@@ -134,9 +134,8 @@ Future live-location work should cover:
 
 - Secure job-scoped driver live location.
 - Driver consent and clear start/end state.
-- Customer live location only for allowed job types later.
-- Arrival/MNG should not expose customer live location.
-- DEP, TRF, and hourly jobs can use a customer live link only when it is secure and allowed.
+- Customer live location for DEP/MNG/TRF/DSP only through the scoped customer portal/app link after driver assignment, driver-link open, OTW, and active non-stale driver sharing.
+- Arrival/MNG uses manual arrival readiness plus driver sharing wording; do not claim flight API or ETA monitoring is active.
 - Live location should auto-end after POB later.
 - Link expiry, privacy rules, and audit trail.
 

@@ -225,7 +225,7 @@ for (const fragment of [
   "safeDisplayLabel: customerDriverDetailsPortalSafeDisplayLabel || customerAccountReference",
   '"x-prestige-admin-purpose": adminLegacyDataPurpose',
   "navigator.clipboard.writeText(",
-  "customerDriverDetailsWithPortalLinkText(messageText, portalUrl)",
+  "customerDriverDetailsWithPortalLinkText(messageText, portalUrl, booking.bookingType)",
   "portalUrl,",
   "Paste/send manually; no provider message was sent.",
   "external_send: false",

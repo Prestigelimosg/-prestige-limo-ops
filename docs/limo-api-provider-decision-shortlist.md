@@ -69,7 +69,7 @@ Why this is safest:
 - It avoids requiring a separate driver app at the start.
 - It keeps location sharing job-scoped instead of exposing general driver tracking.
 - It lets the driver explicitly activate sharing.
-- It keeps customer live location off for Arrival/MNG jobs, where flight ETA and OTS proof matter more.
+- It keeps Arrival/MNG customer live location scoped to manual arrival readiness plus driver sharing, without claiming flight API/ETA monitoring is active.
 
 No live location production behavior is implemented or approved by this document.
 

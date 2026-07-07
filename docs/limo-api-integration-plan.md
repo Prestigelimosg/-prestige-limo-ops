@@ -99,8 +99,8 @@ Driver live location should start with the simplest safe model:
 
 Rules for job types:
 
-- For DEP, TRF, and hourly jobs, the customer can receive a live location link 30 minutes before pickup if the owner approves customer live links.
-- For Arrival/MNG jobs, customer live location is not used.
+- For DEP, MNG, TRF, and hourly/DSP jobs, the customer can view live location only through the scoped customer portal/app link after driver assignment, driver-link open, OTW, and active non-stale driver sharing.
+- Arrival/MNG live location uses manual arrival readiness plus driver sharing wording; do not claim flight API or ETA monitoring is active.
 - Live location should auto-end when POB is marked.
 - Driver statuses must include OTW, OTS, POB, and JC/Job Completed.
 - OTS photo proof can be added later for Arrival/MNG jobs if approved.
@@ -253,7 +253,7 @@ Before any API implementation, these checks must stay protected:
 - No fake payment success.
 - No fake flight status.
 - Live location link is job-scoped.
-- Customer live location disabled for Arrival/MNG.
+- Arrival/MNG customer live location stays scoped to manual arrival readiness plus driver sharing; no flight API/ETA monitoring is claimed.
 - Driver location auto-ends at POB.
 - Notification sending disabled unless explicitly approved.
 - API keys are server-only.

@@ -12381,7 +12381,10 @@ function customerLiveLocationState(
   if (currentTimeMs < windowStartMs) {
     return {
       copyLine: "",
-      helperText: "Customer app link can be copied now; live location appears only when ready around 30 minutes before pickup.",
+      helperText:
+        bookingType === "MNG"
+          ? "Customer app link can be copied now; arrival live location appears only after manual arrival readiness and driver sharing."
+          : "Customer app link can be copied now; live location appears only when ready around 30 minutes before pickup.",
     };
   }
 
@@ -19900,14 +19903,12 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             .filter(isAdminActiveJobsMapLocation)
         : [];
       const activeJobs = collapseAdminActiveJobsMapDriverDuplicates(allActiveJobs);
-      const activeJobReferenceSet = new Set(
-        activeJobDriverStatusReferenceList.map(cleanReferenceText).filter(Boolean),
-      );
+      const activeJobReferenceSet = new Set(liveDispatchMapReferenceList);
       const visibleActiveJobs = activeJobs.filter((job) =>
         activeJobReferenceSet.has(cleanReferenceText(job.assigned_job_reference)),
       );
       const duplicateCount = allActiveJobs.length - activeJobs.length;
-      const outsideWindowCount = activeJobs.length - visibleActiveJobs.length;
+      const outsideAssignedScopeCount = activeJobs.length - visibleActiveJobs.length;
       const allowedBookingReferences = Array.isArray(result.allowed_booking_references)
         ? result.allowed_booking_references.map(cleanReferenceText).filter(Boolean)
         : null;
@@ -19928,8 +19929,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     ? `; ${duplicateCount} older duplicate${duplicateCount === 1 ? "" : "s"} hidden.`
                     : "."
                 }`
-              : outsideWindowCount > 0
-                ? `${outsideWindowCount} shared driver${outsideWindowCount === 1 ? "" : "s"} outside Today's Jobs window hidden.`
+              : outsideAssignedScopeCount > 0
+                ? `${outsideAssignedScopeCount} shared driver${outsideAssignedScopeCount === 1 ? "" : "s"} outside assigned active job scope hidden.`
                 : "Live location is open, but no driver has shared live movement yet.",
         },
         runtimeStatus: "active",
@@ -19952,14 +19953,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   }
 
   async function openAdminLiveLocationRuntimeForActiveJobs() {
-    const bookingReferences = [...new Set(activeJobDriverStatusReferenceList.map(cleanReferenceText).filter(Boolean))];
+    const bookingReferences = liveDispatchMapReferenceList;
 
     if (bookingReferences.length === 0) {
       setAdminActiveJobsMapReadState((current) => ({
         ...current,
         message: {
           tone: "info",
-          text: "No assigned jobs are inside the 1-hour monitor window yet.",
+          text: "No active assigned jobs are ready for live map watching yet.",
         },
       }));
       return;
@@ -20012,7 +20013,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           tone: "success",
           text: `Live Dispatch Map is watching ${allowedBookingReferences.length} active job${
             allowedBookingReferences.length === 1 ? "" : "s"
-          }. Driver movement refreshes automatically while Today's Jobs is open.`,
+          } across DEP/MNG/TRF/DSP. Driver movement refreshes automatically while Dispatch is open.`,
         },
         runtimeStatus: "active",
         status: "loaded",
@@ -20831,13 +20832,18 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     await copyDispatchCopy("customerCopy");
   }
 
-  function customerDriverDetailsWithPortalLinkText(messageText: string, portalUrl: string) {
+  function customerDriverDetailsWithPortalLinkText(messageText: string, portalUrl: string, bookingTypeValue = "") {
+    const liveLocationPortalNote =
+      normalizeBookingType(bookingTypeValue) === "MNG"
+        ? "Arrival live location appears in the customer app only after manual arrival readiness and driver sharing."
+        : "Live location appears in the customer app only when ready, usually around 30 minutes before pickup, after the driver shares location.";
+
     return [
       messageText,
       [
         "CUSTOMER APP",
         "View driver details and trip status:",
-        "Live location appears in the customer app only when ready, usually around 30 minutes before pickup, after the driver shares location.",
+        liveLocationPortalNote,
         portalUrl,
       ].join("\n"),
     ]
@@ -20909,7 +20915,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
       const portalUrl = await createCustomerDriverDetailsPortalLink();
       await navigator.clipboard.writeText(
-        customerDriverDetailsWithPortalLinkText(messageText, portalUrl),
+        customerDriverDetailsWithPortalLinkText(messageText, portalUrl, booking.bookingType),
       );
       setCustomerDriverDetailsPortalLinkCopyState({
         external_send: false,
@@ -24421,6 +24427,15 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         normaliseTimeForSort(formatPickupTimeFromRecord(secondBooking))
       );
     });
+  const liveDispatchMapEligibleBookings = operationalBookings
+    .filter(bookingRecordIsDispatchActiveJobsMonitorEligible)
+    .filter((bookingRecord) => {
+      return (
+        !bookingRecordIsCompletedStatus(bookingRecord) &&
+        !bookingRecordIsCancelledStatus(bookingRecord) &&
+        !bookingRecordHasCompletedDriverReport(bookingRecord)
+      );
+    });
   function getActiveJobBookingReference(bookingRecord: BookingRecord) {
     return getBookingDriverJobStatusReference(bookingRecord);
   }
@@ -24436,21 +24451,28 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const activeJobDriverStatusReferenceList = dayOfTripActiveJobVisibleBookings
     .map(getActiveJobBookingReference)
     .filter(Boolean);
-  const activeJobDriverStatusReferenceSet = new Set(
-    activeJobDriverStatusReferenceList.map(cleanReferenceText).filter(Boolean),
-  );
+  const liveDispatchMapReferenceList = [
+    ...new Set(
+      liveDispatchMapEligibleBookings
+        .map(getActiveJobBookingReference)
+        .map(cleanReferenceText)
+        .filter(Boolean),
+    ),
+  ];
+  const liveDispatchMapReferenceSet = new Set(liveDispatchMapReferenceList);
   const activeJobsMapVisibleJobs = adminActiveJobsMapReadState.activeJobs.filter((job) =>
-    activeJobDriverStatusReferenceSet.has(cleanReferenceText(job.assigned_job_reference)),
+    liveDispatchMapReferenceSet.has(cleanReferenceText(job.assigned_job_reference)),
   );
   const activeJobsMapMarkerCount = activeJobsMapVisibleJobs.length;
-  const liveDispatchPreparedSlotCount = activeJobDriverStatusReferenceList.length;
+  const liveDispatchPreparedSlotCount = liveDispatchMapReferenceList.length;
   const liveDispatchSlotSummaryLabel =
     liveDispatchPreparedSlotCount > 0
       ? `${liveDispatchPreparedSlotCount} active live map slot${
           liveDispatchPreparedSlotCount === 1 ? "" : "s"
-        } ready.`
-      : "No assigned jobs are inside the 1-hour live map window.";
+        } ready across assigned DEP/MNG/TRF/DSP jobs.`
+      : "No active assigned jobs are ready for live map watching.";
   const activeJobDriverStatusReferenceKey = activeJobDriverStatusReferenceList.join("|");
+  const liveDispatchMapReferenceKey = liveDispatchMapReferenceList.join("|");
   const activeJobsMapAllowedReferenceKey = adminActiveJobsMapReadState.allowedBookingReferences.join("|");
   const todayJobsMonitorIsActive = activeTab === "dispatch";
   const activeJobsMapLocationsByReference = new Map(
@@ -24802,7 +24824,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   }, [todayJobsMonitorIsActive, activeJobDriverStatusReferenceKey, dashboardDriverJobAutoRefreshEnabled]);
 
   useEffect(() => {
-    if (!activeJobDriverStatusReferenceKey) {
+    if (!liveDispatchMapReferenceKey) {
       setAdminActiveJobsMapReadState((current) => {
         if (current.activeJobs.length === 0 && current.markerCount === 0) {
           return current;
@@ -24816,7 +24838,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             current.runtimeStatus === "active"
               ? {
                   tone: "info",
-                  text: "No assigned jobs are inside the 1-hour monitor window; live markers are hidden until a job enters the window.",
+                  text: "No active assigned jobs are ready for live map watching; live markers are hidden until an assigned job is active.",
                 }
               : current.message,
         };
@@ -24842,7 +24864,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     // The polling target is keyed by the active Dashboard/runtime state; the refresh helper is intentionally stable by behavior, not identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    activeJobDriverStatusReferenceKey,
+    liveDispatchMapReferenceKey,
     todayJobsMonitorIsActive,
     activeJobsMapAllowedReferenceKey,
     adminActiveJobsMapReadState.runtimeStatus,
@@ -25204,7 +25226,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             <div className="min-w-0">
               <p className="font-semibold">Live Dispatch Map</p>
               <p className="mt-0.5 text-[10px] text-lime-900 sm:text-[11px]">
-                Assigned job live movement; driver locations refresh automatically while Today&apos;s Jobs is open.
+                Active assigned DEP/MNG/TRF/DSP driver sharing; no flight API or provider send is triggered.
               </p>
             </div>
             <div className="flex flex-wrap gap-1">
@@ -25246,7 +25268,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               className="rounded border border-lime-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-lime-950 transition hover:bg-lime-50 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[11px]"
               data-dispatch-live-driver-map-open="true"
               disabled={
-                activeJobDriverStatusReferenceList.length === 0 ||
+                liveDispatchMapReferenceList.length === 0 ||
                 adminActiveJobsMapReadState.action !== "idle"
               }
               onClick={openAdminLiveLocationRuntimeForActiveJobs}
@@ -25258,7 +25280,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               className="rounded border border-lime-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-lime-950 transition hover:bg-lime-50 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[11px]"
               data-dispatch-live-driver-map-refresh="true"
               disabled={
-                activeJobDriverStatusReferenceList.length === 0 ||
+                liveDispatchMapReferenceList.length === 0 ||
                 adminActiveJobsMapReadState.runtimeStatus !== "active" ||
                 adminActiveJobsMapReadState.action !== "idle"
               }
@@ -25272,7 +25294,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               className="rounded border border-sky-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-sky-900 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[11px]"
               data-dispatch-live-driver-map-expand="true"
               data-dispatch-live-driver-map-expanded={adminActiveJobsMapExpanded ? "true" : "false"}
-              disabled={activeJobDriverStatusReferenceList.length === 0}
+              disabled={liveDispatchMapReferenceList.length === 0}
               onClick={() => setAdminActiveJobsMapExpanded((currentValue) => !currentValue)}
               type="button"
             >

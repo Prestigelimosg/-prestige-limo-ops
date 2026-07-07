@@ -120,7 +120,7 @@ No Supabase command is run in this docs-only stage.
 - [ ] Use expiring links.
 - [ ] Protect driver privacy.
 - [ ] Customer live location should be available only for allowed job types later.
-- [ ] Arrival/MNG should not expose customer live location.
+- [ ] Arrival/MNG customer live location uses the scoped customer app link only after manual arrival readiness and driver sharing; no flight API/ETA monitoring is claimed.
 - [ ] DEP/TRF/hourly can use a customer live link only when secure.
 - [ ] Auto-end after POB later.
 - [ ] Plan audit trail for live-location start/end events.

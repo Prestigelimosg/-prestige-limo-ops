@@ -718,24 +718,24 @@ assertIncludes(appPage, 'data-dispatch-live-driver-map-close="true"', "Dispatch 
 assertIncludes(
   appPage,
   "const visibleActiveJobs = activeJobs.filter((job) =>\n        activeJobReferenceSet.has(cleanReferenceText(job.assigned_job_reference)),\n      );",
-  "Dispatch live map filters runtime markers to Today's Jobs references",
+  "Dispatch live map filters runtime markers to assigned active job references",
 );
 assertIncludes(appPage, "activeJobs: visibleActiveJobs,", "Dispatch live map stores only visible markers");
 assertIncludes(appPage, "markerCount: visibleActiveJobs.length,", "Dispatch live map marker count follows visible markers");
 assertIncludes(
   appPage,
-  "outside Today's Jobs window hidden.",
-  "Dispatch live map explains hidden out-of-window shared drivers",
+  "outside assigned active job scope hidden.",
+  "Dispatch live map explains hidden out-of-scope shared drivers",
 );
 assertIncludes(
   appPage,
-  "No assigned jobs are inside the 1-hour monitor window; live markers are hidden until a job enters the window.",
-  "Dispatch live map clears stale markers when the monitor window is empty",
+  "No active assigned jobs are ready for live map watching; live markers are hidden until an assigned job is active.",
+  "Dispatch live map clears stale markers when no active assigned job is available",
 );
 assertIncludes(
   appPage,
-  "const activeJobsMapVisibleJobs = adminActiveJobsMapReadState.activeJobs.filter((job) =>\n    activeJobDriverStatusReferenceSet.has(cleanReferenceText(job.assigned_job_reference)),\n  );",
-  "Dispatch live map derives visible marker rows from the monitor window",
+  "const activeJobsMapVisibleJobs = adminActiveJobsMapReadState.activeJobs.filter((job) =>\n    liveDispatchMapReferenceSet.has(cleanReferenceText(job.assigned_job_reference)),\n  );",
+  "Dispatch live map derives visible marker rows from assigned active jobs",
 );
 assertIncludes(
   appPage,
@@ -744,13 +744,13 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  "activeJobDriverStatusReferenceList.length === 0 ||\n                adminActiveJobsMapReadState.runtimeStatus !== \"active\"",
-  "Dispatch live map refresh is disabled when no monitor-window job exists",
+  "liveDispatchMapReferenceList.length === 0 ||\n                adminActiveJobsMapReadState.runtimeStatus !== \"active\"",
+  "Dispatch live map refresh is disabled when no active assigned job exists",
 );
 assertIncludes(
   appPage,
-  "const liveDispatchPreparedSlotCount = activeJobDriverStatusReferenceList.length;",
-  "Dispatch live map slot count follows the actual monitor-window jobs",
+  "const liveDispatchPreparedSlotCount = liveDispatchMapReferenceList.length;",
+  "Dispatch live map slot count follows active assigned jobs",
 );
 assertExcludes(
   appPage,

@@ -228,12 +228,12 @@ for (const fragment of [
   'data-dispatch-live-driver-map-marker-list="true"',
   'data-dispatch-live-driver-map-boundary="true"',
   "Live Dispatch Map",
-  "Assigned job live movement; driver locations refresh automatically while Today&apos;s Jobs is open.",
+  "Active assigned DEP/MNG/TRF/DSP driver sharing; no flight API or provider send is triggered.",
   "Open Live Dispatch Map",
   "Refresh movement",
   "Close live map",
   "Open Map",
-  "activeJobDriverStatusReferenceList.length === 0",
+  "liveDispatchMapReferenceList.length === 0",
   "Admin-only. Uses assigned active jobs and driver-shared live movement; no external message is sent from here.",
 ]) {
   assertIncludes(activeJobsRuntimeSource, fragment, `admin active-jobs runtime UI fragment ${fragment}`);

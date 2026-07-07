@@ -108,8 +108,9 @@ Future live location requirements:
 
 Customer live location rules remain separate:
 
-- Arrival/MNG should not expose customer live location.
-- DEP/TRF/hourly can later use a customer live link only when secure and allowed.
+- DEP/MNG/TRF/DSP customer live location can be shown only through the scoped customer portal/app link after the assigned driver opens the driver link, presses OTW, and shares active non-stale location.
+- Arrival/MNG uses manual arrival readiness plus driver sharing wording; this plan does not claim flight API or ETA monitoring is active.
+- POB, Job Completed, stopped sharing, stale, or offline state must cut off customer live location safely.
 
 ## 9. Safety Boundaries
 

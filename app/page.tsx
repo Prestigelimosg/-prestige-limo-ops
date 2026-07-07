@@ -1417,6 +1417,7 @@ type AdminAppNotificationAction = {
 
 type AdminAlertLocatorTarget =
   | "admin-app-notification"
+  | "admin-action-summary"
   | "new-booking-requests"
   | "urgent-booking-requests";
 
@@ -19241,7 +19242,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       const selector =
         target === "new-booking-requests"
           ? '[data-new-customer-booking-requests-panel="true"]'
-          : '[data-dashboard-urgent-booking-requests-panel="true"]';
+          : target === "admin-action-summary"
+            ? '[data-dashboard-admin-action-summary="true"]'
+            : '[data-dashboard-urgent-booking-requests-panel="true"]';
 
       document.querySelector<HTMLElement>(selector)?.scrollIntoView({
         behavior: "smooth",
@@ -19251,7 +19254,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   }
 
   function openCustomerBookingRequestsReview(options: { highlight?: boolean } = {}) {
-    selectAppTab("bookings");
+    setBookingsAlertMenuOpen(false);
+    selectAppTab("dashboard");
 
     if (options.highlight) {
       markAdminAlertLocatorHighlight("new-booking-requests");
@@ -19299,7 +19303,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       return;
     }
 
-    selectAppTab("bookings");
+    setBookingsAlertMenuOpen(false);
+    selectAppTab("dashboard");
+    markAdminAlertLocatorHighlight("admin-action-summary");
+    scrollToAdminAlertLocatorTarget("admin-action-summary");
   }
 
   async function saveAdminBookingOperationalSnapshot() {
@@ -28767,9 +28774,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         >
           {appTabs.map((tab) => {
             const selected = activeTab === tab.id;
-            const isBookingsTab = tab.id === "bookings";
-            const showBookingsRequestBadge = isBookingsTab && bookingsTabAttentionCount > 0;
-            const highlightBookingsTab = showBookingsRequestBadge && !selected;
+            const isDashboardTab = tab.id === "dashboard";
+            const showAdminActionBadge = isDashboardTab && bookingsTabAttentionCount > 0;
+            const highlightDashboardTab = showAdminActionBadge && !selected;
 
 	            return (
 	              <div className="relative w-full" key={tab.id}>
@@ -28778,23 +28785,23 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 className={`flex min-h-11 w-full items-center justify-center gap-1.5 rounded px-2 py-1 text-xs font-semibold transition ${
                   selected
                     ? "bg-slate-950 text-white"
-                    : highlightBookingsTab
+                    : highlightDashboardTab
                       ? "border border-emerald-300 bg-emerald-50 text-emerald-950 shadow-[0_0_0_2px_rgba(16,185,129,0.18)] hover:bg-emerald-100"
                     : "border border-stone-200 bg-white text-slate-700 hover:bg-stone-50"
                 }`}
 	                data-app-tab={tab.id}
                 data-bookings-tab-autoload={tab.id === "bookings" ? "true" : undefined}
-                data-bookings-tab-change-requests={isBookingsTab ? String(customerBookingChangeRequestCount) : undefined}
-                data-bookings-tab-new-booking-requests={isBookingsTab ? String(customerBookingRequestCount) : undefined}
-                data-bookings-tab-new-requests={showBookingsRequestBadge ? "true" : undefined}
-	                data-bookings-tab-total-alerts={isBookingsTab ? String(bookingsTabAttentionCount) : undefined}
-	                data-bookings-tab-urgent-under-one-hour={isBookingsTab ? String(bookingsTabUrgentUnderOneHourCount) : undefined}
+                data-dashboard-tab-change-requests={isDashboardTab ? String(customerBookingChangeRequestCount) : undefined}
+                data-dashboard-tab-new-booking-requests={isDashboardTab ? String(customerBookingRequestCount) : undefined}
+                data-dashboard-tab-new-requests={showAdminActionBadge ? "true" : undefined}
+	                data-dashboard-tab-total-alerts={isDashboardTab ? String(bookingsTabAttentionCount) : undefined}
+	                data-dashboard-tab-urgent-under-one-hour={isDashboardTab ? String(bookingsTabUrgentUnderOneHourCount) : undefined}
 		                onClick={(event) => {
 		                  const clickedAlertBadge =
 		                    event.target instanceof HTMLElement &&
 		                    Boolean(event.target.closest('[data-bookings-new-request-badge="true"]'));
 
-		                  if (isBookingsTab && showBookingsRequestBadge && clickedAlertBadge) {
+		                  if (isDashboardTab && showAdminActionBadge && clickedAlertBadge) {
 		                    if (bookingsTabAlertTypeCount > 1) {
 		                      setBookingsAlertMenuOpen((isOpen) => !isOpen);
 		                      return;
@@ -28812,7 +28819,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 type="button"
               >
                 <span data-app-tab-label="true">{tab.label}</span>
-                {showBookingsRequestBadge ? (
+                {showAdminActionBadge ? (
                   <span
                     className={`animate-pulse rounded-full px-2 py-0.5 text-[10px] font-bold leading-none ${
                       selected ? "bg-white text-slate-950" : "bg-emerald-600 text-white"
@@ -28823,7 +28830,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 	                  </span>
 	                ) : null}
 	              </button>
-		                {isBookingsTab && showBookingsRequestBadge && bookingsAlertMenuOpen ? (
+		                {isDashboardTab && showAdminActionBadge && bookingsAlertMenuOpen ? (
 		                  <div
 		                    className="absolute left-1/2 top-full z-30 mt-1 grid min-w-36 -translate-x-1/2 gap-1 rounded-md border border-emerald-200 bg-white p-1 text-left text-xs font-semibold text-slate-800 shadow-lg"
 		                    data-bookings-alert-menu="true"
@@ -40858,7 +40865,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             </button>
           </div>
           {statusPanel}
-          {customerBookingRequestsPanel}
           {recentBookingsPanel}
         </section>
         ) : null}
@@ -41894,6 +41900,50 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           </div>
           {statusPanel}
 
+          {bookingsTabAttentionCount > 0 ? (
+            <section
+              aria-label="Admin Action Center"
+              className={`mb-4 rounded-md border border-emerald-200 bg-emerald-50/60 p-2 sm:p-3 ${
+                adminAlertLocatorHighlight?.target === "admin-action-summary"
+                  ? "shadow-[0_0_0_3px_rgba(16,185,129,0.35)]"
+                  : ""
+              }`}
+              data-admin-alert-locator-highlight={
+                adminAlertLocatorHighlight?.target === "admin-action-summary" ? "true" : undefined
+              }
+              data-dashboard-admin-action-summary="true"
+            >
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <h3 className="text-base font-semibold text-slate-950">Admin Action Center</h3>
+                  <p className="text-xs text-slate-600 sm:text-sm">
+                    Review urgent dispatch items, new customer requests, and customer change/cancel requests from Dashboard.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  <span
+                    className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900 ring-1 ring-amber-200"
+                    data-dashboard-action-summary-urgent={String(bookingsTabUrgentUnderOneHourCount)}
+                  >
+                    {bookingsTabUrgentUnderOneHourCount} urgent
+                  </span>
+                  <span
+                    className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-900 ring-1 ring-emerald-200"
+                    data-dashboard-action-summary-new={String(customerBookingRequestCount)}
+                  >
+                    {customerBookingRequestCount} new
+                  </span>
+                  <span
+                    className="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-semibold text-sky-900 ring-1 ring-sky-200"
+                    data-dashboard-action-summary-change-cancel={String(customerBookingChangeRequestCount)}
+                  >
+                    {customerBookingChangeRequestCount} change/cancel
+                  </span>
+                </div>
+              </div>
+            </section>
+          ) : null}
+
           <section
             aria-label="Urgent Booking Requests"
             className={`mb-4 rounded-md border p-2 sm:p-3 ${
@@ -42017,6 +42067,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               </p>
             )}
           </section>
+
+          {customerBookingRequestsPanel}
 
           <section
             aria-label="Admin App Notifications"

@@ -58,8 +58,8 @@ for (const phrase of [
   "Customer request rows with past pickup times are excluded from the new-request badge, so stale pending test/demo requests do not keep a live mobile alert alive.",
   "Dispatch is the default admin landing tab; Dashboard shows a compact `Urgent Booking Requests` alert only for open customer requests and saved Driver TBC jobs inside the 1-hour pickup monitor window, and routes each row to the existing Dispatch Driver Job Link handoff.",
   "Dashboard initial Load Bookings completion only writes the global status message while the operator is still on Dashboard, so a delayed read cannot overwrite Rates or other tab feedback after navigation.",
-  "The Bookings request row is the review handoff point for open customer requests outside the 1-hour dispatch window and can load the selected request into the existing Dispatch form only when the operator chooses `Open in Driver Job Link`; the handoff focuses the existing Driver Job Link section without adding a duplicate write path.",
-  "Loading a customer request into Dispatch now records a bounded browser-local handled-request key so that request leaves the Dashboard urgent queue plus the Bookings `Urgent & New Booking Requests` queue and badge on that admin browser, then becomes available in Current / Upcoming.",
+  "The Dashboard request row is the review handoff point for open customer requests outside the 1-hour dispatch window and can load the selected request into the existing Dispatch form only when the operator chooses `Open in Driver Job Link`; the handoff focuses the existing Driver Job Link section without adding a duplicate write path.",
+  "Loading a customer request into Dispatch now records a bounded browser-local handled-request key so that request leaves the Dashboard urgent/new request queues and action badge on that admin browser, then becomes available in Current / Upcoming.",
   "Loading a saved booking into Dispatch refreshes the typed operational display once immediately and pauses one background sync tick, keeping the existing guarded read set stable while Customer Copy focuses for review.",
   "The Dashboard now uses compact read-only booking summaries plus `Open` handoff buttons; single-booking driver assignment, status, copy, job-card, and completion work stays in Dispatch/Bookings so page purposes do not duplicate.",
   "`Today's Jobs` is shown below the Dispatch `Assigned Driver` sector for multi-driver scanning and is not rendered on Dashboard.",
@@ -70,7 +70,7 @@ for (const phrase of [
   "The lower Dispatch saved-record finder and internal advanced checks stay in the source as an archived `Optional Workflow Tools` block, but the block is hidden from normal operation so it cannot distract dispatch with unused saved-record or readiness panels.",
   "Dispatch internal readiness, handoff, follow-up, day-of-trip monitor, recovery, exception, closeout-review, and billing-prep panels remain colocated under the archived optional workflow block and nested `Advanced Checks` disclosure for guard coverage, while the default operator view stays focused on daily trip work.",
   "The `Today's Jobs` driver report readout is read-only and does not create driver status events, notification rows, provider sends, GPS/live-location records, billing/payment/PDF/invoice/payout records, or a duplicate single-booking Dispatch workflow.",
-  "The Bookings tab shows one compact pulsing alert badge/highlight after open customer booking requests, queued customer change/cancel requests, or under-1-hour urgent Driver TBC jobs are detected. The badge labels single-source alerts as `change`, `new`, or `urgent`, falls back to compact combined `alerts`, and exposes separate safe data markers for booking-request count, change-request count, urgent under-1-hour count, and total alert count; no sound, browser notification, polling loop, provider send, or new route is added.",
+  "The Dashboard tab is the single Admin Action Center for alert badges after open customer booking requests, queued customer change/cancel requests, or under-1-hour urgent Driver TBC jobs are detected. The badge labels single-source alerts as `change`, `new`, or `urgent`, falls back to compact combined `alerts`, and exposes separate safe data markers for booking-request count, change-request count, urgent under-1-hour count, and total alert count; no sound, browser notification, polling loop, provider send, or new route is added.",
 ]) {
   assertIncludes(ledgerSection, phrase, `Load Bookings fallback ledger phrase ${phrase}`);
 }
@@ -203,7 +203,7 @@ assertIncludes(
   "function openCustomerBookingRequestsReview(options: { highlight?: boolean } = {})",
   "Dashboard request review handoff helper",
 );
-assertIncludes(appPage, 'selectAppTab("bookings");', "Dashboard request handoff opens Bookings");
+assertIncludes(appPage, 'selectAppTab("dashboard");', "Dashboard request handoff stays on Dashboard");
 assertIncludes(
   appPage,
   "onClick={() => openCustomerBookingRequestsReview()}",
@@ -221,83 +221,89 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  'data-bookings-tab-new-requests={showBookingsRequestBadge ? "true" : undefined}',
-  "Bookings tab new request highlight marker",
+  'data-dashboard-tab-new-requests={showAdminActionBadge ? "true" : undefined}',
+  "Dashboard tab new request highlight marker",
 );
 assertIncludes(
   appPage,
-  'data-bookings-tab-new-booking-requests={isBookingsTab ? String(customerBookingRequestCount) : undefined}',
-  "Bookings tab customer booking request count marker",
+  'data-dashboard-tab-new-booking-requests={isDashboardTab ? String(customerBookingRequestCount) : undefined}',
+  "Dashboard tab customer booking request count marker",
 );
 assertIncludes(
   appPage,
-  'data-bookings-tab-change-requests={isBookingsTab ? String(customerBookingChangeRequestCount) : undefined}',
-  "Bookings tab customer change request count marker",
+  'data-dashboard-tab-change-requests={isDashboardTab ? String(customerBookingChangeRequestCount) : undefined}',
+  "Dashboard tab customer change request count marker",
 );
 assertIncludes(
   appPage,
-  'data-bookings-tab-total-alerts={isBookingsTab ? String(bookingsTabAttentionCount) : undefined}',
-  "Bookings tab total attention count marker",
+  'data-dashboard-tab-total-alerts={isDashboardTab ? String(bookingsTabAttentionCount) : undefined}',
+  "Dashboard tab total attention count marker",
 );
 assertIncludes(
   appPage,
-  'data-bookings-tab-urgent-under-one-hour={isBookingsTab ? String(bookingsTabUrgentUnderOneHourCount) : undefined}',
-  "Bookings tab urgent under-one-hour count marker",
+  'data-dashboard-tab-urgent-under-one-hour={isDashboardTab ? String(bookingsTabUrgentUnderOneHourCount) : undefined}',
+  "Dashboard tab urgent under-one-hour count marker",
 );
-assertIncludes(appPage, 'data-bookings-new-request-badge="true"', "Bookings tab new request badge");
-assertIncludes(appPage, "const customerBookingRequestCount = bookingTabCustomerBookingRequestBookings.length;", "Bookings badge count");
+assertIncludes(appPage, 'data-bookings-new-request-badge="true"', "Dashboard action badge");
+assertIncludes(appPage, "const customerBookingRequestCount = bookingTabCustomerBookingRequestBookings.length;", "Dashboard action badge count");
 assertIncludes(
   appPage,
   "const customerBookingChangeRequestCount = adminAppNotificationReadState.notifications.filter((notification) =>",
-  "Bookings badge customer change request source",
+  "Dashboard action badge customer change request source",
 );
 assertIncludes(
   appPage,
   "customerBookingRequestCount + customerBookingChangeRequestCount + bookingsTabUrgentUnderOneHourCount;",
-  "Bookings badge combined attention count",
+  "Dashboard action badge combined attention count",
 );
-assertIncludes(appPage, "adminBookingsTabAlertBadgeLabel", "Bookings badge meaningful alert label helper");
-assertIncludes(appPage, "return `${changeRequestCount} change", "Bookings badge change wording");
-assertIncludes(appPage, "return `${newBookingRequestCount} new`;", "Bookings badge new wording");
-assertIncludes(appPage, "return `${urgentBookingRequestCount} urgent`;", "Bookings badge urgent wording");
-assertIncludes(appPage, "return `${totalCount} alerts`;", "Bookings badge combined wording");
-assertIncludes(appPage, "function locateBookingsTabAlert()", "Bookings badge locator helper");
-assertIncludes(appPage, "bookingsTabAlertTypeCount", "Bookings badge mixed alert type count");
-assertIncludes(appPage, 'data-bookings-alert-menu="true"', "Bookings badge mixed alert menu");
-assertIncludes(appPage, 'data-bookings-alert-menu-option="change"', "Bookings badge change menu option");
-assertIncludes(appPage, 'data-bookings-alert-menu-option="new"', "Bookings badge new menu option");
-assertIncludes(appPage, 'data-bookings-alert-menu-option="urgent"', "Bookings badge urgent menu option");
+assertIncludes(appPage, "adminBookingsTabAlertBadgeLabel", "Dashboard action badge meaningful alert label helper");
+assertIncludes(appPage, "return `${changeRequestCount} change", "Dashboard action badge change wording");
+assertIncludes(appPage, "return `${newBookingRequestCount} new`;", "Dashboard action badge new wording");
+assertIncludes(appPage, "return `${urgentBookingRequestCount} urgent`;", "Dashboard action badge urgent wording");
+assertIncludes(appPage, "return `${totalCount} alerts`;", "Dashboard action badge combined wording");
+assertIncludes(appPage, "function locateBookingsTabAlert()", "Dashboard action badge locator helper");
+assertIncludes(appPage, "bookingsTabAlertTypeCount", "Dashboard action badge mixed alert type count");
+assertIncludes(appPage, 'data-bookings-alert-menu="true"', "Dashboard action badge mixed alert menu");
+assertIncludes(appPage, 'data-bookings-alert-menu-option="change"', "Dashboard action badge change menu option");
+assertIncludes(appPage, 'data-bookings-alert-menu-option="new"', "Dashboard action badge new menu option");
+assertIncludes(appPage, 'data-bookings-alert-menu-option="urgent"', "Dashboard action badge urgent menu option");
 assertIncludes(
   appPage,
   'event.target.closest(\'[data-bookings-new-request-badge="true"]\')',
-  "Bookings tab locator only triggers from badge click",
+  "Dashboard tab locator only triggers from badge click",
 );
 assertIncludes(
   appPage,
-  "if (isBookingsTab && showBookingsRequestBadge && clickedAlertBadge)",
-  "Bookings tab normal click still opens Bookings when badge is present",
+  "if (isDashboardTab && showAdminActionBadge && clickedAlertBadge)",
+  "Dashboard tab normal click still opens Dashboard when badge is present",
 );
 assertIncludes(
   appPage,
   'markAdminAlertLocatorHighlight("admin-app-notification", changeRequestNotificationId);',
-  "Bookings badge highlights exact admin notification row",
+  "Dashboard action badge highlights exact admin notification row",
 );
 assertIncludes(
   appPage,
   'scrollToAdminAlertLocatorTarget("admin-app-notification", changeRequestNotificationId);',
-  "Bookings badge scrolls to exact admin notification row",
+  "Dashboard action badge scrolls to exact admin notification row",
 );
 assertIncludes(
   appPage,
   'openCustomerBookingRequestsReview({ highlight: true });',
-  "Bookings badge locates new booking request panel",
+  "Dashboard action badge locates new booking request panel",
 );
 assertIncludes(
   appPage,
   "openDashboardUrgentBookingRequestsReview();",
-  "Bookings badge locates urgent under-one-hour dashboard panel",
+  "Dashboard action badge locates urgent under-one-hour dashboard panel",
 );
-assertIncludes(appPage, "animate-pulse rounded-full", "Bookings tab alert badge pulse");
+assertIncludes(appPage, "animate-pulse rounded-full", "Dashboard tab alert badge pulse");
+assertIncludes(appPage, 'data-dashboard-admin-action-summary="true"', "Dashboard action summary target");
+assertExcludes(
+  sliceBetween(appPage, '{activeTab === "bookings" ? (', '{activeTab === "completed" ? ('),
+  "{customerBookingRequestsPanel}",
+  "Bookings tab no longer renders request alert panel",
+);
 assertIncludes(appPage, "visibleCustomerBookingRequestBookings", "Customer request visible list cap");
 assertIncludes(
   appPage,

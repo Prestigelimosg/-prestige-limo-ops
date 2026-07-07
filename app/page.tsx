@@ -19227,7 +19227,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       setAdminAlertLocatorHighlight((current) =>
         current?.target === target && current.notificationId === notificationId ? null : current,
       );
-    }, 4500);
+    }, 2500);
   }
 
   function scrollToAdminAlertLocatorTarget(
@@ -19268,6 +19268,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           return;
         }
 
+        markAdminAlertLocatorHighlight("admin-action-summary");
         if (scrollToSelector('[data-dashboard-admin-action-summary="true"]')) {
           return;
         }
@@ -22313,7 +22314,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     <div
       className={`mt-4 rounded-md border border-emerald-200 bg-emerald-50/60 p-3 ${
         adminAlertLocatorHighlight?.target === "new-booking-requests"
-          ? "shadow-[0_0_0_3px_rgba(16,185,129,0.35)]"
+          ? "animate-pulse shadow-[0_0_0_3px_rgba(16,185,129,0.35)]"
           : ""
       }`}
       data-admin-alert-locator-highlight={
@@ -22364,7 +22365,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
           return (
             <article
-              className="grid gap-2 rounded-md border border-emerald-200 bg-white p-2 text-sm shadow-sm md:grid-cols-[minmax(12rem,0.8fr)_minmax(10rem,0.8fr)_minmax(14rem,1.2fr)_auto] md:items-center"
+              className={`grid gap-2 rounded-md border border-emerald-200 bg-white p-2 text-sm shadow-sm md:grid-cols-[minmax(12rem,0.8fr)_minmax(10rem,0.8fr)_minmax(14rem,1.2fr)_auto] md:items-center ${
+                adminAlertLocatorHighlight?.target === "new-booking-requests"
+                  ? "animate-pulse ring-2 ring-emerald-400"
+                  : ""
+              }`}
               data-new-customer-booking-request-row={bookingId}
               data-new-customer-booking-request-urgency={isUrgentRequest ? "urgent" : "new"}
               key={`customer-request-${bookingId}`}
@@ -41950,7 +41955,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               aria-label="Admin Action Center"
               className={`mb-4 rounded-md border border-emerald-200 bg-emerald-50/60 p-2 sm:p-3 ${
                 adminAlertLocatorHighlight?.target === "admin-action-summary"
-                  ? "shadow-[0_0_0_3px_rgba(16,185,129,0.35)]"
+                  ? "animate-pulse shadow-[0_0_0_3px_rgba(16,185,129,0.35)]"
                   : ""
               }`}
               data-admin-alert-locator-highlight={
@@ -42351,7 +42356,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                             onClick={() => openCustomerBookingRequestsReview({ highlight: true })}
                             type="button"
                           >
-                            Review request
+                            Jump to request
                           </button>
                         ) : null}
                         {changeRequestContext ? (

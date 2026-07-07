@@ -307,6 +307,12 @@ assertIncludes(
   "window.setTimeout(() => scrollToAdminAlertLocatorTarget(\"new-booking-requests\"), 150);",
   "Dashboard request review retries after tab render",
 );
+assertIncludes(appPage, "}, 2500);", "Dashboard request review highlight clears in 2.5 seconds");
+assertIncludes(
+  appPage,
+  '? "animate-pulse ring-2 ring-emerald-400"',
+  "Dashboard request rows visibly pulse while highlighted",
+);
 assertIncludes(
   appPage,
   "if (scrollToSelector('[data-new-customer-booking-requests-panel=\"true\"]'))",
@@ -319,6 +325,11 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
+  'markAdminAlertLocatorHighlight("admin-action-summary");',
+  "Dashboard request review fallback highlights Admin Action Center",
+);
+assertIncludes(
+  appPage,
   "scrollToSelector('[data-admin-app-notification-feed=\"true\"]', \"center\")",
   "Dashboard request review final fallback keeps visible movement in notification feed",
 );
@@ -327,6 +338,8 @@ assertIncludes(
   'data-admin-app-notification-review-new-booking-request="true"',
   "New booking notification row review action",
 );
+assertIncludes(appPage, "Jump to request", "New booking notification row jump label");
+assertExcludes(appPage, "Review request", "New booking notification row old review label");
 assertIncludes(
   appPage,
   'onClick={() => openCustomerBookingRequestsReview({ highlight: true })}',

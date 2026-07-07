@@ -7231,18 +7231,10 @@ function sortBookingHistoryNewestFirst(firstBooking: BookingRecord, secondBookin
 }
 
 function bookingRecordIsCustomerBookingRequest(bookingRecord: BookingRecord) {
-  const referenceCandidates = [
-    bookingRecord.booking_reference,
-    cleanReferenceText(bookingRecord.id),
-  ]
-    .map((value) => clean(value).toUpperCase())
-    .filter(Boolean);
-
   return (
     clean(bookingRecord.source_channel) === "customer-booking-request" ||
     clean(bookingRecord.source_surface) === "customer_booking_request" ||
-    clean(bookingRecord.source_surface) === "customer-booking-request" ||
-    referenceCandidates.some((referenceCandidate) => referenceCandidate.startsWith("CUST-"))
+    clean(bookingRecord.source_surface) === "customer-booking-request"
   );
 }
 

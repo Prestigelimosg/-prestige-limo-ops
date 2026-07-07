@@ -53,7 +53,7 @@ for (const phrase of [
   "Save Booking + CRM remains on `POST /api/admin-bookings` and is not changed by this list source cleanup.",
   "Recent and Completed booking lists now render compact expandable rows by default so dispatch can scan more bookings at once while keeping existing details and action buttons available.",
   "The Bookings tab now triggers the same safe Load Bookings read automatically the first time it is opened with an empty loaded list.",
-  "Open customer booking requests are surfaced on the Dashboard command centre and above Recent Bookings, using the existing customer request source markers with a bounded fallback for open `CUST-` request references when live rows do not carry those markers.",
+  "Open customer booking requests are surfaced on the Dashboard command centre and above Recent Bookings only when the saved booking carries the customer request source markers; a `CUST-` reference alone does not create a new-request badge because older test/demo rows can share that prefix.",
   "The Dashboard is the default admin landing tab, shows a compact `Urgent Booking Requests` alert only for open customer requests and saved Driver TBC jobs inside the 1-hour pickup monitor window, and routes each row to the existing Dispatch Driver Job Link handoff.",
   "Dashboard initial Load Bookings completion only writes the global status message while the operator is still on Dashboard, so a delayed read cannot overwrite Rates or other tab feedback after navigation.",
   "The Bookings request row is the review handoff point for open customer requests outside the 1-hour dispatch window and can load the selected request into the existing Dispatch form only when the operator chooses `Open in Driver Job Link`; the handoff focuses the existing Driver Job Link section without adding a duplicate write path.",
@@ -145,10 +145,10 @@ assertIncludes(
   'clean(bookingRecord.source_surface) === "customer_booking_request"',
   "Customer request source_surface marker",
 );
-assertIncludes(
+assertExcludes(
   appPage,
   'referenceCandidates.some((referenceCandidate) => referenceCandidate.startsWith("CUST-"))',
-  "Customer request CUST reference fallback",
+  "Customer request CUST reference-only fallback",
 );
 assertIncludes(appPage, '"confirmed"', "Confirmed customer request exclusion");
 assertIncludes(appPage, '"released"', "Released customer request exclusion");

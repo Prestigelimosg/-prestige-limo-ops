@@ -4265,6 +4265,21 @@ assert.equal(shorthandHotelDeparturePickup.time, '0830hrs');
 assert.equal(shorthandHotelDeparturePickup.pickup, 'Sofitel city centre');
 assert.equal(shorthandHotelDeparturePickup.dropoff, 'Changi Airport');
 
+const narratedPassengerDepartureMessage =
+  'Jwalant will depart for London via SQ 322 tomorrow, 8 July, ETD 23:00. Pickup 2130hrs. 82 Grange Road';
+const narratedPassengerDeparture = parseBookingMessage(narratedPassengerDepartureMessage, {
+  referenceDate: new Date('2026-07-07T12:00:00+08:00'),
+});
+assert.equal(narratedPassengerDeparture.bookingType, 'DEP');
+assert.equal(narratedPassengerDeparture.date, '2026-07-08');
+assert.equal(narratedPassengerDeparture.time, '2130hrs');
+assert.equal(narratedPassengerDeparture.flight, 'SQ322');
+assert.equal(narratedPassengerDeparture.pickup, '82 Grange Road');
+assert.equal(narratedPassengerDeparture.dropoff, 'Changi Airport');
+assert.equal(narratedPassengerDeparture.name, 'Jwalant');
+assert.equal(narratedPassengerDeparture.extraStopCount ?? '', '');
+assert.equal(narratedPassengerDeparture.extraStopLocation ?? '', '');
+
 const jobCard = [
   `${finalBooking.vehicle} ${finalBooking.bookingType}`,
   `${finalBooking.date}, ${finalBooking.time}`,

@@ -1126,6 +1126,12 @@ function detectLoosePickupStayRoute(text: string) {
   return { pickup: "", dropoff: "" };
 }
 
+function detectDeparturePickupAfterTime(text: string) {
+  return cleanLocation(firstMatch(text, [
+    /\b(?:pick\s*up|pickup|p\/u|pu)\s*(?:at|by|around)?\s*(?:[01]?\d|2[0-3])(?:(?::|\.)?\d{2})?\s*(?:am|pm|hrs?)?\s*[.,;:-]+\s*(.+?)(?=\.|,|\n|$)/i,
+  ]));
+}
+
 function normalizeNarratedPersonName(value: string) {
   const cleanedValue = cleanDetectedName(value);
   const honorificMatch = cleanedValue.match(/^(mr|mrs|ms|mdm|miss|dr)\b\.?\s*(.*)$/i);
@@ -1692,6 +1698,15 @@ function detectNarratedTravelerName(text: string) {
   return "";
 }
 
+function detectNarratedDeparturePassenger(text: string) {
+  const passenger = firstMatch(text, [
+    /\b([A-Za-z][A-Za-z.' -]{1,60}?)\s+(?:will\s+)?depart(?:ing)?\s+(?:for|to)\b/i,
+    /\b([A-Za-z][A-Za-z.' -]{1,60}?)\s+(?:will\s+)?take\s+(?:flight\s+)?[A-Z]{2}\s?\d{1,4}\b/i,
+  ]);
+
+  return looksLikePersonName(passenger) ? cleanDetectedName(passenger) : "";
+}
+
 function toDateKey(date: Date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -1815,6 +1830,7 @@ function parseTimeFromText(text: string) {
   ]);
   const explicitPickupTime = firstMatch(text, [
     /\b(?:pick\s*up|pickup|p\/u|pu)\s*(?:at|by|around)\s*[:=-]?\s*(\d{1,2}(?:(?::|\.)?\d{2})?\s*(?:am|pm|hrs?)?)/i,
+    /\b(?:pick\s*up|pickup|p\/u|pu)\s*[:=-]?\s*(((?:[01]\d|2[0-3])[0-5]\d\s*(?:hrs?)?)|(?:\d{1,2}(?::|\.)\d{2}\s*(?:am|pm|hrs?)?)|(?:\d{1,2}\s*(?:am|pm|hrs?)))\b/i,
   ]);
   const labeledTime = firstMatch(text, [
     /\b(?:pickup\s*time|time|p\/u\s*time|pu\s*time|eta)\s*[:=-]?\s*(\d{1,2}(?:(?::|\.)?\d{2})?\s*(?:am|pm|hrs?)?)/i,
@@ -1984,7 +2000,8 @@ function detectExtraStopDetails(text: string) {
     /\bdrop\s+by\s+(.+?)(?=\.|,|\n|$)/i,
     /\b(?:via|stopover\s+at)\s+(.+?)(?=\.|,|\n|$)/i,
   ]));
-  const extraStopLocation = structuredRouteLocation || labeledExtraStop || narratedExtraStop;
+  const safeNarratedExtraStop = /^[A-Z]{2}\s?\d{1,4}\b/i.test(narratedExtraStop) ? "" : narratedExtraStop;
+  const extraStopLocation = structuredRouteLocation || labeledExtraStop || safeNarratedExtraStop;
   const structuredRouteLocationCount = structuredRouteLocation
     ? structuredRouteLocation.split(/\s*>\s*/g).filter(Boolean).length
     : 0;
@@ -3158,6 +3175,17 @@ function detectRoute(text: string, flight = "") {
     };
   }
 
+  const departurePickupAfterTime =
+    flight && /\b(?:DEP|DEPART|DEPARTURE|DEPARTING|ETD)\b/i.test(text)
+      ? detectDeparturePickupAfterTime(text)
+      : "";
+  if (departurePickupAfterTime) {
+    return {
+      pickup: departurePickupAfterTime,
+      dropoff: airportLocationFromText(text),
+    };
+  }
+
   const hotelDeparturePickup = cleanLocation(firstMatch(text, [
     /^(.+?)\s*[.,-]\s*(?:DEP|DEPARTURE|DEPART)\b.*?\b(?:pick\s*up|pickup)\b/i,
   ]));
@@ -3256,6 +3284,7 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
   const name =
     terminalFlightDetails?.passenger ||
     freeformMultiLocationTransfer?.passenger ||
+    detectNarratedDeparturePassenger(operationalText) ||
     detectStandaloneHonorificNameLine(operationalText) ||
     detectStandbyName(operationalText) ||
     detectDrivenPassenger(operationalText) ||

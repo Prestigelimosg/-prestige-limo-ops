@@ -1037,7 +1037,7 @@ export async function createCustomerBookingRequestAdminAppNotification(
       surface: "customer_booking_request",
       workflow_area: "new_booking_request",
     },
-    safe_message: "New booking request received. Open Bookings to review.",
+    safe_message: "New booking request received. Review in Dashboard.",
     safe_title: "New booking request",
     workflow_area: "new_booking_request",
   });

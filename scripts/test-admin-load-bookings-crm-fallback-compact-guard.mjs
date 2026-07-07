@@ -294,6 +294,22 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
+  'data-admin-app-notification-review-new-booking-request="true"',
+  "New booking notification row review action",
+);
+assertIncludes(
+  appPage,
+  'onClick={() => openCustomerBookingRequestsReview({ highlight: true })}',
+  "New booking notification review action opens Dashboard request panel",
+);
+assertIncludes(
+  appPage,
+  '"New booking request received. Review in Dashboard."',
+  "New booking notification row Dashboard review wording",
+);
+assertExcludes(appPage, "Open Bookings to review.", "Admin notification row stale Bookings wording");
+assertIncludes(
+  appPage,
   "openDashboardUrgentBookingRequestsReview();",
   "Dashboard action badge locates urgent under-one-hour dashboard panel",
 );

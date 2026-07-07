@@ -42186,8 +42186,13 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 	                  const notificationStatus = adminAppNotificationDisplayLabel(notification.notification_status);
 	                  const createdTime = adminAppNotificationTimeLabel(notification.created_at);
 	                  const changeRequestContext = adminAppNotificationChangeRequestContext(notification);
+                  const isNewBookingRequestNotification =
+                    clean(notification.workflow_area) === "new_booking_request" ||
+                    clean(notification.safe_title).toLowerCase() === "new booking request";
                   const message = changeRequestContext
                     ? adminBookingChangeRequestDisplayMessage(changeRequestContext)
+                    : isNewBookingRequestNotification
+                      ? "New booking request received. Review in Dashboard."
                     : clean(notification.safe_message) || "No safe notification message recorded.";
                   const loadedChangeRequestBookingRecord = changeRequestContext
                     ? findAdminBookingPersistenceRecordByReference(
@@ -42294,6 +42299,16 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 	                        </dl>
 	                      ) : null}
 	                      <div className="mt-2 flex flex-wrap gap-2">
+                        {isNewBookingRequestNotification ? (
+                          <button
+                            className="h-7 rounded-md border border-emerald-300 bg-emerald-700 px-2 text-xs font-semibold text-white transition hover:bg-emerald-600"
+                            data-admin-app-notification-review-new-booking-request="true"
+                            onClick={() => openCustomerBookingRequestsReview({ highlight: true })}
+                            type="button"
+                          >
+                            Review request
+                          </button>
+                        ) : null}
                         {changeRequestContext ? (
                           <div
                             className="flex flex-wrap gap-2"

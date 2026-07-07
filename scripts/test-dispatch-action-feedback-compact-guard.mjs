@@ -153,6 +153,7 @@ for (const fragment of [
 for (const fragment of [
   'driverJobLinkCopyMessage?.tone === "error"',
   'adminDriverJobLinkState.message?.tone === "error"',
+  "{driverJobLinkPreviewText}",
 ]) {
   assertIncludes(dispatchCopyUiBlock, fragment, `driver job link error-only feedback fragment ${fragment}`);
 }
@@ -160,6 +161,8 @@ for (const fragment of [
 for (const fragment of [
   "const oneTimeUrl = clean(adminDriverJobLinkState.oneTimeUrl);",
   "if (!oneTimeUrl) {\n      return \"\";\n    }",
+  "const driverJobLinkPreviewText =",
+  "Create Link to generate the one-time driver job link preview for this booking.",
 ]) {
   assertIncludes(driverJobLinkMessageBlock, fragment, `driver job link blank preview fragment ${fragment}`);
 }

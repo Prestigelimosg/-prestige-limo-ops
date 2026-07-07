@@ -1089,6 +1089,43 @@ function detectNamedAddressTransferContext(text: string) {
   };
 }
 
+function detectLoosePickupStayRoute(text: string) {
+  const lines = text
+    .split(/\n+/)
+    .map((line) => clean(line))
+    .filter(Boolean);
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] || "";
+    const stayAddress = firstMatch(line, [
+      /\b(?:pick\s*up|pickup)\b.*?\b(?:he|she|they|guest|passenger|pax)\s+stay(?:ing)?(?:\s+at)?\s+(?:the\s+)?(.+?)$/i,
+      /\b(?:pick\s*up|pickup)\b.*?\bstay(?:ing)?(?:\s+at)?\s+(?:the\s+)?(.+?)$/i,
+    ]);
+
+    if (!stayAddress) {
+      continue;
+    }
+
+    const nextAddressLine = lines
+      .slice(index + 1)
+      .find((nextLine) =>
+        /^\d{1,5}[A-Za-z]?\s+[A-Za-z0-9]/.test(nextLine) &&
+        !/\b(?:pax|persons?|people|passengers?)\b/i.test(nextLine) &&
+        !/\b(?:S\$|\$)\d/.test(nextLine) &&
+        !isVehicleServiceHeaderLine(nextLine) &&
+        !looksLikePersonName(nextLine),
+      );
+    const pickup = normalizeNarratedAddress(stayAddress);
+    const dropoff = normalizeNarratedAddress(nextAddressLine || "");
+
+    if (pickup || dropoff) {
+      return { pickup, dropoff };
+    }
+  }
+
+  return { pickup: "", dropoff: "" };
+}
+
 function normalizeNarratedPersonName(value: string) {
   const cleanedValue = cleanDetectedName(value);
   const honorificMatch = cleanedValue.match(/^(mr|mrs|ms|mdm|miss|dr)\b\.?\s*(.*)$/i);
@@ -2208,6 +2245,26 @@ function detectLabeledTravelerName(text: string) {
   return looksLikePersonName(labeledName) ? cleanDetectedName(labeledName) : "";
 }
 
+function detectStandaloneHonorificNameLine(text: string) {
+  const lines = text
+    .split(/\n+/)
+    .map((line) => clean(line))
+    .filter(Boolean);
+
+  for (const line of lines) {
+    const candidate = firstMatch(line, [
+      /^((?:mr|mrs|ms|mdm|miss|dr)\.?\s+[A-Za-z][A-Za-z.' -]*[A-Za-z])\.?\s*(?:S\$|\$)\d+(?:\.\d{1,2})?(?:\s|$)/i,
+      /^((?:mr|mrs|ms|mdm|miss|dr)\.?\s+[A-Za-z][A-Za-z.' -]*[A-Za-z])\.?$/i,
+    ]);
+
+    if (looksLikePersonName(candidate)) {
+      return cleanDetectedName(candidate);
+    }
+  }
+
+  return "";
+}
+
 function detectTripOrganizerDetails(text: string) {
   const match = text.match(/\btrip\s+organizer\s*[:=-]\s*([^\n(]+?)(?:\s*\(([^)]*)\))?(?=\n|$)/i);
   const booker = cleanDetectedName(match?.[1] ?? "");
@@ -3012,6 +3069,12 @@ function detectRoute(text: string, flight = "") {
     };
   }
 
+  const loosePickupStayRoute = flight ? { pickup: "", dropoff: "" } : detectLoosePickupStayRoute(text);
+
+  if (loosePickupStayRoute.pickup || loosePickupStayRoute.dropoff) {
+    return loosePickupStayRoute;
+  }
+
   if (isStandbyBooking(text)) {
     const standbyRoute = detectStandbyRoute(text);
 
@@ -3091,6 +3154,16 @@ function detectRoute(text: string, flight = "") {
     ]));
     return {
       pickup: pickupBeforeAirport,
+      dropoff: airportLocationFromText(text),
+    };
+  }
+
+  const hotelDeparturePickup = cleanLocation(firstMatch(text, [
+    /^(.+?)\s*[.,-]\s*(?:DEP|DEPARTURE|DEPART)\b.*?\b(?:pick\s*up|pickup)\b/i,
+  ]));
+  if (hotelDeparturePickup && !flight) {
+    return {
+      pickup: hotelDeparturePickup,
       dropoff: airportLocationFromText(text),
     };
   }
@@ -3183,6 +3256,7 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
   const name =
     terminalFlightDetails?.passenger ||
     freeformMultiLocationTransfer?.passenger ||
+    detectStandaloneHonorificNameLine(operationalText) ||
     detectStandbyName(operationalText) ||
     detectDrivenPassenger(operationalText) ||
     paxNameAndNumber ||

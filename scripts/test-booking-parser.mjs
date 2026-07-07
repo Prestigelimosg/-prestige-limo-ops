@@ -4243,6 +4243,28 @@ assert.equal(plainBookerNoCompany.company, '');
 assert.equal(plainBookerNoCompany.booker, 'Nicole');
 assert.equal(plainBookerNoCompany.name, 'Mr Tan');
 
+const looseStayAddressTransferMessage = `Roland
+Pickup 0630 and he stay 82 Grange Road
+22 Bedok North Drive
+Mr. Bijjala. $65
+Viano
+2 vvv`;
+const looseStayAddressTransfer = parseBookingForTest(looseStayAddressTransferMessage);
+assert.equal(looseStayAddressTransfer.bookingType, 'TRF');
+assert.equal(looseStayAddressTransfer.vehicle, 'VVV');
+assert.equal(looseStayAddressTransfer.time, '0630hrs');
+assert.equal(looseStayAddressTransfer.pickup, '82 Grange Road');
+assert.equal(looseStayAddressTransfer.dropoff, '22 Bedok North Drive');
+assert.equal(looseStayAddressTransfer.name, 'Mr Bijjala');
+assert.equal(looseStayAddressTransfer.customerPriceOverride, '65');
+
+const shorthandHotelDeparturePickupMessage = 'Sofitel city centre. Departure 0830hrs pickup';
+const shorthandHotelDeparturePickup = parseBookingForTest(shorthandHotelDeparturePickupMessage);
+assert.equal(shorthandHotelDeparturePickup.bookingType, 'DEP');
+assert.equal(shorthandHotelDeparturePickup.time, '0830hrs');
+assert.equal(shorthandHotelDeparturePickup.pickup, 'Sofitel city centre');
+assert.equal(shorthandHotelDeparturePickup.dropoff, 'Changi Airport');
+
 const jobCard = [
   `${finalBooking.vehicle} ${finalBooking.bookingType}`,
   `${finalBooking.date}, ${finalBooking.time}`,

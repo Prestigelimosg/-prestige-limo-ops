@@ -12442,7 +12442,7 @@ function companyProfileSettingsFailureMessage(action: "load" | "save", rawError:
   return `Company settings could not be ${actionLabel}. Reload Company Settings and try again.`;
 }
 
-export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
+export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const showSetupReadinessArchive = false;
   const [booking, setBooking] = useState<BookingForm>(() => createInitialBooking());
   const [activeTab, setActiveTab] = useState<AppTab>(initialTab);
@@ -13047,7 +13047,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
 
   useEffect(() => {
     if (
-      activeTab !== "dashboard" ||
+      (activeTab !== "dashboard" && activeTab !== "dispatch") ||
       dashboardBookingsInitialLoadAttemptedRef.current ||
       bookings.length > 0 ||
       loading
@@ -13056,7 +13056,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
     }
 
     dashboardBookingsInitialLoadAttemptedRef.current = true;
-    void loadBookings("Bookings loaded.", { messageTab: "dashboard" });
+    void loadBookings("Bookings loaded.", { messageTab: activeTab });
   }, [activeTab, bookings.length, loading]);
 
   useEffect(() => {
@@ -19046,7 +19046,11 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
   function selectAppTab(nextTab: AppTab) {
     setActiveTab(nextTab);
 
-    if ((nextTab === "bookings" || nextTab === "dashboard") && bookings.length === 0 && !loading) {
+    if (
+      (nextTab === "bookings" || nextTab === "dashboard" || nextTab === "dispatch") &&
+      bookings.length === 0 &&
+      !loading
+    ) {
       void loadBookings("Bookings loaded.");
     }
 
@@ -21226,6 +21230,10 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         },
         oneTimeUrl: "",
       }));
+
+      if (statusResult.ok) {
+        await loadBookings("Bookings synced.", { silent: true });
+      }
     } catch (error) {
       setAdminDriverJobLinkState((current) => ({
         ...current,

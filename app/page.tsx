@@ -561,7 +561,6 @@ type AdminBookingsListReadResult =
   | {
       bookings: BookingRecord[];
       ok: true;
-      source: "admin-bookings" | "admin-saved-bookings";
     }
   | {
       error: string;
@@ -13072,7 +13071,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
       }
 
       bookingAutoSyncInFlightRef.current = true;
-      void loadBookings("Bookings synced.", { silent: true, skipSavedBookingsRead: true }).finally(() => {
+      void loadBookings("Bookings synced.", { silent: true }).finally(() => {
         bookingAutoSyncInFlightRef.current = false;
       });
     }, 3 * 1000);
@@ -18716,7 +18715,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
 
   async function loadBookings(
     successText = "Bookings loaded.",
-    options?: { messageTab?: AppTab; silent?: boolean; skipSavedBookingsRead?: boolean },
+    options?: { messageTab?: AppTab; silent?: boolean },
   ) {
     const silent = options?.silent === true;
     const canShowMessage = () => !silent && (!options?.messageTab || activeTabRef.current === options.messageTab);
@@ -18746,7 +18745,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
         await fetchLoadBookingsTypedOperationalDisplayResult(searchParams).catch(() => null);
       searchParams.set("limit", adminLoadBookingsListLimit);
 
-      async function fetchAdminBookingsList(): Promise<AdminBookingsListReadResult> {
+      async function fetchAdminSavedBookingsList(): Promise<AdminBookingsListReadResult> {
         const requestInit = {
           headers: {
             "x-prestige-admin-purpose": adminLegacyDataPurpose,
@@ -18754,56 +18753,32 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           method: "GET",
         } satisfies RequestInit;
 
-        let savedBookingsError = "Admin saved booking list read request failed.";
-
-        if (options?.skipSavedBookingsRead !== true) {
-          const savedBookingsResponse = await fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`, requestInit);
-          const savedBookingsBody = (await savedBookingsResponse.json().catch(() => null)) as
-            | AdminSavedBookingReadResponse
-            | null;
-
-          if (
-            savedBookingsResponse.ok &&
-            savedBookingsBody?.ok === true &&
-            Array.isArray(savedBookingsBody.bookings)
-          ) {
-            return {
-              bookings: savedBookingsBody.bookings,
-              ok: true,
-              source: "admin-saved-bookings",
-            };
-          }
-
-          savedBookingsError = readAdminLegacyDataError(
-            savedBookingsBody,
-            savedBookingsError,
-          ).message;
-        }
-
-        const adminBookingsResponse = await fetch(`${adminBookingsApiPath}?${searchParams.toString()}`, requestInit);
-        const adminBookingsBody = (await adminBookingsResponse.json().catch(() => null)) as
+        const savedBookingsResponse = await fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`, requestInit);
+        const savedBookingsBody = (await savedBookingsResponse.json().catch(() => null)) as
           | AdminSavedBookingReadResponse
           | null;
 
         if (
-          adminBookingsResponse.ok &&
-          adminBookingsBody?.ok === true &&
-          Array.isArray(adminBookingsBody.bookings)
+          savedBookingsResponse.ok &&
+          savedBookingsBody?.ok === true &&
+          Array.isArray(savedBookingsBody.bookings)
         ) {
           return {
-            bookings: adminBookingsBody.bookings,
+            bookings: savedBookingsBody.bookings,
             ok: true,
-            source: "admin-bookings",
           };
         }
 
         return {
-          error: readAdminLegacyDataError(adminBookingsBody, savedBookingsError).message,
+          error: readAdminLegacyDataError(
+            savedBookingsBody,
+            "Admin saved booking list read request failed.",
+          ).message,
           ok: false,
         };
       }
 
-      const bookingsListResult = await fetchAdminBookingsList();
+      const bookingsListResult = await fetchAdminSavedBookingsList();
 
       if (!bookingsListResult.ok) {
         if (canShowMessage()) {
@@ -18831,12 +18806,7 @@ export default function Home({ initialTab = "dashboard" }: HomeProps = {}) {
           if (loadedBookings.length === 0) {
             setMessage({ tone: "info", text: "No bookings found." });
           } else {
-            const fallbackNote =
-              bookingsListResult.source === "admin-bookings"
-                ? " CRM list fallback used."
-                : "";
-
-            setMessage({ tone: "success", text: `${successText} Choose a booking below.${fallbackNote}` });
+            setMessage({ tone: "success", text: `${successText} Choose a booking below.` });
           }
         }
       }

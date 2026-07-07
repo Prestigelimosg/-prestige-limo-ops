@@ -45,11 +45,12 @@ const [ledger, appPage, preactivationSuite] = await Promise.all([
 const ledgerSection = sectionBetween(ledger, "### Admin Load Bookings CRM Fallback And Compact List Fix");
 
 for (const phrase of [
-  "Admin `Load Bookings` now keeps typed display hydration at `limit=25`, then uses a bounded same-origin admin booking list read at `limit=100` for Dashboard/Dispatch active-job monitoring.",
+  "The legacy admin booking list fallback is now retired for normal `Load Bookings`, because deleted fake/demo rows can remain in the older `/api/admin-bookings` source and reappear after refresh.",
+  "Admin `Load Bookings` now keeps typed display hydration at `limit=25`, then uses only the guarded saved-bookings list read at `limit=100` for Dashboard/Bookings/Dispatch records.",
   "Both reads use the existing `x-prestige-admin-purpose` browser-admin header and remain GET-only.",
-  "Silent dashboard/bookings/dispatch auto-sync skips the legacy saved-bookings read and uses the CRM-safe admin bookings list, so `Save Booking + CRM` cannot accidentally reload through `/api/admin-saved-bookings`.",
-  "The fallback is an admin dashboard read fallback only; it does not add public reads, broad writes, DB writes, provider sends, env changes, deploys, parser changes, live GPS/customer-wide live map, billing/payment/PDF/invoice/payout, or shims.",
-  "Save Booking + CRM remains on `POST /api/admin-bookings` and is not changed by this fallback.",
+  "Silent dashboard/bookings/dispatch auto-sync uses the same guarded saved-bookings read, so refresh cannot rehydrate old legacy fake/demo rows from `/api/admin-bookings`.",
+  "This read-source cleanup does not add public reads, broad writes, DB writes, provider sends, env changes, deploys, parser changes, live GPS/customer-wide live map, billing/payment/PDF/invoice/payout, or shims.",
+  "Save Booking + CRM remains on `POST /api/admin-bookings` and is not changed by this list source cleanup.",
   "Recent and Completed booking lists now render compact expandable rows by default so dispatch can scan more bookings at once while keeping existing details and action buttons available.",
   "The Bookings tab now triggers the same safe Load Bookings read automatically the first time it is opened with an empty loaded list.",
   "Open customer booking requests are surfaced on the Dashboard command centre and above Recent Bookings, using the existing customer request source markers with a bounded fallback for open `CUST-` request references when live rows do not carry those markers.",
@@ -102,29 +103,23 @@ const dispatchBlock = sliceBetween(
 
 assertIncludes(appPage, 'const adminBookingsApiPath = "/api/admin-bookings";', "Admin bookings fallback path");
 assertIncludes(appPage, 'const adminLoadBookingsListLimit = "100";', "Admin active booking list limit");
-assertIncludes(loadBookingsBlock, "function fetchAdminBookingsList", "Admin bookings list fallback helper");
-assertIncludes(loadBookingsBlock, "skipSavedBookingsRead?: boolean", "Load Bookings supports silent saved-booking skip");
-assertIncludes(loadBookingsBlock, "options?.skipSavedBookingsRead !== true", "Saved bookings read can be skipped");
+assertIncludes(loadBookingsBlock, "function fetchAdminSavedBookingsList", "Admin saved bookings list helper");
+assertExcludes(loadBookingsBlock, "skipSavedBookingsRead", "Load Bookings legacy source bypass");
 assertIncludes(
   appPage,
-  'void loadBookings("Bookings synced.", { silent: true, skipSavedBookingsRead: true })',
-  "Silent auto-sync skips legacy saved bookings read",
+  'void loadBookings("Bookings synced.", { silent: true })',
+  "Silent auto-sync uses saved bookings read",
 );
 assertIncludes(
   loadBookingsBlock,
   "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`",
   "Saved bookings first read",
 );
-assertIncludes(
-  loadBookingsBlock,
-  "const adminBookingsResponse = await fetch(`${adminBookingsApiPath}?${searchParams.toString()}`, requestInit);",
-  "Admin bookings fallback read",
-);
+assertExcludes(loadBookingsBlock, "adminBookingsApiPath", "Admin bookings fallback read");
 assertIncludes(loadBookingsBlock, '"x-prestige-admin-purpose": adminLegacyDataPurpose', "Admin purpose header");
 assertIncludes(loadBookingsBlock, 'method: "GET"', "Load Bookings GET-only method");
-assertIncludes(loadBookingsBlock, 'source: "admin-saved-bookings"', "Saved bookings source marker");
-assertIncludes(loadBookingsBlock, 'source: "admin-bookings"', "Admin bookings fallback source marker");
-assertIncludes(loadBookingsBlock, "CRM list fallback used.", "Operator fallback success note");
+assertExcludes(loadBookingsBlock, 'source: "admin-bookings"', "Admin bookings fallback source marker");
+assertExcludes(loadBookingsBlock, "CRM list fallback used.", "Operator fallback success note");
 assertIncludes(loadBookingsBlock, "sortBookingsNewestFirst(bookingsListResult.bookings)", "Fallback list feeds CRM list");
 assertIncludes(
   loadBookingsBlock,
@@ -804,11 +799,11 @@ const adminBookingsFetchIndex = loadBookingsBlock.indexOf(
 );
 assert.equal(typedOperationalFetchIndex > -1, true, "Typed operational fetch must be present.");
 assert.equal(savedBookingsFetchIndex > -1, true, "Saved bookings fetch must be present.");
-assert.equal(adminBookingsFetchIndex > -1, true, "Admin bookings fallback fetch must be present.");
+assert.equal(adminBookingsFetchIndex, -1, "Admin bookings fallback fetch must stay retired.");
 assert.equal(
-  typedOperationalFetchIndex < savedBookingsFetchIndex && savedBookingsFetchIndex < adminBookingsFetchIndex,
+  typedOperationalFetchIndex < savedBookingsFetchIndex,
   true,
-  "Load Bookings must hydrate typed display, then try saved-bookings, then fall back to admin-bookings.",
+  "Load Bookings must hydrate typed display, then read saved-bookings without falling back to admin-bookings.",
 );
 
 for (const forbiddenLoadFragment of [

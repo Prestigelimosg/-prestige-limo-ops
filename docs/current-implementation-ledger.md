@@ -713,12 +713,13 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Admin Load Bookings CRM Fallback And Compact List Fix
 
 - Live manual walkthrough on 2026-06-26 found that the visible admin `Load Bookings` button could still fail with the safe `Admin saved booking read failed safely.` message when `GET /api/admin-saved-bookings?limit=25` failed, even though same-origin admin `GET /api/admin-bookings` returned `ok: true`.
-- Admin `Load Bookings` now keeps typed display hydration at `limit=25`, then uses a bounded same-origin admin booking list read at `limit=100` for Dashboard/Dispatch active-job monitoring.
+- The legacy admin booking list fallback is now retired for normal `Load Bookings`, because deleted fake/demo rows can remain in the older `/api/admin-bookings` source and reappear after refresh.
+- Admin `Load Bookings` now keeps typed display hydration at `limit=25`, then uses only the guarded saved-bookings list read at `limit=100` for Dashboard/Bookings/Dispatch records.
 - Both reads use the existing `x-prestige-admin-purpose` browser-admin header and remain GET-only.
-- Silent dashboard/bookings/dispatch auto-sync skips the legacy saved-bookings read and uses the CRM-safe admin bookings list, so `Save Booking + CRM` cannot accidentally reload through `/api/admin-saved-bookings`.
-- The bounded active-job list read prevents a driver who has already tapped OTW/Share Location from disappearing from `Today's Jobs` merely because newer booking rows pushed the job outside the old 25-row dashboard slice.
-- The fallback is an admin dashboard read fallback only; it does not add public reads, broad writes, DB writes, provider sends, env changes, deploys, parser changes, live GPS/customer-wide live map, billing/payment/PDF/invoice/payout, or shims.
-- Save Booking + CRM remains on `POST /api/admin-bookings` and is not changed by this fallback.
+- Silent dashboard/bookings/dispatch auto-sync uses the same guarded saved-bookings read, so refresh cannot rehydrate old legacy fake/demo rows from `/api/admin-bookings`.
+- The bounded saved-bookings list read prevents a driver who has already tapped OTW/Share Location from disappearing from `Today's Jobs` merely because newer booking rows pushed the job outside the old 25-row dashboard slice.
+- This read-source cleanup does not add public reads, broad writes, DB writes, provider sends, env changes, deploys, parser changes, live GPS/customer-wide live map, billing/payment/PDF/invoice/payout, or shims.
+- Save Booking + CRM remains on `POST /api/admin-bookings` and is not changed by this list source cleanup.
 - Recent and Completed booking lists now render compact expandable rows by default so dispatch can scan more bookings at once while keeping existing details and action buttons available.
 - The Bookings tab now triggers the same safe Load Bookings read automatically the first time it is opened with an empty loaded list.
 - Open customer booking requests are surfaced on the Dashboard command centre and above Recent Bookings, using the existing customer request source markers with a bounded fallback for open `CUST-` request references when live rows do not carry those markers.

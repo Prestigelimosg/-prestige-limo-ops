@@ -16327,21 +16327,30 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       useTypedOperationalOrder: true,
     });
   const customerBookingRequestCount = bookingTabCustomerBookingRequestBookings.length;
+  const newBookingRequestNotificationCount = adminAppNotificationReadState.notifications.filter(
+    (notification) =>
+      clean(notification.workflow_area) === "new_booking_request" ||
+      clean(notification.safe_title).toLowerCase() === "new booking request",
+  ).length;
+  const dashboardNewBookingRequestAttentionCount = Math.max(
+    customerBookingRequestCount,
+    newBookingRequestNotificationCount,
+  );
   const customerBookingChangeRequestCount = adminAppNotificationReadState.notifications.filter((notification) =>
     Boolean(adminAppNotificationChangeRequestContext(notification)),
   ).length;
   const bookingsTabUrgentUnderOneHourCount = dashboardUrgentBookingRequestBookings.length;
   const bookingsTabAttentionCount =
-    customerBookingRequestCount + customerBookingChangeRequestCount + bookingsTabUrgentUnderOneHourCount;
+    dashboardNewBookingRequestAttentionCount + customerBookingChangeRequestCount + bookingsTabUrgentUnderOneHourCount;
   const bookingsTabAlertBadgeLabel = adminBookingsTabAlertBadgeLabel({
     changeRequestCount: customerBookingChangeRequestCount,
-    newBookingRequestCount: customerBookingRequestCount,
+    newBookingRequestCount: dashboardNewBookingRequestAttentionCount,
     totalCount: bookingsTabAttentionCount,
     urgentBookingRequestCount: bookingsTabUrgentUnderOneHourCount,
   });
   const bookingsTabAlertTypeCount = [
     customerBookingChangeRequestCount,
-    customerBookingRequestCount,
+    dashboardNewBookingRequestAttentionCount,
     bookingsTabUrgentUnderOneHourCount,
   ].filter((count) => count > 0).length;
   const urgentCustomerBookingRequestCount = urgentCustomerBookingRequestBookings.length;
@@ -19226,6 +19235,21 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     notificationId?: string,
   ) {
     window.setTimeout(() => {
+      const scrollToSelector = (selector: string, block: ScrollLogicalPosition = "start") => {
+        const targetElement = document.querySelector<HTMLElement>(selector);
+
+        if (!targetElement) {
+          return false;
+        }
+
+        targetElement.scrollIntoView({
+          behavior: "smooth",
+          block,
+        });
+
+        return true;
+      };
+
       if (target === "admin-app-notification") {
         const rows = Array.from(
           document.querySelectorAll<HTMLElement>("[data-admin-app-notification-feed-row-id]"),
@@ -19239,17 +19263,37 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         return;
       }
 
-      const selector =
-        target === "new-booking-requests"
-          ? '[data-new-customer-booking-requests-panel="true"]'
-          : target === "admin-action-summary"
-            ? '[data-dashboard-admin-action-summary="true"]'
-            : '[data-dashboard-urgent-booking-requests-panel="true"]';
+      if (target === "new-booking-requests") {
+        if (scrollToSelector('[data-new-customer-booking-requests-panel="true"]')) {
+          return;
+        }
 
-      document.querySelector<HTMLElement>(selector)?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+        if (scrollToSelector('[data-dashboard-admin-action-summary="true"]')) {
+          return;
+        }
+
+        scrollToSelector('[data-admin-app-notification-feed="true"]', "center");
+        return;
+      }
+
+      if (target === "admin-action-summary") {
+        if (scrollToSelector('[data-dashboard-admin-action-summary="true"]')) {
+          return;
+        }
+
+        scrollToSelector('[data-admin-app-notification-feed="true"]', "center");
+        return;
+      }
+
+      if (scrollToSelector('[data-dashboard-urgent-booking-requests-panel="true"]')) {
+        return;
+      }
+
+      if (scrollToSelector('[data-dashboard-admin-action-summary="true"]')) {
+        return;
+      }
+
+      scrollToSelector('[data-admin-app-notification-feed="true"]', "center");
     }, 0);
   }
 
@@ -19262,6 +19306,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     }
 
     scrollToAdminAlertLocatorTarget("new-booking-requests");
+    window.setTimeout(() => scrollToAdminAlertLocatorTarget("new-booking-requests"), 150);
   }
 
   function openDashboardUrgentBookingRequestsReview() {
@@ -19293,7 +19338,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       return;
     }
 
-    if (customerBookingRequestCount > 0) {
+    if (dashboardNewBookingRequestAttentionCount > 0) {
       openCustomerBookingRequestsReview({ highlight: true });
       return;
     }
@@ -28792,7 +28837,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 	                data-app-tab={tab.id}
                 data-bookings-tab-autoload={tab.id === "bookings" ? "true" : undefined}
                 data-dashboard-tab-change-requests={isDashboardTab ? String(customerBookingChangeRequestCount) : undefined}
-                data-dashboard-tab-new-booking-requests={isDashboardTab ? String(customerBookingRequestCount) : undefined}
+                data-dashboard-tab-new-booking-requests={isDashboardTab ? String(dashboardNewBookingRequestAttentionCount) : undefined}
                 data-dashboard-tab-new-requests={showAdminActionBadge ? "true" : undefined}
 	                data-dashboard-tab-total-alerts={isDashboardTab ? String(bookingsTabAttentionCount) : undefined}
 	                data-dashboard-tab-urgent-under-one-hour={isDashboardTab ? String(bookingsTabUrgentUnderOneHourCount) : undefined}
@@ -28848,7 +28893,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 		                        {customerBookingChangeRequestCount} change
 		                      </button>
 		                    ) : null}
-		                    {customerBookingRequestCount > 0 ? (
+		                    {dashboardNewBookingRequestAttentionCount > 0 ? (
 		                      <button
 		                        className="cursor-pointer rounded px-2 py-1.5 hover:bg-emerald-50"
 		                        data-bookings-alert-menu-option="new"
@@ -28858,7 +28903,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 		                        }}
 		                        type="button"
 		                      >
-		                        {customerBookingRequestCount} new
+		                        {dashboardNewBookingRequestAttentionCount} new
 		                      </button>
 		                    ) : null}
 		                    {bookingsTabUrgentUnderOneHourCount > 0 ? (
@@ -41929,9 +41974,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   </span>
                   <span
                     className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-900 ring-1 ring-emerald-200"
-                    data-dashboard-action-summary-new={String(customerBookingRequestCount)}
+                    data-dashboard-action-summary-new={String(dashboardNewBookingRequestAttentionCount)}
                   >
-                    {customerBookingRequestCount} new
+                    {dashboardNewBookingRequestAttentionCount} new
                   </span>
                   <span
                     className="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-semibold text-sky-900 ring-1 ring-sky-200"
@@ -42002,7 +42047,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 <button
                   className="h-9 rounded-md border border-stone-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:text-slate-400"
                   data-dashboard-review-new-booking-requests="true"
-                  disabled={customerBookingRequestCount === 0}
+                  disabled={dashboardNewBookingRequestAttentionCount === 0}
 	                  onClick={() => openCustomerBookingRequestsReview()}
                   type="button"
                 >

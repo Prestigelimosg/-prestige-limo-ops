@@ -226,7 +226,7 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  'data-dashboard-tab-new-booking-requests={isDashboardTab ? String(customerBookingRequestCount) : undefined}',
+  'data-dashboard-tab-new-booking-requests={isDashboardTab ? String(dashboardNewBookingRequestAttentionCount) : undefined}',
   "Dashboard tab customer booking request count marker",
 );
 assertIncludes(
@@ -248,12 +248,22 @@ assertIncludes(appPage, 'data-bookings-new-request-badge="true"', "Dashboard act
 assertIncludes(appPage, "const customerBookingRequestCount = bookingTabCustomerBookingRequestBookings.length;", "Dashboard action badge count");
 assertIncludes(
   appPage,
+  "const newBookingRequestNotificationCount = adminAppNotificationReadState.notifications.filter(",
+  "Dashboard action badge queued new booking notification source",
+);
+assertIncludes(
+  appPage,
+  "const dashboardNewBookingRequestAttentionCount = Math.max(",
+  "Dashboard action badge avoids double-counting saved request rows and notifications",
+);
+assertIncludes(
+  appPage,
   "const customerBookingChangeRequestCount = adminAppNotificationReadState.notifications.filter((notification) =>",
   "Dashboard action badge customer change request source",
 );
 assertIncludes(
   appPage,
-  "customerBookingRequestCount + customerBookingChangeRequestCount + bookingsTabUrgentUnderOneHourCount;",
+  "dashboardNewBookingRequestAttentionCount + customerBookingChangeRequestCount + bookingsTabUrgentUnderOneHourCount;",
   "Dashboard action badge combined attention count",
 );
 assertIncludes(appPage, "adminBookingsTabAlertBadgeLabel", "Dashboard action badge meaningful alert label helper");
@@ -291,6 +301,26 @@ assertIncludes(
   appPage,
   'openCustomerBookingRequestsReview({ highlight: true });',
   "Dashboard action badge locates new booking request panel",
+);
+assertIncludes(
+  appPage,
+  "window.setTimeout(() => scrollToAdminAlertLocatorTarget(\"new-booking-requests\"), 150);",
+  "Dashboard request review retries after tab render",
+);
+assertIncludes(
+  appPage,
+  "if (scrollToSelector('[data-new-customer-booking-requests-panel=\"true\"]'))",
+  "Dashboard request review scrolls exact request panel first",
+);
+assertIncludes(
+  appPage,
+  "if (scrollToSelector('[data-dashboard-admin-action-summary=\"true\"]'))",
+  "Dashboard request review falls back to Admin Action Center",
+);
+assertIncludes(
+  appPage,
+  "scrollToSelector('[data-admin-app-notification-feed=\"true\"]', \"center\")",
+  "Dashboard request review final fallback keeps visible movement in notification feed",
 );
 assertIncludes(
   appPage,

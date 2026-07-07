@@ -78,7 +78,7 @@ const requestBodyLineItems = sectionBetween(
 const invoicePrepWorkspace = sectionBetween(
   customersPage,
   'data-customer-invoice-prep-panel="true"',
-  'data-customer-invoice-workspace-panel="statements"',
+  "</main>",
 );
 const ledgerSection = sectionBetween(
   ledger,

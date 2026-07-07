@@ -33,6 +33,7 @@ for (const fragment of [
   "adminAppNotificationChangeRequestContext",
   "adminBookingChangeRequestIsCancellation",
   "adminBookingChangeRequestKindLabel",
+  "adminBookingChangeRequestSummaryRows",
   "adminBookingChangeRequestMergeIntoBookingForm",
   "buildAdminBookingCancellationRequestApplyPayload",
   "handleAdminBookingChangeRequestCancelDecision",
@@ -44,6 +45,10 @@ for (const fragment of [
   "Accept + Cal",
   'activeChangeRequestAction === "reject" ? "Rejecting..." : "Reject"',
   "Dismiss",
+  'data-admin-app-notification-change-request-summary="true"',
+  'data-admin-app-notification-clear="safe-inbox-row-only"',
+  'aria-label="Clear only this admin notification inbox row"',
+  'handleAdminAppNotificationStatusUpdate(notificationId, "read")',
 ]) {
   assertIncludes(adminPage, fragment, `admin amendment review UI ${fragment}`);
 }
@@ -85,6 +90,21 @@ assert.equal(
   [...changeRequestActionsBlock.matchAll(/data-admin-booking-change-request-review-action=/g)].length,
   3,
   "Customer change/cancel request rows must expose exactly three review actions.",
+);
+assertIncludes(
+  changeRequestActionsBlock,
+  'data-admin-app-notification-clear="safe-inbox-row-only"',
+  "Customer change/cancel request row safe Clear inbox action",
+);
+assertIncludes(
+  changeRequestActionsBlock,
+  'data-admin-app-notification-action="read"',
+  "Customer change/cancel request Clear reuses notification read status",
+);
+assertIncludes(
+  changeRequestActionsBlock,
+  'handleAdminAppNotificationStatusUpdate(notificationId, "read")',
+  "Customer change/cancel request Clear must not call booking update handlers",
 );
 
 for (const fragment of [

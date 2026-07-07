@@ -45,14 +45,17 @@ const [ledger, appPage, preactivationSuite] = await Promise.all([
 const ledgerSection = sectionBetween(ledger, "### Admin Load Bookings CRM Fallback And Compact List Fix");
 
 for (const phrase of [
-  "Admin `Load Bookings` now keeps typed display hydration at `limit=25`, then uses a bounded same-origin admin booking list read at `limit=100` for Dashboard/Dispatch active-job monitoring.",
+  "The legacy admin booking list fallback is now retired for normal `Load Bookings`, because deleted fake/demo rows can remain in the older `/api/admin-bookings` source and reappear after refresh.",
+  "Admin `Load Bookings` now keeps typed display hydration at `limit=25`, then uses only the guarded saved-bookings list read at `limit=100` for Dashboard/Bookings/Dispatch records.",
   "Both reads use the existing `x-prestige-admin-purpose` browser-admin header and remain GET-only.",
-  "Silent dashboard/bookings/dispatch auto-sync skips the legacy saved-bookings read and uses the CRM-safe admin bookings list, so `Save Booking + CRM` cannot accidentally reload through `/api/admin-saved-bookings`.",
-  "The fallback is an admin dashboard read fallback only; it does not add public reads, broad writes, DB writes, provider sends, env changes, deploys, parser changes, live GPS/customer-wide live map, billing/payment/PDF/invoice/payout, or shims.",
-  "Save Booking + CRM remains on `POST /api/admin-bookings` and is not changed by this fallback.",
+  "Silent dashboard/bookings/dispatch auto-sync uses the same guarded saved-bookings read, so refresh cannot rehydrate old legacy fake/demo rows from `/api/admin-bookings`.",
+  "This read-source cleanup does not add public reads, broad writes, DB writes, provider sends, env changes, deploys, parser changes, live GPS/customer-wide live map, billing/payment/PDF/invoice/payout, or shims.",
+  "Save Booking + CRM remains on `POST /api/admin-bookings` and is not changed by this list source cleanup.",
   "Recent and Completed booking lists now render compact expandable rows by default so dispatch can scan more bookings at once while keeping existing details and action buttons available.",
   "The Bookings tab now triggers the same safe Load Bookings read automatically the first time it is opened with an empty loaded list.",
-  "Open customer booking requests are surfaced on the Dashboard command centre and above Recent Bookings, using the existing customer request source markers with a bounded fallback for open `CUST-` request references when live rows do not carry those markers.",
+  "Open customer booking requests are surfaced on the Dashboard command centre and above Recent Bookings only when the saved booking carries the customer request source markers; a `CUST-` reference alone does not create a new-request badge because older test/demo rows can share that prefix.",
+  "The new-request badge open/closed check reads `status`, `admin_internal_status`, `customer_facing_status`, and `request_review_status`, so approved, declined, confirmed, released, cancelled, completed, and closed customer request rows do not remain counted as new.",
+  "Customer request rows with past pickup times are excluded from the new-request badge, so stale pending test/demo requests do not keep a live mobile alert alive.",
   "Dispatch is the default admin landing tab; Dashboard shows a compact `Urgent Booking Requests` alert only for open customer requests and saved Driver TBC jobs inside the 1-hour pickup monitor window, and routes each row to the existing Dispatch Driver Job Link handoff.",
   "Dashboard initial Load Bookings completion only writes the global status message while the operator is still on Dashboard, so a delayed read cannot overwrite Rates or other tab feedback after navigation.",
   "The Bookings request row is the review handoff point for open customer requests outside the 1-hour dispatch window and can load the selected request into the existing Dispatch form only when the operator chooses `Open in Driver Job Link`; the handoff focuses the existing Driver Job Link section without adding a duplicate write path.",
@@ -67,7 +70,7 @@ for (const phrase of [
   "The lower Dispatch saved-record finder and internal advanced checks stay in the source as an archived `Optional Workflow Tools` block, but the block is hidden from normal operation so it cannot distract dispatch with unused saved-record or readiness panels.",
   "Dispatch internal readiness, handoff, follow-up, day-of-trip monitor, recovery, exception, closeout-review, and billing-prep panels remain colocated under the archived optional workflow block and nested `Advanced Checks` disclosure for guard coverage, while the default operator view stays focused on daily trip work.",
   "The `Today's Jobs` driver report readout is read-only and does not create driver status events, notification rows, provider sends, GPS/live-location records, billing/payment/PDF/invoice/payout records, or a duplicate single-booking Dispatch workflow.",
-  "The Bookings tab shows one compact pulsing alert badge/highlight after open customer booking requests or queued customer change/cancel requests are detected. The count combines both existing sources and exposes separate safe data markers for booking-request count, change-request count, and total alert count; no sound, browser notification, polling loop, provider send, or new route is added.",
+  "The Bookings tab shows one compact pulsing alert badge/highlight after open customer booking requests, queued customer change/cancel requests, or under-1-hour urgent Driver TBC jobs are detected. The badge labels single-source alerts as `change`, `new`, or `urgent`, falls back to compact combined `alerts`, and exposes separate safe data markers for booking-request count, change-request count, urgent under-1-hour count, and total alert count; no sound, browser notification, polling loop, provider send, or new route is added.",
 ]) {
   assertIncludes(ledgerSection, phrase, `Load Bookings fallback ledger phrase ${phrase}`);
 }
@@ -102,29 +105,23 @@ const dispatchBlock = sliceBetween(
 
 assertIncludes(appPage, 'const adminBookingsApiPath = "/api/admin-bookings";', "Admin bookings fallback path");
 assertIncludes(appPage, 'const adminLoadBookingsListLimit = "100";', "Admin active booking list limit");
-assertIncludes(loadBookingsBlock, "function fetchAdminBookingsList", "Admin bookings list fallback helper");
-assertIncludes(loadBookingsBlock, "skipSavedBookingsRead?: boolean", "Load Bookings supports silent saved-booking skip");
-assertIncludes(loadBookingsBlock, "options?.skipSavedBookingsRead !== true", "Saved bookings read can be skipped");
+assertIncludes(loadBookingsBlock, "function fetchAdminSavedBookingsList", "Admin saved bookings list helper");
+assertExcludes(loadBookingsBlock, "skipSavedBookingsRead", "Load Bookings legacy source bypass");
 assertIncludes(
   appPage,
-  'void loadBookings("Bookings synced.", { silent: true, skipSavedBookingsRead: true })',
-  "Silent auto-sync skips legacy saved bookings read",
+  'void loadBookings("Bookings synced.", { silent: true })',
+  "Silent auto-sync uses saved bookings read",
 );
 assertIncludes(
   loadBookingsBlock,
   "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`",
   "Saved bookings first read",
 );
-assertIncludes(
-  loadBookingsBlock,
-  "const adminBookingsResponse = await fetch(`${adminBookingsApiPath}?${searchParams.toString()}`, requestInit);",
-  "Admin bookings fallback read",
-);
+assertExcludes(loadBookingsBlock, "adminBookingsApiPath", "Admin bookings fallback read");
 assertIncludes(loadBookingsBlock, '"x-prestige-admin-purpose": adminLegacyDataPurpose', "Admin purpose header");
 assertIncludes(loadBookingsBlock, 'method: "GET"', "Load Bookings GET-only method");
-assertIncludes(loadBookingsBlock, 'source: "admin-saved-bookings"', "Saved bookings source marker");
-assertIncludes(loadBookingsBlock, 'source: "admin-bookings"', "Admin bookings fallback source marker");
-assertIncludes(loadBookingsBlock, "CRM list fallback used.", "Operator fallback success note");
+assertExcludes(loadBookingsBlock, 'source: "admin-bookings"', "Admin bookings fallback source marker");
+assertExcludes(loadBookingsBlock, "CRM list fallback used.", "Operator fallback success note");
 assertIncludes(loadBookingsBlock, "sortBookingsNewestFirst(bookingsListResult.bookings)", "Fallback list feeds CRM list");
 assertIncludes(
   loadBookingsBlock,
@@ -150,14 +147,22 @@ assertIncludes(
   'clean(bookingRecord.source_surface) === "customer_booking_request"',
   "Customer request source_surface marker",
 );
-assertIncludes(
+assertExcludes(
   appPage,
   'referenceCandidates.some((referenceCandidate) => referenceCandidate.startsWith("CUST-"))',
-  "Customer request CUST reference fallback",
+  "Customer request CUST reference-only fallback",
 );
 assertIncludes(appPage, '"confirmed"', "Confirmed customer request exclusion");
 assertIncludes(appPage, '"released"', "Released customer request exclusion");
+assertIncludes(appPage, "bookingRecord.admin_internal_status", "Admin internal status request exclusion");
+assertIncludes(appPage, "bookingRecord.customer_facing_status", "Customer facing status request exclusion");
+assertIncludes(appPage, "bookingRecord.request_review_status", "Request review status request exclusion");
+assertIncludes(appPage, '"ready for confirmation"', "Approved internal request exclusion");
+assertIncludes(appPage, '"approved"', "Approved request review exclusion");
+assertIncludes(appPage, '"declined internally"', "Declined internal request exclusion");
 assertIncludes(appPage, "function bookingRecordIsOpenCustomerBookingRequest", "Open customer request classifier");
+assertIncludes(appPage, "const pickupTimeMs = bookingRecordPickupDateTimeMs(bookingRecord);", "Customer request pickup freshness");
+assertIncludes(appPage, "pickupTimeMs === null || pickupTimeMs >= currentTimeMs", "Customer request past pickup exclusion");
 assertIncludes(appPage, "handledCustomerBookingRequestKeys", "Handled customer request state");
 assertIncludes(appPage, "handledCustomerBookingRequestKeySet", "Handled customer request filter set");
 assertIncludes(
@@ -193,11 +198,20 @@ assertIncludes(
   "Dashboard initial auto-load empty-list boundary",
 );
 assertIncludes(appPage, "function selectAppTab(nextTab: AppTab)", "Admin tab selection helper");
-assertIncludes(appPage, "function openCustomerBookingRequestsReview()", "Dashboard request review handoff helper");
+assertIncludes(
+  appPage,
+  "function openCustomerBookingRequestsReview(options: { highlight?: boolean } = {})",
+  "Dashboard request review handoff helper",
+);
 assertIncludes(appPage, 'selectAppTab("bookings");', "Dashboard request handoff opens Bookings");
 assertIncludes(
   appPage,
-  'querySelector(\'[data-new-customer-booking-requests-panel="true"]\')',
+  "onClick={() => openCustomerBookingRequestsReview()}",
+  "Dashboard review button calls request handoff helper",
+);
+assertIncludes(
+  appPage,
+  'scrollToAdminAlertLocatorTarget("new-booking-requests")',
   "Dashboard request handoff scrolls to request panel",
 );
 assertIncludes(
@@ -225,6 +239,11 @@ assertIncludes(
   'data-bookings-tab-total-alerts={isBookingsTab ? String(bookingsTabAttentionCount) : undefined}',
   "Bookings tab total attention count marker",
 );
+assertIncludes(
+  appPage,
+  'data-bookings-tab-urgent-under-one-hour={isBookingsTab ? String(bookingsTabUrgentUnderOneHourCount) : undefined}',
+  "Bookings tab urgent under-one-hour count marker",
+);
 assertIncludes(appPage, 'data-bookings-new-request-badge="true"', "Bookings tab new request badge");
 assertIncludes(appPage, "const customerBookingRequestCount = bookingTabCustomerBookingRequestBookings.length;", "Bookings badge count");
 assertIncludes(
@@ -234,18 +253,59 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  "const bookingsTabAttentionCount = customerBookingRequestCount + customerBookingChangeRequestCount;",
+  "customerBookingRequestCount + customerBookingChangeRequestCount + bookingsTabUrgentUnderOneHourCount;",
   "Bookings badge combined attention count",
+);
+assertIncludes(appPage, "adminBookingsTabAlertBadgeLabel", "Bookings badge meaningful alert label helper");
+assertIncludes(appPage, "return `${changeRequestCount} change", "Bookings badge change wording");
+assertIncludes(appPage, "return `${newBookingRequestCount} new`;", "Bookings badge new wording");
+assertIncludes(appPage, "return `${urgentBookingRequestCount} urgent`;", "Bookings badge urgent wording");
+assertIncludes(appPage, "return `${totalCount} alerts`;", "Bookings badge combined wording");
+assertIncludes(appPage, "function locateBookingsTabAlert()", "Bookings badge locator helper");
+assertIncludes(appPage, "bookingsTabAlertTypeCount", "Bookings badge mixed alert type count");
+assertIncludes(appPage, 'data-bookings-alert-menu="true"', "Bookings badge mixed alert menu");
+assertIncludes(appPage, 'data-bookings-alert-menu-option="change"', "Bookings badge change menu option");
+assertIncludes(appPage, 'data-bookings-alert-menu-option="new"', "Bookings badge new menu option");
+assertIncludes(appPage, 'data-bookings-alert-menu-option="urgent"', "Bookings badge urgent menu option");
+assertIncludes(
+  appPage,
+  'event.target.closest(\'[data-bookings-new-request-badge="true"]\')',
+  "Bookings tab locator only triggers from badge click",
+);
+assertIncludes(
+  appPage,
+  "if (isBookingsTab && showBookingsRequestBadge && clickedAlertBadge)",
+  "Bookings tab normal click still opens Bookings when badge is present",
+);
+assertIncludes(
+  appPage,
+  'markAdminAlertLocatorHighlight("admin-app-notification", changeRequestNotificationId);',
+  "Bookings badge highlights exact admin notification row",
+);
+assertIncludes(
+  appPage,
+  'scrollToAdminAlertLocatorTarget("admin-app-notification", changeRequestNotificationId);',
+  "Bookings badge scrolls to exact admin notification row",
+);
+assertIncludes(
+  appPage,
+  'openCustomerBookingRequestsReview({ highlight: true });',
+  "Bookings badge locates new booking request panel",
+);
+assertIncludes(
+  appPage,
+  "openDashboardUrgentBookingRequestsReview();",
+  "Bookings badge locates urgent under-one-hour dashboard panel",
 );
 assertIncludes(appPage, "animate-pulse rounded-full", "Bookings tab alert badge pulse");
 assertIncludes(appPage, "visibleCustomerBookingRequestBookings", "Customer request visible list cap");
 assertIncludes(
   appPage,
-  '(nextTab === "bookings" || nextTab === "dashboard") && bookings.length === 0 && !loading',
-  "Bookings/Dashboard tab auto-load empty-list guard",
+  '(nextTab === "bookings" || nextTab === "dashboard" || nextTab === "dispatch") &&',
+  "Bookings/Dashboard/Dispatch tab auto-load empty-list guard",
 );
 assertIncludes(appPage, 'void loadBookings("Bookings loaded.");', "Bookings tab visible auto-load");
-assertIncludes(appPage, 'void loadBookings("Bookings loaded.", { messageTab: "dashboard" });', "Dashboard tab-scoped initial load");
+assertIncludes(appPage, 'void loadBookings("Bookings loaded.", { messageTab: activeTab });', "Current tab-scoped initial load");
 assertIncludes(appPage, "const activeTabRef = useRef<AppTab>(initialTab);", "Active tab async message ref");
 assertIncludes(appPage, "activeTabRef.current === options.messageTab", "Load bookings tab-scoped message guard");
 
@@ -749,11 +809,11 @@ const adminBookingsFetchIndex = loadBookingsBlock.indexOf(
 );
 assert.equal(typedOperationalFetchIndex > -1, true, "Typed operational fetch must be present.");
 assert.equal(savedBookingsFetchIndex > -1, true, "Saved bookings fetch must be present.");
-assert.equal(adminBookingsFetchIndex > -1, true, "Admin bookings fallback fetch must be present.");
+assert.equal(adminBookingsFetchIndex, -1, "Admin bookings fallback fetch must stay retired.");
 assert.equal(
-  typedOperationalFetchIndex < savedBookingsFetchIndex && savedBookingsFetchIndex < adminBookingsFetchIndex,
+  typedOperationalFetchIndex < savedBookingsFetchIndex,
   true,
-  "Load Bookings must hydrate typed display, then try saved-bookings, then fall back to admin-bookings.",
+  "Load Bookings must hydrate typed display, then read saved-bookings without falling back to admin-bookings.",
 );
 
 for (const forbiddenLoadFragment of [

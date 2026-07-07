@@ -51,7 +51,7 @@ for (const phrase of [
   "Dispatch `Today's Jobs` only lists jobs inside the one-hour-before-pickup monitor window.",
   "Dashboard Upcoming booking rows show assigned driver name/contact/plate/vehicle details when available.",
   "`Today's Jobs` driver report auto-refresh has an explicit 10-second on/off switch, defaults on, and manual Refresh remains available.",
-  "Customers payment review rows are compact by default; the mock payment controls and long notes stay collapsed until `View details` is opened.",
+  "The old Customers mock payment review rows stay removed from the daily Customers page.",
   "No app smoke, provider send, external notification delivery, GPS/live location, billing/payment/PDF/invoice/payout, env, DB schema, parser, calendar, or duplicate workflow sector was added.",
   "Guard coverage lives in `scripts/test-admin-dashboard-live-followup-fixes-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {
@@ -140,25 +140,12 @@ for (const forbidden of [
 }
 
 for (const fragment of [
-  "data-outstanding-review-expanded",
-  "lg:grid-cols-[minmax(12rem,1.35fr)_minmax(7rem,0.65fr)_minmax(6rem,0.55fr)_minmax(10rem,0.85fr)_minmax(9rem,auto)]",
-  "data-outstanding-review-actions-dropdown",
-  '<details className="group relative flex-1 lg:flex-none">',
-  "data-payment-action-feedback={item.key}",
+  'data-outstanding-payments-review="true"',
+  'data-collection-follow-up-queue="true"',
+  'data-monthly-statement-preview="true"',
+  'data-customer-debug-tools-drawer="true"',
 ]) {
-  assertIncludes(customersPage, fragment, `customers compact row fragment ${fragment}`);
+  assertExcludes(customersPage, fragment, `removed customer mock review fragment ${fragment}`);
 }
-
-const collapsedOutstandingBlock = customersPage.slice(
-  customersPage.indexOf('data-outstanding-payment-row={item.key}'),
-  customersPage.indexOf('data-collection-follow-up-queue="true"'),
-);
-
-assert.equal(
-  collapsedOutstandingBlock.indexOf("data-payment-action=\"invoice-sent\"") >
-    collapsedOutstandingBlock.indexOf("data-outstanding-review-expanded"),
-  true,
-  "mock payment controls must live in the expanded outstanding-payment area.",
-);
 
 console.log("Admin dashboard live follow-up fixes guard passed.");

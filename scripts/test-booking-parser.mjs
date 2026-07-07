@@ -3526,6 +3526,136 @@ function assertMultiBookingDoesNotBlend(sampleInput, label) {
 assertMultiBookingDoesNotBlend(liveBugSamples[0].input, 'multi-case dispatcher list');
 assertMultiBookingDoesNotBlend(liveBugSamples[2].input, 'need 2 cars tomorrow');
 
+const repeatedPickupAddressCombiMessage = `Combi
+
+Hi William, other arrangements I require for 9 July
+Pick Up Address: Frasers Tower Level 1 Lobby to Ion Mall taxi drop off (depart with Group CEO car)
+Time: 16:30
+8 persons
+
+Pickup Address: Ngee Ann City Tower B pick up to National Gallery, drop off Supreme Court – if no rain.
+If raining, Coleman street.
+(depart with Group CEO car)
+Time: 18:45 to 19:00
+7 persons
+
+ 
+Pickup Address: Frasers Towers, drop off Supreme Court – if no rain.
+If raining, Coleman street.
+Time: 18:10
+10 persons`;
+const parsedRepeatedPickupAddressCombi = parseJobCardBookingMessage(
+  repeatedPickupAddressCombiMessage,
+  { referenceDate: new Date(2026, 6, 7, 10, 0, 0) },
+) ?? {};
+assert.equal(parsedRepeatedPickupAddressCombi.success, false);
+assert.equal(parsedRepeatedPickupAddressCombi.multipleBookingsDetected, true);
+assert.equal(
+  parsedRepeatedPickupAddressCombi.parserWarning,
+  'Multiple bookings detected. Please select one extracted booking.',
+);
+assert.equal(parsedRepeatedPickupAddressCombi.vehicle, 'Combi');
+assert.equal(parsedRepeatedPickupAddressCombi.pickup ?? '', '');
+assert.equal(parsedRepeatedPickupAddressCombi.dropoff ?? '', '');
+assert.deepEqual(parsedRepeatedPickupAddressCombi.extractedBookingsPreview, [
+  {
+    passenger: '',
+    company: '',
+    booker: '',
+    vehicle: 'Combi',
+    date: '2026-07-09',
+    time: '1630hrs',
+    type: 'TRF',
+    flight: '',
+    pickup: 'Frasers Tower Level 1 Lobby',
+    dropoff: 'Ion Mall taxi drop off',
+    pax: '8',
+  },
+  {
+    passenger: '',
+    company: '',
+    booker: '',
+    vehicle: 'Combi',
+    date: '2026-07-09',
+    time: '1845hrs',
+    type: 'TRF',
+    flight: '',
+    pickup: 'Ngee Ann City Tower B',
+    dropoff: 'Supreme Court - if no rain; Coleman street if raining',
+    pax: '7',
+    extraStopCount: '1',
+    extraStopLocation: 'National Gallery',
+  },
+  {
+    passenger: '',
+    company: '',
+    booker: '',
+    vehicle: 'Combi',
+    date: '2026-07-09',
+    time: '1810hrs',
+    type: 'TRF',
+    flight: '',
+    pickup: 'Frasers Towers',
+    dropoff: 'Supreme Court - if no rain; Coleman street if raining',
+    pax: '10',
+  },
+]);
+assertMultiBookingDoesNotBlend(repeatedPickupAddressCombiMessage, 'repeated pickup address combi jobs');
+
+const addOnTripsVehicleSectionMessage = `Evelyn
+
+@⁨PrestigeLimo.Sg⁩  2 more add on trips for 9th July:
+
+1 Alphard (5.30pm - 7.00pm) - need to store luggage on car
+pickup 5.30pm from Frasers Tower to ION
+pickup 7.00pm from ION to Airport (JAL036, 21:50 JL36)
+Alphard short dsp
+
+
+1 4-seater, 7.00pm pick up from ION to Supreme Court unless raining, alight at Coleman Street
+AVF Trf`;
+const parsedAddOnTripsVehicleSection = parseJobCardBookingMessage(
+  addOnTripsVehicleSectionMessage,
+  { referenceDate: new Date(2026, 6, 7, 10, 0, 0) },
+) ?? {};
+assert.equal(parsedAddOnTripsVehicleSection.success, false);
+assert.equal(parsedAddOnTripsVehicleSection.multipleBookingsDetected, true);
+assert.equal(
+  parsedAddOnTripsVehicleSection.parserWarning,
+  'Multiple bookings detected. Please select one extracted booking.',
+);
+assert.equal(parsedAddOnTripsVehicleSection.pickup ?? '', '');
+assert.equal(parsedAddOnTripsVehicleSection.dropoff ?? '', '');
+assert.deepEqual(parsedAddOnTripsVehicleSection.extractedBookingsPreview, [
+  {
+    passenger: '',
+    company: '',
+    booker: '',
+    vehicle: 'AVF',
+    date: '2026-07-09',
+    time: '1730hrs',
+    type: 'DSP',
+    flight: 'JL36',
+    pickup: 'Frasers Tower',
+    dropoff: 'Changi Airport',
+    extraStopCount: '1',
+    extraStopLocation: 'ION',
+  },
+  {
+    passenger: '',
+    company: '',
+    booker: '',
+    vehicle: 'AVF',
+    date: '2026-07-09',
+    time: '1900hrs',
+    type: 'TRF',
+    flight: '',
+    pickup: 'ION',
+    dropoff: 'Supreme Court; Coleman Street if raining',
+  },
+]);
+assertMultiBookingDoesNotBlend(addOnTripsVehicleSectionMessage, 'add-on trips vehicle sections');
+
 const naturalRoundTripAirportBookingSample =
   'Hi, can I book an airport transfer and pick up - 5 people + bags. We will need one forward facing booster seat. Pick up date 02 July at 6am SQ938. Return flight on the 10th July SQ939. mr. peter. 276 ocean drive lobb o';
 const parsedNaturalRoundTripAirportBooking = parseJobCardBookingMessage(
@@ -4112,6 +4242,43 @@ const plainBookerNoCompany = parseBookingMessage(plainBookerNoCompanyMessage, {
 assert.equal(plainBookerNoCompany.company, '');
 assert.equal(plainBookerNoCompany.booker, 'Nicole');
 assert.equal(plainBookerNoCompany.name, 'Mr Tan');
+
+const looseStayAddressTransferMessage = `Roland
+Pickup 0630 and he stay 82 Grange Road
+22 Bedok North Drive
+Mr. Bijjala. $65
+Viano
+2 vvv`;
+const looseStayAddressTransfer = parseBookingForTest(looseStayAddressTransferMessage);
+assert.equal(looseStayAddressTransfer.bookingType, 'TRF');
+assert.equal(looseStayAddressTransfer.vehicle, 'VVV');
+assert.equal(looseStayAddressTransfer.time, '0630hrs');
+assert.equal(looseStayAddressTransfer.pickup, '82 Grange Road');
+assert.equal(looseStayAddressTransfer.dropoff, '22 Bedok North Drive');
+assert.equal(looseStayAddressTransfer.name, 'Mr Bijjala');
+assert.equal(looseStayAddressTransfer.customerPriceOverride, '65');
+
+const shorthandHotelDeparturePickupMessage = 'Sofitel city centre. Departure 0830hrs pickup';
+const shorthandHotelDeparturePickup = parseBookingForTest(shorthandHotelDeparturePickupMessage);
+assert.equal(shorthandHotelDeparturePickup.bookingType, 'DEP');
+assert.equal(shorthandHotelDeparturePickup.time, '0830hrs');
+assert.equal(shorthandHotelDeparturePickup.pickup, 'Sofitel city centre');
+assert.equal(shorthandHotelDeparturePickup.dropoff, 'Changi Airport');
+
+const narratedPassengerDepartureMessage =
+  'Jwalant will depart for London via SQ 322 tomorrow, 8 July, ETD 23:00. Pickup 2130hrs. 82 Grange Road';
+const narratedPassengerDeparture = parseBookingMessage(narratedPassengerDepartureMessage, {
+  referenceDate: new Date('2026-07-07T12:00:00+08:00'),
+});
+assert.equal(narratedPassengerDeparture.bookingType, 'DEP');
+assert.equal(narratedPassengerDeparture.date, '2026-07-08');
+assert.equal(narratedPassengerDeparture.time, '2130hrs');
+assert.equal(narratedPassengerDeparture.flight, 'SQ322');
+assert.equal(narratedPassengerDeparture.pickup, '82 Grange Road');
+assert.equal(narratedPassengerDeparture.dropoff, 'Changi Airport');
+assert.equal(narratedPassengerDeparture.name, 'Jwalant');
+assert.equal(narratedPassengerDeparture.extraStopCount ?? '', '');
+assert.equal(narratedPassengerDeparture.extraStopLocation ?? '', '');
 
 const jobCard = [
   `${finalBooking.vehicle} ${finalBooking.bookingType}`,

@@ -79,7 +79,7 @@ const customerIssuePanel = sectionBetween(
 const issuedInvoiceTable = sectionBetween(
   customersPage,
   'data-customer-invoice-issued-local-list="true"',
-  'data-customer-invoice-workspace-panel="statements"',
+  "</main>",
 );
 const portalInvoiceSection = sectionBetween(
   portalPage,

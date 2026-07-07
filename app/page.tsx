@@ -475,6 +475,21 @@ type BookingForm = {
   driverIncludePayout: string;
 };
 
+function draftDriverAssignmentSignature(booking: Pick<
+  BookingForm,
+  "driverContact" | "driverId" | "driverName" | "driverPlate" | "driverVehicleModel"
+>) {
+  const parts = [
+    clean(booking.driverId),
+    clean(booking.driverName),
+    clean(booking.driverContact),
+    clean(booking.driverPlate),
+    clean(booking.driverVehicleModel),
+  ];
+
+  return parts.some(Boolean) ? parts.join("|") : "";
+}
+
 type LoadBookingsOperationalFormFields = Pick<
   BookingForm,
   | "booker"
@@ -561,7 +576,6 @@ type AdminBookingsListReadResult =
   | {
       bookings: BookingRecord[];
       ok: true;
-      source: "admin-bookings" | "admin-saved-bookings";
     }
   | {
       error: string;
@@ -1400,6 +1414,11 @@ type AdminAppNotificationAction = {
   notificationId: string;
   status: AdminAppNotificationUpdateStatus;
 } | null;
+
+type AdminAlertLocatorTarget =
+  | "admin-app-notification"
+  | "new-booking-requests"
+  | "urgent-booking-requests";
 
 type AdminBookingChangeRequestReviewAction = {
   action: "accept" | "dismiss" | "reject";
@@ -2338,6 +2357,8 @@ type ParsedBooking = Partial<BookingForm> & {
     pickup?: string;
     dropoff?: string;
     pax?: string;
+    extraStopCount?: string;
+    extraStopLocation?: string;
     childSeatRequired?: string;
     childSeatCount?: string;
     childSeatType?: string;
@@ -2360,6 +2381,8 @@ type ParsedDebugBooking = BookingForm & {
     pickup?: string;
     dropoff?: string;
     pax?: string;
+    extraStopCount?: string;
+    extraStopLocation?: string;
     childSeatRequired?: string;
     childSeatCount?: string;
     childSeatType?: string;
@@ -7227,18 +7250,10 @@ function sortBookingHistoryNewestFirst(firstBooking: BookingRecord, secondBookin
 }
 
 function bookingRecordIsCustomerBookingRequest(bookingRecord: BookingRecord) {
-  const referenceCandidates = [
-    bookingRecord.booking_reference,
-    cleanReferenceText(bookingRecord.id),
-  ]
-    .map((value) => clean(value).toUpperCase())
-    .filter(Boolean);
-
   return (
     clean(bookingRecord.source_channel) === "customer-booking-request" ||
     clean(bookingRecord.source_surface) === "customer_booking_request" ||
-    clean(bookingRecord.source_surface) === "customer-booking-request" ||
-    referenceCandidates.some((referenceCandidate) => referenceCandidate.startsWith("CUST-"))
+    clean(bookingRecord.source_surface) === "customer-booking-request"
   );
 }
 
@@ -7262,21 +7277,31 @@ function bookingRecordIsOpenCustomerBookingRequest(bookingRecord: BookingRecord)
     return false;
   }
 
-  const status = clean(bookingRecord.status).toLowerCase();
+  const statusValues = [
+    bookingRecord.status,
+    bookingRecord.admin_internal_status,
+    bookingRecord.customer_facing_status,
+    bookingRecord.request_review_status,
+  ].map((value) => clean(value).toLowerCase()).filter(Boolean);
 
-  return ![
+  const closedStatuses = new Set([
     "cancelled",
     "canceled",
     "completed",
     "complete",
     "declined",
+    "declined internally",
     "rejected",
     "confirmed",
+    "ready for confirmation",
+    "approved",
     "released",
     "closed",
     "job completed",
     "job_completed",
-  ].includes(status);
+  ]);
+
+  return !statusValues.some((status) => closedStatuses.has(status));
 }
 
 const dispatchActiveJobsMonitorUnassignedDriverLabels = new Set([
@@ -9566,6 +9591,59 @@ function adminBookingChangeRequestDisplayMessage(context: AdminBookingChangeRequ
   const requestKindTitle = adminBookingChangeRequestKindTitle(context);
 
   return `${requestKindTitle} request received. Review the requested values, then choose Accept + Cal, Reject, or Dismiss.`;
+}
+
+function adminBookingChangeRequestSummaryRows(
+  context: AdminBookingChangeRequestContext,
+  linkedBookingRecord: AdminBookingPersistenceRecord | null = null,
+) {
+  const requestedDateTime = [context.requestedPickupDate, context.requestedPickupTime]
+    .map(adminAppNotificationContextValue)
+    .filter(Boolean)
+    .join(" ");
+
+  return [
+    ["Booking", context.bookingReference],
+    [
+      "Passenger",
+      linkedBookingRecord
+        ? adminBookingPersistencePassengerDisplayName(linkedBookingRecord)
+        : context.passengerName,
+    ],
+    ["Request", adminBookingChangeRequestKindTitle(context)],
+    ["Requested", requestedDateTime || context.requestedPickupDate || context.requestedPickupTime],
+  ]
+    .map(([label, value]) => ({
+      label,
+      value: adminAppNotificationContextValue(value),
+    }))
+    .filter((row) => row.value);
+}
+
+function adminBookingsTabAlertBadgeLabel({
+  changeRequestCount,
+  newBookingRequestCount,
+  totalCount,
+  urgentBookingRequestCount,
+}: {
+  changeRequestCount: number;
+  newBookingRequestCount: number;
+  totalCount: number;
+  urgentBookingRequestCount: number;
+}) {
+  if (totalCount === changeRequestCount) {
+    return `${changeRequestCount} change${changeRequestCount === 1 ? "" : "s"}`;
+  }
+
+  if (totalCount === newBookingRequestCount) {
+    return `${newBookingRequestCount} new`;
+  }
+
+  if (totalCount === urgentBookingRequestCount) {
+    return `${urgentBookingRequestCount} urgent`;
+  }
+
+  return `${totalCount} alerts`;
 }
 
 function adminBookingChangeRequestServiceTypeChanged(
@@ -12386,6 +12464,7 @@ function companyProfileSettingsFailureMessage(action: "load" | "save", rawError:
 export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const showSetupReadinessArchive = false;
   const [booking, setBooking] = useState<BookingForm>(() => createInitialBooking());
+  const [appliedDraftDriverAssignmentSignature, setAppliedDraftDriverAssignmentSignature] = useState("");
   const [activeTab, setActiveTab] = useState<AppTab>(initialTab);
   const activeTabRef = useRef<AppTab>(initialTab);
   const [isInternalQaMockArchiveOpen, setIsInternalQaMockArchiveOpen] = useState(false);
@@ -12590,6 +12669,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       pagination: null,
       status: "idle",
     });
+  const [adminAlertLocatorHighlight, setAdminAlertLocatorHighlight] = useState<{
+    notificationId?: string;
+    target: AdminAlertLocatorTarget;
+  } | null>(null);
+  const [bookingsAlertMenuOpen, setBookingsAlertMenuOpen] = useState(false);
   const [adminAppNotificationReadRevision, setAdminAppNotificationReadRevision] = useState(0);
   const [adminAppNotificationAction, setAdminAppNotificationAction] =
     useState<AdminAppNotificationAction>(null);
@@ -12983,7 +13067,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
   useEffect(() => {
     if (
-      activeTab !== "dashboard" ||
+      (activeTab !== "dashboard" && activeTab !== "dispatch") ||
       dashboardBookingsInitialLoadAttemptedRef.current ||
       bookings.length > 0 ||
       loading
@@ -12992,7 +13076,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     }
 
     dashboardBookingsInitialLoadAttemptedRef.current = true;
-    void loadBookings("Bookings loaded.", { messageTab: "dashboard" });
+    void loadBookings("Bookings loaded.", { messageTab: activeTab });
   }, [activeTab, bookings.length, loading]);
 
   useEffect(() => {
@@ -13009,7 +13093,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       }
 
       bookingAutoSyncInFlightRef.current = true;
-      void loadBookings("Bookings synced.", { silent: true, skipSavedBookingsRead: true }).finally(() => {
+      void loadBookings("Bookings synced.", { silent: true }).finally(() => {
         bookingAutoSyncInFlightRef.current = false;
       });
     }, 3 * 1000);
@@ -15593,6 +15677,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     assignedDriverId && (!assignedDriverRecord || assignedDriverIsInactive),
   );
   const assignedDriverPlate = clean(booking.driverPlate) || clean(assignedDriverRecord?.plate_number);
+  const currentDraftDriverAssignmentSignature = draftDriverAssignmentSignature(booking);
+  const draftDriverAssignmentApplied = Boolean(
+    currentDraftDriverAssignmentSignature &&
+      currentDraftDriverAssignmentSignature === appliedDraftDriverAssignmentSignature,
+  );
   const customerLiveLocation = useMemo(
     () => customerLiveLocationState(booking, currentTimeMs),
     [booking, currentTimeMs],
@@ -15928,11 +16017,17 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const customerBookingRequestBookings = useMemo(
     () =>
       operationalBookings.filter(
-        (bookingRecord) =>
-          bookingRecordIsOpenCustomerBookingRequest(bookingRecord) &&
-          !handledCustomerBookingRequestKeySet.has(getCustomerBookingRequestQueueKey(bookingRecord)),
+        (bookingRecord) => {
+          const pickupTimeMs = bookingRecordPickupDateTimeMs(bookingRecord);
+
+          return (
+            bookingRecordIsOpenCustomerBookingRequest(bookingRecord) &&
+            (pickupTimeMs === null || pickupTimeMs >= currentTimeMs) &&
+            !handledCustomerBookingRequestKeySet.has(getCustomerBookingRequestQueueKey(bookingRecord))
+          );
+        },
       ),
-    [handledCustomerBookingRequestKeySet, operationalBookings],
+    [currentTimeMs, handledCustomerBookingRequestKeySet, operationalBookings],
   );
   const dashboardCustomerBookingRequestBookings = useMemo(
     () =>
@@ -16234,7 +16329,20 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const customerBookingChangeRequestCount = adminAppNotificationReadState.notifications.filter((notification) =>
     Boolean(adminAppNotificationChangeRequestContext(notification)),
   ).length;
-  const bookingsTabAttentionCount = customerBookingRequestCount + customerBookingChangeRequestCount;
+  const bookingsTabUrgentUnderOneHourCount = dashboardUrgentBookingRequestBookings.length;
+  const bookingsTabAttentionCount =
+    customerBookingRequestCount + customerBookingChangeRequestCount + bookingsTabUrgentUnderOneHourCount;
+  const bookingsTabAlertBadgeLabel = adminBookingsTabAlertBadgeLabel({
+    changeRequestCount: customerBookingChangeRequestCount,
+    newBookingRequestCount: customerBookingRequestCount,
+    totalCount: bookingsTabAttentionCount,
+    urgentBookingRequestCount: bookingsTabUrgentUnderOneHourCount,
+  });
+  const bookingsTabAlertTypeCount = [
+    customerBookingChangeRequestCount,
+    customerBookingRequestCount,
+    bookingsTabUrgentUnderOneHourCount,
+  ].filter((count) => count > 0).length;
   const urgentCustomerBookingRequestCount = urgentCustomerBookingRequestBookings.length;
   const dashboardUrgentBookingRequestDisplayItems =
     buildLoadBookingsOperationalDisplayItems(visibleDashboardUrgentBookingRequestBookings, {
@@ -16491,6 +16599,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         pickup: clean(safePreview.pickup),
         dropoff: clean(safePreview.dropoff),
         pax: clean(safePreview.pax) || current.pax,
+        extraStopCount: clean(safePreview.extraStopCount),
+        extraStopLocation: clean(safePreview.extraStopLocation),
         childSeatRequired: clean(safePreview.childSeatRequired),
         childSeatCount: clean(safePreview.childSeatCount),
         childSeatType: clean(safePreview.childSeatType),
@@ -16610,6 +16720,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   }
 
   function applyDriverToBooking(driverId: string) {
+    setAppliedDraftDriverAssignmentSignature("");
+
     if (!driverId) {
       setBooking((current) => ({
         ...current,
@@ -18643,7 +18755,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
   async function loadBookings(
     successText = "Bookings loaded.",
-    options?: { messageTab?: AppTab; silent?: boolean; skipSavedBookingsRead?: boolean },
+    options?: { messageTab?: AppTab; silent?: boolean },
   ) {
     const silent = options?.silent === true;
     const canShowMessage = () => !silent && (!options?.messageTab || activeTabRef.current === options.messageTab);
@@ -18673,7 +18785,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         await fetchLoadBookingsTypedOperationalDisplayResult(searchParams).catch(() => null);
       searchParams.set("limit", adminLoadBookingsListLimit);
 
-      async function fetchAdminBookingsList(): Promise<AdminBookingsListReadResult> {
+      async function fetchAdminSavedBookingsList(): Promise<AdminBookingsListReadResult> {
         const requestInit = {
           headers: {
             "x-prestige-admin-purpose": adminLegacyDataPurpose,
@@ -18681,56 +18793,32 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           method: "GET",
         } satisfies RequestInit;
 
-        let savedBookingsError = "Admin saved booking list read request failed.";
-
-        if (options?.skipSavedBookingsRead !== true) {
-          const savedBookingsResponse = await fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`, requestInit);
-          const savedBookingsBody = (await savedBookingsResponse.json().catch(() => null)) as
-            | AdminSavedBookingReadResponse
-            | null;
-
-          if (
-            savedBookingsResponse.ok &&
-            savedBookingsBody?.ok === true &&
-            Array.isArray(savedBookingsBody.bookings)
-          ) {
-            return {
-              bookings: savedBookingsBody.bookings,
-              ok: true,
-              source: "admin-saved-bookings",
-            };
-          }
-
-          savedBookingsError = readAdminLegacyDataError(
-            savedBookingsBody,
-            savedBookingsError,
-          ).message;
-        }
-
-        const adminBookingsResponse = await fetch(`${adminBookingsApiPath}?${searchParams.toString()}`, requestInit);
-        const adminBookingsBody = (await adminBookingsResponse.json().catch(() => null)) as
+        const savedBookingsResponse = await fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`, requestInit);
+        const savedBookingsBody = (await savedBookingsResponse.json().catch(() => null)) as
           | AdminSavedBookingReadResponse
           | null;
 
         if (
-          adminBookingsResponse.ok &&
-          adminBookingsBody?.ok === true &&
-          Array.isArray(adminBookingsBody.bookings)
+          savedBookingsResponse.ok &&
+          savedBookingsBody?.ok === true &&
+          Array.isArray(savedBookingsBody.bookings)
         ) {
           return {
-            bookings: adminBookingsBody.bookings,
+            bookings: savedBookingsBody.bookings,
             ok: true,
-            source: "admin-bookings",
           };
         }
 
         return {
-          error: readAdminLegacyDataError(adminBookingsBody, savedBookingsError).message,
+          error: readAdminLegacyDataError(
+            savedBookingsBody,
+            "Admin saved booking list read request failed.",
+          ).message,
           ok: false,
         };
       }
 
-      const bookingsListResult = await fetchAdminBookingsList();
+      const bookingsListResult = await fetchAdminSavedBookingsList();
 
       if (!bookingsListResult.ok) {
         if (canShowMessage()) {
@@ -18758,12 +18846,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           if (loadedBookings.length === 0) {
             setMessage({ tone: "info", text: "No bookings found." });
           } else {
-            const fallbackNote =
-              bookingsListResult.source === "admin-bookings"
-                ? " CRM list fallback used."
-                : "";
-
-            setMessage({ tone: "success", text: `${successText} Choose a booking below.${fallbackNote}` });
+            setMessage({ tone: "success", text: `${successText} Choose a booking below.` });
           }
         }
       }
@@ -18995,7 +19078,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   function selectAppTab(nextTab: AppTab) {
     setActiveTab(nextTab);
 
-    if ((nextTab === "bookings" || nextTab === "dashboard") && bookings.length === 0 && !loading) {
+    if (
+      (nextTab === "bookings" || nextTab === "dashboard" || nextTab === "dispatch") &&
+      bookings.length === 0 &&
+      !loading
+    ) {
       void loadBookings("Bookings loaded.");
     }
 
@@ -19121,14 +19208,98 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function openCustomerBookingRequestsReview() {
+  function markAdminAlertLocatorHighlight(
+    target: AdminAlertLocatorTarget,
+    notificationId?: string,
+  ) {
+    setAdminAlertLocatorHighlight({ notificationId, target });
+    window.setTimeout(() => {
+      setAdminAlertLocatorHighlight((current) =>
+        current?.target === target && current.notificationId === notificationId ? null : current,
+      );
+    }, 4500);
+  }
+
+  function scrollToAdminAlertLocatorTarget(
+    target: AdminAlertLocatorTarget,
+    notificationId?: string,
+  ) {
+    window.setTimeout(() => {
+      if (target === "admin-app-notification") {
+        const rows = Array.from(
+          document.querySelectorAll<HTMLElement>("[data-admin-app-notification-feed-row-id]"),
+        );
+        const row = rows.find(
+          (candidate) => candidate.dataset.adminAppNotificationFeedRowId === notificationId,
+        );
+        const feed = document.querySelector<HTMLElement>('[data-admin-app-notification-feed="true"]');
+
+        (row ?? feed)?.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
+
+      const selector =
+        target === "new-booking-requests"
+          ? '[data-new-customer-booking-requests-panel="true"]'
+          : '[data-dashboard-urgent-booking-requests-panel="true"]';
+
+      document.querySelector<HTMLElement>(selector)?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 0);
+  }
+
+  function openCustomerBookingRequestsReview(options: { highlight?: boolean } = {}) {
     selectAppTab("bookings");
 
-    window.setTimeout(() => {
-      document
-        .querySelector('[data-new-customer-booking-requests-panel="true"]')
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 0);
+    if (options.highlight) {
+      markAdminAlertLocatorHighlight("new-booking-requests");
+    }
+
+    scrollToAdminAlertLocatorTarget("new-booking-requests");
+  }
+
+  function openDashboardUrgentBookingRequestsReview() {
+    setBookingsAlertMenuOpen(false);
+    selectAppTab("dashboard");
+    markAdminAlertLocatorHighlight("urgent-booking-requests");
+    scrollToAdminAlertLocatorTarget("urgent-booking-requests");
+  }
+
+  function openBookingsTabChangeRequestAlert() {
+    const changeRequestNotification = adminAppNotificationReadState.notifications.find((notification) =>
+      Boolean(adminAppNotificationChangeRequestContext(notification)),
+    );
+    const changeRequestNotificationId = clean(changeRequestNotification?.id);
+
+    if (changeRequestNotification && changeRequestNotificationId) {
+      setBookingsAlertMenuOpen(false);
+      selectAppTab("dashboard");
+      markAdminAlertLocatorHighlight("admin-app-notification", changeRequestNotificationId);
+      scrollToAdminAlertLocatorTarget("admin-app-notification", changeRequestNotificationId);
+      return true;
+    }
+
+    return false;
+  }
+
+  function locateBookingsTabAlert() {
+    if (openBookingsTabChangeRequestAlert()) {
+      return;
+    }
+
+    if (customerBookingRequestCount > 0) {
+      openCustomerBookingRequestsReview({ highlight: true });
+      return;
+    }
+
+    if (bookingsTabUrgentUnderOneHourCount > 0) {
+      openDashboardUrgentBookingRequestsReview();
+      return;
+    }
+
+    selectAppTab("bookings");
   }
 
   async function saveAdminBookingOperationalSnapshot() {
@@ -21091,6 +21262,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         },
         oneTimeUrl: "",
       }));
+
+      if (statusResult.ok) {
+        await loadBookings("Bookings synced.", { silent: true });
+      }
     } catch (error) {
       setAdminDriverJobLinkState((current) => ({
         ...current,
@@ -21104,11 +21279,21 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   }
 
   function assignDraftDriver() {
+    if (draftDriverAssignmentApplied) {
+      setAppliedDraftDriverAssignmentSignature("");
+      setMessage({
+        tone: "success",
+        text: "Driver draft assignment reopened for changes. Select or edit driver details, then Apply Driver to Draft.",
+      });
+      return;
+    }
+
     if (!clean(booking.driverName)) {
       setMessage({ tone: "error", text: "Enter a driver name before assigning this draft." });
       return;
     }
 
+    setAppliedDraftDriverAssignmentSignature(currentDraftDriverAssignmentSignature);
     setMessage({
       tone: "success",
       text: "Driver applied to draft. Save booking to keep this assignment.",
@@ -22074,7 +22259,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
   const customerBookingRequestsPanel = customerBookingRequestDisplayItems.length > 0 ? (
     <div
-      className="mt-4 rounded-md border border-emerald-200 bg-emerald-50/60 p-3"
+      className={`mt-4 rounded-md border border-emerald-200 bg-emerald-50/60 p-3 ${
+        adminAlertLocatorHighlight?.target === "new-booking-requests"
+          ? "shadow-[0_0_0_3px_rgba(16,185,129,0.35)]"
+          : ""
+      }`}
+      data-admin-alert-locator-highlight={
+        adminAlertLocatorHighlight?.target === "new-booking-requests" ? "true" : undefined
+      }
       data-new-customer-booking-requests-panel="true"
     >
       <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
@@ -28579,9 +28771,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             const showBookingsRequestBadge = isBookingsTab && bookingsTabAttentionCount > 0;
             const highlightBookingsTab = showBookingsRequestBadge && !selected;
 
-            return (
-              <button
-                aria-selected={selected}
+	            return (
+	              <div className="relative w-full" key={tab.id}>
+	              <button
+	                aria-selected={selected}
                 className={`flex min-h-11 w-full items-center justify-center gap-1.5 rounded px-2 py-1 text-xs font-semibold transition ${
                   selected
                     ? "bg-slate-950 text-white"
@@ -28589,14 +28782,31 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       ? "border border-emerald-300 bg-emerald-50 text-emerald-950 shadow-[0_0_0_2px_rgba(16,185,129,0.18)] hover:bg-emerald-100"
                     : "border border-stone-200 bg-white text-slate-700 hover:bg-stone-50"
                 }`}
-                key={tab.id}
-                data-app-tab={tab.id}
+	                data-app-tab={tab.id}
                 data-bookings-tab-autoload={tab.id === "bookings" ? "true" : undefined}
                 data-bookings-tab-change-requests={isBookingsTab ? String(customerBookingChangeRequestCount) : undefined}
                 data-bookings-tab-new-booking-requests={isBookingsTab ? String(customerBookingRequestCount) : undefined}
                 data-bookings-tab-new-requests={showBookingsRequestBadge ? "true" : undefined}
-                data-bookings-tab-total-alerts={isBookingsTab ? String(bookingsTabAttentionCount) : undefined}
-                onClick={() => selectAppTab(tab.id)}
+	                data-bookings-tab-total-alerts={isBookingsTab ? String(bookingsTabAttentionCount) : undefined}
+	                data-bookings-tab-urgent-under-one-hour={isBookingsTab ? String(bookingsTabUrgentUnderOneHourCount) : undefined}
+		                onClick={(event) => {
+		                  const clickedAlertBadge =
+		                    event.target instanceof HTMLElement &&
+		                    Boolean(event.target.closest('[data-bookings-new-request-badge="true"]'));
+
+		                  if (isBookingsTab && showBookingsRequestBadge && clickedAlertBadge) {
+		                    if (bookingsTabAlertTypeCount > 1) {
+		                      setBookingsAlertMenuOpen((isOpen) => !isOpen);
+		                      return;
+		                    }
+
+		                    locateBookingsTabAlert();
+		                    return;
+		                  }
+
+	                  setBookingsAlertMenuOpen(false);
+	                  selectAppTab(tab.id);
+	                }}
                 role="tab"
                 style={{ minHeight: 44 }}
                 type="button"
@@ -28609,10 +28819,57 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     }`}
                     data-bookings-new-request-badge="true"
                   >
-                    {bookingsTabAttentionCount} alert{bookingsTabAttentionCount === 1 ? "" : "s"}
-                  </span>
-                ) : null}
-              </button>
+                    {bookingsTabAlertBadgeLabel}
+	                  </span>
+	                ) : null}
+	              </button>
+		                {isBookingsTab && showBookingsRequestBadge && bookingsAlertMenuOpen ? (
+		                  <div
+		                    className="absolute left-1/2 top-full z-30 mt-1 grid min-w-36 -translate-x-1/2 gap-1 rounded-md border border-emerald-200 bg-white p-1 text-left text-xs font-semibold text-slate-800 shadow-lg"
+		                    data-bookings-alert-menu="true"
+		                  >
+		                    {customerBookingChangeRequestCount > 0 ? (
+		                      <button
+		                        className="cursor-pointer rounded px-2 py-1.5 hover:bg-emerald-50"
+		                        data-bookings-alert-menu-option="change"
+		                        onClick={(event) => {
+		                          event.stopPropagation();
+		                          openBookingsTabChangeRequestAlert();
+		                        }}
+		                        type="button"
+		                      >
+		                        {customerBookingChangeRequestCount} change
+		                      </button>
+		                    ) : null}
+		                    {customerBookingRequestCount > 0 ? (
+		                      <button
+		                        className="cursor-pointer rounded px-2 py-1.5 hover:bg-emerald-50"
+		                        data-bookings-alert-menu-option="new"
+		                        onClick={(event) => {
+		                          event.stopPropagation();
+		                          openCustomerBookingRequestsReview({ highlight: true });
+		                        }}
+		                        type="button"
+		                      >
+		                        {customerBookingRequestCount} new
+		                      </button>
+		                    ) : null}
+		                    {bookingsTabUrgentUnderOneHourCount > 0 ? (
+		                      <button
+		                        className="cursor-pointer rounded px-2 py-1.5 hover:bg-emerald-50"
+		                        data-bookings-alert-menu-option="urgent"
+		                        onClick={(event) => {
+		                          event.stopPropagation();
+		                          openDashboardUrgentBookingRequestsReview();
+		                        }}
+		                        type="button"
+		                      >
+		                        {bookingsTabUrgentUnderOneHourCount} urgent
+		                      </button>
+		                    ) : null}
+		                  </div>
+		                ) : null}
+		              </div>
             );
           })}
         </nav>
@@ -35675,6 +35932,12 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                               <p className="sm:col-span-2">
                                 <strong>Route:</strong> {routeText || "Not detected"}
                               </p>
+                              {clean(preview.extraStopLocation) ? (
+                                <p className="sm:col-span-2">
+                                  <strong>Extra stop:</strong>{" "}
+                                  {[preview.extraStopCount, preview.extraStopLocation].filter(Boolean).join(" x ")}
+                                </p>
+                              ) : null}
                               {clean(preview.childSeatRequired) === "yes" ? (
                                 <p className="sm:col-span-2">
                                   <strong>Child seat:</strong>{" "}
@@ -36264,11 +36527,19 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   Include payout in dispatch
                 </label>
                 <button
-                  className="h-8 rounded-md border border-sky-300 bg-white px-3 text-xs font-semibold text-sky-900 transition hover:bg-sky-50"
+                  aria-pressed={draftDriverAssignmentApplied}
+                  className={`h-8 rounded-md border px-3 text-xs font-semibold transition ${
+                    draftDriverAssignmentApplied
+                      ? "border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100"
+                      : "border-sky-300 bg-white text-sky-900 hover:bg-sky-50"
+                  }`}
+                  data-admin-draft-driver-assignment-state={
+                    draftDriverAssignmentApplied ? "applied" : "ready"
+                  }
                   onClick={assignDraftDriver}
                   type="button"
                 >
-                  Apply Driver to Draft
+                  {draftDriverAssignmentApplied ? "Applied / Cancel to Revise" : "Apply Driver to Draft"}
                 </button>
               </div>
             </section>
@@ -41629,7 +41900,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               dashboardUrgentBookingRequestCount > 0
                 ? "border-amber-300 bg-amber-50"
                 : "border-stone-200 bg-stone-50"
+            } ${
+              adminAlertLocatorHighlight?.target === "urgent-booking-requests"
+                ? "shadow-[0_0_0_3px_rgba(245,158,11,0.35)]"
+                : ""
             }`}
+            data-admin-alert-locator-highlight={
+              adminAlertLocatorHighlight?.target === "urgent-booking-requests" ? "true" : undefined
+            }
             data-dashboard-new-booking-requests-panel="true"
             data-dashboard-urgent-booking-requests-panel="true"
           >
@@ -41675,7 +41953,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   className="h-9 rounded-md border border-stone-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:text-slate-400"
                   data-dashboard-review-new-booking-requests="true"
                   disabled={customerBookingRequestCount === 0}
-                  onClick={openCustomerBookingRequestsReview}
+	                  onClick={() => openCustomerBookingRequestsReview()}
                   type="button"
                 >
                   Review
@@ -41785,10 +42063,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
                   <h4 className="text-sm font-semibold text-slate-950">Device Push Alerts</h4>
-                  <p className="text-xs text-slate-600">
-                    Phone/Mac browser alert for new booking requests. Disable push stops browser alerts only. It does
-                    not clear queued inbox items; use Mark read, Dismiss, or Archive on the row.
-                  </p>
+	                  <p className="text-xs text-slate-600">
+	                    Phone/Mac browser alert for new booking requests. Disable push stops browser alerts only. It does
+	                    not clear queued inbox items; use Clear, Dismiss, or Archive on the row.
+	                  </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button
@@ -41873,13 +42151,19 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                         return loadedRecord ? bookingRecordToAdminBookingPersistenceRecord(loadedRecord) : null;
                       })()
                     : null;
-	                  const changeRequestRows = adminAppNotificationChangeRequestRows(
+		                  const changeRequestRows = adminAppNotificationChangeRequestRows(
                     notification,
                     loadedChangeRequestBookingRecord,
                   );
-	                  const activeNotificationAction =
-	                    notificationId &&
-	                    adminAppNotificationAction?.notificationId === notificationId
+                  const changeRequestSummaryRows = changeRequestContext
+                    ? adminBookingChangeRequestSummaryRows(
+                        changeRequestContext,
+                        loadedChangeRequestBookingRecord,
+                      )
+                    : [];
+		                  const activeNotificationAction =
+		                    notificationId &&
+		                    adminAppNotificationAction?.notificationId === notificationId
                       ? adminAppNotificationAction.status
                       : null;
                   const activeChangeRequestAction =
@@ -41887,18 +42171,28 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     adminBookingChangeRequestReviewAction?.notificationId === notificationId
                       ? adminBookingChangeRequestReviewAction.action
                       : null;
-                  const notificationActionDisabled =
-                    !notificationId ||
-                    Boolean(activeNotificationAction) ||
-                    Boolean(activeChangeRequestAction);
-                  const changeRequestActionDisabled = notificationActionDisabled;
+	                  const notificationActionDisabled =
+	                    !notificationId ||
+	                    Boolean(activeNotificationAction) ||
+	                    Boolean(activeChangeRequestAction);
+	                  const changeRequestActionDisabled = notificationActionDisabled;
+                  const clearNotificationActive = activeNotificationAction === "read";
+                  const notificationHighlighted =
+                    adminAlertLocatorHighlight?.target === "admin-app-notification" &&
+                    adminAlertLocatorHighlight.notificationId === notificationId;
 
-                  return (
-                    <div
-                      className="rounded-md border border-sky-100 bg-white p-2 text-xs sm:text-sm"
-                      data-admin-app-notification-feed-row="true"
-                      key={notificationId || `${title}-${index}`}
-                    >
+	                  return (
+	                    <div
+	                      className={`rounded-md border bg-white p-2 text-xs sm:text-sm ${
+                          notificationHighlighted
+                            ? "border-amber-300 shadow-[0_0_0_3px_rgba(245,158,11,0.35)]"
+                            : "border-sky-100"
+                        }`}
+                        data-admin-alert-locator-highlight={notificationHighlighted ? "true" : undefined}
+	                      data-admin-app-notification-feed-row="true"
+                        data-admin-app-notification-feed-row-id={notificationId || undefined}
+	                      key={notificationId || `${title}-${index}`}
+	                    >
                       <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0">
                           <h4
@@ -41907,15 +42201,28 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                           >
                             {title}
                           </h4>
-	                          <p
-	                            className="mt-1 break-words text-xs text-slate-700 sm:text-sm"
-	                            data-admin-app-notification-feed-message="true"
-	                          >
-	                            {message}
-	                          </p>
-	                        </div>
-                        <span className="w-fit rounded-full bg-sky-100 px-2 py-1 text-xs font-semibold text-sky-800">
-                          {notificationPriority}
+		                          <p
+		                            className="mt-1 break-words text-xs text-slate-700 sm:text-sm"
+		                            data-admin-app-notification-feed-message="true"
+		                          >
+		                            {message}
+		                          </p>
+                              {changeRequestSummaryRows.length > 0 ? (
+                                <dl
+                                  className="mt-2 grid gap-1 rounded-md border border-sky-100 bg-sky-50/60 p-2 text-xs text-slate-700 sm:grid-cols-4"
+                                  data-admin-app-notification-change-request-summary="true"
+                                >
+                                  {changeRequestSummaryRows.map((row) => (
+                                    <div key={row.label}>
+                                      <dt className="font-semibold text-slate-600">{row.label}</dt>
+                                      <dd className="mt-0.5 break-words text-slate-950">{row.value}</dd>
+                                    </div>
+                                  ))}
+                                </dl>
+                              ) : null}
+		                        </div>
+	                        <span className="w-fit rounded-full bg-sky-100 px-2 py-1 text-xs font-semibold text-sky-800">
+	                          {notificationPriority}
                         </span>
                       </div>
 	                      <p className="mt-2 hidden break-words text-xs text-slate-600">
@@ -41966,15 +42273,28 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                               type="button"
                             >
                               {activeChangeRequestAction === "dismiss" ? "Dismissing..." : "Dismiss"}
-                            </button>
-                          </div>
+	                            </button>
+	                          </div>
+	                        ) : null}
+                        {changeRequestContext ? (
+                          <button
+                            aria-label="Clear only this admin notification inbox row"
+                            className="h-7 rounded-md border border-sky-300 bg-white px-2 text-xs font-semibold text-sky-800 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                            data-admin-app-notification-clear="safe-inbox-row-only"
+                            data-admin-app-notification-action="read"
+                            disabled={notificationActionDisabled}
+                            onClick={() => handleAdminAppNotificationStatusUpdate(notificationId, "read")}
+                            type="button"
+                          >
+                            {clearNotificationActive ? "Clearing..." : "Clear"}
+                          </button>
                         ) : null}
-                        {!changeRequestContext
-                          ? [
-                              {
-                                label: "Mark read",
-                                status: "read" as const,
-                              },
+	                        {!changeRequestContext
+	                          ? [
+	                              {
+	                                label: "Clear",
+	                                status: "read" as const,
+	                              },
                               {
                                 label: "Dismiss",
                                 status: "dismissed" as const,

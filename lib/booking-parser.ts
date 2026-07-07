@@ -69,6 +69,20 @@ type MultiStopItineraryDetails = {
   extraStopLocation: string;
 };
 
+type PickupAddressSectionRoute = {
+  pickup: string;
+  dropoff: string;
+  extraStopCount?: string;
+  extraStopLocation?: string;
+};
+
+type AddOnTripLeg = {
+  dropoff: string;
+  pickup: string;
+  rawLine: string;
+  time: string;
+};
+
 type TerminalFlightLineDetails = {
   passenger: string;
   flight: string;
@@ -408,11 +422,27 @@ function extractNamedPassengerLine(line: string) {
   return "";
 }
 
+function isPickupAddressSectionLine(line: string) {
+  return /^(?:pick\s*up|pickup|pick-up)\s+address\s*[:=-]/i.test(clean(line));
+}
+
+function hasAddOnTripCue(text: string) {
+  return /\b(?:add[\s-]*on|more\s+trips?|trips?\s+for)\b/i.test(text);
+}
+
+function isAddOnTripSectionLine(line: string) {
+  return /^\d+\s+(?:toyota\s+)?(?:alphard|vellfire|avf|vvv|combi|(?:[4-9]|1[0-9])\s*-?\s*seater|e\s*-?\s*class|s\s*-?\s*class|sedan|mpv|van|vito)\b/i.test(clean(line));
+}
+
 function detectMultipleBookings(text: string, cleanedLines: string[]) {
   const structuredBookingForm = /\bbooking\s+form\s+name\s*[:=-]|\broute\s+name\s*[:=-]|\bclient\s+details\s*:/i.test(text);
   const listItems = structuredBookingForm
     ? []
     : cleanedLines.filter((line) => /^(?:\d+[.)]\s+|[-*•]\s+)/.test(line));
+  const pickupAddressSections = cleanedLines.filter(isPickupAddressSectionLine);
+  const addOnTripSections = hasAddOnTripCue(text)
+    ? cleanedLines.filter(isAddOnTripSectionLine)
+    : [];
   const flights = detectAllFlights(text);
   const namedPassengers = Array.from(new Set(
     cleanedLines
@@ -429,6 +459,8 @@ function detectMultipleBookings(text: string, cleanedLines: string[]) {
   }
 
   return hasCrewTransferRequestSections(text) ||
+    addOnTripSections.length > 1 ||
+    pickupAddressSections.length > 1 ||
     listItems.length > 1 ||
     flights.length > 1 ||
     namedPassengers.length > 1 ||
@@ -524,6 +556,18 @@ function detectTerminalFlightLineDetails(text: string, selectedFlight = ""): Ter
 }
 
 function splitPotentialBookings(text: string, cleanedLines: string[]) {
+  const addOnTripSections = splitAddOnTripRequestSections(text, cleanedLines);
+
+  if (addOnTripSections.length > 1) {
+    return addOnTripSections;
+  }
+
+  const pickupAddressSections = splitPickupAddressRequestSections(cleanedLines);
+
+  if (pickupAddressSections.length > 1) {
+    return pickupAddressSections;
+  }
+
   const listLines = cleanedLines
     .filter((line) => /^(?:\d+[.)]\s+|[-*•]\s+)/.test(line))
     .map((line) => clean(line.replace(/^(?:\d+[.)]\s+|[-*•]\s+)/, "")))
@@ -542,6 +586,205 @@ function splitPotentialBookings(text: string, cleanedLines: string[]) {
   const passengerLines = cleanedLines.filter((line) => extractNamedPassengerLine(line));
 
   return passengerLines.length > 1 ? passengerLines : cleanedLines;
+}
+
+function splitAddOnTripRequestSections(text: string, cleanedLines: string[]) {
+  if (!hasAddOnTripCue(text)) {
+    return [];
+  }
+
+  const sectionIndexes = cleanedLines
+    .map((line, index) => isAddOnTripSectionLine(line) ? index : -1)
+    .filter((index) => index >= 0);
+
+  if (sectionIndexes.length < 2) {
+    return [];
+  }
+
+  const sharedContextLines = cleanedLines.slice(0, sectionIndexes[0]);
+
+  return sectionIndexes
+    .map((startIndex, sectionIndex) => {
+      const endIndex = sectionIndexes[sectionIndex + 1] ?? cleanedLines.length;
+      return [...sharedContextLines, ...cleanedLines.slice(startIndex, endIndex)]
+        .map(clean)
+        .filter(Boolean)
+        .join("\n");
+    })
+    .filter(Boolean);
+}
+
+function cleanAddOnTripLocation(value: string) {
+  const cleanedValue = clean(value).replace(/\([^)]*\)/g, "").trim();
+
+  if (/\bairport\b/i.test(cleanedValue)) {
+    return airportLocationFromText(cleanedValue);
+  }
+
+  return cleanLocation(cleanedValue);
+}
+
+function cleanAddOnTripDropoff(value: string) {
+  const rainMatch = clean(value).match(
+    /^(.+?)\s+unless\s+raining,?\s*(?:alight\s+at|drop\s*off\s+at|drop\s*off|to)?\s*(.+)$/i,
+  );
+
+  if (rainMatch?.[1] && rainMatch[2]) {
+    return `${cleanAddOnTripLocation(rainMatch[1])}; ${cleanAddOnTripLocation(rainMatch[2])} if raining`;
+  }
+
+  return cleanAddOnTripLocation(value);
+}
+
+function extractAddOnTripPickupLegs(sectionText: string): AddOnTripLeg[] {
+  return sectionText
+    .split(/\n+/)
+    .map((line) => clean(line))
+    .filter((line) => /\bpick\s*up\b|\bpickup\b/i.test(line) && /\bto\b/i.test(line))
+    .map((line): AddOnTripLeg | null => {
+      const routeMatch = line.match(
+        /\b(?:pick\s*up|pickup)\s*(?:\d{1,2}(?:(?::|\.)\d{2})?\s*(?:am|pm)?)?\s*(?:from\s+)?(.+?)\s+to\s+(.+)$/i,
+      );
+
+      if (!routeMatch?.[1] || !routeMatch[2]) {
+        return null;
+      }
+
+      const pickup = cleanAddOnTripLocation(routeMatch[1]);
+      const dropoff = cleanAddOnTripDropoff(routeMatch[2]);
+      const rawTime = parseTimeFromText(line);
+
+      if (!pickup || !dropoff) {
+        return null;
+      }
+
+      return {
+        dropoff,
+        pickup,
+        rawLine: line,
+        time: formatTimeForState(rawTime) || rawTime,
+      };
+    })
+    .filter((leg): leg is AddOnTripLeg => Boolean(leg));
+}
+
+function detectAddOnTripType(sectionText: string, flight: string, route: { pickup: string; dropoff: string }) {
+  if (/\b(?:short\s+)?dsp\b|\bdisposal\b/i.test(sectionText)) {
+    return "DSP";
+  }
+
+  if (/\btrf\b|\btransfer\b/i.test(sectionText)) {
+    return "TRF";
+  }
+
+  return detectBookingType(sectionText, flight, route) || (route.pickup && route.dropoff ? "TRF" : "");
+}
+
+function splitPickupAddressRequestSections(cleanedLines: string[]) {
+  const pickupIndexes = cleanedLines
+    .map((line, index) => isPickupAddressSectionLine(line) ? index : -1)
+    .filter((index) => index >= 0);
+
+  if (pickupIndexes.length < 2) {
+    return [];
+  }
+
+  const sharedContextLines = cleanedLines.slice(0, pickupIndexes[0]);
+
+  return pickupIndexes
+    .map((startIndex, sectionIndex) => {
+      const endIndex = pickupIndexes[sectionIndex + 1] ?? cleanedLines.length;
+      return [...sharedContextLines, ...cleanedLines.slice(startIndex, endIndex)]
+        .map(clean)
+        .filter(Boolean)
+        .join("\n");
+    })
+    .filter(Boolean);
+}
+
+function stripDispatchRouteNote(value: string) {
+  return clean(value)
+    .replace(/\s*\([^)]*\bdepart\b[^)]*\)/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function appendConditionalRainDropoff(dropoff: string, sectionText: string) {
+  const rainDropoff = cleanLocation(firstMatch(sectionText, [
+    /\bif\s+raining,?\s+(.+?)(?=\.|\n|$)/i,
+  ]));
+
+  if (!dropoff || !rainDropoff || dropoff.toLowerCase().includes(rainDropoff.toLowerCase())) {
+    return dropoff;
+  }
+
+  return `${dropoff}; ${rainDropoff} if raining`;
+}
+
+function cleanPickupAddressRouteLocation(value: string) {
+  return cleanLocation(stripDispatchRouteNote(value).replace(/[\u2013\u2014]/g, "-"));
+}
+
+function detectPickupAddressSectionRoute(sectionText: string): PickupAddressSectionRoute | null {
+  const rawPickupAddress = lineValue(sectionText, [
+    "pickup address",
+    "pick up address",
+    "pick-up address",
+  ]);
+  const routeText = stripDispatchRouteNote(rawPickupAddress);
+
+  if (!routeText) {
+    return null;
+  }
+
+  const pickupExtraStopDropoffMatch = routeText.match(
+    /^(.+?)\s+pick\s*up\s+to\s+(.+?),\s*drop\s*off\s+(.+)$/i,
+  );
+
+  if (
+    pickupExtraStopDropoffMatch?.[1] &&
+    pickupExtraStopDropoffMatch[2] &&
+    pickupExtraStopDropoffMatch[3]
+  ) {
+    const pickup = cleanPickupAddressRouteLocation(pickupExtraStopDropoffMatch[1]);
+    const extraStopLocation = cleanPickupAddressRouteLocation(pickupExtraStopDropoffMatch[2]);
+    const dropoff = appendConditionalRainDropoff(
+      cleanPickupAddressRouteLocation(pickupExtraStopDropoffMatch[3]),
+      sectionText,
+    );
+
+    return {
+      pickup,
+      dropoff,
+      ...(extraStopLocation ? { extraStopCount: "1", extraStopLocation } : {}),
+    };
+  }
+
+  const commaDropoffMatch = routeText.match(/^(.+?),\s*drop\s*off\s+(.+)$/i);
+
+  if (commaDropoffMatch?.[1] && commaDropoffMatch[2]) {
+    return {
+      pickup: cleanPickupAddressRouteLocation(commaDropoffMatch[1]),
+      dropoff: appendConditionalRainDropoff(
+        cleanPickupAddressRouteLocation(commaDropoffMatch[2]),
+        sectionText,
+      ),
+    };
+  }
+
+  const toRouteMatch = routeText.match(/^(.+?)\s+to\s+(.+)$/i);
+
+  if (toRouteMatch?.[1] && toRouteMatch[2]) {
+    return {
+      pickup: cleanPickupAddressRouteLocation(toRouteMatch[1]),
+      dropoff: appendConditionalRainDropoff(
+        cleanPickupAddressRouteLocation(toRouteMatch[2]),
+        sectionText,
+      ),
+    };
+  }
+
+  return null;
 }
 
 function detectSignatureBooker(text: string) {
@@ -639,6 +882,94 @@ function buildCrewTransferRequestPreview(text: string, referenceDate: Date) {
       pickup: rawRoute.pickup,
       dropoff: rawRoute.dropoff,
       ...(pax ? { pax } : {}),
+    };
+  });
+}
+
+function buildAddOnTripRequestPreview(text: string, cleanedLines: string[], referenceDate: Date) {
+  const addOnTripSections = splitAddOnTripRequestSections(text, cleanedLines);
+
+  if (addOnTripSections.length < 2) {
+    return [];
+  }
+
+  const sharedContext = detectSharedTransferRequestContext(text);
+  const contextDate = parseDateFromText(text, referenceDate);
+
+  return addOnTripSections.map((section) => {
+    const sectionText = normalizeIntentText(section);
+    const pickupLegs = extractAddOnTripPickupLegs(sectionText);
+    const firstLeg = pickupLegs[0] || null;
+    const lastLeg = pickupLegs[pickupLegs.length - 1] || null;
+    const fallbackFlight = detectFlight(sectionText);
+    const flight = lastLeg ? detectFlight(lastLeg.rawLine) || fallbackFlight : fallbackFlight;
+    const route = {
+      pickup: firstLeg?.pickup || detectRoute(sectionText, flight).pickup,
+      dropoff: lastLeg?.dropoff || detectRoute(sectionText, flight).dropoff,
+    };
+    const extraStops = pickupLegs.length > 1
+      ? pickupLegs.slice(0, -1)
+        .map((leg) => leg.dropoff)
+        .filter((location) => location && location.toLowerCase() !== route.dropoff.toLowerCase())
+      : [];
+    const rawTime = firstLeg?.time || parseTimeFromText(sectionText);
+    const type = detectAddOnTripType(sectionText, flight, route);
+    const pax = detectExplicitPax(sectionText);
+
+    return {
+      passenger: detectName(sectionText, flight) || sharedContext.passenger,
+      company: sharedContext.company,
+      booker: sharedContext.booker,
+      vehicle: detectVehicle(sectionText) || sharedContext.vehicle,
+      date: parseDateFromText(sectionText, referenceDate) || contextDate,
+      time: formatTimeForState(rawTime) || rawTime,
+      type,
+      flight,
+      pickup: route.pickup,
+      dropoff: route.dropoff,
+      ...(pax ? { pax } : {}),
+      ...(extraStops.length ? { extraStopCount: String(extraStops.length), extraStopLocation: extraStops.join(" > ") } : {}),
+    };
+  });
+}
+
+function buildPickupAddressRequestPreview(text: string, cleanedLines: string[], referenceDate: Date) {
+  const pickupAddressSections = splitPickupAddressRequestSections(cleanedLines);
+
+  if (pickupAddressSections.length < 2) {
+    return [];
+  }
+
+  const sharedContext = detectSharedTransferRequestContext(text);
+  const contextDate = parseDateFromText(text, referenceDate);
+  const sharedVehicle = sharedContext.vehicle || detectVehicle(text);
+
+  return pickupAddressSections.map((section) => {
+    const sectionText = normalizeIntentText(section);
+    const flight = detectFlight(sectionText);
+    const pickupAddressRoute = detectPickupAddressSectionRoute(sectionText);
+    const route = pickupAddressRoute || detectRoute(sectionText, flight);
+    const rawTime = parseTimeFromText(sectionText);
+    const type = lineValue(sectionText, ["booking type", "type", "job type"]) ||
+      (!flight && route.pickup && route.dropoff ? "TRF" : detectBookingType(sectionText, flight, route));
+    const passenger = detectName(sectionText, flight) || sharedContext.passenger;
+    const date = parseDateFromText(sectionText, referenceDate) || contextDate;
+    const pax = detectExplicitPax(sectionText);
+
+    return {
+      passenger,
+      company: sharedContext.company,
+      booker: sharedContext.booker,
+      vehicle: sharedVehicle,
+      date,
+      time: formatTimeForState(rawTime) || rawTime,
+      type,
+      flight,
+      pickup: route.pickup,
+      dropoff: route.dropoff,
+      ...(pax ? { pax } : {}),
+      ...(pickupAddressRoute?.extraStopCount ? { extraStopCount: pickupAddressRoute.extraStopCount } : {}),
+      ...(pickupAddressRoute?.extraStopLocation ? { extraStopLocation: pickupAddressRoute.extraStopLocation } : {}),
     };
   });
 }
@@ -756,6 +1087,49 @@ function detectNamedAddressTransferContext(text: string) {
     passenger: looksLikePersonName(passenger) ? passenger : "",
     address,
   };
+}
+
+function detectLoosePickupStayRoute(text: string) {
+  const lines = text
+    .split(/\n+/)
+    .map((line) => clean(line))
+    .filter(Boolean);
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] || "";
+    const stayAddress = firstMatch(line, [
+      /\b(?:pick\s*up|pickup)\b.*?\b(?:he|she|they|guest|passenger|pax)\s+stay(?:ing)?(?:\s+at)?\s+(?:the\s+)?(.+?)$/i,
+      /\b(?:pick\s*up|pickup)\b.*?\bstay(?:ing)?(?:\s+at)?\s+(?:the\s+)?(.+?)$/i,
+    ]);
+
+    if (!stayAddress) {
+      continue;
+    }
+
+    const nextAddressLine = lines
+      .slice(index + 1)
+      .find((nextLine) =>
+        /^\d{1,5}[A-Za-z]?\s+[A-Za-z0-9]/.test(nextLine) &&
+        !/\b(?:pax|persons?|people|passengers?)\b/i.test(nextLine) &&
+        !/\b(?:S\$|\$)\d/.test(nextLine) &&
+        !isVehicleServiceHeaderLine(nextLine) &&
+        !looksLikePersonName(nextLine),
+      );
+    const pickup = normalizeNarratedAddress(stayAddress);
+    const dropoff = normalizeNarratedAddress(nextAddressLine || "");
+
+    if (pickup || dropoff) {
+      return { pickup, dropoff };
+    }
+  }
+
+  return { pickup: "", dropoff: "" };
+}
+
+function detectDeparturePickupAfterTime(text: string) {
+  return cleanLocation(firstMatch(text, [
+    /\b(?:pick\s*up|pickup|p\/u|pu)\s*(?:at|by|around)?\s*(?:[01]?\d|2[0-3])(?:(?::|\.)?\d{2})?\s*(?:am|pm|hrs?)?\s*[.,;:-]+\s*(.+?)(?=\.|,|\n|$)/i,
+  ]));
 }
 
 function normalizeNarratedPersonName(value: string) {
@@ -887,6 +1261,8 @@ function buildExtractedBookingsPreview(text: string, cleanedLines: string[], ref
   const hasMultipleFlights = detectAllFlights(text).length > 1;
   const airportStandbyPreview = hasExplicitList || hasMultipleFlights ? [] : buildAirportStandbyPreview(text, referenceDate);
   const crewTransferPreview = buildCrewTransferRequestPreview(text, referenceDate);
+  const addOnTripPreview = buildAddOnTripRequestPreview(text, cleanedLines, referenceDate);
+  const pickupAddressPreview = buildPickupAddressRequestPreview(text, cleanedLines, referenceDate);
   const separatedTransferPreview = buildSeparatedTransferRequestPreview(text, referenceDate);
   const airportReturnTransferPreview = buildAirportReturnTransferPreview(text, referenceDate);
   const contextDate = parseDateFromText(text, referenceDate);
@@ -898,6 +1274,14 @@ function buildExtractedBookingsPreview(text: string, cleanedLines: string[], ref
 
   if (separatedTransferPreview.length > 0) {
     return separatedTransferPreview;
+  }
+
+  if (addOnTripPreview.length > 0) {
+    return addOnTripPreview;
+  }
+
+  if (pickupAddressPreview.length > 0) {
+    return pickupAddressPreview;
   }
 
   if (airportReturnTransferPreview.length > 0) {
@@ -1314,6 +1698,15 @@ function detectNarratedTravelerName(text: string) {
   return "";
 }
 
+function detectNarratedDeparturePassenger(text: string) {
+  const passenger = firstMatch(text, [
+    /\b([A-Za-z][A-Za-z.' -]{1,60}?)\s+(?:will\s+)?depart(?:ing)?\s+(?:for|to)\b/i,
+    /\b([A-Za-z][A-Za-z.' -]{1,60}?)\s+(?:will\s+)?take\s+(?:flight\s+)?[A-Z]{2}\s?\d{1,4}\b/i,
+  ]);
+
+  return looksLikePersonName(passenger) ? cleanDetectedName(passenger) : "";
+}
+
 function toDateKey(date: Date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -1437,6 +1830,7 @@ function parseTimeFromText(text: string) {
   ]);
   const explicitPickupTime = firstMatch(text, [
     /\b(?:pick\s*up|pickup|p\/u|pu)\s*(?:at|by|around)\s*[:=-]?\s*(\d{1,2}(?:(?::|\.)?\d{2})?\s*(?:am|pm|hrs?)?)/i,
+    /\b(?:pick\s*up|pickup|p\/u|pu)\s*[:=-]?\s*(((?:[01]\d|2[0-3])[0-5]\d\s*(?:hrs?)?)|(?:\d{1,2}(?::|\.)\d{2}\s*(?:am|pm|hrs?)?)|(?:\d{1,2}\s*(?:am|pm|hrs?)))\b/i,
   ]);
   const labeledTime = firstMatch(text, [
     /\b(?:pickup\s*time|time|p\/u\s*time|pu\s*time|eta)\s*[:=-]?\s*(\d{1,2}(?:(?::|\.)?\d{2})?\s*(?:am|pm|hrs?)?)/i,
@@ -1606,7 +2000,8 @@ function detectExtraStopDetails(text: string) {
     /\bdrop\s+by\s+(.+?)(?=\.|,|\n|$)/i,
     /\b(?:via|stopover\s+at)\s+(.+?)(?=\.|,|\n|$)/i,
   ]));
-  const extraStopLocation = structuredRouteLocation || labeledExtraStop || narratedExtraStop;
+  const safeNarratedExtraStop = /^[A-Z]{2}\s?\d{1,4}\b/i.test(narratedExtraStop) ? "" : narratedExtraStop;
+  const extraStopLocation = structuredRouteLocation || labeledExtraStop || safeNarratedExtraStop;
   const structuredRouteLocationCount = structuredRouteLocation
     ? structuredRouteLocation.split(/\s*>\s*/g).filter(Boolean).length
     : 0;
@@ -1865,6 +2260,26 @@ function detectLabeledTravelerName(text: string) {
   ]);
 
   return looksLikePersonName(labeledName) ? cleanDetectedName(labeledName) : "";
+}
+
+function detectStandaloneHonorificNameLine(text: string) {
+  const lines = text
+    .split(/\n+/)
+    .map((line) => clean(line))
+    .filter(Boolean);
+
+  for (const line of lines) {
+    const candidate = firstMatch(line, [
+      /^((?:mr|mrs|ms|mdm|miss|dr)\.?\s+[A-Za-z][A-Za-z.' -]*[A-Za-z])\.?\s*(?:S\$|\$)\d+(?:\.\d{1,2})?(?:\s|$)/i,
+      /^((?:mr|mrs|ms|mdm|miss|dr)\.?\s+[A-Za-z][A-Za-z.' -]*[A-Za-z])\.?$/i,
+    ]);
+
+    if (looksLikePersonName(candidate)) {
+      return cleanDetectedName(candidate);
+    }
+  }
+
+  return "";
 }
 
 function detectTripOrganizerDetails(text: string) {
@@ -2671,6 +3086,12 @@ function detectRoute(text: string, flight = "") {
     };
   }
 
+  const loosePickupStayRoute = flight ? { pickup: "", dropoff: "" } : detectLoosePickupStayRoute(text);
+
+  if (loosePickupStayRoute.pickup || loosePickupStayRoute.dropoff) {
+    return loosePickupStayRoute;
+  }
+
   if (isStandbyBooking(text)) {
     const standbyRoute = detectStandbyRoute(text);
 
@@ -2750,6 +3171,27 @@ function detectRoute(text: string, flight = "") {
     ]));
     return {
       pickup: pickupBeforeAirport,
+      dropoff: airportLocationFromText(text),
+    };
+  }
+
+  const departurePickupAfterTime =
+    flight && /\b(?:DEP|DEPART|DEPARTURE|DEPARTING|ETD)\b/i.test(text)
+      ? detectDeparturePickupAfterTime(text)
+      : "";
+  if (departurePickupAfterTime) {
+    return {
+      pickup: departurePickupAfterTime,
+      dropoff: airportLocationFromText(text),
+    };
+  }
+
+  const hotelDeparturePickup = cleanLocation(firstMatch(text, [
+    /^(.+?)\s*[.,-]\s*(?:DEP|DEPARTURE|DEPART)\b.*?\b(?:pick\s*up|pickup)\b/i,
+  ]));
+  if (hotelDeparturePickup && !flight) {
+    return {
+      pickup: hotelDeparturePickup,
       dropoff: airportLocationFromText(text),
     };
   }
@@ -2842,6 +3284,8 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
   const name =
     terminalFlightDetails?.passenger ||
     freeformMultiLocationTransfer?.passenger ||
+    detectNarratedDeparturePassenger(operationalText) ||
+    detectStandaloneHonorificNameLine(operationalText) ||
     detectStandbyName(operationalText) ||
     detectDrivenPassenger(operationalText) ||
     paxNameAndNumber ||

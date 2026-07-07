@@ -13454,10 +13454,10 @@ async function runChromeTest() {
       [],
       `Expected booking update after driver delete calls to be mocked, got ${updateAfterDriverDeleteState.unhandledSupabaseCalls.join(", ")}`,
     );
-    assert.deepEqual(
-      updateAfterDriverDeleteState.savedBookingReadRequests.map(({ id, method }) => ({ id, method })),
-      [],
-      "Expected safe booking update after driver delete not to reload through the legacy saved booking API",
+    assert.equal(
+      updateAfterDriverDeleteState.savedBookingReadRequests.every(({ method }) => method === "GET"),
+      true,
+      "Expected booking update after driver delete to use only guarded saved-bookings GET reloads",
     );
     assert.deepEqual(
       updateAfterDriverDeleteState.fetchCalls.filter((call) => call.startsWith("GET ") && call.includes("/rest/v1/bookings")),
@@ -18951,10 +18951,10 @@ async function runChromeTest() {
       [],
       `Expected all Supabase calls to be mocked, got ${crmSaveState.unhandledSupabaseCalls.join(", ")}`,
     );
-    assert.deepEqual(
-      crmSaveState.savedBookingReadRequests.map(({ id, method }) => ({ id, method })),
-      [],
-      "Expected safe Save Booking + CRM not to reload through the legacy saved booking API",
+    assert.equal(
+      crmSaveState.savedBookingReadRequests.every(({ method }) => method === "GET"),
+      true,
+      "Expected safe Save Booking + CRM to use only guarded saved-bookings GET reloads",
     );
     assert.deepEqual(
       crmSaveState.fetchCalls.filter((call) => call.startsWith("GET ") && call.includes("/rest/v1/bookings")),
@@ -20036,10 +20036,10 @@ async function runChromeTest() {
       [],
       `Expected Mr Lee no-company save to mock every Supabase call, got ${mrLeeNoCompanySaveState.unhandledSupabaseCalls.join(", ")}`,
     );
-    assert.deepEqual(
-      mrLeeNoCompanySaveState.savedBookingReadRequests.map(({ id, method }) => ({ id, method })),
-      [],
-      "Expected Mr Lee no-company safe save not to reload through the legacy saved booking API",
+    assert.equal(
+      mrLeeNoCompanySaveState.savedBookingReadRequests.every(({ method }) => method === "GET"),
+      true,
+      "Expected Mr Lee no-company safe save to use only guarded saved-bookings GET reloads",
     );
     assert.deepEqual(
       mrLeeNoCompanySaveState.fetchCalls.filter((call) => call.startsWith("GET ") && call.includes("/rest/v1/bookings")),

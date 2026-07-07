@@ -269,6 +269,7 @@ const seed = {
     {
       admin_internal_status: "completed",
       booking_reference: "UBS-SAFE-002",
+      contact_display_name: "PA Lee",
       contact_email: "private@example.test",
       contact_phone: "+65 9999 0000",
       customer_display_name: "UBS",
@@ -285,6 +286,7 @@ const seed = {
     {
       admin_internal_status: "confirmed",
       booking_reference: "UBS-SAFE-001",
+      contact_display_name: "PA Lee",
       contact_phone: "+65 7777 0000",
       customer_display_name: "UBS",
       customer_facing_status: "confirmed",
@@ -420,7 +422,7 @@ try {
   assert.deepEqual(readResult.body.accounts, [
     {
       account_scope_key: "boss_alpha",
-      account_scope_label: "Traveller: Boss Alpha",
+      account_scope_label: "Passenger: Boss Alpha / Booker: PA Lee",
       completed_count: 1,
       customer_account: "UBS",
       customer_folder_key: "customer-ubs::boss_alpha",
@@ -448,7 +450,7 @@ try {
     },
     {
       account_scope_key: "boss_beta",
-      account_scope_label: "Traveller: Boss Beta",
+      account_scope_label: "Passenger: Boss Beta / Booker: PA Lee",
       completed_count: 0,
       customer_account: "UBS",
       customer_folder_key: "customer-ubs::boss_beta",

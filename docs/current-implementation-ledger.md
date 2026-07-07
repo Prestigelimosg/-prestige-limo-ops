@@ -713,15 +713,18 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Admin Load Bookings CRM Fallback And Compact List Fix
 
 - Live manual walkthrough on 2026-06-26 found that the visible admin `Load Bookings` button could still fail with the safe `Admin saved booking read failed safely.` message when `GET /api/admin-saved-bookings?limit=25` failed, even though same-origin admin `GET /api/admin-bookings` returned `ok: true`.
-- Admin `Load Bookings` now keeps typed display hydration at `limit=25`, then uses a bounded same-origin admin booking list read at `limit=100` for Dashboard/Dispatch active-job monitoring.
+- The legacy admin booking list fallback is now retired for normal `Load Bookings`, because deleted fake/demo rows can remain in the older `/api/admin-bookings` source and reappear after refresh.
+- Admin `Load Bookings` now keeps typed display hydration at `limit=25`, then uses only the guarded saved-bookings list read at `limit=100` for Dashboard/Bookings/Dispatch records.
 - Both reads use the existing `x-prestige-admin-purpose` browser-admin header and remain GET-only.
-- Silent dashboard/bookings/dispatch auto-sync skips the legacy saved-bookings read and uses the CRM-safe admin bookings list, so `Save Booking + CRM` cannot accidentally reload through `/api/admin-saved-bookings`.
-- The bounded active-job list read prevents a driver who has already tapped OTW/Share Location from disappearing from `Today's Jobs` merely because newer booking rows pushed the job outside the old 25-row dashboard slice.
-- The fallback is an admin dashboard read fallback only; it does not add public reads, broad writes, DB writes, provider sends, env changes, deploys, parser changes, live GPS/customer-wide live map, billing/payment/PDF/invoice/payout, or shims.
-- Save Booking + CRM remains on `POST /api/admin-bookings` and is not changed by this fallback.
+- Silent dashboard/bookings/dispatch auto-sync uses the same guarded saved-bookings read, so refresh cannot rehydrate old legacy fake/demo rows from `/api/admin-bookings`.
+- The bounded saved-bookings list read prevents a driver who has already tapped OTW/Share Location from disappearing from `Today's Jobs` merely because newer booking rows pushed the job outside the old 25-row dashboard slice.
+- This read-source cleanup does not add public reads, broad writes, DB writes, provider sends, env changes, deploys, parser changes, live GPS/customer-wide live map, billing/payment/PDF/invoice/payout, or shims.
+- Save Booking + CRM remains on `POST /api/admin-bookings` and is not changed by this list source cleanup.
 - Recent and Completed booking lists now render compact expandable rows by default so dispatch can scan more bookings at once while keeping existing details and action buttons available.
 - The Bookings tab now triggers the same safe Load Bookings read automatically the first time it is opened with an empty loaded list.
-- Open customer booking requests are surfaced on the Dashboard command centre and above Recent Bookings, using the existing customer request source markers with a bounded fallback for open `CUST-` request references when live rows do not carry those markers.
+- Open customer booking requests are surfaced on the Dashboard command centre and above Recent Bookings only when the saved booking carries the customer request source markers; a `CUST-` reference alone does not create a new-request badge because older test/demo rows can share that prefix.
+- The new-request badge open/closed check reads `status`, `admin_internal_status`, `customer_facing_status`, and `request_review_status`, so approved, declined, confirmed, released, cancelled, completed, and closed customer request rows do not remain counted as new.
+- Customer request rows with past pickup times are excluded from the new-request badge, so stale pending test/demo requests do not keep a live mobile alert alive.
 - Dispatch is the default admin landing tab; Dashboard shows a compact `Urgent Booking Requests` alert only for open customer requests and saved Driver TBC jobs inside the 1-hour pickup monitor window, and routes each row to the existing Dispatch Driver Job Link handoff.
 - The Dashboard now runs the same existing safe Load Bookings read once on initial command-centre entry when the local booking list is empty, so newly submitted customer requests can appear without first opening the Bookings tab.
 - Dashboard initial Load Bookings completion only writes the global status message while the operator is still on Dashboard, so a delayed read cannot overwrite Rates or other tab feedback after navigation.
@@ -739,7 +742,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The lower Dispatch saved-record finder and internal advanced checks stay in the source as an archived `Optional Workflow Tools` block, but the block is hidden from normal operation so it cannot distract dispatch with unused saved-record or readiness panels.
 - Dispatch internal readiness, handoff, follow-up, day-of-trip monitor, recovery, exception, closeout-review, and billing-prep panels remain colocated under the archived optional workflow block and nested `Advanced Checks` disclosure for guard coverage, while the default operator view stays focused on daily trip work.
 - The `Today's Jobs` driver report readout is read-only and does not create driver status events, notification rows, provider sends, GPS/live-location records, billing/payment/PDF/invoice/payout records, or a duplicate single-booking Dispatch workflow.
-- The Bookings tab shows one compact pulsing alert badge/highlight after open customer booking requests or queued customer change/cancel requests are detected. The count combines both existing sources and exposes separate safe data markers for booking-request count, change-request count, and total alert count; no sound, browser notification, polling loop, provider send, or new route is added.
+- The Bookings tab shows one compact pulsing alert badge/highlight after open customer booking requests, queued customer change/cancel requests, or under-1-hour urgent Driver TBC jobs are detected. The badge labels single-source alerts as `change`, `new`, or `urgent`, falls back to compact combined `alerts`, and exposes separate safe data markers for booking-request count, change-request count, urgent under-1-hour count, and total alert count; no sound, browser notification, polling loop, provider send, or new route is added.
 - Customer/driver-visible forbidden data remains blocked from this list path: driver payout, PayNow payout, customer price, billing, invoice, payment, internal admin notes, parser/debug, secrets, raw provider payloads, and mock QA/dev archive data.
 - Guard coverage lives in `scripts/test-admin-load-bookings-crm-fallback-compact-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
@@ -973,7 +976,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Dispatch `Today's Jobs` only lists jobs inside the one-hour-before-pickup monitor window.
 - Dashboard Upcoming booking rows show assigned driver name/contact/plate/vehicle details when available.
 - `Today's Jobs` driver report auto-refresh has an explicit 10-second on/off switch, defaults on, and manual Refresh remains available.
-- Customers payment review rows are compact by default; the mock payment controls and long notes stay collapsed until `View details` is opened.
+- The old Customers mock payment review rows stay removed from the daily Customers page.
 - No app smoke, provider send, external notification delivery, GPS/live location, billing/payment/PDF/invoice/payout, env, DB schema, parser, calendar, or duplicate workflow sector was added.
 - Guard coverage lives in `scripts/test-admin-dashboard-live-followup-fixes-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
@@ -1037,8 +1040,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The Monthly Billing Queue sits before the invoice workspace so completed closeout-ready jobs are visible before invoice work starts.
 - Guarded saved-booking reads now check the existing completed closeout status for those references and bridge only closeout-ready saved bookings into the Monthly Billing Queue with `Draft amount not set`.
 - Customer Finder job reads and closeout-ready saved-booking rows keep the real saved customer/account id as the invoice `customerId`; the old mock folder match fallback is removed from this billing queue.
-- Monthly Billing Queue groups only by the saved billing account ID plus billing month; it does not fall back to company, booker, passenger, display name, or booking reference.
-- Closeout-ready jobs without a saved billing account ID are held behind an `account review needed` count instead of being prepared under the wrong customer.
+- Monthly Billing Queue groups only by the saved billing account ID plus passenger/traveller account scope plus billing month; it does not fall back to company, booker, passenger, display name, or booking reference.
+- Closeout-ready jobs without a saved billing account ID or passenger/traveller billing scope are held behind an `account review needed` count instead of being prepared under the wrong customer.
 - The Monthly Billing Queue has one billing account/month group selector plus one primary `Prepare monthly bill` action that fills the existing Create Invoice workbench for admin review.
 - The `Prepare monthly bill` action stays hidden until admin selects an exact billing account/month group, so the normal Customer dashboard does not show a disabled/noisy prepare button when there are no billable jobs.
 - The finder no longer shows noisy selected-dropdown wording; selecting a customer now shows a short `Selected customer` status only.

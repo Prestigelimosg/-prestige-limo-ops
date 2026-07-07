@@ -2333,7 +2333,7 @@ async function runChromeTest() {
         [],
         "Expected admin booking persistence save body to include only approved operational field names",
       );
-      assert.equal(saveState.body.booking.customer_display_name, "OPS TEST CUSTOMER");
+      assert.equal(saveState.body.booking.customer_display_name, "OPS TEST CUSTOMER [Ops Passenger]");
       assert.equal(saveState.body.booking.contact_email, "ops@example.com");
       assert.equal(saveState.body.booking.customer_facing_status, "Received");
       assert.equal(saveState.body.booking.admin_internal_status, "Draft");
@@ -26844,7 +26844,9 @@ async function runChromeTest() {
         "Expected Monthly Billing Queue heading",
       );
       assert.equal(
-        dashboardState.monthlyBillingQueueText.includes("Same company names stay separate by saved account ID."),
+        dashboardState.monthlyBillingQueueText.includes(
+          "Same company names stay separate by saved account ID and passenger scope.",
+        ),
         true,
         "Expected Monthly Billing Queue strict account grouping copy",
       );

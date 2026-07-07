@@ -37,18 +37,14 @@ const [customersPage, ledger, preactivationSuite] = await Promise.all([
 const invoiceWorkspace = sectionBetween(
   customersPage,
   'data-customer-invoice-workspace="true"',
-  'data-customer-advanced-booking-drawer="true"',
+  "</main>",
 );
 const ledgerSection = sectionBetween(ledger, "### Customers Invoice Workspace Cleanup", "\n### ");
 
 for (const fragment of [
   'const customerInvoiceWorkspaceTabs: Array<{ label: string; value: CustomerInvoiceWorkspaceTab }> = [];',
   'useState<CustomerInvoiceWorkspaceTab>("create-invoice")',
-  "const showLegacyMockCustomerWorkbench = false;",
   'data-customer-invoice-workspace="true"',
-  'data-customer-invoice-workspace-panel="statements"',
-  'data-customer-invoice-workspace-panel="outstanding"',
-  'data-customer-invoice-workspace-panel="follow-up"',
   'data-customer-folder-finder="true"',
   'data-customer-monthly-billing-queue="true"',
   'data-customer-monthly-billing-group-select="true"',
@@ -58,8 +54,6 @@ for (const fragment of [
   'data-customer-billing-workbench-drawer="true"',
   'data-customer-billing-workbench-summary="true"',
   'data-customer-billing-workbench-contents="true"',
-  'data-customer-advanced-booking-drawer="true"',
-  'data-customer-debug-tools-drawer="true"',
   "Invoice workbench",
   "Monthly Billing Queue",
   "Prepare monthly bill",
@@ -73,33 +67,6 @@ assertIncludes(
   customersPage,
   "{selectedMonthlyBillingGroup ? (",
   "Monthly Billing Queue prepare action must be conditional on selecting an exact billing account/month group.",
-);
-
-assert.equal(
-  (customersPage.match(/data-monthly-statement-preview="true"/g) ?? []).length,
-  1,
-  "customers page legacy archive must keep one Monthly Account Statement Preview section while it is not exposed.",
-);
-
-assert.equal(
-  customersPage.indexOf('useState<CustomerInvoiceWorkspaceTab>("create-invoice")') <
-    customersPage.indexOf('data-customer-invoice-workspace-panel="statements"'),
-  true,
-  "legacy statement previews must not be the default invoice workspace tab.",
-);
-
-assert.equal(
-  customersPage.indexOf("const showLegacyMockCustomerWorkbench = false;") <
-    customersPage.indexOf('data-customer-advanced-booking-drawer="true"'),
-  true,
-  "legacy customer mock workbench must be behind the false render gate.",
-);
-
-assert.equal(
-  customersPage.indexOf("const showLegacyMockCustomerWorkbench = false;") <
-    customersPage.indexOf('data-customer-debug-tools-drawer="true"'),
-  true,
-  "legacy customer support/mock logs must be behind the false render gate.",
 );
 
 assert.equal(
@@ -125,6 +92,18 @@ for (const forbiddenFragment of [
   '{ label: "Outstanding", value: "outstanding" }',
   '{ label: "Follow-up", value: "follow-up" }',
   'useState<CustomerInvoiceWorkspaceTab>("statements")',
+  "const showLegacyMockCustomerWorkbench = false;",
+  'data-customer-invoice-workspace-panel="statements"',
+  'data-customer-invoice-workspace-panel="outstanding"',
+  'data-customer-invoice-workspace-panel="follow-up"',
+  'data-monthly-statement-preview="true"',
+  'data-outstanding-payments-review="true"',
+  'data-collection-follow-up-queue="true"',
+  'data-customer-advanced-booking-drawer="true"',
+  'data-customer-debug-tools-drawer="true"',
+  'data-regular-customer-booking-form-section="true"',
+  'data-regular-customer-booking-list-preview="true"',
+  'data-mock-payment-event-log="true"',
   "Dropdown selected",
   "Billing workbench and mock review queues",
   "All unbilled customers",

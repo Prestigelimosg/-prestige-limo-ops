@@ -44,12 +44,7 @@ const [hourlyHelper, localInvoicesHelper, customersPage, mockCustomers, ledger, 
 const invoiceIssuePanel = sectionBetween(
   customersPage,
   'data-customer-invoice-issue-panel="true"',
-  'data-customer-invoice-workspace-panel="statements"',
-);
-const hourlyBookingFormSection = sectionBetween(
-  customersPage,
-  'data-regular-customer-booking-form="true"',
-  'data-regular-customer-booking-preview="true"',
+  "</main>",
 );
 const ledgerSection = sectionBetween(
   ledger,
@@ -84,7 +79,6 @@ for (const fragment of [
   "hourlyBillingGraceRuleText",
   "function getRegularCustomerHourlyInvoiceReview(form: RegularCustomerBookingForm)",
   "const regularCustomerHourlyInvoiceReview = useMemo(",
-  'data-regular-customer-booking-hourly-preview="true"',
   "function getCustomerInvoiceDriverActualTimeCalculatedAmount(",
   "Driver JC timing: ${actualMinutes} actual min / ${billableMinutes} billable min",
   "invoiceLineDescription: `Driver JC actual time | ${actualMinutes} actual min | ${billableMinutes} billable min | ${rateLabel}`",
@@ -94,20 +88,6 @@ for (const fragment of [
 ]) {
   assertIncludes(customersPage, fragment, `customers hourly invoice fragment ${fragment}`);
 }
-
-for (const fragment of [
-  'data-regular-booking-field="actualStartTime"',
-  'data-regular-booking-field="actualEndTime"',
-  'data-regular-booking-field="ratePerHour"',
-  'data-regular-booking-hourly-calculation="true"',
-]) {
-  assertIncludes(hourlyBookingFormSection, fragment, `hourly booking form fragment ${fragment}`);
-}
-assertIncludes(
-  customersPage,
-  'data-regular-customer-booking-hourly-preview="true"',
-  "hourly booking preview fragment",
-);
 
 for (const fragment of [
   'data-unbilled-customer-billing-breakdown={row.key}',

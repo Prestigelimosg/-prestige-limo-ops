@@ -2846,7 +2846,6 @@ const fieldLabels: Record<keyof BookingForm, string> = {
 
 const bookingDetailFieldOrder: Array<keyof BookingForm> = [
   "company",
-  "bookingType",
   "booker",
   "bookerContact",
   "bookerEmail",
@@ -2859,6 +2858,7 @@ const tripRouteFieldOrder: Array<keyof BookingForm> = [
   "date",
   "time",
   "flight",
+  "bookingType",
   "pickup",
   "dropoff",
 ];

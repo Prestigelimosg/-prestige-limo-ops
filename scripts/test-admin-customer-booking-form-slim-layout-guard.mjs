@@ -28,6 +28,16 @@ const ledger = await readFile("docs/current-implementation-ledger.md", "utf8");
   "h-8 w-full rounded-md border border-stone-300",
   "Save + CRM creates outbound and return as two linked booking records.",
 ].forEach((fragment) => assertIncludes(adminPage, fragment, `admin slim dispatch form fragment`));
+assertIncludes(
+  adminPage,
+  'const bookingDetailFieldOrder: Array<keyof BookingForm> = [\n  "company",\n  "booker",',
+  "admin booking details field order excludes service type",
+);
+assertIncludes(
+  adminPage,
+  'const tripRouteFieldOrder: Array<keyof BookingForm> = [\n  "vehicle",\n  "date",\n  "time",\n  "flight",\n  "bookingType",',
+  "admin pickup/dropoff field order places service type next to flight",
+);
 
 [
   'data-customer-booking-form-density="slim"',

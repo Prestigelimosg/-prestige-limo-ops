@@ -22503,7 +22503,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             Pick a date, then quick-search jobs inside that day.
           </p>
         </div>
-        <div className="grid gap-2 rounded-md border border-stone-200 bg-white p-2 lg:grid-cols-[minmax(12rem,0.8fr)_auto_minmax(12rem,1fr)_auto_auto] lg:items-center">
+        <div className="grid gap-2 rounded-md border border-stone-200 bg-white p-2 xl:grid-cols-[minmax(11rem,0.8fr)_auto_minmax(11rem,0.9fr)_auto_auto_minmax(18rem,1.5fr)_auto] xl:items-center">
           <label className="flex min-w-0 items-center gap-2 rounded-md border border-stone-300 bg-white px-2">
             <span className="text-xs font-semibold uppercase text-slate-500">Date</span>
             <span className="sr-only">Booking date</span>
@@ -22550,8 +22550,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           >
             Today
           </button>
-        </div>
-        <div className="flex flex-col gap-2 sm:flex-row">
           <label className="flex-1">
             <span className="sr-only">Quick search selected date jobs</span>
             <input

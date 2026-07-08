@@ -74,7 +74,7 @@ const activeMonitorPanel = sliceBetween(
 const dashboardCommandCentrePanel = sliceBetween(
   appPage,
   'data-operations-dashboard="true"',
-  '<div className="grid gap-3 border-y border-stone-200 py-4 text-center sm:grid-cols-3">',
+  "{activeJobsMonitorPanel}",
 );
 const dashboardUrgentPanel = sliceBetween(
   appPage,
@@ -125,7 +125,6 @@ for (const fragment of [
   "[...dashboardCustomerBookingRequestBookings, ...urgentUnassignedSavedBookingRequests].sort(",
   "const visibleDashboardUrgentBookingRequestBookings = useMemo(",
   "dashboardUrgentBookingRequestBookings.slice(0, 5)",
-  "const urgentUnassignedSavedBookingIdSet = useMemo(",
   "const urgentCustomerBookingRequestKeySet = useMemo(",
   "const unhandledCustomerBookingRequestKeySet = useMemo(",
   "!unhandledCustomerBookingRequestKeySet.has(getCustomerBookingRequestQueueKey(bookingRecord))",

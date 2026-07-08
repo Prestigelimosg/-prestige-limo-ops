@@ -16057,13 +16057,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       bookingRecordHasCompletedDriverReport(bookingRecord),
     [bookingRecordHasCompletedDriverReport, todayKey],
   );
-  const activeDashboardBookings = useMemo(
-    () =>
-      dashboardBookings.filter(
-        (bookingRecord) => !bookingRecordBelongsInCompletedHistoryWithDriverReport(bookingRecord),
-      ),
-    [bookingRecordBelongsInCompletedHistoryWithDriverReport, dashboardBookings],
-  );
   const earlierHistoryDashboardBookings = useMemo(
     () =>
       dashboardBookings.filter((bookingRecord) =>
@@ -16159,10 +16152,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const visibleDashboardUrgentBookingRequestBookings = useMemo(
     () => dashboardUrgentBookingRequestBookings.slice(0, 5),
     [dashboardUrgentBookingRequestBookings],
-  );
-  const urgentUnassignedSavedBookingIdSet = useMemo(
-    () => new Set(urgentUnassignedSavedBookingRequests.map((bookingRecord) => bookingRecordStableKey(bookingRecord))),
-    [urgentUnassignedSavedBookingRequests],
   );
   const urgentCustomerBookingRequestKeySet = useMemo(
     () =>
@@ -16382,18 +16371,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         parsedDebugBooking.multipleBookingsDetected),
   );
 
-  const todayBookings = activeDashboardBookings.filter(
-    (bookingRecord) =>
-      getBookingDateKey(bookingRecord) === todayKey &&
-      !urgentUnassignedSavedBookingIdSet.has(bookingRecordStableKey(bookingRecord)) &&
-      !unhandledCustomerBookingRequestKeySet.has(getCustomerBookingRequestQueueKey(bookingRecord)),
-  );
-  const upcomingBookings = activeDashboardBookings.filter(
-    (bookingRecord) =>
-      getBookingDateKey(bookingRecord) > todayKey &&
-      !urgentUnassignedSavedBookingIdSet.has(bookingRecordStableKey(bookingRecord)) &&
-      !unhandledCustomerBookingRequestKeySet.has(getCustomerBookingRequestQueueKey(bookingRecord)),
-  );
   const customerBookingRequestDisplayItems =
     buildLoadBookingsOperationalDisplayItems(visibleCustomerBookingRequestBookings, {
       useTypedOperationalOrder: true,
@@ -42569,21 +42546,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               or driver auth.
             </p>
           </section>
-
-          <div className="grid gap-3 border-y border-stone-200 py-4 text-center sm:grid-cols-3">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-slate-500">Today</p>
-              <p className="text-2xl font-semibold">{todayBookings.length}</p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-slate-500">Upcoming</p>
-              <p className="text-2xl font-semibold">{upcomingBookings.length}</p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-slate-500">History</p>
-              <p className="text-2xl font-semibold">{earlierHistoryDashboardBookings.length}</p>
-            </div>
-          </div>
 
           <div className="mt-5 space-y-6">
             {activeJobsMonitorPanel}

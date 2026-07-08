@@ -657,15 +657,15 @@ assertIncludes(
   "const dashboardUrgentBookingRequestBookings = useMemo(",
   "Dashboard urgent booking panel combines customer requests and Driver TBC saved jobs",
 );
-assertIncludes(
+assertExcludes(
   appPage,
-  "const urgentUnassignedSavedBookingIdSet = useMemo(",
-  "Dashboard urgent unassigned saved booking id set",
+  '<p className="text-xs uppercase tracking-wide text-slate-500">Today</p>',
+  "Dashboard Today summary count strip",
 );
-assertIncludes(
+assertExcludes(
   appPage,
-  "!urgentUnassignedSavedBookingIdSet.has(bookingRecordStableKey(bookingRecord))",
-  "Dashboard Today/Upcoming excludes urgent unassigned saved jobs by stable key",
+  '<p className="text-xs uppercase tracking-wide text-slate-500">Upcoming</p>',
+  "Dashboard Upcoming summary count strip",
 );
 assertIncludes(
   appPage,
@@ -864,7 +864,7 @@ const bookingsBadgeScope =
   sliceBetween(
     appPage,
     'data-dashboard-new-booking-requests-panel="true"',
-    '<div className="grid gap-3 border-y border-stone-200 py-4 text-center sm:grid-cols-3">',
+    "{activeJobsMonitorPanel}",
   );
 assertExcludes(bookingsBadgeScope, "new Audio(", "Bookings badge sound");
 assertExcludes(

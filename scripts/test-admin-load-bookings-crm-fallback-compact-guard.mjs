@@ -338,12 +338,28 @@ assertIncludes(
   'data-admin-app-notification-review-new-booking-request="true"',
   "New booking notification row review action",
 );
-assertIncludes(appPage, "Jump to request", "New booking notification row jump label");
+assertIncludes(
+  appPage,
+  "function openNewBookingRequestNotificationReview(bookingReference: string)",
+  "New booking notification review helper",
+);
+assertIncludes(
+  appPage,
+  "loadSelectedBooking(loadedRecord, { focusDriverJobLink: true });",
+  "New booking notification loads loaded booking record",
+);
+assertIncludes(
+  appPage,
+  "adminBookingPersistenceRecordToCalendarBookingRecord(savedRecord)",
+  "New booking notification can load saved booking record",
+);
+assertIncludes(appPage, "Open request", "New booking notification row open label");
+assertExcludes(appPage, "Jump to request", "New booking notification row old jump label");
 assertExcludes(appPage, "Review request", "New booking notification row old review label");
 assertIncludes(
   appPage,
-  'onClick={() => openCustomerBookingRequestsReview({ highlight: true })}',
-  "New booking notification review action opens Dashboard request panel",
+  "openNewBookingRequestNotificationReview(newBookingRequestReference)",
+  "New booking notification review action opens matching booking when possible",
 );
 assertIncludes(
   appPage,

@@ -19382,6 +19382,39 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     window.setTimeout(() => scrollToAdminAlertLocatorTarget("new-booking-requests"), 150);
   }
 
+  function openNewBookingRequestNotificationReview(bookingReference: string) {
+    const safeBookingReference = cleanReferenceText(bookingReference);
+
+    if (safeBookingReference) {
+      const loadedRecord = findLoadedBookingRecordByReference(bookings, safeBookingReference);
+
+      if (loadedRecord) {
+        loadSelectedBooking(loadedRecord, { focusDriverJobLink: true });
+        return;
+      }
+
+      const savedRecord = findAdminBookingPersistenceRecordByReference(
+        adminBookingPersistenceRecords,
+        safeBookingReference,
+      );
+
+      if (savedRecord) {
+        const bookingRecord = adminBookingPersistenceRecordToCalendarBookingRecord(savedRecord);
+        setBookings((currentBookings) => {
+          const remainingBookings = currentBookings.filter(
+            (currentBooking) => bookingRecordPersistedReference(currentBooking) !== safeBookingReference,
+          );
+
+          return [bookingRecord, ...remainingBookings];
+        });
+        loadSelectedBooking(bookingRecord, { focusDriverJobLink: true });
+        return;
+      }
+    }
+
+    openCustomerBookingRequestsReview({ highlight: true });
+  }
+
   function openDashboardUrgentBookingRequestsReview() {
     setBookingsAlertMenuOpen(false);
     selectAppTab("dashboard");
@@ -42430,10 +42463,12 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                           <button
                             className="h-7 rounded-md border border-emerald-300 bg-emerald-700 px-2 text-xs font-semibold text-white transition hover:bg-emerald-600"
                             data-admin-app-notification-review-new-booking-request="true"
-                            onClick={() => openCustomerBookingRequestsReview({ highlight: true })}
+                            onClick={() =>
+                              openNewBookingRequestNotificationReview(newBookingRequestReference)
+                            }
                             type="button"
                           >
-                            Jump to request
+                            Open request
                           </button>
                         ) : null}
                         {changeRequestContext ? (

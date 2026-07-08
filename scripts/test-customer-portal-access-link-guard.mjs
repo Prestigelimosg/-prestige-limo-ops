@@ -248,7 +248,6 @@ for (const fragment of [
   'data-admin-customer-driver-details-copy-with-portal-link-external-send="false"',
   'data-admin-customer-driver-details-copy-with-portal-link-no-provider-send="true"',
   'data-admin-customer-driver-details-copy-with-portal-link-feedback="true"',
-  'data-admin-customer-driver-details-copy-with-portal-link-url="true"',
   "Copy + App Link",
   "Copying link",
   "Copied + link",
@@ -278,6 +277,11 @@ assertExcludes(
   customerPortalLinkCopyHandler,
   /copyManualTelegramMessage\s*\(|telegram\.org|t\.me|chat_id|sendMessage|sendAdminCustomerDriverDetailsEmail\s*\(/i,
   "customer app link copy handler must not call provider/message sends",
+);
+assertExcludes(
+  appPage,
+  'data-admin-customer-driver-details-copy-with-portal-link-url="true"',
+  "customer app link copy feedback must not visibly render the raw portal URL",
 );
 assertExcludes(
   customerFinderSection,

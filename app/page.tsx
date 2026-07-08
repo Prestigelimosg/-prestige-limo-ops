@@ -40273,14 +40273,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       data-admin-customer-driver-details-copy-with-portal-link-feedback-no-provider-send="true"
                     >
                       <div>{customerDriverDetailsPortalLinkCopyDisplayState.text}</div>
-                      {customerDriverDetailsPortalLinkCopyDisplayState.portalUrl ? (
-                        <div
-                          className="mt-1 break-all font-mono text-[11px] font-semibold"
-                          data-admin-customer-driver-details-copy-with-portal-link-url="true"
-                        >
-                          {customerDriverDetailsPortalLinkCopyDisplayState.portalUrl}
-                        </div>
-                      ) : null}
                     </div>
                   ) : null}
                 </div>

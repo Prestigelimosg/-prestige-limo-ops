@@ -22522,12 +22522,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             : null;
           const passengerText = getLoadBookingsOperationalPassengerDisplay(operationalCard, savedBooking);
           const bookerText = operationalCard.booker_display_name || "Unknown";
-          const driverText =
-            operationalCard.assigned_driver_display_name ||
-            clean(savedBooking.driver_name) ||
-            "Driver TBC";
+          const driverSummary = getAssignedDriverSummary(savedBooking, operationalCard);
+          const driverText = driverSummary.name === "—" ? "Driver TBC" : driverSummary.name;
+          const driverDetailText =
+            [driverSummary.contact, driverSummary.plate ? `Plate ${driverSummary.plate}` : ""]
+              .filter(Boolean)
+              .join(" | ") || "No driver contact / plate";
           const vehiclePaxText = [
-            operationalCard.vehicle_display || "Vehicle TBC",
+            driverSummary.vehicle || operationalCard.vehicle_display || "Vehicle TBC",
             `Pax ${operationalCard.pax_display || "1"}`,
           ].join(" · ");
           const pickupMetaText = [
@@ -22563,8 +22565,12 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       <span className="block truncate text-xs text-slate-500">Booker: {bookerText}</span>
                     </span>
                     <span className="min-w-0 truncate text-slate-700">{routeText}</span>
-                    <span className="min-w-0">
-                      <span className="block truncate text-slate-800">{driverText}</span>
+                    <span className="min-w-0 rounded-md border border-sky-100 bg-sky-50/70 px-2 py-1">
+                      <span className="block truncate text-[11px] font-semibold uppercase text-sky-800">
+                        Driver
+                      </span>
+                      <span className="block truncate font-semibold text-slate-950">{driverText}</span>
+                      <span className="block truncate text-xs text-slate-700">{driverDetailText}</span>
                       <span className="block truncate text-xs text-slate-500">{vehiclePaxText}</span>
                     </span>
                     <span className="flex items-center gap-2 text-right">

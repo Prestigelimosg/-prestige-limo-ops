@@ -19930,12 +19930,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             .filter(isAdminActiveJobsMapLocation)
         : [];
       const activeJobs = collapseAdminActiveJobsMapDriverDuplicates(allActiveJobs);
-      const activeJobReferenceSet = new Set(liveDispatchMapReferenceList);
-      const visibleActiveJobs = activeJobs.filter((job) =>
-        activeJobReferenceSet.has(cleanReferenceText(job.assigned_job_reference)),
-      );
       const duplicateCount = allActiveJobs.length - activeJobs.length;
-      const outsideAssignedScopeCount = activeJobs.length - visibleActiveJobs.length;
       const allowedBookingReferences = Array.isArray(result.allowed_booking_references)
         ? result.allowed_booking_references.map(cleanReferenceText).filter(Boolean)
         : null;
@@ -19943,22 +19938,20 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       setAdminActiveJobsMapReadState((current) => ({
         ...current,
         action: "idle",
-        activeJobs: visibleActiveJobs,
+        activeJobs,
         allowedBookingReferences:
           allowedBookingReferences ?? current.allowedBookingReferences,
-        markerCount: visibleActiveJobs.length,
+        markerCount: activeJobs.length,
         message: {
-          tone: visibleActiveJobs.length > 0 ? "success" : "info",
+          tone: activeJobs.length > 0 ? "success" : "info",
           text:
-            visibleActiveJobs.length > 0
-              ? `Loaded live movement for ${visibleActiveJobs.length} driver${visibleActiveJobs.length === 1 ? "" : "s"}${
+            activeJobs.length > 0
+              ? `Loaded live movement for ${activeJobs.length} driver${activeJobs.length === 1 ? "" : "s"}${
                   duplicateCount > 0
                     ? `; ${duplicateCount} older duplicate${duplicateCount === 1 ? "" : "s"} hidden.`
                     : "."
                 }`
-              : outsideAssignedScopeCount > 0
-                ? `${outsideAssignedScopeCount} shared driver${outsideAssignedScopeCount === 1 ? "" : "s"} outside assigned active job scope hidden.`
-                : "Live location is open, but no driver has shared live movement yet.",
+              : "Live location is open, but no driver has shared live movement yet.",
         },
         runtimeStatus: "active",
         status: "loaded",
@@ -24486,10 +24479,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         .filter(Boolean),
     ),
   ];
-  const liveDispatchMapReferenceSet = new Set(liveDispatchMapReferenceList);
-  const activeJobsMapVisibleJobs = adminActiveJobsMapReadState.activeJobs.filter((job) =>
-    liveDispatchMapReferenceSet.has(cleanReferenceText(job.assigned_job_reference)),
-  );
+  const activeJobsMapVisibleJobs = adminActiveJobsMapReadState.activeJobs;
   const activeJobsMapMarkerCount = activeJobsMapVisibleJobs.length;
   const liveDispatchPreparedSlotCount = liveDispatchMapReferenceList.length;
   const liveDispatchSlotSummaryLabel =

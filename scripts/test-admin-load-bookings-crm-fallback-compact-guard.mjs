@@ -717,15 +717,18 @@ assertIncludes(appPage, 'data-dispatch-live-driver-map-refresh="true"', "Dispatc
 assertIncludes(appPage, 'data-dispatch-live-driver-map-close="true"', "Dispatch live map close action");
 assertIncludes(
   appPage,
-  "const visibleActiveJobs = activeJobs.filter((job) =>\n        activeJobReferenceSet.has(cleanReferenceText(job.assigned_job_reference)),\n      );",
-  "Dispatch live map filters runtime markers to assigned active job references",
+  "const activeJobs = collapseAdminActiveJobsMapDriverDuplicates(allActiveJobs);",
+  "Dispatch live map deduplicates guarded runtime markers",
 );
-assertIncludes(appPage, "activeJobs: visibleActiveJobs,", "Dispatch live map stores only visible markers");
-assertIncludes(appPage, "markerCount: visibleActiveJobs.length,", "Dispatch live map marker count follows visible markers");
 assertIncludes(
   appPage,
-  "outside assigned active job scope hidden.",
-  "Dispatch live map explains hidden out-of-scope shared drivers",
+  "activeJobs,",
+  "Dispatch live map stores guarded runtime markers",
+);
+assertIncludes(
+  appPage,
+  "markerCount: activeJobs.length,",
+  "Dispatch live map marker count follows guarded runtime markers",
 );
 assertIncludes(
   appPage,
@@ -734,8 +737,8 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  "const activeJobsMapVisibleJobs = adminActiveJobsMapReadState.activeJobs.filter((job) =>\n    liveDispatchMapReferenceSet.has(cleanReferenceText(job.assigned_job_reference)),\n  );",
-  "Dispatch live map derives visible marker rows from assigned active jobs",
+  "const activeJobsMapVisibleJobs = adminActiveJobsMapReadState.activeJobs;",
+  "Dispatch live map derives visible marker rows from guarded runtime markers",
 );
 assertIncludes(
   appPage,

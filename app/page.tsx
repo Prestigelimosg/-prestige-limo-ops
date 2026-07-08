@@ -16394,8 +16394,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       !urgentUnassignedSavedBookingIdSet.has(bookingRecordStableKey(bookingRecord)) &&
       !unhandledCustomerBookingRequestKeySet.has(getCustomerBookingRequestQueueKey(bookingRecord)),
   );
-  const todayBookingDisplayItems = buildLoadBookingsOperationalDisplayItems(todayBookings);
-  const upcomingBookingDisplayItems = buildLoadBookingsOperationalDisplayItems(upcomingBookings);
   const customerBookingRequestDisplayItems =
     buildLoadBookingsOperationalDisplayItems(visibleCustomerBookingRequestBookings, {
       useTypedOperationalOrder: true,
@@ -22100,118 +22098,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     }
   }
 
-  function renderDashboardBookingSummaries(
-    sectionItems: LoadBookingsOperationalDisplayItem[],
-    emptyText: string,
-  ) {
-    if (sectionItems.length === 0) {
-      return (
-        <div className="rounded-md border border-dashed border-stone-300 p-4 text-center text-sm text-slate-500">
-          {emptyText}
-        </div>
-      );
-    }
-
-    return (
-      <div className="grid gap-2" data-dashboard-command-centre-bookings="true">
-        {sectionItems.slice(0, 8).map(({ bookingRecord: savedBooking, operationalCard }) => {
-          const bookingId = bookingRecordStableKey(savedBooking, operationalCard);
-          const routePoints = getRoutePoints(savedBooking);
-          const pickup = operationalCard.pickup_address || routePoints[0] || "Pickup";
-          const dropoff =
-            operationalCard.dropoff_address ||
-            routePoints[routePoints.length - 1] ||
-            "Drop-off";
-          const routeText =
-            operationalCard.route_points_summary ||
-            (routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`);
-          const passengerText = getLoadBookingsOperationalPassengerDisplay(operationalCard, savedBooking);
-          const rowBookingReference = bookingRecordPersistedReference(savedBooking);
-          const rowIsLoadedBooking =
-            Boolean(rowBookingReference) &&
-            rowBookingReference === cleanReferenceText(loadedBookingId);
-          const activeDriverJobLinkVehicleModel =
-            rowIsLoadedBooking &&
-            cleanReferenceText(activeAdminDriverJobLink?.booking_reference) === rowBookingReference
-              ? safeDriverVehicleModelDisplay(activeAdminDriverJobLink?.safe_summary.vehicle)
-              : "";
-          const driverText =
-            (rowIsLoadedBooking ? clean(booking.driverName) : "") ||
-            operationalCard.assigned_driver_display_name ||
-            clean(savedBooking.driver_name) ||
-            "Driver TBC";
-          const driverContactText =
-            (rowIsLoadedBooking ? clean(booking.driverContact) : "") ||
-            operationalCard.assigned_driver_phone ||
-            clean(savedBooking.driver_contact);
-          const driverPlateText =
-            (rowIsLoadedBooking ? clean(booking.driverPlate) : "") ||
-            operationalCard.assigned_driver_plate ||
-            clean(savedBooking.driver_plate_number);
-          const driverVehicleText =
-            activeDriverJobLinkVehicleModel ||
-            safeDriverVehicleModelDisplay(rowIsLoadedBooking ? booking.driverVehicleModel : "") ||
-            safeDriverVehicleModelFromBookingRecord(savedBooking);
-          const assignedDriverSummary = [
-            driverText,
-            driverContactText ? `Contact ${driverContactText}` : "",
-            driverPlateText ? `Plate ${driverPlateText}` : "",
-            driverVehicleText ? `Vehicle ${driverVehicleText}` : "",
-          ].filter(Boolean);
-
-          return (
-            <article
-              className="grid gap-2 rounded-md border border-stone-200 bg-white px-3 py-2 text-sm shadow-sm md:grid-cols-[minmax(10rem,0.9fr)_minmax(9rem,0.8fr)_minmax(12rem,1.2fr)_minmax(8rem,0.7fr)_auto] md:items-center"
-              data-dashboard-command-centre-row={bookingId}
-              key={`dashboard-summary-${bookingId}`}
-            >
-              <div className="min-w-0">
-                <p className="truncate font-semibold text-slate-950">
-                  {getLoadBookingsOperationalDisplayTitle(operationalCard)}
-                </p>
-                <p className="truncate text-xs text-slate-500">
-                  {operationalCard.pickup_datetime ||
-                    formatPickupDateTime(getBookingDateKey(savedBooking), savedBooking.pickup_time)}
-                </p>
-              </div>
-              <div className="min-w-0">
-                <p className="truncate text-slate-800">{passengerText}</p>
-                <p
-                  className="truncate text-xs text-slate-500"
-                  data-dashboard-assigned-driver-details="true"
-                >
-                  {assignedDriverSummary.join(" | ")}
-                </p>
-              </div>
-              <p className="min-w-0 truncate text-slate-700">{routeText}</p>
-              <span
-                className={`w-fit rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${bookingStatusClass(
-                  savedBooking.status,
-                )}`}
-              >
-                {bookingStatusLabel(savedBooking.status)}
-              </span>
-              <button
-                className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
-                data-dashboard-open-in-dispatch={bookingId}
-                onClick={() => loadSelectedBooking(savedBooking)}
-                type="button"
-              >
-                Open
-              </button>
-            </article>
-          );
-        })}
-        {sectionItems.length > 8 ? (
-          <p className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-slate-600">
-            {sectionItems.length - 8} more loaded booking
-            {sectionItems.length - 8 === 1 ? "" : "s"} in the Bookings list.
-          </p>
-        ) : null}
-      </div>
-    );
-  }
-
   const pricingPanel = (
     <div className="rounded-md border border-stone-200 bg-white p-2.5" data-admin-dispatch-form-density="slim-pricing">
       <h2 className="text-sm font-semibold">Pricing</h2>
@@ -24623,7 +24509,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const activeJobDriverStatusReferenceKey = activeJobDriverStatusReferenceList.join("|");
   const liveDispatchMapReferenceKey = liveDispatchMapReferenceList.join("|");
   const activeJobsMapAllowedReferenceKey = adminActiveJobsMapReadState.allowedBookingReferences.join("|");
-  const todayJobsMonitorIsActive = activeTab === "dispatch";
+  const todayJobsMonitorIsActive = activeTab === "dashboard";
   const activeJobsMapLocationsByReference = new Map(
     activeJobsMapVisibleJobs
       .map((job) => [cleanReferenceText(job.assigned_job_reference), job] as const)
@@ -25031,6 +24917,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     <section
       aria-label="Today's Jobs"
       className="rounded-md border border-lime-200 bg-lime-50/70 p-2 sm:p-3"
+      data-dashboard-day-of-trip-operations-monitor="true"
       data-dispatch-day-of-trip-operations-monitor="true"
       data-admin-multi-driver-active-jobs-monitor="true"
     >
@@ -36773,8 +36660,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               </div>
             </section>
 
-            <div className="order-[61]">{activeJobsMonitorPanel}</div>
-
             {shouldShowParserDebugPanel && parsedDebugBooking ? (
               <div className="order-[100] rounded-md border border-slate-200 bg-slate-50 p-3">
                 {parsedDebugBooking.parserWarning ? (
@@ -42666,15 +42551,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           </div>
 
           <div className="mt-5 space-y-6">
-            <div>
-              <h3 className="mb-3 text-base font-semibold">Today Bookings</h3>
-              {renderDashboardBookingSummaries(todayBookingDisplayItems, "No bookings for today.")}
-            </div>
-
-            <div>
-              <h3 className="mb-3 text-base font-semibold">Upcoming Bookings</h3>
-              {renderDashboardBookingSummaries(upcomingBookingDisplayItems, "No upcoming bookings.")}
-            </div>
+            {activeJobsMonitorPanel}
 
             {earlierHistoryDashboardBookings.length > 0 ? (
               <div

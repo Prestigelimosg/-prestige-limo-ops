@@ -162,7 +162,7 @@ for (const fragment of [
   "const firstBooking = dashboardUrgentBookingRequestDisplayItems[0]?.bookingRecord;",
   "loadSelectedBooking(firstBooking, { focusDriverJobLink: true })",
   'data-dashboard-review-new-booking-requests="true"',
-  "disabled={customerBookingRequestCount === 0}",
+  "disabled={dashboardNewBookingRequestAttentionCount === 0}",
   "onClick={() => openCustomerBookingRequestsReview()}",
   "dashboardUrgentBookingRequestDisplayItems.map",
   'data-dashboard-urgent-booking-request-kind=',
@@ -294,10 +294,10 @@ for (const fragment of [
   "normaliseTimeForSort(formatPickupTimeFromRecord(firstBooking))",
   "normaliseTimeForSort(formatPickupTimeFromRecord(secondBooking))",
   "const dayOfTripActiveJobVisibleBookings = dayOfTripActiveJobBookings;",
-  "const liveDispatchPreparedSlotCount = activeJobDriverStatusReferenceList.length;",
+  "const liveDispatchPreparedSlotCount = liveDispatchMapReferenceList.length;",
   "const liveDispatchSlotSummaryLabel =",
   "const activeJobsMapAllowedReferenceKey = adminActiveJobsMapReadState.allowedBookingReferences.join(\"|\");",
-  'const todayJobsMonitorIsActive = activeTab === "dispatch";',
+  'const todayJobsMonitorIsActive = activeTab === "dashboard";',
 ]) {
   assertIncludes(activeMonitorSource, fragment, `active monitor source fragment ${fragment}`);
 }
@@ -329,7 +329,7 @@ for (const fragment of [
   'data-admin-pickup-approach-evidence-summary="true"',
   'data-admin-pickup-approach-evidence-marker-state=',
   "Wrong-direction/ETA alerts use guarded pickup geocode and route evidence when available; otherwise the row says evidence unavailable.",
-  "driver locations refresh automatically while Today&apos;s Jobs is open.",
+  "Driver reports auto-refresh every 10s.",
   "AdminActiveJobsBrowserMap",
 ]) {
   assertIncludes(activeMonitorPanel, fragment, `active monitor fragment ${fragment}`);
@@ -362,10 +362,10 @@ for (const forbiddenPattern of [
 for (const phrase of [
   "Dashboard request panel is now `Urgent Booking Requests` and displays only open customer requests plus saved Driver TBC jobs inside the 1-hour pickup monitor window.",
   "Dashboard `Open Urgent` and urgent rows load the selected urgent booking into Dispatch with the existing Driver Job Link panel focused, a visible booking handoff notice, and keyboard focus on `Create Link` so admin can create and copy the driver link before a driver is assigned.",
-  "Dashboard keeps a secondary `Review` action for the existing Bookings review path; it does not replace the Driver Job Link urgent handoff.",
-  "The Bookings page request panel remains the queue for open customer requests outside the 1-hour dispatch window as `Urgent & New Booking Requests`, with row badges separating under-24h-but-not-dispatch-window requests from new non-urgent requests.",
+  "Dashboard keeps a secondary `Review` action for the existing request review path; it does not replace the Driver Job Link urgent handoff.",
+  "The Dashboard request panel remains the queue for open customer requests outside the 1-hour dispatch window as `Urgent & New Booking Requests`, with row badges separating under-24h-but-not-dispatch-window requests from new non-urgent requests; Bookings remains for saved booking search/load/list work.",
   "Unhandled customer requests are hidden from Current / Upcoming until admin loads them from the Dashboard urgent lane or the Bookings request lane, preventing duplicate cards while preserving the existing post-review booking list.",
-  "Day-of-trip jobs are shown as `Today's Jobs` only on Dispatch; Dashboard stays focused on urgent requests, admin notifications, calendar, and booking summaries.",
+  "Day-of-trip jobs are shown as `Today's Jobs` on Dashboard, replacing the duplicate Today/Upcoming booking summaries while keeping Bookings as the saved-job finder.",
   "`Today's Jobs` driver report auto-refresh is on by default, still uses the guarded admin driver-status read path, and can be switched off by the operator.",
   "The `Today's Jobs` live map control opens the existing admin-only live-location runtime for assigned jobs in the monitor window and refreshes shared markers every 10 seconds while the sector is open.",
   "The same live map control stays visible at zero assigned jobs, shows the actual active live-map slot count, and stays disabled until at least one assigned active job enters the 1-hour window.",

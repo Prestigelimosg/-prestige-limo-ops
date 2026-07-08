@@ -61,8 +61,8 @@ for (const phrase of [
   "The Dashboard request row is the review handoff point for open customer requests outside the 1-hour dispatch window and can load the selected request into the existing Dispatch form only when the operator chooses `Open in Driver Job Link`; the handoff focuses the existing Driver Job Link section without adding a duplicate write path.",
   "Loading a customer request into Dispatch now records a bounded browser-local handled-request key so that request leaves the Dashboard urgent/new request queues and action badge on that admin browser, then becomes available in Current / Upcoming.",
   "Loading a saved booking into Dispatch refreshes the typed operational display once immediately and pauses one background sync tick, keeping the existing guarded read set stable while Customer Copy focuses for review.",
-  "The Dashboard now uses compact read-only booking summaries plus `Open` handoff buttons; single-booking driver assignment, status, copy, job-card, and completion work stays in Dispatch/Bookings so page purposes do not duplicate.",
-  "`Today's Jobs` is shown below the Dispatch `Assigned Driver` sector for multi-driver scanning and is not rendered on Dashboard.",
+  "The Dashboard now uses the active day-of-trip monitor instead of duplicate Today/Upcoming booking summaries; single-booking driver assignment, status, copy, job-card, and completion work stays in Dispatch/Bookings so page purposes do not duplicate.",
+  "`Today's Jobs` is shown on Dashboard for multi-driver day-of-trip scanning and is no longer duplicated inside the Dispatch driver-assignment workflow.",
   "`Today's Jobs` shows assigned operational jobs inside the 1-hour pickup monitor window without a separate expand/collapse toggle.",
   "`Today's Jobs` excludes customer-request rows and unassigned/Driver TBC rows from the live-dispatch queue; unassigned saved jobs inside the 1-hour pickup monitor window stay in the Dashboard `Urgent Booking Requests` panel until admin loads them for driver assignment.",
   "`Today's Jobs` shows a compact saved driver report readout per visible job, using the existing guarded admin `GET /api/admin-driver-job-statuses` path only, with monitor-wide/per-card refresh controls and auto-refresh on by default.",
@@ -404,21 +404,8 @@ for (const customerRequestFragment of [
   assertIncludes(appPage, customerRequestFragment, `Customer request auto-load fragment ${customerRequestFragment}`);
 }
 
-for (const dashboardCommandCentreHelperFragment of [
-  "data-dashboard-command-centre-bookings",
-  "data-dashboard-command-centre-row",
-  "data-dashboard-open-in-dispatch",
-]) {
-  assertIncludes(
-    appPage,
-    dashboardCommandCentreHelperFragment,
-    `Dashboard command-centre helper fragment ${dashboardCommandCentreHelperFragment}`,
-  );
-}
-
 for (const dashboardCommandCentreFragment of [
-  "renderDashboardBookingSummaries(todayBookingDisplayItems",
-  "renderDashboardBookingSummaries(upcomingBookingDisplayItems",
+  "{activeJobsMonitorPanel}",
   'data-dashboard-earlier-history-handoff="true"',
   'data-dashboard-open-completed-history="true"',
   'onClick={() => selectAppTab("completed")}',
@@ -429,10 +416,10 @@ for (const dashboardCommandCentreFragment of [
     `Dashboard command-centre fragment ${dashboardCommandCentreFragment}`,
   );
 }
-assertExcludes(
-  dashboardBlock,
-  "{activeJobsMonitorPanel}",
-  "Dashboard must not render Today's Jobs monitor",
+assertIncludes(
+  appPage,
+  'data-dashboard-day-of-trip-operations-monitor="true"',
+  "Dashboard active jobs monitor marker",
 );
 
 for (const duplicateDashboardWorkflowFragment of [
@@ -453,14 +440,8 @@ for (const duplicateDashboardWorkflowFragment of [
   );
 }
 
-assertIncludes(dispatchBlock, "{activeJobsMonitorPanel}", "Dispatch uses shared Today's Jobs monitor");
-assertIncludes(dispatchBlock, '<div className="order-[61]">{activeJobsMonitorPanel}</div>', "Dispatch Today's Jobs monitor placement below Assigned Driver");
-assert.equal(
-  dispatchBlock.indexOf('data-dispatch-workflow-step="driver-assignment"') <
-    dispatchBlock.indexOf('<div className="order-[61]">{activeJobsMonitorPanel}</div>'),
-  true,
-  "Dispatch Today's Jobs monitor must render after the Assigned Driver sector.",
-);
+assertExcludes(dispatchBlock, "{activeJobsMonitorPanel}", "Dispatch duplicate Today's Jobs monitor");
+assertIncludes(dashboardBlock, "{activeJobsMonitorPanel}", "Dashboard uses shared Today's Jobs monitor");
 assertIncludes(
   dispatchBlock,
   'data-dispatch-optional-workflow-tools="true"',
@@ -775,8 +756,8 @@ assertExcludes(
   "Math.max(2, activeJobDriverStatusReferenceList.length)",
   "Dispatch live map standby slot floor",
 );
-assertExcludes(appPage, 'data-dashboard-live-driver-map="true"', "Dashboard live map panel removed");
-assertExcludes(appPage, 'data-dashboard-day-of-trip-operations-monitor="true"', "Dashboard active jobs monitor removed");
+assertExcludes(appPage, 'data-dashboard-live-driver-map="true"', "old Dashboard live map panel removed");
+assertIncludes(appPage, 'data-dashboard-day-of-trip-operations-monitor="true"', "Dashboard active jobs monitor moved in");
 assertExcludes(appPage, 'data-admin-multi-driver-active-jobs-toggle="true"', "Active jobs monitor expand toggle");
 assertExcludes(appPage, '"Show other active jobs"', "Active jobs monitor expand label");
 assertExcludes(appPage, '"Show one job"', "Active jobs monitor collapse label");

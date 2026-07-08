@@ -5403,6 +5403,35 @@ function formatDate(value: string) {
   }).format(date);
 }
 
+function formatDateWithWeekday(value: string) {
+  if (!value) {
+    return "Date TBC";
+  }
+
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("en-SG", {
+    day: "2-digit",
+    month: "short",
+    weekday: "short",
+    year: "numeric",
+  }).format(date);
+}
+
+function shiftDateKey(dateKey: string, offsetDays: number) {
+  const date = new Date(`${dateKey}T00:00:00`);
+
+  if (Number.isNaN(date.getTime())) {
+    return toDateKey(new Date());
+  }
+
+  date.setDate(date.getDate() + offsetDays);
+  return toDateKey(date);
+}
+
 function formatMoney(value: string | number | null | undefined) {
   return numericRate(value).toFixed(2);
 }
@@ -12587,6 +12616,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const dashboardDriverJobStatusAutoRequestedRef = useRef<Set<string>>(new Set());
   const driverCompletedBookingStatusSyncRequestedRef = useRef<Set<string>>(new Set());
   const [bookingsSearchTerm, setBookingsSearchTerm] = useState("");
+  const [bookingsSelectedDate, setBookingsSelectedDate] = useState(() => toDateKey(new Date()));
   const [completedSearchTerm, setCompletedSearchTerm] = useState("");
   const [completedMonthFilter, setCompletedMonthFilter] = useState("");
   const [driverSearchTerm, setDriverSearchTerm] = useState("");
@@ -16160,10 +16190,12 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           (bookingRecord) =>
             !unhandledCustomerBookingRequestKeySet.has(getCustomerBookingRequestQueueKey(bookingRecord)),
         )
+        .filter((bookingRecord) => getBookingDateKey(bookingRecord) === bookingsSelectedDate)
         .filter((bookingRecord) => bookingMatchesLocalSearch(bookingRecord, bookingsSearchTerm)),
     [
       bookingRecordBelongsInCompletedHistoryWithDriverReport,
       bookingsSearchTerm,
+      bookingsSelectedDate,
       operationalBookings,
       unhandledCustomerBookingRequestKeySet,
     ],
@@ -16217,6 +16249,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     [filteredCompletedBookings, selectedCompletedHistoryMonthKey],
   );
   const hasBookingsSearch = Boolean(clean(bookingsSearchTerm));
+  const selectedBookingsDateLabel = formatDateWithWeekday(bookingsSelectedDate);
   const hasCompletedSearch = Boolean(clean(completedSearchTerm));
   const loadedBookingIds = new Set(operationalBookings.map((bookingRecord) => bookingRecordStableKey(bookingRecord)));
   const completedBookingIds = new Set(completedBookings.map((bookingRecord) => bookingRecordStableKey(bookingRecord)));
@@ -22463,28 +22496,76 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
   const recentBookingsPanel = operationalBookings.length > 0 ? (
     <div className="mt-4 rounded-md border border-stone-200 bg-stone-50 p-3">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+      <div className="flex flex-col gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-slate-800">Current / Upcoming Bookings</h3>
+          <h3 className="text-sm font-semibold text-slate-800">Bookings / Find Job</h3>
           <p className="text-xs text-slate-500">
-            Earlier pickup dates are moved to Completed / History.
+            Pick a date, then quick-search jobs inside that day.
           </p>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row lg:min-w-[460px]">
-          <label className="flex-1">
-            <span className="sr-only">Search loaded bookings</span>
+        <div className="grid gap-2 rounded-md border border-stone-200 bg-white p-2 lg:grid-cols-[minmax(12rem,0.8fr)_auto_minmax(12rem,1fr)_auto_auto] lg:items-center">
+          <label className="flex min-w-0 items-center gap-2 rounded-md border border-stone-300 bg-white px-2">
+            <span className="text-xs font-semibold uppercase text-slate-500">Date</span>
+            <span className="sr-only">Booking date</span>
             <input
-              className="h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-base outline-none transition placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+              className="h-10 min-w-0 flex-1 bg-transparent text-sm font-semibold text-slate-900 outline-none"
+              data-bookings-date-input="true"
+              onChange={(event) => {
+                const nextDate = clean(event.target.value);
+                if (nextDate) {
+                  setBookingsSelectedDate(nextDate);
+                }
+              }}
+              type="date"
+              value={bookingsSelectedDate}
+            />
+          </label>
+          <button
+            className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+            data-bookings-prev-day="true"
+            onClick={() => setBookingsSelectedDate((currentDate) => shiftDateKey(currentDate, -1))}
+            type="button"
+          >
+            Prev Day
+          </button>
+          <div
+            className="h-10 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-center text-sm font-semibold text-slate-950"
+            data-bookings-selected-date-label="true"
+          >
+            {selectedBookingsDateLabel}
+          </div>
+          <button
+            className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+            data-bookings-next-day="true"
+            onClick={() => setBookingsSelectedDate((currentDate) => shiftDateKey(currentDate, 1))}
+            type="button"
+          >
+            Next Day
+          </button>
+          <button
+            className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+            data-bookings-today="true"
+            onClick={() => setBookingsSelectedDate(todayKey)}
+            type="button"
+          >
+            Today
+          </button>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <label className="flex-1">
+            <span className="sr-only">Quick search selected date jobs</span>
+            <input
+              className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
               data-bookings-search-input="true"
               onChange={(event) => setBookingsSearchTerm(event.target.value)}
-              placeholder="Search current/upcoming passenger, company, flight, route, driver"
+              placeholder="Quick search this date: ref, passenger, flight, route, driver"
               type="search"
               value={bookingsSearchTerm}
             />
           </label>
           {hasBookingsSearch ? (
             <button
-              className="h-11 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              className="h-10 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
               onClick={() => setBookingsSearchTerm("")}
               type="button"
             >
@@ -22498,7 +22579,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
           data-bookings-search-empty="true"
         >
-          No matching current/upcoming bookings found.
+          No matching jobs found for {selectedBookingsDateLabel}.
         </p>
       ) : null}
       {filteredRecentBookings.length > 0 ? (
@@ -22687,7 +22768,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           className="mt-3 rounded-md border border-dashed border-stone-300 bg-white p-4 text-center text-sm text-slate-500"
           data-current-upcoming-bookings-empty="true"
         >
-          No current/upcoming bookings in this search. Earlier jobs are in Completed / History.
+          No active bookings found for {selectedBookingsDateLabel}. Earlier jobs are in Completed / History.
         </div>
       )}
     </div>

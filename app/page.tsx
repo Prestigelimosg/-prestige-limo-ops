@@ -6594,6 +6594,17 @@ function formatPickupDateTime(dateValue: string, timeValue: string | null | unde
   return `${formatDate(dateValue)}, ${formatPickupTime(timeValue)}`;
 }
 
+function formatBookingPickupDateTimeSgt(bookingRecord: BookingRecord) {
+  const timestampParts = singaporePickupDateTimePartsFromTimestamp(
+    clean(bookingRecord.pickup_at) || clean(bookingRecord.pickup_datetime),
+  );
+  const dateValue = timestampParts?.date || getBookingDateKey(bookingRecord);
+  const timeValue = timestampParts?.time || formatPickupTimeFromRecord(bookingRecord).replace(/\D/g, "");
+  const formattedTime = formatPickupTime(timeValue);
+
+  return `${formatDate(dateValue)}, ${formattedTime}${formattedTime === "Time TBC" ? "" : " SGT"}`;
+}
+
 function singaporePickupDateTimePartsFromTimestamp(value: string | null | undefined) {
   const rawValue = clean(value);
   const localDateTimeMatch = rawValue.match(
@@ -21726,6 +21737,16 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     );
   }
 
+  async function markBookingCancelled(bookingRecord: BookingRecord) {
+    await updateBookingStatusOnly(
+      bookingRecord,
+      "cancelled",
+      "Cancelling booking...",
+      "Booking cancelled.",
+      "Cancel booking failed",
+    );
+  }
+
   async function adminConfirmBookingCompletedByPhone(
     bookingRecord: BookingRecord,
     context: {
@@ -22510,10 +22531,15 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             `Pax ${operationalCard.pax_display || "1"}`,
           ].join(" · ");
           const pickupMetaText = [
-            operationalCard.pickup_datetime ||
-              formatPickupDateTime(getBookingDateKey(savedBooking), savedBooking.pickup_time),
+            formatBookingPickupDateTimeSgt(savedBooking),
             operationalCard.job_card_display,
           ].filter(Boolean).join(" · ");
+          const bookingsListStatus = bookingStatusLabel(savedBooking.status);
+          const showBookingsListStatus = ![
+            "admin_review_required",
+            "ops_pending_ots",
+            "pending_ots",
+          ].includes(clean(savedBooking.status).toLowerCase());
 
           return (
             <article
@@ -22541,14 +22567,16 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       <span className="block truncate text-slate-800">{driverText}</span>
                       <span className="block truncate text-xs text-slate-500">{vehiclePaxText}</span>
                     </span>
-                    <span className="flex items-center gap-2">
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${bookingStatusClass(
-                          savedBooking.status,
-                        )}`}
-                      >
-                        {bookingStatusLabel(savedBooking.status)}
-                      </span>
+                    <span className="flex items-center gap-2 text-right">
+                      {showBookingsListStatus ? (
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${bookingStatusClass(
+                            savedBooking.status,
+                          )}`}
+                        >
+                          {bookingsListStatus}
+                        </span>
+                      ) : null}
                       <span className="text-xs font-medium text-slate-500">Details</span>
                     </span>
                   </summary>
@@ -22566,18 +22594,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                         <p className="break-words">Route: {routeText}</p>
                       </OperationalCardSection>
                     </div>
-                    <div className="grid gap-2 sm:grid-cols-3" data-operational-card-summary-grid={bookingId}>
-                      <DispatcherStatusSummaryBlock
-                        bookingRecord={savedBooking}
-                        flush
-                        operationalCard={operationalCard}
-                      />
+                    <div className="grid gap-2" data-operational-card-summary-grid={bookingId}>
                       <AssignedDriverSummaryBlock
-                        bookingRecord={savedBooking}
-                        flush
-                        operationalCard={operationalCard}
-                      />
-                      <OperationalReadinessSummaryBlock
                         bookingRecord={savedBooking}
                         flush
                         operationalCard={operationalCard}
@@ -22594,13 +22612,13 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     </OperationalCardSection>
                   </div>
                 </details>
-                <div className="grid gap-2 sm:grid-cols-3 xl:w-44 xl:grid-cols-1" data-recent-operational-actions={bookingId}>
+                <div className="grid gap-2 sm:grid-cols-3 xl:w-52 xl:grid-cols-1" data-recent-operational-actions={bookingId}>
                   <button
                     className="h-10 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-                    onClick={() => loadSelectedBooking(savedBooking, { focusCustomerCopy: true })}
+                    onClick={() => loadSelectedBooking(savedBooking)}
                     type="button"
                   >
-                    Load this booking
+                    Open / Edit
                   </button>
                   {!isCompleted ? (
                     <button
@@ -22610,12 +22628,23 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       onClick={() => markBookingCompleted(savedBooking)}
                       type="button"
                     >
-                      {completingBookingId === bookingId ? "Marking..." : "Mark completed"}
+                      {completingBookingId === bookingId ? "Working..." : "Complete"}
+                    </button>
+                  ) : null}
+                  {!isCompleted ? (
+                    <button
+                      className="h-10 rounded-md border border-red-200 bg-white px-3 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                      data-bookings-mark-cancelled={bookingId}
+                      disabled={completingBookingId === bookingId}
+                      onClick={() => markBookingCancelled(savedBooking)}
+                      type="button"
+                    >
+                      {completingBookingId === bookingId ? "Working..." : "Cancel"}
                     </button>
                   ) : null}
                   {bookingCompletionMessage ? (
                     <p
-                      className={`rounded-md border px-3 py-2 text-xs ${statusClass(
+                      className={`rounded-md border px-3 py-2 text-xs sm:col-span-3 xl:col-span-1 ${statusClass(
                         bookingCompletionMessage.tone,
                       )}`}
                       data-booking-completion-message={bookingId}

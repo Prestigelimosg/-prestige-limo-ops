@@ -347,8 +347,18 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  '"New booking request received. Review in Dashboard."',
-  "New booking notification row Dashboard review wording",
+  "newBookingRequestPickupDateLabel",
+  "New booking notification row derives booking date label",
+);
+assertIncludes(
+  appPage,
+  "? `${newBookingRequestPickupDateLabel} - Review in Dashboard.`",
+  "New booking notification row prefixes Dashboard review wording with booking date",
+);
+assertIncludes(
+  appPage,
+  ': "Review in Dashboard."',
+  "New booking notification row keeps Dashboard review fallback wording",
 );
 assertExcludes(appPage, "Open Bookings to review.", "Admin notification row stale Bookings wording");
 assertIncludes(

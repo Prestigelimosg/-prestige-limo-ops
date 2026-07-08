@@ -42272,10 +42272,37 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   const isNewBookingRequestNotification =
                     clean(notification.workflow_area) === "new_booking_request" ||
                     clean(notification.safe_title).toLowerCase() === "new booking request";
+                  const newBookingRequestReference = isNewBookingRequestNotification
+                    ? cleanReferenceText(notification.booking_reference)
+                    : "";
+                  const newBookingRequestLoadedRecord = newBookingRequestReference
+                    ? findLoadedBookingRecordByReference(bookings, newBookingRequestReference)
+                    : null;
+                  const newBookingRequestSavedRecord =
+                    newBookingRequestReference && !newBookingRequestLoadedRecord
+                      ? findAdminBookingPersistenceRecordByReference(
+                          adminBookingPersistenceRecords,
+                          newBookingRequestReference,
+                        )
+                      : null;
+                  const newBookingRequestSavedDateKey = newBookingRequestSavedRecord
+                    ? singaporePickupDateTimePartsFromTimestamp(
+                        adminBookingPersistencePickupDateTime(newBookingRequestSavedRecord),
+                      )?.date || ""
+                    : "";
+                  const newBookingRequestPickupDateLabel = newBookingRequestLoadedRecord
+                    ? formatDate(getBookingDateKey(newBookingRequestLoadedRecord))
+                    : newBookingRequestSavedDateKey
+                      ? formatDate(newBookingRequestSavedDateKey)
+                      : "";
                   const message = changeRequestContext
                     ? adminBookingChangeRequestDisplayMessage(changeRequestContext)
                     : isNewBookingRequestNotification
-                      ? "New booking request received. Review in Dashboard."
+                      ? `New booking request received. ${
+                          newBookingRequestPickupDateLabel
+                            ? `${newBookingRequestPickupDateLabel} - Review in Dashboard.`
+                            : "Review in Dashboard."
+                        }`
                     : clean(notification.safe_message) || "No safe notification message recorded.";
                   const loadedChangeRequestBookingRecord = changeRequestContext
                     ? findAdminBookingPersistenceRecordByReference(

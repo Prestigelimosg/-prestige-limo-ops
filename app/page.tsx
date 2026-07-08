@@ -22523,6 +22523,12 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           const passengerText = getLoadBookingsOperationalPassengerDisplay(operationalCard, savedBooking);
           const bookerText = operationalCard.booker_display_name || "Unknown";
           const driverSummary = getAssignedDriverSummary(savedBooking, operationalCard);
+          const hasAssignedDriver = Boolean(
+            driverSummary.name !== "—" ||
+              driverSummary.contact ||
+              driverSummary.plate ||
+              hasBookingDriver(savedBooking),
+          );
           const driverText = driverSummary.name === "—" ? "Driver TBC" : driverSummary.name;
           const driverDetailText =
             [driverSummary.contact, driverSummary.plate ? `Plate ${driverSummary.plate}` : ""]
@@ -22565,9 +22571,21 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       <span className="block truncate text-xs text-slate-500">Booker: {bookerText}</span>
                     </span>
                     <span className="min-w-0 truncate text-slate-700">{routeText}</span>
-                    <span className="min-w-0 rounded-md border border-sky-100 bg-sky-50/70 px-2 py-1">
-                      <span className="block truncate text-[11px] font-semibold uppercase text-sky-800">
-                        Driver
+                    <span
+                      className={`min-w-0 rounded-md border px-2 py-1 ${
+                        hasAssignedDriver
+                          ? "border-emerald-200 bg-emerald-50/80"
+                          : "border-red-200 bg-red-50/80"
+                      }`}
+                    >
+                      <span
+                        className={`mb-0.5 inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ${
+                          hasAssignedDriver
+                            ? "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200"
+                            : "bg-red-100 text-red-800 ring-1 ring-red-200"
+                        }`}
+                      >
+                        {hasAssignedDriver ? "Assigned" : "Need driver"}
                       </span>
                       <span className="block truncate font-semibold text-slate-950">{driverText}</span>
                       <span className="block truncate text-xs text-slate-700">{driverDetailText}</span>

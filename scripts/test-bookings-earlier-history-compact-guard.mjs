@@ -144,6 +144,11 @@ for (const fragment of [
 ]) {
   assertIncludes(currentUpcomingPanel, fragment, `current/upcoming panel fragment ${fragment}`);
 }
+assertExcludes(
+  currentUpcomingPanel,
+  "!unhandledCustomerBookingRequestKeySet.has(getCustomerBookingRequestQueueKey(bookingRecord))",
+  "Bookings saved jobs list must not hide unhandled customer/new booking requests",
+);
 
 for (const fragment of [
   'data-completed-history-panel="true"',

@@ -16163,23 +16163,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       ),
     [urgentCustomerBookingRequestBookings],
   );
-  const unhandledCustomerBookingRequestKeySet = useMemo(
-    () =>
-      new Set(
-        customerBookingRequestBookings
-          .map(getCustomerBookingRequestQueueKey)
-          .filter(Boolean),
-      ),
-    [customerBookingRequestBookings],
-  );
   const filteredRecentBookings = useMemo(
     () =>
       operationalBookings
         .filter((bookingRecord) => !bookingRecordBelongsInCompletedHistoryWithDriverReport(bookingRecord))
-        .filter(
-          (bookingRecord) =>
-            !unhandledCustomerBookingRequestKeySet.has(getCustomerBookingRequestQueueKey(bookingRecord)),
-        )
         .filter(
           (bookingRecord) =>
             bookingsShowAllDates || getBookingDateKey(bookingRecord) === bookingsSelectedDate,
@@ -16191,7 +16178,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       bookingsSelectedDate,
       bookingsShowAllDates,
       operationalBookings,
-      unhandledCustomerBookingRequestKeySet,
     ],
   );
   const filteredCompletedBookings = useMemo(

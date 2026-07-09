@@ -126,14 +126,17 @@ for (const fragment of [
   "const visibleDashboardUrgentBookingRequestBookings = useMemo(",
   "dashboardUrgentBookingRequestBookings.slice(0, 5)",
   "const urgentCustomerBookingRequestKeySet = useMemo(",
-  "const unhandledCustomerBookingRequestKeySet = useMemo(",
-  "!unhandledCustomerBookingRequestKeySet.has(getCustomerBookingRequestQueueKey(bookingRecord))",
   "const dashboardUrgentBookingRequestDisplayItems =",
   "const customerBookingRequestCount = bookingTabCustomerBookingRequestBookings.length;",
   "const dashboardUrgentBookingRequestCount = dashboardUrgentBookingRequestBookings.length;",
 ]) {
   assertIncludes(derivedRequestSection, fragment, `urgent request derived fragment ${fragment}`);
 }
+assertExcludes(
+  derivedRequestSection,
+  "!unhandledCustomerBookingRequestKeySet.has(getCustomerBookingRequestQueueKey(bookingRecord))",
+  "Bookings saved jobs list must not hide active customer/new booking requests",
+);
 
 for (const fragment of [
   "Urgent &amp; New Booking Requests",

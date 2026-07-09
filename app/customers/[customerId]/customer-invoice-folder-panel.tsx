@@ -87,6 +87,13 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
             </tr>
           </thead>
           <tbody>
+            {customer.invoices.length === 0 ? (
+              <tr data-customer-invoice-folder-empty="true">
+                <td className="px-4 py-5 text-sm font-semibold text-slate-600" colSpan={6}>
+                  No invoice records loaded for this customer yet.
+                </td>
+              </tr>
+            ) : null}
             {customer.invoices.map((invoice) => {
               const booking = customer.bookingHistory.find((row) => row.invoiceNumber === invoice.invoiceNumber);
               const balance = invoiceBalance(invoice, booking);

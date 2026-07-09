@@ -395,6 +395,7 @@ type CustomerBillingOverviewRow = {
   balanceCents: number;
   balanceLabel: string;
   customerFolderKey: string;
+  customerFolderHref: string;
   customerId: string;
   customerName: string;
   draftCount: number;
@@ -1367,6 +1368,23 @@ function normalizeCustomerFolderMatch(value: string | null | undefined) {
     .toLowerCase();
 }
 
+function customerFolderHrefFor(customerId: string | null | undefined, customerName: string | null | undefined) {
+  const safeCustomerId = String(customerId ?? "").trim() || String(customerName ?? "").trim();
+  const safeCustomerName = String(customerName ?? "").trim();
+  const pathId = encodeURIComponent(safeCustomerId || "customer-account");
+  const params = new URLSearchParams();
+
+  if (safeCustomerName) {
+    params.set("name", safeCustomerName);
+  }
+
+  return `/customers/${pathId}${params.toString() ? `?${params.toString()}` : ""}`;
+}
+
+function customerFolderHrefFromIndexRow(customer: { customerId: string; customerName: string }) {
+  return customerFolderHrefFor(customer.customerId, customer.customerName);
+}
+
 function customerAdminFailureText(rawError: unknown) {
   return rawError instanceof Error
     ? String(rawError.message || "").trim().toLowerCase()
@@ -1465,7 +1483,7 @@ function customerFolderRowFromSavedAccount(account: RegularCustomerAccountReadRe
     customerFolderKey,
     customerId,
     customerName: customerAccount,
-    folderHref: "",
+    folderHref: customerFolderHrefFor(customerId, customerAccount),
     historyRows: Number(account.saved_booking_count ?? 0),
     latestBookingReference: account.latest_booking_reference ?? null,
     latestPickupAt: account.latest_pickup_at ?? null,
@@ -2858,6 +2876,7 @@ export default function MockCustomerDashboardPage() {
           balanceCents,
           balanceLabel: formatInvoiceAmount(balanceCents),
           customerFolderKey: customer.customerFolderKey,
+          customerFolderHref: customerFolderHrefFor(customer.customerId, customer.customerName),
           customerId: customer.customerId,
           customerName: customer.customerName,
           draftCount,
@@ -4323,65 +4342,6 @@ export default function MockCustomerDashboardPage() {
     setCustomerFolderFinderSelectedId(row.customerId);
     setSelectedMonthlyBillingGroupKey("");
     setSelectedUnbilledCustomerRowKey(row.key);
-    setCustomerFolderFinderDropdownOpen(false);
-    setSearchTerm("");
-    setCustomerFolderFinderPage(1);
-    setExpandedCustomerFolderJobReference("");
-    setSelectedCustomerInvoiceDetailKey("");
-    setCustomerFolderExactBookingEditorState(initialCustomerFolderExactBookingEditorState);
-
-    setCustomerFolderJobViewState({
-      customerId: row.customerId,
-      customerName: row.customerName,
-      message: `Loading saved jobs for ${row.customerName} by exact account ID...`,
-      savedBookings: [],
-      status: "loading",
-      summary: null,
-      tone: "info",
-    });
-    scrollCustomerFolderJobsPanelIntoView();
-
-    try {
-      const result = await readRegularCustomerSavedBookingsForTarget(
-        {
-          accountScopeKey: "",
-          customerId: row.customerId,
-          customerName: row.customerName,
-        },
-        "customer-id",
-      );
-      const savedBookings = result.savedBookings;
-      const returnedCount = Number(result.summary?.returned_count ?? savedBookings.length);
-
-      setCustomerFolderJobViewState({
-        customerId: row.customerId,
-        customerName: row.customerName,
-        message:
-          returnedCount > 0
-            ? `Loaded ${savedBookingCountLabel(returnedCount, "saved job")} for ${row.customerName}.`
-            : `No saved jobs returned for ${row.customerName}.`,
-        savedBookings,
-        status: "loaded",
-        summary: result.summary,
-        tone: returnedCount > 0 ? "success" : "info",
-      });
-    } catch (error) {
-      setCustomerFolderJobViewState({
-        customerId: row.customerId,
-        customerName: row.customerName,
-        message: customerAdminReadFailureMessage(`Saved job read for ${row.customerName}`, error),
-        savedBookings: [],
-        status: "error",
-        summary: null,
-        tone: "error",
-      });
-    }
-  }
-
-  async function viewCustomerJobsFromBillingOverviewRow(row: CustomerBillingOverviewRow) {
-    setCustomerFolderFinderSelectedId(row.customerFolderKey);
-    setSelectedMonthlyBillingGroupKey("");
-    setSelectedUnbilledCustomerRowKey("");
     setCustomerFolderFinderDropdownOpen(false);
     setSearchTerm("");
     setCustomerFolderFinderPage(1);
@@ -6542,14 +6502,13 @@ export default function MockCustomerDashboardPage() {
                       key={row.customerFolderKey}
                     >
                       <td className="border-b border-slate-100 px-3 py-3">
-                        <button
+                        <Link
                           className="text-left font-bold text-slate-950 underline-offset-4 transition hover:text-sky-700 hover:underline"
                           data-customer-billing-overview-open={row.customerFolderKey}
-                          onClick={() => viewCustomerJobsFromBillingOverviewRow(row)}
-                          type="button"
+                          href={row.customerFolderHref}
                         >
                           {row.customerName}
-                        </button>
+                        </Link>
                         <p className="mt-1 text-xs text-slate-500">{row.customerId}</p>
                       </td>
                       <td className="border-b border-slate-100 px-3 py-3">
@@ -6800,14 +6759,13 @@ export default function MockCustomerDashboardPage() {
                         key={customer.customerFolderKey}
                       >
                         <div className="min-w-0">
-                          <button
+                          <Link
                             className="block max-w-full truncate text-left text-sm font-bold text-slate-950 underline decoration-slate-300 underline-offset-4 transition hover:text-emerald-800 hover:decoration-emerald-500 sm:text-base"
                             data-customer-folder-finder-name-jobs={customer.customerFolderKey}
-                            onClick={() => viewCustomerFolderJobs(customer)}
-                            type="button"
+                            href={customer.folderHref || customerFolderHrefFromIndexRow(customer)}
                           >
                             {customer.customerName}
-                          </button>
+                          </Link>
                           <p className="mt-0.5 truncate text-xs text-slate-500">
                             Account: {customer.customerId}
                           </p>

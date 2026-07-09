@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import {
   collectionRules,
   findMockCustomer,
@@ -13,6 +12,9 @@ import { CustomerFolderSavedBookingsPanel } from "./saved-bookings-panel";
 type CustomerFolderPageProps = {
   params: Promise<{
     customerId: string;
+  }>;
+  searchParams?: Promise<{
+    name?: string;
   }>;
 };
 
@@ -90,13 +92,38 @@ export function generateStaticParams() {
   }));
 }
 
-export default async function MockCustomerFolderPage({ params }: CustomerFolderPageProps) {
-  const { customerId } = await params;
-  const customer = findMockCustomer(customerId);
+function fallbackCustomerFolder(customerId: string, customerName: string): MockCustomer {
+  const safeCustomerId = decodeURIComponent(customerId).trim() || "customer-account";
+  const safeCustomerName = customerName.trim() || safeCustomerId;
 
-  if (!customer) {
-    notFound();
-  }
+  return {
+    accountType: "Customer account",
+    bookingHistory: [],
+    companyName: safeCustomerName,
+    contacts: [],
+    documentsPlaceholder: "No customer documents are shown in this folder.",
+    followUpNotes: ["Use Load Saved Bookings to read this customer's saved job references."],
+    id: safeCustomerId,
+    invoiceExamples: [],
+    invoicePrefix: safeCustomerName
+      .replace(/[^a-z0-9]+/gi, "")
+      .slice(0, 4)
+      .toUpperCase() || "CUST",
+    invoices: [],
+    nextFollowUpDate: "Review when saved jobs are loaded",
+    outstandingAmount: "$0",
+    overdueAmount: "$0",
+    paidThisMonth: "$0",
+    paymentHistory: [],
+    paymentStatusSummary: "No invoice records loaded in this folder yet",
+    paymentTerms: "Use existing guarded invoice workflow before sending customer billing.",
+  };
+}
+
+export default async function MockCustomerFolderPage({ params, searchParams }: CustomerFolderPageProps) {
+  const { customerId } = await params;
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+  const customer = findMockCustomer(customerId) ?? fallbackCustomerFolder(customerId, resolvedSearchParams.name ?? "");
 
   const upcomingJobs = customer.bookingHistory.filter((booking) => booking.jobStatus === "Upcoming");
   const completedJobs = customer.bookingHistory.filter((booking) => booking.jobStatus === "Completed");

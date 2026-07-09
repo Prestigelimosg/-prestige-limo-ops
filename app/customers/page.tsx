@@ -3019,6 +3019,32 @@ export default function MockCustomerDashboardPage() {
       null,
     [customerMonthlyBillingGroups, selectedMonthlyBillingGroupKey],
   );
+  const selectedCustomerMonthlyBillingGroups = useMemo(() => {
+    const selectedCustomerId = normalizeCustomerFolderMatch(customerFolderJobViewState.customerId);
+    const selectedCustomerName = normalizeCustomerFolderMatch(customerFolderJobViewState.customerName);
+
+    if (!selectedCustomerId && !selectedCustomerName) {
+      return [];
+    }
+
+    return customerMonthlyBillingGroups.filter((group) => {
+      const groupCustomerId = normalizeCustomerFolderMatch(group.customerId);
+      const groupCustomerName = normalizeCustomerFolderMatch(group.customerName);
+
+      return (
+        Boolean(selectedCustomerId && groupCustomerId && groupCustomerId === selectedCustomerId) ||
+        Boolean(selectedCustomerName && groupCustomerName && groupCustomerName === selectedCustomerName)
+      );
+    });
+  }, [
+    customerFolderJobViewState.customerId,
+    customerFolderJobViewState.customerName,
+    customerMonthlyBillingGroups,
+  ]);
+  const selectedCustomerPrimaryMonthlyBillingGroup =
+    selectedCustomerMonthlyBillingGroups.find((group) => !group.needsScopeReview) ??
+    selectedCustomerMonthlyBillingGroups[0] ??
+    null;
   const selectedUnbilledCustomerRow = useMemo(
     () => unbilledCustomerRows.find((row) => row.key === selectedUnbilledCustomerRowKey) ?? null,
     [selectedUnbilledCustomerRowKey, unbilledCustomerRows],
@@ -4537,6 +4563,19 @@ export default function MockCustomerDashboardPage() {
       document.querySelector<HTMLElement>("[data-plain-invoice-amount='true']")?.focus();
       setPreparingMonthlyBillingGroupKey("");
     }, 150);
+  }
+
+  function prepareSelectedCustomerMonthlyInvoice() {
+    if (!selectedCustomerPrimaryMonthlyBillingGroup) {
+      setPlainInvoiceFeedback(
+        "No completed billing-ready jobs are available for this selected customer yet.",
+      );
+      setPlainInvoiceFeedbackTone("info");
+      return;
+    }
+
+    setSelectedMonthlyBillingGroupKey(selectedCustomerPrimaryMonthlyBillingGroup.key);
+    prepareMonthlyBillingGroupForInvoice(selectedCustomerPrimaryMonthlyBillingGroup);
   }
 
   async function readCustomerInvoiceDriverActualTimeSummary(bookingReference: string) {
@@ -6842,19 +6881,57 @@ export default function MockCustomerDashboardPage() {
                       </p>
                     ) : null}
                   </div>
-                  <p
-                    className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-700"
-                    data-customer-folder-jobs-count="true"
-                  >
-                    {savedBookingCountLabel(
-                      Number(
-                        customerFolderJobViewState.summary?.returned_count ??
-                          customerFolderJobViewState.savedBookings.length,
-                      ),
-                      "job",
+                  <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                    {selectedCustomerPrimaryMonthlyBillingGroup ? (
+                      <button
+                        className="inline-flex min-h-9 items-center justify-center rounded-md border border-emerald-900 bg-emerald-900 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-100 disabled:text-slate-500"
+                        data-selected-customer-prepare-monthly-invoice="true"
+                        disabled={
+                          selectedCustomerPrimaryMonthlyBillingGroup.needsScopeReview ||
+                          preparingMonthlyBillingGroupKey === selectedCustomerPrimaryMonthlyBillingGroup.key
+                        }
+                        onClick={prepareSelectedCustomerMonthlyInvoice}
+                        type="button"
+                      >
+                        {preparingMonthlyBillingGroupKey === selectedCustomerPrimaryMonthlyBillingGroup.key
+                          ? "Preparing"
+                          : selectedCustomerPrimaryMonthlyBillingGroup.needsScopeReview
+                            ? "Review scope"
+                            : "Prepare monthly invoice"}
+                      </button>
+                    ) : (
+                      <p
+                        className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-500"
+                        data-selected-customer-no-monthly-invoice-ready="true"
+                      >
+                        No billing-ready jobs
+                      </p>
                     )}
-                  </p>
+                    <p
+                      className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-700"
+                      data-customer-folder-jobs-count="true"
+                    >
+                      {savedBookingCountLabel(
+                        Number(
+                          customerFolderJobViewState.summary?.returned_count ??
+                            customerFolderJobViewState.savedBookings.length,
+                        ),
+                        "job",
+                      )}
+                    </p>
+                  </div>
                 </div>
+                {selectedCustomerPrimaryMonthlyBillingGroup ? (
+                  <p
+                    className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold leading-5 text-emerald-950"
+                    data-selected-customer-monthly-invoice-summary="true"
+                  >
+                    {selectedCustomerPrimaryMonthlyBillingGroup.billingMonthLabel}:{" "}
+                    {selectedCustomerPrimaryMonthlyBillingGroup.rows.length} completed billing-ready job
+                    {selectedCustomerPrimaryMonthlyBillingGroup.rows.length === 1 ? "" : "s"} will be loaded into
+                    the invoice workbench for admin review only.
+                  </p>
+                ) : null}
 
                 <p
                   aria-live="polite"

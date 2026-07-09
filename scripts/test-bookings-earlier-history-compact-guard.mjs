@@ -111,15 +111,9 @@ for (const fragment of [
 for (const fragment of [
   "const todayKey = toDateKey(new Date());",
   "const bookingRecordBelongsInCompletedHistoryWithDriverReport = useCallback",
-  "const activeDashboardBookings = useMemo(",
   "const earlierHistoryDashboardBookings = useMemo(",
-  ".filter((bookingRecord) => !bookingRecordBelongsInCompletedHistoryWithDriverReport(bookingRecord))",
   ".filter((bookingRecord) => bookingRecordBelongsInCompletedHistoryWithDriverReport(bookingRecord))",
   ".sort(sortBookingHistoryNewestFirst)",
-  "const todayBookings = activeDashboardBookings.filter(",
-  "const upcomingBookings = activeDashboardBookings.filter(",
-  "getBookingDateKey(bookingRecord) === todayKey",
-  "getBookingDateKey(bookingRecord) > todayKey",
   "bookingRecord.status,",
   "cancelledCount: number;",
   "Cancelled {monthGroup.cancelledCount}",
@@ -128,15 +122,25 @@ for (const fragment of [
 }
 
 for (const fragment of [
-  "Current / Upcoming Bookings",
-  "Earlier pickup dates are moved to Completed / History.",
-  "Search current/upcoming passenger, company, flight, route, driver",
-  "No matching current/upcoming bookings found.",
+  "Find saved jobs",
+  'data-bookings-find-toolbar="true"',
+  'data-bookings-loaded-filter-summary="true"',
+  "Search the loaded admin saved jobs by pickup date, ref, passenger, flight, route, or driver.",
+  'data-bookings-all-dates="true"',
+  "All dates",
+  "bookingsShowAllDates || getBookingDateKey(bookingRecord) === bookingsSelectedDate",
+  "Quick search loaded jobs: ref, passenger, flight, route, driver",
+]) {
+  assertIncludes(appPage, fragment, `bookings find toolbar fragment ${fragment}`);
+}
+
+for (const fragment of [
+  "No matching jobs found for {bookingsDateScopeLabel}.",
   'data-current-upcoming-bookings-list="true"',
   'data-current-upcoming-bookings-empty="true"',
-  "No current/upcoming bookings in this search. Earlier jobs are in Completed / History.",
+  "No active bookings found for {bookingsDateScopeLabel}. Earlier jobs are in Completed / History.",
   'className="mt-1.5 grid gap-2 border-t border-stone-100 px-2 pt-2"',
-  'className="grid gap-2 sm:grid-cols-3"',
+  'className="grid gap-2 sm:grid-cols-3 xl:w-52 xl:grid-cols-1"',
 ]) {
   assertIncludes(currentUpcomingPanel, fragment, `current/upcoming panel fragment ${fragment}`);
 }

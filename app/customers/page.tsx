@@ -4403,6 +4403,27 @@ export default function MockCustomerDashboardPage() {
     }
   }
 
+  function reviewSelectedCustomerInvoice(invoiceKey: string) {
+    setSelectedCustomerInvoiceDetailKey(invoiceKey);
+    window.setTimeout(() => {
+      document
+        .querySelector<HTMLElement>("[data-selected-customer-invoice-detail='true']")
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 50);
+  }
+
+  function openAdvancedInvoiceWorkbenchForReview() {
+    const drawer = document.querySelector<HTMLDetailsElement>(
+      "[data-customer-billing-workbench-drawer='true']",
+    );
+
+    if (drawer) {
+      drawer.open = true;
+    }
+
+    plainInvoicePanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   function updateOutstandingReviewSearch(value: string) {
     setOutstandingReviewSearchTerm(value);
     setOutstandingReviewPage(1);
@@ -6883,6 +6904,9 @@ export default function MockCustomerDashboardPage() {
                             <th className="border-b border-slate-100 px-3 py-2 text-right font-bold">
                               Status
                             </th>
+                            <th className="border-b border-slate-100 px-3 py-2 text-right font-bold">
+                              Action
+                            </th>
                           </tr>
                         </thead>
                         <tbody>
@@ -6899,7 +6923,7 @@ export default function MockCustomerDashboardPage() {
                                 <button
                                   className="text-left font-bold text-slate-950 underline-offset-4 transition hover:text-sky-700 hover:underline"
                                   data-selected-customer-invoice-open={invoice.key}
-                                  onClick={() => setSelectedCustomerInvoiceDetailKey(invoice.key)}
+                                  onClick={() => reviewSelectedCustomerInvoice(invoice.key)}
                                   type="button"
                                 >
                                   {invoice.documentNumber}
@@ -6925,6 +6949,16 @@ export default function MockCustomerDashboardPage() {
                                   {invoice.statusLabel}
                                 </span>
                               </td>
+                              <td className="px-3 py-2 text-right">
+                                <button
+                                  className="inline-flex min-h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-xs font-bold text-slate-800 transition hover:border-slate-700"
+                                  data-selected-customer-invoice-review-edit={invoice.key}
+                                  onClick={() => reviewSelectedCustomerInvoice(invoice.key)}
+                                  type="button"
+                                >
+                                  Review/Edit
+                                </button>
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -6949,17 +6983,27 @@ export default function MockCustomerDashboardPage() {
                             Review line items and descriptions before using the invoice workbench below.
                           </p>
                         </div>
-                        <span
-                          className={`inline-flex min-h-7 w-fit items-center rounded-md border px-2 text-xs font-bold ${
-                            selectedCustomerBillingInvoiceDetail.statusLabel === "Draft"
-                              ? "border-amber-200 bg-amber-50 text-amber-800"
-                              : selectedCustomerBillingInvoiceDetail.statusLabel === "Pending"
-                                ? "border-sky-200 bg-sky-50 text-sky-800"
-                                : "border-emerald-200 bg-emerald-50 text-emerald-800"
-                          }`}
-                        >
-                          {selectedCustomerBillingInvoiceDetail.statusLabel}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                          <span
+                            className={`inline-flex min-h-7 w-fit items-center rounded-md border px-2 text-xs font-bold ${
+                              selectedCustomerBillingInvoiceDetail.statusLabel === "Draft"
+                                ? "border-amber-200 bg-amber-50 text-amber-800"
+                                : selectedCustomerBillingInvoiceDetail.statusLabel === "Pending"
+                                  ? "border-sky-200 bg-sky-50 text-sky-800"
+                                  : "border-emerald-200 bg-emerald-50 text-emerald-800"
+                            }`}
+                          >
+                            {selectedCustomerBillingInvoiceDetail.statusLabel}
+                          </span>
+                          <button
+                            className="inline-flex min-h-8 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-xs font-bold text-white transition hover:bg-slate-700"
+                            data-selected-customer-invoice-open-workbench="true"
+                            onClick={openAdvancedInvoiceWorkbenchForReview}
+                            type="button"
+                          >
+                            Open advanced workbench
+                          </button>
+                        </div>
                       </div>
                       <div className="mt-3 overflow-x-auto rounded-md border border-slate-200 bg-white">
                         <table className="w-full min-w-[520px] text-left text-xs">

@@ -3993,6 +3993,64 @@ export default function MockCustomerDashboardPage() {
     }
   }
 
+  async function viewCustomerJobsFromBillingRow(row: UnbilledCustomerRow) {
+    setCustomerFolderFinderSelectedId(row.customerId);
+    setSelectedMonthlyBillingGroupKey("");
+    setSelectedUnbilledCustomerRowKey(row.key);
+    setCustomerFolderFinderDropdownOpen(false);
+    setSearchTerm("");
+    setCustomerFolderFinderPage(1);
+    setExpandedCustomerFolderJobReference("");
+    setCustomerFolderExactBookingEditorState(initialCustomerFolderExactBookingEditorState);
+
+    setCustomerFolderJobViewState({
+      customerId: row.customerId,
+      customerName: row.customerName,
+      message: `Loading saved jobs for ${row.customerName} by exact account ID...`,
+      savedBookings: [],
+      status: "loading",
+      summary: null,
+      tone: "info",
+    });
+    scrollCustomerFolderJobsPanelIntoView();
+
+    try {
+      const result = await readRegularCustomerSavedBookingsForTarget(
+        {
+          accountScopeKey: "",
+          customerId: row.customerId,
+          customerName: row.customerName,
+        },
+        "customer-id",
+      );
+      const savedBookings = result.savedBookings;
+      const returnedCount = Number(result.summary?.returned_count ?? savedBookings.length);
+
+      setCustomerFolderJobViewState({
+        customerId: row.customerId,
+        customerName: row.customerName,
+        message:
+          returnedCount > 0
+            ? `Loaded ${savedBookingCountLabel(returnedCount, "saved job")} for ${row.customerName}.`
+            : `No saved jobs returned for ${row.customerName}.`,
+        savedBookings,
+        status: "loaded",
+        summary: result.summary,
+        tone: returnedCount > 0 ? "success" : "info",
+      });
+    } catch (error) {
+      setCustomerFolderJobViewState({
+        customerId: row.customerId,
+        customerName: row.customerName,
+        message: customerAdminReadFailureMessage(`Saved job read for ${row.customerName}`, error),
+        savedBookings: [],
+        status: "error",
+        summary: null,
+        tone: "error",
+      });
+    }
+  }
+
   function updateOutstandingReviewSearch(value: string) {
     setOutstandingReviewSearchTerm(value);
     setOutstandingReviewPage(1);
@@ -6199,9 +6257,14 @@ export default function MockCustomerDashboardPage() {
                         key={customer.customerFolderKey}
                       >
                         <div className="min-w-0">
-                          <h3 className="truncate text-sm font-bold text-slate-950 sm:text-base">
+                          <button
+                            className="block max-w-full truncate text-left text-sm font-bold text-slate-950 underline decoration-slate-300 underline-offset-4 transition hover:text-emerald-800 hover:decoration-emerald-500 sm:text-base"
+                            data-customer-folder-finder-name-jobs={customer.customerFolderKey}
+                            onClick={() => viewCustomerFolderJobs(customer)}
+                            type="button"
+                          >
                             {customer.customerName}
-                          </h3>
+                          </button>
                           <p className="mt-0.5 truncate text-xs text-slate-500">
                             Account: {customer.customerId}
                           </p>
@@ -6814,6 +6877,14 @@ export default function MockCustomerDashboardPage() {
                         </td>
                         <td className="px-3 py-2 text-right sm:px-4">
                           <div className="inline-flex items-center gap-2">
+                            <button
+                              className="inline-flex min-h-8 items-center justify-center rounded-md border border-emerald-300 bg-white px-3 text-center text-xs font-bold text-emerald-800 transition hover:bg-emerald-50"
+                              data-unbilled-customer-view-jobs={row.key}
+                              onClick={() => viewCustomerJobsFromBillingRow(row)}
+                              type="button"
+                            >
+                              Jobs
+                            </button>
                             <button
                               className={`inline-flex min-h-8 items-center justify-center rounded-md border px-3 text-center text-xs font-bold transition disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-100 disabled:text-slate-500 ${
                                 prepareButtonPrepared

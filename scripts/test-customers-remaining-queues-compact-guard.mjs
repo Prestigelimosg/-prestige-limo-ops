@@ -21,6 +21,12 @@ const [customersPage, preactivationSuite] = await Promise.all([
 for (const fragment of [
   "Monthly Billing Queue",
   "Prepare monthly bill",
+  "async function viewCustomerJobsFromBillingRow(row: UnbilledCustomerRow)",
+  "readRegularCustomerSavedBookingsForTarget(",
+  'data-customer-folder-finder-name-jobs={customer.customerFolderKey}',
+  "onClick={() => viewCustomerFolderJobs(customer)}",
+  'data-unbilled-customer-view-jobs={row.key}',
+  "onClick={() => viewCustomerJobsFromBillingRow(row)}",
   "Search the customer or company, open the correct folder, then use Monthly Billing Queue below to",
   "Choose the customer/month with ready completed jobs, then click Prepare monthly bill.",
   "before any invoice number, PDF, payment, or send action.",

@@ -21,7 +21,11 @@ const [customersPage, preactivationSuite] = await Promise.all([
 for (const fragment of [
   "Monthly Billing Queue",
   "Prepare monthly bill",
-  "Same company names stay separate by saved account ID and passenger scope.",
+  "Search the customer or company, open the correct folder, then use Monthly Billing Queue below to",
+  "Choose the customer/month with ready completed jobs, then click Prepare monthly bill.",
+  "before any invoice number, PDF, payment, or send action.",
+  "Same company names stay",
+  "separate by saved account ID and passenger scope.",
   'data-customer-monthly-billing-group-select="true"',
 ]) {
   assertIncludes(customersPage, fragment, `real monthly billing queue fragment ${fragment}`);

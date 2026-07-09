@@ -21912,7 +21912,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
       setBookingCompletionMessage(bookingId, {
         tone: "success",
-        text: `Billing readiness saved for ${referenceLabel}. Monthly Billing Queue can pick it up.`,
+        text: `Billing readiness saved for ${referenceLabel}. Next: open Customers page, choose this customer/month in Monthly Billing Queue, then Prepare monthly bill.`,
       });
     } catch (error) {
       setBookingCompletionMessage(bookingId, {
@@ -23036,14 +23036,24 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                         </>
                       ) : null}
                       {bookingCompletionMessage ? (
-                        <p
+                        <div
                           className={`rounded-md border px-3 py-2 text-xs ${statusClass(
                             bookingCompletionMessage.tone,
                           )}`}
                           data-booking-completion-message={bookingId}
                         >
-                          {bookingCompletionMessage.text}
-                        </p>
+                          <p>{bookingCompletionMessage.text}</p>
+                          {bookingCompletionMessage.tone === "success" &&
+                          bookingCompletionMessage.text.startsWith("Billing readiness saved for") ? (
+                            <Link
+                              className="mt-2 inline-flex min-h-8 items-center justify-center rounded-md border border-emerald-700 bg-white px-2.5 text-xs font-bold text-emerald-900 transition hover:bg-emerald-50"
+                              data-completed-billing-ready-open-customers="true"
+                              href="/customers"
+                            >
+                              Open Customers & Payments
+                            </Link>
+                          ) : null}
+                        </div>
                       ) : null}
                     </div>
                   </div>

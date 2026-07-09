@@ -6026,7 +6026,8 @@ export default function MockCustomerDashboardPage() {
               <div>
                 <h2 className="text-lg font-bold text-slate-950">Find Customer Folder</h2>
                 <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
-                  Search all customer folders, scan 10 at a time, then open the correct account before invoice work.
+                  Search the customer or company, open the correct folder, then use Monthly Billing Queue below to
+                  prepare the bill.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2 lg:justify-end">
@@ -6664,8 +6665,9 @@ export default function MockCustomerDashboardPage() {
                 </p>
                 <h2 className="mt-1 text-lg font-bold text-slate-950">Monthly Billing Queue</h2>
                 <p className="mt-1 max-w-3xl text-sm font-semibold leading-6 text-emerald-950">
-                  Select one saved billing account and month, review the jobs, then prepare the bill in the invoice
-                  workbench. Same company names stay separate by saved account ID and passenger scope.
+                  Choose the customer/month with ready completed jobs, then click Prepare monthly bill. Review in the
+                  invoice workbench before any invoice number, PDF, payment, or send action. Same company names stay
+                  separate by saved account ID and passenger scope.
                 </p>
               </div>
               <p

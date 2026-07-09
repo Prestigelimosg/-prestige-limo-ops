@@ -115,7 +115,7 @@ for (const fragment of [
   "Admin marked completed job billing ready from Completed / History.",
   "method: \"POST\"",
   "adminCompletedBookingCloseoutApiPath",
-  "Billing readiness saved for ${referenceLabel}. Monthly Billing Queue can pick it up.",
+  "Billing readiness saved for ${referenceLabel}. Next: open Customers page, choose this customer/month in Monthly Billing Queue, then Prepare monthly bill.",
 ]) {
   assertIncludes(rowBillingReadyAction, fragment, `completed history billing ready action ${fragment}`);
 }
@@ -125,6 +125,9 @@ for (const fragment of [
   "data-completed-billing-ready-booking={bookingId}",
   "completedHistoryBillingReadyBookingId === bookingId ? \"Saving...\" : \"Billing ready\"",
   "completedHistoryBillingReadyBookingId === bookingId",
+  'data-completed-billing-ready-open-customers="true"',
+  'href="/customers"',
+  "Open Customers & Payments",
 ]) {
   assertIncludes(completedHistoryPanel, fragment, `completed history billing ready panel ${fragment}`);
 }

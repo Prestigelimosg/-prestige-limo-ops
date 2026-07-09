@@ -58,6 +58,11 @@ const completedHistoryPanel = sliceBetween(
   "const completedBookingsPanel = (",
   "const jobCardCopyEditState =",
 );
+const bookingsTabSection = sliceBetween(
+  appPage,
+  '{activeTab === "bookings" ? (',
+  '{activeTab === "completed" ? (',
+);
 const dashboardSection = sliceBetween(
   appPage,
   '{activeTab === "dashboard" ? (',
@@ -128,10 +133,18 @@ for (const fragment of [
   "Search the loaded admin saved jobs by pickup date, ref, passenger, flight, route, or driver.",
   'data-bookings-all-dates="true"',
   "All dates",
+  'className="mt-3 overflow-x-auto rounded-md border border-stone-200 bg-white p-2"',
+  'className="flex min-w-[56rem] items-center gap-2"',
   "bookingsShowAllDates || getBookingDateKey(bookingRecord) === bookingsSelectedDate",
   "Quick search loaded jobs: ref, passenger, flight, route, driver",
 ]) {
   assertIncludes(appPage, fragment, `bookings find toolbar fragment ${fragment}`);
+}
+for (const fragment of [
+  "Load saved bookings and reopen them in Dispatch.",
+  "{loading ? \"Loading...\" : \"Load Bookings\"}",
+]) {
+  assertExcludes(bookingsTabSection, fragment, `Bookings tab redundant header/button fragment ${fragment}`);
 }
 
 for (const fragment of [

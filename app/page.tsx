@@ -22395,10 +22395,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           Showing {filteredRecentBookings.length} of {operationalBookings.length} loaded for {bookingsDateScopeLabel}.
         </p>
       </div>
-      <div className="mt-3 grid gap-2 rounded-md border border-stone-200 bg-white p-2 xl:grid-cols-[auto_minmax(11rem,0.8fr)_auto_minmax(11rem,0.9fr)_auto_auto_minmax(18rem,1.5fr)_auto] xl:items-center">
+      <div className="mt-3 overflow-x-auto rounded-md border border-stone-200 bg-white p-2">
+        <div className="flex min-w-[56rem] items-center gap-2">
         <button
           aria-pressed={bookingsShowAllDates}
-          className={`h-10 rounded-md border px-3 text-sm font-semibold transition ${
+          className={`h-10 shrink-0 rounded-md border px-3 text-sm font-semibold transition ${
             bookingsShowAllDates
               ? "border-slate-950 bg-slate-950 text-white hover:bg-slate-800"
               : "border-slate-300 bg-white text-slate-800 hover:bg-slate-50"
@@ -22409,7 +22410,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         >
           All dates
         </button>
-        <label className="flex min-w-0 items-center gap-2 rounded-md border border-stone-300 bg-white px-2">
+        <label className="flex w-44 shrink-0 items-center gap-2 rounded-md border border-stone-300 bg-white px-2">
           <span className="text-xs font-semibold uppercase text-slate-500">Date</span>
           <span className="sr-only">Booking date</span>
           <input
@@ -22427,7 +22428,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           />
         </label>
         <button
-          className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+          className="h-10 shrink-0 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
           data-bookings-prev-day="true"
           onClick={() => {
             setBookingsSelectedDate((currentDate) => shiftDateKey(currentDate, -1));
@@ -22438,13 +22439,13 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           Prev Day
         </button>
         <div
-          className="h-10 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-center text-sm font-semibold text-slate-950"
+          className="h-10 w-44 shrink-0 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-center text-sm font-semibold text-slate-950"
           data-bookings-selected-date-label="true"
         >
           {selectedBookingsDateLabel}
         </div>
         <button
-          className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+          className="h-10 shrink-0 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
           data-bookings-next-day="true"
           onClick={() => {
             setBookingsSelectedDate((currentDate) => shiftDateKey(currentDate, 1));
@@ -22455,7 +22456,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           Next Day
         </button>
         <button
-          className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+          className="h-10 shrink-0 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
           data-bookings-today="true"
           onClick={() => {
             setBookingsSelectedDate(todayKey);
@@ -22465,7 +22466,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         >
           Today
         </button>
-        <label className="flex-1">
+        <label className="min-w-72 flex-1">
           <span className="sr-only">Quick search loaded jobs</span>
           <input
             className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
@@ -22478,13 +22479,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         </label>
         {hasBookingsSearch ? (
           <button
-            className="h-10 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            className="h-10 shrink-0 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
             onClick={() => setBookingsSearchTerm("")}
             type="button"
           >
             Clear
           </button>
         ) : null}
+        </div>
       </div>
     </div>
   );
@@ -40983,20 +40985,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
         {activeTab === "bookings" ? (
         <section className="rounded-md border border-stone-200 bg-white p-3">
-          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold">Bookings</h2>
-              <p className="text-xs text-slate-500">Load saved bookings and reopen them in Dispatch.</p>
-            </div>
-            <button
-              className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
-              disabled={loading}
-              onClick={() => loadBookings()}
-              type="button"
-            >
-              {loading ? "Loading..." : "Load Bookings"}
-            </button>
-          </div>
           {statusPanel}
           {bookingsFindToolbar}
           {recentBookingsPanel}

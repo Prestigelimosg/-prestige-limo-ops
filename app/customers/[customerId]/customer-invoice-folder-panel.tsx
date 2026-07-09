@@ -8,6 +8,8 @@ type CustomerInvoiceFolderPanelProps = {
   customer: MockCustomer;
 };
 
+type PaymentMethod = "Card" | "Cash" | "Bank transfer";
+
 function statusClass(status: string) {
   if (/paid/i.test(status) && !/partially/i.test(status)) {
     return "border-emerald-200 bg-emerald-50 text-emerald-800";
@@ -28,12 +30,20 @@ function displayInvoiceStatus(status: string) {
   return "Pending";
 }
 
+function isPaidStatus(status: string) {
+  return /paid/i.test(status) && !/partially/i.test(status);
+}
+
 function invoiceBalance(invoice: MockCustomerInvoice, booking: MockCustomerBooking | undefined) {
   if (booking?.balanceDue) {
     return booking.balanceDue;
   }
 
   return /paid/i.test(invoice.status) && !/partially/i.test(invoice.status) ? "$0" : invoice.amount;
+}
+
+function customerBillingContact(customer: MockCustomer) {
+  return customer.contacts.find((contact) => /billing|account/i.test(contact.label)) ?? customer.contacts[0];
 }
 
 function itemDescription(customer: MockCustomer, booking: MockCustomerBooking | undefined, invoice: MockCustomerInvoice) {
@@ -46,10 +56,58 @@ function itemDescription(customer: MockCustomer, booking: MockCustomerBooking | 
 
 export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPanelProps) {
   const [selectedInvoiceNumber, setSelectedInvoiceNumber] = useState(customer.invoices[0]?.invoiceNumber ?? "");
+  const [paidInvoiceMethods, setPaidInvoiceMethods] = useState<Record<string, PaymentMethod>>({});
+  const [localPaidInvoices, setLocalPaidInvoices] = useState<Record<string, PaymentMethod>>({});
+  const [invoiceActionMessage, setInvoiceActionMessage] = useState("");
   const selectedInvoice = customer.invoices.find((invoice) => invoice.invoiceNumber === selectedInvoiceNumber);
   const selectedBooking = customer.bookingHistory.find(
     (booking) => booking.invoiceNumber === selectedInvoice?.invoiceNumber,
   );
+  const selectedPaymentMethod = selectedInvoice
+    ? paidInvoiceMethods[selectedInvoice.invoiceNumber] ?? "Bank transfer"
+    : "Bank transfer";
+  const selectedInvoiceIsPaid = selectedInvoice
+    ? Boolean(localPaidInvoices[selectedInvoice.invoiceNumber]) || isPaidStatus(selectedInvoice.status)
+    : false;
+  const selectedInvoiceStatus = selectedInvoiceIsPaid ? "Paid" : "Pending";
+  const selectedInvoiceBalance = selectedInvoice
+    ? selectedInvoiceIsPaid
+      ? "$0"
+      : invoiceBalance(selectedInvoice, selectedBooking)
+    : "$0";
+  const selectedContact = customerBillingContact(customer);
+
+  function openInvoice(invoiceNumber: string) {
+    setSelectedInvoiceNumber(invoiceNumber);
+    setInvoiceActionMessage("");
+  }
+
+  function updatePaymentMethod(invoiceNumber: string, paymentMethod: PaymentMethod) {
+    setPaidInvoiceMethods((currentMethods) => ({
+      ...currentMethods,
+      [invoiceNumber]: paymentMethod,
+    }));
+  }
+
+  function markInvoicePaid(invoice: MockCustomerInvoice) {
+    const paymentMethod = paidInvoiceMethods[invoice.invoiceNumber] ?? "Bank transfer";
+
+    setSelectedInvoiceNumber(invoice.invoiceNumber);
+    setLocalPaidInvoices((currentPaidInvoices) => ({
+      ...currentPaidInvoices,
+      [invoice.invoiceNumber]: paymentMethod,
+    }));
+    setInvoiceActionMessage(
+      `Marked ${invoice.invoiceNumber} paid by ${paymentMethod}. Thank you message ready for ${selectedContact?.value ?? customer.companyName}.`,
+    );
+  }
+
+  function preparePaymentReminder(invoice: MockCustomerInvoice) {
+    setSelectedInvoiceNumber(invoice.invoiceNumber);
+    setInvoiceActionMessage(
+      `Reminder ready for ${selectedContact?.value ?? customer.companyName}: payment is pending for ${invoice.invoiceNumber}, amount ${invoice.amount}, due ${invoice.dueDate}.`,
+    );
+  }
 
   return (
     <section
@@ -104,8 +162,11 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
             ) : null}
             {customer.invoices.map((invoice) => {
               const booking = customer.bookingHistory.find((row) => row.invoiceNumber === invoice.invoiceNumber);
-              const balance = invoiceBalance(invoice, booking);
+              const paidLocally = localPaidInvoices[invoice.invoiceNumber];
+              const isPaid = Boolean(paidLocally) || isPaidStatus(invoice.status);
+              const balance = isPaid ? "$0" : invoiceBalance(invoice, booking);
               const selected = selectedInvoiceNumber === invoice.invoiceNumber;
+              const paymentMethod = paidInvoiceMethods[invoice.invoiceNumber] ?? paidLocally ?? "Bank transfer";
 
               return (
                 <tr
@@ -120,7 +181,7 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
                     <button
                       className="font-bold text-sky-700 underline-offset-4 hover:underline"
                       data-customer-invoice-folder-view={invoice.invoiceNumber}
-                      onClick={() => setSelectedInvoiceNumber(invoice.invoiceNumber)}
+                      onClick={() => openInvoice(invoice.invoiceNumber)}
                       type="button"
                     >
                       {invoice.invoiceNumber}
@@ -129,25 +190,53 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
                   <td className="px-4 py-3 font-bold text-slate-950">{invoice.amount}</td>
                   <td className="px-4 py-3 font-bold text-slate-950">{balance}</td>
                   <td className="px-4 py-3">
-                    <span className={`inline-flex rounded-md border px-3 py-1 font-bold ${statusClass(invoice.status)}`}>
-                      {displayInvoiceStatus(invoice.status)}
+                    <span
+                      className={`inline-flex rounded-md border px-3 py-1 font-bold ${statusClass(
+                        isPaid ? "Paid" : invoice.status,
+                      )}`}
+                    >
+                      {isPaid ? "Paid" : displayInvoiceStatus(invoice.status)}
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex justify-end gap-2">
+                    <div className="flex flex-wrap justify-end gap-2">
                       <button
                         className="rounded-md border border-slate-300 bg-white px-3 py-1.5 font-bold text-slate-800 hover:bg-slate-50"
-                        onClick={() => setSelectedInvoiceNumber(invoice.invoiceNumber)}
+                        onClick={() => openInvoice(invoice.invoiceNumber)}
                         type="button"
                       >
                         View
                       </button>
+                      {isPaid ? null : (
+                        <button
+                          className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 font-bold text-amber-900 hover:bg-amber-100"
+                          data-customer-invoice-folder-reminder={invoice.invoiceNumber}
+                          onClick={() => preparePaymentReminder(invoice)}
+                          type="button"
+                        >
+                          Send reminder
+                        </button>
+                      )}
+                      <select
+                        aria-label={`Payment method for ${invoice.invoiceNumber}`}
+                        className="min-h-9 rounded-md border border-slate-300 bg-white px-2 text-sm font-bold text-slate-800"
+                        data-customer-invoice-folder-paid-method={invoice.invoiceNumber}
+                        onChange={(event) =>
+                          updatePaymentMethod(invoice.invoiceNumber, event.target.value as PaymentMethod)
+                        }
+                        value={paymentMethod}
+                      >
+                        <option>Bank transfer</option>
+                        <option>Card</option>
+                        <option>Cash</option>
+                      </select>
                       <button
-                        className="rounded-md border border-slate-300 bg-white px-3 py-1.5 font-bold text-slate-800 opacity-60"
-                        title="Use the guarded invoice workbench for live email sending."
+                        className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 font-bold text-emerald-800 hover:bg-emerald-100"
+                        data-customer-invoice-folder-mark-paid={invoice.invoiceNumber}
+                        onClick={() => markInvoicePaid(invoice)}
                         type="button"
                       >
-                        Email
+                        Mark paid
                       </button>
                     </div>
                   </td>
@@ -167,8 +256,12 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
                 Only this selected invoice is shown below.
               </p>
             </div>
-            <span className={`w-fit rounded-md border px-3 py-1 text-sm font-bold ${statusClass(selectedInvoice.status)}`}>
-              {displayInvoiceStatus(selectedInvoice.status)}
+            <span
+              className={`w-fit rounded-md border px-3 py-1 text-sm font-bold ${statusClass(
+                selectedInvoiceStatus,
+              )}`}
+            >
+              {selectedInvoiceStatus}
             </span>
           </div>
 
@@ -192,6 +285,58 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
               </tbody>
             </table>
           </div>
+          <div
+            className="mt-3 grid gap-3 rounded-md border border-slate-200 bg-white p-3 text-sm md:grid-cols-[minmax(14rem,1fr)_minmax(14rem,1fr)]"
+            data-customer-invoice-folder-selected-actions={selectedInvoice.invoiceNumber}
+          >
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">Invoice status</p>
+              <p className="mt-1 font-bold text-slate-950">
+                {selectedInvoiceStatus} · Due {selectedInvoiceBalance}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-end gap-2 md:justify-end">
+              {selectedInvoiceIsPaid ? null : (
+                <button
+                  className="min-h-9 rounded-md border border-amber-300 bg-amber-50 px-3 text-sm font-bold text-amber-900 hover:bg-amber-100"
+                  data-customer-invoice-folder-selected-reminder={selectedInvoice.invoiceNumber}
+                  onClick={() => preparePaymentReminder(selectedInvoice)}
+                  type="button"
+                >
+                  Send reminder
+                </button>
+              )}
+              <select
+                aria-label={`Payment method for selected invoice ${selectedInvoice.invoiceNumber}`}
+                className="min-h-9 rounded-md border border-slate-300 bg-white px-2 text-sm font-bold text-slate-800"
+                data-customer-invoice-folder-selected-paid-method={selectedInvoice.invoiceNumber}
+                onChange={(event) =>
+                  updatePaymentMethod(selectedInvoice.invoiceNumber, event.target.value as PaymentMethod)
+                }
+                value={selectedPaymentMethod}
+              >
+                <option>Bank transfer</option>
+                <option>Card</option>
+                <option>Cash</option>
+              </select>
+              <button
+                className="min-h-9 rounded-md border border-emerald-300 bg-emerald-50 px-3 text-sm font-bold text-emerald-800 hover:bg-emerald-100"
+                data-customer-invoice-folder-selected-mark-paid={selectedInvoice.invoiceNumber}
+                onClick={() => markInvoicePaid(selectedInvoice)}
+                type="button"
+              >
+                Mark paid + thank you
+              </button>
+            </div>
+          </div>
+          {invoiceActionMessage ? (
+            <p
+              className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-900"
+              data-customer-invoice-folder-action-message="true"
+            >
+              {invoiceActionMessage}
+            </p>
+          ) : null}
         </div>
       ) : (
         <div className="border-t border-slate-200 bg-slate-50 px-4 py-4 text-sm font-semibold text-slate-600">

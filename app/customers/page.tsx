@@ -2969,6 +2969,7 @@ export default function MockCustomerDashboardPage() {
   ]);
   const selectedCustomerBillingInvoiceDetail =
     selectedCustomerBillingInvoiceRows.find((row) => row.key === selectedCustomerInvoiceDetailKey) ?? null;
+  const selectedCustomerWorkspaceOpen = customerFolderJobViewState.status !== "idle";
   const customerMonthlyBillingAccountReviewCount = useMemo(() => {
     const invoicedReferences = invoicedReferenceSetFrom(issuedCustomerInvoices);
     const suppressedInvoiceReferences = new Set([
@@ -6486,10 +6487,11 @@ export default function MockCustomerDashboardPage() {
           </div>
         </header>
 
-        <section
-          className="rounded-lg border border-slate-200 bg-white shadow-sm"
-          data-customer-billing-overview="true"
-        >
+        {!selectedCustomerWorkspaceOpen ? (
+          <section
+            className="rounded-lg border border-slate-200 bg-white shadow-sm"
+            data-customer-billing-overview="true"
+          >
           <div className="border-b border-slate-200 p-4 sm:p-5">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
@@ -6599,7 +6601,8 @@ export default function MockCustomerDashboardPage() {
               </tbody>
             </table>
           </div>
-        </section>
+          </section>
+        ) : null}
 
         <section
           className="rounded-lg border border-slate-200 bg-white shadow-sm"
@@ -6609,34 +6612,52 @@ export default function MockCustomerDashboardPage() {
           <div className="border-b border-slate-200 p-4 sm:p-5">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <h2 className="text-lg font-bold text-slate-950">Find Customer Folder</h2>
+                <h2 className="text-lg font-bold text-slate-950">
+                  {selectedCustomerWorkspaceOpen ? "Selected Customer" : "Find Customer Folder"}
+                </h2>
                 <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
-                  Search the customer or company, open the correct folder, then use Monthly Billing Queue below to
-                  prepare the bill.
+                  {selectedCustomerWorkspaceOpen
+                    ? "Only the selected customer's jobs, invoices, and monthly invoice prep are shown here."
+                    : "Search the customer or company, open the correct folder, then use Monthly Billing Queue below to prepare the bill."}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                <p
-                  className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-700"
-                  data-customer-folder-finder-count="true"
-                >
-                  {customerFolderFinderShowingStart}-{customerFolderFinderShowingEnd} of{" "}
-                  {filteredCustomers.length} folders
-                </p>
-                <button
-                  className="min-h-8 whitespace-nowrap rounded-md border border-slate-900 bg-slate-900 px-2.5 py-1 text-xs font-bold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-                  data-customer-folder-finder-load-accounts="true"
-                  disabled={regularCustomerAccountReadState.status === "loading"}
-                  onClick={loadRegularCustomerAccounts}
-                  type="button"
-                >
-                  {regularCustomerAccountReadState.status === "loading" ? "Loading" : "Load Accounts"}
-                </button>
+                {selectedCustomerWorkspaceOpen ? (
+                  <button
+                    className="min-h-8 whitespace-nowrap rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-bold text-slate-800 transition hover:border-slate-700"
+                    data-selected-customer-back-to-all="true"
+                    onClick={() => showAllCustomerFolderFinderRows(1)}
+                    type="button"
+                  >
+                    Back to all customers
+                  </button>
+                ) : (
+                  <>
+                    <p
+                      className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-700"
+                      data-customer-folder-finder-count="true"
+                    >
+                      {customerFolderFinderShowingStart}-{customerFolderFinderShowingEnd} of{" "}
+                      {filteredCustomers.length} folders
+                    </p>
+                    <button
+                      className="min-h-8 whitespace-nowrap rounded-md border border-slate-900 bg-slate-900 px-2.5 py-1 text-xs font-bold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      data-customer-folder-finder-load-accounts="true"
+                      disabled={regularCustomerAccountReadState.status === "loading"}
+                      onClick={loadRegularCustomerAccounts}
+                      type="button"
+                    >
+                      {regularCustomerAccountReadState.status === "loading" ? "Loading" : "Load Accounts"}
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>
 
           <div className="p-4 sm:p-5">
+            {!selectedCustomerWorkspaceOpen ? (
+              <>
             <div className="grid gap-3 lg:grid-cols-[minmax(18rem,0.9fr)_minmax(16rem,1fr)] lg:items-start">
               <div className="relative flex flex-col gap-1 text-sm font-semibold text-slate-700">
                 <span>All customers</span>
@@ -6861,6 +6882,8 @@ export default function MockCustomerDashboardPage() {
                 </div>
               )}
             </div>
+              </>
+            ) : null}
 
             {customerFolderJobViewState.status !== "idle" ? (
               <section
@@ -7455,11 +7478,12 @@ export default function MockCustomerDashboardPage() {
           </div>
         </section>
 
-        <section
-          className="rounded-lg border border-emerald-200 bg-white shadow-sm"
-          data-customer-monthly-billing-queue="true"
-          data-unbilled-customers-sector="true"
-        >
+        {!selectedCustomerWorkspaceOpen ? (
+          <section
+            className="rounded-lg border border-emerald-200 bg-white shadow-sm"
+            data-customer-monthly-billing-queue="true"
+            data-unbilled-customers-sector="true"
+          >
           <div className="border-b border-emerald-200 bg-emerald-50/60 p-4 sm:p-5">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
@@ -7664,6 +7688,7 @@ export default function MockCustomerDashboardPage() {
 	            call providers, or message customers.
 	          </p>
 	        </section>
+        ) : null}
 
         <details
           className="rounded-lg border border-slate-200 bg-white shadow-sm"

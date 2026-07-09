@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const pagePath = "app/customers/[customerId]/page.tsx";
+const invoiceFolderPanelPath = "app/customers/[customerId]/customer-invoice-folder-panel.tsx";
 const prefixPanelPath = "app/customers/[customerId]/invoice-prefix-settings-panel.tsx";
 const savedBookingsPanelPath = "app/customers/[customerId]/saved-bookings-panel.tsx";
 
-const [page, prefixPanel, savedBookingsPanel] = await Promise.all(
-  [pagePath, prefixPanelPath, savedBookingsPanelPath].map((path) => readFile(path, "utf8")),
+const [page, invoiceFolderPanel, prefixPanel, savedBookingsPanel] = await Promise.all(
+  [pagePath, invoiceFolderPanelPath, prefixPanelPath, savedBookingsPanelPath].map((path) => readFile(path, "utf8")),
 );
 
 function assertIncludes(source, fragment, label = fragment) {
@@ -17,12 +18,17 @@ for (const fragment of [
   'data-customer-folder-compact-summary="true"',
   'data-customer-folder-compact-admin-rows="true"',
   'data-customer-folder-details="true"',
-  'data-customer-invoice-rules="true"',
   'data-customer-booking-history="true"',
   'data-customer-job-status-index="true"',
 ]) {
   assertIncludes(page, fragment, `compact customer folder marker ${fragment}`);
 }
+
+assertIncludes(
+  invoiceFolderPanel,
+  'data-customer-invoice-rules="true"',
+  "compact customer folder marker data-customer-invoice-rules",
+);
 
 for (const forbidden of [
   'className="grid gap-4 lg:grid-cols-3"',

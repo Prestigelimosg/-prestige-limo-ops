@@ -7,7 +7,7 @@ import {
   type MockCustomer,
   type MockCustomerBooking,
 } from "../_data/mock-customers";
-import { CustomerInvoicePrefixSettingsPanel } from "./invoice-prefix-settings-panel";
+import { CustomerInvoiceFolderPanel } from "./customer-invoice-folder-panel";
 import { CustomerFolderSavedBookingsPanel } from "./saved-bookings-panel";
 
 type CustomerFolderPageProps = {
@@ -439,50 +439,7 @@ export default async function MockCustomerFolderPage({ params }: CustomerFolderP
           ) : null}
         </section>
 
-        <section className="rounded-md border border-slate-200 bg-white p-3 shadow-sm" data-customer-invoice-rules="true">
-          <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-            <div>
-              <h2 className="text-base font-bold text-slate-950">Invoices</h2>
-              <p className="mt-1 text-sm text-slate-600">
-                Prefix <strong>{customer.invoicePrefix}</strong> · Examples {customer.invoiceExamples.join(", ")}
-              </p>
-            </div>
-            <p className="max-w-2xl text-xs leading-5 text-slate-600">
-              Invoice numbers are unique and immutable once issued. Prefix changes are protected to avoid messy
-              history.
-            </p>
-          </div>
-          <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(20rem,0.8fr)_minmax(26rem,1.2fr)]">
-            <div>
-              <CustomerInvoicePrefixSettingsPanel
-                customerAccount={customer.companyName}
-                suggestedPrefix={customer.invoicePrefix}
-              />
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[560px] border-collapse text-left text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 text-xs uppercase tracking-[0.14em] text-slate-500">
-                    <th className="py-2 pr-4">Invoice</th>
-                    <th className="py-2 pr-4">Status</th>
-                    <th className="py-2 pr-4">Amount</th>
-                    <th className="py-2">Due date</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {customer.invoices.map((invoice) => (
-                    <tr className="border-b border-slate-100 last:border-b-0" key={invoice.invoiceNumber}>
-                      <td className="py-3 pr-4 font-bold text-slate-950">{invoice.invoiceNumber}</td>
-                      <td className="py-3 pr-4 text-slate-700">{invoice.status}</td>
-                      <td className="py-3 pr-4 text-slate-700">{invoice.amount}</td>
-                      <td className="py-3 text-slate-700">{invoice.dueDate}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </section>
+        <CustomerInvoiceFolderPanel customer={customer} />
 
         <section className="rounded-md border border-slate-200 bg-white p-3 shadow-sm" data-customer-booking-history="true">
           <h2 className="text-base font-bold text-slate-950">All booking history</h2>

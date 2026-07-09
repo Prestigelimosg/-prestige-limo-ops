@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 const helperPath = "lib/admin-customer-invoice-prefix-settings.ts";
 const routePath = "app/api/admin-customer-invoice-prefix-settings/route.ts";
 const panelPath = "app/customers/[customerId]/invoice-prefix-settings-panel.tsx";
-const customerFolderPath = "app/customers/[customerId]/page.tsx";
+const customerInvoiceFolderPanelPath = "app/customers/[customerId]/customer-invoice-folder-panel.tsx";
 const appPagePath = "app/page.tsx";
 const customerBookingPagePath = "app/book/page.tsx";
 const customerPortalPagePath = "app/my-bookings/page.tsx";
@@ -38,7 +38,7 @@ const [
   helper,
   route,
   panel,
-  customerFolder,
+  customerInvoiceFolderPanel,
   appPage,
   customerBookingPage,
   customerPortalPage,
@@ -49,7 +49,7 @@ const [
   readFile(helperPath, "utf8"),
   readFile(routePath, "utf8"),
   readFile(panelPath, "utf8"),
-  readFile(customerFolderPath, "utf8"),
+  readFile(customerInvoiceFolderPanelPath, "utf8"),
   readFile(appPagePath, "utf8"),
   readFile(customerBookingPagePath, "utf8"),
   readFile(customerPortalPagePath, "utf8"),
@@ -139,22 +139,22 @@ for (const fragment of [
 }
 
 assertIncludes(
-  customerFolder,
+  customerInvoiceFolderPanel,
   'import { CustomerInvoicePrefixSettingsPanel } from "./invoice-prefix-settings-panel";',
   "customer folder prefix panel import",
 );
 assertIncludes(
-  customerFolder,
+  customerInvoiceFolderPanel,
   "<CustomerInvoicePrefixSettingsPanel",
   "customer folder prefix panel mount",
 );
 assertIncludes(
-  customerFolder,
+  customerInvoiceFolderPanel,
   "customerAccount={customer.companyName}",
   "customer folder account binding",
 );
 assertIncludes(
-  customerFolder,
+  customerInvoiceFolderPanel,
   "suggestedPrefix={customer.invoicePrefix}",
   "customer folder suggested prefix binding",
 );

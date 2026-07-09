@@ -20,6 +20,14 @@ function statusClass(status: string) {
   return "border-sky-200 bg-sky-50 text-sky-800";
 }
 
+function displayInvoiceStatus(status: string) {
+  if (/paid/i.test(status) && !/partially/i.test(status)) {
+    return "Paid";
+  }
+
+  return "Pending";
+}
+
 function invoiceBalance(invoice: MockCustomerInvoice, booking: MockCustomerBooking | undefined) {
   if (booking?.balanceDue) {
     return booking.balanceDue;
@@ -52,9 +60,9 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
       <div className="border-b border-slate-200 px-4 py-3">
         <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <h2 className="text-lg font-bold text-slate-950">{customer.companyName}</h2>
+            <h2 className="text-lg font-bold text-slate-950">Invoices</h2>
             <p className="mt-0.5 text-sm font-semibold text-slate-600">
-              Customer invoices, balances, and reviewed line items.
+              Date, invoice number, amount, balance due, and paid or pending status for this customer.
             </p>
           </div>
           <div className="grid grid-cols-3 gap-2 text-center text-xs font-semibold text-slate-600 sm:min-w-[28rem]">
@@ -81,7 +89,7 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
               <th className="px-4 py-3">Date</th>
               <th className="px-4 py-3">Invoice number</th>
               <th className="px-4 py-3">Amount</th>
-              <th className="px-4 py-3">Balance due</th>
+              <th className="px-4 py-3">Due</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3 text-right">Action</th>
             </tr>
@@ -122,7 +130,7 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
                   <td className="px-4 py-3 font-bold text-slate-950">{balance}</td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex rounded-md border px-3 py-1 font-bold ${statusClass(invoice.status)}`}>
-                      {invoice.status}
+                      {displayInvoiceStatus(invoice.status)}
                     </span>
                   </td>
                   <td className="px-4 py-3">
@@ -160,7 +168,7 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
               </p>
             </div>
             <span className={`w-fit rounded-md border px-3 py-1 text-sm font-bold ${statusClass(selectedInvoice.status)}`}>
-              {selectedInvoice.status}
+              {displayInvoiceStatus(selectedInvoice.status)}
             </span>
           </div>
 
@@ -201,9 +209,6 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
         </div>
       </details>
 
-      <p className="border-t border-slate-200 px-4 py-3 text-xs font-semibold leading-5 text-slate-600">
-        Display-only customer folder view. Email/PDF/payment actions still use the existing guarded invoice workflow.
-      </p>
     </section>
   );
 }

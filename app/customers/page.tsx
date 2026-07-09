@@ -141,7 +141,7 @@ const outstandingReviewSortOptions: Array<{ label: string; value: OutstandingRev
 
 const outstandingReviewPageSizeOptions = [10, 25];
 const customerQueuePageSizeOptions = [10, 25];
-const customerFolderFinderPageSize = 10;
+const customerFolderFinderPageSize = 20;
 const customerBillingDocumentPageSize = 5;
 type CustomerInvoiceWorkspaceTab = "create-invoice" | "statements" | "outstanding" | "follow-up";
 
@@ -2919,6 +2919,51 @@ export default function MockCustomerDashboardPage() {
         },
       ),
     [customerBillingOverviewRows],
+  );
+  const filteredCustomerBillingOverviewRows = useMemo(() => {
+    if (!normalizedSearchTerm) {
+      return customerBillingOverviewRows;
+    }
+
+    return customerBillingOverviewRows.filter((row) =>
+      [
+        row.customerName,
+        row.customerId,
+        row.statusLabel,
+        row.latestDateLabel,
+        row.invoiceAmountLabel,
+        row.balanceLabel,
+      ]
+        .join(" ")
+        .toLowerCase()
+      .includes(normalizedSearchTerm),
+    );
+  }, [customerBillingOverviewRows, normalizedSearchTerm]);
+  const customerBillingOverviewTotalPages = Math.max(
+    1,
+    Math.ceil(filteredCustomerBillingOverviewRows.length / customerFolderFinderPageSize),
+  );
+  const activeCustomerBillingOverviewPage = Math.min(
+    currentCustomerFolderFinderPage,
+    customerBillingOverviewTotalPages,
+  );
+  const customerBillingOverviewStartIndex =
+    filteredCustomerBillingOverviewRows.length === 0
+      ? 0
+      : (activeCustomerBillingOverviewPage - 1) * customerFolderFinderPageSize;
+  const paginatedCustomerBillingOverviewRows = filteredCustomerBillingOverviewRows.slice(
+    customerBillingOverviewStartIndex,
+    customerBillingOverviewStartIndex + customerFolderFinderPageSize,
+  );
+  const customerBillingOverviewShowingStart =
+    filteredCustomerBillingOverviewRows.length === 0 ? 0 : customerBillingOverviewStartIndex + 1;
+  const customerBillingOverviewShowingEnd = Math.min(
+    customerBillingOverviewStartIndex + customerFolderFinderPageSize,
+    filteredCustomerBillingOverviewRows.length,
+  );
+  const customerBillingOverviewPageNumbers = Array.from(
+    { length: customerBillingOverviewTotalPages },
+    (_, pageIndex) => pageIndex + 1,
   );
   const selectedCustomerBillingInvoiceRows = useMemo<SelectedCustomerBillingInvoiceRow[]>(() => {
     const selectedCustomerId = normalizeCustomerFolderMatch(customerFolderJobViewState.customerId);
@@ -6456,26 +6501,68 @@ export default function MockCustomerDashboardPage() {
                   invoice.
                 </p>
               </div>
-              <div className="grid grid-cols-2 gap-2 text-xs font-bold text-slate-700 sm:grid-cols-4">
-                <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-                  <span className="block text-[10px] uppercase text-slate-500">Customers</span>
-                  <span className="text-base text-slate-950">{customerBillingOverviewTotals.rowCount}</span>
-                </p>
-                <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
-                  <span className="block text-[10px] uppercase">Draft</span>
-                  <span className="text-base">{customerBillingOverviewTotals.draftCount}</span>
-                </p>
-                <p className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sky-900">
-                  <span className="block text-[10px] uppercase">Pending</span>
-                  <span className="text-base">{customerBillingOverviewTotals.pendingCount}</span>
-                </p>
-                <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-900">
-                  <span className="block text-[10px] uppercase">Balance</span>
-                  <span className="text-base">
-                    {formatInvoiceAmount(customerBillingOverviewTotals.balanceCents)}
-                  </span>
-                </p>
+              <div className="flex flex-col gap-2 lg:items-end">
+                <div className="grid grid-cols-2 gap-2 text-xs font-bold text-slate-700 sm:grid-cols-4">
+                  <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                    <span className="block text-[10px] uppercase text-slate-500">Customers</span>
+                    <span className="text-base text-slate-950">{customerBillingOverviewTotals.rowCount}</span>
+                  </p>
+                  <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
+                    <span className="block text-[10px] uppercase">Draft</span>
+                    <span className="text-base">{customerBillingOverviewTotals.draftCount}</span>
+                  </p>
+                  <p className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sky-900">
+                    <span className="block text-[10px] uppercase">Pending</span>
+                    <span className="text-base">{customerBillingOverviewTotals.pendingCount}</span>
+                  </p>
+                  <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-900">
+                    <span className="block text-[10px] uppercase">Balance</span>
+                    <span className="text-base">
+                      {formatInvoiceAmount(customerBillingOverviewTotals.balanceCents)}
+                    </span>
+                  </p>
+                </div>
+                <button
+                  className="min-h-9 w-fit whitespace-nowrap rounded-md border border-slate-900 bg-slate-900 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  data-customer-billing-overview-load-accounts="true"
+                  disabled={regularCustomerAccountReadState.status === "loading"}
+                  onClick={loadRegularCustomerAccounts}
+                  type="button"
+                >
+                  {regularCustomerAccountReadState.status === "loading" ? "Loading accounts" : "Load Accounts"}
+                </button>
               </div>
+            </div>
+            <div className="mt-4 grid gap-2 lg:grid-cols-[minmax(18rem,1fr)_auto] lg:items-center">
+              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
+                Quick search
+                <input
+                  className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                  data-customer-billing-overview-search="true"
+                  data-customer-search="true"
+                  onChange={(event) => updateCustomerFolderFinderSearch(event.target.value)}
+                  placeholder="Search customer, account, invoice status, date, amount"
+                  type="search"
+                  value={searchTerm}
+                />
+              </label>
+              <p
+                aria-live="polite"
+                className={`rounded-md border px-3 py-2 text-xs font-semibold leading-5 ${
+                  regularCustomerAccountReadState.tone === "error"
+                    ? "border-rose-200 bg-rose-50 text-rose-700"
+                    : regularCustomerAccountReadState.status === "loading"
+                      ? "border-slate-200 bg-slate-50 text-slate-700"
+                      : "border-slate-200 bg-slate-50 text-slate-600"
+                }`}
+                data-customer-billing-overview-feedback="true"
+              >
+                {normalizedSearchTerm
+                  ? `${filteredCustomerBillingOverviewRows.length} customer${
+                      filteredCustomerBillingOverviewRows.length === 1 ? "" : "s"
+                    } match "${searchTerm}".`
+                  : `${regularCustomerAccountReadState.message} Showing ${customerBillingOverviewShowingStart}-${customerBillingOverviewShowingEnd} of ${filteredCustomerBillingOverviewRows.length} customers.`}
+              </p>
             </div>
           </div>
 
@@ -6494,8 +6581,8 @@ export default function MockCustomerDashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {customerBillingOverviewRows.length > 0 ? (
-                  customerBillingOverviewRows.map((row) => (
+                {paginatedCustomerBillingOverviewRows.length > 0 ? (
+                  paginatedCustomerBillingOverviewRows.map((row) => (
                     <tr
                       className="align-top transition hover:bg-slate-50"
                       data-customer-billing-overview-row={row.customerFolderKey}
@@ -6548,20 +6635,47 @@ export default function MockCustomerDashboardPage() {
                 ) : (
                   <tr>
                     <td className="px-3 py-5 text-sm font-semibold text-slate-600" colSpan={6}>
-                      Load customer accounts or billing documents to show the customer billing overview.
+                      Load customer accounts or clear the search to show the customer billing overview.
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
+            {customerBillingOverviewTotalPages > 1 ? (
+              <div
+                className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-slate-600"
+                data-customer-billing-overview-pages="true"
+              >
+                <span>
+                  Page {activeCustomerBillingOverviewPage} of {customerBillingOverviewTotalPages}
+                </span>
+                <div className="flex flex-wrap gap-1">
+                  {customerBillingOverviewPageNumbers.map((pageNumber) => (
+                    <button
+                      className={`min-h-8 min-w-8 rounded-md border px-2 transition ${
+                        pageNumber === activeCustomerBillingOverviewPage
+                          ? "border-slate-900 bg-slate-900 text-white"
+                          : "border-slate-300 bg-white text-slate-700 hover:border-slate-700"
+                      }`}
+                      data-customer-billing-overview-page={pageNumber}
+                      key={pageNumber}
+                      onClick={() => showAllCustomerFolderFinderRows(pageNumber)}
+                      type="button"
+                    >
+                      {pageNumber}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
           </section>
         ) : null}
 
+        {selectedCustomerWorkspaceOpen ? (
         <section
           className="rounded-lg border border-slate-200 bg-white shadow-sm"
-          data-customer-dashboard="true"
-          data-customer-folder-finder="true"
+          data-selected-customer-dashboard="true"
         >
           <div className="border-b border-slate-200 p-4 sm:p-5">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -7456,217 +7570,6 @@ export default function MockCustomerDashboardPage() {
             ) : null}
           </div>
         </section>
-
-        {!selectedCustomerWorkspaceOpen ? (
-          <section
-            className="rounded-lg border border-emerald-200 bg-white shadow-sm"
-            data-customer-monthly-billing-queue="true"
-            data-unbilled-customers-sector="true"
-          >
-          <div className="border-b border-emerald-200 bg-emerald-50/60 p-4 sm:p-5">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-800">
-                  Admin billing
-                </p>
-                <h2 className="mt-1 text-lg font-bold text-slate-950">Monthly Billing Queue</h2>
-                <p className="mt-1 max-w-3xl text-sm font-semibold leading-6 text-emerald-950">
-                  Choose the customer/month with ready completed jobs, then click Prepare monthly bill. Review in the
-                  invoice workbench before any invoice number, PDF, payment, or send action. Same company names stay
-                  separate by saved account ID and passenger scope.
-                </p>
-              </div>
-              <p
-                className="rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-bold text-emerald-950"
-                data-unbilled-customers-count="true"
-              >
-                {unbilledCustomersShowingLabel}
-              </p>
-            </div>
-            <div
-              className="mt-3 grid gap-3 lg:grid-cols-[minmax(18rem,1fr)_auto] lg:items-end"
-              data-customer-monthly-billing-controls="true"
-              data-unbilled-customers-dropdown="true"
-            >
-              <label className="text-sm font-semibold text-slate-700">
-                Billing account/month
-                <select
-                  className="mt-1 min-h-10 w-full rounded-md border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950 outline-none focus:border-emerald-700"
-                  data-customer-monthly-billing-group-select="true"
-                  data-unbilled-customers-select="true"
-                  onChange={(event) => updateSelectedMonthlyBillingGroup(event.target.value)}
-                  value={selectedMonthlyBillingGroupKey}
-                >
-                  <option value="">All billing account/month groups</option>
-                  {visibleCustomerMonthlyBillingGroups.map((group) => (
-                    <option key={group.key} value={group.key}>
-                      {group.customerName}
-                      {group.accountScopeLabel ? ` - ${group.accountScopeLabel}` : ""} - Account{" "}
-                      {group.customerId} - {group.billingMonthLabel} -{" "}
-                      {group.rows.length} job
-                      {group.rows.length === 1 ? "" : "s"}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {selectedMonthlyBillingGroup ? (
-                <button
-                  className="min-h-10 rounded-md border border-emerald-900 bg-emerald-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-100 disabled:text-slate-500"
-                  data-customer-monthly-billing-prepare-group="true"
-                  disabled={
-                    selectedMonthlyBillingGroup.needsScopeReview ||
-                    preparingMonthlyBillingGroupKey === selectedMonthlyBillingGroup.key
-                  }
-                  onClick={() => prepareMonthlyBillingGroupForInvoice(selectedMonthlyBillingGroup)}
-                  type="button"
-                >
-                  {preparingMonthlyBillingGroupKey === selectedMonthlyBillingGroup.key
-                    ? "Preparing"
-                    : selectedMonthlyBillingGroup.needsScopeReview
-                      ? "Review scope"
-                      : "Prepare monthly bill"}
-                </button>
-              ) : null}
-            </div>
-            {selectedMonthlyBillingGroup ? (
-              <div
-                className="mt-3 rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold leading-5 text-emerald-950"
-                data-customer-monthly-billing-group-summary="true"
-              >
-                {selectedMonthlyBillingGroup.customerName} / Account {selectedMonthlyBillingGroup.customerId} /{" "}
-                {selectedMonthlyBillingGroup.accountScopeLabel
-                  ? `${selectedMonthlyBillingGroup.accountScopeLabel} / `
-                  : ""}
-                {selectedMonthlyBillingGroup.billingMonthLabel} / {selectedMonthlyBillingGroup.rows.length} job
-                {selectedMonthlyBillingGroup.rows.length === 1 ? "" : "s"} selected.
-              </div>
-            ) : null}
-            {customerMonthlyBillingAccountReviewCount > 0 ? (
-              <p
-                className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-950"
-                data-customer-monthly-billing-account-review-count="true"
-              >
-                {customerMonthlyBillingAccountReviewCount} closeout-ready job
-                {customerMonthlyBillingAccountReviewCount === 1 ? "" : "s"} need a saved billing account ID or
-                passenger scope before monthly billing. Open the exact booking and fix the customer account before
-                preparing an invoice.
-              </p>
-            ) : null}
-          </div>
-
-          <div className="max-h-72 overflow-auto" data-unbilled-customers-scroll-list="true">
-            {visibleUnbilledCustomerRows.length > 0 ? (
-              <table
-                className="w-full min-w-[820px] border-collapse text-left text-sm"
-                data-unbilled-customers-list="true"
-              >
-	                <thead className="sticky top-0 z-10 bg-white">
-	                  <tr className="border-b border-emerald-100 text-[11px] uppercase tracking-[0.1em] text-slate-500">
-	                    <th className="px-3 py-2 font-bold sm:px-4">Customer</th>
-	                    <th className="px-3 py-2 font-bold">Month</th>
-	                    <th className="px-3 py-2 font-bold">Billing status</th>
-	                    <th className="px-3 py-2 font-bold">Job / route</th>
-	                    <th className="px-3 py-2 text-right font-bold sm:px-4">Action</th>
-	                  </tr>
-	                </thead>
-                <tbody>
-                  {visibleUnbilledCustomerRows.map((row) => {
-                    const prepareButtonPrepared = isUnbilledPrepareButtonPrepared(row.key);
-
-                    return (
-                      <tr
-	                        className="border-b border-slate-100 text-sm last:border-b-0 hover:bg-emerald-50/40"
-                        data-unbilled-customer-row={row.key}
-                        key={row.key}
-                      >
-                        <td className="px-3 py-2 sm:px-4">
-                          <p className="max-w-[13rem] truncate font-bold text-slate-950">{row.customerName}</p>
-                          <p className="max-w-[13rem] truncate text-xs font-semibold text-slate-500">
-                            Account {row.customerId}
-                          </p>
-                          {row.accountScopeLabel ? (
-                            <p className="max-w-[13rem] truncate text-xs font-semibold text-emerald-800">
-                              {row.accountScopeLabel}
-                            </p>
-                          ) : (
-                            <p className="max-w-[13rem] truncate text-xs font-semibold text-amber-700">
-                              Passenger scope needs review
-                            </p>
-                          )}
-                          <p className="max-w-[13rem] truncate text-xs text-slate-500" title={row.reference}>
-                            {compactCustomerBookingReference(row.reference)}
-                          </p>
-                        </td>
-	                        <td className="px-3 py-2">
-	                          <p className="font-bold text-slate-950">{row.billingMonthLabel}</p>
-	                          <p className="text-xs font-semibold text-slate-500">{row.amount}</p>
-	                        </td>
-	                        <td className="px-3 py-2">
-	                          <p className="font-semibold text-emerald-950">{row.statusLabel}</p>
-	                          {row.billingBreakdown ? (
-	                            <p
-	                              className="mt-1 max-w-[14rem] text-xs font-semibold leading-4 text-emerald-800"
-	                              data-unbilled-customer-billing-breakdown={row.key}
-	                            >
-	                              {row.billingBreakdown}
-	                            </p>
-	                          ) : null}
-	                        </td>
-	                        <td className="px-3 py-2">
-                          <p className="max-w-[18rem] truncate font-semibold text-slate-800">
-                            {row.dateLabel} · {row.service}
-                          </p>
-                          <p className="max-w-[18rem] truncate text-xs text-slate-500">{row.route}</p>
-                        </td>
-                        <td className="px-3 py-2 text-right sm:px-4">
-                          <div className="inline-flex items-center gap-2">
-                            <button
-                              className="inline-flex min-h-8 items-center justify-center rounded-md border border-emerald-300 bg-white px-3 text-center text-xs font-bold text-emerald-800 transition hover:bg-emerald-50"
-                              data-unbilled-customer-view-jobs={row.key}
-                              onClick={() => viewCustomerJobsFromBillingRow(row)}
-                              type="button"
-                            >
-                              Jobs
-                            </button>
-                            <button
-                              className={`inline-flex min-h-8 items-center justify-center rounded-md border px-3 text-center text-xs font-bold transition disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-100 disabled:text-slate-500 ${
-                                prepareButtonPrepared
-                                  ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-                                  : "border-slate-300 bg-white text-slate-800 hover:border-slate-700"
-                              }`}
-                              data-unbilled-customer-prepare-invoice={row.key}
-                              disabled={row.needsScopeReview}
-                              onClick={() => prepareCustomerInvoiceFromUnbilled(row)}
-                              type="button"
-                            >
-                              {row.needsScopeReview
-                                ? "Review scope"
-                                : prepareButtonPrepared
-                                  ? getUnbilledPrepareButtonLabel(row.key)
-                                  : "Prepare job"}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            ) : (
-	              <div className="p-5 text-sm leading-6 text-slate-600" data-unbilled-customers-empty="true">
-	                No closeout-ready jobs are waiting for monthly billing right now.
-	              </div>
-	            )}
-	          </div>
-	          <p
-	            className="border-t border-emerald-100 bg-emerald-50/60 px-4 py-3 text-xs font-semibold leading-5 text-emerald-950 sm:px-5"
-	            data-unbilled-customers-boundary="true"
-	          >
-	            Admin-only billing queue. Preparing a monthly bill only loads the invoice workbench for staff review;
-	            it does not issue invoices, reserve invoice numbers, email PDFs, create payment links, write payouts,
-	            call providers, or message customers.
-	          </p>
-	        </section>
         ) : null}
 
         {advancedInvoiceWorkbenchVisible ? (
@@ -7698,7 +7601,7 @@ export default function MockCustomerDashboardPage() {
                 <h2 className="mt-1 text-lg font-bold text-slate-950">Send Invoice Workbench</h2>
                 <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
                   Existing guarded controls for final staff review. Use the customer overview and invoice detail
-                  above first, then load one exact customer/month from the Monthly Billing Queue or create a manual
+                  above first, then load one exact customer/month from the selected customer folder or create a manual
                   billing document before any draft, issue, PDF, email, paid, unpaid, or credit action.
                 </p>
               </div>
@@ -7820,7 +7723,7 @@ export default function MockCustomerDashboardPage() {
                   className="text-sm font-semibold leading-5 text-slate-700"
                   data-customer-invoice-prep-empty="true"
                 >
-	                  No customer loaded. Use Prepare monthly bill from the Monthly Billing Queue to load jobs here.
+	                  No customer loaded. Open a customer from the overview, then prepare that customer&apos;s monthly invoice.
                 </p>
               )}
               <p

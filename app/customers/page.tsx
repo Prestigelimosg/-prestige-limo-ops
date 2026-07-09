@@ -408,6 +408,17 @@ type CustomerBillingOverviewRow = {
   statusLabel: "Draft" | "Pending" | "Ready" | "Paid" | "No invoices";
 };
 
+type SelectedCustomerBillingInvoiceRow = {
+  amountLabel: string;
+  balanceLabel: string;
+  customerName: string;
+  dateLabel: string;
+  documentNumber: string;
+  documentTypeLabel: string;
+  key: string;
+  statusLabel: "Draft" | "Pending" | "Paid";
+};
+
 type PlainInvoiceForm = {
   amount: string;
   billToEmail: string;
@@ -2887,6 +2898,58 @@ export default function MockCustomerDashboardPage() {
       ),
     [customerBillingOverviewRows],
   );
+  const selectedCustomerBillingInvoiceRows = useMemo<SelectedCustomerBillingInvoiceRow[]>(() => {
+    const selectedCustomerId = normalizeCustomerFolderMatch(customerFolderJobViewState.customerId);
+    const selectedCustomerName = normalizeCustomerFolderMatch(customerFolderJobViewState.customerName);
+
+    if (!selectedCustomerId && !selectedCustomerName) {
+      return [];
+    }
+
+    const rowMatchesSelectedCustomer = (customerId: string | null | undefined, customerName: string) => {
+      const rowCustomerId = normalizeCustomerFolderMatch(customerId);
+      const rowCustomerName = normalizeCustomerFolderMatch(customerName);
+
+      return (
+        Boolean(selectedCustomerId && rowCustomerId && rowCustomerId === selectedCustomerId) ||
+        Boolean(selectedCustomerName && rowCustomerName && rowCustomerName === selectedCustomerName)
+      );
+    };
+
+    const draftRows = customerInvoiceDrafts
+      .filter((draft) => rowMatchesSelectedCustomer(null, draft.customerName))
+      .map((draft): SelectedCustomerBillingInvoiceRow => ({
+        amountLabel: draft.amountLabel,
+        balanceLabel: draft.amountLabel,
+        customerName: draft.customerName,
+        dateLabel: draft.dueDateLabel || draft.createdAtLabel,
+        documentNumber: draft.documentNumber || draft.draftId,
+        documentTypeLabel: customerBillingDocumentLabel(draft.documentType),
+        key: `draft::${draft.draftId}`,
+        statusLabel: "Draft",
+      }));
+    const issuedRows = activeCustomerInvoiceRecords(issuedCustomerInvoices)
+      .filter((invoice) => rowMatchesSelectedCustomer(invoice.customerId, invoice.customerName))
+      .map((invoice): SelectedCustomerBillingInvoiceRow => ({
+        amountLabel: invoice.amountLabel,
+        balanceLabel: invoice.status === "Paid" ? formatInvoiceAmount(0) : invoice.amountLabel,
+        customerName: invoice.customerName,
+        dateLabel: invoice.issueDateLabel || invoice.dueDateLabel,
+        documentNumber: invoice.invoiceNumber,
+        documentTypeLabel: customerBillingDocumentLabel(invoice.documentType || "invoice"),
+        key: `issued::${invoice.invoiceNumber}`,
+        statusLabel: invoice.status === "Paid" ? "Paid" : "Pending",
+      }));
+
+    return [...draftRows, ...issuedRows].sort((firstRow, secondRow) =>
+      secondRow.dateLabel.localeCompare(firstRow.dateLabel),
+    );
+  }, [
+    customerFolderJobViewState.customerId,
+    customerFolderJobViewState.customerName,
+    customerInvoiceDrafts,
+    issuedCustomerInvoices,
+  ]);
   const customerMonthlyBillingAccountReviewCount = useMemo(() => {
     const invoicedReferences = invoicedReferenceSetFrom(issuedCustomerInvoices);
     const suppressedInvoiceReferences = new Set([
@@ -6759,6 +6822,91 @@ export default function MockCustomerDashboardPage() {
                 >
                   {customerFolderJobViewState.message}
                 </p>
+
+                <div
+                  className="mt-3 overflow-hidden rounded-md border border-slate-200 bg-white"
+                  data-selected-customer-invoice-list="true"
+                >
+                  <div className="flex flex-col gap-1 border-b border-slate-200 bg-white px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-950">Customer invoices</h4>
+                      <p className="text-xs font-semibold text-slate-500">
+                        Draft, pending, and paid documents for this selected customer.
+                      </p>
+                    </div>
+                    <p
+                      className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-bold text-slate-700"
+                      data-selected-customer-invoice-count="true"
+                    >
+                      {selectedCustomerBillingInvoiceRows.length} invoice
+                      {selectedCustomerBillingInvoiceRows.length === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                  {selectedCustomerBillingInvoiceRows.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[620px] text-left text-xs">
+                        <thead className="text-[11px] uppercase tracking-[0.08em] text-slate-500">
+                          <tr>
+                            <th className="border-b border-slate-100 px-3 py-2 font-bold">Date</th>
+                            <th className="border-b border-slate-100 px-3 py-2 font-bold">
+                              Invoice Number
+                            </th>
+                            <th className="border-b border-slate-100 px-3 py-2 font-bold">Type</th>
+                            <th className="border-b border-slate-100 px-3 py-2 text-right font-bold">
+                              Amount
+                            </th>
+                            <th className="border-b border-slate-100 px-3 py-2 text-right font-bold">
+                              Balance Due
+                            </th>
+                            <th className="border-b border-slate-100 px-3 py-2 text-right font-bold">
+                              Status
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedCustomerBillingInvoiceRows.map((invoice) => (
+                            <tr
+                              className="border-b border-slate-100 last:border-b-0"
+                              data-selected-customer-invoice-row={invoice.key}
+                              key={invoice.key}
+                            >
+                              <td className="px-3 py-2 font-semibold text-slate-700">
+                                {invoice.dateLabel}
+                              </td>
+                              <td className="px-3 py-2 font-bold text-slate-950">
+                                {invoice.documentNumber}
+                              </td>
+                              <td className="px-3 py-2 text-slate-700">{invoice.documentTypeLabel}</td>
+                              <td className="px-3 py-2 text-right font-semibold text-slate-950">
+                                {invoice.amountLabel}
+                              </td>
+                              <td className="px-3 py-2 text-right font-bold text-slate-950">
+                                {invoice.balanceLabel}
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                <span
+                                  className={`inline-flex min-h-7 items-center rounded-md border px-2 text-xs font-bold ${
+                                    invoice.statusLabel === "Draft"
+                                      ? "border-amber-200 bg-amber-50 text-amber-800"
+                                      : invoice.statusLabel === "Pending"
+                                        ? "border-sky-200 bg-sky-50 text-sky-800"
+                                        : "border-emerald-200 bg-emerald-50 text-emerald-800"
+                                  }`}
+                                >
+                                  {invoice.statusLabel}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="px-3 py-3 text-sm font-semibold text-slate-600">
+                      No draft, pending, or paid invoice documents found for this selected customer yet.
+                    </p>
+                  )}
+                </div>
 
                 {customerFolderJobViewState.status === "loaded" &&
                 customerFolderJobViewState.savedBookings.length > 0 ? (

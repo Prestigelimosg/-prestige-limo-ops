@@ -416,6 +416,7 @@ type SelectedCustomerBillingInvoiceRow = {
   documentNumber: string;
   documentTypeLabel: string;
   key: string;
+  lineItems: CustomerLocalInvoiceLineItem[];
   statusLabel: "Draft" | "Pending" | "Paid";
 };
 
@@ -2225,6 +2226,7 @@ export default function MockCustomerDashboardPage() {
       tone: "info",
     });
   const [expandedCustomerFolderJobReference, setExpandedCustomerFolderJobReference] = useState("");
+  const [selectedCustomerInvoiceDetailKey, setSelectedCustomerInvoiceDetailKey] = useState("");
   const [customerFolderExactBookingEditorState, setCustomerFolderExactBookingEditorState] =
     useState<CustomerFolderExactBookingEditorState>(initialCustomerFolderExactBookingEditorState);
   const [
@@ -2926,6 +2928,12 @@ export default function MockCustomerDashboardPage() {
         documentNumber: draft.documentNumber || draft.draftId,
         documentTypeLabel: customerBillingDocumentLabel(draft.documentType),
         key: `draft::${draft.draftId}`,
+        lineItems: [
+          {
+            amountLabel: draft.amountLabel,
+            description: draft.lineDescription,
+          },
+        ],
         statusLabel: "Draft",
       }));
     const issuedRows = activeCustomerInvoiceRecords(issuedCustomerInvoices)
@@ -2938,6 +2946,15 @@ export default function MockCustomerDashboardPage() {
         documentNumber: invoice.invoiceNumber,
         documentTypeLabel: customerBillingDocumentLabel(invoice.documentType || "invoice"),
         key: `issued::${invoice.invoiceNumber}`,
+        lineItems:
+          invoice.lineItems.length > 0
+            ? invoice.lineItems
+            : [
+                {
+                  amountLabel: invoice.amountLabel,
+                  description: invoice.lineItems[0]?.description || invoice.service,
+                },
+              ],
         statusLabel: invoice.status === "Paid" ? "Paid" : "Pending",
       }));
 
@@ -2950,6 +2967,8 @@ export default function MockCustomerDashboardPage() {
     customerInvoiceDrafts,
     issuedCustomerInvoices,
   ]);
+  const selectedCustomerBillingInvoiceDetail =
+    selectedCustomerBillingInvoiceRows.find((row) => row.key === selectedCustomerInvoiceDetailKey) ?? null;
   const customerMonthlyBillingAccountReviewCount = useMemo(() => {
     const invoicedReferences = invoicedReferenceSetFrom(issuedCustomerInvoices);
     const suppressedInvoiceReferences = new Set([
@@ -4215,6 +4234,7 @@ export default function MockCustomerDashboardPage() {
     setSearchTerm("");
     setCustomerFolderFinderPage(1);
     setExpandedCustomerFolderJobReference("");
+    setSelectedCustomerInvoiceDetailKey("");
     setCustomerFolderExactBookingEditorState(initialCustomerFolderExactBookingEditorState);
 
     setCustomerFolderJobViewState({
@@ -4273,6 +4293,7 @@ export default function MockCustomerDashboardPage() {
     setSearchTerm("");
     setCustomerFolderFinderPage(1);
     setExpandedCustomerFolderJobReference("");
+    setSelectedCustomerInvoiceDetailKey("");
     setCustomerFolderExactBookingEditorState(initialCustomerFolderExactBookingEditorState);
 
     setCustomerFolderJobViewState({
@@ -4331,6 +4352,7 @@ export default function MockCustomerDashboardPage() {
     setSearchTerm("");
     setCustomerFolderFinderPage(1);
     setExpandedCustomerFolderJobReference("");
+    setSelectedCustomerInvoiceDetailKey("");
     setCustomerFolderExactBookingEditorState(initialCustomerFolderExactBookingEditorState);
 
     setCustomerFolderJobViewState({
@@ -6873,8 +6895,15 @@ export default function MockCustomerDashboardPage() {
                               <td className="px-3 py-2 font-semibold text-slate-700">
                                 {invoice.dateLabel}
                               </td>
-                              <td className="px-3 py-2 font-bold text-slate-950">
-                                {invoice.documentNumber}
+                              <td className="px-3 py-2">
+                                <button
+                                  className="text-left font-bold text-slate-950 underline-offset-4 transition hover:text-sky-700 hover:underline"
+                                  data-selected-customer-invoice-open={invoice.key}
+                                  onClick={() => setSelectedCustomerInvoiceDetailKey(invoice.key)}
+                                  type="button"
+                                >
+                                  {invoice.documentNumber}
+                                </button>
                               </td>
                               <td className="px-3 py-2 text-slate-700">{invoice.documentTypeLabel}</td>
                               <td className="px-3 py-2 text-right font-semibold text-slate-950">
@@ -6906,6 +6935,66 @@ export default function MockCustomerDashboardPage() {
                       No draft, pending, or paid invoice documents found for this selected customer yet.
                     </p>
                   )}
+                  {selectedCustomerBillingInvoiceDetail ? (
+                    <div
+                      className="border-t border-slate-200 bg-slate-50 px-3 py-3"
+                      data-selected-customer-invoice-detail="true"
+                    >
+                      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <h5 className="text-sm font-bold text-slate-950">
+                            {selectedCustomerBillingInvoiceDetail.documentNumber} items
+                          </h5>
+                          <p className="text-xs font-semibold text-slate-500">
+                            Review line items and descriptions before using the invoice workbench below.
+                          </p>
+                        </div>
+                        <span
+                          className={`inline-flex min-h-7 w-fit items-center rounded-md border px-2 text-xs font-bold ${
+                            selectedCustomerBillingInvoiceDetail.statusLabel === "Draft"
+                              ? "border-amber-200 bg-amber-50 text-amber-800"
+                              : selectedCustomerBillingInvoiceDetail.statusLabel === "Pending"
+                                ? "border-sky-200 bg-sky-50 text-sky-800"
+                                : "border-emerald-200 bg-emerald-50 text-emerald-800"
+                          }`}
+                        >
+                          {selectedCustomerBillingInvoiceDetail.statusLabel}
+                        </span>
+                      </div>
+                      <div className="mt-3 overflow-x-auto rounded-md border border-slate-200 bg-white">
+                        <table className="w-full min-w-[520px] text-left text-xs">
+                          <thead className="text-[11px] uppercase tracking-[0.08em] text-slate-500">
+                            <tr>
+                              <th className="border-b border-slate-100 px-3 py-2 font-bold">No.</th>
+                              <th className="border-b border-slate-100 px-3 py-2 font-bold">
+                                Item description
+                              </th>
+                              <th className="border-b border-slate-100 px-3 py-2 text-right font-bold">
+                                Amount
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {selectedCustomerBillingInvoiceDetail.lineItems.map((item, itemIndex) => (
+                              <tr
+                                className="border-b border-slate-100 last:border-b-0"
+                                data-selected-customer-invoice-detail-item={`${selectedCustomerBillingInvoiceDetail.key}-${itemIndex}`}
+                                key={`${selectedCustomerBillingInvoiceDetail.key}-${itemIndex}`}
+                              >
+                                <td className="px-3 py-2 font-semibold text-slate-500">{itemIndex + 1}</td>
+                                <td className="px-3 py-2 font-semibold leading-5 text-slate-800">
+                                  {item.description}
+                                </td>
+                                <td className="px-3 py-2 text-right font-bold text-slate-950">
+                                  {item.amountLabel}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
 
                 {customerFolderJobViewState.status === "loaded" &&
@@ -7463,8 +7552,8 @@ export default function MockCustomerDashboardPage() {
             className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-slate-900 [&::-webkit-details-marker]:hidden"
             data-customer-billing-workbench-summary="true"
           >
-	            Invoice workbench
-            <span className="text-xs font-semibold text-slate-500">Collapsed</span>
+	            Advanced invoice workbench
+            <span className="text-xs font-semibold text-slate-500">Open only after review</span>
           </summary>
           <div
             className="grid gap-4 border-t border-slate-200 p-4 sm:p-5"
@@ -7482,8 +7571,9 @@ export default function MockCustomerDashboardPage() {
                 </p>
                 <h2 className="mt-1 text-lg font-bold text-slate-950">Send Invoice Workbench</h2>
                 <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
-                  Load one exact customer/month from the Monthly Billing Queue or create a manual billing document,
-                  then preview before any draft, issue, PDF, email, paid, unpaid, or credit action.
+                  Existing guarded controls for final staff review. Use the customer overview and invoice detail
+                  above first, then load one exact customer/month from the Monthly Billing Queue or create a manual
+                  billing document before any draft, issue, PDF, email, paid, unpaid, or credit action.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2 lg:justify-end">

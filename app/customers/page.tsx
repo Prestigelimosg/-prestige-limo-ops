@@ -415,6 +415,7 @@ type SelectedCustomerBillingInvoiceRow = {
   dateLabel: string;
   documentNumber: string;
   documentTypeLabel: string;
+  invoiceRecord?: CustomerDisplayedInvoiceRecord;
   key: string;
   lineItems: CustomerLocalInvoiceLineItem[];
   statusLabel: "Draft" | "Pending" | "Paid";
@@ -2945,6 +2946,7 @@ export default function MockCustomerDashboardPage() {
         dateLabel: invoice.issueDateLabel || invoice.dueDateLabel,
         documentNumber: invoice.invoiceNumber,
         documentTypeLabel: customerBillingDocumentLabel(invoice.documentType || "invoice"),
+        invoiceRecord: invoice,
         key: `issued::${invoice.invoiceNumber}`,
         lineItems:
           invoice.lineItems.length > 0
@@ -3078,6 +3080,11 @@ export default function MockCustomerDashboardPage() {
     () => unbilledCustomerRows.find((row) => row.key === customerInvoicePrepRowKey) ?? null,
     [customerInvoicePrepRowKey, unbilledCustomerRows],
   );
+  const advancedInvoiceWorkbenchVisible =
+    !selectedCustomerWorkspaceOpen ||
+    Boolean(customerInvoicePrepRow) ||
+    Boolean(plainInvoicePreview) ||
+    Boolean(plainInvoiceForm.billToName.trim());
   const customerInvoiceApprovedAmountCents = useMemo(
     () => parseInvoiceAmountToCents(customerInvoiceIssueAmount),
     [customerInvoiceIssueAmount],
@@ -4437,18 +4444,6 @@ export default function MockCustomerDashboardPage() {
         .querySelector<HTMLElement>("[data-selected-customer-invoice-detail='true']")
         ?.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 50);
-  }
-
-  function openAdvancedInvoiceWorkbenchForReview() {
-    const drawer = document.querySelector<HTMLDetailsElement>(
-      "[data-customer-billing-workbench-drawer='true']",
-    );
-
-    if (drawer) {
-      drawer.open = true;
-    }
-
-    plainInvoicePanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function updateOutstandingReviewSearch(value: string) {
@@ -7050,14 +7045,58 @@ export default function MockCustomerDashboardPage() {
                                 </span>
                               </td>
                               <td className="px-3 py-2 text-right">
-                                <button
-                                  className="inline-flex min-h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-xs font-bold text-slate-800 transition hover:border-slate-700"
-                                  data-selected-customer-invoice-review-edit={invoice.key}
-                                  onClick={() => reviewSelectedCustomerInvoice(invoice.key)}
-                                  type="button"
-                                >
-                                  Review/Edit
-                                </button>
+                                <div className="inline-flex flex-wrap justify-end gap-1">
+                                  <button
+                                    className="inline-flex min-h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-2 text-xs font-bold text-slate-800 transition hover:border-slate-700"
+                                    data-selected-customer-invoice-view={invoice.key}
+                                    onClick={() => reviewSelectedCustomerInvoice(invoice.key)}
+                                    type="button"
+                                  >
+                                    View
+                                  </button>
+                                  {invoice.invoiceRecord ? (
+                                    <>
+                                      <button
+                                        className="inline-flex min-h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-2 text-xs font-bold text-slate-800 transition hover:border-slate-700"
+                                        data-selected-customer-invoice-pdf={invoice.key}
+                                        onClick={() => downloadIssuedCustomerInvoice(invoice.invoiceRecord!)}
+                                        type="button"
+                                      >
+                                        PDF
+                                      </button>
+                                      <button
+                                        className="inline-flex min-h-8 items-center justify-center rounded-md border border-emerald-300 bg-emerald-50 px-2 text-xs font-bold text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                        data-selected-customer-invoice-email={invoice.key}
+                                        disabled={
+                                          emailingCustomerInvoiceNumber === invoice.invoiceRecord.invoiceNumber ||
+                                          invoice.invoiceRecord.emailDeliveryStatus === "sent"
+                                        }
+                                        onClick={() => handleCustomerInvoiceEmailAction(invoice.invoiceRecord!)}
+                                        type="button"
+                                      >
+                                        {emailingCustomerInvoiceNumber === invoice.invoiceRecord.invoiceNumber
+                                          ? "Sending"
+                                          : invoice.invoiceRecord.emailDeliveryStatus === "sent"
+                                            ? "Emailed"
+                                            : "Email"}
+                                      </button>
+                                      {invoice.invoiceRecord.status === "Paid" ? null : (
+                                        <button
+                                          className="inline-flex min-h-8 items-center justify-center rounded-md border border-emerald-300 bg-white px-2 text-xs font-bold text-emerald-800 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                          data-selected-customer-invoice-paid={invoice.key}
+                                          disabled={
+                                            updatingCustomerInvoiceStatusNumber ===
+                                            invoice.invoiceRecord.invoiceNumber
+                                          }
+                                          onClick={() => markIssuedCustomerInvoicePaid(invoice.invoiceRecord!)}
+                                          type="button"
+                                        >
+                                          Paid
+                                        </button>
+                                      )}
+                                    </>
+                                  ) : null}
+                                </div>
                               </td>
                             </tr>
                           ))}
@@ -7080,30 +7119,20 @@ export default function MockCustomerDashboardPage() {
                             {selectedCustomerBillingInvoiceDetail.documentNumber} items
                           </h5>
                           <p className="text-xs font-semibold text-slate-500">
-                            Review line items and descriptions before using the invoice workbench below.
+                            Line items and descriptions for this invoice.
                           </p>
                         </div>
-                        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                          <span
-                            className={`inline-flex min-h-7 w-fit items-center rounded-md border px-2 text-xs font-bold ${
-                              selectedCustomerBillingInvoiceDetail.statusLabel === "Draft"
-                                ? "border-amber-200 bg-amber-50 text-amber-800"
-                                : selectedCustomerBillingInvoiceDetail.statusLabel === "Pending"
-                                  ? "border-sky-200 bg-sky-50 text-sky-800"
-                                  : "border-emerald-200 bg-emerald-50 text-emerald-800"
-                            }`}
-                          >
-                            {selectedCustomerBillingInvoiceDetail.statusLabel}
-                          </span>
-                          <button
-                            className="inline-flex min-h-8 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-xs font-bold text-white transition hover:bg-slate-700"
-                            data-selected-customer-invoice-open-workbench="true"
-                            onClick={openAdvancedInvoiceWorkbenchForReview}
-                            type="button"
-                          >
-                            Open advanced workbench
-                          </button>
-                        </div>
+                        <span
+                          className={`inline-flex min-h-7 w-fit items-center rounded-md border px-2 text-xs font-bold ${
+                            selectedCustomerBillingInvoiceDetail.statusLabel === "Draft"
+                              ? "border-amber-200 bg-amber-50 text-amber-800"
+                              : selectedCustomerBillingInvoiceDetail.statusLabel === "Pending"
+                                ? "border-sky-200 bg-sky-50 text-sky-800"
+                                : "border-emerald-200 bg-emerald-50 text-emerald-800"
+                          }`}
+                        >
+                          {selectedCustomerBillingInvoiceDetail.statusLabel}
+                        </span>
                       </div>
                       <div className="mt-3 overflow-x-auto rounded-md border border-slate-200 bg-white">
                         <table className="w-full min-w-[520px] text-left text-xs">
@@ -7690,10 +7719,11 @@ export default function MockCustomerDashboardPage() {
 	        </section>
         ) : null}
 
-        <details
-          className="rounded-lg border border-slate-200 bg-white shadow-sm"
-          data-customer-billing-workbench-drawer="true"
-        >
+        {advancedInvoiceWorkbenchVisible ? (
+          <details
+            className="rounded-lg border border-slate-200 bg-white shadow-sm"
+            data-customer-billing-workbench-drawer="true"
+          >
           <summary
             className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-slate-900 [&::-webkit-details-marker]:hidden"
             data-customer-billing-workbench-summary="true"
@@ -8921,7 +8951,8 @@ export default function MockCustomerDashboardPage() {
         </section>
 
           </div>
-        </details>
+          </details>
+        ) : null}
       </div>
     </main>
   );

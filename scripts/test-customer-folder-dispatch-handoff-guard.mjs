@@ -5,6 +5,7 @@ const appPagePath = "app/page.tsx";
 const adminBookingsRoutePath = "app/api/admin-bookings/route.ts";
 const adminSavedBookingsRoutePath = "app/api/admin-saved-bookings/route.ts";
 const customersPagePath = "app/customers/page.tsx";
+const customerFolderSavedBookingsPanelPath = "app/customers/[customerId]/saved-bookings-panel.tsx";
 const adminCustomerSavedBookingsReadPath = "lib/admin-customer-saved-bookings-read.ts";
 const persistencePath = "lib/admin-booking-persistence.ts";
 const adapterPath = "lib/admin-booking-supabase-adapter.ts";
@@ -39,6 +40,7 @@ const [
   adminBookingsRoute,
   adminSavedBookingsRoute,
   customersPage,
+  customerFolderSavedBookingsPanel,
   adminCustomerSavedBookingsRead,
   persistence,
   adapter,
@@ -49,6 +51,7 @@ const [
   readFile(adminBookingsRoutePath, "utf8"),
   readFile(adminSavedBookingsRoutePath, "utf8"),
   readFile(customersPagePath, "utf8"),
+  readFile(customerFolderSavedBookingsPanelPath, "utf8"),
   readFile(adminCustomerSavedBookingsReadPath, "utf8"),
   readFile(persistencePath, "utf8"),
   readFile(adapterPath, "utf8"),
@@ -56,11 +59,6 @@ const [
   readFile(preactivationSuitePath, "utf8"),
 ]);
 
-const customerFolderJobsSection = sectionBetween(
-  customersPage,
-  'data-customer-folder-jobs-panel="true"',
-  'data-unbilled-customers-sector="true"',
-);
 const customerFolderExactBookingLoadFunction = sectionBetween(
   customersPage,
   "async function loadCustomerFolderExactBookingForEdit",
@@ -116,28 +114,24 @@ for (const fragment of [
   "fetch(adminBookingsApiPath, {",
   "fetch(adminSavedBookingsApiPath, {",
   "Delete is locked until this exact job is completed or cancelled.",
-  'data-customer-folder-job-open-dispatch={bookingReference}',
-  'data-customer-folder-exact-booking-editor={bookingReference}',
-  'data-customer-folder-exact-booking-save={bookingReference}',
-  'data-customer-folder-job-delete={bookingReference}',
-  "Open in Dispatch",
+  "data-customer-folder-saved-bookings-open-dispatch",
+  "Open/Edit",
 ]) {
-  assertIncludes(customersPage, fragment, `customer folder dispatch handoff source ${fragment}`);
+  const source = fragment.includes("data-customer-folder-saved-bookings") || fragment === "Open/Edit"
+    ? customerFolderSavedBookingsPanel
+    : customersPage;
+
+  assertIncludes(source, fragment, `customer folder dispatch handoff source ${fragment}`);
 }
 
 for (const fragment of [
-  'data-customer-folder-job-view-toggle={bookingReference}',
-  'data-customer-folder-job-details={bookingReference}',
-  'data-customer-folder-exact-booking-editor={bookingReference}',
-  'data-customer-folder-exact-booking-save={bookingReference}',
-  'data-customer-folder-job-delete={bookingReference}',
-  'data-customer-folder-job-open-dispatch={bookingReference}',
-  "View/Edit",
-  "Save changes",
-  "Delete job",
-  "Open in Dispatch",
+  "data-customer-folder-saved-bookings-list",
+  "data-customer-folder-saved-bookings-row",
+  "data-customer-folder-saved-bookings-open-dispatch",
+  "max-h-96 overflow-auto",
+  "Open/Edit",
 ]) {
-  assertIncludes(customerFolderJobsSection, fragment, `customer folder jobs section ${fragment}`);
+  assertIncludes(customerFolderSavedBookingsPanel, fragment, `customer folder jobs section ${fragment}`);
 }
 
 for (const fragment of [
@@ -315,7 +309,7 @@ for (const fragment of [
 }
 
 for (const phrase of [
-  "Customer Folder `View jobs` now exposes one safe `Open in Dispatch` handoff for each saved booking row with an exact booking reference.",
+  "Customer folder pages expose one safe `Open/Edit` Dispatch handoff for each saved booking row with an exact booking reference.",
   "The handoff uses `/?tab=dispatch&booking_reference=...`, performs one exact guarded admin GET read through `/api/admin-bookings?booking_reference=...`, and then calls the existing Dispatch `loadSelectedBooking` editor/review path.",
   "It does not rely on the recent bookings list window, so older customer-folder jobs can still open by exact reference.",
   "Customer Folder `View/Edit` now loads the exact booking by reference before showing compact operational edit controls for passenger, pickup time, pickup, drop-off, service, vehicle, driver, driver contact, and plate.",

@@ -503,42 +503,6 @@ export default async function MockCustomerFolderPage({ params, searchParams }: C
 
         <section
           className="rounded-md border border-slate-200 bg-white p-3 shadow-sm"
-          data-customer-job-status-index="true"
-        >
-          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-            <h2 className="text-base font-bold text-slate-950">Upcoming / Completed Index</h2>
-            <p className="text-sm font-semibold text-slate-600">
-              {upcomingJobs.length} upcoming / {completedJobs.length} completed
-            </p>
-          </div>
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full min-w-[680px] border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-[11px] uppercase tracking-[0.1em] text-slate-500">
-                  <th className="py-2 pr-4 font-bold">Status</th>
-                  <th className="py-2 pr-4 font-bold">Reference</th>
-                  <th className="py-2 pr-4 font-bold">Date</th>
-                  <th className="py-2 font-bold">Service / payment</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[...upcomingJobs, ...completedJobs].map((booking) => (
-                  <tr className="border-b border-slate-100 last:border-b-0" key={`${booking.invoiceNumber}-index`}>
-                    <td className="py-2 pr-4 font-semibold text-slate-900">{booking.jobStatus}</td>
-                    <td className="py-2 pr-4 font-bold text-slate-950">{booking.invoiceNumber}</td>
-                    <td className="py-2 pr-4 text-slate-700">{booking.date}</td>
-                    <td className="py-2 text-slate-700">
-                      {booking.jobStatus === "Upcoming" ? booking.service : booking.paymentStatus}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section
-          className="rounded-md border border-slate-200 bg-white p-3 shadow-sm"
           data-customer-folder-compact-admin-rows="true"
         >
           <div className="grid gap-3 lg:grid-cols-[1.2fr_1fr_1fr]">

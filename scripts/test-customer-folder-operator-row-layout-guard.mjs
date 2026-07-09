@@ -19,7 +19,6 @@ for (const fragment of [
   'data-customer-folder-compact-admin-rows="true"',
   'data-customer-folder-details="true"',
   'data-customer-booking-history="true"',
-  'data-customer-job-status-index="true"',
 ]) {
   assertIncludes(page, fragment, `compact customer folder marker ${fragment}`);
 }
@@ -50,8 +49,13 @@ for (const fragment of [
 
 assertIncludes(
   savedBookingsPanel,
-  "rounded-md border border-sky-200 bg-sky-50/70 p-3 shadow-sm",
+  "rounded-md border border-slate-200 bg-white p-3 shadow-sm",
   "compact saved bookings panel",
+);
+assertIncludes(
+  savedBookingsPanel,
+  "data-customer-folder-saved-bookings-open-dispatch",
+  "customer folder jobs open/edit dispatch action",
 );
 
 console.log("Customer folder operator row layout guard passed");

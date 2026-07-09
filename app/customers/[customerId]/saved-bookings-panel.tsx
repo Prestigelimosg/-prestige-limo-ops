@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 const adminCustomerSavedBookingsApiPath = "/api/admin-customer-saved-bookings";
@@ -52,6 +53,33 @@ function displayText(value: string | null | undefined, fallback = "Not available
   const cleaned = String(value ?? "").trim();
 
   return cleaned || fallback;
+}
+
+function compactReference(value: string | null | undefined, fallback = "Reference unavailable") {
+  const text = displayText(value, fallback);
+
+  return text.length > 18 ? `${text.slice(0, 8)}...${text.slice(-6)}` : text;
+}
+
+function safeDispatchReference(booking: CustomerFolderSavedBookingRecord) {
+  const reference = String(booking.booking_reference ?? "").trim();
+
+  return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(reference) ? reference : "";
+}
+
+function dispatchHref(booking: CustomerFolderSavedBookingRecord) {
+  const reference = safeDispatchReference(booking);
+
+  if (!reference) {
+    return "";
+  }
+
+  const params = new URLSearchParams({
+    booking_reference: reference,
+    tab: "dispatch",
+  });
+
+  return `/?${params.toString()}`;
 }
 
 function initialMessage(customerName: string) {
@@ -154,49 +182,44 @@ export function CustomerFolderSavedBookingsPanel({
 
   return (
     <section
-      className="rounded-md border border-sky-200 bg-sky-50/70 p-3 shadow-sm"
+      className="rounded-md border border-slate-200 bg-white p-3 shadow-sm"
       data-customer-folder-saved-bookings={customerId}
     >
       <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-sky-800">
-            Internal staff-only / guarded read
-          </p>
           <h2
-            className="mt-1 text-base font-bold text-sky-950"
+            className="text-base font-bold text-slate-950"
             data-customer-folder-saved-bookings-heading="true"
           >
-            Saved Booking References
+            Customer jobs
           </h2>
           <p
-            className="mt-0.5 max-w-4xl text-xs font-semibold leading-5 text-sky-950"
+            className="mt-0.5 max-w-4xl text-xs font-semibold leading-5 text-slate-600"
             data-customer-folder-saved-bookings-boundary="true"
           >
-            Loads safe saved booking references for this customer folder only. No booking write, invoice/PDF/payment
-            action, notification/calendar action, contact detail, pricing fields, driver compensation, parser data, or
-            private notes are returned.
+            Loads this customer&apos;s saved jobs only. Open/Edit uses Dispatch; no invoice, payment, send, payout, GPS,
+            or provider action runs here.
           </p>
         </div>
         <button
-          className="rounded-md border border-sky-400 bg-white px-3 py-2 text-sm font-bold text-sky-950 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-md border border-slate-900 bg-slate-900 px-3 py-2 text-sm font-bold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
           data-customer-folder-saved-bookings-action="true"
           disabled={readState.status === "loading"}
           onClick={loadSavedBookings}
           type="button"
         >
-          {readState.status === "loading" ? "Loading..." : "Load Saved Bookings"}
+          {readState.status === "loading" ? "Loading" : "Load jobs"}
         </button>
       </div>
 
-      <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
         {[
-          ["Customer/account", customerName],
-          ["Returned", countLabel(returnedCount, "saved booking reference")],
-          ["Matched", countLabel(matchedCount, "recent admin booking")],
-          ["Source", "Guarded saved-booking read; customer-folder context only."],
+          ["Customer", customerName],
+          ["Jobs", countLabel(returnedCount, "loaded job")],
+          ["Matched", countLabel(matchedCount, "recent admin record")],
         ].map(([label, description]) => (
           <div
-            className="rounded-md border border-sky-200 bg-white px-3 py-2 leading-5 text-slate-700"
+            className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 leading-5 text-slate-700"
             data-customer-folder-saved-bookings-summary={label}
             key={label}
           >
@@ -225,34 +248,62 @@ export function CustomerFolderSavedBookingsPanel({
       ) : null}
 
       {readState.status === "loaded" && readState.savedBookings.length > 0 ? (
-        <div className="mt-3 grid gap-1.5" data-customer-folder-saved-bookings-list="true">
-          {readState.savedBookings.map((booking) => (
-            <div
-              className="rounded-md border border-sky-200 bg-white px-3 py-2 text-sm leading-5 text-slate-700"
-              data-customer-folder-saved-bookings-row={booking.booking_reference || ""}
-              key={booking.booking_reference || `${booking.customer_account}-${booking.pickup_at}`}
-            >
-              <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <p className="font-bold text-slate-950">
-                    {displayText(booking.booking_reference, "Saved booking reference unavailable")}
-                  </p>
-                  <p className="text-slate-600">
-                    {[booking.booking_month, booking.service_type].filter(Boolean).join(" | ") ||
-                      "Month/service unavailable"}
-                  </p>
-                </div>
-                <p className="font-semibold text-sky-950">
-                  {[booking.admin_status, booking.customer_status].filter(Boolean).join(" / ") ||
-                    "Status unavailable"}
-                </p>
-              </div>
-              <p className="mt-1 text-xs font-semibold text-slate-500">
-                Pickup: {displayText(booking.pickup_at, "not available")} | Account:{" "}
-                {displayText(booking.customer_account, "not available")}
-              </p>
-            </div>
-          ))}
+        <div
+          className="mt-3 max-h-96 overflow-auto rounded-md border border-slate-200"
+          data-customer-folder-saved-bookings-list="true"
+        >
+          <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+            <thead className="sticky top-0 bg-white text-[11px] uppercase tracking-[0.12em] text-slate-500">
+              <tr>
+                <th className="border-b border-slate-200 px-3 py-2 font-bold">Booking</th>
+                <th className="border-b border-slate-200 px-3 py-2 font-bold">Pickup</th>
+                <th className="border-b border-slate-200 px-3 py-2 font-bold">Service</th>
+                <th className="border-b border-slate-200 px-3 py-2 font-bold">Status</th>
+                <th className="border-b border-slate-200 px-3 py-2 text-right font-bold">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {readState.savedBookings.map((booking) => {
+                const href = dispatchHref(booking);
+                const rowKey = booking.booking_reference || `${booking.customer_account}-${booking.pickup_at}`;
+
+                return (
+                  <tr
+                    className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50"
+                    data-customer-folder-saved-bookings-row={booking.booking_reference || ""}
+                    key={rowKey}
+                  >
+                    <td className="px-3 py-2 font-bold text-slate-950" title={displayText(booking.booking_reference)}>
+                      {compactReference(booking.booking_reference)}
+                    </td>
+                    <td className="px-3 py-2 font-semibold text-slate-800">
+                      {displayText(booking.pickup_at, "Pickup not available")}
+                    </td>
+                    <td className="px-3 py-2 text-slate-700">
+                      {displayText(booking.service_type, "Service not available")}
+                    </td>
+                    <td className="px-3 py-2 text-slate-700">
+                      {[booking.admin_status, booking.customer_status].filter(Boolean).join(" / ") ||
+                        "Status unavailable"}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {href ? (
+                        <Link
+                          className="inline-flex min-h-8 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-xs font-bold text-white transition hover:bg-slate-700"
+                          data-customer-folder-saved-bookings-open-dispatch={booking.booking_reference || ""}
+                          href={href}
+                        >
+                          Open/Edit
+                        </Link>
+                      ) : (
+                        <span className="text-xs font-semibold text-slate-400">No reference</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       ) : null}
     </section>

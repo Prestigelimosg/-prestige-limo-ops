@@ -39,11 +39,6 @@ const jobHistorySection = sectionBetween(
   "data-customer-job-history-clarity={customer.id}",
   'data-payment-collection-detail={customer.id}',
 );
-const jobStatusIndexSection = sectionBetween(
-  customerFolderPage,
-  'data-customer-job-status-index="true"',
-  'data-customer-folder-compact-admin-rows="true"',
-);
 const ledgerSection = sectionBetween(
   ledger,
   "### Customer Folder Job History Compact Rows",
@@ -62,21 +57,14 @@ for (const fragment of [
   assertIncludes(jobHistorySection, fragment, `compact job history fragment ${fragment}`);
 }
 
-for (const fragment of [
-  'data-customer-job-status-index="true"',
-  "Upcoming / Completed Index",
-  "{upcomingJobs.length} upcoming / {completedJobs.length} completed",
-  "[...upcomingJobs, ...completedJobs].map((booking)",
-]) {
-  assertIncludes(jobStatusIndexSection, fragment, `compact job status index fragment ${fragment}`);
-}
-
 for (const forbiddenPattern of [
   /<article[\s\S]*data-customer-job-history-clarity-row/,
   /sm:grid-cols-3/,
   /<div className="rounded-md border border-slate-200 bg-slate-50 p-3">/,
   /<h2 className="text-lg font-bold text-slate-950">Upcoming jobs<\/h2>/,
   /<h2 className="text-lg font-bold text-slate-950">Completed jobs<\/h2>/,
+  /data-customer-job-status-index="true"/,
+  /Upcoming \/ Completed Index/,
   /driver payout|PayNow payout|customer price|payout comparisons/i,
   /internal admin notes|internal finance notes|parser\/debug|mock QA|dev archive/i,
   /sendMail|new\s+Resend|api\.telegram\.org|twilio|navigator\.geolocation/i,
@@ -86,7 +74,7 @@ for (const forbiddenPattern of [
 
 for (const phrase of [
   "Customer folder `Job history snapshot` now uses one slim summary strip plus a compact scrollable table instead of summary cards and large job cards.",
-  "The duplicate Upcoming/Completed job blocks are combined into one compact index table below All booking history.",
+  "The duplicate Upcoming/Completed job blocks are removed from the customer folder; job status now stays in the compact job rows.",
   "This is customer-folder UI-only polish on existing mock/customer data; it does not add routes, APIs, DB reads/writes, env changes, Vercel changes, invoice/PDF/payment/provider sending, payout automation, GPS/live location, calendar sync, parser changes, or shims.",
   "Guard coverage lives in `scripts/test-customer-folder-job-history-compact-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {

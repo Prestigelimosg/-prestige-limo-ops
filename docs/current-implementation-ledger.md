@@ -827,8 +827,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The fake top payment summary strip is removed from the daily Customers page.
 - The invoice workbench is collapsed behind an admin-only drawer, leaving the daily visible Customers page focused on the customer folder finder and Monthly Billing Queue.
 - The mock statement, outstanding, follow-up, advanced booking, and support log drawers are not rendered in normal operation.
-- The normal finder row has one primary `View jobs` action and no portal invite/revoke controls; customer app links stay in Dispatch Customer Copy `Copy + App Link`.
-- Customer Folder `View jobs` groups the selected account's saved jobs by booking month before the exact `View/Edit`, `Save changes`, safe `Delete job`, and `Open in Dispatch` controls.
+- The normal finder row opens the customer's own folder page instead of showing a duplicate inline job-view sector; customer app links stay in Dispatch Customer Copy `Copy + App Link`.
+- Customer folder pages load compact scrollable saved-job rows with an `Open/Edit` Dispatch handoff for exact booking references.
 - No route, API, parser, DB, env, Vercel, provider-send, GPS/live-location, billing/payment/PDF/payout, calendar, or shim behavior is changed.
 - This polish is guarded by `scripts/test-customer-folder-compact-index-guard.mjs` and registered in `scripts/test-preactivation-verification-suite.mjs`.
 
@@ -1034,7 +1034,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customers page now has a visible Customer Folder Finder that searches all loaded customer folders and paginates the compact folder rows 10 per page by default.
 - The finder uses a visible `All customers` dropdown for direct folder selection; it shows 10 customer folders at a time and keeps numbered page buttons inside the dropdown for larger 200-plus account lists.
 - The finder keeps the existing guarded `Load Accounts` control visible as a compact one-line button, with the folder count shown as a small `1-10 of N folders` chip; that same button now refreshes the guarded saved-booking bridge for the Monthly Billing Queue without adding a new route/API.
-- Customer rows no longer show a meaningless `Pending` folder placeholder; `View jobs` opens an inline read-only saved-job panel for that exact saved account id.
+- Customer rows no longer show a meaningless `Pending` folder placeholder; `Open folder` moves the user into that exact customer's folder page.
 - Customer finder rows no longer expose portal invite/revoke controls; customer app link copying stays in the existing Dispatch Customer Copy `Copy + App Link` lane.
 - The inline saved-job panel groups jobs by booking month before the exact job `View/Edit`, safe `Delete job`, and `Open in Dispatch` controls.
 - The Monthly Billing Queue sits before the invoice workspace so completed closeout-ready jobs are visible before invoice work starts.
@@ -1050,7 +1050,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Customer Folder Dispatch Handoff
 
-- Customer Folder `View jobs` now exposes one safe `Open in Dispatch` handoff for each saved booking row with an exact booking reference.
+- Customer folder pages expose one safe `Open/Edit` Dispatch handoff for each saved booking row with an exact booking reference.
 - The handoff uses `/?tab=dispatch&booking_reference=...`, performs one exact guarded admin GET read through `/api/admin-bookings?booking_reference=...`, and then calls the existing Dispatch `loadSelectedBooking` editor/review path.
 - It does not rely on the recent bookings list window, so older customer-folder jobs can still open by exact reference.
 - Customer Folder `View/Edit` now loads the exact booking by reference before showing compact operational edit controls for passenger, pickup time, pickup, drop-off, service, vehicle, driver, driver contact, and plate.
@@ -1136,7 +1136,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Customer Folder Job History Compact Rows
 
 - Customer folder `Job history snapshot` now uses one slim summary strip plus a compact scrollable table instead of summary cards and large job cards.
-- The duplicate Upcoming/Completed job blocks are combined into one compact index table below All booking history.
+- The duplicate Upcoming/Completed job blocks are removed from the customer folder; job status now stays in the compact job rows.
 - This is customer-folder UI-only polish on existing mock/customer data; it does not add routes, APIs, DB reads/writes, env changes, Vercel changes, invoice/PDF/payment/provider sending, payout automation, GPS/live location, calendar sync, parser changes, or shims.
 - Guard coverage lives in `scripts/test-customer-folder-job-history-compact-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 

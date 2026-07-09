@@ -2238,7 +2238,7 @@ export default function MockCustomerDashboardPage() {
     useState<CustomerFolderJobViewState>({
       customerId: "",
       customerName: "",
-      message: "Click View jobs on a customer row to read that exact saved account's jobs.",
+      message: "Open a customer folder to read that exact saved account's jobs.",
       savedBookings: [],
       status: "idle",
       summary: null,
@@ -3912,7 +3912,7 @@ export default function MockCustomerDashboardPage() {
     }
   }
 
-  function resetCustomerFolderJobView(message = "Click View jobs on a customer row to read that exact saved account's jobs.") {
+  function resetCustomerFolderJobView(message = "Open a customer folder to read that exact saved account's jobs.") {
     setCustomerFolderJobViewState({
       customerId: "",
       customerName: "",
@@ -6802,17 +6802,9 @@ export default function MockCustomerDashboardPage() {
                             : "Local folder ready"}
                         </p>
                         <div className="flex flex-wrap gap-2 md:justify-end">
-                          <button
-                            className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-center text-xs font-bold text-white transition hover:bg-slate-700"
-                            data-customer-folder-finder-view-jobs={customer.customerFolderKey}
-                            onClick={() => viewCustomerFolderJobs(customer)}
-                            type="button"
-                          >
-                            View jobs
-                          </button>
                           {customer.folderHref ? (
                             <Link
-                              className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-center text-xs font-bold text-slate-800 transition hover:border-slate-700"
+                              className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-center text-xs font-bold text-white transition hover:bg-slate-700"
                               data-customer-folder-finder-link={customer.customerId}
                               data-open-customer-folder={customer.customerId}
                               href={customer.folderHref}

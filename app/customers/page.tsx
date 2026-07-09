@@ -391,6 +391,23 @@ type CustomerInvoiceDraftRecord = {
   storageSource?: "local" | "server";
 };
 
+type CustomerBillingOverviewRow = {
+  balanceCents: number;
+  balanceLabel: string;
+  customerFolderKey: string;
+  customerId: string;
+  customerName: string;
+  draftCount: number;
+  invoiceAmountCents: number;
+  invoiceAmountLabel: string;
+  invoiceCount: number;
+  latestDateLabel: string;
+  paidCount: number;
+  pendingCount: number;
+  readyJobCount: number;
+  statusLabel: "Draft" | "Pending" | "Ready" | "Paid" | "No invoices";
+};
+
 type PlainInvoiceForm = {
   amount: string;
   billToEmail: string;
@@ -2678,6 +2695,198 @@ export default function MockCustomerDashboardPage() {
         firstGroup.billingMonth.localeCompare(secondGroup.billingMonth),
     );
   }, [unbilledCustomerRows]);
+  const customerBillingOverviewRows = useMemo<CustomerBillingOverviewRow[]>(() => {
+    type DraftSummary = { amountCents: number; count: number; dueDateLabel: string };
+    type InvoiceSummary = {
+      amountCents: number;
+      balanceCents: number;
+      count: number;
+      dueDateLabel: string;
+      paidCount: number;
+      pendingCount: number;
+    };
+    type ReadySummary = { amountCents: number; count: number; dateLabel: string };
+
+    const folderRowsByKey = new Map<
+      string,
+      {
+        customerFolderKey: string;
+        customerId: string;
+        customerName: string;
+      }
+    >();
+    const accountKeyAliases = new Map<string, string>();
+    const addAlias = (alias: string | null | undefined, customerFolderKey: string) => {
+      const normalizedAlias = normalizeCustomerFolderMatch(alias);
+
+      if (normalizedAlias) {
+        accountKeyAliases.set(normalizedAlias, customerFolderKey);
+      }
+    };
+
+    for (const customer of customerFolderIndexRows) {
+      folderRowsByKey.set(customer.customerFolderKey, {
+        customerFolderKey: customer.customerFolderKey,
+        customerId: customer.customerId,
+        customerName: customer.customerName,
+      });
+      addAlias(customer.customerFolderKey, customer.customerFolderKey);
+      addAlias(customer.customerId, customer.customerFolderKey);
+      addAlias(customer.customerName, customer.customerFolderKey);
+    }
+
+    const keyForCustomer = (customerId: string, customerName: string) => {
+      const customerIdKey = normalizeCustomerFolderMatch(customerId);
+      const customerNameKey = normalizeCustomerFolderMatch(customerName);
+      const matchedKey = accountKeyAliases.get(customerIdKey) || accountKeyAliases.get(customerNameKey);
+
+      if (matchedKey) {
+        return matchedKey;
+      }
+
+      const fallbackKey = customerIdKey || customerNameKey || "unknown-customer";
+      const customerFolderKey = `billing-overview::${fallbackKey}`;
+
+      if (!folderRowsByKey.has(customerFolderKey)) {
+        folderRowsByKey.set(customerFolderKey, {
+          customerFolderKey,
+          customerId: customerId || customerName,
+          customerName: customerName || customerId || "Customer account",
+        });
+        addAlias(customerId, customerFolderKey);
+        addAlias(customerName, customerFolderKey);
+      }
+
+      return customerFolderKey;
+    };
+
+    const draftSummaries = new Map<string, DraftSummary>();
+    for (const draft of customerInvoiceDrafts) {
+      const rowKey = keyForCustomer(draft.customerName, draft.customerName);
+      const existing = draftSummaries.get(rowKey) ?? {
+        amountCents: 0,
+        count: 0,
+        dueDateLabel: "",
+      };
+
+      existing.amountCents += draft.amountCents;
+      existing.count += 1;
+      existing.dueDateLabel ||= draft.dueDateLabel || draft.createdAtLabel;
+      draftSummaries.set(rowKey, existing);
+    }
+
+    const invoiceSummaries = new Map<string, InvoiceSummary>();
+    for (const invoice of activeCustomerInvoiceRecords(issuedCustomerInvoices)) {
+      const rowKey = keyForCustomer(invoice.customerId, invoice.customerName);
+      const isPaid = invoice.status === "Paid";
+      const existing = invoiceSummaries.get(rowKey) ?? {
+        amountCents: 0,
+        balanceCents: 0,
+        count: 0,
+        dueDateLabel: "",
+        paidCount: 0,
+        pendingCount: 0,
+      };
+
+      existing.amountCents += invoice.amountCents;
+      existing.balanceCents += isPaid ? 0 : invoice.amountCents;
+      existing.count += 1;
+      existing.dueDateLabel ||= invoice.dueDateLabel || invoice.issueDateLabel;
+      existing.paidCount += isPaid ? 1 : 0;
+      existing.pendingCount += isPaid ? 0 : 1;
+      invoiceSummaries.set(rowKey, existing);
+    }
+
+    const readySummaries = new Map<string, ReadySummary>();
+    for (const row of unbilledCustomerRows) {
+      const rowKey = keyForCustomer(row.customerId, row.customerName);
+      const existing = readySummaries.get(rowKey) ?? {
+        amountCents: 0,
+        count: 0,
+        dateLabel: "",
+      };
+
+      existing.amountCents += parseInvoiceAmountToCents(row.amount) || 0;
+      existing.count += 1;
+      existing.dateLabel ||= row.billingMonthLabel || row.dateLabel;
+      readySummaries.set(rowKey, existing);
+    }
+
+    return Array.from(folderRowsByKey.values())
+      .map((customer) => {
+        const draftSummary = draftSummaries.get(customer.customerFolderKey);
+        const invoiceSummary = invoiceSummaries.get(customer.customerFolderKey);
+        const readySummary = readySummaries.get(customer.customerFolderKey);
+        const draftCount = draftSummary?.count ?? 0;
+        const pendingCount = invoiceSummary?.pendingCount ?? 0;
+        const readyJobCount = readySummary?.count ?? 0;
+        const paidCount = invoiceSummary?.paidCount ?? 0;
+        const statusLabel: CustomerBillingOverviewRow["statusLabel"] =
+          draftCount > 0
+            ? "Draft"
+            : pendingCount > 0
+              ? "Pending"
+              : readyJobCount > 0
+                ? "Ready"
+                : paidCount > 0
+                  ? "Paid"
+                  : "No invoices";
+        const invoiceAmountCents =
+          (draftSummary?.amountCents ?? 0) +
+          (invoiceSummary?.amountCents ?? 0) +
+          (readySummary?.amountCents ?? 0);
+        const balanceCents =
+          (draftSummary?.amountCents ?? 0) +
+          (invoiceSummary?.balanceCents ?? 0) +
+          (readySummary?.amountCents ?? 0);
+
+        return {
+          balanceCents,
+          balanceLabel: formatInvoiceAmount(balanceCents),
+          customerFolderKey: customer.customerFolderKey,
+          customerId: customer.customerId,
+          customerName: customer.customerName,
+          draftCount,
+          invoiceAmountCents,
+          invoiceAmountLabel: formatInvoiceAmount(invoiceAmountCents),
+          invoiceCount: draftCount + (invoiceSummary?.count ?? 0),
+          latestDateLabel:
+            draftSummary?.dueDateLabel ||
+            invoiceSummary?.dueDateLabel ||
+            readySummary?.dateLabel ||
+            "No invoice date",
+          paidCount,
+          pendingCount,
+          readyJobCount,
+          statusLabel,
+        };
+      })
+      .sort(
+        (firstRow, secondRow) =>
+          secondRow.balanceCents - firstRow.balanceCents ||
+          firstRow.customerName.localeCompare(secondRow.customerName),
+      );
+  }, [customerFolderIndexRows, customerInvoiceDrafts, issuedCustomerInvoices, unbilledCustomerRows]);
+  const customerBillingOverviewTotals = useMemo(
+    () =>
+      customerBillingOverviewRows.reduce(
+        (totals, row) => ({
+          balanceCents: totals.balanceCents + row.balanceCents,
+          draftCount: totals.draftCount + row.draftCount,
+          pendingCount: totals.pendingCount + row.pendingCount,
+          readyJobCount: totals.readyJobCount + row.readyJobCount,
+          rowCount: totals.rowCount + 1,
+        }),
+        {
+          balanceCents: 0,
+          draftCount: 0,
+          pendingCount: 0,
+          readyJobCount: 0,
+          rowCount: 0,
+        },
+      ),
+    [customerBillingOverviewRows],
+  );
   const customerMonthlyBillingAccountReviewCount = useMemo(() => {
     const invoicedReferences = invoicedReferenceSetFrom(issuedCustomerInvoices);
     const suppressedInvoiceReferences = new Set([
@@ -3997,6 +4206,64 @@ export default function MockCustomerDashboardPage() {
     setCustomerFolderFinderSelectedId(row.customerId);
     setSelectedMonthlyBillingGroupKey("");
     setSelectedUnbilledCustomerRowKey(row.key);
+    setCustomerFolderFinderDropdownOpen(false);
+    setSearchTerm("");
+    setCustomerFolderFinderPage(1);
+    setExpandedCustomerFolderJobReference("");
+    setCustomerFolderExactBookingEditorState(initialCustomerFolderExactBookingEditorState);
+
+    setCustomerFolderJobViewState({
+      customerId: row.customerId,
+      customerName: row.customerName,
+      message: `Loading saved jobs for ${row.customerName} by exact account ID...`,
+      savedBookings: [],
+      status: "loading",
+      summary: null,
+      tone: "info",
+    });
+    scrollCustomerFolderJobsPanelIntoView();
+
+    try {
+      const result = await readRegularCustomerSavedBookingsForTarget(
+        {
+          accountScopeKey: "",
+          customerId: row.customerId,
+          customerName: row.customerName,
+        },
+        "customer-id",
+      );
+      const savedBookings = result.savedBookings;
+      const returnedCount = Number(result.summary?.returned_count ?? savedBookings.length);
+
+      setCustomerFolderJobViewState({
+        customerId: row.customerId,
+        customerName: row.customerName,
+        message:
+          returnedCount > 0
+            ? `Loaded ${savedBookingCountLabel(returnedCount, "saved job")} for ${row.customerName}.`
+            : `No saved jobs returned for ${row.customerName}.`,
+        savedBookings,
+        status: "loaded",
+        summary: result.summary,
+        tone: returnedCount > 0 ? "success" : "info",
+      });
+    } catch (error) {
+      setCustomerFolderJobViewState({
+        customerId: row.customerId,
+        customerName: row.customerName,
+        message: customerAdminReadFailureMessage(`Saved job read for ${row.customerName}`, error),
+        savedBookings: [],
+        status: "error",
+        summary: null,
+        tone: "error",
+      });
+    }
+  }
+
+  async function viewCustomerJobsFromBillingOverviewRow(row: CustomerBillingOverviewRow) {
+    setCustomerFolderFinderSelectedId(row.customerFolderKey);
+    setSelectedMonthlyBillingGroupKey("");
+    setSelectedUnbilledCustomerRowKey("");
     setCustomerFolderFinderDropdownOpen(false);
     setSearchTerm("");
     setCustomerFolderFinderPage(1);
@@ -6073,6 +6340,121 @@ export default function MockCustomerDashboardPage() {
             </div>
           </div>
         </header>
+
+        <section
+          className="rounded-lg border border-slate-200 bg-white shadow-sm"
+          data-customer-billing-overview="true"
+        >
+          <div className="border-b border-slate-200 p-4 sm:p-5">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-slate-950">Customer Billing Overview</h2>
+                <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
+                  Click a customer name to review that customer&apos;s saved jobs before preparing or sending any
+                  invoice.
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs font-bold text-slate-700 sm:grid-cols-4">
+                <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                  <span className="block text-[10px] uppercase text-slate-500">Customers</span>
+                  <span className="text-base text-slate-950">{customerBillingOverviewTotals.rowCount}</span>
+                </p>
+                <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
+                  <span className="block text-[10px] uppercase">Draft</span>
+                  <span className="text-base">{customerBillingOverviewTotals.draftCount}</span>
+                </p>
+                <p className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sky-900">
+                  <span className="block text-[10px] uppercase">Pending</span>
+                  <span className="text-base">{customerBillingOverviewTotals.pendingCount}</span>
+                </p>
+                <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-900">
+                  <span className="block text-[10px] uppercase">Balance</span>
+                  <span className="text-base">
+                    {formatInvoiceAmount(customerBillingOverviewTotals.balanceCents)}
+                  </span>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto p-4 sm:p-5">
+            <table className="min-w-full border-separate border-spacing-0 text-left text-sm">
+              <thead className="text-xs uppercase text-slate-500">
+                <tr>
+                  <th className="border-b border-slate-200 px-3 py-2 font-bold">Customer Name</th>
+                  <th className="border-b border-slate-200 px-3 py-2 font-bold">Invoice Status</th>
+                  <th className="border-b border-slate-200 px-3 py-2 font-bold">Due / Latest Date</th>
+                  <th className="border-b border-slate-200 px-3 py-2 text-right font-bold">
+                    Invoice Amount
+                  </th>
+                  <th className="border-b border-slate-200 px-3 py-2 text-right font-bold">Balance</th>
+                  <th className="border-b border-slate-200 px-3 py-2 text-right font-bold">Jobs</th>
+                </tr>
+              </thead>
+              <tbody>
+                {customerBillingOverviewRows.length > 0 ? (
+                  customerBillingOverviewRows.map((row) => (
+                    <tr
+                      className="align-top transition hover:bg-slate-50"
+                      data-customer-billing-overview-row={row.customerFolderKey}
+                      key={row.customerFolderKey}
+                    >
+                      <td className="border-b border-slate-100 px-3 py-3">
+                        <button
+                          className="text-left font-bold text-slate-950 underline-offset-4 transition hover:text-sky-700 hover:underline"
+                          data-customer-billing-overview-open={row.customerFolderKey}
+                          onClick={() => viewCustomerJobsFromBillingOverviewRow(row)}
+                          type="button"
+                        >
+                          {row.customerName}
+                        </button>
+                        <p className="mt-1 text-xs text-slate-500">{row.customerId}</p>
+                      </td>
+                      <td className="border-b border-slate-100 px-3 py-3">
+                        <span
+                          className={`inline-flex min-h-7 items-center rounded-md border px-2 text-xs font-bold ${
+                            row.statusLabel === "Draft"
+                              ? "border-amber-200 bg-amber-50 text-amber-800"
+                              : row.statusLabel === "Pending"
+                                ? "border-sky-200 bg-sky-50 text-sky-800"
+                                : row.statusLabel === "Ready"
+                                  ? "border-violet-200 bg-violet-50 text-violet-800"
+                                  : row.statusLabel === "Paid"
+                                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                                    : "border-slate-200 bg-slate-50 text-slate-600"
+                          }`}
+                        >
+                          {row.statusLabel}
+                        </span>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {row.invoiceCount} invoice{row.invoiceCount === 1 ? "" : "s"}
+                        </p>
+                      </td>
+                      <td className="border-b border-slate-100 px-3 py-3 font-semibold text-slate-700">
+                        {row.latestDateLabel}
+                      </td>
+                      <td className="border-b border-slate-100 px-3 py-3 text-right font-semibold text-slate-900">
+                        {row.invoiceAmountLabel}
+                      </td>
+                      <td className="border-b border-slate-100 px-3 py-3 text-right font-bold text-slate-950">
+                        {row.balanceLabel}
+                      </td>
+                      <td className="border-b border-slate-100 px-3 py-3 text-right text-xs font-bold text-slate-600">
+                        {row.readyJobCount > 0 ? `${row.readyJobCount} ready` : "Review"}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td className="px-3 py-5 text-sm font-semibold text-slate-600" colSpan={6}>
+                      Load customer accounts or billing documents to show the customer billing overview.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
 
         <section
           className="rounded-lg border border-slate-200 bg-white shadow-sm"

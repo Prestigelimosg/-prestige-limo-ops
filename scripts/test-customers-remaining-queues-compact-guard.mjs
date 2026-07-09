@@ -20,6 +20,14 @@ const [customersPage, preactivationSuite] = await Promise.all([
 
 for (const fragment of [
   "Monthly Billing Queue",
+  "Customer Billing Overview",
+  "type CustomerBillingOverviewRow = {",
+  "customerBillingOverviewRows",
+  "customerBillingOverviewTotals",
+  "async function viewCustomerJobsFromBillingOverviewRow(row: CustomerBillingOverviewRow)",
+  'data-customer-billing-overview="true"',
+  "data-customer-billing-overview-row={row.customerFolderKey}",
+  "data-customer-billing-overview-open={row.customerFolderKey}",
   "Prepare monthly bill",
   "async function viewCustomerJobsFromBillingRow(row: UnbilledCustomerRow)",
   "readRegularCustomerSavedBookingsForTarget(",

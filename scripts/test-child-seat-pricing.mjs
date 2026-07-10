@@ -2,8 +2,16 @@ import assert from "node:assert/strict";
 import {
   calculateProfit,
   initialRateSettings,
+  isMidnightPickup,
   resolvePricing,
 } from "../lib/pricing.ts";
+
+assert.equal(isMidnightPickup("2259hrs"), false);
+assert.equal(isMidnightPickup("2300hrs"), true);
+assert.equal(isMidnightPickup("23:00"), true);
+assert.equal(isMidnightPickup("0659hrs"), true);
+assert.equal(isMidnightPickup("06:59"), true);
+assert.equal(isMidnightPickup("0700hrs"), false);
 
 const defaultPricing = resolvePricing(
   {

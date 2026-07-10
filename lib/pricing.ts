@@ -128,11 +128,11 @@ export function normalizeChildSeatCount(
 
 function normalizePickupTimeForStorage(value: string | null | undefined) {
   const rawValue = clean(value).toLowerCase();
-  const amPmMatch = rawValue.match(/\b(\d{1,2})(?::?(\d{2}))?\s*(am|pm)\b/);
+  const amPmMatch = rawValue.match(/\b(\d{1,2})(?:(?::|\.)(\d{2})|(\d{2}))?\s*(am|pm)\b/);
 
   if (amPmMatch) {
     const rawHour = Number(amPmMatch[1]);
-    const rawMinute = Number(amPmMatch[2] ?? "0");
+    const rawMinute = Number(amPmMatch[2] ?? amPmMatch[3] ?? "0");
 
     if (
       Number.isInteger(rawHour) &&
@@ -143,7 +143,7 @@ function normalizePickupTimeForStorage(value: string | null | undefined) {
       rawMinute <= 59
     ) {
       const hour =
-        amPmMatch[3] === "am"
+        amPmMatch[4] === "am"
           ? rawHour % 12
           : rawHour === 12
             ? 12

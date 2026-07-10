@@ -19894,6 +19894,25 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   function openNewBookingRequestNotificationReview(bookingReference: string) {
     const safeBookingReference = cleanReferenceText(bookingReference);
 
+    if (!safeBookingReference) {
+      if (customerBookingRequestDisplayItems.length > 0) {
+        openCustomerBookingRequestsReview({ highlight: true });
+        return;
+      }
+
+      const message = {
+        tone: "error",
+        text: "Open request needs a booking reference. No exact customer request could be loaded from this notification.",
+      } satisfies Message;
+
+      setMessage(message);
+      setAdminAppNotificationReadState((current) => ({
+        ...current,
+        message,
+      }));
+      return;
+    }
+
     if (safeBookingReference) {
       const loadedRecord = findLoadedBookingRecordByReference(bookings, safeBookingReference);
 
@@ -43241,14 +43260,15 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 	                      <div className="mt-2 flex flex-wrap gap-2">
                         {isNewBookingRequestNotification ? (
                           <button
-                            className="h-7 rounded-md border border-emerald-300 bg-emerald-700 px-2 text-xs font-semibold text-white transition hover:bg-emerald-600"
+                            className="h-7 rounded-md border border-emerald-300 bg-emerald-700 px-2 text-xs font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400 disabled:hover:bg-slate-100"
                             data-admin-app-notification-review-new-booking-request="true"
+                            disabled={!newBookingRequestReference && customerBookingRequestDisplayItems.length === 0}
                             onClick={() =>
                               openNewBookingRequestNotificationReview(newBookingRequestReference)
                             }
                             type="button"
                           >
-                            Open request
+                            {newBookingRequestReference ? "Open request" : "Review queue"}
                           </button>
                         ) : null}
                         {changeRequestContext ? (

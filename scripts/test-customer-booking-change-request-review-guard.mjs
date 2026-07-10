@@ -195,6 +195,9 @@ for (const forbidden of [
 for (const fragment of [
   "safe_context?: Record<string, unknown> | null",
   "adminAppNotificationBookingReference",
+  "Open request needs a booking reference. No exact customer request could be loaded from this notification.",
+  'disabled={!newBookingRequestReference && customerBookingRequestDisplayItems.length === 0}',
+  '{newBookingRequestReference ? "Open request" : "Review queue"}',
   "adminAppNotificationChangeRequestRows",
   "customer_booking_change_request",
   "data-admin-app-notification-change-request",

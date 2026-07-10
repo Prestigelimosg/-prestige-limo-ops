@@ -16323,9 +16323,31 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         );
       });
   }, [operationalBookings, searchTerm]);
-  const dashboardSearchResultBookings = clean(searchTerm)
-    ? dashboardBookings.slice(0, 8)
+  const dashboardSearchSourceBookings = useMemo(
+    () =>
+      operationalBookings
+        .slice()
+        .sort((firstBooking, secondBooking) => {
+          const firstDate = getBookingDateKey(firstBooking);
+          const secondDate = getBookingDateKey(secondBooking);
+
+          if (firstDate !== secondDate) {
+            return firstDate.localeCompare(secondDate);
+          }
+
+          return (
+            normaliseTimeForSort(firstBooking.pickup_time) -
+            normaliseTimeForSort(secondBooking.pickup_time)
+          );
+        }),
+    [operationalBookings],
+  );
+  const dashboardSearchMatchingBookings = clean(searchTerm)
+    ? dashboardSearchSourceBookings.filter((bookingRecord) =>
+        bookingMatchesLocalSearch(bookingRecord, searchTerm),
+      )
     : [];
+  const dashboardSearchResultBookings = dashboardSearchMatchingBookings.slice(0, 8);
   const bookingRecordHasCompletedDriverReport = useCallback((bookingRecord: BookingRecord) => {
     const bookingReference = getBookingDriverJobStatusReference(bookingRecord);
 
@@ -42620,8 +42642,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                 <h3 className="text-sm font-semibold text-slate-950">Quick search results</h3>
                 <p className="text-xs font-semibold text-slate-500">
-                  Showing {dashboardSearchResultBookings.length} of {dashboardBookings.length} loaded match
-                  {dashboardBookings.length === 1 ? "" : "es"} for &quot;{searchTerm}&quot;.
+                  Showing {dashboardSearchResultBookings.length} of {dashboardSearchMatchingBookings.length} match
+                  {dashboardSearchMatchingBookings.length === 1 ? "" : "es"} from{" "}
+                  {dashboardSearchSourceBookings.length} loaded booking
+                  {dashboardSearchSourceBookings.length === 1 ? "" : "s"} for &quot;{searchTerm}&quot;.
                 </p>
               </div>
               {dashboardSearchResultBookings.length > 0 ? (

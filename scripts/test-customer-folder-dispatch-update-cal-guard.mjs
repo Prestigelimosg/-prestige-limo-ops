@@ -130,6 +130,16 @@ assertIncludes(
 );
 assertIncludes(
   dispatchPageSource,
+  "dashboardSearchSourceBookings",
+  "Operations Dashboard quick search must count loaded operational bookings separately from matches",
+);
+assertIncludes(
+  dispatchPageSource,
+  "bookingMatchesLocalSearch(bookingRecord, searchTerm)",
+  "Operations Dashboard quick search must use the shared booking matcher",
+);
+assertIncludes(
+  dispatchPageSource,
   "function saveFakeRitzDispatchEdit",
   "Dispatch must keep the fake Ritz no-write edit persistence helper",
 );

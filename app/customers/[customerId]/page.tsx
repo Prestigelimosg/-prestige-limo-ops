@@ -5,6 +5,7 @@ import {
   type MockCustomer,
 } from "../_data/mock-customers";
 import { CustomerInvoiceFolderPanel } from "./customer-invoice-folder-panel";
+import { CustomerCompanyProfileEditor } from "./customer-company-profile-editor";
 import { CustomerFolderSavedBookingsPanel } from "./saved-bookings-panel";
 
 type CustomerFolderPageProps = {
@@ -67,13 +68,7 @@ export default async function MockCustomerFolderPage({ params, searchParams }: C
               <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Customer company profile</p>
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 <h1 className="text-2xl font-bold tracking-normal text-slate-950">{customer.companyName}</h1>
-                <Link
-                  className="inline-flex min-h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-sm font-bold text-slate-800 transition hover:border-slate-700"
-                  data-customer-company-profile-edit={customer.id}
-                  href={`/customers?customer_id=${encodeURIComponent(customer.id)}&customer_name=${encodeURIComponent(customer.companyName)}`}
-                >
-                  Open customer workspace
-                </Link>
+                <CustomerCompanyProfileEditor customerId={customer.id} customerName={customer.companyName} />
               </div>
               <p className="mt-1 max-w-3xl text-sm leading-5 text-slate-600">
                 Review this customer&apos;s profile, invoices, due balance, and billing status before any guarded

@@ -49,7 +49,9 @@ function safeFailureResponse() {
 }
 
 function requireAdminDispatcherBoundary(request: Request): AdminDispatcherBoundaryCheck {
-  const boundary = resolveAdminDispatcherBoundary(request, adminBookingPersistencePurpose);
+  const boundary = resolveAdminDispatcherBoundary(request, adminBookingPersistencePurpose, {
+    additionalSameOriginRefererPathPrefixes: ["/customers"],
+  });
 
   return boundary.ok
     ? {

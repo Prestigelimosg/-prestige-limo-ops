@@ -136,6 +136,7 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
   const [storedInvoiceMessage, setStoredInvoiceMessage] = useState("Loading stored invoices...");
   const [paidInvoiceMethods, setPaidInvoiceMethods] = useState<Record<string, PaymentMethod>>({});
   const [localPaidInvoices, setLocalPaidInvoices] = useState<Record<string, PaymentMethod>>({});
+  const [localInvoiceStatusOverrides, setLocalInvoiceStatusOverrides] = useState<Record<string, "Paid" | "Unpaid">>({});
   const [invoiceActionMessage, setInvoiceActionMessage] = useState("");
   const mockInvoices = useMemo<DisplayInvoice[]>(
     () =>
@@ -161,7 +162,6 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
     [customer],
   );
   const displayInvoices = storedInvoices.length > 0 ? storedInvoices : mockInvoices;
-  const unpaidInvoices = displayInvoices.filter((invoice) => !isPaidStatus(invoice.status));
   const selectedInvoice =
     displayInvoices.find((invoice) => invoice.invoiceNumber === selectedInvoiceNumber) ??
     displayInvoices[0];
@@ -172,7 +172,11 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
     ? paidInvoiceMethods[selectedInvoice.invoiceNumber] ?? "Bank transfer"
     : "Bank transfer";
   const selectedInvoiceIsPaid = selectedInvoice
-    ? Boolean(localPaidInvoices[selectedInvoice.invoiceNumber]) || isPaidStatus(selectedInvoice.status)
+    ? localInvoiceStatusOverrides[selectedInvoice.invoiceNumber] === "Unpaid"
+      ? false
+      : localInvoiceStatusOverrides[selectedInvoice.invoiceNumber] === "Paid" ||
+        Boolean(localPaidInvoices[selectedInvoice.invoiceNumber]) ||
+        isPaidStatus(selectedInvoice.status)
     : false;
   const selectedInvoiceStatus = selectedInvoiceIsPaid ? "Paid" : "Pending";
   const selectedInvoiceBalance = selectedInvoice
@@ -385,16 +389,80 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
     }));
   }
 
-  function markInvoicePaid(invoice: DisplayInvoice) {
+  function applyInvoiceStatus(invoiceNumber: string, status: "Paid" | "Unpaid") {
+    setLocalInvoiceStatusOverrides((currentOverrides) => ({
+      ...currentOverrides,
+      [invoiceNumber]: status,
+    }));
+    setStoredInvoices((currentInvoices) =>
+      currentInvoices.map((invoice) =>
+        invoice.invoiceNumber === invoiceNumber
+          ? {
+              ...invoice,
+              status,
+            }
+          : invoice,
+      ),
+    );
+  }
+
+  async function persistInvoiceStatus(invoiceNumber: string, status: "Paid" | "Unpaid") {
+    if (!/^INV-/.test(invoiceNumber)) {
+      return false;
+    }
+
+    try {
+      const response = await fetch(adminCustomerInvoicesApiPath, {
+        body: JSON.stringify({
+          invoiceNumber,
+          status,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "PATCH",
+      });
+      const result = await response.json().catch(() => null);
+
+      return response.ok && result?.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  async function updateInvoicePaidState(invoice: DisplayInvoice, paid: boolean) {
+    const status = paid ? "Paid" : "Unpaid";
     const paymentMethod = paidInvoiceMethods[invoice.invoiceNumber] ?? "Bank transfer";
 
     setSelectedInvoiceNumber(invoice.invoiceNumber);
-    setLocalPaidInvoices((currentPaidInvoices) => ({
-      ...currentPaidInvoices,
-      [invoice.invoiceNumber]: paymentMethod,
-    }));
+    applyInvoiceStatus(invoice.invoiceNumber, status);
+
+    if (paid) {
+      setLocalPaidInvoices((currentPaidInvoices) => ({
+        ...currentPaidInvoices,
+        [invoice.invoiceNumber]: paymentMethod,
+      }));
+    } else {
+      setLocalPaidInvoices((currentPaidInvoices) => {
+        const nextPaidInvoices = { ...currentPaidInvoices };
+
+        delete nextPaidInvoices[invoice.invoiceNumber];
+
+        return nextPaidInvoices;
+      });
+    }
+
+    const persisted = await persistInvoiceStatus(invoice.invoiceNumber, status);
+
     setInvoiceActionMessage(
-      `Marked ${invoice.invoiceNumber} paid by ${paymentMethod}. Thank you message ready for ${selectedContact?.value ?? customer.companyName}.`,
+      paid
+        ? `Marked ${invoice.invoiceNumber} paid by ${paymentMethod}${
+            persisted ? "" : " in this customer view"
+          }. Thank you message ready for ${selectedContact?.value ?? customer.companyName}.`
+        : `Reversed ${invoice.invoiceNumber} to unpaid${
+            persisted ? "" : " in this customer view"
+          }. Balance is open again for billing follow-up.`,
     );
   }
 
@@ -462,7 +530,11 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
             ) : null}
             {displayInvoices.map((invoice) => {
               const paidLocally = localPaidInvoices[invoice.invoiceNumber];
-              const isPaid = Boolean(paidLocally) || isPaidStatus(invoice.status);
+              const statusOverride = localInvoiceStatusOverrides[invoice.invoiceNumber];
+              const isPaid =
+                statusOverride === "Unpaid"
+                  ? false
+                  : statusOverride === "Paid" || Boolean(paidLocally) || isPaidStatus(invoice.status);
               const balance = isPaid ? "$0" : invoice.amount;
               const selected = selectedInvoiceNumber === invoice.invoiceNumber;
               const paymentMethod = paidInvoiceMethods[invoice.invoiceNumber] ?? paidLocally ?? "Bank transfer";
@@ -499,13 +571,6 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap justify-end gap-2">
-                      <button
-                        className="rounded-md border border-slate-300 bg-white px-3 py-1.5 font-bold text-slate-800 hover:bg-slate-50"
-                        onClick={() => openInvoice(invoice.invoiceNumber)}
-                        type="button"
-                      >
-                        View
-                      </button>
                       {isPaid ? null : (
                         <button
                           className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 font-bold text-amber-900 hover:bg-amber-100"
@@ -530,12 +595,16 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
                         <option>Cash</option>
                       </select>
                       <button
-                        className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 font-bold text-emerald-800 hover:bg-emerald-100"
+                        className={`rounded-md border px-3 py-1.5 font-bold ${
+                          isPaid
+                            ? "border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100"
+                            : "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                        }`}
                         data-customer-invoice-folder-mark-paid={invoice.invoiceNumber}
-                        onClick={() => markInvoicePaid(invoice)}
+                        onClick={() => updateInvoicePaidState(invoice, !isPaid)}
                         type="button"
                       >
-                        Mark paid
+                        {isPaid ? "Mark unpaid" : "Mark paid"}
                       </button>
                     </div>
                   </td>
@@ -544,44 +613,6 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
             })}
           </tbody>
         </table>
-      </div>
-
-      <div className="border-t border-slate-200 bg-white px-4 py-3" data-customer-unpaid-invoices="true">
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h3 className="text-base font-bold text-slate-950">Unpaid invoices</h3>
-            <p className="text-xs font-semibold text-slate-600">
-              Compact rows. Click a row to open the selected invoice below.
-            </p>
-          </div>
-          <p className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-bold text-slate-700">
-            {unpaidInvoices.length} unpaid
-          </p>
-        </div>
-        {unpaidInvoices.length > 0 ? (
-          <div className="mt-2 max-h-48 overflow-auto rounded-md border border-slate-200">
-            {unpaidInvoices.map((invoice) => (
-              <button
-                className="grid w-full gap-1 border-b border-slate-100 px-3 py-2 text-left text-xs last:border-b-0 hover:bg-slate-50 sm:grid-cols-[minmax(8rem,0.9fr)_6rem_minmax(0,1fr)_5rem]"
-                data-customer-unpaid-invoice-row={invoice.invoiceNumber}
-                key={`unpaid-${invoice.invoiceNumber}`}
-                onClick={() => openInvoice(invoice.invoiceNumber)}
-                type="button"
-              >
-                <span className="font-bold text-slate-950">{invoice.invoiceNumber}</span>
-                <span className="font-bold text-slate-800">{invoice.amount}</span>
-                <span className="truncate text-slate-600">
-                  {invoice.lineItems[0]?.description || invoice.service}
-                </span>
-                <span className="text-right font-bold text-sky-700">View</span>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <p className="mt-2 rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-600">
-            No unpaid invoice records loaded for this customer.
-          </p>
-        )}
       </div>
 
       {selectedInvoice ? (
@@ -670,12 +701,16 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
                 <option>Cash</option>
               </select>
               <button
-                className="min-h-9 rounded-md border border-emerald-300 bg-emerald-50 px-3 text-sm font-bold text-emerald-800 hover:bg-emerald-100"
+                className={`min-h-9 rounded-md border px-3 text-sm font-bold ${
+                  selectedInvoiceIsPaid
+                    ? "border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100"
+                    : "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                }`}
                 data-customer-invoice-folder-selected-mark-paid={selectedInvoice.invoiceNumber}
-                onClick={() => markInvoicePaid(selectedInvoice)}
+                onClick={() => updateInvoicePaidState(selectedInvoice, !selectedInvoiceIsPaid)}
                 type="button"
               >
-                Mark paid + thank you
+                {selectedInvoiceIsPaid ? "Mark unpaid" : "Mark paid + thank you"}
               </button>
             </div>
           </div>

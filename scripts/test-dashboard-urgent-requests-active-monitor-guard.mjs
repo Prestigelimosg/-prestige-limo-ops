@@ -78,7 +78,7 @@ const dashboardCommandCentrePanel = sliceBetween(
 );
 const dashboardUrgentPanel = sliceBetween(
   appPage,
-  'aria-label="Urgent Booking Requests"',
+  'aria-label="Urgent and Customer Requests"',
   "<section\n            aria-label=\"Admin App Notifications\"",
 );
 const ledgerSection = sliceBetween(
@@ -155,10 +155,11 @@ for (const fragment of [
 }
 
 for (const fragment of [
-  "Urgent Booking Requests",
+  "Urgent / Customer Requests",
   'data-dashboard-urgent-booking-requests-panel="true"',
   'data-dashboard-urgent-booking-requests-count={String(dashboardUrgentBookingRequestCount)}',
-  "Open urgent bookings in Driver Job Link, then create and copy the driver link.",
+  'data-dashboard-change-cancel-requests-count={String(customerBookingChangeRequestCount)}',
+  "Open urgent bookings in Driver Job Link, or review customer change/cancel requests.",
   'data-dashboard-open-urgent-driver-job-link="true"',
   "disabled={dashboardUrgentBookingRequestCount === 0}",
   "const firstBooking = dashboardUrgentBookingRequestDisplayItems[0]?.bookingRecord;",
@@ -176,7 +177,16 @@ for (const fragment of [
   "Passenger: {passengerText}",
   "Needs driver link |",
   "loadSelectedBooking(bookingRecord, { focusDriverJobLink: true })",
-  "No urgent booking requests or Driver TBC jobs inside the dispatch window.",
+  "customerBookingChangeRequestNotifications.map",
+  "adminAppNotificationChangeRequestContext(notification)",
+  'data-dashboard-change-cancel-request-row={safeRowKey}',
+  'data-dashboard-change-cancel-request-action="accept"',
+  "handleAdminBookingChangeRequestApply(notification)",
+  'data-dashboard-change-cancel-request-action="reject"',
+  'handleAdminBookingChangeRequestCancelDecision(notification, "reject")',
+  'data-dashboard-change-cancel-request-action="dismiss"',
+  'handleAdminBookingChangeRequestCancelDecision(notification, "dismiss")',
+  "No urgent booking requests, Driver TBC jobs, or customer change/cancel requests.",
 ]) {
   assertIncludes(dashboardUrgentPanel, fragment, `dashboard urgent panel fragment ${fragment}`);
 }
@@ -207,7 +217,7 @@ for (const fragment of [
 assertSourceOrder(
   dashboardCommandCentrePanel,
   [
-    'aria-label="Urgent Booking Requests"',
+    'aria-label="Urgent and Customer Requests"',
     'aria-label="Admin App Notifications"',
   ],
   "dashboard command centre order",
@@ -362,7 +372,7 @@ for (const forbiddenPattern of [
 }
 
 for (const phrase of [
-  "Dashboard request panel is now `Urgent Booking Requests` and displays only open customer requests plus saved Driver TBC jobs inside the 1-hour pickup monitor window.",
+  "Dashboard request panel is now `Urgent / Customer Requests` and displays open customer requests, saved Driver TBC jobs inside the 1-hour pickup monitor window, and customer change/cancel requests using the existing guarded notification handlers.",
   "Dashboard `Open Urgent` and urgent rows load the selected urgent booking into Dispatch with the existing Driver Job Link panel focused, a visible booking handoff notice, and keyboard focus on `Create Link` so admin can create and copy the driver link before a driver is assigned.",
   "Dashboard keeps a secondary `Review` action for the existing request review path; it does not replace the Driver Job Link urgent handoff.",
   "The Dashboard request panel remains the queue for open customer requests outside the 1-hour dispatch window as `Urgent & New Booking Requests`, with row badges separating under-24h-but-not-dispatch-window requests from new non-urgent requests; Bookings remains for saved booking search/load/list work.",

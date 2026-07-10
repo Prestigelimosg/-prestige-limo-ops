@@ -194,9 +194,16 @@ for (const forbidden of [
 
 for (const fragment of [
   "safe_context?: Record<string, unknown> | null",
+  "adminAppNotificationBookingReference",
   "adminAppNotificationChangeRequestRows",
   "customer_booking_change_request",
   "data-admin-app-notification-change-request",
+  "customerBookingChangeRequestNotifications",
+  "data-dashboard-change-cancel-request-row",
+  "data-dashboard-change-cancel-request-action=\"accept\"",
+  "handleAdminBookingChangeRequestApply(notification)",
+  "handleAdminBookingChangeRequestCancelDecision(notification, \"reject\")",
+  "handleAdminBookingChangeRequestCancelDecision(notification, \"dismiss\")",
 ]) {
   assertIncludes(adminPage, fragment, `admin inbox change request render ${fragment}`);
 }

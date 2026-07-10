@@ -9881,6 +9881,23 @@ function adminAppNotificationContextValue(value: unknown) {
   return cleaned.replace(/_/g, " ");
 }
 
+function adminAppNotificationSafeContext(notification: AdminAppNotificationRecord) {
+  return notification.safe_context &&
+    typeof notification.safe_context === "object" &&
+    !Array.isArray(notification.safe_context)
+      ? notification.safe_context
+      : {};
+}
+
+function adminAppNotificationBookingReference(notification: AdminAppNotificationRecord) {
+  const context = adminAppNotificationSafeContext(notification);
+
+  return (
+    cleanReferenceText(notification.booking_reference) ||
+    cleanReferenceText(adminAppNotificationContextValue(context.booking_reference))
+  );
+}
+
 function adminAppNotificationChangeRequestContext(
   notification: AdminAppNotificationRecord,
 ): AdminBookingChangeRequestContext | null {
@@ -9888,16 +9905,8 @@ function adminAppNotificationChangeRequestContext(
     return null;
   }
 
-  const context =
-    notification.safe_context &&
-    typeof notification.safe_context === "object" &&
-    !Array.isArray(notification.safe_context)
-      ? notification.safe_context
-      : {};
-
-  const bookingReference =
-    cleanReferenceText(notification.booking_reference) ||
-    cleanReferenceText(adminAppNotificationContextValue(context.booking_reference));
+  const context = adminAppNotificationSafeContext(notification);
+  const bookingReference = adminAppNotificationBookingReference(notification);
 
   if (!bookingReference) {
     return null;
@@ -16691,9 +16700,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     customerBookingRequestCount,
     newBookingRequestNotificationCount,
   );
-  const customerBookingChangeRequestCount = adminAppNotificationReadState.notifications.filter((notification) =>
+  const customerBookingChangeRequestNotifications = adminAppNotificationReadState.notifications.filter((notification) =>
     Boolean(adminAppNotificationChangeRequestContext(notification)),
-  ).length;
+  );
+  const customerBookingChangeRequestCount = customerBookingChangeRequestNotifications.length;
   const bookingsTabUrgentUnderOneHourCount = dashboardUrgentBookingRequestBookings.length;
   const bookingsTabAttentionCount =
     dashboardNewBookingRequestAttentionCount + customerBookingChangeRequestCount + bookingsTabUrgentUnderOneHourCount;
@@ -42743,9 +42753,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           ) : null}
 
           <section
-            aria-label="Urgent Booking Requests"
+            aria-label="Urgent and Customer Requests"
             className={`mb-4 rounded-md border p-2 sm:p-3 ${
-              dashboardUrgentBookingRequestCount > 0
+              dashboardUrgentBookingRequestCount > 0 || customerBookingChangeRequestCount > 0
                 ? "border-amber-300 bg-amber-50"
                 : "border-stone-200 bg-stone-50"
             } ${
@@ -42762,7 +42772,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="text-base font-semibold text-slate-950">Urgent Booking Requests</h3>
+                  <h3 className="text-base font-semibold text-slate-950">Urgent / Customer Requests</h3>
                   <span
                     className={`rounded-full px-2.5 py-1 text-xs font-semibold uppercase ring-1 ${
                       dashboardUrgentBookingRequestCount > 0
@@ -42774,9 +42784,19 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   >
                     {dashboardUrgentBookingRequestCount} urgent
                   </span>
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-xs font-semibold uppercase ring-1 ${
+                      customerBookingChangeRequestCount > 0
+                        ? "bg-sky-100 text-sky-900 ring-sky-200"
+                        : "bg-white text-slate-600 ring-stone-200"
+                    }`}
+                    data-dashboard-change-cancel-requests-count={String(customerBookingChangeRequestCount)}
+                  >
+                    {customerBookingChangeRequestCount} change/cancel
+                  </span>
                 </div>
                 <p className="mt-1 text-xs text-slate-600 sm:text-sm">
-                  Open urgent bookings in Driver Job Link, then create and copy the driver link.
+                  Open urgent bookings in Driver Job Link, or review customer change/cancel requests.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2 sm:justify-end">
@@ -42808,7 +42828,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 </button>
               </div>
             </div>
-            {dashboardUrgentBookingRequestDisplayItems.length > 0 ? (
+            {dashboardUrgentBookingRequestDisplayItems.length > 0 || customerBookingChangeRequestCount > 0 ? (
               <div className="mt-3 grid gap-2" data-dashboard-new-booking-request-rows="true">
                 {dashboardUrgentBookingRequestDisplayItems.map(({ bookingRecord, operationalCard }) => {
                   const routePoints = getRoutePoints(bookingRecord);
@@ -42855,13 +42875,108 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                           ? `Needs driver link | ${routeText}`
                           : `Driver TBC under 1h | ${routeText}`}
                       </span>
-                    </button>
+                      </button>
+                    );
+                  })}
+                {customerBookingChangeRequestNotifications.map((notification) => {
+                  const notificationId = clean(notification.id);
+                  const changeRequestContext = adminAppNotificationChangeRequestContext(notification);
+
+                  if (!notificationId || !changeRequestContext) {
+                    return null;
+                  }
+
+                  const loadedChangeRequestBookingRecord =
+                    findAdminBookingPersistenceRecordByReference(
+                      adminBookingPersistenceRecords,
+                      changeRequestContext.bookingReference,
+                    ) ||
+                    (() => {
+                      const loadedRecord = findLoadedBookingRecordByReference(
+                        bookings,
+                        changeRequestContext.bookingReference,
+                      );
+
+                      return loadedRecord ? bookingRecordToAdminBookingPersistenceRecord(loadedRecord) : null;
+                    })();
+                  const summaryRows = adminBookingChangeRequestSummaryRows(
+                    changeRequestContext,
+                    loadedChangeRequestBookingRecord,
+                  );
+                  const activeChangeRequestAction =
+                    adminBookingChangeRequestReviewAction?.notificationId === notificationId
+                      ? adminBookingChangeRequestReviewAction.action
+                      : null;
+                  const activeNotificationAction =
+                    adminAppNotificationAction?.notificationId === notificationId
+                      ? adminAppNotificationAction.status
+                      : null;
+                  const actionDisabled = Boolean(activeChangeRequestAction || activeNotificationAction);
+                  const requestTitle = adminBookingChangeRequestKindTitle(changeRequestContext);
+                  const passengerRow = summaryRows.find((row) => row.label === "Passenger");
+                  const requestedRow = summaryRows.find((row) => row.label === "Requested");
+                  const safeRowKey = notificationId || changeRequestContext.bookingReference;
+
+                  return (
+                    <article
+                      className="rounded-md border border-sky-200 bg-white px-3 py-2 text-sm shadow-sm"
+                      data-dashboard-change-cancel-request-row={safeRowKey}
+                      key={`dashboard-change-request-${safeRowKey}`}
+                    >
+                      <div className="grid gap-2 md:grid-cols-[minmax(10rem,0.8fr)_minmax(12rem,1fr)_auto] md:items-center">
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-slate-950">
+                            {requestTitle} - {changeRequestContext.bookingReference}
+                          </p>
+                          <p className="truncate text-xs text-slate-500">
+                            {passengerRow?.value || changeRequestContext.passengerName || "Passenger not shown"}
+                          </p>
+                        </div>
+                        <div className="min-w-0 text-xs text-slate-700 sm:text-sm">
+                          <p className="truncate">
+                            Requested: {requestedRow?.value || changeRequestContext.requestNote || "Review details"}
+                          </p>
+                          <p className="truncate text-xs text-slate-500">
+                            Existing guarded change/cancel review actions.
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2 md:justify-end">
+                          <button
+                            className="h-8 rounded-md border border-emerald-300 bg-emerald-700 px-2 text-xs font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                            data-dashboard-change-cancel-request-action="accept"
+                            disabled={actionDisabled}
+                            onClick={() => handleAdminBookingChangeRequestApply(notification)}
+                            type="button"
+                          >
+                            {activeChangeRequestAction === "accept" ? "Accepting..." : "Accept + Cal"}
+                          </button>
+                          <button
+                            className="h-8 rounded-md border border-rose-200 bg-white px-2 text-xs font-semibold text-rose-800 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                            data-dashboard-change-cancel-request-action="reject"
+                            disabled={actionDisabled}
+                            onClick={() => handleAdminBookingChangeRequestCancelDecision(notification, "reject")}
+                            type="button"
+                          >
+                            {activeChangeRequestAction === "reject" ? "Rejecting..." : "Reject"}
+                          </button>
+                          <button
+                            className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                            data-dashboard-change-cancel-request-action="dismiss"
+                            disabled={actionDisabled}
+                            onClick={() => handleAdminBookingChangeRequestCancelDecision(notification, "dismiss")}
+                            type="button"
+                          >
+                            {activeChangeRequestAction === "dismiss" ? "Dismissing..." : "Dismiss"}
+                          </button>
+                        </div>
+                      </div>
+                    </article>
                   );
                 })}
               </div>
             ) : (
               <p className="mt-3 rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-slate-600">
-                No urgent booking requests or Driver TBC jobs inside the dispatch window.
+                No urgent booking requests, Driver TBC jobs, or customer change/cancel requests.
               </p>
             )}
           </section>
@@ -42988,7 +43103,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     clean(notification.workflow_area) === "new_booking_request" ||
                     clean(notification.safe_title).toLowerCase() === "new booking request";
                   const newBookingRequestReference = isNewBookingRequestNotification
-                    ? cleanReferenceText(notification.booking_reference)
+                    ? adminAppNotificationBookingReference(notification)
                     : "";
                   const newBookingRequestLoadedRecord = newBookingRequestReference
                     ? findLoadedBookingRecordByReference(bookings, newBookingRequestReference)

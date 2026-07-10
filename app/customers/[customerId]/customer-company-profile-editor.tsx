@@ -13,10 +13,11 @@ type CustomerCompanyProfileEditorProps = {
 type CompanyProfile = {
   company_name: string;
   domain: string;
-  id: number;
+  id: number | null;
 };
 
 type EditorStatus = "idle" | "loading" | "ready" | "saving" | "saved" | "error";
+type ProfileMode = "create" | "edit";
 
 function feedbackClass(status: EditorStatus) {
   if (status === "error") {
@@ -56,6 +57,7 @@ export function CustomerCompanyProfileEditor({
   const [status, setStatus] = useState<EditorStatus>("idle");
   const [message, setMessage] = useState("");
   const [profile, setProfile] = useState<CompanyProfile | null>(null);
+  const [profileMode, setProfileMode] = useState<ProfileMode>("edit");
 
   async function openProfileEditor() {
     setStatus("loading");
@@ -72,14 +74,20 @@ export function CustomerCompanyProfileEditor({
       const result = await response.json().catch(() => null);
       const company = result?.company;
 
-      if (
-        !response.ok ||
-        !result?.ok ||
-        !company ||
-        !Number.isSafeInteger(Number(company.id)) ||
-        Number(company.id) <= 0
-      ) {
-        throw new Error(result?.error || "No company CRM profile was found.");
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.error || "Customer company profile lookup failed safely.");
+      }
+
+      if (!company) {
+        setProfile({ company_name: customerName, domain: "", id: null });
+        setProfileMode("create");
+        setMessage(`No company CRM profile exists for ${customerName}. Review the name, then create it deliberately.`);
+        setStatus("ready");
+        return;
+      }
+
+      if (!Number.isSafeInteger(Number(company.id)) || Number(company.id) <= 0) {
+        throw new Error("Customer company profile returned an invalid record id.");
       }
 
       setProfile({
@@ -87,6 +95,7 @@ export function CustomerCompanyProfileEditor({
         domain: String(company.domain || "").trim(),
         id: Number(company.id),
       });
+      setProfileMode("edit");
       setMessage(`Editing the company profile for ${String(company.company_name || customerName).trim()}.`);
       setStatus("ready");
     } catch (error) {
@@ -102,6 +111,7 @@ export function CustomerCompanyProfileEditor({
 
     const companyName = profile.company_name.trim();
     const domain = profile.domain.trim().toLowerCase();
+    const isCreate = profileMode === "create";
 
     if (!companyName) {
       setMessage("Company name is required before saving.");
@@ -111,7 +121,7 @@ export function CustomerCompanyProfileEditor({
 
     if (
       !window.confirm(
-        `Save customer company profile for ${companyName}? This updates only this customer company's name and domain. It does not change jobs, invoices, payments, or send any message.`,
+        `${isCreate ? "Create" : "Save"} customer company profile for ${companyName}? This ${isCreate ? "creates" : "updates"} only this customer company's name and domain. It does not change jobs, invoices, payments, or send any message.`,
       )
     ) {
       setMessage("Profile save cancelled. No customer record was changed.");
@@ -120,16 +130,16 @@ export function CustomerCompanyProfileEditor({
     }
 
     setStatus("saving");
-    setMessage(`Saving customer company profile for ${companyName}...`);
+    setMessage(`${isCreate ? "Creating" : "Saving"} customer company profile for ${companyName}...`);
 
     try {
       const response = await fetch(adminCompanyProfileWriteApiPath, {
         body: JSON.stringify({
-          action_type: "company_update",
+          action_type: isCreate ? "company_create" : "company_update",
           company_name: companyName,
           domain: domain || undefined,
           entity_type: "company",
-          id: profile.id,
+          ...(profile.id ? { id: profile.id } : {}),
         }),
         headers: {
           "Content-Type": "application/json",
@@ -149,6 +159,7 @@ export function CustomerCompanyProfileEditor({
         domain: String(savedProfile.domain || domain).trim(),
         id: Number(savedProfile.id),
       });
+      setProfileMode("edit");
       setMessage(`Saved customer company profile for ${String(savedProfile.company_name || companyName).trim()}.`);
       setStatus("saved");
     } catch (error) {
@@ -185,9 +196,12 @@ export function CustomerCompanyProfileEditor({
     >
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm font-bold text-slate-950">Edit customer company profile</p>
+          <p className="text-sm font-bold text-slate-950">
+            {profileMode === "create" ? "Create customer company profile" : "Edit customer company profile"}
+          </p>
           <p className="mt-0.5 text-xs font-semibold leading-5 text-slate-600">
-            Changes this customer company record only. Jobs, invoices, payments, and messages are not affected.
+            {profileMode === "create" ? "Creates" : "Changes"} this customer company record only. Jobs,
+            invoices, payments, and messages are not affected.
           </p>
         </div>
         <div className="flex gap-2">
@@ -196,6 +210,7 @@ export function CustomerCompanyProfileEditor({
             disabled={status === "saving"}
             onClick={() => {
               setProfile(null);
+              setProfileMode("edit");
               setMessage("");
               setStatus("idle");
             }}
@@ -210,7 +225,7 @@ export function CustomerCompanyProfileEditor({
             onClick={saveProfile}
             type="button"
           >
-            {status === "saving" ? "Saving" : "Save profile"}
+            {status === "saving" ? "Saving" : profileMode === "create" ? "Create profile" : "Save profile"}
           </button>
         </div>
       </div>

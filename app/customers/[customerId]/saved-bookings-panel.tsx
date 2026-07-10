@@ -67,7 +67,12 @@ function safeDispatchReference(booking: CustomerFolderSavedBookingRecord) {
   return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(reference) ? reference : "";
 }
 
-function dispatchHref(booking: CustomerFolderSavedBookingRecord) {
+function customerWorkspaceHref(
+  booking: CustomerFolderSavedBookingRecord,
+  customerId: string,
+  customerName: string,
+  action: "edit" | "delete",
+) {
   const reference = safeDispatchReference(booking);
 
   if (!reference) {
@@ -76,14 +81,27 @@ function dispatchHref(booking: CustomerFolderSavedBookingRecord) {
 
   const params = new URLSearchParams({
     booking_reference: reference,
-    tab: "dispatch",
+    customer_id: customerId,
+    customer_job_action: action,
+    customer_name: customerName,
   });
 
-  return `/?${params.toString()}`;
+  return `/customers?${params.toString()}`;
+}
+
+function isClearlyBilledOrClosedJob(booking: CustomerFolderSavedBookingRecord) {
+  const statusText = [booking.admin_status, booking.customer_status]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return /\b(invoice|invoiced|billed|paid|cancelled|canceled|declined|rejected|void|deleted)\b/.test(
+    statusText,
+  );
 }
 
 function initialMessage(customerName: string) {
-  return `Load saved booking references for ${customerName} from the guarded customer-folder read path.`;
+  return `Load saved jobs not clearly billed or closed for ${customerName}.`;
 }
 
 function savedBookingReadFailureMessage(rawError: unknown) {
@@ -126,7 +144,7 @@ export function CustomerFolderSavedBookingsPanel({
 
   async function loadSavedBookings() {
     setReadState({
-      message: `Loading saved booking references for ${customerName}...`,
+      message: `Loading saved jobs for ${customerName}...`,
       savedBookings: [],
       status: "loading",
       summary: null,
@@ -137,7 +155,7 @@ export function CustomerFolderSavedBookingsPanel({
       const params = new URLSearchParams({
         customer_account: customerName,
         customer_id: customerId,
-        limit: "10",
+        limit: "25",
       });
       const response = await fetch(`${adminCustomerSavedBookingsApiPath}?${params.toString()}`, {
         headers: {
@@ -159,8 +177,8 @@ export function CustomerFolderSavedBookingsPanel({
       setReadState({
         message:
           returnedCount > 0
-            ? `Loaded ${countLabel(returnedCount, "saved booking reference")} for ${customerName}.`
-            : `No saved booking references returned for ${customerName}.`,
+            ? `Loaded ${countLabel(returnedCount, "saved job")} for ${customerName}.`
+            : `No saved jobs returned for ${customerName}.`,
         savedBookings,
         status: "loaded",
         summary: result.summary || null,
@@ -177,7 +195,9 @@ export function CustomerFolderSavedBookingsPanel({
     }
   }
 
-  const returnedCount = Number(readState.summary?.returned_count ?? readState.savedBookings.length);
+  const unbilledSavedBookings = readState.savedBookings.filter(
+    (booking) => !isClearlyBilledOrClosedJob(booking),
+  );
   const matchedCount = Number(readState.summary?.matched_count ?? 0);
 
   return (
@@ -191,14 +211,14 @@ export function CustomerFolderSavedBookingsPanel({
             className="text-base font-bold text-slate-950"
             data-customer-folder-saved-bookings-heading="true"
           >
-            Customer jobs
+            Jobs not billed yet
           </h2>
           <p
             className="mt-0.5 max-w-4xl text-xs font-semibold leading-5 text-slate-600"
             data-customer-folder-saved-bookings-boundary="true"
           >
-            Loads this customer&apos;s saved jobs only. Open/Edit uses Dispatch; no invoice, payment, send, payout, GPS,
-            or provider action runs here.
+            Shows saved jobs not clearly billed, paid, cancelled, or closed. Edit and Delete open the exact job in the
+            existing guarded customer workspace; no invoice, payment, send, payout, GPS, or provider action runs here.
           </p>
         </div>
         <button
@@ -208,14 +228,14 @@ export function CustomerFolderSavedBookingsPanel({
           onClick={loadSavedBookings}
           type="button"
         >
-          {readState.status === "loading" ? "Loading" : "Load jobs"}
+          {readState.status === "loading" ? "Loading" : "Load unbilled jobs"}
         </button>
       </div>
 
       <div className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
         {[
           ["Customer", customerName],
-          ["Jobs", countLabel(returnedCount, "loaded job")],
+          ["Jobs not billed", countLabel(unbilledSavedBookings.length, "job")],
           ["Matched", countLabel(matchedCount, "recent admin record")],
         ].map(([label, description]) => (
           <div
@@ -238,16 +258,16 @@ export function CustomerFolderSavedBookingsPanel({
         {readState.message}
       </p>
 
-      {readState.savedBookings.length === 0 ? (
+      {readState.status === "loaded" && unbilledSavedBookings.length === 0 ? (
         <p
           className="mt-3 rounded-md border border-sky-100 bg-white px-3 py-2 text-sm font-semibold leading-6 text-slate-700"
           data-customer-folder-saved-bookings-empty="true"
         >
-          No saved booking references loaded yet.
+          No unbilled saved jobs returned for this customer.
         </p>
       ) : null}
 
-      {readState.status === "loaded" && readState.savedBookings.length > 0 ? (
+      {readState.status === "loaded" && unbilledSavedBookings.length > 0 ? (
         <div
           className="mt-3 max-h-96 overflow-auto rounded-md border border-slate-200"
           data-customer-folder-saved-bookings-list="true"
@@ -263,8 +283,9 @@ export function CustomerFolderSavedBookingsPanel({
               </tr>
             </thead>
             <tbody>
-              {readState.savedBookings.map((booking) => {
-                const href = dispatchHref(booking);
+              {unbilledSavedBookings.map((booking) => {
+                const editHref = customerWorkspaceHref(booking, customerId, customerName, "edit");
+                const deleteHref = customerWorkspaceHref(booking, customerId, customerName, "delete");
                 const rowKey = booking.booking_reference || `${booking.customer_account}-${booking.pickup_at}`;
 
                 return (
@@ -287,14 +308,31 @@ export function CustomerFolderSavedBookingsPanel({
                         "Status unavailable"}
                     </td>
                     <td className="px-3 py-2 text-right">
-                      {href ? (
-                        <Link
-                          className="inline-flex min-h-8 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-xs font-bold text-white transition hover:bg-slate-700"
-                          data-customer-folder-saved-bookings-open-dispatch={booking.booking_reference || ""}
-                          href={href}
-                        >
-                          Open/Edit
-                        </Link>
+                      {editHref && deleteHref ? (
+                        <details className="inline-grid justify-items-end text-left">
+                          <summary
+                            className="inline-flex min-h-8 cursor-pointer list-none items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-xs font-bold text-white transition hover:bg-slate-700 [&::-webkit-details-marker]:hidden"
+                            data-customer-folder-saved-bookings-action-menu={booking.booking_reference || ""}
+                          >
+                            Action
+                          </summary>
+                          <div className="mt-1 grid min-w-28 gap-1 rounded-md border border-slate-200 bg-white p-1 shadow-sm">
+                            <Link
+                              className="rounded px-2 py-1.5 text-xs font-bold text-slate-800 transition hover:bg-slate-100"
+                              data-customer-folder-saved-bookings-edit={booking.booking_reference || ""}
+                              href={editHref}
+                            >
+                              Edit
+                            </Link>
+                            <Link
+                              className="rounded px-2 py-1.5 text-xs font-bold text-rose-700 transition hover:bg-rose-50"
+                              data-customer-folder-saved-bookings-delete={booking.booking_reference || ""}
+                              href={deleteHref}
+                            >
+                              Delete
+                            </Link>
+                          </div>
+                        </details>
                       ) : (
                         <span className="text-xs font-semibold text-slate-400">No reference</span>
                       )}

@@ -70,9 +70,9 @@ export default async function MockCustomerFolderPage({ params, searchParams }: C
                 <Link
                   className="inline-flex min-h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-sm font-bold text-slate-800 transition hover:border-slate-700"
                   data-customer-company-profile-edit={customer.id}
-                  href={`/customers?customer=${encodeURIComponent(customer.id)}`}
+                  href={`/customers?customer_id=${encodeURIComponent(customer.id)}&customer_name=${encodeURIComponent(customer.companyName)}`}
                 >
-                  Edit
+                  Open customer workspace
                 </Link>
               </div>
               <p className="mt-1 max-w-3xl text-sm leading-5 text-slate-600">

@@ -2143,6 +2143,7 @@ export default function MockCustomerDashboardPage() {
   const plainInvoicePanelRef = useRef<HTMLDivElement | null>(null);
   const plainInvoiceCrmRequestSequenceRef = useRef(0);
   const customerInvoicePrepRowKeyRef = useRef("");
+  const customerFolderUrlHandoffRef = useRef("");
   const [searchTerm, setSearchTerm] = useState("");
   const [customerFolderFinderPage, setCustomerFolderFinderPage] = useState(1);
   const [customerFolderFinderSelectedId, setCustomerFolderFinderSelectedId] = useState("");
@@ -4382,6 +4383,112 @@ export default function MockCustomerDashboardPage() {
       });
     }
   }
+
+  async function openCustomerFolderFromUrl(
+    customerId: string,
+    customerName: string,
+    bookingReference: string,
+    action: "edit" | "delete" | "open",
+  ) {
+    setCustomerFolderFinderSelectedId("");
+    setSelectedMonthlyBillingGroupKey("");
+    setSelectedUnbilledCustomerRowKey("");
+    setCustomerFolderFinderDropdownOpen(false);
+    setSearchTerm("");
+    setCustomerFolderFinderPage(1);
+    setExpandedCustomerFolderJobReference("");
+    setSelectedCustomerInvoiceDetailKey("");
+    setCustomerFolderExactBookingEditorState(initialCustomerFolderExactBookingEditorState);
+    setCustomerFolderJobViewState({
+      customerId,
+      customerName,
+      message: `Loading saved jobs for ${customerName}...`,
+      savedBookings: [],
+      status: "loading",
+      summary: null,
+      tone: "info",
+    });
+    scrollCustomerFolderJobsPanelIntoView();
+
+    try {
+      const result = await readRegularCustomerSavedBookingsForTarget(
+        {
+          accountScopeKey: "",
+          customerId,
+          customerName,
+        },
+        "customer-id",
+      );
+      const savedBookings = result.savedBookings;
+      const targetBooking = bookingReference
+        ? savedBookings.find(
+            (booking) => safeCustomerFolderDispatchHandoffReference(booking) === bookingReference,
+          ) ?? null
+        : null;
+
+      setCustomerFolderJobViewState({
+        customerId,
+        customerName,
+        message: bookingReference && !targetBooking
+          ? `Loaded ${savedBookingCountLabel(savedBookings.length, "saved job")}. Job ${bookingReference} was not returned for this customer.`
+          : `Loaded ${savedBookingCountLabel(savedBookings.length, "saved job")} for ${customerName}.`,
+        savedBookings,
+        status: "loaded",
+        summary: result.summary,
+        tone: bookingReference && !targetBooking ? "error" : savedBookings.length > 0 ? "success" : "info",
+      });
+
+      if (targetBooking) {
+        await loadCustomerFolderExactBookingForEdit(targetBooking);
+        setCustomerFolderJobViewState((current) => ({
+          ...current,
+          message:
+            action === "delete"
+              ? `Job ${bookingReference} is open. Delete remains guarded and requires confirmation.`
+              : `Job ${bookingReference} is open for review and edit.`,
+          tone: "info",
+        }));
+      }
+    } catch (error) {
+      setCustomerFolderJobViewState({
+        customerId,
+        customerName,
+        message: customerAdminReadFailureMessage(`Saved job read for ${customerName}`, error),
+        savedBookings: [],
+        status: "error",
+        summary: null,
+        tone: "error",
+      });
+    } finally {
+      if (typeof window !== "undefined") {
+        window.history.replaceState(null, "", window.location.pathname);
+      }
+    }
+  }
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const customerId = cleanCustomerFolderText(searchParams.get("customer_id"), 80);
+    const customerName = cleanCustomerFolderText(searchParams.get("customer_name"), 160);
+    const bookingReference = cleanCustomerFolderText(searchParams.get("booking_reference"), 120);
+    const requestedAction = searchParams.get("customer_job_action");
+    const action = requestedAction === "delete" ? "delete" : requestedAction === "edit" ? "edit" : "open";
+
+    if (!customerId || !customerName) {
+      return;
+    }
+
+    const handoffKey = [customerId, customerName, bookingReference, action].join("::");
+
+    if (customerFolderUrlHandoffRef.current === handoffKey) {
+      return;
+    }
+
+    customerFolderUrlHandoffRef.current = handoffKey;
+    void openCustomerFolderFromUrl(customerId, customerName, bookingReference, action);
+    // URL handoff runs once so normal page interactions do not reload the selected customer.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function viewCustomerJobsFromBillingRow(row: UnbilledCustomerRow) {
     setCustomerFolderFinderSelectedId(row.customerId);

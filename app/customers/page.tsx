@@ -2435,6 +2435,10 @@ export default function MockCustomerDashboardPage() {
   const [plainInvoicePreview, setPlainInvoicePreview] =
     useState<CustomerInvoicePreview | null>(null);
   const [fakeRitzInvoiceHandoffActive, setFakeRitzInvoiceHandoffActive] = useState(false);
+  const [fakeRitzInvoiceCustomerTarget, setFakeRitzInvoiceCustomerTarget] = useState({
+    customerId: "",
+    customerName: "",
+  });
   const [plainInvoiceFeedback, setPlainInvoiceFeedback] = useState(
     "Create Invoice is ready for manual bill-to. No invoice number is created until Draft or Issue.",
   );
@@ -4616,6 +4620,7 @@ export default function MockCustomerDashboardPage() {
     selectedBookingReferences = "",
   ) {
     setFakeRitzInvoiceHandoffActive(false);
+    setFakeRitzInvoiceCustomerTarget({ customerId: "", customerName: "" });
     customerFolderReturnHrefRef.current =
       action === "edit" || action === "delete" ? customerFolderHrefFor(customerId, customerName) : "";
     setCustomerFolderFinderSelectedId("");
@@ -4670,6 +4675,9 @@ export default function MockCustomerDashboardPage() {
         route: "Ritz Carlton > Marina Bay Cruise Centre",
         service: fakeService,
       });
+      setSelectedPlainInvoiceCrmFolderKey("");
+      setPlainInvoiceCrmPickerOpen(false);
+      setFakeRitzInvoiceCustomerTarget({ customerId, customerName });
       setFakeRitzInvoiceHandoffActive(true);
       setPlainInvoicePreview(null);
       setCustomerInvoiceWorkspaceTab("statements");
@@ -4682,15 +4690,11 @@ export default function MockCustomerDashboardPage() {
       setCustomerFolderJobViewState({
         customerId,
         customerName,
-        message: `Fake job ${fakeReferences.join(", ")} loaded into Create Invoice. No booking, invoice, payment, send, payout, GPS, provider, or Supabase record was created.`,
+        message: "",
         savedBookings: [],
-        status: "loaded",
-        summary: {
-          matched_count: 0,
-          recent_read_count: 0,
-          returned_count: 0,
-        },
-        tone: "success",
+        status: "idle",
+        summary: null,
+        tone: "info",
       });
       window.setTimeout(() => {
         plainInvoicePanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -5307,6 +5311,7 @@ export default function MockCustomerDashboardPage() {
   function clearPlainInvoiceForm() {
     setPlainInvoiceForm(plainInvoiceInitialForm());
     setFakeRitzInvoiceHandoffActive(false);
+    setFakeRitzInvoiceCustomerTarget({ customerId: "", customerName: "" });
     setPlainInvoicePreview(null);
     setPlainInvoiceFeedback(
       "Create Invoice cleared. No invoice number, PDF, email, payment, or customer folder was created.",
@@ -8459,9 +8464,30 @@ export default function MockCustomerDashboardPage() {
                       Manual bill-to
                     </h3>
                   </div>
-                  <p className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-600">
-                    No number yet
-                  </p>
+                  {fakeRitzInvoiceHandoffActive ? (
+                    <Link
+                      className="fixed right-4 top-4 z-50 inline-flex min-h-9 max-w-full items-center rounded-md border border-emerald-300 bg-emerald-50 px-3 text-xs font-bold text-emerald-800 shadow-sm transition hover:bg-emerald-100"
+                      data-fake-ritz-ready-email="true"
+                      href={customerFolderHrefFor(
+                        fakeRitzInvoiceCustomerTarget.customerId || plainInvoiceForm.crmCustomerId || "Ritz Carlton",
+                        fakeRitzInvoiceCustomerTarget.customerName || plainInvoiceForm.crmCustomerName || "Ritz Carlton",
+                      ).replace(
+                        /$/,
+                        `${customerFolderHrefFor(
+                          fakeRitzInvoiceCustomerTarget.customerId || plainInvoiceForm.crmCustomerId || "Ritz Carlton",
+                          fakeRitzInvoiceCustomerTarget.customerName || plainInvoiceForm.crmCustomerName || "Ritz Carlton",
+                        ).includes("?") ? "&" : "?"}ready_fake_ritz_invoice=1&selected_booking_references=${encodeURIComponent(
+                          plainInvoiceForm.reference,
+                        )}`,
+                      )}
+                    >
+                      Ready to email
+                    </Link>
+                  ) : (
+                    <p className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-600">
+                      No number yet
+                    </p>
+                  )}
                 </div>
                 {fakeRitzInvoiceHandoffActive ? (
                   <div
@@ -8573,22 +8599,14 @@ export default function MockCustomerDashboardPage() {
                         </span>
                       </div>
                     </div>
-                    <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 pt-3">
+                    <div className="mt-4 flex flex-wrap items-center justify-start gap-2 border-t border-slate-200 pt-3">
                       <p className="text-xs font-semibold text-slate-500">
                         Preview only. Email is still guarded below.
                       </p>
-                      <button
-                        className="inline-flex min-h-9 items-center rounded-md border border-emerald-300 bg-emerald-50 px-3 text-xs font-bold text-emerald-800 transition hover:bg-emerald-100"
-                        data-fake-ritz-ready-email="true"
-                        onClick={previewPlainInvoice}
-                        type="button"
-                      >
-                        Ready to email
-                      </button>
                     </div>
                   </div>
                 ) : null}
-                <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(9rem,1fr)_minmax(9rem,0.9fr)_minmax(8rem,0.75fr)_minmax(8rem,0.7fr)] xl:items-end">
+                <div className={`${fakeRitzInvoiceHandoffActive ? "hidden" : "mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(9rem,1fr)_minmax(9rem,0.9fr)_minmax(8rem,0.75fr)_minmax(8rem,0.7fr)] xl:items-end"}`}>
                   <div className="grid gap-2 sm:col-span-2 xl:col-span-4 xl:grid-cols-[minmax(12rem,1fr)_auto] xl:items-end">
                     <div className="relative grid gap-1 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
                       <span>CRM billing account</span>
@@ -8826,7 +8844,10 @@ export default function MockCustomerDashboardPage() {
                     </label>
                   </div>
                 </div>
-                <div className="mt-3" data-plain-invoice-line-items="true">
+                <div
+                  className={fakeRitzInvoiceHandoffActive ? "hidden" : "mt-3"}
+                  data-plain-invoice-line-items="true"
+                >
                   <div className="flex flex-wrap items-end justify-between gap-2">
                     <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
                       Line items
@@ -8931,7 +8952,9 @@ export default function MockCustomerDashboardPage() {
                     Add item
                   </button>
                 </div>
-                <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                <div
+                  className={fakeRitzInvoiceHandoffActive ? "hidden" : "mt-3 flex flex-wrap items-center gap-1.5"}
+                >
                   <button
                     className={`inline-flex h-7 items-center justify-center whitespace-nowrap rounded-md border px-2 text-[11px] font-bold leading-none transition ${
                       isPlainInvoicePreviewCurrent
@@ -9000,7 +9023,7 @@ export default function MockCustomerDashboardPage() {
                     Clear
                   </button>
                 </div>
-                {plainInvoicePreview ? (
+                {!fakeRitzInvoiceHandoffActive && plainInvoicePreview ? (
                   <div
                     className={`mt-3 rounded-md border px-3 py-2 text-xs leading-5 ${
                       isPlainInvoicePreviewCurrent
@@ -9078,7 +9101,7 @@ export default function MockCustomerDashboardPage() {
                 ) : null}
                 <p
                   aria-live="polite"
-                  className={`mt-2 rounded-md border px-3 py-2 text-sm font-semibold leading-5 ${regularCustomerBookingFeedbackClass(
+                  className={`${fakeRitzInvoiceHandoffActive ? "hidden" : "mt-2"} rounded-md border px-3 py-2 text-sm font-semibold leading-5 ${regularCustomerBookingFeedbackClass(
                     plainInvoiceFeedbackTone,
                   )}`}
                   data-plain-invoice-feedback="true"
@@ -9087,7 +9110,7 @@ export default function MockCustomerDashboardPage() {
                   {plainInvoiceFeedback}
                 </p>
                 <p
-                  className="mt-2 rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-950"
+                  className={`${fakeRitzInvoiceHandoffActive ? "hidden" : "mt-2"} rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-950`}
                   data-plain-invoice-boundary="true"
                 >
                   Create Invoice stores an admin billing document only after Draft or Issue. Select a CRM billing
@@ -9097,7 +9120,7 @@ export default function MockCustomerDashboardPage() {
                   guarded email route. Paid only changes invoice status; it does not record a payment.
                 </p>
               </div>
-              {customerInvoiceDrafts.length > 0 ? (
+              {!fakeRitzInvoiceHandoffActive && customerInvoiceDrafts.length > 0 ? (
                 <div
                   className="mt-3 border-t border-slate-200 pt-3"
                   data-customer-invoice-draft-list="true"

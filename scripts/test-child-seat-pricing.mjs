@@ -7,11 +7,17 @@ import {
 } from "../lib/pricing.ts";
 
 assert.equal(isMidnightPickup("2259hrs"), false);
+assert.equal(isMidnightPickup("10:59pm"), false);
 assert.equal(isMidnightPickup("2300hrs"), true);
 assert.equal(isMidnightPickup("23:00"), true);
+assert.equal(isMidnightPickup("11pm"), true);
+assert.equal(isMidnightPickup("11:00pm"), true);
 assert.equal(isMidnightPickup("0659hrs"), true);
 assert.equal(isMidnightPickup("06:59"), true);
+assert.equal(isMidnightPickup("6:59am"), true);
 assert.equal(isMidnightPickup("0700hrs"), false);
+assert.equal(isMidnightPickup("7am"), false);
+assert.equal(isMidnightPickup("7:00am"), false);
 
 const defaultPricing = resolvePricing(
   {

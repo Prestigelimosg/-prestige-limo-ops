@@ -127,7 +127,33 @@ export function normalizeChildSeatCount(
 }
 
 function normalizePickupTimeForStorage(value: string | null | undefined) {
-  const digits = clean(value).replace(/\D/g, "");
+  const rawValue = clean(value).toLowerCase();
+  const amPmMatch = rawValue.match(/\b(\d{1,2})(?::?(\d{2}))?\s*(am|pm)\b/);
+
+  if (amPmMatch) {
+    const rawHour = Number(amPmMatch[1]);
+    const rawMinute = Number(amPmMatch[2] ?? "0");
+
+    if (
+      Number.isInteger(rawHour) &&
+      Number.isInteger(rawMinute) &&
+      rawHour >= 1 &&
+      rawHour <= 12 &&
+      rawMinute >= 0 &&
+      rawMinute <= 59
+    ) {
+      const hour =
+        amPmMatch[3] === "am"
+          ? rawHour % 12
+          : rawHour === 12
+            ? 12
+            : rawHour + 12;
+
+      return `${String(hour).padStart(2, "0")}${String(rawMinute).padStart(2, "0")}`;
+    }
+  }
+
+  const digits = rawValue.replace(/\D/g, "");
 
   if (digits.length >= 4) {
     return digits.slice(0, 4);

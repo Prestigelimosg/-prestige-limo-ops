@@ -19592,8 +19592,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     setCompletedCancelHandoffBooking(cancelledReviewBooking);
     loadSelectedBooking(cancelledReviewBooking, { focusCustomerCopy: true });
     setActiveTab("completed");
-    setCompletedMonthFilter("all");
-    setCompletedSearchTerm(bookingReference);
+    setCompletedMonthFilter(bookingRecordCompletedHistoryMonthKey(cancelledReviewBooking));
+    setCompletedSearchTerm("");
     setCompletedTripCloseoutReviewStatus("waived-no-charge");
     setCompletedTripCloseoutReviewNote(
       `Customer folder Delete opened ${bookingReference} for cancel/no-charge closeout review. No automatic save ran.`,

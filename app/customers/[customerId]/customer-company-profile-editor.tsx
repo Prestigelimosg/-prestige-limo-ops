@@ -62,6 +62,29 @@ function profileValue(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function blankCreateProfile(customerName: string): CompanyProfile {
+  return {
+    accounts_email: "",
+    billing_address: "",
+    billing_email: "",
+    company_name: customerName,
+    domain: "",
+    id: null,
+    main_phone: "",
+    mobile_phone: "",
+    operations_email: "",
+    primary_contact_name: "",
+    website: "",
+  };
+}
+
+function isMissingCompanyProfileResult(response: Response, result: unknown) {
+  const record = result !== null && typeof result === "object" ? (result as Record<string, unknown>) : {};
+  const message = typeof record.error === "string" ? record.error.toLowerCase() : "";
+
+  return response.status === 404 || /not found|no company/.test(message);
+}
+
 function profilePayload(profile: CompanyProfile, isCreate: boolean) {
   const website = profile.website.trim().toLowerCase();
 
@@ -107,23 +130,19 @@ export function CustomerCompanyProfileEditor({
       const company = result?.company;
 
       if (!response.ok || !result?.ok) {
+        if (isMissingCompanyProfileResult(response, result)) {
+          setProfile(blankCreateProfile(customerName));
+          setProfileMode("create");
+          setMessage(`No company CRM profile exists for ${customerName}. Review the name, then create it deliberately.`);
+          setStatus("ready");
+          return;
+        }
+
         throw new Error(result?.error || "Customer company profile lookup failed safely.");
       }
 
       if (!company) {
-        setProfile({
-          accounts_email: "",
-          billing_address: "",
-          billing_email: "",
-          company_name: customerName,
-          domain: "",
-          id: null,
-          main_phone: "",
-          mobile_phone: "",
-          operations_email: "",
-          primary_contact_name: "",
-          website: "",
-        });
+        setProfile(blankCreateProfile(customerName));
         setProfileMode("create");
         setMessage(`No company CRM profile exists for ${customerName}. Review the name, then create it deliberately.`);
         setStatus("ready");

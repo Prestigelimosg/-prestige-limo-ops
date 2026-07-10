@@ -21,6 +21,8 @@ const sourceFiles = [
   "lib/admin-dispatcher-auth-boundary.ts",
   "app/api/admin-companies-crm-identity/route.ts",
 ];
+const companyIdentitySelect =
+  "id, company_name, domain, billing_address, main_phone, mobile_phone, website, primary_contact_name, billing_email, accounts_email, operations_email";
 const originalEnv = {
   PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED:
     process.env.PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED,
@@ -324,9 +326,17 @@ try {
 
     assert.equal(helperResult.ok, true);
     assert.deepEqual(helperResult.data, {
+      accounts_email: null,
+      billing_address: null,
+      billing_email: null,
       company_name: "Safe Corporate",
       domain: "safe.example.invalid",
       id: 101,
+      main_phone: null,
+      mobile_phone: null,
+      operations_email: null,
+      primary_contact_name: null,
+      website: null,
     });
     assert.deepEqual(
       helperMock.client.selectHistory.map((entry) => ({
@@ -337,11 +347,11 @@ try {
       [
         {
           filters: [{ column: "domain", type: "eq", value: "safe.example.invalid" }],
-          selectedColumns: "id, company_name, domain",
+          selectedColumns: companyIdentitySelect,
           table: "companies",
         },
       ],
-      "Expected typed companies CRM identity helper to select safe identity/domain columns only.",
+      "Expected typed companies CRM identity helper to select safe company profile columns only.",
     );
     assert.equal(unsafeLeakPattern.test(JSON.stringify(helperResult)), false);
 
@@ -368,9 +378,17 @@ try {
     assert.equal(success.status, 200);
     assert.equal(success.body.ok, true);
     assert.deepEqual(success.body.company, {
+      accounts_email: null,
+      billing_address: null,
+      billing_email: null,
       company_name: "Case Match Company",
       domain: "case.example.invalid",
       id: 202,
+      main_phone: null,
+      mobile_phone: null,
+      operations_email: null,
+      primary_contact_name: null,
+      website: null,
     });
     assert.deepEqual(success.body.readiness, {
       external_send: false,
@@ -388,7 +406,7 @@ try {
     );
     assert.deepEqual(
       routeMock.client.selectHistory.map((entry) => entry.selectedColumns),
-      ["id, company_name, domain"],
+      [companyIdentitySelect],
       "Companies CRM identity route must not select rate, payout, notes, payment, or parser fields.",
     );
 

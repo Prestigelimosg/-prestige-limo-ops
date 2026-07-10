@@ -16323,6 +16323,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         );
       });
   }, [operationalBookings, searchTerm]);
+  const dashboardSearchResultBookings = clean(searchTerm)
+    ? dashboardBookings.slice(0, 8)
+    : [];
   const bookingRecordHasCompletedDriverReport = useCallback((bookingRecord: BookingRecord) => {
     const bookingReference = getBookingDriverJobStatusReference(bookingRecord);
 
@@ -42607,6 +42610,71 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             </div>
           </div>
           {statusPanel}
+
+          {clean(searchTerm) ? (
+            <section
+              aria-label="Dashboard quick search results"
+              className="mb-4 rounded-md border border-slate-200 bg-white p-2 sm:p-3"
+              data-dashboard-quick-search-results="true"
+            >
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                <h3 className="text-sm font-semibold text-slate-950">Quick search results</h3>
+                <p className="text-xs font-semibold text-slate-500">
+                  Showing {dashboardSearchResultBookings.length} of {dashboardBookings.length} loaded match
+                  {dashboardBookings.length === 1 ? "" : "es"} for &quot;{searchTerm}&quot;.
+                </p>
+              </div>
+              {dashboardSearchResultBookings.length > 0 ? (
+                <div className="mt-2 grid gap-2" data-dashboard-quick-search-result-rows="true">
+                  {dashboardSearchResultBookings.map((bookingRecord) => {
+                    const bookingReference =
+                      clean(bookingRecord.booking_reference) || bookingRecordStableKey(bookingRecord);
+                    const routePoints = getRoutePoints(bookingRecord);
+                    const pickup = clean(bookingRecord.pickup_address) || routePoints[0] || "Pickup";
+                    const dropoff =
+                      clean(bookingRecord.dropoff_address) ||
+                      routePoints[routePoints.length - 1] ||
+                      "Drop-off";
+
+                    return (
+                      <button
+                        className="grid min-h-10 gap-1 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-left text-sm transition hover:border-slate-400 hover:bg-white md:grid-cols-[minmax(8rem,0.7fr)_minmax(10rem,0.8fr)_minmax(12rem,1.2fr)] md:items-center"
+                        data-dashboard-quick-search-result={bookingReference}
+                        key={`dashboard-search-${bookingReference}`}
+                        onClick={() => loadSelectedBooking(bookingRecord)}
+                        type="button"
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate font-semibold text-slate-950">
+                            {compactBookingReference(bookingReference)}
+                          </span>
+                          <span className="block truncate text-xs text-slate-500">
+                            {formatPickupDateTime(
+                              getBookingDateKey(bookingRecord),
+                              formatPickupTimeFromRecord(bookingRecord),
+                            )}
+                          </span>
+                        </span>
+                        <span className="min-w-0 truncate font-semibold text-slate-800">
+                          {getBookingName(bookingRecord)}
+                        </span>
+                        <span className="min-w-0 truncate text-slate-700">
+                          {getBookingCompany(bookingRecord)} | {pickup} &gt; {dropoff}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p
+                  className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900"
+                  data-dashboard-quick-search-empty="true"
+                >
+                  No loaded dashboard bookings match &quot;{searchTerm}&quot;. Refresh Loaded Bookings, then search again.
+                </p>
+              )}
+            </section>
+          ) : null}
 
           {bookingsTabAttentionCount > 0 ? (
             <section

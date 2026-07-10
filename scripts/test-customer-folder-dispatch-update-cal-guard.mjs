@@ -115,6 +115,21 @@ assertIncludes(
 );
 assertIncludes(
   dispatchPageSource,
+  "data-dashboard-quick-search-results",
+  "Operations Dashboard quick search must render visible loaded-booking results",
+);
+assertIncludes(
+  dispatchPageSource,
+  "data-dashboard-quick-search-result",
+  "Operations Dashboard quick search result rows must be clickable",
+);
+assertIncludes(
+  dispatchPageSource,
+  "dashboardSearchResultBookings",
+  "Operations Dashboard quick search must derive visible result rows from loaded bookings",
+);
+assertIncludes(
+  dispatchPageSource,
   "function saveFakeRitzDispatchEdit",
   "Dispatch must keep the fake Ritz no-write edit persistence helper",
 );

@@ -8697,7 +8697,7 @@ export default function MockCustomerDashboardPage() {
                     </div>
                   </div>
                 ) : null}
-                <div className={`${fakeRitzInvoiceHandoffActive ? "hidden" : "mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(9rem,1fr)_minmax(9rem,0.9fr)_minmax(8rem,0.75fr)_minmax(8rem,0.7fr)] xl:items-end"}`}>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(9rem,1fr)_minmax(9rem,0.9fr)_minmax(8rem,0.75fr)_minmax(8rem,0.7fr)] xl:items-end">
                   <div className="grid gap-2 sm:col-span-2 xl:col-span-4 xl:grid-cols-[minmax(12rem,1fr)_auto] xl:items-end">
                     <div className="relative grid gap-1 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
                       <span>CRM billing account</span>
@@ -9043,9 +9043,7 @@ export default function MockCustomerDashboardPage() {
                     Add item
                   </button>
                 </div>
-                <div
-                  className={fakeRitzInvoiceHandoffActive ? "hidden" : "mt-3 flex flex-wrap items-center gap-1.5"}
-                >
+                <div className="mt-3 flex flex-wrap items-center gap-1.5">
                   <button
                     className={`inline-flex h-7 items-center justify-center whitespace-nowrap rounded-md border px-2 text-[11px] font-bold leading-none transition ${
                       isPlainInvoicePreviewCurrent
@@ -9192,7 +9190,7 @@ export default function MockCustomerDashboardPage() {
                 ) : null}
                 <p
                   aria-live="polite"
-                  className={`${fakeRitzInvoiceHandoffActive ? "hidden" : "mt-2"} rounded-md border px-3 py-2 text-sm font-semibold leading-5 ${regularCustomerBookingFeedbackClass(
+                  className={`mt-2 rounded-md border px-3 py-2 text-sm font-semibold leading-5 ${regularCustomerBookingFeedbackClass(
                     plainInvoiceFeedbackTone,
                   )}`}
                   data-plain-invoice-feedback="true"
@@ -9201,7 +9199,7 @@ export default function MockCustomerDashboardPage() {
                   {plainInvoiceFeedback}
                 </p>
                 <p
-                  className={`${fakeRitzInvoiceHandoffActive ? "hidden" : "mt-2"} rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-950`}
+                  className="mt-2 rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-950"
                   data-plain-invoice-boundary="true"
                 >
                   Create Invoice stores an admin billing document only after Draft or Issue. Select a CRM billing

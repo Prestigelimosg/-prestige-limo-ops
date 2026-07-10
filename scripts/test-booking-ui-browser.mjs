@@ -11230,13 +11230,14 @@ async function runChromeTest() {
       driverProfileSaveState.fetchCalls.every((call) => !call.includes("/rest/v1/bookings")),
       `Expected driver profile save not to update bookings, got ${driverProfileSaveState.fetchCalls.join(", ")}`,
     );
-    assert.equal(driverProfileSaveState.driverSearchCountText, "Showing 0 of 30 drivers.");
+    assert.equal(driverProfileSaveState.driverSearchCountText, "Showing 30 of 30 drivers.");
     assert.ok(
       driverProfileSaveState.driverSearchHelperText === "" ||
-        driverProfileSaveState.driverSearchHelperText === "Search driver name, phone, plate, or vehicle to show drivers.",
+        driverProfileSaveState.driverSearchHelperText ===
+          "Loaded drivers are shown below. Search driver name, phone, plate, or vehicle to filter.",
       `Expected compact Driver Database helper to be hidden or restored after save, got ${driverProfileSaveState.driverSearchHelperText}`,
     );
-    assert.equal(driverProfileSaveState.driverRowTexts.length, 0);
+    assert.equal(driverProfileSaveState.driverRowTexts.length, 30);
     assert.ok(
       driverProfileSaveState.statusDistanceFromSaveButton !== null &&
         driverProfileSaveState.statusDistanceFromSaveButton <= 120,
@@ -11527,7 +11528,7 @@ async function runChromeTest() {
         evaluate(`(() => {
           const rows = [...document.querySelectorAll("[data-driver-profile-row]")].map((row) => row.innerText);
 
-          return rows.length === 0 &&
+          return rows.length === 30 &&
             !document.querySelector("[data-driver-search-empty='true']")
             ? {
                 countText: document.querySelector("[data-driver-search-count='true']")?.textContent.trim() || "",
@@ -11539,10 +11540,11 @@ async function runChromeTest() {
       10000,
       "driver search cleared",
     );
-    assert.equal(driverSearchClearedState.countText, "Showing 0 of 30 drivers.");
+    assert.equal(driverSearchClearedState.countText, "Showing 30 of 30 drivers.");
     assert.ok(
       driverSearchClearedState.helperText === "" ||
-        driverSearchClearedState.helperText === "Search driver name, phone, plate, or vehicle to show drivers.",
+        driverSearchClearedState.helperText ===
+          "Loaded drivers are shown below. Search driver name, phone, plate, or vehicle to filter.",
       `Expected compact Driver Database helper to be hidden or restored after clearing search, got ${driverSearchClearedState.helperText}`,
     );
 

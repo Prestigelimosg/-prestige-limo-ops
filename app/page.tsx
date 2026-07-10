@@ -15929,7 +15929,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     const query = clean(driverSearchTerm);
 
     if (!query) {
-      return [];
+      return driverProfileDisplayDrivers;
     }
 
     return driverProfileDisplayDrivers.filter((driver) => driverDisplayMatchesSearch(driver, query));
@@ -41752,7 +41752,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 		                </label>
 		                {driverProfileDisplayDrivers.length > 0 && !driverDatabaseSearchQuery ? (
 		                  <p className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900" data-driver-search-helper="true">
-		                    Search driver name, phone, plate, or vehicle to show drivers.
+		                    Loaded drivers are shown below. Search driver name, phone, plate, or vehicle to filter.
 		                  </p>
 		                ) : null}
 		                {driverProfileDisplayDrivers.length > 0 && driverDatabaseSearchQuery && filteredDrivers.length === 0 ? (
@@ -41776,8 +41776,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 		                ) : null}
 		                {driverProfileDisplayDrivers.length === 0 ? (
 		                  <p className="text-sm text-slate-500">No drivers loaded.</p>
-		                ) : !driverDatabaseSearchQuery ? (
-		                  <p className="text-sm text-slate-500">Search to show drivers.</p>
 		                ) : (
 		                  filteredDrivers.map((driver) => {
 		                    const fullProfileDriver = drivers.find((candidate) => candidate.id === driver.id) ?? null;

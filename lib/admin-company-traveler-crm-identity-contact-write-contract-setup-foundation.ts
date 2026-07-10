@@ -12,9 +12,17 @@ export const adminCompanyTravelerCrmIdentityContactWriteContractSetupFoundationV
 export type AdminCompanyTravelerCrmIdentityContactWriteContractInput = Record<string, unknown>;
 
 export type AdminCompanyTravelerCrmIdentityContactWriteContractCompanyFields = {
+  accounts_email: string | null;
+  billing_address: string | null;
+  billing_email: string | null;
   company_name: string | null;
   domain: string | null;
   id: number | null;
+  main_phone: string | null;
+  mobile_phone: string | null;
+  operations_email: string | null;
+  primary_contact_name: string | null;
+  website: string | null;
 };
 
 export type AdminCompanyTravelerCrmIdentityContactWriteContractTravelerFields = {
@@ -71,6 +79,9 @@ export type AdminCompanyTravelerCrmIdentityContactWriteContractResult = {
 
 const allowedCanonicalFields = [
   "action_type",
+  "accounts_email",
+  "billing_address",
+  "billing_email",
   "booker_contact",
   "booker_email",
   "booker_name",
@@ -82,15 +93,26 @@ const allowedCanonicalFields = [
   "domain",
   "entity_type",
   "id",
+  "main_phone",
+  "mobile_phone",
+  "operations_email",
+  "primary_contact_name",
   "preferred_vehicle",
   "traveler_id",
   "traveler_name",
+  "website",
 ] as const;
 
 const fieldAliases = new Map<string, (typeof allowedCanonicalFields)[number]>([
   ["action", "action_type"],
   ["action_type", "action_type"],
   ["actiontype", "action_type"],
+  ["accounts_email", "accounts_email"],
+  ["accountsemail", "accounts_email"],
+  ["billing_address", "billing_address"],
+  ["billingaddress", "billing_address"],
+  ["billing_email", "billing_email"],
+  ["billingemail", "billing_email"],
   ["booker_contact", "booker_contact"],
   ["bookercontact", "booker_contact"],
   ["booker_email", "booker_email"],
@@ -112,12 +134,21 @@ const fieldAliases = new Map<string, (typeof allowedCanonicalFields)[number]>([
   ["entity_type", "entity_type"],
   ["entitytype", "entity_type"],
   ["id", "id"],
+  ["main_phone", "main_phone"],
+  ["mainphone", "main_phone"],
+  ["mobile_phone", "mobile_phone"],
+  ["mobilephone", "mobile_phone"],
+  ["operations_email", "operations_email"],
+  ["operationsemail", "operations_email"],
+  ["primary_contact_name", "primary_contact_name"],
+  ["primarycontactname", "primary_contact_name"],
   ["preferred_vehicle", "preferred_vehicle"],
   ["preferredvehicle", "preferred_vehicle"],
   ["traveler_id", "traveler_id"],
   ["travelerid", "traveler_id"],
   ["traveler_name", "traveler_name"],
   ["travelername", "traveler_name"],
+  ["website", "website"],
   ["type", "action_type"],
 ]);
 
@@ -264,6 +295,25 @@ function safeContact(value: unknown) {
   return safeText(value, 160);
 }
 
+function safeCustomerProfileText(value: unknown, maxLength: number) {
+  const cleaned = textOrNull(value);
+
+  if (!cleaned || cleaned.length > maxLength) {
+    return null;
+  }
+
+  const normalized = cleaned.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+  const disallowed = forbiddenValueFragments.filter((fragment) => fragment !== "billing");
+
+  return disallowed.some((fragment) => normalized.includes(fragment)) ? null : cleaned;
+}
+
+function safeCustomerProfileEmail(value: unknown) {
+  const cleaned = safeCustomerProfileText(value, 240)?.toLowerCase() || null;
+
+  return cleaned && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleaned) ? cleaned : null;
+}
+
 function positiveInteger(value: unknown) {
   const parsed = Number(value);
 
@@ -327,7 +377,11 @@ function normalizeInput(input: unknown) {
   for (const key of Object.keys(record)) {
     const canonical = canonicalFieldName(key);
 
-    if (hasForbiddenFieldFragment(key)) {
+    if (
+      hasForbiddenFieldFragment(key) &&
+      canonical !== "billing_address" &&
+      canonical !== "billing_email"
+    ) {
       forbiddenFields.push(key);
       continue;
     }
@@ -362,9 +416,17 @@ export function buildAdminCompanyTravelerCrmIdentityContactWriteContractSetup(
   const companyId = positiveInteger(firstValue(normalized, "company_id", scope === "company" ? "id" : ""));
   const travelerId = positiveInteger(firstValue(normalized, "traveler_id", scope === "traveler" ? "id" : ""));
   const companyFields = {
+    accounts_email: safeCustomerProfileEmail(firstValue(normalized, "accounts_email")),
+    billing_address: safeCustomerProfileText(firstValue(normalized, "billing_address"), 500),
+    billing_email: safeCustomerProfileEmail(firstValue(normalized, "billing_email")),
     company_name: safeText(firstValue(normalized, "company_name")),
     domain: safeDomain(firstValue(normalized, "domain")),
     id: companyId,
+    main_phone: safeContact(firstValue(normalized, "main_phone")),
+    mobile_phone: safeContact(firstValue(normalized, "mobile_phone")),
+    operations_email: safeCustomerProfileEmail(firstValue(normalized, "operations_email")),
+    primary_contact_name: safeText(firstValue(normalized, "primary_contact_name"), 160),
+    website: safeDomain(firstValue(normalized, "website")),
   };
   const travelerFields = {
     booker_contact: safeContact(firstValue(normalized, "booker_contact")),
@@ -382,6 +444,18 @@ export function buildAdminCompanyTravelerCrmIdentityContactWriteContractSetup(
     [
       fieldInvalid(normalized, "company_name", companyFields.company_name) ? "company_name" : "",
       fieldInvalid(normalized, "domain", companyFields.domain) ? "domain" : "",
+      fieldInvalid(normalized, "billing_address", companyFields.billing_address) ? "billing_address" : "",
+      fieldInvalid(normalized, "main_phone", companyFields.main_phone) ? "main_phone" : "",
+      fieldInvalid(normalized, "mobile_phone", companyFields.mobile_phone) ? "mobile_phone" : "",
+      fieldInvalid(normalized, "website", companyFields.website) ? "website" : "",
+      fieldInvalid(normalized, "primary_contact_name", companyFields.primary_contact_name)
+        ? "primary_contact_name"
+        : "",
+      fieldInvalid(normalized, "billing_email", companyFields.billing_email) ? "billing_email" : "",
+      fieldInvalid(normalized, "accounts_email", companyFields.accounts_email) ? "accounts_email" : "",
+      fieldInvalid(normalized, "operations_email", companyFields.operations_email)
+        ? "operations_email"
+        : "",
       fieldInvalid(normalized, "booker_contact", travelerFields.booker_contact) ? "booker_contact" : "",
       fieldInvalid(normalized, "booker_email", travelerFields.booker_email) ? "booker_email" : "",
       fieldInvalid(normalized, "booker_name", travelerFields.booker_name) ? "booker_name" : "",
@@ -412,6 +486,7 @@ export function buildAdminCompanyTravelerCrmIdentityContactWriteContractSetup(
     scope === "company" &&
     !companyFields.company_name &&
     !companyFields.domain &&
+    !companyFields.website &&
     !companyFields.id
   ) {
     missingRequirements.push("company_identity_field");

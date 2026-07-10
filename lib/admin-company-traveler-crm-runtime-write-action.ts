@@ -28,6 +28,9 @@ type RuntimeWriteReason =
   | "write_gate_closed";
 
 export type AdminCompanyTravelerCrmRuntimeWriteActionRecord = {
+  accounts_email?: string | null;
+  billing_address?: string | null;
+  billing_email?: string | null;
   booker_contact?: string | null;
   booker_email?: string | null;
   booker_name?: string | null;
@@ -38,8 +41,13 @@ export type AdminCompanyTravelerCrmRuntimeWriteActionRecord = {
   default_pickup_address?: string | null;
   domain?: string | null;
   id: number;
+  main_phone?: string | null;
+  mobile_phone?: string | null;
+  operations_email?: string | null;
+  primary_contact_name?: string | null;
   preferred_vehicle?: string | null;
   traveler_name?: string | null;
+  website?: string | null;
 };
 
 export type AdminCompanyTravelerCrmRuntimeWriteActionResult = {
@@ -78,7 +86,8 @@ const safeConfigError =
   "Company/traveler CRM identity/contact write is not configured on this server.";
 const safeWriteError = "Company/traveler CRM identity/contact write failed safely.";
 const allowedActorRoles = new Set(["admin", "dispatcher"]);
-const companyWriteSelect = "id, company_name, domain";
+const companyWriteSelect =
+  "id, company_name, domain, billing_address, main_phone, mobile_phone, website, primary_contact_name, billing_email, accounts_email, operations_email";
 const travelerWriteSelect =
   "id, company_id, traveler_name, preferred_vehicle, default_address, default_pickup_address, default_dropoff_address, booker_name, booker_contact, booker_email";
 const placeholderConfigPattern =
@@ -281,8 +290,18 @@ function getRuntimeWriteClient(
 
 function companyPayload(contract: AdminCompanyTravelerCrmIdentityContactWriteContractResult) {
   return {
+    ...(contract.company_fields.accounts_email ? { accounts_email: contract.company_fields.accounts_email } : {}),
+    ...(contract.company_fields.billing_address ? { billing_address: contract.company_fields.billing_address } : {}),
+    ...(contract.company_fields.billing_email ? { billing_email: contract.company_fields.billing_email } : {}),
     ...(contract.company_fields.company_name ? { company_name: contract.company_fields.company_name } : {}),
     ...(contract.company_fields.domain ? { domain: contract.company_fields.domain } : {}),
+    ...(contract.company_fields.main_phone ? { main_phone: contract.company_fields.main_phone } : {}),
+    ...(contract.company_fields.mobile_phone ? { mobile_phone: contract.company_fields.mobile_phone } : {}),
+    ...(contract.company_fields.operations_email ? { operations_email: contract.company_fields.operations_email } : {}),
+    ...(contract.company_fields.primary_contact_name
+      ? { primary_contact_name: contract.company_fields.primary_contact_name }
+      : {}),
+    ...(contract.company_fields.website ? { website: contract.company_fields.website } : {}),
   };
 }
 
@@ -313,9 +332,17 @@ function toCompanyRecord(value: unknown): AdminCompanyTravelerCrmRuntimeWriteAct
   }
 
   return {
+    accounts_email: textOrNull(record.accounts_email),
+    billing_address: textOrNull(record.billing_address),
+    billing_email: textOrNull(record.billing_email),
     company_name: textOrNull(record.company_name),
     domain: textOrNull(record.domain),
     id,
+    main_phone: textOrNull(record.main_phone),
+    mobile_phone: textOrNull(record.mobile_phone),
+    operations_email: textOrNull(record.operations_email),
+    primary_contact_name: textOrNull(record.primary_contact_name),
+    website: textOrNull(record.website),
   };
 }
 

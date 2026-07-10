@@ -12,9 +12,17 @@ export const adminCompaniesCrmIdentityVersion =
   "admin-companies-crm-identity-api-v1";
 
 export type AdminCompanyCrmIdentityRecord = {
+  accounts_email: string | null;
+  billing_address: string | null;
+  billing_email: string | null;
   company_name: string | null;
   domain: string | null;
   id: number;
+  main_phone: string | null;
+  mobile_phone: string | null;
+  operations_email: string | null;
+  primary_contact_name: string | null;
+  website: string | null;
 };
 
 export type AdminCompanyCrmIdentityReadiness = {
@@ -28,7 +36,8 @@ export type AdminCompanyCrmIdentityReadiness = {
 type UnknownRecord = Record<string, unknown>;
 type CompaniesCrmIdentityClient = Pick<SupabaseClient, "from">;
 
-const companyIdentitySelect = "id, company_name, domain";
+const companyIdentitySelect =
+  "id, company_name, domain, billing_address, main_phone, mobile_phone, website, primary_contact_name, billing_email, accounts_email, operations_email";
 const safeBlockedError =
   "Admin companies CRM identity read requires a verified internal boundary.";
 const safeConfigError =
@@ -127,6 +136,25 @@ function safeDomain(value: unknown) {
   }
 
   return cleaned;
+}
+
+function safeCustomerProfileText(value: unknown, maxLength: number) {
+  const cleaned = textOrNull(value);
+
+  if (!cleaned || cleaned.length > maxLength) {
+    return null;
+  }
+
+  const normalized = normalizeToken(cleaned);
+  const sensitiveFragments = forbiddenIdentityFragments.filter((fragment) => fragment !== "billing");
+
+  return sensitiveFragments.some((fragment) => normalized.includes(fragment)) ? null : cleaned;
+}
+
+function safeCustomerProfileEmail(value: unknown) {
+  const cleaned = safeCustomerProfileText(value, 240)?.toLowerCase() || null;
+
+  return cleaned && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleaned) ? cleaned : null;
 }
 
 function isPlaceholderConfigValue(value: string) {
@@ -288,9 +316,17 @@ function toAdminCompanyCrmIdentityRecord(value: unknown): AdminCompanyCrmIdentit
   }
 
   return {
+    accounts_email: safeCustomerProfileEmail(record.accounts_email),
+    billing_address: safeCustomerProfileText(record.billing_address, 500),
+    billing_email: safeCustomerProfileEmail(record.billing_email),
     company_name: safeCompanyName(record.company_name),
     domain: safeDomain(record.domain),
     id,
+    main_phone: safeText(record.main_phone, 80),
+    mobile_phone: safeText(record.mobile_phone, 80),
+    operations_email: safeCustomerProfileEmail(record.operations_email),
+    primary_contact_name: safeText(record.primary_contact_name, 160),
+    website: safeDomain(record.website),
   };
 }
 

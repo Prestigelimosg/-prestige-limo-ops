@@ -11,9 +11,17 @@ type CustomerCompanyProfileEditorProps = {
 };
 
 type CompanyProfile = {
+  accounts_email: string;
+  billing_address: string;
+  billing_email: string;
   company_name: string;
   domain: string;
   id: number | null;
+  main_phone: string;
+  mobile_phone: string;
+  operations_email: string;
+  primary_contact_name: string;
+  website: string;
 };
 
 type EditorStatus = "idle" | "loading" | "ready" | "saving" | "saved" | "error";
@@ -50,6 +58,30 @@ function safeErrorMessage(rawError: unknown) {
   return "Customer profile could not be loaded or saved. No customer record was changed.";
 }
 
+function profileValue(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function profilePayload(profile: CompanyProfile, isCreate: boolean) {
+  const website = profile.website.trim().toLowerCase();
+
+  return {
+    action_type: isCreate ? "company_create" : "company_update",
+    accounts_email: profile.accounts_email.trim().toLowerCase() || undefined,
+    billing_address: profile.billing_address.trim() || undefined,
+    billing_email: profile.billing_email.trim().toLowerCase() || undefined,
+    company_name: profile.company_name.trim(),
+    domain: website || profile.domain.trim().toLowerCase() || undefined,
+    entity_type: "company",
+    main_phone: profile.main_phone.trim() || undefined,
+    mobile_phone: profile.mobile_phone.trim() || undefined,
+    operations_email: profile.operations_email.trim().toLowerCase() || undefined,
+    primary_contact_name: profile.primary_contact_name.trim() || undefined,
+    website: website || undefined,
+    ...(profile.id ? { id: profile.id } : {}),
+  };
+}
+
 export function CustomerCompanyProfileEditor({
   customerId,
   customerName,
@@ -79,7 +111,19 @@ export function CustomerCompanyProfileEditor({
       }
 
       if (!company) {
-        setProfile({ company_name: customerName, domain: "", id: null });
+        setProfile({
+          accounts_email: "",
+          billing_address: "",
+          billing_email: "",
+          company_name: customerName,
+          domain: "",
+          id: null,
+          main_phone: "",
+          mobile_phone: "",
+          operations_email: "",
+          primary_contact_name: "",
+          website: "",
+        });
         setProfileMode("create");
         setMessage(`No company CRM profile exists for ${customerName}. Review the name, then create it deliberately.`);
         setStatus("ready");
@@ -91,9 +135,17 @@ export function CustomerCompanyProfileEditor({
       }
 
       setProfile({
-        company_name: String(company.company_name || "").trim(),
-        domain: String(company.domain || "").trim(),
+        accounts_email: profileValue(company.accounts_email),
+        billing_address: profileValue(company.billing_address),
+        billing_email: profileValue(company.billing_email),
+        company_name: profileValue(company.company_name),
+        domain: profileValue(company.domain),
         id: Number(company.id),
+        main_phone: profileValue(company.main_phone),
+        mobile_phone: profileValue(company.mobile_phone),
+        operations_email: profileValue(company.operations_email),
+        primary_contact_name: profileValue(company.primary_contact_name),
+        website: profileValue(company.website) || profileValue(company.domain),
       });
       setProfileMode("edit");
       setMessage(`Editing the company profile for ${String(company.company_name || customerName).trim()}.`);
@@ -121,7 +173,7 @@ export function CustomerCompanyProfileEditor({
 
     if (
       !window.confirm(
-        `${isCreate ? "Create" : "Save"} customer company profile for ${companyName}? This ${isCreate ? "creates" : "updates"} only this customer company's name and domain. It does not change jobs, invoices, payments, or send any message.`,
+        `${isCreate ? "Create" : "Save"} customer company profile for ${companyName}? This ${isCreate ? "creates" : "updates"} only this customer company's contact profile. It does not change jobs, invoices, payments, or send any message.`,
       )
     ) {
       setMessage("Profile save cancelled. No customer record was changed.");
@@ -134,13 +186,7 @@ export function CustomerCompanyProfileEditor({
 
     try {
       const response = await fetch(adminCompanyProfileWriteApiPath, {
-        body: JSON.stringify({
-          action_type: isCreate ? "company_create" : "company_update",
-          company_name: companyName,
-          domain: domain || undefined,
-          entity_type: "company",
-          ...(profile.id ? { id: profile.id } : {}),
-        }),
+        body: JSON.stringify(profilePayload(profile, isCreate)),
         headers: {
           "Content-Type": "application/json",
           "x-prestige-admin-purpose": "admin-booking-persistence",
@@ -155,9 +201,17 @@ export function CustomerCompanyProfileEditor({
       }
 
       setProfile({
-        company_name: String(savedProfile.company_name || companyName).trim(),
-        domain: String(savedProfile.domain || domain).trim(),
+        accounts_email: profileValue(savedProfile.accounts_email),
+        billing_address: profileValue(savedProfile.billing_address),
+        billing_email: profileValue(savedProfile.billing_email),
+        company_name: profileValue(savedProfile.company_name) || companyName,
+        domain: profileValue(savedProfile.domain) || domain,
         id: Number(savedProfile.id),
+        main_phone: profileValue(savedProfile.main_phone),
+        mobile_phone: profileValue(savedProfile.mobile_phone),
+        operations_email: profileValue(savedProfile.operations_email),
+        primary_contact_name: profileValue(savedProfile.primary_contact_name),
+        website: profileValue(savedProfile.website) || profileValue(savedProfile.domain) || domain,
       });
       setProfileMode("edit");
       setMessage(`Saved customer company profile for ${String(savedProfile.company_name || companyName).trim()}.`);
@@ -241,13 +295,79 @@ export function CustomerCompanyProfileEditor({
           />
         </label>
         <label className="grid gap-1 text-xs font-bold text-slate-700">
-          Company domain
+          Website
           <input
             className="min-h-9 rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-950"
-            data-customer-company-profile-domain={customerId}
-            onChange={(event) => setProfile((current) => (current ? { ...current, domain: event.target.value } : current))}
+            data-customer-company-profile-website={customerId}
+            onChange={(event) => setProfile((current) => (current ? { ...current, website: event.target.value } : current))}
             placeholder="example.com"
-            value={profile.domain}
+            value={profile.website}
+          />
+        </label>
+        <label className="grid gap-1 text-xs font-bold text-slate-700 sm:col-span-2">
+          Billing address
+          <textarea
+            className="min-h-20 rounded-md border border-slate-300 bg-white px-2 py-2 text-sm font-semibold text-slate-950"
+            data-customer-company-profile-billing-address={customerId}
+            onChange={(event) => setProfile((current) => (current ? { ...current, billing_address: event.target.value } : current))}
+            value={profile.billing_address}
+          />
+        </label>
+        <label className="grid gap-1 text-xs font-bold text-slate-700">
+          Main telephone
+          <input
+            className="min-h-9 rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-950"
+            data-customer-company-profile-main-phone={customerId}
+            onChange={(event) => setProfile((current) => (current ? { ...current, main_phone: event.target.value } : current))}
+            value={profile.main_phone}
+          />
+        </label>
+        <label className="grid gap-1 text-xs font-bold text-slate-700">
+          Mobile
+          <input
+            className="min-h-9 rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-950"
+            data-customer-company-profile-mobile-phone={customerId}
+            onChange={(event) => setProfile((current) => (current ? { ...current, mobile_phone: event.target.value } : current))}
+            value={profile.mobile_phone}
+          />
+        </label>
+        <label className="grid gap-1 text-xs font-bold text-slate-700">
+          Primary contact person
+          <input
+            className="min-h-9 rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-950"
+            data-customer-company-profile-primary-contact={customerId}
+            onChange={(event) => setProfile((current) => (current ? { ...current, primary_contact_name: event.target.value } : current))}
+            value={profile.primary_contact_name}
+          />
+        </label>
+        <label className="grid gap-1 text-xs font-bold text-slate-700">
+          Billing email
+          <input
+            className="min-h-9 rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-950"
+            data-customer-company-profile-billing-email={customerId}
+            onChange={(event) => setProfile((current) => (current ? { ...current, billing_email: event.target.value } : current))}
+            type="email"
+            value={profile.billing_email}
+          />
+        </label>
+        <label className="grid gap-1 text-xs font-bold text-slate-700">
+          Accounts email
+          <input
+            className="min-h-9 rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-950"
+            data-customer-company-profile-accounts-email={customerId}
+            onChange={(event) => setProfile((current) => (current ? { ...current, accounts_email: event.target.value } : current))}
+            type="email"
+            value={profile.accounts_email}
+          />
+        </label>
+        <label className="grid gap-1 text-xs font-bold text-slate-700 sm:col-span-2">
+          Operations email
+          <input
+            className="min-h-9 rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-950"
+            data-customer-company-profile-operations-email={customerId}
+            onChange={(event) => setProfile((current) => (current ? { ...current, operations_email: event.target.value } : current))}
+            type="email"
+            value={profile.operations_email}
           />
         </label>
       </div>

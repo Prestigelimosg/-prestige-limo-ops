@@ -1605,8 +1605,16 @@ function customerFolderJobDispatchHref(booking: RegularCustomerSavedBookingReadR
     return "";
   }
 
+  const customerId = cleanCustomerFolderText(booking.customer_id, 80);
+  const customerName = cleanCustomerFolderText(booking.customer_account, 160) || "Customer";
+  const returnParams = new URLSearchParams({ name: customerName });
   const params = new URLSearchParams({
     [customerFolderDispatchHandoffReferenceParam]: bookingReference,
+    ...(customerId
+      ? {
+          customer_return_url: `/customers/${encodeURIComponent(customerId)}?${returnParams.toString()}`,
+        }
+      : {}),
     tab: customerFolderDispatchHandoffTab,
   });
 

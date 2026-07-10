@@ -90,6 +90,27 @@ function customerWorkspaceHref(
   return `/customers?${params.toString()}`;
 }
 
+function customerDispatchEditHref(
+  booking: CustomerFolderSavedBookingRecord,
+  customerId: string,
+  customerName: string,
+) {
+  const reference = safeDispatchReference(booking);
+
+  if (!reference) {
+    return "";
+  }
+
+  const returnParams = new URLSearchParams({ name: customerName });
+  const params = new URLSearchParams({
+    booking_reference: reference,
+    customer_return_url: `/customers/${encodeURIComponent(customerId)}?${returnParams.toString()}`,
+    tab: "dispatch",
+  });
+
+  return `/?${params.toString()}`;
+}
+
 function isClearlyBilledOrClosedJob(booking: CustomerFolderSavedBookingRecord) {
   const statusText = [booking.admin_status, booking.customer_status]
     .filter(Boolean)
@@ -401,7 +422,7 @@ export function CustomerFolderSavedBookingsPanel({
             </thead>
             <tbody>
               {unbilledSavedBookings.map((booking) => {
-                const editHref = customerWorkspaceHref(booking, customerId, customerName, "edit");
+                const editHref = customerDispatchEditHref(booking, customerId, customerName);
                 const deleteHref = customerWorkspaceHref(booking, customerId, customerName, "delete");
                 const createSingleInvoiceHref =
                   customerWorkspaceHref(booking, customerId, customerName, "open") +

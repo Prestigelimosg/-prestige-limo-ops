@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { MockCustomer, MockCustomerBooking, MockCustomerInvoice } from "../_data/mock-customers";
-import { CustomerInvoicePrefixSettingsPanel } from "./invoice-prefix-settings-panel";
 
 const adminCustomerInvoicesApiPath = "/api/admin-customer-invoices";
 
@@ -728,16 +727,6 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
           No invoice selected.
         </div>
       )}
-
-      <details className="border-t border-slate-200 px-4 py-3">
-        <summary className="cursor-pointer text-sm font-bold text-slate-700">Prefix settings</summary>
-        <div className="mt-3">
-          <CustomerInvoicePrefixSettingsPanel
-            customerAccount={customer.companyName}
-            suggestedPrefix={customer.invoicePrefix}
-          />
-        </div>
-      </details>
 
     </section>
   );

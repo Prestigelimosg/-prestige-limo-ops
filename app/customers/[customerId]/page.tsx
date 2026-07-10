@@ -7,6 +7,7 @@ import {
 import { CustomerInvoiceFolderPanel } from "./customer-invoice-folder-panel";
 import { CustomerCompanyProfileEditor } from "./customer-company-profile-editor";
 import { CustomerFolderSavedBookingsPanel } from "./saved-bookings-panel";
+import { CustomerInvoicePrefixSettingsPanel } from "./invoice-prefix-settings-panel";
 
 type CustomerFolderPageProps = {
   params: Promise<{
@@ -75,6 +76,12 @@ export default async function MockCustomerFolderPage({ params, searchParams }: C
                 invoice action.
               </p>
             </div>
+          </div>
+          <div className="mt-3">
+            <CustomerInvoicePrefixSettingsPanel
+              customerAccount={customer.companyName}
+              suggestedPrefix={customer.invoicePrefix}
+            />
           </div>
         </header>
 

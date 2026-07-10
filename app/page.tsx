@@ -19940,7 +19940,21 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       }
     }
 
-    openCustomerBookingRequestsReview({ highlight: true });
+    if (customerBookingRequestDisplayItems.length > 0) {
+      openCustomerBookingRequestsReview({ highlight: true });
+      return;
+    }
+
+    const message = {
+      tone: "error",
+      text: `Open request could not find booking ${safeBookingReference}. No exact customer request was loaded or changed.`,
+    } satisfies Message;
+
+    setMessage(message);
+    setAdminAppNotificationReadState((current) => ({
+      ...current,
+      message,
+    }));
   }
 
   function openDashboardUrgentBookingRequestsReview() {
@@ -43144,6 +43158,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     : newBookingRequestSavedDateKey
                       ? formatDate(newBookingRequestSavedDateKey)
                       : "";
+                  const newBookingRequestCanOpenExact = Boolean(
+                    newBookingRequestLoadedRecord || newBookingRequestSavedRecord,
+                  );
+                  const newBookingRequestCanReviewQueue = customerBookingRequestDisplayItems.length > 0;
                   const message = changeRequestContext
                     ? adminBookingChangeRequestDisplayMessage(changeRequestContext)
                     : isNewBookingRequestNotification
@@ -43262,13 +43280,19 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                           <button
                             className="h-7 rounded-md border border-emerald-300 bg-emerald-700 px-2 text-xs font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400 disabled:hover:bg-slate-100"
                             data-admin-app-notification-review-new-booking-request="true"
-                            disabled={!newBookingRequestReference && customerBookingRequestDisplayItems.length === 0}
+                            disabled={!newBookingRequestCanOpenExact && !newBookingRequestCanReviewQueue}
                             onClick={() =>
-                              openNewBookingRequestNotificationReview(newBookingRequestReference)
+                              openNewBookingRequestNotificationReview(
+                                newBookingRequestCanOpenExact ? newBookingRequestReference : "",
+                              )
                             }
                             type="button"
                           >
-                            {newBookingRequestReference ? "Open request" : "Review queue"}
+                            {newBookingRequestCanOpenExact
+                              ? "Open request"
+                              : newBookingRequestCanReviewQueue
+                                ? "Review queue"
+                                : "Missing request"}
                           </button>
                         ) : null}
                         {changeRequestContext ? (

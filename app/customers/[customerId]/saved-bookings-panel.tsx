@@ -452,7 +452,7 @@ export function CustomerFolderSavedBookingsPanel({
                 data-customer-folder-create-invoice-selected="true"
                 href={createInvoiceHref}
               >
-                Create invoice
+                Open Create Invoice
               </Link>
             ) : (
               <button

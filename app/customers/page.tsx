@@ -8091,6 +8091,12 @@ export default function MockCustomerDashboardPage() {
           <details
             className="rounded-lg border border-slate-200 bg-white shadow-sm"
             data-customer-billing-workbench-drawer="true"
+            open={
+              fakeRitzInvoiceHandoffActive ||
+              Boolean(customerInvoicePrepRow) ||
+              Boolean(plainInvoicePreview) ||
+              Boolean(plainInvoiceForm.billToName.trim())
+            }
           >
           <summary
             className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-slate-900 [&::-webkit-details-marker]:hidden"

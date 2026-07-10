@@ -12862,6 +12862,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   >([]);
   const [bookingCompletionMessages, setBookingCompletionMessages] =
     useState<Record<string, Message>>({});
+  const [completedCancelHandoffBooking, setCompletedCancelHandoffBooking] =
+    useState<BookingRecord | null>(null);
   const [loadedBookingId, setLoadedBookingId] = useState("");
   const loadedBookingIdRef = useRef("");
   const dispatchHandoffAttemptedReferenceRef = useRef("");
@@ -15934,6 +15936,20 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   }, [driverSearchTerm, driverProfileDisplayDrivers]);
   const driverDatabaseSearchQuery = clean(driverSearchTerm);
   const operationalBookings = useMemo(() => bookings.filter(isOperationalBooking), [bookings]);
+  const completedHistorySourceBookings = useMemo(() => {
+    if (!completedCancelHandoffBooking) {
+      return operationalBookings;
+    }
+
+    const handoffReference = bookingRecordPersistedReference(completedCancelHandoffBooking);
+
+    return [
+      completedCancelHandoffBooking,
+      ...operationalBookings.filter(
+        (bookingRecord) => bookingRecordPersistedReference(bookingRecord) !== handoffReference,
+      ),
+    ];
+  }, [completedCancelHandoffBooking, operationalBookings]);
   const todayKey = toDateKey(new Date());
   const loadBookingsTypedOperationalCardOrderIndex = useMemo(
     () =>
@@ -16340,10 +16356,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   );
   const completedBookings = useMemo(
     () =>
-      operationalBookings
+      completedHistorySourceBookings
         .filter((bookingRecord) => bookingRecordBelongsInCompletedHistoryWithDriverReport(bookingRecord))
         .sort(sortBookingHistoryNewestFirst),
-    [bookingRecordBelongsInCompletedHistoryWithDriverReport, operationalBookings],
+    [bookingRecordBelongsInCompletedHistoryWithDriverReport, completedHistorySourceBookings],
   );
   const completedBillingAuditBookings = useMemo(
     () => completedBookings.filter(bookingRecordIsCompletedStatus),
@@ -19573,6 +19589,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
       return [cancelledReviewBooking, ...filteredBookings];
     });
+    setCompletedCancelHandoffBooking(cancelledReviewBooking);
     loadSelectedBooking(cancelledReviewBooking, { focusCustomerCopy: true });
     setActiveTab("completed");
     setCompletedMonthFilter("all");

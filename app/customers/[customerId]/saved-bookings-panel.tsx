@@ -112,6 +112,28 @@ function customerDispatchEditHref(
   return `/?${params.toString()}`;
 }
 
+function customerCompletedCancelHref(
+  booking: CustomerFolderSavedBookingRecord,
+  customerId: string,
+  customerName: string,
+) {
+  const reference = safeDispatchReference(booking);
+
+  if (!reference) {
+    return "";
+  }
+
+  const returnParams = new URLSearchParams({ name: customerName });
+  const params = new URLSearchParams({
+    completed_action: "cancel",
+    completed_booking_reference: reference,
+    customer_return_url: `/customers/${encodeURIComponent(customerId)}?${returnParams.toString()}`,
+    tab: "completed",
+  });
+
+  return `/?${params.toString()}`;
+}
+
 function isClearlyBilledOrClosedJob(booking: CustomerFolderSavedBookingRecord) {
   const statusText = [booking.admin_status, booking.customer_status]
     .filter(Boolean)
@@ -367,8 +389,9 @@ export function CustomerFolderSavedBookingsPanel({
             className="mt-0.5 max-w-4xl text-xs font-semibold leading-5 text-slate-600"
             data-customer-folder-saved-bookings-boundary="true"
           >
-            Shows saved jobs not clearly billed, paid, cancelled, or closed. Edit and Delete open the exact job in the
-            existing guarded customer workspace; no invoice, payment, send, payout, GPS, or provider action runs here.
+            Shows saved jobs not clearly billed, paid, cancelled, or closed. Edit opens Dispatch; Delete opens the
+            exact job in Completed / History for cancel review. No invoice, payment, send, payout, GPS, or provider
+            action runs here.
           </p>
         </div>
         <button
@@ -456,7 +479,7 @@ export function CustomerFolderSavedBookingsPanel({
             <tbody>
               {unbilledSavedBookings.map((booking) => {
                 const editHref = customerDispatchEditHref(booking, customerId, customerName);
-                const deleteHref = customerWorkspaceHref(booking, customerId, customerName, "delete");
+                const deleteHref = customerCompletedCancelHref(booking, customerId, customerName);
                 const createSingleInvoiceHref =
                   customerWorkspaceHref(booking, customerId, customerName, "open") +
                   `&customer_invoice_action=create&selected_booking_references=${encodeURIComponent(

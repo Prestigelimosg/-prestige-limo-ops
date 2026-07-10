@@ -108,6 +108,8 @@ const adminLoadBookingsListLimit = "100";
 const dispatchHandoffReferenceQueryParam = "booking_reference";
 const dispatchHandoffAlternateReferenceQueryParam = "dispatch_booking_reference";
 const dispatchHandoffCustomerReturnQueryParam = "customer_return_url";
+const completedHandoffReferenceQueryParam = "completed_booking_reference";
+const completedHandoffActionQueryParam = "completed_action";
 const fakeRitzDispatchEditStorageKey = "prestige-fake-ritz-dispatch-edits";
 const saveCrmBillingIdentityReviewReadLimit = 200;
 const adminHandledCustomerBookingRequestsStorageKey =
@@ -12864,6 +12866,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const loadedBookingIdRef = useRef("");
   const dispatchHandoffAttemptedReferenceRef = useRef("");
   const dispatchHandoffCustomerReturnUrlRef = useRef("");
+  const completedHandoffAttemptedReferenceRef = useRef("");
   const [driverProfileDraft, setDriverProfileDraft] =
     useState<DriverProfileDraft>(initialDriverProfileDraft);
   const [mockMidnightChargeOverrideMode, setMockMidnightChargeOverrideMode] =
@@ -19553,6 +19556,125 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     }
   }
 
+  function openBookingInCompletedCancelReview(bookingRecord: BookingRecord, bookingReference: string) {
+    const cancelledReviewBooking = {
+      ...bookingRecord,
+      admin_internal_status: "cancelled",
+      cancellation_review_status: "cancelled",
+      customer_facing_status: "cancelled",
+      status: "cancelled",
+    } satisfies BookingRecord;
+    const cancelReviewMessage = `Booking ${bookingReference} opened in Completed / History for cancel review. No booking, invoice, payment, send, payout, GPS, provider, or Supabase record was changed. Use the existing Completed closeout controls before any save.`;
+
+    setBookings((currentBookings) => {
+      const filteredBookings = currentBookings.filter(
+        (currentBooking) => bookingRecordPersistedReference(currentBooking) !== bookingReference,
+      );
+
+      return [cancelledReviewBooking, ...filteredBookings];
+    });
+    loadSelectedBooking(cancelledReviewBooking, { focusCustomerCopy: true });
+    setActiveTab("completed");
+    setCompletedMonthFilter("all");
+    setCompletedSearchTerm(bookingReference);
+    setCompletedTripCloseoutReviewStatus("waived-no-charge");
+    setCompletedTripCloseoutReviewNote(
+      `Customer folder Delete opened ${bookingReference} for cancel/no-charge closeout review. No automatic save ran.`,
+    );
+    setCompletedTripCloseoutReviewMessage({
+      tone: "info",
+      text: cancelReviewMessage,
+    });
+    setMessage({
+      tone: "success",
+      text: cancelReviewMessage,
+    });
+  }
+
+  async function loadCompletedCancelHandoffBookingFromUrl(targetBookingReference: string) {
+    const safeTargetBookingReference = cleanDispatchHandoffBookingReference(targetBookingReference);
+
+    setActiveTab("completed");
+
+    if (!safeTargetBookingReference) {
+      setMessage({
+        tone: "error",
+        text: "Customer folder completed cancel handoff blocked: booking reference is malformed.",
+      });
+      return;
+    }
+
+    if (typeof fetch !== "function") {
+      setMessage({
+        tone: "error",
+        text: "Customer folder completed cancel handoff failed: admin booking read API is not available.",
+      });
+      return;
+    }
+
+    setLoading(true);
+    setMessage({
+      tone: "info",
+      text: `Opening ${safeTargetBookingReference} in Completed / History for cancel review...`,
+    });
+
+    try {
+      const searchParams = new URLSearchParams({
+        [dispatchHandoffReferenceQueryParam]: safeTargetBookingReference,
+      });
+      const response = await fetch(`${adminBookingsApiPath}?${searchParams.toString()}`, {
+        headers: {
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "GET",
+      });
+      const responseBody = (await response.json().catch(() => null)) as
+        | AdminSavedBookingReadResponse
+        | null;
+      const targetBooking = responseBody?.booking ?? null;
+      const responseReference = targetBooking
+        ? bookingRecordPersistedReference(targetBooking)
+        : "";
+
+      if (
+        !response.ok ||
+        responseBody?.ok !== true ||
+        !targetBooking ||
+        responseReference !== safeTargetBookingReference
+      ) {
+        const error = readAdminLegacyDataError(
+          responseBody,
+          `Customer folder completed cancel handoff could not find ${safeTargetBookingReference}.`,
+        );
+
+        throw new Error(formatSupabaseError(error));
+      }
+
+      openBookingInCompletedCancelReview(targetBooking, safeTargetBookingReference);
+
+      if (typeof window !== "undefined") {
+        window.history.replaceState(null, "", window.location.pathname);
+      }
+    } catch (error) {
+      if (/^FAKE-RITZ-\d{4}$/.test(safeTargetBookingReference)) {
+        openBookingInCompletedCancelReview(
+          fakeRitzDispatchBooking(safeTargetBookingReference),
+          safeTargetBookingReference,
+        );
+        return;
+      }
+
+      const errorMessage = error instanceof Error ? error.message : "Unknown completed cancel handoff error.";
+
+      setMessage({
+        tone: "error",
+        text: `Customer folder completed cancel handoff failed: ${errorMessage}`,
+      });
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
@@ -19585,6 +19707,43 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     dispatchHandoffAttemptedReferenceRef.current = rawTargetBookingReference;
     void loadDispatchHandoffBookingFromUrl(safeTargetBookingReference || rawTargetBookingReference);
     // One-time URL handoff only; rerunning after local state changes can reload the editor unexpectedly.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const searchParams = new URLSearchParams(window.location.search);
+
+    if (
+      searchParams.get("tab") !== "completed" ||
+      searchParams.get(completedHandoffActionQueryParam) !== "cancel"
+    ) {
+      return;
+    }
+
+    const rawTargetBookingReference = searchParams.get(completedHandoffReferenceQueryParam) || "";
+    const safeTargetBookingReference = cleanDispatchHandoffBookingReference(rawTargetBookingReference);
+    dispatchHandoffCustomerReturnUrlRef.current = cleanDispatchHandoffCustomerReturnUrl(
+      searchParams.get(dispatchHandoffCustomerReturnQueryParam),
+    );
+
+    if (!rawTargetBookingReference) {
+      setActiveTab("completed");
+      return;
+    }
+
+    if (completedHandoffAttemptedReferenceRef.current === rawTargetBookingReference) {
+      return;
+    }
+
+    completedHandoffAttemptedReferenceRef.current = rawTargetBookingReference;
+    void loadCompletedCancelHandoffBookingFromUrl(
+      safeTargetBookingReference || rawTargetBookingReference,
+    );
+    // One-time URL handoff only; rerunning after local state changes can reload the cancel review unexpectedly.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

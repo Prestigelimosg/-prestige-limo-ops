@@ -62,10 +62,10 @@ type PricingInput = {
 };
 
 export const defaultCustomerRates: Required<RateRules> = {
-  MNG: { AVF: 85, S: 85, VVV: 85, Combi: 85 },
-  DEP: { AVF: 75, S: 75, VVV: 75, Combi: 75 },
-  TRF: { AVF: 55, S: 55, VVV: 55, Combi: 55 },
-  DSP: { AVF: 65, S: 65, VVV: 65, Combi: 65 },
+  MNG: { AVF: 85, S: 180, VVV: 95, Combi: 105 },
+  DEP: { AVF: 75, S: 170, VVV: 85, Combi: 95 },
+  TRF: { AVF: 55, S: 160, VVV: 65, Combi: 75 },
+  DSP: { AVF: 65, S: 160, VVV: 75, Combi: 75 },
 };
 
 export const defaultDriverPayoutRules: Required<DriverPayoutRules> = {

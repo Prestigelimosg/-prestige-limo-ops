@@ -134,6 +134,32 @@ const travelerVehicleOverridePricing = resolvePricing(
 assert.equal(travelerVehicleOverridePricing.customerRate, 105);
 assert.equal(travelerVehicleOverridePricing.pricingSource, "boss");
 
+for (const [bookingType, expectedByVehicle] of Object.entries({
+  MNG: { AVF: 85, S: 180, VVV: 95, Combi: 105 },
+  DEP: { AVF: 75, S: 170, VVV: 85, Combi: 95 },
+  TRF: { AVF: 55, S: 160, VVV: 65, Combi: 75 },
+  DSP: { AVF: 65, S: 160, VVV: 75, Combi: 75 },
+})) {
+  for (const [vehicle, expectedRate] of Object.entries(expectedByVehicle)) {
+    const pricing = resolvePricing(
+      {
+        bookingType,
+        vehicle,
+        time: "1200hrs",
+        extraStopCount: "0",
+        childSeatRequired: "",
+        childSeatCount: "",
+      },
+      { customer_rates: {}, driver_payout_rules: {} },
+      null,
+      initialRateSettings,
+      null,
+    );
+
+    assert.equal(pricing.customerRate, expectedRate, `${bookingType} ${vehicle} default customer rate`);
+  }
+}
+
 const configuredPricing = resolvePricing(
   {
     bookingType: "MNG",

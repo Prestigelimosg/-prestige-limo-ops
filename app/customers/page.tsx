@@ -4591,6 +4591,50 @@ export default function MockCustomerDashboardPage() {
     });
     scrollCustomerFolderJobsPanelIntoView();
 
+    if (invoiceAction === "create" && /^FAKE-RITZ-\d{4}$/.test(bookingReference)) {
+      const fakeService =
+        bookingReference === "FAKE-RITZ-0001"
+          ? "MNG / Arrival"
+          : bookingReference === "FAKE-RITZ-0002"
+            ? "TRF / Transfer"
+            : "DSP / Hourly";
+
+      setPlainInvoiceForm({
+        ...plainInvoiceInitialForm(),
+        amount: "420.00",
+        billToName: customerName,
+        crmCustomerId: customerId,
+        crmCustomerName: customerName,
+        lineDescription: `${fakeService} - ${bookingReference} - Ritz Carlton fake billing UI test`,
+        reference: bookingReference,
+        route: "Ritz Carlton > Marina Bay Cruise Centre",
+        service: fakeService,
+      });
+      setPlainInvoicePreview(null);
+      setCustomerInvoiceWorkspaceTab("statements");
+      setPlainInvoiceFeedback(
+        `Fake invoice handoff received for ${bookingReference}. Review Create Invoice, then Preview. Draft, Issue, and Email still create real billing documents, so stop before those unless approved.`,
+      );
+      setPlainInvoiceFeedbackTone("success");
+      setCustomerFolderJobViewState({
+        customerId,
+        customerName,
+        message: `Fake job ${bookingReference} loaded into Create Invoice. No booking, invoice, payment, send, payout, GPS, provider, or Supabase record was created.`,
+        savedBookings: [],
+        status: "loaded",
+        summary: {
+          matched_count: 0,
+          recent_read_count: 0,
+          returned_count: 0,
+        },
+        tone: "success",
+      });
+      window.setTimeout(() => {
+        plainInvoicePanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 100);
+      return;
+    }
+
     try {
       const result = await readRegularCustomerSavedBookingsForTarget(
         {

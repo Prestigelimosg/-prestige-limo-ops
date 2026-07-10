@@ -960,6 +960,54 @@ function fakeRitzInvoiceLineMeta(description: string) {
   return { date: "Date not set", time: "Time not set", reference: "" };
 }
 
+function fakeRitzPickupAt(reference: string) {
+  if (reference === "FAKE-RITZ-0001") {
+    return "2026-07-10 09:00";
+  }
+
+  if (reference === "FAKE-RITZ-0002") {
+    return "2026-07-11 14:30";
+  }
+
+  return "2026-07-12 23:15";
+}
+
+function fakeRitzSavedBooking(reference: string, customerId: string, customerName: string) {
+  return {
+    admin_status: "Fake test unbilled",
+    booking_month: "2026-07",
+    booking_reference: reference,
+    customer_account: customerName,
+    customer_id: customerId,
+    customer_price_amount: 420,
+    customer_status: "Ready for billing test",
+    pickup_at: fakeRitzPickupAt(reference),
+    pricing_source: "fake-ritz-ui-test",
+    route_type: fakeRitzInvoiceService(reference),
+    service_type: fakeRitzInvoiceService(reference),
+  } satisfies RegularCustomerSavedBookingReadRecord;
+}
+
+function fakeRitzExactBooking(reference: string, customerId: string, customerName: string) {
+  return {
+    admin_internal_status: "dispatch_edit_test",
+    booking_reference: reference,
+    contact_display_name: "Ritz Carlton",
+    customer_display_name: customerName,
+    customer_facing_status: "ready_for_billing_test",
+    customer_id: customerId,
+    dropoff_location: "Marina Bay Cruise Centre",
+    passenger_name: "Ritz Carlton guest",
+    pickup_at: fakeRitzPickupAt(reference),
+    pickup_location: "Ritz Carlton",
+    route_summary: "Ritz Carlton > Marina Bay Cruise Centre",
+    route_type: fakeRitzInvoiceService(reference),
+    service_type: fakeRitzInvoiceService(reference),
+    source_surface: "fake-ritz-customer-url-edit-test",
+    vehicle_type_or_category: "E / AVF",
+  } satisfies CustomerFolderExactBookingRecord;
+}
+
 function customerInvoiceCardPaymentPreviewLabel(
   cardPaymentEnabled: boolean,
   cardFeeApplies: boolean,
@@ -4642,6 +4690,35 @@ export default function MockCustomerDashboardPage() {
       tone: "info",
     });
     scrollCustomerFolderJobsPanelIntoView();
+
+    if (action === "edit" && /^FAKE-RITZ-\d{4}$/.test(bookingReference)) {
+      const fakeBooking = fakeRitzSavedBooking(bookingReference, customerId, customerName);
+      const fakeExactBooking = fakeRitzExactBooking(bookingReference, customerId, customerName);
+
+      setExpandedCustomerFolderJobReference(bookingReference);
+      setCustomerFolderJobViewState({
+        customerId,
+        customerName,
+        message: `Fake job ${bookingReference} is open for dispatch edit testing. No booking, invoice, payment, send, payout, GPS, provider, or Supabase record was created.`,
+        savedBookings: [fakeBooking],
+        status: "loaded",
+        summary: {
+          matched_count: 1,
+          recent_read_count: 0,
+          returned_count: 1,
+        },
+        tone: "success",
+      });
+      setCustomerFolderExactBookingEditorState({
+        booking: fakeExactBooking,
+        bookingReference,
+        form: customerFolderExactBookingFormFromRecord(fakeExactBooking),
+        message: `Fake job ${bookingReference} loaded into dispatch edit fields. Review only; no real booking record is attached.`,
+        status: "loaded",
+        tone: "success",
+      });
+      return;
+    }
 
     if (invoiceAction === "create" && /^FAKE-RITZ-\d{4}$/.test(bookingReference)) {
       const selectedFakeReferences = selectedBookingReferences

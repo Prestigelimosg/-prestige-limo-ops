@@ -104,6 +104,45 @@ function initialMessage(customerName: string) {
   return `Load saved jobs not clearly billed or closed for ${customerName}.`;
 }
 
+function customerFolderFakeUnbilledJobs(customerId: string, customerName: string) {
+  if (!/ritz\s+carlton/i.test(customerName)) {
+    return [];
+  }
+
+  return [
+    {
+      admin_status: "Fake test unbilled",
+      booking_month: "2026-07",
+      booking_reference: "FAKE-RITZ-0001",
+      customer_account: customerName,
+      customer_id: customerId,
+      customer_status: "Ready for billing test",
+      pickup_at: "2026-07-10 09:00",
+      service_type: "MNG / Arrival",
+    },
+    {
+      admin_status: "Fake test unbilled",
+      booking_month: "2026-07",
+      booking_reference: "FAKE-RITZ-0002",
+      customer_account: customerName,
+      customer_id: customerId,
+      customer_status: "Ready for billing test",
+      pickup_at: "2026-07-11 14:30",
+      service_type: "TRF / Transfer",
+    },
+    {
+      admin_status: "Fake test unbilled",
+      booking_month: "2026-07",
+      booking_reference: "FAKE-RITZ-0003",
+      customer_account: customerName,
+      customer_id: customerId,
+      customer_status: "Ready for billing test",
+      pickup_at: "2026-07-12 23:15",
+      service_type: "DSP / Hourly",
+    },
+  ] satisfies CustomerFolderSavedBookingRecord[];
+}
+
 function savedBookingReadFailureMessage(rawError: unknown) {
   const message = rawError instanceof Error ? rawError.message.toLowerCase() : String(rawError ?? "").toLowerCase();
 
@@ -173,19 +212,46 @@ export function CustomerFolderSavedBookingsPanel({
       const savedBookings = Array.isArray(result.saved_bookings)
         ? (result.saved_bookings as CustomerFolderSavedBookingRecord[])
         : [];
+      const fakeFallbackJobs = savedBookings.length === 0 ? customerFolderFakeUnbilledJobs(customerId, customerName) : [];
+      const displaySavedBookings = savedBookings.length > 0 ? savedBookings : fakeFallbackJobs;
       const returnedCount = Number(result.summary?.returned_count ?? savedBookings.length);
 
       setReadState({
         message:
-          returnedCount > 0
+          fakeFallbackJobs.length > 0
+            ? `Loaded ${countLabel(fakeFallbackJobs.length, "fake unbilled job")} for UI testing only. No booking, invoice, payment, send, payout, GPS, provider, or Supabase record was created.`
+            : returnedCount > 0
             ? `Loaded ${countLabel(returnedCount, "saved job")} for ${customerName}.`
             : `No saved jobs returned for ${customerName}.`,
-        savedBookings,
+        savedBookings: displaySavedBookings,
         status: "loaded",
-        summary: result.summary || null,
+        summary: fakeFallbackJobs.length > 0
+          ? {
+              matched_count: fakeFallbackJobs.length,
+              recent_read_count: 0,
+              returned_count: fakeFallbackJobs.length,
+            }
+          : result.summary || null,
         tone: "success",
       });
     } catch (error) {
+      const fakeFallbackJobs = customerFolderFakeUnbilledJobs(customerId, customerName);
+
+      if (fakeFallbackJobs.length > 0) {
+        setReadState({
+          message: `Saved booking read was unavailable, so ${countLabel(fakeFallbackJobs.length, "fake unbilled job")} loaded for UI testing only. No booking, invoice, payment, send, payout, GPS, provider, or Supabase record was created.`,
+          savedBookings: fakeFallbackJobs,
+          status: "loaded",
+          summary: {
+            matched_count: fakeFallbackJobs.length,
+            recent_read_count: 0,
+            returned_count: fakeFallbackJobs.length,
+          },
+          tone: "success",
+        });
+        return;
+      }
+
       setReadState({
         message: savedBookingReadFailureMessage(error),
         savedBookings: [],

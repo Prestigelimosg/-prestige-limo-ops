@@ -6,6 +6,10 @@ const customerFolderSource = readFileSync(
   "app/customers/[customerId]/saved-bookings-panel.tsx",
   "utf8",
 );
+const savedBookingsReadSource = readFileSync(
+  "lib/admin-customer-saved-bookings-read.ts",
+  "utf8",
+);
 const updateAppliedStart = dispatchPageSource.indexOf(
   "async function updateAppliedAdminBookingOperationalSnapshot()",
 );
@@ -41,6 +45,26 @@ assertIncludes(
   customerFolderSource,
   "customer_return_url",
   "customer folder edit href must carry the return URL into Dispatch",
+);
+assertIncludes(
+  customerFolderSource,
+  "load_saved_jobs",
+  "customer folder Dispatch return URL must ask the customer page to reload saved jobs",
+);
+assertIncludes(
+  customerFolderSource,
+  "focus_booking_reference",
+  "customer folder Dispatch return URL must carry the exact booking reference back",
+);
+assertIncludes(
+  customerFolderSource,
+  "void loadSavedBookings({",
+  "customer folder return URL must auto-load saved bookings on return",
+);
+assertIncludes(
+  customerFolderSource,
+  "params.set(\"booking_reference\", focusBookingReference)",
+  "customer folder return read must pass the exact booking reference to the safe read route",
 );
 assertIncludes(
   customerFolderSource,
@@ -82,6 +106,21 @@ assertIncludes(
   updateAppliedSource,
   "window.location.assign(customerReturnUrl)",
   "Dispatch update must return to the customer folder after save/update",
+);
+assertIncludes(
+  savedBookingsReadSource,
+  "booking_reference: string | null",
+  "saved booking read params must support exact booking reference handoff",
+);
+assertIncludes(
+  savedBookingsReadSource,
+  "const exactReferenceMatches =",
+  "saved booking read must explicitly bound exact-reference matching",
+);
+assertIncludes(
+  savedBookingsReadSource,
+  "if (!baseMatches && !exactReferenceMatches)",
+  "saved booking read must not match unrelated bookings unless the exact returned reference matches",
 );
 assertIncludes(
   updateAppliedSource,

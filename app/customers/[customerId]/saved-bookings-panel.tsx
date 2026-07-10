@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const adminCustomerSavedBookingsApiPath = "/api/admin-customer-saved-bookings";
+const customerFolderFocusBookingReferenceParam = "focus_booking_reference";
+const customerFolderLoadSavedJobsParam = "load_saved_jobs";
 const fakeRitzDispatchEditStorageKey = "prestige-fake-ritz-dispatch-edits";
 
 type CustomerFolderSavedBookingRecord = {
@@ -69,6 +71,12 @@ function safeDispatchReference(booking: CustomerFolderSavedBookingRecord) {
   return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(reference) ? reference : "";
 }
 
+function safeBookingReferenceValue(value: string | null | undefined) {
+  const reference = String(value ?? "").trim();
+
+  return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(reference) ? reference : "";
+}
+
 function customerWorkspaceHref(
   booking: CustomerFolderSavedBookingRecord,
   customerId: string,
@@ -102,7 +110,11 @@ function customerDispatchEditHref(
     return "";
   }
 
-  const returnParams = new URLSearchParams({ name: customerName });
+  const returnParams = new URLSearchParams({
+    [customerFolderFocusBookingReferenceParam]: reference,
+    [customerFolderLoadSavedJobsParam]: "1",
+    name: customerName,
+  });
   const params = new URLSearchParams({
     booking_reference: reference,
     customer_return_url: `/customers/${encodeURIComponent(customerId)}?${returnParams.toString()}`,
@@ -123,7 +135,11 @@ function customerCompletedCancelHref(
     return "";
   }
 
-  const returnParams = new URLSearchParams({ name: customerName });
+  const returnParams = new URLSearchParams({
+    [customerFolderFocusBookingReferenceParam]: reference,
+    [customerFolderLoadSavedJobsParam]: "1",
+    name: customerName,
+  });
   const params = new URLSearchParams({
     completed_action: "cancel",
     completed_booking_reference: reference,
@@ -147,6 +163,22 @@ function isClearlyBilledOrClosedJob(booking: CustomerFolderSavedBookingRecord) {
 
 function initialMessage(customerName: string) {
   return `Load saved jobs not clearly billed or closed for ${customerName}.`;
+}
+
+function customerFolderReturnContext() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const params = new URLSearchParams(window.location.search);
+
+  if (params.get(customerFolderLoadSavedJobsParam) !== "1") {
+    return null;
+  }
+
+  return {
+    focusBookingReference: safeBookingReferenceValue(params.get(customerFolderFocusBookingReferenceParam)),
+  };
 }
 
 function customerFolderFakeUnbilledJobs(customerId: string, customerName: string) {
@@ -248,6 +280,7 @@ export function CustomerFolderSavedBookingsPanel({
   customerId,
   customerName,
 }: CustomerFolderSavedBookingsPanelProps) {
+  const autoLoadAttemptedRef = useRef(false);
   const [selectedReferences, setSelectedReferences] = useState<Record<string, boolean>>({});
   const [readState, setReadState] = useState<CustomerFolderSavedBookingsState>({
     message: initialMessage(customerName),
@@ -257,7 +290,11 @@ export function CustomerFolderSavedBookingsPanel({
     tone: "info",
   });
 
-  async function loadSavedBookings() {
+  async function loadSavedBookings(options?: {
+    focusBookingReference?: string;
+    source?: "manual" | "return";
+  }) {
+    const focusBookingReference = safeBookingReferenceValue(options?.focusBookingReference);
     setReadState({
       message: `Loading saved jobs for ${customerName}...`,
       savedBookings: [],
@@ -272,6 +309,9 @@ export function CustomerFolderSavedBookingsPanel({
         customer_id: customerId,
         limit: "25",
       });
+      if (focusBookingReference) {
+        params.set("booking_reference", focusBookingReference);
+      }
       const response = await fetch(`${adminCustomerSavedBookingsApiPath}?${params.toString()}`, {
         headers: {
           "x-prestige-admin-purpose": "admin-booking-persistence",
@@ -293,14 +333,37 @@ export function CustomerFolderSavedBookingsPanel({
           : [];
       const displaySavedBookings = savedBookings.length > 0 ? savedBookings : fakeFallbackJobs;
       const returnedCount = Number(result.summary?.returned_count ?? savedBookings.length);
+      const visibleSavedBookings = displaySavedBookings.filter(
+        (booking) => !isClearlyBilledOrClosedJob(booking),
+      );
+      const focusReturned = focusBookingReference
+        ? displaySavedBookings.some((booking) => safeDispatchReference(booking) === focusBookingReference)
+        : false;
+      const focusVisible = focusBookingReference
+        ? visibleSavedBookings.some((booking) => safeDispatchReference(booking) === focusBookingReference)
+        : false;
+      const returnMessage = focusBookingReference
+        ? focusVisible
+          ? `Returned from Dispatch after Update + Calendar. Loaded ${countLabel(
+              visibleSavedBookings.length,
+              "unbilled saved job",
+            )} for ${customerName}; job ${focusBookingReference} is visible below.`
+          : focusReturned
+          ? `Returned from Dispatch after Update + Calendar. Job ${focusBookingReference} was returned but is now billed, paid, cancelled, or closed, so it is hidden from Jobs not billed yet.`
+          : `Returned from Dispatch after Update + Calendar. Loaded ${countLabel(
+              returnedCount,
+              "saved job",
+            )}, but job ${focusBookingReference} was not returned for ${customerName}.`
+        : "";
 
       setReadState({
         message:
-          fakeFallbackJobs.length > 0
+          returnMessage ||
+          (fakeFallbackJobs.length > 0
             ? `Loaded ${countLabel(fakeFallbackJobs.length, "fake unbilled job")} for UI testing only. No booking, invoice, payment, send, payout, GPS, provider, or Supabase record was created.`
             : returnedCount > 0
             ? `Loaded ${countLabel(returnedCount, "saved job")} for ${customerName}.`
-            : `No saved jobs returned for ${customerName}.`,
+            : `No saved jobs returned for ${customerName}.`),
         savedBookings: displaySavedBookings,
         status: "loaded",
         summary: fakeFallbackJobs.length > 0
@@ -341,6 +404,28 @@ export function CustomerFolderSavedBookingsPanel({
       });
     }
   }
+
+  useEffect(() => {
+    if (autoLoadAttemptedRef.current) {
+      return;
+    }
+
+    const returnContext = customerFolderReturnContext();
+
+    if (!returnContext) {
+      return;
+    }
+
+    autoLoadAttemptedRef.current = true;
+    window.setTimeout(() => {
+      void loadSavedBookings({
+        focusBookingReference: returnContext.focusBookingReference,
+        source: "return",
+      });
+    }, 0);
+    // The return URL should trigger exactly one guarded read when this panel mounts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const unbilledSavedBookings = readState.savedBookings.filter(
     (booking) => !isClearlyBilledOrClosedJob(booking),
@@ -398,7 +483,9 @@ export function CustomerFolderSavedBookingsPanel({
           className="rounded-md border border-slate-900 bg-slate-900 px-3 py-2 text-sm font-bold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
           data-customer-folder-saved-bookings-action="true"
           disabled={readState.status === "loading"}
-          onClick={loadSavedBookings}
+          onClick={() => {
+            void loadSavedBookings();
+          }}
           type="button"
         >
           {readState.status === "loading" ? "Loading" : "Load unbilled jobs"}

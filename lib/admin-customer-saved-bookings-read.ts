@@ -12,6 +12,7 @@ export const adminCustomerSavedBookingsReadVersion =
 
 export type AdminCustomerSavedBookingsReadParams = {
   account_scope_key: string | null;
+  booking_reference: string | null;
   customer_account: string | null;
   customer_id: string | null;
   limit: number;
@@ -167,6 +168,10 @@ function normalizeForMatch(value: unknown) {
   return safeText(value)?.replace(/[^a-z0-9]+/gi, "").toLowerCase() || "";
 }
 
+function normalizeBookingReferenceForMatch(value: unknown) {
+  return safeText(value, 120)?.toLowerCase() || "";
+}
+
 function accountScopeFromBooking(booking: AdminBookingPersistenceRecord) {
   const bookerName = safeText(booking.contact_display_name, 80);
   const travellerName = safeText(booking.passenger_name, 80);
@@ -189,11 +194,15 @@ function bookingMatchesCustomer(
 ) {
   const customerId = normalizeForMatch(booking.customer_id);
   const customerAccount = normalizeForMatch(booking.customer_display_name);
+  const bookingReference = normalizeBookingReferenceForMatch(booking.booking_reference);
+  const requestedBookingReference = normalizeBookingReferenceForMatch(params.booking_reference);
   const baseMatches =
     (params.customer_id && customerId === normalizeForMatch(params.customer_id)) ||
     (params.customer_account && customerAccount === normalizeForMatch(params.customer_account));
+  const exactReferenceMatches =
+    Boolean(requestedBookingReference) && bookingReference === requestedBookingReference;
 
-  if (!baseMatches) {
+  if (!baseMatches && !exactReferenceMatches) {
     return false;
   }
 
@@ -254,11 +263,17 @@ export function parseAdminCustomerSavedBookingsReadParams(
     accountScopeKeyValue === undefined || accountScopeKeyValue === null || accountScopeKeyValue === ""
       ? null
       : safeText(accountScopeKeyValue, 220);
+  const bookingReferenceValue = readParamsValue(params, "booking_reference");
+  const bookingReference =
+    bookingReferenceValue === undefined || bookingReferenceValue === null || bookingReferenceValue === ""
+      ? null
+      : safeText(bookingReferenceValue, 120);
 
   if (
     (customerAccountValue && !customerAccount) ||
     (customerIdValue && !customerId) ||
-    (accountScopeKeyValue && !accountScopeKey)
+    (accountScopeKeyValue && !accountScopeKey) ||
+    (bookingReferenceValue && !bookingReference)
   ) {
     return {
       error: forbiddenParamsError,
@@ -288,6 +303,7 @@ export function parseAdminCustomerSavedBookingsReadParams(
   return {
     data: {
       account_scope_key: accountScopeKey ? normalizeAccountScopeKey(accountScopeKey) : null,
+      booking_reference: bookingReference,
       customer_account: customerAccount,
       customer_id: customerId,
       limit,

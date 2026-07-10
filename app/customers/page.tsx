@@ -7141,7 +7141,7 @@ export default function MockCustomerDashboardPage() {
                         {row.balanceLabel}
                       </td>
                       <td className="border-b border-slate-100 px-3 py-3 text-right text-xs font-bold text-slate-600">
-                        {row.readyJobCount > 0 ? `${row.readyJobCount} ready` : "Review"}
+                        {row.readyJobCount > 0 ? `${row.readyJobCount} ready` : ""}
                       </td>
                     </tr>
                   ))

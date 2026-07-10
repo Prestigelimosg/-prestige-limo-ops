@@ -71,7 +71,7 @@ function customerWorkspaceHref(
   booking: CustomerFolderSavedBookingRecord,
   customerId: string,
   customerName: string,
-  action: "edit" | "delete",
+  action: "edit" | "delete" | "open",
 ) {
   const reference = safeDispatchReference(booking);
 
@@ -134,6 +134,7 @@ export function CustomerFolderSavedBookingsPanel({
   customerId,
   customerName,
 }: CustomerFolderSavedBookingsPanelProps) {
+  const [selectedReferences, setSelectedReferences] = useState<Record<string, boolean>>({});
   const [readState, setReadState] = useState<CustomerFolderSavedBookingsState>({
     message: initialMessage(customerName),
     savedBookings: [],
@@ -198,7 +199,32 @@ export function CustomerFolderSavedBookingsPanel({
   const unbilledSavedBookings = readState.savedBookings.filter(
     (booking) => !isClearlyBilledOrClosedJob(booking),
   );
+  const selectedUnbilledBookings = unbilledSavedBookings.filter((booking) => {
+    const reference = safeDispatchReference(booking);
+
+    return reference && selectedReferences[reference];
+  });
   const matchedCount = Number(readState.summary?.matched_count ?? 0);
+  const firstSelectedBooking = selectedUnbilledBookings[0] ?? null;
+  const createInvoiceHref = firstSelectedBooking
+    ? customerWorkspaceHref(firstSelectedBooking, customerId, customerName, "open") +
+      `&customer_invoice_action=create&selected_booking_references=${encodeURIComponent(
+        selectedUnbilledBookings.map((booking) => safeDispatchReference(booking)).filter(Boolean).join(","),
+      )}`
+    : "";
+
+  function toggleSelectedBooking(booking: CustomerFolderSavedBookingRecord, selected: boolean) {
+    const reference = safeDispatchReference(booking);
+
+    if (!reference) {
+      return;
+    }
+
+    setSelectedReferences((current) => ({
+      ...current,
+      [reference]: selected,
+    }));
+  }
 
   return (
     <section
@@ -268,13 +294,35 @@ export function CustomerFolderSavedBookingsPanel({
       ) : null}
 
       {readState.status === "loaded" && unbilledSavedBookings.length > 0 ? (
-        <div
-          className="mt-3 max-h-96 overflow-auto rounded-md border border-slate-200"
-          data-customer-folder-saved-bookings-list="true"
-        >
-          <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+        <div className="mt-3" data-customer-folder-saved-bookings-list="true">
+          <div className="mb-2 flex flex-col gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs font-bold text-slate-700">
+              {selectedUnbilledBookings.length} selected for new invoice
+            </p>
+            {createInvoiceHref ? (
+              <Link
+                className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-xs font-bold text-white transition hover:bg-slate-700"
+                data-customer-folder-create-invoice-selected="true"
+                href={createInvoiceHref}
+              >
+                Create invoice
+              </Link>
+            ) : (
+              <button
+                className="inline-flex min-h-9 cursor-not-allowed items-center justify-center rounded-md border border-slate-200 bg-slate-100 px-3 text-xs font-bold text-slate-400"
+                data-customer-folder-create-invoice-selected-disabled="true"
+                disabled
+                type="button"
+              >
+                Create invoice
+              </button>
+            )}
+          </div>
+          <div className="max-h-96 overflow-auto rounded-md border border-slate-200">
+          <table className="w-full min-w-[860px] border-collapse text-left text-sm">
             <thead className="sticky top-0 bg-white text-[11px] uppercase tracking-[0.12em] text-slate-500">
               <tr>
+                <th className="border-b border-slate-200 px-3 py-2 font-bold">Select</th>
                 <th className="border-b border-slate-200 px-3 py-2 font-bold">Booking</th>
                 <th className="border-b border-slate-200 px-3 py-2 font-bold">Pickup</th>
                 <th className="border-b border-slate-200 px-3 py-2 font-bold">Service</th>
@@ -286,6 +334,12 @@ export function CustomerFolderSavedBookingsPanel({
               {unbilledSavedBookings.map((booking) => {
                 const editHref = customerWorkspaceHref(booking, customerId, customerName, "edit");
                 const deleteHref = customerWorkspaceHref(booking, customerId, customerName, "delete");
+                const createSingleInvoiceHref =
+                  customerWorkspaceHref(booking, customerId, customerName, "open") +
+                  `&customer_invoice_action=create&selected_booking_references=${encodeURIComponent(
+                    safeDispatchReference(booking),
+                  )}`;
+                const bookingReference = safeDispatchReference(booking);
                 const rowKey = booking.booking_reference || `${booking.customer_account}-${booking.pickup_at}`;
 
                 return (
@@ -294,6 +348,17 @@ export function CustomerFolderSavedBookingsPanel({
                     data-customer-folder-saved-bookings-row={booking.booking_reference || ""}
                     key={rowKey}
                   >
+                    <td className="px-3 py-2">
+                      <input
+                        aria-label={`Select ${displayText(booking.booking_reference)}`}
+                        checked={Boolean(bookingReference && selectedReferences[bookingReference])}
+                        className="h-4 w-4 rounded border-slate-300 text-slate-900"
+                        data-customer-folder-saved-bookings-select={booking.booking_reference || ""}
+                        disabled={!bookingReference}
+                        onChange={(event) => toggleSelectedBooking(booking, event.target.checked)}
+                        type="checkbox"
+                      />
+                    </td>
                     <td className="px-3 py-2 font-bold text-slate-950" title={displayText(booking.booking_reference)}>
                       {compactReference(booking.booking_reference)}
                     </td>
@@ -309,30 +374,29 @@ export function CustomerFolderSavedBookingsPanel({
                     </td>
                     <td className="px-3 py-2 text-right">
                       {editHref && deleteHref ? (
-                        <details className="inline-grid justify-items-end text-left">
-                          <summary
-                            className="inline-flex min-h-8 cursor-pointer list-none items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-xs font-bold text-white transition hover:bg-slate-700 [&::-webkit-details-marker]:hidden"
-                            data-customer-folder-saved-bookings-action-menu={booking.booking_reference || ""}
+                        <div className="inline-flex flex-wrap justify-end gap-1">
+                          <Link
+                            className="inline-flex min-h-8 items-center rounded-md border border-slate-300 bg-white px-2 text-xs font-bold text-slate-800 transition hover:bg-slate-100"
+                            data-customer-folder-saved-bookings-edit={booking.booking_reference || ""}
+                            href={editHref}
                           >
-                            Action
-                          </summary>
-                          <div className="mt-1 grid min-w-28 gap-1 rounded-md border border-slate-200 bg-white p-1 shadow-sm">
-                            <Link
-                              className="rounded px-2 py-1.5 text-xs font-bold text-slate-800 transition hover:bg-slate-100"
-                              data-customer-folder-saved-bookings-edit={booking.booking_reference || ""}
-                              href={editHref}
-                            >
-                              Edit
-                            </Link>
-                            <Link
-                              className="rounded px-2 py-1.5 text-xs font-bold text-rose-700 transition hover:bg-rose-50"
-                              data-customer-folder-saved-bookings-delete={booking.booking_reference || ""}
-                              href={deleteHref}
-                            >
-                              Delete
-                            </Link>
-                          </div>
-                        </details>
+                            Edit
+                          </Link>
+                          <Link
+                            className="inline-flex min-h-8 items-center rounded-md border border-rose-200 bg-white px-2 text-xs font-bold text-rose-700 transition hover:bg-rose-50"
+                            data-customer-folder-saved-bookings-delete={booking.booking_reference || ""}
+                            href={deleteHref}
+                          >
+                            Delete
+                          </Link>
+                          <Link
+                            className="inline-flex min-h-8 items-center rounded-md border border-slate-900 bg-slate-900 px-2 text-xs font-bold text-white transition hover:bg-slate-700"
+                            data-customer-folder-saved-bookings-create-invoice={booking.booking_reference || ""}
+                            href={createSingleInvoiceHref}
+                          >
+                            Invoice
+                          </Link>
+                        </div>
                       ) : (
                         <span className="text-xs font-semibold text-slate-400">No reference</span>
                       )}
@@ -342,6 +406,7 @@ export function CustomerFolderSavedBookingsPanel({
               })}
             </tbody>
           </table>
+          </div>
         </div>
       ) : null}
     </section>

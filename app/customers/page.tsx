@@ -2234,6 +2234,7 @@ export default function MockCustomerDashboardPage() {
   const plainInvoiceCrmRequestSequenceRef = useRef(0);
   const customerInvoicePrepRowKeyRef = useRef("");
   const customerFolderUrlHandoffRef = useRef("");
+  const customerFolderReturnHrefRef = useRef("");
   const [searchTerm, setSearchTerm] = useState("");
   const [customerFolderFinderPage, setCustomerFolderFinderPage] = useState(1);
   const [customerFolderFinderSelectedId, setCustomerFolderFinderSelectedId] = useState("");
@@ -4376,6 +4377,11 @@ export default function MockCustomerDashboardPage() {
         ),
         tone: "success",
       }));
+      if (customerFolderReturnHrefRef.current) {
+        window.setTimeout(() => {
+          window.location.href = customerFolderReturnHrefRef.current;
+        }, 900);
+      }
     } catch (error) {
       setCustomerFolderExactBookingEditorState((current) => ({
         ...current,
@@ -4482,6 +4488,11 @@ export default function MockCustomerDashboardPage() {
         status: "deleted",
         tone: "success",
       });
+      if (customerFolderReturnHrefRef.current) {
+        window.setTimeout(() => {
+          window.location.href = customerFolderReturnHrefRef.current;
+        }, 900);
+      }
     } catch (error) {
       setCustomerFolderExactBookingEditorState((current) => ({
         ...current,
@@ -4556,7 +4567,10 @@ export default function MockCustomerDashboardPage() {
     customerName: string,
     bookingReference: string,
     action: "edit" | "delete" | "open",
+    invoiceAction = "",
   ) {
+    customerFolderReturnHrefRef.current =
+      action === "edit" || action === "delete" ? customerFolderHrefFor(customerId, customerName) : "";
     setCustomerFolderFinderSelectedId("");
     setSelectedMonthlyBillingGroupKey("");
     setSelectedUnbilledCustomerRowKey("");
@@ -4610,11 +4624,19 @@ export default function MockCustomerDashboardPage() {
         setCustomerFolderJobViewState((current) => ({
           ...current,
           message:
-            action === "delete"
+            invoiceAction === "create"
+              ? `Job ${bookingReference} is open for invoice preparation. Use the billing-ready row or Create Invoice workbench below after reviewing the loaded job.`
+              : action === "delete"
               ? `Job ${bookingReference} is open. Delete remains guarded and requires confirmation.`
               : `Job ${bookingReference} is open for review and edit.`,
           tone: "info",
         }));
+        if (invoiceAction === "create") {
+          setCustomerInvoiceWorkspaceTab("statements");
+          setCustomerInvoicePrepFeedback(
+            `Invoice handoff received for ${bookingReference}. Review the loaded job, then prepare the billing row or use Create Invoice before sending to customer.`,
+          );
+        }
       }
     } catch (error) {
       setCustomerFolderJobViewState({
@@ -4639,20 +4661,21 @@ export default function MockCustomerDashboardPage() {
     const customerName = cleanCustomerFolderText(searchParams.get("customer_name"), 160);
     const bookingReference = cleanCustomerFolderText(searchParams.get("booking_reference"), 120);
     const requestedAction = searchParams.get("customer_job_action");
+    const invoiceAction = cleanCustomerFolderText(searchParams.get("customer_invoice_action"), 40);
     const action = requestedAction === "delete" ? "delete" : requestedAction === "edit" ? "edit" : "open";
 
     if (!customerId || !customerName) {
       return;
     }
 
-    const handoffKey = [customerId, customerName, bookingReference, action].join("::");
+    const handoffKey = [customerId, customerName, bookingReference, action, invoiceAction].join("::");
 
     if (customerFolderUrlHandoffRef.current === handoffKey) {
       return;
     }
 
     customerFolderUrlHandoffRef.current = handoffKey;
-    void openCustomerFolderFromUrl(customerId, customerName, bookingReference, action);
+    void openCustomerFolderFromUrl(customerId, customerName, bookingReference, action, invoiceAction);
     // URL handoff runs once so normal page interactions do not reload the selected customer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

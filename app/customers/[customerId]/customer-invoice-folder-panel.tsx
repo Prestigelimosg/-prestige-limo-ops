@@ -1,14 +1,43 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { MockCustomer, MockCustomerBooking, MockCustomerInvoice } from "../_data/mock-customers";
 import { CustomerInvoicePrefixSettingsPanel } from "./invoice-prefix-settings-panel";
+
+const adminCustomerInvoicesApiPath = "/api/admin-customer-invoices";
 
 type CustomerInvoiceFolderPanelProps = {
   customer: MockCustomer;
 };
 
 type PaymentMethod = "Card" | "Cash" | "Bank transfer";
+type InvoiceLineItem = {
+  amountLabel?: string;
+  description?: string;
+};
+type DisplayInvoice = {
+  amount: string;
+  dueDate: string;
+  invoiceNumber: string;
+  issueDate: string;
+  lineItems: InvoiceLineItem[];
+  route: string;
+  service: string;
+  status: string;
+};
+type StoredInvoiceRecord = {
+  amountLabel?: string;
+  customerId?: string;
+  customerName?: string;
+  documentState?: string;
+  dueDateLabel?: string;
+  invoiceNumber?: string;
+  issueDateLabel?: string;
+  lineItems?: InvoiceLineItem[];
+  route?: string;
+  service?: string;
+  status?: string;
+};
 
 function statusClass(status: string) {
   if (/paid/i.test(status) && !/partially/i.test(status)) {
@@ -34,7 +63,20 @@ function isPaidStatus(status: string) {
   return /paid/i.test(status) && !/partially/i.test(status);
 }
 
-function invoiceBalance(invoice: MockCustomerInvoice, booking: MockCustomerBooking | undefined) {
+function normalizeCustomerMatch(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function safeDisplay(value: string | null | undefined, fallback: string) {
+  const cleaned = String(value ?? "").trim();
+
+  return cleaned || fallback;
+}
+
+function invoiceBalance(
+  invoice: Pick<DisplayInvoice, "amount" | "status"> | MockCustomerInvoice,
+  booking: MockCustomerBooking | undefined,
+) {
   if (booking?.balanceDue) {
     return booking.balanceDue;
   }
@@ -46,7 +88,11 @@ function customerBillingContact(customer: MockCustomer) {
   return customer.contacts.find((contact) => /billing|account/i.test(contact.label)) ?? customer.contacts[0];
 }
 
-function itemDescription(customer: MockCustomer, booking: MockCustomerBooking | undefined, invoice: MockCustomerInvoice) {
+function itemDescription(
+  customer: MockCustomer,
+  booking: MockCustomerBooking | undefined,
+  invoice: Pick<DisplayInvoice, "invoiceNumber"> | MockCustomerInvoice,
+) {
   if (!booking) {
     return `Passenger/service details pending review. Ref ${invoice.invoiceNumber}`;
   }
@@ -56,10 +102,39 @@ function itemDescription(customer: MockCustomer, booking: MockCustomerBooking | 
 
 export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPanelProps) {
   const [selectedInvoiceNumber, setSelectedInvoiceNumber] = useState(customer.invoices[0]?.invoiceNumber ?? "");
+  const [storedInvoices, setStoredInvoices] = useState<DisplayInvoice[]>([]);
+  const [storedInvoiceMessage, setStoredInvoiceMessage] = useState("Loading stored invoices...");
   const [paidInvoiceMethods, setPaidInvoiceMethods] = useState<Record<string, PaymentMethod>>({});
   const [localPaidInvoices, setLocalPaidInvoices] = useState<Record<string, PaymentMethod>>({});
   const [invoiceActionMessage, setInvoiceActionMessage] = useState("");
-  const selectedInvoice = customer.invoices.find((invoice) => invoice.invoiceNumber === selectedInvoiceNumber);
+  const mockInvoices = useMemo<DisplayInvoice[]>(
+    () =>
+      customer.invoices.map((invoice) => {
+        const booking = customer.bookingHistory.find((row) => row.invoiceNumber === invoice.invoiceNumber);
+
+        return {
+          amount: invoice.amount,
+          dueDate: invoice.dueDate,
+          invoiceNumber: invoice.invoiceNumber,
+          issueDate: invoice.dueDate,
+          lineItems: [
+            {
+              amountLabel: invoice.amount,
+              description: itemDescription(customer, booking, invoice),
+            },
+          ],
+          route: booking?.route || "Route to confirm",
+          service: booking?.service || "Service",
+          status: invoice.status,
+        };
+      }),
+    [customer],
+  );
+  const displayInvoices = storedInvoices.length > 0 ? storedInvoices : mockInvoices;
+  const unpaidInvoices = displayInvoices.filter((invoice) => !isPaidStatus(invoice.status));
+  const selectedInvoice =
+    displayInvoices.find((invoice) => invoice.invoiceNumber === selectedInvoiceNumber) ??
+    displayInvoices[0];
   const selectedBooking = customer.bookingHistory.find(
     (booking) => booking.invoiceNumber === selectedInvoice?.invoiceNumber,
   );
@@ -73,9 +148,82 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
   const selectedInvoiceBalance = selectedInvoice
     ? selectedInvoiceIsPaid
       ? "$0"
-      : invoiceBalance(selectedInvoice, selectedBooking)
+      : selectedBooking
+        ? invoiceBalance(
+            {
+              amount: selectedInvoice.amount,
+              status: selectedInvoice.status,
+            },
+            selectedBooking,
+          )
+        : selectedInvoice.amount
     : "$0";
   const selectedContact = customerBillingContact(customer);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadStoredInvoices() {
+      try {
+        const response = await fetch(adminCustomerInvoicesApiPath, {
+          cache: "no-store",
+          headers: {
+            "x-prestige-admin-purpose": "admin-booking-persistence",
+          },
+          signal: controller.signal,
+        });
+        const result = await response.json().catch(() => null);
+
+        if (!response.ok || !result?.ok || !Array.isArray(result.invoices)) {
+          throw new Error("Stored invoice read failed");
+        }
+
+        const customerIdKey = normalizeCustomerMatch(customer.id);
+        const customerNameKey = normalizeCustomerMatch(customer.companyName);
+        const invoices = (result.invoices as StoredInvoiceRecord[])
+          .filter((invoice) => {
+            const invoiceCustomerId = normalizeCustomerMatch(String(invoice.customerId ?? ""));
+            const invoiceCustomerName = normalizeCustomerMatch(String(invoice.customerName ?? ""));
+
+            return (
+              invoiceCustomerId === customerIdKey ||
+              invoiceCustomerName === customerNameKey ||
+              (customerNameKey && invoiceCustomerName.includes(customerNameKey))
+            );
+          })
+          .map((invoice) => ({
+            amount: safeDisplay(invoice.amountLabel, "$0"),
+            dueDate: safeDisplay(invoice.dueDateLabel, "Due date to confirm"),
+            invoiceNumber: safeDisplay(invoice.invoiceNumber, ""),
+            issueDate: safeDisplay(invoice.issueDateLabel, "Date to confirm"),
+            lineItems: Array.isArray(invoice.lineItems) ? invoice.lineItems : [],
+            route: safeDisplay(invoice.route, "Route to confirm"),
+            service: safeDisplay(invoice.service, "Service"),
+            status: invoice.documentState === "draft" ? "Draft" : safeDisplay(invoice.status, "Unpaid"),
+          }))
+          .filter((invoice) => invoice.invoiceNumber);
+
+        setStoredInvoices(invoices);
+        setStoredInvoiceMessage(
+          invoices.length > 0
+            ? `Loaded ${invoices.length} stored invoice${invoices.length === 1 ? "" : "s"} for this customer.`
+            : "No stored invoice records matched this customer yet.",
+        );
+
+        if (!selectedInvoiceNumber && invoices[0]) {
+          setSelectedInvoiceNumber(invoices[0].invoiceNumber);
+        }
+      } catch {
+        if (!controller.signal.aborted) {
+          setStoredInvoiceMessage("Stored invoice records could not be loaded; showing folder records only.");
+        }
+      }
+    }
+
+    void loadStoredInvoices();
+
+    return () => controller.abort();
+  }, [customer.companyName, customer.id, selectedInvoiceNumber]);
 
   function openInvoice(invoiceNumber: string) {
     setSelectedInvoiceNumber(invoiceNumber);
@@ -89,7 +237,7 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
     }));
   }
 
-  function markInvoicePaid(invoice: MockCustomerInvoice) {
+  function markInvoicePaid(invoice: DisplayInvoice) {
     const paymentMethod = paidInvoiceMethods[invoice.invoiceNumber] ?? "Bank transfer";
 
     setSelectedInvoiceNumber(invoice.invoiceNumber);
@@ -102,7 +250,7 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
     );
   }
 
-  function preparePaymentReminder(invoice: MockCustomerInvoice) {
+  function preparePaymentReminder(invoice: DisplayInvoice) {
     setSelectedInvoiceNumber(invoice.invoiceNumber);
     setInvoiceActionMessage(
       `Reminder ready for ${selectedContact?.value ?? customer.companyName}: payment is pending for ${invoice.invoiceNumber}, amount ${invoice.amount}, due ${invoice.dueDate}.`,
@@ -126,7 +274,7 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
           <div className="grid grid-cols-3 gap-2 text-center text-xs font-semibold text-slate-600 sm:min-w-[28rem]">
             <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
               <p>Total</p>
-              <p className="mt-1 text-base font-bold text-slate-950">{customer.invoices.length}</p>
+              <p className="mt-1 text-base font-bold text-slate-950">{displayInvoices.length}</p>
             </div>
             <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
               <p>Outstanding</p>
@@ -140,7 +288,11 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
         </div>
       </div>
 
-      <div className="overflow-x-auto">
+      <p className="border-b border-slate-100 px-4 py-2 text-xs font-semibold text-slate-600">
+        {storedInvoiceMessage}
+      </p>
+
+      <div className="max-h-72 overflow-auto" data-customer-total-invoices-scroll="true">
         <table className="w-full min-w-[760px] border-collapse text-left text-sm" data-customer-invoice-folder-table="true">
           <thead>
             <tr className="border-b border-slate-200 text-xs uppercase tracking-[0.14em] text-slate-500">
@@ -153,18 +305,17 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
             </tr>
           </thead>
           <tbody>
-            {customer.invoices.length === 0 ? (
+            {displayInvoices.length === 0 ? (
               <tr data-customer-invoice-folder-empty="true">
                 <td className="px-4 py-5 text-sm font-semibold text-slate-600" colSpan={6}>
                   No invoice records loaded for this customer yet.
                 </td>
               </tr>
             ) : null}
-            {customer.invoices.map((invoice) => {
-              const booking = customer.bookingHistory.find((row) => row.invoiceNumber === invoice.invoiceNumber);
+            {displayInvoices.map((invoice) => {
               const paidLocally = localPaidInvoices[invoice.invoiceNumber];
               const isPaid = Boolean(paidLocally) || isPaidStatus(invoice.status);
-              const balance = isPaid ? "$0" : invoiceBalance(invoice, booking);
+              const balance = isPaid ? "$0" : invoice.amount;
               const selected = selectedInvoiceNumber === invoice.invoiceNumber;
               const paymentMethod = paidInvoiceMethods[invoice.invoiceNumber] ?? paidLocally ?? "Bank transfer";
 
@@ -176,7 +327,7 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
                   data-customer-invoice-folder-row={invoice.invoiceNumber}
                   key={invoice.invoiceNumber}
                 >
-                  <td className="px-4 py-3 font-semibold text-slate-800">{invoice.dueDate}</td>
+                  <td className="px-4 py-3 font-semibold text-slate-800">{invoice.issueDate}</td>
                   <td className="px-4 py-3">
                     <button
                       className="font-bold text-sky-700 underline-offset-4 hover:underline"
@@ -247,6 +398,44 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
         </table>
       </div>
 
+      <div className="border-t border-slate-200 bg-white px-4 py-3" data-customer-unpaid-invoices="true">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h3 className="text-base font-bold text-slate-950">Unpaid invoices</h3>
+            <p className="text-xs font-semibold text-slate-600">
+              Compact rows. Click a row to open the selected invoice below.
+            </p>
+          </div>
+          <p className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-bold text-slate-700">
+            {unpaidInvoices.length} unpaid
+          </p>
+        </div>
+        {unpaidInvoices.length > 0 ? (
+          <div className="mt-2 max-h-48 overflow-auto rounded-md border border-slate-200">
+            {unpaidInvoices.map((invoice) => (
+              <button
+                className="grid w-full gap-1 border-b border-slate-100 px-3 py-2 text-left text-xs last:border-b-0 hover:bg-slate-50 sm:grid-cols-[minmax(8rem,0.9fr)_6rem_minmax(0,1fr)_5rem]"
+                data-customer-unpaid-invoice-row={invoice.invoiceNumber}
+                key={`unpaid-${invoice.invoiceNumber}`}
+                onClick={() => openInvoice(invoice.invoiceNumber)}
+                type="button"
+              >
+                <span className="font-bold text-slate-950">{invoice.invoiceNumber}</span>
+                <span className="font-bold text-slate-800">{invoice.amount}</span>
+                <span className="truncate text-slate-600">
+                  {invoice.lineItems[0]?.description || invoice.service}
+                </span>
+                <span className="text-right font-bold text-sky-700">View</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-2 rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-600">
+            No unpaid invoice records loaded for this customer.
+          </p>
+        )}
+      </div>
+
       {selectedInvoice ? (
         <div className="border-t border-slate-200 bg-slate-50 px-4 py-4" data-customer-invoice-folder-detail="true">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -275,13 +464,26 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td className="px-4 py-4 font-bold text-slate-600">1</td>
-                  <td className="px-4 py-4 font-semibold leading-6 text-slate-900">
-                    {itemDescription(customer, selectedBooking, selectedInvoice)}
-                  </td>
-                  <td className="px-4 py-4 text-right font-bold text-slate-950">{selectedInvoice.amount}</td>
-                </tr>
+                {(selectedInvoice.lineItems.length > 0
+                  ? selectedInvoice.lineItems
+                  : [
+                      {
+                        amountLabel: selectedInvoice.amount,
+                        description: itemDescription(customer, selectedBooking, {
+                          invoiceNumber: selectedInvoice.invoiceNumber,
+                        }),
+                      },
+                    ]).map((item, itemIndex) => (
+                  <tr key={`${selectedInvoice.invoiceNumber}-${itemIndex}`}>
+                    <td className="px-4 py-4 font-bold text-slate-600">{itemIndex + 1}</td>
+                    <td className="px-4 py-4 font-semibold leading-6 text-slate-900">
+                      {item.description || "Invoice item description pending"}
+                    </td>
+                    <td className="px-4 py-4 text-right font-bold text-slate-950">
+                      {item.amountLabel || selectedInvoice.amount}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

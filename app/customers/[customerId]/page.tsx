@@ -75,67 +75,27 @@ export default async function MockCustomerFolderPage({ params, searchParams }: C
                 invoice action.
               </p>
             </div>
-            <div className="inline-flex w-fit items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm">
-              Outstanding balance: <strong>{customer.outstandingAmount}</strong>
-            </div>
           </div>
         </header>
 
         <section
-          className="rounded-md border border-slate-200 bg-white p-3 shadow-sm"
+          className="rounded-md border border-slate-200 bg-white px-4 py-3 shadow-sm"
           data-customer-folder-compact-summary="true"
         >
-          <div className="grid gap-3 text-sm md:grid-cols-[minmax(13rem,0.9fr)_minmax(14rem,1fr)_minmax(16rem,1fr)]">
-            <dl className="grid gap-2" data-customer-folder-details="true">
-              <div>
-                <dt className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">Account type</dt>
-                <dd className="mt-0.5 font-semibold text-slate-950">{customer.accountType}</dd>
-              </div>
-              <div>
-                <dt className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">Payment terms</dt>
-                <dd className="mt-0.5 text-slate-800">{customer.paymentTerms}</dd>
-              </div>
-              <div>
-                <dt className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">Next follow-up</dt>
-                <dd className="mt-0.5 font-semibold text-slate-950">{customer.nextFollowUpDate}</dd>
-              </div>
-            </dl>
-
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">Contacts</p>
-              <div className="mt-1 divide-y divide-slate-100">
-                {customer.contacts.map((contact) => (
-                  <div className="grid gap-1 py-1 first:pt-0 last:pb-0 sm:grid-cols-[8rem_1fr]" key={contact.label}>
-                    <p className="font-semibold text-slate-500">{contact.label}</p>
-                    <p className="min-w-0 text-slate-800">
-                      <span className="font-semibold text-slate-950">{contact.name}</span>
-                      <span className="mx-1 text-slate-300">/</span>
-                      <span>{contact.value}</span>
-                    </p>
-                  </div>
-                ))}
-              </div>
+          <dl className="grid grid-cols-3 divide-x divide-slate-200 text-sm">
+            <div className="pr-4">
+              <dt className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">Outstanding</dt>
+              <dd className="mt-0.5 text-lg font-bold text-slate-950">{customer.outstandingAmount}</dd>
             </div>
-
-            <dl className="grid grid-cols-2 gap-2">
-              <div>
-                <dt className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">Outstanding</dt>
-                <dd className="mt-0.5 text-lg font-bold text-slate-950">{customer.outstandingAmount}</dd>
-              </div>
-              <div>
-                <dt className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">Overdue</dt>
-                <dd className="mt-0.5 text-lg font-bold text-rose-700">{customer.overdueAmount}</dd>
-              </div>
-              <div>
-                <dt className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">Paid this month</dt>
-                <dd className="mt-0.5 font-bold text-emerald-700">{customer.paidThisMonth}</dd>
-              </div>
-              <div>
-                <dt className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">Status</dt>
-                <dd className="mt-0.5 font-bold text-slate-900">{customer.paymentStatusSummary}</dd>
-              </div>
-            </dl>
-          </div>
+            <div className="px-4">
+              <dt className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">Overdue</dt>
+              <dd className="mt-0.5 text-lg font-bold text-rose-700">{customer.overdueAmount}</dd>
+            </div>
+            <div className="pl-4">
+              <dt className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">Paid this month</dt>
+              <dd className="mt-0.5 text-lg font-bold text-emerald-700">{customer.paidThisMonth}</dd>
+            </div>
+          </dl>
         </section>
 
         <CustomerInvoiceFolderPanel customer={customer} />

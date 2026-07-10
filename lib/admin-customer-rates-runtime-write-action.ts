@@ -4,7 +4,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import type { AdminBookingPersistenceSafeErrorCategory } from "./admin-booking-persistence";
 import type { AdminBookingPersistenceAdapterActor } from "./admin-booking-supabase-adapter";
-import type { BookingType, RateRules } from "./pricing";
+import type { BookingType, CustomerRateVehicleType, RateRules } from "./pricing";
 
 export const adminCustomerRatesRuntimeWriteActionVersion =
   "admin-customer-rates-runtime-write-action-v1";
@@ -37,7 +37,7 @@ export type AdminCustomerRatesRuntimeWriteActionResult = {
   action_scope: CustomerRatesActionScope | null;
   action_type: CustomerRatesActionType | null;
   category?: SafeFailureCategory;
-  customer_rate_field_names: BookingType[];
+  customer_rate_field_names: string[];
   customer_rates: RateRules;
   database_client_enabled: boolean;
   delivery_surface: "admin_customer_rates_runtime_write_action";
@@ -64,6 +64,7 @@ export type AdminCustomerRatesRuntimeWriteActionOptions = {
 
 const allowedActorRoles = new Set(["admin", "dispatcher"]);
 const allowedCustomerRateKeys: BookingType[] = ["MNG", "DEP", "TRF", "DSP"];
+const allowedCustomerRateVehicleKeys: CustomerRateVehicleType[] = ["AVF", "S", "VVV", "Combi"];
 const safeBlockedError =
   "Customer rates write requires a verified admin or dispatcher session.";
 const safeConfigError = "Customer rates write is not configured on this server.";
@@ -236,12 +237,40 @@ function customerRateFieldsFrom(value: unknown) {
 
     const parsedValue = finiteNonNegativeNumber(rawValue);
 
-    if (parsedValue === null) {
-      invalidFields.push(`customer_rates.${key}`);
+    if (parsedValue !== null) {
+      customerRates[key as BookingType] = parsedValue;
       continue;
     }
 
-    customerRates[key as BookingType] = parsedValue;
+    const vehicleSource = asRecord(rawValue);
+    const vehicleRates: Partial<Record<CustomerRateVehicleType, number>> = {};
+
+    for (const vehicleType of allowedCustomerRateVehicleKeys) {
+      if (!Object.prototype.hasOwnProperty.call(vehicleSource, vehicleType)) {
+        continue;
+      }
+
+      const vehicleRate = finiteNonNegativeNumber(vehicleSource[vehicleType]);
+
+      if (vehicleRate === null) {
+        invalidFields.push(`customer_rates.${key}.${vehicleType}`);
+        continue;
+      }
+
+      vehicleRates[vehicleType] = vehicleRate;
+    }
+
+    for (const vehicleKey of Object.keys(vehicleSource)) {
+      if (!allowedCustomerRateVehicleKeys.includes(vehicleKey as CustomerRateVehicleType)) {
+        unknownFields.push(`customer_rates.${key}.${vehicleKey}`);
+      }
+    }
+
+    if (Object.keys(vehicleRates).length > 0) {
+      customerRates[key as BookingType] = vehicleRates;
+    } else if (rawValue !== null && rawValue !== undefined) {
+      invalidFields.push(`customer_rates.${key}`);
+    }
   }
 
   return {
@@ -315,7 +344,11 @@ function buildContract(input: unknown) {
   return {
     action_scope: actionScope(action),
     action_type: action,
-    customer_rate_field_names: Object.keys(customerRateFields.customerRates) as BookingType[],
+    customer_rate_field_names: Object.entries(customerRateFields.customerRates).flatMap(([bookingType, rate]) =>
+      typeof rate === "number"
+        ? [bookingType]
+        : Object.keys(asRecord(rate)).map((vehicleType) => `${bookingType}.${vehicleType}`),
+    ),
     customer_rates: customerRateFields.customerRates,
     forbidden_fields_present: forbiddenFields,
     id,

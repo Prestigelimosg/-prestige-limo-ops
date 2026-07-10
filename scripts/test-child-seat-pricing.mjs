@@ -51,6 +51,89 @@ assert.deepEqual(
   },
 );
 
+const vehicleDefaultPricing = resolvePricing(
+  {
+    bookingType: "MNG",
+    vehicle: "VVV",
+    time: "1200hrs",
+    extraStopCount: "0",
+    childSeatRequired: "",
+    childSeatCount: "",
+  },
+  { customer_rates: {}, driver_payout_rules: {} },
+  null,
+  {
+    ...initialRateSettings,
+    customerRates: {
+      ...initialRateSettings.customerRates,
+      MNG: { AVF: 85, S: 95, VVV: 125, Combi: 115 },
+    },
+  },
+  null,
+);
+
+assert.equal(vehicleDefaultPricing.customerRate, 125);
+assert.equal(calculateProfit(vehicleDefaultPricing).customerPrice, 125);
+
+const missingVehicleFallbackPricing = resolvePricing(
+  {
+    bookingType: "MNG",
+    vehicle: "",
+    time: "1200hrs",
+    extraStopCount: "0",
+    childSeatRequired: "",
+    childSeatCount: "",
+  },
+  { customer_rates: {}, driver_payout_rules: {} },
+  null,
+  {
+    ...initialRateSettings,
+    customerRates: {
+      ...initialRateSettings.customerRates,
+      MNG: { AVF: 85, S: 95, VVV: 125, Combi: 115 },
+    },
+  },
+  null,
+);
+
+assert.equal(missingVehicleFallbackPricing.customerRate, 85);
+
+const companyVehicleOverridePricing = resolvePricing(
+  {
+    bookingType: "DEP",
+    vehicle: "Combi",
+    time: "1200hrs",
+    extraStopCount: "0",
+    childSeatRequired: "",
+    childSeatCount: "",
+  },
+  { customer_rates: { DEP: { Combi: 140 } }, driver_payout_rules: {} },
+  null,
+  initialRateSettings,
+  null,
+);
+
+assert.equal(companyVehicleOverridePricing.customerRate, 140);
+assert.equal(companyVehicleOverridePricing.pricingSource, "company");
+
+const travelerVehicleOverridePricing = resolvePricing(
+  {
+    bookingType: "TRF",
+    vehicle: "S",
+    time: "1200hrs",
+    extraStopCount: "0",
+    childSeatRequired: "",
+    childSeatCount: "",
+  },
+  { customer_rates: { TRF: { S: 90 } }, driver_payout_rules: {} },
+  { customer_rates: { TRF: { S: 105 } }, driver_payout_rules: {} },
+  initialRateSettings,
+  null,
+);
+
+assert.equal(travelerVehicleOverridePricing.customerRate, 105);
+assert.equal(travelerVehicleOverridePricing.pricingSource, "boss");
+
 const configuredPricing = resolvePricing(
   {
     bookingType: "MNG",

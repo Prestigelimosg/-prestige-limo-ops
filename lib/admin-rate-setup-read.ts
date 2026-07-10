@@ -7,7 +7,13 @@ import type {
   AdminBookingResult,
 } from "./admin-booking-persistence";
 import type { AdminBookingPersistenceAdapterActor } from "./admin-booking-supabase-adapter";
-import type { DriverPayoutRule, DriverPayoutRules, RateRules } from "./pricing";
+import {
+  customerRateVehicleTypes,
+  type CustomerRateVehicleType,
+  type DriverPayoutRule,
+  type DriverPayoutRules,
+  type RateRules,
+} from "./pricing";
 
 export const adminRateSetupReadVersion = "stage-admin-rate-setup-read-api-v1";
 
@@ -117,10 +123,27 @@ function rateRulesFromDb(value: unknown): RateRules {
   const rules: RateRules = {};
 
   for (const bookingType of bookingTypes) {
-    const rate = finiteNumberOrNull(source[bookingType]);
+    const rawRate = source[bookingType];
+    const rate = finiteNumberOrNull(rawRate);
 
     if (rate !== null) {
       rules[bookingType] = rate;
+      continue;
+    }
+
+    const vehicleSource = asRecord(rawRate);
+    const vehicleRates: Partial<Record<CustomerRateVehicleType, number>> = {};
+
+    for (const vehicleType of customerRateVehicleTypes) {
+      const vehicleRate = finiteNumberOrNull(vehicleSource[vehicleType]);
+
+      if (vehicleRate !== null) {
+        vehicleRates[vehicleType] = vehicleRate;
+      }
+    }
+
+    if (Object.keys(vehicleRates).length > 0) {
+      rules[bookingType] = vehicleRates;
     }
   }
 

@@ -1,6 +1,8 @@
 export type BookingType = "MNG" | "DEP" | "TRF" | "DSP";
+export type CustomerRateVehicleType = "AVF" | "S" | "VVV" | "Combi";
 
-export type RateRules = Partial<Record<BookingType, number>>;
+export type CustomerRateRule = number | Partial<Record<CustomerRateVehicleType, number>>;
+export type RateRules = Partial<Record<BookingType, CustomerRateRule>>;
 
 export type DriverPayoutRule = {
   min?: number;
@@ -51,6 +53,8 @@ type PricingRecord = {
 
 type PricingInput = {
   bookingType?: string | null;
+  vehicle?: string | null;
+  vehicleType?: string | null;
   time?: string | null;
   extraStopCount?: string | number | null;
   childSeatRequired?: string | boolean | null;
@@ -58,10 +62,10 @@ type PricingInput = {
 };
 
 export const defaultCustomerRates: Required<RateRules> = {
-  MNG: 85,
-  DEP: 75,
-  TRF: 55,
-  DSP: 65,
+  MNG: { AVF: 85, S: 85, VVV: 85, Combi: 85 },
+  DEP: { AVF: 75, S: 75, VVV: 75, Combi: 75 },
+  TRF: { AVF: 55, S: 55, VVV: 55, Combi: 55 },
+  DSP: { AVF: 65, S: 65, VVV: 65, Combi: 65 },
 };
 
 export const defaultDriverPayoutRules: Required<DriverPayoutRules> = {
@@ -88,6 +92,9 @@ export const initialRateSettings: RateSettings = {
   childSeatCustomerSurcharge: defaultChildSeatCustomerSurcharge,
   childSeatDriverPayout: defaultChildSeatDriverPayout,
 };
+
+export const customerRateVehicleTypes: CustomerRateVehicleType[] = ["AVF", "S", "VVV", "Combi"];
+export const defaultCustomerRateVehicleType: CustomerRateVehicleType = "AVF";
 
 function clean(value: string | null | undefined) {
   return (value ?? "").trim();
@@ -192,6 +199,26 @@ export function normalizeBookingType(value: string | null | undefined): BookingT
   return "MNG";
 }
 
+export function normalizeCustomerRateVehicleType(
+  value: string | null | undefined,
+): CustomerRateVehicleType {
+  const vehicleType = clean(value).toUpperCase().replace(/\s+/g, "");
+
+  if (vehicleType === "S") {
+    return "S";
+  }
+
+  if (vehicleType === "VVV") {
+    return "VVV";
+  }
+
+  if (vehicleType === "COMBI") {
+    return "Combi";
+  }
+
+  return defaultCustomerRateVehicleType;
+}
+
 export function isMidnightPickup(value: string | null | undefined) {
   const digits = normalizePickupTimeForStorage(value);
 
@@ -211,10 +238,24 @@ export function isMidnightPickup(value: string | null | undefined) {
   return minutes >= 23 * 60 || minutes < 7 * 60;
 }
 
-export function rateFromRules(rules: RateRules | null | undefined, bookingType: BookingType) {
+export function rateFromRules(
+  rules: RateRules | null | undefined,
+  bookingType: BookingType,
+  vehicleType: CustomerRateVehicleType = defaultCustomerRateVehicleType,
+) {
   const rate = rules?.[bookingType];
 
-  return typeof rate === "number" && Number.isFinite(rate) ? rate : null;
+  if (typeof rate === "number" && Number.isFinite(rate)) {
+    return rate;
+  }
+
+  if (rate && typeof rate === "object" && !Array.isArray(rate)) {
+    const vehicleRate = rate[vehicleType] ?? rate[defaultCustomerRateVehicleType];
+
+    return typeof vehicleRate === "number" && Number.isFinite(vehicleRate) ? vehicleRate : null;
+  }
+
+  return null;
 }
 
 export function hasRateRules(rules: RateRules | DriverPayoutRules | null | undefined) {
@@ -241,6 +282,9 @@ export function resolvePricing(
   driverRecord: PricingRecord | null = null,
 ): PricingResult {
   const bookingType = normalizeBookingType(bookingValue.bookingType);
+  const vehicleType = normalizeCustomerRateVehicleType(
+    bookingValue.vehicleType ?? bookingValue.vehicle,
+  );
   const isMidnight = isMidnightPickup(bookingValue.time);
   const extraStopCount = normalizeExtraStopCount(bookingValue.extraStopCount);
   const extraStopSurcharge = bookingType === "DSP" ? 0 : settings.extraStopSurcharge;
@@ -249,13 +293,13 @@ export function resolvePricing(
     bookingValue.childSeatRequired,
     bookingValue.childSeatCount,
   );
-  let customerRate = rateFromRules(nameRecord?.customer_rates, bookingType);
+  let customerRate = rateFromRules(nameRecord?.customer_rates, bookingType, vehicleType);
   let pricingSource = "default";
 
   if (customerRate !== null) {
     pricingSource = "boss";
   } else if (hasRateRules(company.customer_rates)) {
-    customerRate = rateFromRules(company.customer_rates, bookingType);
+    customerRate = rateFromRules(company.customer_rates, bookingType, vehicleType);
 
     if (customerRate !== null) {
       pricingSource = "company";
@@ -263,7 +307,7 @@ export function resolvePricing(
   }
 
   if (customerRate === null) {
-    customerRate = settings.customerRates[bookingType];
+    customerRate = rateFromRules(settings.customerRates, bookingType, vehicleType) ?? 0;
   }
 
   let payoutRule = payoutFromRules(company.driver_payout_rules, bookingType, settings);

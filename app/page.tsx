@@ -17,6 +17,7 @@ import {
   defaultChildSeatDriverPayout,
   defaultCustomerRates,
   defaultDriverPayoutRules,
+  defaultCustomerRateVehicleType,
   initialRateSettings,
   isMidnightPickup,
   normalizeBookingType,
@@ -24,7 +25,9 @@ import {
   normalizeExtraStopCount,
   numericRate,
   payoutAmountFromRule,
+  rateFromRules,
   resolvePricing,
+  type CustomerRateVehicleType,
   type DriverPayoutRule,
   type DriverPayoutRules,
   type RateRules,
@@ -2633,6 +2636,13 @@ const adminDispatchVehicleTypeOptions = [
 
 type AdminDispatchServiceTypeValue = (typeof adminDispatchServiceTypeOptions)[number]["value"];
 type AdminDispatchVehicleTypeValue = (typeof adminDispatchVehicleTypeOptions)[number]["value"];
+const rateVehicleTypes = adminDispatchVehicleTypeOptions.map((option) => option.value) as CustomerRateVehicleType[];
+const rateVehicleLabels: Record<CustomerRateVehicleType, string> = {
+  AVF: "E / AVF",
+  S: "S",
+  VVV: "VVV",
+  Combi: "COMBI",
+};
 
 const customerBookingTypeLabels: Record<keyof Required<RateRules>, string> = {
   MNG: "Arrival",
@@ -5528,14 +5538,96 @@ function normalizeCustomerRateRules(rules: RateRules | null | undefined) {
   const normalizedRules: RateRules = {};
 
   for (const bookingType of rateBookingTypes) {
-    const numericValue = finiteNumber(source[bookingType]);
+    const rawRate = source[bookingType];
+    const numericValue = finiteNumber(rawRate);
 
     if (numericValue !== null) {
       normalizedRules[bookingType] = numericValue;
+      continue;
+    }
+
+    if (!rawRate || typeof rawRate !== "object" || Array.isArray(rawRate)) {
+      continue;
+    }
+
+    const vehicleSource = rawRate as Record<string, unknown>;
+    const vehicleRates: Partial<Record<CustomerRateVehicleType, number>> = {};
+
+    for (const vehicleType of rateVehicleTypes) {
+      const vehicleRate = finiteNumber(vehicleSource[vehicleType]);
+
+      if (vehicleRate !== null) {
+        vehicleRates[vehicleType] = vehicleRate;
+      }
+    }
+
+    if (Object.keys(vehicleRates).length > 0) {
+      normalizedRules[bookingType] = vehicleRates;
     }
   }
 
   return normalizedRules;
+}
+
+function customerRateValue(
+  rules: RateRules | null | undefined,
+  bookingType: keyof Required<RateRules>,
+  vehicleType: CustomerRateVehicleType = defaultCustomerRateVehicleType,
+) {
+  return rateFromRules(rules, bookingType, vehicleType);
+}
+
+function customerRateMatrixValue(
+  rules: RateRules | null | undefined,
+  bookingType: keyof Required<RateRules>,
+  vehicleType: CustomerRateVehicleType,
+  fallbackRules?: RateRules,
+) {
+  return customerRateValue(rules, bookingType, vehicleType) ??
+    customerRateValue(fallbackRules, bookingType, vehicleType) ??
+    0;
+}
+
+function setCustomerRateMatrixValue(
+  rules: RateRules,
+  bookingType: keyof Required<RateRules>,
+  vehicleType: CustomerRateVehicleType,
+  value: string,
+  options: { blankRemoves?: boolean } = {},
+) {
+  const currentRate = rules[bookingType];
+  const currentVehicleRates =
+    currentRate && typeof currentRate === "object" && !Array.isArray(currentRate)
+      ? currentRate
+      : Object.fromEntries(
+          rateVehicleTypes.map((candidateVehicleType) => [
+            candidateVehicleType,
+            typeof currentRate === "number" ? currentRate : undefined,
+          ]),
+        );
+  const nextVehicleRates = {
+    ...currentVehicleRates,
+  } as Partial<Record<CustomerRateVehicleType, number | undefined>>;
+
+  if (options.blankRemoves && !clean(value)) {
+    delete nextVehicleRates[vehicleType];
+  } else {
+    nextVehicleRates[vehicleType] = numericRate(value);
+  }
+
+  const cleanedVehicleRates = Object.fromEntries(
+    Object.entries(nextVehicleRates).filter(([, rate]) => rate !== undefined),
+  ) as Partial<Record<CustomerRateVehicleType, number>>;
+  const nextRules = {
+    ...rules,
+    [bookingType]: cleanedVehicleRates,
+  };
+
+  if (Object.keys(cleanedVehicleRates).length === 0) {
+    delete nextRules[bookingType];
+  }
+
+  return nextRules;
 }
 
 function normalizeDriverPayoutRules(rules: DriverPayoutRules | null | undefined) {
@@ -5599,9 +5691,24 @@ function getNonPositiveRateOverrideLabels(
 
   for (const bookingType of rateBookingTypes) {
     if (Object.prototype.hasOwnProperty.call(customerSource, bookingType)) {
-      const numericValue = finiteNumber(customerSource[bookingType]);
+      const rateValue = customerSource[bookingType];
+      const numericValue = finiteNumber(rateValue);
 
-      if (numericValue === null || numericValue <= 0) {
+      if (numericValue !== null && numericValue > 0) {
+        // Valid flat legacy service rate.
+      } else if (rateValue && typeof rateValue === "object" && !Array.isArray(rateValue)) {
+        for (const vehicleType of rateVehicleTypes) {
+          if (!Object.prototype.hasOwnProperty.call(rateValue, vehicleType)) {
+            continue;
+          }
+
+          const vehicleRate = finiteNumber((rateValue as Record<string, unknown>)[vehicleType]);
+
+          if (vehicleRate === null || vehicleRate <= 0) {
+            invalidLabels.push(`${bookingType} ${rateVehicleLabels[vehicleType]} customer`);
+          }
+        }
+      } else {
         invalidLabels.push(`${bookingType} customer`);
       }
     }
@@ -5644,9 +5751,21 @@ function formatOverrideSummary(
 ) {
   const normalizedCustomerRates = normalizeCustomerRateRules(customerRates);
   const normalizedDriverPayoutRules = normalizeDriverPayoutRules(driverPayoutRules);
-  const customerLabels = rateBookingTypes
-    .filter((bookingType) => normalizedCustomerRates[bookingType] !== undefined)
-    .map((bookingType) => `${bookingType} ${formatMoney(normalizedCustomerRates[bookingType])}`);
+  const customerLabels = rateBookingTypes.flatMap((bookingType) => {
+    const rate = normalizedCustomerRates[bookingType];
+
+    if (rate === undefined) {
+      return [];
+    }
+
+    if (typeof rate === "number") {
+      return [`${bookingType} ${formatMoney(rate)}`];
+    }
+
+    return rateVehicleTypes
+      .filter((vehicleType) => rate[vehicleType] !== undefined)
+      .map((vehicleType) => `${bookingType} ${rateVehicleLabels[vehicleType]} ${formatMoney(rate[vehicleType])}`);
+  });
   const driverLabels = rateBookingTypes
     .filter((bookingType) => normalizedDriverPayoutRules[bookingType] !== undefined)
     .map((bookingType) => {
@@ -5729,7 +5848,7 @@ function buildDefaultRateSettingsLegacyRateMapsPayload(
     customer_rates: {
       ...defaultCustomerRates,
       ...normalizeCustomerRateRules(settings.customerRates),
-    },
+    } as Required<RateRules>,
     driver_payout_rules: {
       ...defaultDriverPayoutRules,
       ...normalizeDriverPayoutRules(settings.driverPayoutRules),
@@ -16681,13 +16800,19 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     });
   }
 
-  function updateDefaultCustomerRate(bookingType: keyof Required<RateRules>, value: string) {
+  function updateDefaultCustomerRate(
+    bookingType: keyof Required<RateRules>,
+    vehicleType: CustomerRateVehicleType,
+    value: string,
+  ) {
     setRateSettings((current) => ({
       ...current,
-      customerRates: {
-        ...current.customerRates,
-        [bookingType]: numericRate(value),
-      },
+      customerRates: setCustomerRateMatrixValue(
+        current.customerRates,
+        bookingType,
+        vehicleType,
+        value,
+      ) as Required<RateRules>,
     }));
   }
 
@@ -16704,17 +16829,16 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     }));
   }
 
-  function updateCompanyOverrideRate(bookingType: keyof Required<RateRules>, value: string) {
+  function updateCompanyOverrideRate(
+    bookingType: keyof Required<RateRules>,
+    vehicleType: CustomerRateVehicleType,
+    value: string,
+  ) {
     setRateOverrideDraft((current) => ({
       ...current,
-      customerRates: clean(value)
-        ? {
-            ...current.customerRates,
-            [bookingType]: numericRate(value),
-          }
-        : Object.fromEntries(
-            Object.entries(current.customerRates).filter(([key]) => key !== bookingType),
-          ) as RateRules,
+      customerRates: setCustomerRateMatrixValue(current.customerRates, bookingType, vehicleType, value, {
+        blankRemoves: true,
+      }),
     }));
   }
 
@@ -41573,21 +41697,42 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           <div className="grid gap-3 lg:grid-cols-2">
             <div>
               <h3 className="text-base font-semibold">Default Prestige Rates</h3>
+              <div className="mt-3 overflow-x-auto rounded-md border border-stone-200">
+                <table className="min-w-full border-collapse text-sm" data-default-vehicle-customer-rates="true">
+                  <thead className="bg-stone-50 text-left text-xs font-semibold text-slate-600">
+                    <tr>
+                      <th className="border-b border-stone-200 px-3 py-2">Service</th>
+                      {rateVehicleTypes.map((vehicleType) => (
+                        <th className="border-b border-stone-200 px-3 py-2" key={`default-head-${vehicleType}`}>
+                          {rateVehicleLabels[vehicleType]}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rateBookingTypes.map((bookingType) => (
+                      <tr className="border-b border-stone-100 last:border-b-0" key={`customer-${bookingType}`}>
+                        <th className="whitespace-nowrap px-3 py-2 text-left text-xs font-semibold text-slate-700">
+                          {rateLabels[bookingType]}
+                        </th>
+                        {rateVehicleTypes.map((vehicleType) => (
+                          <td className="px-2 py-2" key={`customer-${bookingType}-${vehicleType}`}>
+                            <input
+                              aria-label={`${rateLabels[bookingType]} ${rateVehicleLabels[vehicleType]} customer rate`}
+                              className="h-9 w-24 rounded-md border border-stone-300 px-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                              min={0}
+                              onChange={(event) => updateDefaultCustomerRate(bookingType, vehicleType, event.target.value)}
+                              type="number"
+                              value={customerRateMatrixValue(rateSettings.customerRates, bookingType, vehicleType)}
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                {rateBookingTypes.map((bookingType) => (
-                  <label key={`customer-${bookingType}`}>
-                    <span className="mb-1 block text-sm font-medium text-slate-700">
-                      {rateLabels[bookingType]}
-                    </span>
-                    <input
-                      className="h-10 w-full rounded-md border border-stone-300 px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-                      min={0}
-                      onChange={(event) => updateDefaultCustomerRate(bookingType, event.target.value)}
-                      type="number"
-                      value={rateSettings.customerRates[bookingType]}
-                    />
-                  </label>
-                ))}
                 <label>
                   <span className="mb-1 block text-sm font-medium text-slate-700">Midnight surcharge</span>
                   <input
@@ -41760,22 +41905,43 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               </div>
             </div>
 
+            <div className="mt-3 overflow-x-auto rounded-md border border-stone-200">
+              <table className="min-w-full border-collapse text-sm" data-override-vehicle-customer-rates="true">
+                <thead className="bg-stone-50 text-left text-xs font-semibold text-slate-600">
+                  <tr>
+                    <th className="border-b border-stone-200 px-3 py-2">Customer override</th>
+                    {rateVehicleTypes.map((vehicleType) => (
+                      <th className="border-b border-stone-200 px-3 py-2" key={`override-head-${vehicleType}`}>
+                        {rateVehicleLabels[vehicleType]}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rateBookingTypes.map((bookingType) => (
+                    <tr className="border-b border-stone-100 last:border-b-0" key={`override-customer-${bookingType}`}>
+                      <th className="whitespace-nowrap px-3 py-2 text-left text-xs font-semibold text-slate-700">
+                        {rateLabels[bookingType]}
+                      </th>
+                      {rateVehicleTypes.map((vehicleType) => (
+                        <td className="px-2 py-2" key={`override-customer-${bookingType}-${vehicleType}`}>
+                          <input
+                            aria-label={`${rateLabels[bookingType]} ${rateVehicleLabels[vehicleType]} customer override`}
+                            className="h-9 w-24 rounded-md border border-stone-300 px-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                            min={0}
+                            onChange={(event) => updateCompanyOverrideRate(bookingType, vehicleType, event.target.value)}
+                            placeholder="-"
+                            type="number"
+                            value={customerRateValue(rateOverrideDraft.customerRates, bookingType, vehicleType) ?? ""}
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <div className="mt-3 grid gap-3 sm:grid-cols-4">
-              {rateBookingTypes.map((bookingType) => (
-                <label key={`override-customer-${bookingType}`}>
-                  <span className="mb-1 block text-sm font-medium text-slate-700">
-                    {bookingType} customer
-                  </span>
-                  <input
-                    className="h-10 w-full rounded-md border border-stone-300 px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-                    min={0}
-                    onChange={(event) => updateCompanyOverrideRate(bookingType, event.target.value)}
-                    placeholder="-"
-                    type="number"
-                    value={rateOverrideDraft.customerRates[bookingType] ?? ""}
-                  />
-                </label>
-              ))}
               {rateBookingTypes.map((bookingType) => {
                 const payoutRule = rateOverrideDraft.driverPayoutRules[bookingType];
                 const payoutValue = payoutRule?.amount ?? payoutRule?.max ?? payoutRule?.min ?? "";

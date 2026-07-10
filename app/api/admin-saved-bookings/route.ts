@@ -97,7 +97,11 @@ export async function GET(request: Request) {
 
     const actor = adminDispatcherBoundaryToPersistenceAdapterActor(boundary.context);
     const searchParams = new URL(request.url).searchParams;
-    const isSingleBookingRead = Boolean(searchParams.get("id") || searchParams.get("booking_id"));
+    const isSingleBookingRead = Boolean(
+      searchParams.get("id") ||
+        searchParams.get("booking_id") ||
+        searchParams.get("booking_reference"),
+    );
 
     if (isSingleBookingRead) {
       const result = await loadAdminSavedBookingById(searchParams, actor);

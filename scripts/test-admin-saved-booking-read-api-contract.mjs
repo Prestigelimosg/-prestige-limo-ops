@@ -328,6 +328,7 @@ const seed = {
   bookings: [
     {
       id: "save-read-1",
+      booking_reference: "ADM-SAVE-READ-1",
       company_id: 42,
       booker_id: 43,
       traveler_id: 44,
@@ -414,6 +415,13 @@ try {
   assert.deepEqual(reader.parseAdminSavedBookingListReadParams({ limit: "2" }), {
     data: {
       limit: 2,
+    },
+    ok: true,
+  });
+  assert.deepEqual(reader.parseAdminSavedBookingReadParams({ booking_reference: "ADM-SAVE-READ-1" }), {
+    data: {
+      booking_reference: "ADM-SAVE-READ-1",
+      id: undefined,
     },
     ok: true,
   });
@@ -513,6 +521,33 @@ try {
   assert.equal(validMock.client.selectHistory[0].selectedColumns.includes("parser_debug"), false);
   assertNoWrites(validMock, "valid read");
   assertNoUnsafeResponse(readResult, "valid read response");
+
+  setEnv(enabledEnv());
+
+  const bookingReferenceMock = installMockClient(seed);
+  const bookingReferenceReadResult = await routeJson(
+    await route.GET(
+      new Request("http://localhost/api/admin-saved-bookings?booking_reference=ADM-SAVE-READ-1", {
+        headers: sessionHeaders(),
+      }),
+    ),
+  );
+
+  assert.equal(bookingReferenceReadResult.status, 200);
+  assert.equal(bookingReferenceReadResult.body.ok, true);
+  assert.equal(bookingReferenceReadResult.body.booking.id, "save-read-1");
+  assert.equal(bookingReferenceReadResult.body.booking.booking_reference, "ADM-SAVE-READ-1");
+  assert.equal(bookingReferenceReadResult.body.booking.customer_price_amount, 88);
+  assert.deepEqual(bookingReferenceMock.client.selectHistory[0].filters, [
+    {
+      column: "booking_reference",
+      type: "eq",
+      value: "ADM-SAVE-READ-1",
+    },
+  ]);
+  assert.equal(bookingReferenceMock.client.selectHistory[0].limit, 1);
+  assertNoWrites(bookingReferenceMock, "valid booking reference read");
+  assertNoUnsafeResponse(bookingReferenceReadResult, "valid booking reference read response");
 
   setEnv(enabledEnv());
 

@@ -36,12 +36,12 @@ const [customersPage, ledger, preactivationSuite] = await Promise.all([
 
 const folderFinderSection = sectionBetween(
   customersPage,
-  'data-customer-folder-finder="true"',
-  'data-unbilled-customers-sector="true"',
+  'data-selected-customer-dashboard="true"',
+  'data-customer-invoice-workspace="true"',
 );
 const unbilledSection = sectionBetween(
   customersPage,
-  'data-unbilled-customers-sector="true"',
+  'data-selected-customer-dashboard="true"',
   'data-customer-invoice-workspace="true"',
 );
 const invoiceWorkspaceSection = sectionBetween(
@@ -56,7 +56,7 @@ const ledgerSection = sectionBetween(
 );
 
 for (const fragment of [
-  "const customerFolderFinderPageSize = 10;",
+  "const customerFolderFinderPageSize = 20;",
   "const [customerFolderFinderPage, setCustomerFolderFinderPage] = useState(1);",
   "const [customerFolderFinderSelectedId, setCustomerFolderFinderSelectedId] = useState(\"\");",
   "const [customerFolderFinderDropdownOpen, setCustomerFolderFinderDropdownOpen] = useState(false);",
@@ -127,6 +127,10 @@ for (const fragment of [
   "const [customerInvoicePrepRowKey, setCustomerInvoicePrepRowKey] = useState(\"\");",
   "const [customerInvoicePrepFeedback, setCustomerInvoicePrepFeedback] = useState(",
   "async function readRegularCustomerSavedBookingsForTarget(",
+  "async function readAdminSavedBookingCustomerChargeByReference(",
+  "fetch(`${adminSavedBookingsApiPath}?${params.toString()}`",
+  "booking_reference: safeReference",
+  "async function enrichRegularCustomerSavedBookingsWithCustomerCharges(",
   "async function loadRegularCustomerSavedBookingsForUnbilledQueue(",
   "await loadRegularCustomerSavedBookingsForUnbilledQueue(",
   "Loading saved bookings for the Monthly Billing Queue...",
@@ -136,6 +140,11 @@ for (const fragment of [
   "regularCustomerSavedBookingReadState.savedBookings",
   "regularCustomerSavedBookingBillingReadinessState.closeoutsByReference",
   "savedBookingUnbilledRow(",
+  "function savedBookingCustomerBillingAmountCents(",
+  "customer_price_amount",
+  "customer_rate_override",
+  "customer_rate",
+  "Closeout ready / amount ready",
   "Closeout ready / amount needed",
   "Draft amount not set",
   "Enter the approved customer amount before previewing or issuing.",
@@ -170,21 +179,17 @@ for (const fragment of [
 }
 
 for (const fragment of [
-  'data-unbilled-customers-count="true"',
-  'data-unbilled-customers-dropdown="true"',
-  'data-unbilled-customers-select="true"',
-  'data-unbilled-customers-scroll-list="true"',
-  'data-unbilled-customers-list="true"',
-  'data-unbilled-customer-row={row.key}',
-  'data-unbilled-customer-prepare-invoice={row.key}',
-  'data-unbilled-customers-boundary="true"',
-  "Prepare",
-  "All billing account/month groups",
-  'data-customer-monthly-billing-account-review-count="true"',
-  "Passenger scope needs review",
+  'data-selected-customer-prepare-monthly-invoice="true"',
+  'data-selected-customer-no-monthly-invoice-ready="true"',
+  'data-selected-customer-monthly-invoice-summary="true"',
+  'data-selected-customer-invoice-list="true"',
+  'data-selected-customer-invoice-count="true"',
+  'data-selected-customer-invoice-row={invoice.key}',
+  'data-selected-customer-invoice-detail="true"',
+  "Prepare monthly invoice",
+  "No billing-ready jobs",
   "Review scope",
-  "Account {row.customerId}",
-  "visibleUnbilledCustomerRows.map((row)",
+  "completed billing-ready job",
 ]) {
   assertIncludes(unbilledSection, fragment, `unbilled customers UI fragment ${fragment}`);
 }
@@ -238,7 +243,7 @@ for (const fragment of [
   'data-customer-invoice-prep-clear="true"',
   'data-customer-invoice-prep-empty="true"',
   'data-customer-invoice-prep-feedback="true"',
-  "No customer loaded. Use Prepare monthly bill from the Monthly Billing Queue to load jobs here.",
+  "No customer loaded. Open a customer from the overview, then prepare that customer&apos;s monthly invoice.",
 ]) {
   assertIncludes(invoiceWorkspaceSection, fragment, `invoice prep handoff UI fragment ${fragment}`);
 }

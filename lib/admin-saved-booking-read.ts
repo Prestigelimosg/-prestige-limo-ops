@@ -7,7 +7,8 @@ import type { AdminBookingPersistenceAdapterActor } from "./admin-booking-supaba
 export const adminSavedBookingReadVersion = "admin-saved-booking-read-v1";
 
 export type AdminSavedBookingReadParams = {
-  id: string;
+  booking_reference?: string;
+  id?: string;
 };
 
 export type AdminSavedBookingListReadParams = {
@@ -130,7 +131,7 @@ type SavedBookingSelectResult<T> = {
 };
 
 const allowedAdapterActorRoles = new Set(["admin", "dispatcher", "system"]);
-const allowedSingleReadQueryParams = new Set(["booking_id", "id"]);
+const allowedSingleReadQueryParams = new Set(["booking_id", "booking_reference", "id"]);
 const allowedListReadQueryParams = new Set(["limit"]);
 const adminSavedBookingLegacyReadSelect =
   "id, booking_reference, source_channel, source_surface, company_id, booker_id, traveler_id, booking_type, service_type, route_type, vehicle, vehicle_type, vehicle_type_or_category, pickup_time, pickup_at, pickup_datetime, pickup_address, pickup_location, dropoff_address, dropoff_location, flight_no, route, route_summary, pax, pax_count, passenger_name, passenger_phone, customer_display_name, contact_display_name, contact_phone, contact_email, job_card, status, driver_id, driver_name, driver_contact, driver_plate_number, customer_rate, customer_rate_unit, customer_price_amount, customer_rate_override, customer_price_override_reason, driver_payout_min, driver_payout_max, driver_payout_amount, driver_payout_override, driver_payout_reason, driver_payout_unit, driver_notes, driver_dispatch_include_payout, midnight_surcharge, midnight_payout, extra_stop_count, extra_stop_surcharge, extra_stop_payout, child_seat_required, child_seat_count, child_seat_type, child_seat_customer_surcharge, child_seat_driver_payout, pricing_source, created_at, updated_at, companies(company_name, domain), bookers(booker_name, email, phone), travelers(traveler_name)";
@@ -450,6 +451,14 @@ function validBookingId(value: unknown) {
     : null;
 }
 
+function validBookingReference(value: unknown) {
+  const cleaned = textOrNull(value, 160);
+
+  return cleaned && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/.test(cleaned)
+    ? cleaned
+    : null;
+}
+
 function positiveInteger(value: unknown, defaultValue: number, maxValue: number) {
   if (value === undefined || value === null || value === "") {
     return defaultValue;
@@ -601,8 +610,11 @@ export function parseAdminSavedBookingReadParams(
   const id = validBookingId(
     readParamsValue(params, "id") || readParamsValue(params, "booking_id"),
   );
+  const bookingReference = validBookingReference(
+    readParamsValue(params, "booking_reference"),
+  );
 
-  if (!id) {
+  if (!id && !bookingReference) {
     return {
       error: malformedParamsError,
       ok: false,
@@ -612,7 +624,8 @@ export function parseAdminSavedBookingReadParams(
 
   return {
     data: {
-      id,
+      booking_reference: bookingReference || undefined,
+      id: id || undefined,
     },
     ok: true,
   };
@@ -671,14 +684,18 @@ export async function loadAdminSavedBookingById(
     return clientResult;
   }
 
-  const { data, error } = await loadAdminSavedBookingsWithSchemaFallback((selectedColumns) =>
-    clientResult.data
+  const { data, error } = await loadAdminSavedBookingsWithSchemaFallback((selectedColumns) => {
+    let query = clientResult.data
       .from("bookings")
       .select(selectedColumns)
-      .eq("id", parsed.data.id)
-      .limit(1)
-      .maybeSingle(),
-  );
+      .limit(1);
+
+    query = parsed.data.booking_reference
+      ? query.eq("booking_reference", parsed.data.booking_reference)
+      : query.eq("id", parsed.data.id);
+
+    return query.maybeSingle();
+  });
 
   if (error) {
     return safeDatabaseFailure(safeReadError, 500, error);

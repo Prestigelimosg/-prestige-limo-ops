@@ -497,10 +497,24 @@ type RegularCustomerSavedBookingReadRecord = {
   admin_status?: string | null;
   booking_month?: string | null;
   booking_reference?: string | null;
+  booking_type?: string | null;
+  child_seat_count?: number | null;
+  child_seat_customer_surcharge?: number | null;
+  child_seat_required?: boolean | null;
   customer_account?: string | null;
   customer_id?: string | null;
+  customer_price_amount?: number | null;
+  customer_price_override_reason?: string | null;
+  customer_rate?: number | null;
+  customer_rate_override?: number | null;
+  customer_rate_unit?: string | null;
   customer_status?: string | null;
+  extra_stop_count?: number | null;
+  extra_stop_surcharge?: number | null;
+  midnight_surcharge?: number | null;
   pickup_at?: string | null;
+  pricing_source?: string | null;
+  route_type?: string | null;
   service_type?: string | null;
 };
 
@@ -1619,6 +1633,71 @@ function savedBookingDisplayText(value: string | null | undefined, fallback = "N
   return cleaned || fallback;
 }
 
+function savedBookingCustomerChargeNumber(value: unknown) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  const parsed = typeof value === "number" ? value : Number(value);
+
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function savedBookingCustomerBillingAmountCents(
+  booking: RegularCustomerSavedBookingReadRecord,
+) {
+  const savedAmount = savedBookingCustomerChargeNumber(booking.customer_price_amount);
+
+  if (savedAmount !== null) {
+    return Math.round(savedAmount * 100);
+  }
+
+  const overrideRate = savedBookingCustomerChargeNumber(booking.customer_rate_override);
+
+  if (overrideRate !== null) {
+    return Math.round(overrideRate * 100);
+  }
+
+  const baseRate = savedBookingCustomerChargeNumber(booking.customer_rate);
+
+  if (baseRate === null) {
+    return null;
+  }
+
+  const midnightSurcharge = savedBookingCustomerChargeNumber(booking.midnight_surcharge) ?? 0;
+  const extraStopCount = savedBookingCustomerChargeNumber(booking.extra_stop_count) ?? 0;
+  const extraStopSurcharge = savedBookingCustomerChargeNumber(booking.extra_stop_surcharge) ?? 0;
+  const childSeatCount =
+    booking.child_seat_required === false
+      ? 0
+      : (savedBookingCustomerChargeNumber(booking.child_seat_count) ?? 0);
+  const childSeatSurcharge = savedBookingCustomerChargeNumber(
+    booking.child_seat_customer_surcharge,
+  ) ?? 0;
+
+  return Math.round(
+    (baseRate + midnightSurcharge + extraStopCount * extraStopSurcharge + childSeatCount * childSeatSurcharge) * 100,
+  );
+}
+
+function savedBookingCustomerBillingSourceLabel(booking: RegularCustomerSavedBookingReadRecord) {
+  const source = String(booking.pricing_source ?? "").trim();
+
+  if (source) {
+    return source;
+  }
+
+  if (savedBookingCustomerChargeNumber(booking.customer_rate_override) !== null) {
+    return "saved customer override";
+  }
+
+  if (savedBookingCustomerChargeNumber(booking.customer_rate) !== null) {
+    return "saved Prestige rate";
+  }
+
+  return "saved booking";
+}
+
 function compactCustomerBookingReference(value: string | null | undefined, fallback = "Not available") {
   const reference = savedBookingDisplayText(value, "");
 
@@ -1729,17 +1808,24 @@ function savedBookingUnbilledRow(
   const service = String(booking.service_type ?? "").trim() || "Completed transfer";
   const closeoutDisposition = savedBookingCloseoutBillingDispositionLabel(closeout);
   const billableServiceLabel = closeoutDisposition || service;
+  const billingAmountCents = savedBookingCustomerBillingAmountCents(booking);
+  const billingAmountLabel = billingAmountCents ? formatInvoiceAmount(billingAmountCents) : "";
+  const billingSourceLabel = savedBookingCustomerBillingSourceLabel(booking);
+  const amountReadyBreakdown = billingAmountLabel
+    ? `${closeoutDisposition || "Closeout ready"} from saved booking. ${billingAmountLabel} copied from ${billingSourceLabel}; review before previewing or issuing.`
+    : "";
 
   return {
     accountScopeKey,
     accountScopeLabel,
-    amount: "Draft amount not set",
+    amount: billingAmountLabel || "Draft amount not set",
     billingMonth,
     billingMonthLabel: monthlyBillingMonthLabel(billingMonth),
     billingBreakdown:
-      closeoutDisposition
+      amountReadyBreakdown ||
+      (closeoutDisposition
         ? `${closeoutDisposition} closeout ready from saved booking. Enter the approved customer amount before previewing or issuing.`
-        : "Closeout ready from saved booking. Enter the approved customer amount before previewing or issuing.",
+        : "Closeout ready from saved booking. Enter the approved customer amount before previewing or issuing."),
     customerFolderHref: "",
     customerId,
     customerName,
@@ -1750,9 +1836,13 @@ function savedBookingUnbilledRow(
     reference,
     route: "Saved booking route in Dispatch",
     service: billableServiceLabel,
-    statusLabel: closeoutDisposition
-      ? "Closeout exception ready / amount needed"
-      : "Closeout ready / amount needed",
+    statusLabel: billingAmountLabel
+      ? closeoutDisposition
+        ? "Closeout exception ready / amount ready"
+        : "Closeout ready / amount ready"
+      : closeoutDisposition
+        ? "Closeout exception ready / amount needed"
+        : "Closeout ready / amount needed",
   };
 }
 
@@ -3696,6 +3786,81 @@ export default function MockCustomerDashboardPage() {
     };
   }
 
+  async function readAdminSavedBookingCustomerChargeByReference(
+    bookingReference: string,
+  ): Promise<Partial<RegularCustomerSavedBookingReadRecord> | null> {
+    const safeReference = bookingReference.trim();
+
+    if (!safeReference) {
+      return null;
+    }
+
+    const params = new URLSearchParams({
+      booking_reference: safeReference,
+    });
+    const response = await fetch(`${adminSavedBookingsApiPath}?${params.toString()}`, {
+      headers: {
+        "x-prestige-admin-purpose": "admin-booking-persistence",
+      },
+      method: "GET",
+    });
+    const result = await response.json().catch(() => null);
+
+    if (!response.ok || !result?.ok) {
+      throw new Error(result?.error || "Saved booking customer charge read could not be completed.");
+    }
+
+    const booking = result.booking as Partial<RegularCustomerSavedBookingReadRecord> | null | undefined;
+
+    return booking ?? null;
+  }
+
+  async function enrichRegularCustomerSavedBookingsWithCustomerCharges(
+    savedBookings: RegularCustomerSavedBookingReadRecord[],
+  ) {
+    const reads = await Promise.all(
+      savedBookings.map(async (booking) => {
+        const reference = savedBookingReference(booking);
+
+        if (!reference) {
+          return booking;
+        }
+
+        try {
+          const chargeBooking = await readAdminSavedBookingCustomerChargeByReference(reference);
+
+          return chargeBooking
+            ? {
+                ...booking,
+                booking_type: chargeBooking.booking_type ?? booking.booking_type,
+                child_seat_count: chargeBooking.child_seat_count ?? booking.child_seat_count,
+                child_seat_customer_surcharge:
+                  chargeBooking.child_seat_customer_surcharge ?? booking.child_seat_customer_surcharge,
+                child_seat_required: chargeBooking.child_seat_required ?? booking.child_seat_required,
+                customer_price_amount:
+                  chargeBooking.customer_price_amount ?? booking.customer_price_amount,
+                customer_price_override_reason:
+                  chargeBooking.customer_price_override_reason ?? booking.customer_price_override_reason,
+                customer_rate: chargeBooking.customer_rate ?? booking.customer_rate,
+                customer_rate_override:
+                  chargeBooking.customer_rate_override ?? booking.customer_rate_override,
+                customer_rate_unit: chargeBooking.customer_rate_unit ?? booking.customer_rate_unit,
+                extra_stop_count: chargeBooking.extra_stop_count ?? booking.extra_stop_count,
+                extra_stop_surcharge: chargeBooking.extra_stop_surcharge ?? booking.extra_stop_surcharge,
+                midnight_surcharge: chargeBooking.midnight_surcharge ?? booking.midnight_surcharge,
+                pricing_source: chargeBooking.pricing_source ?? booking.pricing_source,
+                route_type: chargeBooking.route_type ?? booking.route_type,
+              }
+            : booking;
+        } catch {
+          return booking;
+        }
+      }),
+    );
+
+    return reads;
+  }
+
   async function loadRegularCustomerSavedBookingsForUnbilledQueue(
     targets: RegularCustomerSavedBookingReadTarget[],
   ) {
@@ -3762,7 +3927,9 @@ export default function MockCustomerDashboardPage() {
       }
     }
 
-    const savedBookings = Array.from(savedBookingsByReference.values());
+    const savedBookings = await enrichRegularCustomerSavedBookingsWithCustomerCharges(
+      Array.from(savedBookingsByReference.values()),
+    );
     const failedCount = reads.filter((read) => !read.ok).length;
     const returnedCount = savedBookings.length;
 
@@ -3924,7 +4091,7 @@ export default function MockCustomerDashboardPage() {
         customerId: selectedRegularCustomer.id,
         customerName: selectedRegularCustomer.companyName,
       });
-      const savedBookings = result.savedBookings;
+      const savedBookings = await enrichRegularCustomerSavedBookingsWithCustomerCharges(result.savedBookings);
       const returnedCount = Number(result.summary?.returned_count ?? savedBookings.length);
 
       setRegularCustomerSavedBookingReadState({

@@ -78,26 +78,6 @@ export default async function MockCustomerFolderPage({ params, searchParams }: C
           </div>
         </header>
 
-        <section
-          className="rounded-md border border-slate-200 bg-white px-4 py-3 shadow-sm"
-          data-customer-folder-compact-summary="true"
-        >
-          <dl className="grid grid-cols-3 divide-x divide-slate-200 text-sm">
-            <div className="pr-4">
-              <dt className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">Outstanding</dt>
-              <dd className="mt-0.5 text-lg font-bold text-slate-950">{customer.outstandingAmount}</dd>
-            </div>
-            <div className="px-4">
-              <dt className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">Overdue</dt>
-              <dd className="mt-0.5 text-lg font-bold text-rose-700">{customer.overdueAmount}</dd>
-            </div>
-            <div className="pl-4">
-              <dt className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">Paid this month</dt>
-              <dd className="mt-0.5 text-lg font-bold text-emerald-700">{customer.paidThisMonth}</dd>
-            </div>
-          </dl>
-        </section>
-
         <CustomerInvoiceFolderPanel customer={customer} />
 
         <CustomerFolderSavedBookingsPanel customerId={customer.id} customerName={customer.companyName} />

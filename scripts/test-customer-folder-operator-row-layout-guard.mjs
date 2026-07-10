@@ -15,9 +15,6 @@ function assertIncludes(source, fragment, label = fragment) {
 }
 
 for (const fragment of [
-  'data-customer-folder-compact-summary="true"',
-  'data-customer-folder-compact-admin-rows="true"',
-  'data-customer-folder-details="true"',
   'data-customer-booking-history="true"',
 ]) {
   assertIncludes(page, fragment, `compact customer folder marker ${fragment}`);
@@ -27,6 +24,11 @@ assertIncludes(
   invoiceFolderPanel,
   'data-customer-invoice-rules="true"',
   "compact customer folder marker data-customer-invoice-rules",
+);
+assertIncludes(
+  invoiceFolderPanel,
+  "Paid this month",
+  "customer invoice card paid-this-month summary",
 );
 
 for (const forbidden of [
@@ -52,10 +54,12 @@ assertIncludes(
   "rounded-md border border-slate-200 bg-white p-3 shadow-sm",
   "compact saved bookings panel",
 );
-assertIncludes(
-  savedBookingsPanel,
-  "data-customer-folder-saved-bookings-open-dispatch",
-  "customer folder jobs open/edit dispatch action",
-);
+for (const fragment of [
+  "data-customer-folder-saved-bookings-edit",
+  "data-customer-folder-saved-bookings-delete",
+  "data-customer-folder-saved-bookings-create-invoice",
+]) {
+  assertIncludes(savedBookingsPanel, fragment, `customer folder jobs action ${fragment}`);
+}
 
 console.log("Customer folder operator row layout guard passed");

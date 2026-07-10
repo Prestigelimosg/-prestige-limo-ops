@@ -493,8 +493,8 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
               <p className="mt-1 text-base font-bold text-slate-950">{displayInvoices.length}</p>
             </div>
             <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-              <p>Outstanding</p>
-              <p className="mt-1 text-base font-bold text-slate-950">{customer.outstandingAmount}</p>
+              <p>Paid this month</p>
+              <p className="mt-1 text-base font-bold text-emerald-700">{customer.paidThisMonth}</p>
             </div>
             <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
               <p>Overdue</p>

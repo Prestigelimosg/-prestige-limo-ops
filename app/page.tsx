@@ -608,6 +608,8 @@ function fakeRitzDispatchBooking(reference: string): BookingRecord {
     booking_type: fakeRitzDispatchService(reference),
     company_id: null,
     contact_display_name: "Ritz Carlton",
+    contact_email: "billing-test@ritzcarlton.example",
+    contact_phone: "90000000",
     customer_display_name: "Ritz Carlton",
     customer_facing_status: "ready_for_billing_test",
     customer_id: "Ritz Carlton",

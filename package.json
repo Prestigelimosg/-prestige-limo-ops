@@ -11,6 +11,7 @@
     "test:parser": "node --experimental-strip-types scripts/test-booking-parser.mjs",
     "test:pricing": "node --experimental-strip-types scripts/test-child-seat-pricing.mjs",
     "test:customer-company-profile": "node --experimental-strip-types scripts/test-customer-company-profile-contract.mjs",
+    "test:customer-folder-dispatch-update-cal": "node scripts/test-customer-folder-dispatch-update-cal-guard.mjs",
     "test:driver-job-link": "node --experimental-strip-types scripts/test-driver-job-link-foundation.mjs",
     "test:driver-job-link-contract": "node --experimental-strip-types scripts/test-driver-job-link-api-contract.mjs",
     "test:driver-job-link-api-routes": "node --experimental-strip-types scripts/test-driver-job-link-api-routes.mjs",

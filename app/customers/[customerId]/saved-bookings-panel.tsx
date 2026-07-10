@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 
 const adminCustomerSavedBookingsApiPath = "/api/admin-customer-saved-bookings";
 const customerFolderFocusBookingReferenceParam = "focus_booking_reference";
@@ -16,7 +16,11 @@ type CustomerFolderSavedBookingRecord = {
   customer_account?: string | null;
   customer_id?: string | null;
   customer_status?: string | null;
+  dropoff_location?: string | null;
+  passenger_name?: string | null;
   pickup_at?: string | null;
+  pickup_location?: string | null;
+  route_summary?: string | null;
   service_type?: string | null;
 };
 
@@ -63,6 +67,20 @@ function compactReference(value: string | null | undefined, fallback = "Referenc
   const text = displayText(value, fallback);
 
   return text.length > 18 ? `${text.slice(0, 8)}...${text.slice(-6)}` : text;
+}
+
+function savedBookingDescriptionItems(booking: CustomerFolderSavedBookingRecord) {
+  return [
+    ["Reference", booking.booking_reference],
+    ["Passenger", booking.passenger_name],
+    ["Customer", booking.customer_account],
+    ["Pickup time", booking.pickup_at],
+    ["Pickup", booking.pickup_location],
+    ["Drop-off", booking.dropoff_location],
+    ["Route", booking.route_summary],
+    ["Service", booking.service_type],
+    ["Price", booking.customer_price_label],
+  ].filter((item): item is [string, string] => Boolean(displayText(item[1], "")));
 }
 
 function safeDispatchReference(booking: CustomerFolderSavedBookingRecord) {
@@ -281,6 +299,7 @@ export function CustomerFolderSavedBookingsPanel({
   customerName,
 }: CustomerFolderSavedBookingsPanelProps) {
   const autoLoadAttemptedRef = useRef(false);
+  const [expandedSavedBookingReference, setExpandedSavedBookingReference] = useState("");
   const [selectedReferences, setSelectedReferences] = useState<Record<string, boolean>>({});
   const [readState, setReadState] = useState<CustomerFolderSavedBookingsState>({
     message: initialMessage(customerName),
@@ -457,6 +476,18 @@ export function CustomerFolderSavedBookingsPanel({
     }));
   }
 
+  function toggleSavedBookingDescription(booking: CustomerFolderSavedBookingRecord) {
+    const reference = safeDispatchReference(booking);
+
+    if (!reference) {
+      return;
+    }
+
+    setExpandedSavedBookingReference((currentReference) =>
+      currentReference === reference ? "" : reference,
+    );
+  }
+
   return (
     <section
       className="rounded-md border border-slate-200 bg-white p-3 shadow-sm"
@@ -574,12 +605,16 @@ export function CustomerFolderSavedBookingsPanel({
                   )}`;
                 const bookingReference = safeDispatchReference(booking);
                 const rowKey = booking.booking_reference || `${booking.customer_account}-${booking.pickup_at}`;
+                const isExpanded = Boolean(
+                  bookingReference && expandedSavedBookingReference === bookingReference,
+                );
+                const descriptionItems = savedBookingDescriptionItems(booking);
 
                 return (
+                  <Fragment key={rowKey}>
                   <tr
                     className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50"
                     data-customer-folder-saved-bookings-row={booking.booking_reference || ""}
-                    key={rowKey}
                   >
                     <td className="px-3 py-2">
                       <input
@@ -593,7 +628,15 @@ export function CustomerFolderSavedBookingsPanel({
                       />
                     </td>
                     <td className="px-3 py-2 font-bold text-slate-950" title={displayText(booking.booking_reference)}>
-                      {compactReference(booking.booking_reference)}
+                      <button
+                        aria-expanded={isExpanded}
+                        className="rounded px-1 py-0.5 text-left font-bold text-slate-950 underline-offset-4 transition hover:bg-slate-100 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+                        data-customer-folder-saved-bookings-description-toggle={booking.booking_reference || ""}
+                        onClick={() => toggleSavedBookingDescription(booking)}
+                        type="button"
+                      >
+                        {compactReference(booking.booking_reference)}
+                      </button>
                     </td>
                     <td className="px-3 py-2 font-semibold text-slate-800">
                       {displayText(booking.pickup_at, "Pickup not available")}
@@ -639,6 +682,26 @@ export function CustomerFolderSavedBookingsPanel({
                       )}
                     </td>
                   </tr>
+                  {isExpanded ? (
+                    <tr
+                      className="border-b border-slate-100 bg-slate-50"
+                      data-customer-folder-saved-bookings-description={booking.booking_reference || ""}
+                    >
+                      <td className="px-3 py-2" colSpan={5}>
+                        <div className="grid gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold leading-5 text-slate-700 sm:grid-cols-2 lg:grid-cols-3">
+                          {descriptionItems.map(([label, value]) => (
+                            <p className="min-w-0" key={label}>
+                              <span className="block text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                                {label}
+                              </span>
+                              <span className="break-words text-slate-900">{displayText(value)}</span>
+                            </p>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  ) : null}
+                  </Fragment>
                 );
               })}
             </tbody>

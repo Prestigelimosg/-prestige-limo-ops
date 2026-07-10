@@ -68,6 +68,16 @@ assertIncludes(
 );
 assertIncludes(
   customerFolderSource,
+  "data-customer-folder-saved-bookings-description-toggle",
+  "customer folder saved booking rows must provide a soft inline description toggle",
+);
+assertIncludes(
+  customerFolderSource,
+  "data-customer-folder-saved-bookings-description",
+  "customer folder saved booking rows must show description details inline without moving the job",
+);
+assertIncludes(
+  customerFolderSource,
   "tab: \"dispatch\"",
   "customer folder edit href must open the Dispatch tab",
 );
@@ -121,6 +131,16 @@ assertIncludes(
   savedBookingsReadSource,
   "if (!baseMatches && !exactReferenceMatches)",
   "saved booking read must not match unrelated bookings unless the exact returned reference matches",
+);
+assertIncludes(
+  savedBookingsReadSource,
+  "pickup_location: safeText(booking.pickup_location",
+  "saved booking read must expose safe pickup location for inline description",
+);
+assertIncludes(
+  savedBookingsReadSource,
+  "dropoff_location: safeText(booking.dropoff_location",
+  "saved booking read must expose safe drop-off location for inline description",
 );
 assertIncludes(
   updateAppliedSource,

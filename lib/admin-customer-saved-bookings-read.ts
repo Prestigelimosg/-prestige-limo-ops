@@ -27,7 +27,11 @@ export type AdminCustomerSavedBookingSafeRecord = {
   customer_account: string | null;
   customer_id: string | null;
   customer_status: string | null;
+  dropoff_location: string | null;
+  passenger_name: string | null;
   pickup_at: string | null;
+  pickup_location: string | null;
+  route_summary: string | null;
   service_type: string | null;
   source: "admin_booking_persistence";
 };
@@ -236,7 +240,11 @@ function toSafeSavedBooking(
     customer_account: safeText(booking.customer_display_name),
     customer_id: safeText(booking.customer_id, 120),
     customer_status: safeStatus(booking.customer_facing_status),
+    dropoff_location: safeText(booking.dropoff_location, 220),
+    passenger_name: safeText(booking.passenger_name || booking.contact_display_name, 140),
     pickup_at: safeText(booking.pickup_at || booking.pickup_datetime, 80),
+    pickup_location: safeText(booking.pickup_location, 220),
+    route_summary: safeText(booking.route_summary, 320),
     service_type: safeText(booking.service_type || booking.route_type, 80),
     source: "admin_booking_persistence",
   };

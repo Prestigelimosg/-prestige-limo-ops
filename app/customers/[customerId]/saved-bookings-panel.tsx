@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 const adminCustomerSavedBookingsApiPath = "/api/admin-customer-saved-bookings";
+const fakeRitzDispatchEditStorageKey = "prestige-fake-ritz-dispatch-edits";
 
 type CustomerFolderSavedBookingRecord = {
   admin_status?: string | null;
@@ -168,6 +169,33 @@ function customerFolderFakeUnbilledJobs(customerId: string, customerName: string
   ] satisfies CustomerFolderSavedBookingRecord[];
 }
 
+function readFakeRitzDispatchEdits() {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(fakeRitzDispatchEditStorageKey) || "{}");
+
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, Partial<CustomerFolderSavedBookingRecord>>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function applyFakeRitzDispatchEdits(bookings: CustomerFolderSavedBookingRecord[]) {
+  const edits = readFakeRitzDispatchEdits();
+
+  return bookings.map((booking) => {
+    const reference = safeDispatchReference(booking);
+    const edit = reference ? edits[reference] : null;
+
+    return edit ? { ...booking, ...edit } : booking;
+  });
+}
+
 function savedBookingReadFailureMessage(rawError: unknown) {
   const message = rawError instanceof Error ? rawError.message.toLowerCase() : String(rawError ?? "").toLowerCase();
 
@@ -237,7 +265,10 @@ export function CustomerFolderSavedBookingsPanel({
       const savedBookings = Array.isArray(result.saved_bookings)
         ? (result.saved_bookings as CustomerFolderSavedBookingRecord[])
         : [];
-      const fakeFallbackJobs = savedBookings.length === 0 ? customerFolderFakeUnbilledJobs(customerId, customerName) : [];
+      const fakeFallbackJobs =
+        savedBookings.length === 0
+          ? applyFakeRitzDispatchEdits(customerFolderFakeUnbilledJobs(customerId, customerName))
+          : [];
       const displaySavedBookings = savedBookings.length > 0 ? savedBookings : fakeFallbackJobs;
       const returnedCount = Number(result.summary?.returned_count ?? savedBookings.length);
 
@@ -260,7 +291,9 @@ export function CustomerFolderSavedBookingsPanel({
         tone: "success",
       });
     } catch (error) {
-      const fakeFallbackJobs = customerFolderFakeUnbilledJobs(customerId, customerName);
+      const fakeFallbackJobs = applyFakeRitzDispatchEdits(
+        customerFolderFakeUnbilledJobs(customerId, customerName),
+      );
 
       if (fakeFallbackJobs.length > 0) {
         setReadState({

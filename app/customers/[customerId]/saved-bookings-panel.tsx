@@ -9,6 +9,7 @@ type CustomerFolderSavedBookingRecord = {
   admin_status?: string | null;
   booking_month?: string | null;
   booking_reference?: string | null;
+  customer_price_label?: string | null;
   customer_account?: string | null;
   customer_id?: string | null;
   customer_status?: string | null;
@@ -114,6 +115,7 @@ function customerFolderFakeUnbilledJobs(customerId: string, customerName: string
       admin_status: "Fake test unbilled",
       booking_month: "2026-07",
       booking_reference: "FAKE-RITZ-0001",
+      customer_price_label: "$420.00",
       customer_account: customerName,
       customer_id: customerId,
       customer_status: "Ready for billing test",
@@ -124,6 +126,7 @@ function customerFolderFakeUnbilledJobs(customerId: string, customerName: string
       admin_status: "Fake test unbilled",
       booking_month: "2026-07",
       booking_reference: "FAKE-RITZ-0002",
+      customer_price_label: "$420.00",
       customer_account: customerName,
       customer_id: customerId,
       customer_status: "Ready for billing test",
@@ -134,6 +137,7 @@ function customerFolderFakeUnbilledJobs(customerId: string, customerName: string
       admin_status: "Fake test unbilled",
       booking_month: "2026-07",
       booking_reference: "FAKE-RITZ-0003",
+      customer_price_label: "$420.00",
       customer_account: customerName,
       customer_id: customerId,
       customer_status: "Ready for billing test",
@@ -385,14 +389,13 @@ export function CustomerFolderSavedBookingsPanel({
             )}
           </div>
           <div className="max-h-96 overflow-auto rounded-md border border-slate-200">
-          <table className="w-full min-w-[860px] border-collapse text-left text-sm">
+          <table className="w-full min-w-[760px] border-collapse text-left text-sm">
             <thead className="sticky top-0 bg-white text-[11px] uppercase tracking-[0.12em] text-slate-500">
               <tr>
                 <th className="border-b border-slate-200 px-3 py-2 font-bold">Select</th>
                 <th className="border-b border-slate-200 px-3 py-2 font-bold">Booking</th>
                 <th className="border-b border-slate-200 px-3 py-2 font-bold">Pickup</th>
                 <th className="border-b border-slate-200 px-3 py-2 font-bold">Service</th>
-                <th className="border-b border-slate-200 px-3 py-2 font-bold">Status</th>
                 <th className="border-b border-slate-200 px-3 py-2 text-right font-bold">Action</th>
               </tr>
             </thead>
@@ -432,11 +435,15 @@ export function CustomerFolderSavedBookingsPanel({
                       {displayText(booking.pickup_at, "Pickup not available")}
                     </td>
                     <td className="px-3 py-2 text-slate-700">
-                      {displayText(booking.service_type, "Service not available")}
-                    </td>
-                    <td className="px-3 py-2 text-slate-700">
-                      {[booking.admin_status, booking.customer_status].filter(Boolean).join(" / ") ||
-                        "Status unavailable"}
+                      <span>{displayText(booking.service_type, "Service not available")}</span>
+                      {booking.customer_price_label ? (
+                        <span
+                          className="ml-2 inline-flex min-h-7 items-center rounded-md border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-950"
+                          data-customer-folder-saved-bookings-price={booking.booking_reference || ""}
+                        >
+                          {booking.customer_price_label}
+                        </span>
+                      ) : null}
                     </td>
                     <td className="px-3 py-2 text-right">
                       {editHref && deleteHref ? (

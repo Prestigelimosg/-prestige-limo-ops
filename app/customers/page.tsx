@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -925,6 +926,38 @@ function plainInvoiceTotalAmountCents(form: PlainInvoiceForm) {
     (total, item) => total + item.amountCents,
     0,
   );
+}
+
+function fakeRitzInvoiceService(reference: string) {
+  if (reference === "FAKE-RITZ-0001") {
+    return "MNG / Arrival";
+  }
+
+  if (reference === "FAKE-RITZ-0002") {
+    return "TRF / Transfer";
+  }
+
+  return "DSP / Hourly";
+}
+
+function fakeRitzInvoiceLineDescription(reference: string) {
+  return `${fakeRitzInvoiceService(reference)} - ${reference} - Ritz Carlton fake billing UI test`;
+}
+
+function fakeRitzInvoiceLineMeta(description: string) {
+  if (description.includes("FAKE-RITZ-0001")) {
+    return { date: "10 Jul 2026", time: "0900hr", reference: "FAKE-RITZ-0001" };
+  }
+
+  if (description.includes("FAKE-RITZ-0002")) {
+    return { date: "11 Jul 2026", time: "1430hr", reference: "FAKE-RITZ-0002" };
+  }
+
+  if (description.includes("FAKE-RITZ-0003")) {
+    return { date: "12 Jul 2026", time: "2315hr", reference: "FAKE-RITZ-0003" };
+  }
+
+  return { date: "Date not set", time: "Time not set", reference: "" };
 }
 
 function customerInvoiceCardPaymentPreviewLabel(
@@ -2401,6 +2434,7 @@ export default function MockCustomerDashboardPage() {
   );
   const [plainInvoicePreview, setPlainInvoicePreview] =
     useState<CustomerInvoicePreview | null>(null);
+  const [fakeRitzInvoiceHandoffActive, setFakeRitzInvoiceHandoffActive] = useState(false);
   const [plainInvoiceFeedback, setPlainInvoiceFeedback] = useState(
     "Create Invoice is ready for manual bill-to. No invoice number is created until Draft or Issue.",
   );
@@ -3333,6 +3367,17 @@ export default function MockCustomerDashboardPage() {
   const isPlainInvoicePreviewCurrent =
     Boolean(plainInvoicePreview) &&
     plainInvoicePreview?.previewKey === plainInvoiceCurrentPreviewKey;
+  const fakeRitzInvoicePreviewRows = useMemo(
+    () =>
+      fakeRitzInvoiceHandoffActive
+        ? plainInvoiceLineItemsFromForm(plainInvoiceForm).map((item, index) => ({
+            ...item,
+            meta: fakeRitzInvoiceLineMeta(item.description),
+            rowNumber: index + 1,
+          }))
+        : [],
+    [fakeRitzInvoiceHandoffActive, plainInvoiceForm],
+  );
   const plainInvoiceCrmPickerLabel =
     (selectedPlainInvoiceCrmAccountOption
       ? `${selectedPlainInvoiceCrmAccountOption.customerName}${
@@ -4568,7 +4613,9 @@ export default function MockCustomerDashboardPage() {
     bookingReference: string,
     action: "edit" | "delete" | "open",
     invoiceAction = "",
+    selectedBookingReferences = "",
   ) {
+    setFakeRitzInvoiceHandoffActive(false);
     customerFolderReturnHrefRef.current =
       action === "edit" || action === "delete" ? customerFolderHrefFor(customerId, customerName) : "";
     setCustomerFolderFinderSelectedId("");
@@ -4592,12 +4639,21 @@ export default function MockCustomerDashboardPage() {
     scrollCustomerFolderJobsPanelIntoView();
 
     if (invoiceAction === "create" && /^FAKE-RITZ-\d{4}$/.test(bookingReference)) {
+      const selectedFakeReferences = selectedBookingReferences
+        .split(",")
+        .map((reference) => reference.trim())
+        .filter((reference, index, references) =>
+          /^FAKE-RITZ-\d{4}$/.test(reference) && references.indexOf(reference) === index,
+        );
+      const fakeReferences =
+        selectedFakeReferences.length > 0
+          ? selectedFakeReferences
+          : [bookingReference];
+      const [firstFakeReference, ...additionalFakeReferences] = fakeReferences;
       const fakeService =
-        bookingReference === "FAKE-RITZ-0001"
-          ? "MNG / Arrival"
-          : bookingReference === "FAKE-RITZ-0002"
-            ? "TRF / Transfer"
-            : "DSP / Hourly";
+        fakeReferences.length === 1
+          ? fakeRitzInvoiceService(firstFakeReference)
+          : `${fakeReferences.length} Ritz Carlton completed jobs`;
 
       setPlainInvoiceForm({
         ...plainInvoiceInitialForm(),
@@ -4605,21 +4661,28 @@ export default function MockCustomerDashboardPage() {
         billToName: customerName,
         crmCustomerId: customerId,
         crmCustomerName: customerName,
-        lineDescription: `${fakeService} - ${bookingReference} - Ritz Carlton fake billing UI test`,
-        reference: bookingReference,
+        lineDescription: fakeRitzInvoiceLineDescription(firstFakeReference),
+        lineItems: additionalFakeReferences.map((reference) => ({
+          amount: "420.00",
+          lineDescription: fakeRitzInvoiceLineDescription(reference),
+        })),
+        reference: fakeReferences.join(", "),
         route: "Ritz Carlton > Marina Bay Cruise Centre",
         service: fakeService,
       });
+      setFakeRitzInvoiceHandoffActive(true);
       setPlainInvoicePreview(null);
       setCustomerInvoiceWorkspaceTab("statements");
       setPlainInvoiceFeedback(
-        `Fake invoice handoff received for ${bookingReference}. Review Create Invoice, then Preview. Draft, Issue, and Email still create real billing documents, so stop before those unless approved.`,
+        `Fake invoice handoff received for ${fakeReferences.length} selected job${
+          fakeReferences.length === 1 ? "" : "s"
+        }. Review the full invoice preview below. Draft, Issue, and Email still create real billing documents, so stop before those unless approved.`,
       );
       setPlainInvoiceFeedbackTone("success");
       setCustomerFolderJobViewState({
         customerId,
         customerName,
-        message: `Fake job ${bookingReference} loaded into Create Invoice. No booking, invoice, payment, send, payout, GPS, provider, or Supabase record was created.`,
+        message: `Fake job ${fakeReferences.join(", ")} loaded into Create Invoice. No booking, invoice, payment, send, payout, GPS, provider, or Supabase record was created.`,
         savedBookings: [],
         status: "loaded",
         summary: {
@@ -4704,6 +4767,10 @@ export default function MockCustomerDashboardPage() {
     const customerId = cleanCustomerFolderText(searchParams.get("customer_id"), 80);
     const customerName = cleanCustomerFolderText(searchParams.get("customer_name"), 160);
     const bookingReference = cleanCustomerFolderText(searchParams.get("booking_reference"), 120);
+    const selectedBookingReferences = cleanCustomerFolderText(
+      searchParams.get("selected_booking_references"),
+      500,
+    );
     const requestedAction = searchParams.get("customer_job_action");
     const invoiceAction = cleanCustomerFolderText(searchParams.get("customer_invoice_action"), 40);
     const action = requestedAction === "delete" ? "delete" : requestedAction === "edit" ? "edit" : "open";
@@ -4712,14 +4779,28 @@ export default function MockCustomerDashboardPage() {
       return;
     }
 
-    const handoffKey = [customerId, customerName, bookingReference, action, invoiceAction].join("::");
+    const handoffKey = [
+      customerId,
+      customerName,
+      bookingReference,
+      selectedBookingReferences,
+      action,
+      invoiceAction,
+    ].join("::");
 
     if (customerFolderUrlHandoffRef.current === handoffKey) {
       return;
     }
 
     customerFolderUrlHandoffRef.current = handoffKey;
-    void openCustomerFolderFromUrl(customerId, customerName, bookingReference, action, invoiceAction);
+    void openCustomerFolderFromUrl(
+      customerId,
+      customerName,
+      bookingReference,
+      action,
+      invoiceAction,
+      selectedBookingReferences,
+    );
     // URL handoff runs once so normal page interactions do not reload the selected customer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -5225,6 +5306,7 @@ export default function MockCustomerDashboardPage() {
 
   function clearPlainInvoiceForm() {
     setPlainInvoiceForm(plainInvoiceInitialForm());
+    setFakeRitzInvoiceHandoffActive(false);
     setPlainInvoicePreview(null);
     setPlainInvoiceFeedback(
       "Create Invoice cleared. No invoice number, PDF, email, payment, or customer folder was created.",
@@ -7366,10 +7448,11 @@ export default function MockCustomerDashboardPage() {
                   {customerFolderJobViewState.message}
                 </p>
 
-                <div
-                  className="mt-3 overflow-hidden rounded-md border border-slate-200 bg-white"
-                  data-selected-customer-invoice-list="true"
-                >
+                {!fakeRitzInvoiceHandoffActive ? (
+                  <div
+                    className="mt-3 overflow-hidden rounded-md border border-slate-200 bg-white"
+                    data-selected-customer-invoice-list="true"
+                  >
                   <div className="flex flex-col gap-1 border-b border-slate-200 bg-white px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <h4 className="text-sm font-bold text-slate-950">Customer invoices</h4>
@@ -7573,7 +7656,8 @@ export default function MockCustomerDashboardPage() {
                       </div>
                     </div>
                   ) : null}
-                </div>
+                  </div>
+                ) : null}
 
                 {customerFolderJobViewState.status === "loaded" &&
                 customerFolderJobViewState.savedBookings.length > 0 ? (
@@ -8379,6 +8463,131 @@ export default function MockCustomerDashboardPage() {
                     No number yet
                   </p>
                 </div>
+                {fakeRitzInvoiceHandoffActive ? (
+                  <div
+                    className="mt-3 rounded-md border border-slate-200 bg-white p-4 text-xs text-slate-700 shadow-sm"
+                    data-fake-ritz-invoice-preview="true"
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <Image
+                          alt="Prestige Limo SG"
+                          className="h-12 w-auto object-contain"
+                          height={48}
+                          src="/prestige-limo-sg-logo.jpg"
+                          width={180}
+                        />
+                        <div className="mt-3 leading-5">
+                          <p className="font-bold text-slate-950">Prestige Limo Sg</p>
+                          <p>10 Anson Road #10-11</p>
+                          <p>International Plaza 079903</p>
+                          <p>Singapore</p>
+                        </div>
+                      </div>
+                      <div className="text-left sm:text-right">
+                        <p className="text-3xl font-semibold uppercase tracking-normal text-slate-950">Invoice</p>
+                        <p className="mt-2 font-bold text-slate-700" data-fake-ritz-invoice-reference="true">
+                          Draft from {plainInvoiceForm.reference}
+                        </p>
+                        <p className="mt-4 text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
+                          Balance Due
+                        </p>
+                        <p className="mt-1 text-lg font-bold text-slate-950">
+                          {plainInvoiceForm.isPaid ? formatInvoiceAmount(0) : formatInvoiceAmount(plainInvoiceAmountCents)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-8 grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <p className="font-bold text-slate-500">Bill To</p>
+                        <p className="mt-1 font-bold text-sky-700" data-fake-ritz-invoice-bill-to="true">
+                          {plainInvoiceForm.billToName || "Ritz Carlton"}
+                        </p>
+                        <p>{plainInvoiceForm.billToName || "Ritz Carlton"}</p>
+                        <p>Singapore</p>
+                      </div>
+                      <dl className="grid gap-2 sm:justify-end sm:text-right">
+                        <div className="grid grid-cols-[8rem_1fr] gap-3 sm:grid-cols-[9rem_9rem]">
+                          <dt className="font-semibold text-slate-600">Invoice Date :</dt>
+                          <dd className="font-semibold text-slate-800">{formatInvoiceDate(new Date())}</dd>
+                        </div>
+                        <div className="grid grid-cols-[8rem_1fr] gap-3 sm:grid-cols-[9rem_9rem]">
+                          <dt className="font-semibold text-slate-600">Terms :</dt>
+                          <dd className="font-semibold text-slate-800">Net 7</dd>
+                        </div>
+                        <div className="grid grid-cols-[8rem_1fr] gap-3 sm:grid-cols-[9rem_9rem]">
+                          <dt className="font-semibold text-slate-600">Due Date :</dt>
+                          <dd className="font-semibold text-slate-800">
+                            {formatInvoiceDate(new Date(`${plainInvoiceForm.dueDateIso}T00:00:00+08:00`))}
+                          </dd>
+                        </div>
+                      </dl>
+                    </div>
+                    <div className="mt-6 overflow-x-auto">
+                      <table className="w-full min-w-[620px] border-collapse text-left">
+                        <thead className="bg-slate-800 text-white">
+                          <tr>
+                            <th className="px-3 py-2 font-semibold">#</th>
+                            <th className="px-3 py-2 font-semibold">Item &amp; Description</th>
+                            <th className="px-3 py-2 text-right font-semibold">Qty</th>
+                            <th className="px-3 py-2 text-right font-semibold">Rate</th>
+                            <th className="px-3 py-2 text-right font-semibold">Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {fakeRitzInvoicePreviewRows.map((row) => (
+                            <tr className="border-b border-slate-200" key={`${row.meta.reference}-${row.rowNumber}`}>
+                              <td className="px-3 py-4 align-top font-semibold text-slate-700">{row.rowNumber}</td>
+                              <td className="px-3 py-4 align-top">
+                                <p className="font-bold text-slate-900">{row.description}</p>
+                                <p className="mt-2">Date: {row.meta.date}</p>
+                                <p>Time: {row.meta.time}</p>
+                                <p>Name of pax: Ritz Carlton guest</p>
+                                <p>Remark: Fake billing UI test</p>
+                              </td>
+                              <td className="px-3 py-4 text-right align-top font-semibold">1.00</td>
+                              <td className="px-3 py-4 text-right align-top font-semibold">
+                                {row.amountLabel.replace(/^\$/, "")}
+                              </td>
+                              <td className="px-3 py-4 text-right align-top font-semibold">
+                                {row.amountLabel.replace(/^\$/, "")}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="mt-5 grid gap-2 sm:ml-auto sm:w-80">
+                      <div className="flex justify-between gap-3">
+                        <span>Sub Total</span>
+                        <span className="font-semibold">{formatInvoiceAmount(plainInvoiceAmountCents)}</span>
+                      </div>
+                      <div className="flex justify-between gap-3 font-bold text-slate-950">
+                        <span>Total</span>
+                        <span>{formatInvoiceAmount(plainInvoiceAmountCents)}</span>
+                      </div>
+                      <div className="flex justify-between gap-3 rounded-md bg-slate-50 px-3 py-2 font-bold text-slate-950">
+                        <span>Balance Due</span>
+                        <span>
+                          {plainInvoiceForm.isPaid ? formatInvoiceAmount(0) : formatInvoiceAmount(plainInvoiceAmountCents)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 pt-3">
+                      <p className="text-xs font-semibold text-slate-500">
+                        Preview only. Email is still guarded below.
+                      </p>
+                      <button
+                        className="inline-flex min-h-9 items-center rounded-md border border-emerald-300 bg-emerald-50 px-3 text-xs font-bold text-emerald-800 transition hover:bg-emerald-100"
+                        data-fake-ritz-ready-email="true"
+                        onClick={previewPlainInvoice}
+                        type="button"
+                      >
+                        Ready to email
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(9rem,1fr)_minmax(9rem,0.9fr)_minmax(8rem,0.75fr)_minmax(8rem,0.7fr)] xl:items-end">
                   <div className="grid gap-2 sm:col-span-2 xl:col-span-4 xl:grid-cols-[minmax(12rem,1fr)_auto] xl:items-end">
                     <div className="relative grid gap-1 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">

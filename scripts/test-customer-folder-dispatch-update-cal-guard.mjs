@@ -6,6 +6,7 @@ const customerFolderSource = readFileSync(
   "app/customers/[customerId]/saved-bookings-panel.tsx",
   "utf8",
 );
+const customerDashboardSource = readFileSync("app/customers/page.tsx", "utf8");
 const savedBookingsReadSource = readFileSync(
   "lib/admin-customer-saved-bookings-read.ts",
   "utf8",
@@ -65,6 +66,21 @@ assertIncludes(
   customerFolderSource,
   "params.set(\"booking_reference\", focusBookingReference)",
   "customer folder return read must pass the exact booking reference to the safe read route",
+);
+assertIncludes(
+  customerDashboardSource,
+  "params.set(\"search\", trimmedSearch)",
+  "customer dashboard quick search must pass typed letters to the guarded customer account read",
+);
+assertIncludes(
+  customerDashboardSource,
+  "void loadRegularCustomerAccounts(trimmedSearch)",
+  "customer dashboard quick search must auto-load matching accounts while typing",
+);
+assertIncludes(
+  customerDashboardSource,
+  "regularCustomerAccountSearchRequestRef",
+  "customer dashboard quick search must ignore stale account search responses",
 );
 assertIncludes(
   customerFolderSource,

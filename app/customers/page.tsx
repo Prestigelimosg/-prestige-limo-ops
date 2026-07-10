@@ -2399,6 +2399,7 @@ export default function MockCustomerDashboardPage() {
       summary: null,
       tone: "info",
     });
+  const regularCustomerAccountSearchRequestRef = useRef(0);
   const [plainInvoiceCrmAccountReadState, setPlainInvoiceCrmAccountReadState] =
     useState<RegularCustomerAccountReadState>({
       accounts: [],
@@ -3676,7 +3677,11 @@ export default function MockCustomerDashboardPage() {
     }
   }
 
-  async function loadRegularCustomerAccounts() {
+  async function loadRegularCustomerAccounts(searchTermOverride = "") {
+    const requestId = regularCustomerAccountSearchRequestRef.current + 1;
+    regularCustomerAccountSearchRequestRef.current = requestId;
+    const trimmedSearch = searchTermOverride.trim();
+
     if (typeof fetch !== "function") {
       setRegularCustomerAccountReadState({
         accounts: [],
@@ -3690,7 +3695,9 @@ export default function MockCustomerDashboardPage() {
 
     setRegularCustomerAccountReadState({
       accounts: [],
-      message: "Loading saved customer accounts from the guarded read path...",
+      message: trimmedSearch
+        ? `Searching saved customer accounts starting with "${trimmedSearch}"...`
+        : "Loading saved customer accounts from the guarded read path...",
       status: "loading",
       summary: null,
       tone: "info",
@@ -3700,6 +3707,9 @@ export default function MockCustomerDashboardPage() {
       const params = new URLSearchParams({
         limit: "10",
       });
+      if (trimmedSearch) {
+        params.set("search", trimmedSearch);
+      }
       const response = await fetch(`${adminCustomerAccountsApiPath}?${params.toString()}`, {
         headers: {
           "x-prestige-admin-purpose": "admin-booking-persistence",
@@ -3716,6 +3726,7 @@ export default function MockCustomerDashboardPage() {
         ? (result.accounts as RegularCustomerAccountReadRecord[])
         : [];
       const returnedCount = Number(result.summary?.returned_count ?? accounts.length);
+      const matchText = trimmedSearch ? ` matching "${trimmedSearch}"` : "";
       const accountReadTargets: RegularCustomerSavedBookingReadTarget[] = accounts.flatMap((account) => {
         const customerName = String(account.customer_account ?? "").trim();
         const customerId = String(account.customer_id ?? "").trim() || customerName;
@@ -3731,12 +3742,16 @@ export default function MockCustomerDashboardPage() {
           : [];
       });
 
+      if (requestId !== regularCustomerAccountSearchRequestRef.current) {
+        return;
+      }
+
       setRegularCustomerAccountReadState({
         accounts,
         message:
           returnedCount > 0
-            ? `Loaded ${returnedCount} saved customer account${returnedCount === 1 ? "" : "s"}.`
-            : "No saved customer accounts were returned.",
+            ? `Loaded ${returnedCount} saved customer account${returnedCount === 1 ? "" : "s"}${matchText}.`
+            : `No saved customer accounts were returned${matchText}.`,
         status: "loaded",
         summary: result.summary || null,
         tone: "success",
@@ -3765,6 +3780,22 @@ export default function MockCustomerDashboardPage() {
       });
     }
   }
+
+  useEffect(() => {
+    const trimmedSearch = searchTerm.trim();
+
+    if (!trimmedSearch) {
+      return;
+    }
+
+    const searchTimer = window.setTimeout(() => {
+      void loadRegularCustomerAccounts(trimmedSearch);
+    }, 250);
+
+    return () => window.clearTimeout(searchTimer);
+    // Quick search should issue one guarded account read for the latest typed value.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm]);
 
   async function loadPlainInvoiceCrmAccounts(searchTerm = plainInvoiceCrmSearchTerm) {
     const requestId = plainInvoiceCrmRequestSequenceRef.current + 1;
@@ -7039,7 +7070,9 @@ export default function MockCustomerDashboardPage() {
                   className="min-h-9 w-fit whitespace-nowrap rounded-md border border-slate-900 bg-slate-900 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
                   data-customer-billing-overview-load-accounts="true"
                   disabled={regularCustomerAccountReadState.status === "loading"}
-                  onClick={loadRegularCustomerAccounts}
+                  onClick={() => {
+                    void loadRegularCustomerAccounts();
+                  }}
                   type="button"
                 >
                   {regularCustomerAccountReadState.status === "loading" ? "Loading accounts" : "Load Accounts"}
@@ -7225,7 +7258,9 @@ export default function MockCustomerDashboardPage() {
                       className="min-h-8 whitespace-nowrap rounded-md border border-slate-900 bg-slate-900 px-2.5 py-1 text-xs font-bold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
                       data-customer-folder-finder-load-accounts="true"
                       disabled={regularCustomerAccountReadState.status === "loading"}
-                      onClick={loadRegularCustomerAccounts}
+                      onClick={() => {
+                        void loadRegularCustomerAccounts();
+                      }}
                       type="button"
                     >
                       {regularCustomerAccountReadState.status === "loading" ? "Loading" : "Load Accounts"}

@@ -53,6 +53,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - When a linked invoice reference is edited, the Create Invoice success feedback is replaced immediately with an error-tone instruction to reselect the exact saved booking and verified PA; the stale linked message is not retained.
 - The existing invoice persistence route independently verifies every issued invoice's `bookingReference + customerId + bookerId` against the saved booking before generating a number or PDF; altered or stale ownership claims fail closed. Admin-only drafts remain nullable.
 - Selecting a Create Invoice CRM billing account now performs an account-scoped read through the existing guarded saved-bookings API and stores the result in selector-specific state. Request sequencing prevents a slower prior account read from replacing the latest selection; the general customer-folder cache is not reused or overwritten.
+- The real customer-folder `Create Invoice` handoff now clears prior manual-invoice ownership, waits for the existing guarded exact-booking read to match the requested reference, and then populates the existing workbench with exact customer, booking, PA/booker, service, and route identity. Amount and recipient email remain blank; missing or failed PA verification keeps Issue and Email blocked. No duplicate invoice panel or route was added.
 
 ### Operational Booking Verified CRM Identity Persistence
 

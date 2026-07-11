@@ -4374,7 +4374,7 @@ export default function MockCustomerDashboardPage() {
         status: "error",
         tone: "error",
       });
-      return;
+      return null;
     }
 
     if (
@@ -4383,7 +4383,7 @@ export default function MockCustomerDashboardPage() {
     ) {
       setExpandedCustomerFolderJobReference("");
       setCustomerFolderExactBookingEditorState(initialCustomerFolderExactBookingEditorState);
-      return;
+      return null;
     }
 
     setExpandedCustomerFolderJobReference(bookingReference);
@@ -4424,6 +4424,7 @@ export default function MockCustomerDashboardPage() {
         status: "loaded",
         tone: "success",
       });
+      return exactBooking;
     } catch (error) {
       setCustomerFolderExactBookingEditorState({
         ...initialCustomerFolderExactBookingEditorState,
@@ -4432,6 +4433,7 @@ export default function MockCustomerDashboardPage() {
         status: "error",
         tone: "error",
       });
+      return null;
     }
   }
 
@@ -4876,7 +4878,12 @@ export default function MockCustomerDashboardPage() {
       });
 
       if (targetBooking) {
-        await loadCustomerFolderExactBookingForEdit(targetBooking);
+        if (invoiceAction === "create") {
+          setPlainInvoiceForm(plainInvoiceInitialForm());
+          setPlainInvoicePreview(null);
+          setPlainInvoiceSavedBookings([]);
+        }
+        const exactBooking = await loadCustomerFolderExactBookingForEdit(targetBooking);
         setCustomerFolderJobViewState((current) => ({
           ...current,
           message:
@@ -4892,6 +4899,49 @@ export default function MockCustomerDashboardPage() {
           setCustomerInvoicePrepFeedback(
             `Invoice handoff received for ${bookingReference}. Review the loaded job, then prepare the billing row or use Create Invoice before sending to customer.`,
           );
+          if (exactBooking) {
+            const exactCustomerId = String(exactBooking.customer_id ?? customerId).trim();
+            const exactCustomerName =
+              String(exactBooking.customer_display_name ?? customerName).trim() || customerName;
+            const exactService =
+              String(exactBooking.service_type ?? targetBooking.service_type ?? "").trim();
+            const exactRoute =
+              String(exactBooking.route_summary ?? "").trim() ||
+              [exactBooking.pickup_location, exactBooking.dropoff_location]
+                .map((value) => String(value ?? "").trim())
+                .filter(Boolean)
+                .join(" > ") ||
+              String(exactBooking.route_type ?? targetBooking.route_type ?? "").trim();
+            const exactBookerId = exactBooking.booker_id ?? targetBooking.booker_id ?? null;
+
+            setPlainInvoiceSavedBookings([targetBooking]);
+            setPlainInvoiceForm({
+              ...plainInvoiceInitialForm(),
+              billToName: exactCustomerName,
+              bookerId: exactBookerId,
+              bookingReference,
+              crmCustomerId: exactCustomerId,
+              crmCustomerName: exactCustomerName,
+              lineDescription: exactService ? `${exactService} - ${bookingReference}` : bookingReference,
+              reference: bookingReference,
+              route: exactRoute,
+              service: exactService,
+            });
+            setPlainInvoiceFeedback(
+              exactBookerId
+                ? `Exact customer-folder job ${bookingReference} loaded with its verified PA. Enter only the approved amount, then Preview before Draft, Issue, or Email.`
+                : `Exact customer-folder job ${bookingReference} has no verified PA. Draft remains admin-only; Issue and Email are blocked.`,
+            );
+            setPlainInvoiceFeedbackTone(exactBookerId ? "success" : "error");
+            window.setTimeout(() => {
+              plainInvoicePanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }, 100);
+          } else {
+            setPlainInvoiceFeedback(
+              `Exact booking ${bookingReference} could not be verified for Create Invoice. Issue and Email remain blocked.`,
+            );
+            setPlainInvoiceFeedbackTone("error");
+          }
         }
       }
     } catch (error) {

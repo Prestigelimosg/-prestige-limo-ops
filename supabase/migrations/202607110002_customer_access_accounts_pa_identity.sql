@@ -5,8 +5,6 @@ alter table if exists public.customer_access_accounts
   add column if not exists company_id bigint references public.companies(id) on delete restrict,
   add column if not exists booker_id bigint references public.bookers(id) on delete restrict;
 
-drop index if exists public.customer_access_accounts_reference_key;
-
 create unique index if not exists customer_access_accounts_booker_id_key
   on public.customer_access_accounts (booker_id)
   where booker_id is not null;

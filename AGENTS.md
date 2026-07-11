@@ -32,4 +32,4 @@ Dispatch now has explicit verified company, PA/booker, and traveler selectors in
 
 The established allowlisted admin legacy-data route accepts PATCH from a verified same-origin admin/dispatcher server session so exact traveler `booker_id` links can be maintained. Do not broaden this exception to POST or DELETE, public/cross-origin callers, unsupported tables, or unsafe fields.
 
-Customer access accounts support multiple PAs under one company through nullable verified `company_id` and unique non-null `booker_id`. Never use company/account reference alone to authorize customer invoices or PA-private bookings.
+Customer access accounts have nullable verified `company_id` and unique non-null `booker_id` foundations. The legacy unique customer-account-reference index must remain until the existing `Copy + App Link` upsert is safely converted to booker identity. Never use company/account reference alone to authorize customer invoices or PA-private bookings.

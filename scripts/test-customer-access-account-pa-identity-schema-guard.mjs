@@ -9,7 +9,6 @@ const migration = await readFile(
 for (const fragment of [
   "add column if not exists company_id bigint",
   "add column if not exists booker_id bigint",
-  "drop index if exists public.customer_access_accounts_reference_key",
   "customer_access_accounts_booker_id_key",
   "where booker_id is not null",
   "customer_access_accounts_company_id_idx",
@@ -19,5 +18,6 @@ for (const fragment of [
 assert.ok(!migration.includes("drop table"));
 assert.ok(!migration.includes("delete from"));
 assert.ok(!migration.includes("update public.customer_access_accounts"));
+assert.ok(!migration.includes("drop index if exists public.customer_access_accounts_reference_key"));
 
 console.log("Customer access-account PA identity schema guard passed.");

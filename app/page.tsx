@@ -23863,6 +23863,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     cleanReferenceText(appliedAdminBookingSnapshot?.customer_id) ||
     cleanReferenceText(dispatchReleaseLoadedBookingRecord?.customer_id) ||
     cleanReferenceText(customerDriverDetailsPortalLastSavedRecord?.customer_id);
+  const customerLiveLocationHelperText = customerDriverDetailsPortalAccountReference
+    ? customerLiveLocation.helperText
+    : "Save + CRM or load the saved booking first.";
   const customerDriverDetailsPortalSafeDisplayLabel =
     clean(appliedAdminBookingSnapshot?.customer_display_name) ||
     clean(dispatchReleaseLoadedBookingRecord?.customer_display_name) ||
@@ -41105,7 +41108,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 className="mb-2 inline-flex max-w-full rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900"
                 data-customer-live-location-helper="true"
               >
-                {customerLiveLocation.helperText}
+                {customerLiveLocationHelperText}
               </div>
               <div
                 className="mb-2 flex min-w-0 flex-col gap-1.5 rounded-md border border-emerald-200 bg-white px-2 py-1.5 text-[11px] leading-4 text-emerald-950"

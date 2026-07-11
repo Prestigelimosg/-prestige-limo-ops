@@ -82,6 +82,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Customer Driver Details Copy + App Link
 
 - Dispatch Customer Copy now has one explicit `Copy + App Link` action in the existing Customer Copy row.
+- If the saved booking has no `customer_id`, the helper says `Save + CRM or load the saved booking first.` The button stays disabled and does not claim the link is ready.
+- Focused guard: `scripts/test-admin-customer-app-link-readiness-helper-guard.mjs`.
 - The action uses the existing admin customer portal access-link route, requires the saved booking `customer_id` / customer account reference, and refuses to create a link from passenger, booker, company, or display names.
 - The copied text is the current customer-safe driver details plus a signed customer app link for manual sending. It does not send Email, WhatsApp, SMS, Telegram, provider messages, customer in-app notifications, driver notifications, payment/PDF/invoice actions, GPS/live-location writes, parser changes, or broad DB writes.
 - The normal Customer Copy button and manual Telegram buttons remain unchanged; Telegram remains manual clipboard-only with no provider send, no chat ID, no Telegram URL, no notification write, and no portal-link creation inside the Telegram handler.

@@ -66,6 +66,16 @@ const customerBookingRequestsReviewHandler = sliceBetween(
   "function openCustomerBookingRequestsReview",
   "function openNewBookingRequestNotificationReview",
 );
+const clearLoadedBookingSelectionContext = sliceBetween(
+  appPage,
+  "function clearLoadedBookingSelectionContext",
+  "function applyExtractedBooking",
+);
+const saveBookingSection = sliceBetween(
+  appPage,
+  "async function saveBooking()",
+  "function bookingRecordReferenceCandidates",
+);
 const activeMonitorSource = sliceBetween(
   appPage,
   "const activeJobDashboardSearchTerm = clean(searchTerm);",
@@ -229,6 +239,21 @@ for (const fragment of [
   assertIncludes(appPage, fragment, `dispatch driver job link focus fragment ${fragment}`);
 }
 
+for (const fragment of [
+  'driverJobLinkHandoffFocusAppliedRef.current = "";',
+  'setDriverJobLinkHandoffReference("");',
+]) {
+  assertIncludes(clearLoadedBookingSelectionContext, fragment, `clear stale driver link handoff ${fragment}`);
+}
+
+for (const fragment of [
+  'driverJobLinkHandoffFocusAppliedRef.current = "";',
+  "setDriverJobLinkHandoffReference(primarySavedBookingReference);",
+  'setDispatchLoadFocusTarget("driverJobLink");',
+]) {
+  assertIncludes(saveBookingSection, fragment, `saved booking driver link handoff ${fragment}`);
+}
+
 assertSourceOrder(
   dashboardCommandCentrePanel,
   [
@@ -389,6 +414,7 @@ for (const forbiddenPattern of [
 for (const phrase of [
   "Dashboard request panel is now `Urgent / Customer Requests` and displays open customer requests, saved Driver TBC jobs inside the 1-hour pickup monitor window, and customer change/cancel requests using the existing guarded notification handlers.",
   "Dashboard `Open Urgent` and urgent rows load the selected urgent booking into Dispatch with the existing Driver Job Link panel focused, a visible booking handoff notice, and keyboard focus on `Create Link` so admin can create and copy the driver link before a driver is assigned.",
+  "Clearing a loaded Dispatch booking now clears its Driver Job Link handoff reference, and a successful new `Save + CRM` replaces it with the newly saved booking reference before focusing the existing Driver Job Link panel; stale prior-booking notices must not survive the save.",
   "Dashboard keeps a secondary `Review` action that switches to Bookings and focuses the existing `Urgent & New Booking Requests` queue; it does not remain on Dashboard, create a duplicate request lane, or replace the Driver Job Link urgent handoff.",
   "Dashboard `Review` is enabled only when that Bookings request queue contains a real reviewable row; a stale notification without an exact saved request remains disabled as `Missing request` and cannot enable a dead review handoff.",
   "The Dashboard request panel remains the queue for open customer requests outside the 1-hour dispatch window as `Urgent & New Booking Requests`, with row badges separating under-24h-but-not-dispatch-window requests from new non-urgent requests; Bookings remains for saved booking search/load/list work.",

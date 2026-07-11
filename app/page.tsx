@@ -16942,8 +16942,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   function clearLoadedBookingSelectionContext() {
     loadedBookingIdRef.current = "";
     appliedAdminBookingSnapshotReferenceRef.current = "";
+    driverJobLinkHandoffFocusAppliedRef.current = "";
     setLoadedBookingId("");
     setAppliedAdminBookingSnapshotReference("");
+    setDriverJobLinkHandoffReference("");
     setDispatchLoadFocusTarget(null);
   }
 
@@ -18994,6 +18996,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       }
 
       markAdminBookingAsActiveForUpdates(primarySavedBookingReference, primarySavedBooking);
+      driverJobLinkHandoffFocusAppliedRef.current = "";
+      setDriverJobLinkHandoffReference(primarySavedBookingReference);
+      setDispatchLoadFocusTarget("driverJobLink");
       const savedMessage = {
         tone: "info",
         text: `Operational booking${savedBookings.length > 1 ? "s" : ""} saved: ${savedBookingReferences.join(

@@ -21,7 +21,6 @@ type DriverJobApiBlockedReason =
   | "invalid_details"
   | "invalid_status"
   | "out_of_order"
-  | "ots_photo_required"
   | "revoked"
   | "unauthorized"
   | "unavailable";
@@ -251,7 +250,6 @@ const blockedMessages: Record<DriverJobApiBlockedReason, string> = {
   invalid_details: "Driver details were not accepted. Check the name and contact dispatch if this continues.",
   invalid_status: "This status update was not accepted. Please try again or contact dispatch.",
   out_of_order: "Update the previous job status before this one.",
-  ots_photo_required: "Send the OTS photo to admin before POB.",
   revoked: "This driver job link is no longer active. Please contact dispatch.",
   unauthorized: "This driver job link is unavailable. Please check the link or contact dispatch.",
   unavailable: "This driver job link is unavailable right now. Please contact dispatch.",
@@ -272,8 +270,7 @@ function normalizeBlockedReason(value: unknown): DriverJobApiBlockedReason {
     value === "unauthorized" ||
     value === "invalid_details" ||
     value === "invalid_status" ||
-    value === "out_of_order" ||
-    value === "ots_photo_required"
+    value === "out_of_order"
     ? value
     : "unavailable";
 }
@@ -1488,7 +1485,7 @@ export default function DriverJobPage() {
           ...currentState,
           feedback: {
             tone: "success",
-            text: "OTS recorded. Send the OTS photo to admin before POB.",
+            text: "OTS recorded. Photo to admin is optional.",
           },
         }));
       }

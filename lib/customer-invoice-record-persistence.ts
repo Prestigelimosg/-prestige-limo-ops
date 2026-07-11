@@ -1223,13 +1223,14 @@ export async function loadCustomerInvoiceRecordsForPortal(
   let invoiceQuery = invoiceClient
     .from(customerInvoiceRecordTableName)
     .select(customerInvoiceSelect)
-    .eq("customer_id", customerAccountReference)
     .eq("document_state", "issued")
     .order("created_at", { ascending: false })
     .limit(100);
 
   if (portalBookerId) {
     invoiceQuery = invoiceQuery.eq("booker_id", portalBookerId);
+  } else {
+    invoiceQuery = invoiceQuery.eq("customer_id", customerAccountReference);
   }
 
   let { data, error } = await invoiceQuery;
@@ -1242,12 +1243,13 @@ export async function loadCustomerInvoiceRecordsForPortal(
     let legacyQuery = invoiceClient
       .from(customerInvoiceRecordTableName)
       .select(customerInvoiceLegacySelect)
-      .eq("customer_id", customerAccountReference)
       .order("created_at", { ascending: false })
       .limit(100);
 
     if (portalBookerId) {
       legacyQuery = legacyQuery.eq("booker_id", portalBookerId);
+    } else {
+      legacyQuery = legacyQuery.eq("customer_id", customerAccountReference);
     }
 
     const legacyResult = await legacyQuery;
@@ -1303,11 +1305,12 @@ export async function loadCustomerInvoicePdfForPortal(
   let pdfQuery = invoiceClient
     .from(customerInvoiceRecordTableName)
     .select(customerInvoicePdfSelect)
-    .eq("customer_id", customerAccountReference)
     .eq("invoice_number", invoiceNumber)
     .eq("document_state", "issued");
   if (portalBookerId) {
     pdfQuery = pdfQuery.eq("booker_id", portalBookerId);
+  } else {
+    pdfQuery = pdfQuery.eq("customer_id", customerAccountReference);
   }
   const pdfResult = await pdfQuery.maybeSingle();
   let data: unknown = pdfResult.data;
@@ -1321,11 +1324,12 @@ export async function loadCustomerInvoicePdfForPortal(
     let legacyPdfQuery = invoiceClient
       .from(customerInvoiceRecordTableName)
       .select(customerInvoiceLegacyPdfSelect)
-      .eq("customer_id", customerAccountReference)
       .eq("invoice_number", invoiceNumber);
 
     if (portalBookerId) {
       legacyPdfQuery = legacyPdfQuery.eq("booker_id", portalBookerId);
+    } else {
+      legacyPdfQuery = legacyPdfQuery.eq("customer_id", customerAccountReference);
     }
 
     const legacyResult = await legacyPdfQuery.maybeSingle();

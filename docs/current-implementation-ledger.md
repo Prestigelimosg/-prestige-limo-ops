@@ -38,8 +38,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Customer Invoice PA Read Isolation
 
 - Customer invoice list and PDF reads obtain nullable `booker_id` only from the validated active access-account row.
-- When present, both reads require `customer_id + booker_id`; another PA in the same company cannot list or download that invoice.
-- Legacy access accounts without a booker retain their established customer scope until assigned; no client-supplied booker identity is trusted.
+- When present, both reads require the verified `booker_id`, so one PA can see invoices for their own multiple bosses/customer folders. Another PA in the same company cannot list or download that invoice.
+- Legacy access accounts without a verified PA keep the established `customer_id` filter.
 - Focused guard: `scripts/test-customer-invoice-booker-scope-guard.mjs`.
 
 ### Admin Invoice Booker Identity Propagation

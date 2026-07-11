@@ -19,6 +19,7 @@ export type AdminSavedBookingRecord = {
   booking_reference: string | null;
   source_channel: string | null;
   source_surface: string | null;
+  customer_id: number | null;
   booker_id: number | null;
   bookers: {
     booker_name: string | null;
@@ -134,11 +135,11 @@ const allowedAdapterActorRoles = new Set(["admin", "dispatcher", "system"]);
 const allowedSingleReadQueryParams = new Set(["booking_id", "booking_reference", "id"]);
 const allowedListReadQueryParams = new Set(["limit"]);
 const adminSavedBookingLegacyReadSelect =
-  "id, booking_reference, source_channel, source_surface, company_id, booker_id, traveler_id, booking_type, service_type, route_type, vehicle, vehicle_type, vehicle_type_or_category, pickup_time, pickup_at, pickup_datetime, pickup_address, pickup_location, dropoff_address, dropoff_location, flight_no, route, route_summary, pax, pax_count, passenger_name, passenger_phone, customer_display_name, contact_display_name, contact_phone, contact_email, job_card, status, driver_id, driver_name, driver_contact, driver_plate_number, customer_rate, customer_rate_unit, customer_price_amount, customer_rate_override, customer_price_override_reason, driver_payout_min, driver_payout_max, driver_payout_amount, driver_payout_override, driver_payout_reason, driver_payout_unit, driver_notes, driver_dispatch_include_payout, midnight_surcharge, midnight_payout, extra_stop_count, extra_stop_surcharge, extra_stop_payout, child_seat_required, child_seat_count, child_seat_type, child_seat_customer_surcharge, child_seat_driver_payout, pricing_source, created_at, updated_at, companies(company_name, domain), bookers(booker_name, email, phone), travelers(traveler_name)";
+  "id, booking_reference, source_channel, source_surface, customer_id, company_id, booker_id, traveler_id, booking_type, service_type, route_type, vehicle, vehicle_type, vehicle_type_or_category, pickup_time, pickup_at, pickup_datetime, pickup_address, pickup_location, dropoff_address, dropoff_location, flight_no, route, route_summary, pax, pax_count, passenger_name, passenger_phone, customer_display_name, contact_display_name, contact_phone, contact_email, job_card, status, driver_id, driver_name, driver_contact, driver_plate_number, customer_rate, customer_rate_unit, customer_price_amount, customer_rate_override, customer_price_override_reason, driver_payout_min, driver_payout_max, driver_payout_amount, driver_payout_override, driver_payout_reason, driver_payout_unit, driver_notes, driver_dispatch_include_payout, midnight_surcharge, midnight_payout, extra_stop_count, extra_stop_surcharge, extra_stop_payout, child_seat_required, child_seat_count, child_seat_type, child_seat_customer_surcharge, child_seat_driver_payout, pricing_source, created_at, updated_at, companies(company_name, domain), bookers(booker_name, email, phone), travelers(traveler_name)";
 const adminSavedBookingCurrentReadSelect =
-  "id, booking_reference, source_surface, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, flight_no, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, admin_internal_status, customer_facing_status, created_at, updated_at";
+  "id, booking_reference, source_surface, customer_id, company_id, booker_id, traveler_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, flight_no, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, admin_internal_status, customer_facing_status, created_at, updated_at";
 const adminSavedBookingCurrentMinimalReadSelect =
-  "id, booking_reference, source_surface, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, admin_internal_status, customer_facing_status, created_at, updated_at";
+  "id, booking_reference, source_surface, customer_id, company_id, booker_id, traveler_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, admin_internal_status, customer_facing_status, created_at, updated_at";
 const adminSavedBookingFoundationScalarReadSelect =
   "id, booking_reference, source_channel, booking_type, vehicle, pickup_time, pickup_address, dropoff_address, flight_no, route, pax, job_card, status, driver_id, driver_name, driver_contact, driver_plate_number, created_at, updated_at";
 const adminSavedBookingReadSelects = [
@@ -537,6 +538,7 @@ function toSavedBookingRecord(value: unknown): AdminSavedBookingRecord | null {
     contact_email: textOrNull(row.contact_email, 220),
     contact_phone: textOrNull(row.contact_phone, 120),
     created_at: textOrNull(row.created_at, 80),
+    customer_id: integerOrNull(row.customer_id),
     customer_display_name: textOrNull(row.customer_display_name, 220),
     customer_price_amount: numberOrNull(row.customer_price_amount),
     customer_price_override_reason: textOrNull(row.customer_price_override_reason, 500),

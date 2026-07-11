@@ -88,6 +88,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Existing saves remain compatible because the identity fields are nullable. This pass does not add the CRM selectors or PA magic-link sign-in UI, does not activate customer invoice access, and does not change parser behavior.
 - Focused guard: `scripts/test-admin-operational-booking-crm-identity-persistence-guard.mjs`.
 - Each verified selector also renders the currently loaded saved ID as an immediate fallback option using that same booking's saved company/booker/passenger label. The guarded option read enriches the list, but a delayed read can no longer make persisted verified IDs appear as `Not selected`.
+- The current-schema and current-minimal saved-booking fallback reads also carry `customer_id`, `company_id`, `booker_id`, and `traveler_id`. Therefore `Bookings` → `Open / Edit` cannot drop verified ownership when the broader legacy-shaped select falls back. Focused guard: `scripts/test-admin-saved-booking-open-edit-identity-guard.mjs`.
 
 ### Dispatch Verified CRM Identity Selectors
 

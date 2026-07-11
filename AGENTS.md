@@ -37,3 +37,5 @@ Customer access accounts have nullable verified `company_id` and unique non-null
 Customer saved-booking reads support an additive verified `company_id + booker_id` scope. Both IDs are mandatory together; a partial pair must fail closed. Legacy sessions without either ID continue using the existing `customer_id` scope.
 
 Reference-bearing customer sessions hydrate verified company/booker IDs only from the validated active `customer_access_accounts` row. Do not trust client-supplied identity IDs.
+
+Customer invoice records have an additive nullable `booker_id` schema foundation. Do not enable customer booker-scoped invoice reads until invoice issuance persists verified `booker_id`; company/customer identity alone is never sufficient for PA-private invoices.

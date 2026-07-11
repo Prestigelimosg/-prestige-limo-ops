@@ -28,6 +28,13 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Focused guard: `scripts/test-customer-saved-bookings-pa-scope-guard.mjs`.
 - Existing reference-bearing sessions hydrate nullable verified IDs from the validated active access-account row before choosing PA versus legacy booking filters.
 
+### Customer Invoice Booker Identity Schema Foundation
+
+- Additive migration `202607110003_customer_invoice_records_booker_identity.sql` adds nullable verified `booker_id` to stored customer invoices and a customer/booker/created index.
+- Existing invoice rows and application reads/writes remain unchanged until booker-aware issuance and customer authorization are deployed together.
+- Company/customer identity alone must never authorize PA-private invoice access.
+- Focused guard: `scripts/test-customer-invoice-booker-identity-schema-guard.mjs`.
+
 ### Operational Booking Verified CRM Identity Persistence
 
 - The established `/api/admin-bookings` persistence contract and Supabase adapter now retain nullable verified `company_id`, `booker_id`, and `traveler_id` values already supported by the existing `bookings` schema.

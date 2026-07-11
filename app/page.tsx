@@ -19462,6 +19462,26 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
     rememberHandledCustomerBookingRequest(bookingRecord);
     setDriverJobLinkCopyMessage(null);
+    setAdminDriverJobStatusReadState({
+      bookingReference,
+      latestStatus: null,
+      message: {
+        tone: "info",
+        text: `Loading saved driver status for ${bookingReference}...`,
+      },
+      status: "loading",
+      statuses: [],
+    });
+    setAdminDriverOtsPhotoProofReadState({
+      bookingReference,
+      latestProof: null,
+      message: {
+        tone: "info",
+        text: `Checking OTS photo proof for ${bookingReference}...`,
+      },
+      proofs: [],
+      status: "loading",
+    });
     setBooking(() => loadedBookingForm);
     if (bookingReference) {
       delete driverJobLinkVehicleFallbackRefreshLastRequestedRef.current[bookingReference];
@@ -20449,6 +20469,13 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
     try {
       const loadedProofs = await loadAdminDriverOtsPhotoProofRead(bookingReference);
+      const currentBookingReference =
+        cleanReferenceText(appliedAdminBookingSnapshotReferenceRef.current) ||
+        cleanReferenceText(loadedBookingIdRef.current);
+
+      if (currentBookingReference !== bookingReference) {
+        return;
+      }
 
       setAdminDriverOtsPhotoProofReadState({
         bookingReference,
@@ -20463,6 +20490,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         status: "loaded",
       });
     } catch (error) {
+      const currentBookingReference =
+        cleanReferenceText(appliedAdminBookingSnapshotReferenceRef.current) ||
+        cleanReferenceText(loadedBookingIdRef.current);
+
+      if (currentBookingReference !== bookingReference) {
+        return;
+      }
+
       setAdminDriverOtsPhotoProofReadState({
         bookingReference,
         latestProof: null,
@@ -20507,6 +20542,13 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
     try {
       const loadedDriverStatuses = await loadAdminDriverJobStatusRead(bookingReference);
+      const currentBookingReference =
+        cleanReferenceText(appliedAdminBookingSnapshotReferenceRef.current) ||
+        cleanReferenceText(loadedBookingIdRef.current);
+
+      if (currentBookingReference !== bookingReference) {
+        return;
+      }
 
       void syncBookingCompletedStatusFromDriverReport(
         bookingReference,
@@ -20529,6 +20571,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       });
       void refreshAdminDriverOtsPhotoProofRead(bookingReference);
     } catch (error) {
+      const currentBookingReference =
+        cleanReferenceText(appliedAdminBookingSnapshotReferenceRef.current) ||
+        cleanReferenceText(loadedBookingIdRef.current);
+
+      if (currentBookingReference !== bookingReference) {
+        return;
+      }
+
       setAdminDriverJobStatusReadState({
         bookingReference,
         latestStatus: null,
@@ -25160,14 +25210,39 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
     return currentIndex >= 0 && statusIndex >= 0 && currentIndex >= statusIndex;
   };
-  const adminDriverJobStatusLatest = adminDriverJobStatusReadState.latestStatus;
+  const adminDriverJobReadoutReference = cleanReferenceText(
+    dispatchReleaseWorkflowBookingReference,
+  );
+  const adminDriverJobStatusMatchesLoadedBooking =
+    Boolean(adminDriverJobReadoutReference) &&
+    cleanReferenceText(adminDriverJobStatusReadState.bookingReference) ===
+      adminDriverJobReadoutReference;
+  const adminDriverOtsPhotoProofMatchesLoadedBooking =
+    Boolean(adminDriverJobReadoutReference) &&
+    cleanReferenceText(adminDriverOtsPhotoProofReadState.bookingReference) ===
+      adminDriverJobReadoutReference;
+  const adminDriverJobStatusReadoutMessage = adminDriverJobStatusMatchesLoadedBooking
+    ? adminDriverJobStatusReadState.message?.text
+    : adminDriverJobReadoutReference
+      ? `Loading saved driver status for ${adminDriverJobReadoutReference}...`
+      : "Load saved booking before reading saved driver status.";
+  const adminDriverOtsPhotoProofReadoutMessage = adminDriverOtsPhotoProofMatchesLoadedBooking
+    ? adminDriverOtsPhotoProofReadState.message?.text
+    : adminDriverJobReadoutReference
+      ? `Checking OTS photo proof for ${adminDriverJobReadoutReference}...`
+      : "Load saved booking before reading OTS photo proof.";
+  const adminDriverJobStatusLatest = adminDriverJobStatusMatchesLoadedBooking
+    ? adminDriverJobStatusReadState.latestStatus
+    : null;
   const adminDriverJobStatusLatestLabel = adminDriverJobStatusDisplayLabel(
     adminDriverJobStatusLatest?.status_value,
   );
   const adminDriverJobStatusLatestTime = adminDriverJobStatusTimeLabel(
     adminDriverJobStatusLatest?.occurred_at || adminDriverJobStatusLatest?.created_at,
   );
-  const adminDriverJobStatusHistory = adminDriverJobStatusReadState.statuses.slice(0, 3);
+  const adminDriverJobStatusHistory = adminDriverJobStatusMatchesLoadedBooking
+    ? adminDriverJobStatusReadState.statuses.slice(0, 3)
+    : [];
   const adminDriverJobStatusHistorySummary =
     adminDriverJobStatusHistory.length > 0
       ? adminDriverJobStatusHistory
@@ -25179,7 +25254,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           )
           .join(" | ")
       : "No saved history loaded.";
-  const adminDriverOtsPhotoProofLatest = adminDriverOtsPhotoProofReadState.latestProof;
+  const adminDriverOtsPhotoProofLatest = adminDriverOtsPhotoProofMatchesLoadedBooking
+    ? adminDriverOtsPhotoProofReadState.latestProof
+    : null;
   const adminDriverOtsPhotoProofLatestTime = adminDriverJobStatusTimeLabel(
     adminDriverOtsPhotoProofLatest?.uploaded_at,
   );
@@ -38657,8 +38734,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       className="mt-0.5 break-words leading-3 sm:leading-4"
                       data-admin-driver-job-status-readout-message="true"
                     >
-                      {adminDriverJobStatusReadState.message?.text ||
-                        "Load saved booking before reading saved driver status."}
+                      {adminDriverJobStatusReadoutMessage}
                     </p>
                   </div>
                   <div className="flex shrink-0 flex-wrap justify-end gap-1">
@@ -38754,8 +38830,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                         className="mt-0.5 break-words leading-3 sm:leading-4"
                         data-admin-driver-ots-photo-proof-readout-detail="true"
                       >
-                        {adminDriverOtsPhotoProofReadState.message?.text ||
-                          adminDriverOtsPhotoProofLabel}
+                        {adminDriverOtsPhotoProofReadoutMessage || adminDriverOtsPhotoProofLabel}
                       </p>
                       {adminDriverOtsPhotoProofLatest ? (
                         <p className="mt-0.5 break-words leading-3 sm:leading-4">
@@ -41709,8 +41784,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                         Saved driver status
                       </p>
                       <p className="mt-0.5 break-words" data-admin-driver-job-status-readout-message="true">
-                        {adminDriverJobStatusReadState.message?.text ||
-                          "Load saved booking before reading saved driver status."}
+                        {adminDriverJobStatusReadoutMessage}
                       </p>
                     </div>
                     <button
@@ -41766,8 +41840,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                         className="mt-0.5 break-words"
                         data-admin-driver-ots-photo-proof-visible-detail="true"
                       >
-                        {adminDriverOtsPhotoProofReadState.message?.text ||
-                          adminDriverOtsPhotoProofLabel}
+                        {adminDriverOtsPhotoProofReadoutMessage || adminDriverOtsPhotoProofLabel}
                       </p>
                       {adminDriverOtsPhotoProofLatest ? (
                         <p className="mt-0.5 break-words">

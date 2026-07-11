@@ -38646,7 +38646,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               </div>
               <div
                 className="mt-2 rounded-md border border-lime-200 bg-white/80 p-1.5 text-[10px] leading-3 text-lime-950 sm:text-[11px] sm:leading-4"
-                data-admin-driver-job-status-readout="true"
+                data-admin-driver-job-status-readout-day-of-trip-detail="true"
               >
                 <div className="flex items-start justify-between gap-1">
                   <div className="min-w-0">
@@ -38664,7 +38664,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   <div className="flex shrink-0 flex-wrap justify-end gap-1">
                     <button
                       className="rounded border border-lime-300 bg-white px-2 py-0.5 text-[9px] font-semibold text-lime-950 transition hover:bg-lime-50 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[10px]"
-                      data-admin-driver-job-status-refresh="true"
+                      data-admin-driver-job-status-day-of-trip-refresh="true"
                       disabled={
                         !clean(dispatchReleaseWorkflowBookingReference) ||
                         adminDriverJobStatusReadState.status === "loading"
@@ -41699,6 +41699,56 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     then Copy Link and send it to the driver.
                   </div>
                 ) : null}
+                <div
+                  className="mb-2 rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-950"
+                  data-admin-driver-job-status-readout="true"
+                >
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="font-semibold" data-admin-driver-job-status-readout-title="true">
+                        Saved driver status
+                      </p>
+                      <p className="mt-0.5 break-words" data-admin-driver-job-status-readout-message="true">
+                        {adminDriverJobStatusReadState.message?.text ||
+                          "Load saved booking before reading saved driver status."}
+                      </p>
+                    </div>
+                    <button
+                      className="min-h-8 shrink-0 rounded-md border border-indigo-300 bg-white px-2.5 py-1 text-xs font-semibold text-indigo-950 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                      data-admin-driver-job-status-refresh="true"
+                      disabled={
+                        !clean(dispatchReleaseWorkflowBookingReference) ||
+                        adminDriverJobStatusReadState.status === "loading"
+                      }
+                      onClick={() => {
+                        void refreshAdminDriverJobStatusRead();
+                      }}
+                      type="button"
+                    >
+                      {adminDriverJobStatusReadState.status === "loading" ? "Checking" : "Refresh status"}
+                    </button>
+                  </div>
+                  <div className="mt-2 grid gap-2 border-t border-indigo-200 pt-2 sm:grid-cols-3">
+                    <div data-admin-driver-job-status-readout-item="latest-status">
+                      <p className="font-semibold">Latest</p>
+                      <p data-admin-driver-job-status-readout-detail="latest-status">
+                        {adminDriverJobStatusLatestLabel}
+                      </p>
+                    </div>
+                    <div data-admin-driver-job-status-readout-item="status-time">
+                      <p className="font-semibold">Status time</p>
+                      <p data-admin-driver-job-status-readout-detail="status-time">
+                        {adminDriverJobStatusLatest ? adminDriverJobStatusLatestTime : "Time not recorded"}
+                      </p>
+                    </div>
+                    <div data-admin-driver-job-status-readout-item="status-history">
+                      <p className="font-semibold">History</p>
+                      <p data-admin-driver-job-status-readout-detail="status-history">
+                        {adminDriverJobStatusHistorySummary}
+                      </p>
+                    </div>
+                  </div>
+                </div>
                 <div
                   className={`mb-2 rounded-md border px-3 py-2 text-xs ${
                     adminDriverOtsPhotoProofLatest

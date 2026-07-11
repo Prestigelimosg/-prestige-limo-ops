@@ -419,6 +419,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Admin Dispatch has one compact Dispatch Live Dispatch Map runtime control for the active jobs list; the old selected-job live map control is not rendered inside the Day-of-Trip Dispatch Monitor.
 - Creating a driver job link now auto-authorizes live movement for that booking by opening the existing admin live-location runtime allowlist after the link row is saved.
 - The visible Driver Job Link panel no longer exposes the manual `Enable Live Location` button; the panel stays limited to `Create Link`, `Copy Link`, `Revoke`, and useful status copy.
+- The existing saved driver-status read now renders directly in the visible Driver Job Link panel for the exact loaded booking, with Latest, Status time, History, and one guarded refresh action. The broader legacy Day-of-Trip monitor remains a separate detailed readiness lane; no second status API or write path was added. Focused guard: `scripts/test-driver-job-status-visible-link-panel-guard.mjs`.
 - The Dispatch Live Dispatch Map opens live movement for the active job references in one operator click through `/api/admin-live-location-runtime` instead of requiring a selected booking to be added manually.
 - Runtime control keeps existing `driver_live_location_allowed_job_references`, removes duplicates, and caps the selected booking list at 50 references.
 - Driver `Share Location` first calls `GET /api/driver-job/[token]/live-location` for server readiness; Chrome GPS is requested only after that readiness check passes.

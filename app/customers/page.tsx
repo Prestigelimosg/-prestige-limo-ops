@@ -245,6 +245,8 @@ type UnbilledCustomerRow = {
   billingBreakdown?: string;
   customerFolderHref: string;
   customerId: string;
+  companyId: number | null;
+  bookerId: number | null;
   customerName: string;
   dateLabel: string;
   invoiceLineDescription?: string;
@@ -493,6 +495,7 @@ type RegularCustomerMockSaveReview = {
 };
 
 type RegularCustomerSavedBookingReadRecord = {
+  booker_id?: number | null;
   account_scope_key?: string | null;
   account_scope_label?: string | null;
   admin_status?: string | null;
@@ -504,6 +507,7 @@ type RegularCustomerSavedBookingReadRecord = {
   child_seat_required?: boolean | null;
   customer_account?: string | null;
   customer_id?: string | null;
+  company_id?: number | null;
   customer_price_amount?: number | null;
   customer_price_override_reason?: string | null;
   customer_rate?: number | null;
@@ -538,6 +542,7 @@ type CustomerFolderExactBookingServiceItem = {
 };
 
 type CustomerFolderExactBookingRecord = {
+  booker_id?: number | null;
   admin_internal_status?: string | null;
   booking_reference?: string | null;
   cancellation_review_status?: string | null;
@@ -548,6 +553,7 @@ type CustomerFolderExactBookingRecord = {
   customer_display_name?: string | null;
   customer_facing_status?: string | null;
   customer_id?: number | string | null;
+  company_id?: number | null;
   driver_contact?: string | null;
   driver_name?: string | null;
   driver_plate_number?: string | null;
@@ -1917,6 +1923,8 @@ function savedBookingUnbilledRow(
         : "Closeout ready from saved booking. Enter the approved customer amount before previewing or issuing."),
     customerFolderHref: "",
     customerId,
+    companyId: booking.company_id ?? null,
+    bookerId: booking.booker_id ?? null,
     customerName,
     dateLabel: savedBookingDateLabel(booking),
     invoiceLineDescription: `${billableServiceLabel} - ${reference}`,
@@ -5925,6 +5933,7 @@ export default function MockCustomerDashboardPage() {
       billingMonthLabel: formatInvoiceMonth(new Date()),
       customerEmail: customerInvoiceRecipientEmail,
       customerId: customerInvoicePrepRow.customerId,
+      bookerId: customerInvoicePrepRow.bookerId,
       customerName: customerInvoicePrepRow.customerName,
       documentState,
       documentType: customerInvoicePreview.documentType,

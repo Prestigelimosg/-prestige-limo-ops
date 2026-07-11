@@ -19,6 +19,7 @@ export type AdminCustomerSavedBookingsReadParams = {
 };
 
 export type AdminCustomerSavedBookingSafeRecord = {
+  booker_id: number | null;
   account_scope_key: string;
   account_scope_label: string | null;
   admin_status: string | null;
@@ -26,6 +27,7 @@ export type AdminCustomerSavedBookingSafeRecord = {
   booking_reference: string;
   customer_account: string | null;
   customer_id: string | null;
+  company_id: number | null;
   customer_status: string | null;
   dropoff_location: string | null;
   passenger_name: string | null;
@@ -108,6 +110,12 @@ function textOrNull(value: unknown) {
 
 function normalizeToken(value: string) {
   return value.replace(/([a-z])([A-Z])/g, "$1_$2").replace(/[^a-z0-9]+/gi, "_").toLowerCase();
+}
+
+function safeIdentityId(value: unknown) {
+  const parsed = Number(value);
+
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 function normalizeAccountScopeKey(value: string) {
@@ -232,6 +240,7 @@ function toSafeSavedBooking(
   const accountScope = accountScopeFromBooking(booking);
 
   return {
+    booker_id: safeIdentityId(booking.booker_id),
     account_scope_key: accountScope.key,
     account_scope_label: accountScope.label,
     admin_status: safeStatus(booking.admin_internal_status),
@@ -239,6 +248,7 @@ function toSafeSavedBooking(
     booking_reference: bookingReference,
     customer_account: safeText(booking.customer_display_name),
     customer_id: safeText(booking.customer_id, 120),
+    company_id: safeIdentityId(booking.company_id),
     customer_status: safeStatus(booking.customer_facing_status),
     dropoff_location: safeText(booking.dropoff_location, 220),
     passenger_name: safeText(booking.passenger_name || booking.contact_display_name, 140),

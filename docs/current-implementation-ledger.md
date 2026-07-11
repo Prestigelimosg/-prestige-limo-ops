@@ -35,6 +35,12 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Company/customer identity alone must never authorize PA-private invoice access.
 - Focused guard: `scripts/test-customer-invoice-booker-identity-schema-guard.mjs`.
 
+### Admin Invoice Booker Identity Propagation
+
+- Exact nullable `company_id` and `booker_id` now flow from the established admin saved-booking DTO through unbilled/preparation rows into the invoice request body.
+- This pass does not yet enforce or persist the invoice booker ID; existing issuance behavior remains unchanged until the following guarded enforcement pass.
+- Focused guard: `scripts/test-admin-invoice-booker-identity-propagation-guard.mjs`.
+
 ### Operational Booking Verified CRM Identity Persistence
 
 - The established `/api/admin-bookings` persistence contract and Supabase adapter now retain nullable verified `company_id`, `booker_id`, and `traveler_id` values already supported by the existing `bookings` schema.

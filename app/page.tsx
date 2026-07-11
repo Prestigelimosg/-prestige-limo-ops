@@ -42853,8 +42853,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 <button
                   className="h-9 rounded-md border border-stone-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:text-slate-400"
                   data-dashboard-review-new-booking-requests="true"
-                  disabled={dashboardNewBookingRequestAttentionCount === 0}
-	                  onClick={() => openCustomerBookingRequestsReview()}
+                  disabled={customerBookingRequestDisplayItems.length === 0}
+                  onClick={() => openCustomerBookingRequestsReview()}
                   type="button"
                 >
                   Review

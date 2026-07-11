@@ -37,6 +37,7 @@ for (const fragment of [
   "adminBookingChangeRequestMergeIntoBookingForm",
   "buildAdminBookingCancellationRequestApplyPayload",
   "handleAdminBookingChangeRequestCancelDecision",
+  "handleAdminBookingChangeRequestCloseDecision",
   "handleAdminBookingChangeRequestApply",
   'data-admin-booking-change-request-review-actions="true"',
   'data-admin-booking-change-request-review-action="accept"',
@@ -160,13 +161,46 @@ for (const fragment of [
   'customer_facing_status: "cancelled"',
   'cancellation_review_status: "cancelled"',
   'request_review_status: "approved"',
-  'action === "accept" ? "Accept + Cal" : action === "reject" ? "Reject" : "Dismiss"',
+  'const actionLabel = "Accept + Cal"',
   "Booking marked cancelled in Completed / History; Google Calendar auto-synced",
-  'handleAdminBookingChangeRequestCancelDecision(notification, "reject")',
-  'handleAdminBookingChangeRequestCancelDecision(notification, "dismiss")',
+  'handleAdminBookingChangeRequestCloseDecision(notification, "reject")',
+  'handleAdminBookingChangeRequestCloseDecision(notification, "dismiss")',
+  "handleAdminBookingChangeRequestCancelDecision(notification)",
   'selectAppTab("completed")',
 ]) {
   assertIncludes(adminPage, fragment, `admin cancellation apply safety ${fragment}`);
+}
+
+const closeDecisionBlock = sliceBetween(
+  adminPage,
+  "async function handleAdminBookingChangeRequestCloseDecision",
+  "async function handleAdminBookingChangeRequestCancelDecision",
+);
+for (const fragment of [
+  'updateAdminAppNotificationStatus(notificationId, "archived")',
+  "Booking and Google Calendar were not changed.",
+  "No external message was sent.",
+]) {
+  assertIncludes(closeDecisionBlock, fragment, `admin request close-only path ${fragment}`);
+}
+for (const forbidden of [
+  'fetch("/api/admin-bookings"',
+  "autoSyncSavedBookingGoogleCalendar",
+  "buildAdminBookingCancellationRequestApplyPayload",
+  "buildAdminBookingPersistencePayload",
+  "loadBlockingCustomerInvoicesForAmendment",
+  'selectAppTab("completed")',
+]) {
+  assertExcludes(closeDecisionBlock, forbidden, `admin request close-only path ${forbidden}`);
+}
+
+const cancelDecisionBlock = sliceBetween(
+  adminPage,
+  "async function handleAdminBookingChangeRequestCancelDecision",
+  "async function handleAdminBookingChangeRequestApply",
+);
+for (const forbidden of ['action: "reject"', 'action: "dismiss"', 'action === "reject"']) {
+  assertExcludes(cancelDecisionBlock, forbidden, `admin cancellation apply path ${forbidden}`);
 }
 
 const changeRequestApplyBlock = sliceBetween(

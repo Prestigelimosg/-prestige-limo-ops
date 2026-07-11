@@ -14017,9 +14017,69 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     }));
   }
 
+  async function handleAdminBookingChangeRequestCloseDecision(
+    notification: AdminAppNotificationRecord,
+    action: "dismiss" | "reject",
+  ) {
+    const notificationId = clean(notification.id);
+    const context = adminAppNotificationChangeRequestContext(notification);
+
+    if (!notificationId || !context) {
+      setAdminAppNotificationReadState((current) => ({
+        ...current,
+        message: {
+          tone: "error",
+          text: "Customer change request close decision needs a saved notification id and booking reference.",
+        },
+      }));
+      return;
+    }
+
+    const actionLabel = action === "reject" ? "Reject" : "Dismiss";
+    const requestKindLabel = adminBookingChangeRequestKindLabel(context);
+
+    setAdminBookingChangeRequestReviewAction({
+      action,
+      notificationId,
+    });
+    setAdminAppNotificationReadState((current) => ({
+      ...current,
+      message: {
+        tone: "info",
+        text: `${actionLabel}: closing ${requestKindLabel} request for ${context.bookingReference} without changing the booking or Google Calendar...`,
+      },
+    }));
+
+    try {
+      const updatedNotification = await updateAdminAppNotificationStatus(notificationId, "archived");
+      const handledId = clean(updatedNotification.id) || notificationId;
+      const message = {
+        tone: "success",
+        text: `${actionLabel} completed for ${context.bookingReference}; request archived. Booking and Google Calendar were not changed. No external message was sent.`,
+      } satisfies Message;
+
+      removeHandledAdminAppNotification(handledId, message);
+      setMessage(message);
+      setAdminBookingPersistenceMessage(message);
+    } catch (error) {
+      setAdminAppNotificationReadState((current) => ({
+        ...current,
+        message: {
+          tone: "error",
+          text:
+            error instanceof Error
+              ? error.message
+              : `${actionLabel} could not close the request. Booking and Google Calendar were not changed.`,
+        },
+        status: "error",
+      }));
+    } finally {
+      setAdminBookingChangeRequestReviewAction(null);
+    }
+  }
+
   async function handleAdminBookingChangeRequestCancelDecision(
     notification: AdminAppNotificationRecord,
-    action: "accept" | "dismiss" | "reject",
   ) {
     const notificationId = clean(notification.id);
     const context = adminAppNotificationChangeRequestContext(notification);
@@ -14035,11 +14095,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       return;
     }
 
-    const actionLabel = action === "accept" ? "Accept + Cal" : action === "reject" ? "Reject" : "Dismiss";
+    const actionLabel = "Accept + Cal";
     const requestKindLabel = adminBookingChangeRequestKindLabel(context);
 
     setAdminBookingChangeRequestReviewAction({
-      action,
+      action: "accept",
       notificationId,
     });
     setAdminAppNotificationReadState((current) => ({
@@ -14203,7 +14263,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     }
 
     if (isCancellationRequest) {
-      await handleAdminBookingChangeRequestCancelDecision(notification, "accept");
+      await handleAdminBookingChangeRequestCancelDecision(notification);
       return;
     }
 
@@ -43154,7 +43214,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                             className="h-8 rounded-md border border-rose-200 bg-white px-2 text-xs font-semibold text-rose-800 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:text-slate-400"
                             data-dashboard-change-cancel-request-action="reject"
                             disabled={actionDisabled}
-                            onClick={() => handleAdminBookingChangeRequestCancelDecision(notification, "reject")}
+                            onClick={() => handleAdminBookingChangeRequestCloseDecision(notification, "reject")}
                             type="button"
                           >
                             {activeChangeRequestAction === "reject" ? "Rejecting..." : "Reject"}
@@ -43163,7 +43223,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                             className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
                             data-dashboard-change-cancel-request-action="dismiss"
                             disabled={actionDisabled}
-                            onClick={() => handleAdminBookingChangeRequestCancelDecision(notification, "dismiss")}
+                            onClick={() => handleAdminBookingChangeRequestCloseDecision(notification, "dismiss")}
                             type="button"
                           >
                             {activeChangeRequestAction === "dismiss" ? "Dismissing..." : "Dismiss"}
@@ -43480,7 +43540,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                               className="h-7 rounded-md border border-rose-200 bg-white px-2 text-xs font-semibold text-rose-800 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:text-slate-400"
                               data-admin-booking-change-request-review-action="reject"
                               disabled={changeRequestActionDisabled}
-                              onClick={() => handleAdminBookingChangeRequestCancelDecision(notification, "reject")}
+                              onClick={() => handleAdminBookingChangeRequestCloseDecision(notification, "reject")}
                               type="button"
                             >
                               {activeChangeRequestAction === "reject" ? "Rejecting..." : "Reject"}
@@ -43489,7 +43549,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                               className="h-7 rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
                               data-admin-booking-change-request-review-action="dismiss"
                               disabled={changeRequestActionDisabled}
-                              onClick={() => handleAdminBookingChangeRequestCancelDecision(notification, "dismiss")}
+                              onClick={() => handleAdminBookingChangeRequestCloseDecision(notification, "dismiss")}
                               type="button"
                             >
                               {activeChangeRequestAction === "dismiss" ? "Dismissing..." : "Dismiss"}

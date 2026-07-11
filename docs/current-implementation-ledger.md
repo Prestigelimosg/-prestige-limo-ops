@@ -12,6 +12,13 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Customer Change Request Reject/Dismiss Safety
+
+- The established Urgent / Customer Requests lane keeps one set of `Accept + Cal`, `Reject`, and `Dismiss` actions; no duplicate request panel or handler lane was added.
+- `Reject` and `Dismiss` now archive only the exact request notification. They do not write the booking, change its status, call Google Calendar, inspect invoice blockers, or send an external message.
+- `Accept + Cal` remains the only review action that may apply an amendment or an approved cancellation through the existing guarded booking and calendar paths.
+- Focused guards: `scripts/test-admin-booking-change-request-review-apply-guard.mjs` and `scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs`.
+
 ### PA Customer Access-Account Schema Foundation
 
 - Additive migration `202607110002_customer_access_accounts_pa_identity.sql` adds nullable verified `company_id` and `booker_id` relationships to existing customer access accounts.

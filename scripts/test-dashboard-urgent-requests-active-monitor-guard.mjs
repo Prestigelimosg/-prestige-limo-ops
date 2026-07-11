@@ -208,9 +208,9 @@ for (const fragment of [
   'data-dashboard-change-cancel-request-action="accept"',
   "handleAdminBookingChangeRequestApply(notification)",
   'data-dashboard-change-cancel-request-action="reject"',
-  'handleAdminBookingChangeRequestCancelDecision(notification, "reject")',
+  'handleAdminBookingChangeRequestCloseDecision(notification, "reject")',
   'data-dashboard-change-cancel-request-action="dismiss"',
-  'handleAdminBookingChangeRequestCancelDecision(notification, "dismiss")',
+  'handleAdminBookingChangeRequestCloseDecision(notification, "dismiss")',
   "No urgent booking requests, Driver TBC jobs, or customer change/cancel requests.",
 ]) {
   assertIncludes(dashboardUrgentPanel, fragment, `dashboard urgent panel fragment ${fragment}`);

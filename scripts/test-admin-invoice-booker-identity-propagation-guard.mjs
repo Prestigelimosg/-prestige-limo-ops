@@ -15,9 +15,20 @@ for (const fragment of [
   "bookerId: customerInvoicePrepRow.bookerId",
   "if (!customerInvoicePrepRow.bookerId)",
   "Assign a verified PA / booker to the exact saved booking before issuing.",
+  'data-plain-invoice-booking-reference="true"',
+  "updatePlainInvoiceSavedBooking(",
+  "bookerId: plainInvoiceForm.bookerId",
+  "bookingReference: plainInvoiceForm.bookingReference",
+  "Select an exact saved booking with a verified PA / booker before issuing Create Invoice.",
+  "Select an exact saved booking with a verified PA / booker before emailing Create Invoice.",
 ]) assert.ok((read + page).includes(fragment), `Missing ${fragment}`);
 
 console.log("Admin invoice booker identity propagation guard passed.");
 assert.ok(persistence.includes("bookerId?: unknown"));
 assert.ok(persistence.includes("booker_id: sanitized.data.bookerId"));
+assert.ok(persistence.includes('sanitized.data.documentState === "issued"'));
+assert.ok(persistence.includes('.from("bookings")'));
+assert.ok(persistence.includes('.eq("booking_reference", sanitized.data.bookingReference)'));
+assert.ok(persistence.includes('.eq("customer_id", sanitized.data.customerId)'));
+assert.ok(persistence.includes('.eq("booker_id", sanitized.data.bookerId)'));
 assert.ok(persistence.includes(", booker_id, document_type"));

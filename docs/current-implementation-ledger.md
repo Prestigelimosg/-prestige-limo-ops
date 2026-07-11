@@ -48,6 +48,9 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Invoice persistence stores a supplied positive `bookerId` in the new `booker_id` column. Missing IDs remain nullable for legacy admin compatibility until all issuance lanes are covered.
 - Focused guard: `scripts/test-admin-invoice-booker-identity-propagation-guard.mjs`.
 - The established prepared-booking Issue action now blocks before confirmation/API write when the exact saved booking lacks verified `bookerId`. Draft saving remains nullable and admin-only.
+- The existing manual Create Invoice lane reuses loaded saved bookings through one exact-booking selector. Its shared Draft/Issue/Email request builder carries the selected booking's verified `bookerId`; Draft remains admin-only, while Issue and Email stop before confirmation or persistence when exact PA ownership is missing.
+- Editing the invoice reference or changing its CRM account clears the exact-booking/PA link so stale ownership cannot be reused.
+- The existing invoice persistence route independently verifies every issued invoice's `bookingReference + customerId + bookerId` against the saved booking before generating a number or PDF; altered or stale ownership claims fail closed. Admin-only drafts remain nullable.
 
 ### Operational Booking Verified CRM Identity Persistence
 

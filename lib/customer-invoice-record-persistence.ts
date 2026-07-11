@@ -48,6 +48,7 @@ export type CustomerInvoiceCreateInput = {
   amountCents?: unknown;
   billingMonthLabel?: unknown;
   bookerId?: unknown;
+  bookingReference?: unknown;
   creditNoteReason?: unknown;
   customerEmail?: unknown;
   customerId?: unknown;
@@ -416,6 +417,7 @@ function sanitizeCreateInput(input: CustomerInvoiceCreateInput): CustomerInvoice
   amountCents: number;
   billingMonthLabel: string;
   bookerId: number | null;
+  bookingReference: string | null;
   creditNoteReason: string | null;
   customerEmail: string | null;
   customerId: string;
@@ -432,6 +434,7 @@ function sanitizeCreateInput(input: CustomerInvoiceCreateInput): CustomerInvoice
 }> {
   const amountCents = safeAmountCents(input.amountCents);
   const bookerId = positiveIdentityId(input.bookerId);
+  const bookingReference = safeText(input.bookingReference, 160);
   const customerId = safeText(input.customerId, 160);
   const customerName = safeText(input.customerName, 180);
   const dueDate = dateFromDueDateIso(input.dueDateIso);
@@ -477,6 +480,7 @@ function sanitizeCreateInput(input: CustomerInvoiceCreateInput): CustomerInvoice
       amountCents,
       billingMonthLabel: safeText(input.billingMonthLabel, 80) || formatInvoiceMonth(new Date()),
       bookerId,
+      bookingReference,
       creditNoteReason: safeText(input.creditNoteReason, 240),
       customerEmail: safeEmail(input.customerEmail),
       customerId,
@@ -616,6 +620,23 @@ export async function createCustomerInvoiceRecord(
   }
 
   const invoiceClient = client ?? createServerClient();
+  if (sanitized.data.documentState === "issued") {
+    if (!sanitized.data.bookerId || !sanitized.data.bookingReference) {
+      return safeFailure(safeValidationError, 400);
+    }
+
+    const { data: ownedBooking, error: ownedBookingError } = await invoiceClient
+      .from("bookings")
+      .select("booking_reference")
+      .eq("booking_reference", sanitized.data.bookingReference)
+      .eq("customer_id", sanitized.data.customerId)
+      .eq("booker_id", sanitized.data.bookerId)
+      .maybeSingle();
+
+    if (ownedBookingError || !ownedBooking) {
+      return safeFailure(safeValidationError, 403);
+    }
+  }
   const issueDate = new Date();
   const invoiceDateKey = issueDate.toISOString().slice(0, 10).replace(/-/g, "");
   const amountLabel = formatInvoiceAmount(sanitized.data.amountCents);

@@ -429,6 +429,8 @@ type PlainInvoiceForm = {
   amount: string;
   billToEmail: string;
   billToName: string;
+  bookerId: number | null;
+  bookingReference: string;
   cardFeeApplies: boolean;
   cardPaymentEnabled: boolean;
   crmCustomerId: string;
@@ -1054,6 +1056,8 @@ function plainInvoiceInitialForm(): PlainInvoiceForm {
     amount: "",
     billToEmail: "",
     billToName: "",
+    bookerId: null,
+    bookingReference: "",
     cardFeeApplies: false,
     cardPaymentEnabled: false,
     crmCustomerId: "",
@@ -2579,6 +2583,16 @@ export default function MockCustomerDashboardPage() {
       ) || null,
     [plainInvoiceCrmAccountOptions, selectedPlainInvoiceCrmFolderKey],
   );
+  const plainInvoiceSavedBookingOptions = useMemo(() => {
+    const selectedCustomerId = normalizeCustomerFolderMatch(plainInvoiceForm.crmCustomerId);
+    if (!selectedCustomerId) return [];
+
+    return regularCustomerSavedBookingReadState.savedBookings.filter(
+      (booking) =>
+        normalizeCustomerFolderMatch(savedBookingCustomerId(booking)) === selectedCustomerId &&
+        Boolean(savedBookingReference(booking)),
+    );
+  }, [plainInvoiceForm.crmCustomerId, regularCustomerSavedBookingReadState.savedBookings]);
   const selectedCustomerFolderFinderRow = useMemo(
     () =>
       customerFolderIndexRows.find(
@@ -3419,6 +3433,8 @@ export default function MockCustomerDashboardPage() {
       plainInvoiceForm.billToEmail.trim(),
       crmCustomerId,
       crmCustomerName,
+      plainInvoiceForm.bookingReference,
+      plainInvoiceForm.bookerId ?? "",
       reference,
       service,
       plainInvoiceForm.route.trim(),
@@ -5075,6 +5091,8 @@ export default function MockCustomerDashboardPage() {
       amount: monthlyBillingInvoiceAmountInput(firstRow),
       billToEmail: "",
       billToName: group.customerName,
+      bookerId: firstRow.bookerId,
+      bookingReference: firstRow.reference,
       cardFeeApplies: false,
       cardPaymentEnabled: false,
       crmCustomerId: group.customerId,
@@ -5351,6 +5369,18 @@ export default function MockCustomerDashboardPage() {
       ) {
         nextForm.crmCustomerId = "";
         nextForm.crmCustomerName = "";
+        nextForm.bookerId = null;
+        nextForm.bookingReference = "";
+      }
+
+      if (
+        field === "reference" &&
+        typeof value === "string" &&
+        currentForm.bookingReference &&
+        value.trim() !== currentForm.bookingReference
+      ) {
+        nextForm.bookerId = null;
+        nextForm.bookingReference = "";
       }
 
       return nextForm;
@@ -5367,6 +5397,8 @@ export default function MockCustomerDashboardPage() {
       billToName: selectedAccount?.customerName || currentForm.billToName,
       crmCustomerId: selectedAccount?.customerId || "",
       crmCustomerName: selectedAccount?.customerName || "",
+      bookerId: null,
+      bookingReference: "",
     }));
 
     setPlainInvoiceFeedback(
@@ -5376,6 +5408,27 @@ export default function MockCustomerDashboardPage() {
     );
     setPlainInvoiceFeedbackTone("info");
     setPlainInvoiceCrmPickerOpen(false);
+  }
+
+  function updatePlainInvoiceSavedBooking(bookingReference: string) {
+    const selectedBooking = plainInvoiceSavedBookingOptions.find(
+      (booking) => savedBookingReference(booking) === bookingReference,
+    );
+    setPlainInvoiceForm((currentForm) => ({
+      ...currentForm,
+      bookerId: selectedBooking?.booker_id ?? null,
+      bookingReference: selectedBooking ? bookingReference : "",
+      reference: selectedBooking ? bookingReference : currentForm.reference,
+    }));
+    setPlainInvoicePreview(null);
+    setPlainInvoiceFeedback(
+      selectedBooking
+        ? selectedBooking.booker_id
+          ? `Exact booking ${bookingReference} linked to its verified PA. Preview again before Draft, Issue, or Email.`
+          : `Exact booking ${bookingReference} has no verified PA. Draft remains admin-only; Issue and Email are blocked.`
+        : "Choose an exact saved booking before issuing or emailing this invoice.",
+    );
+    setPlainInvoiceFeedbackTone(selectedBooking && !selectedBooking.booker_id ? "error" : "info");
   }
 
   function updatePlainInvoiceCrmSearchTerm(value: string) {
@@ -5547,6 +5600,8 @@ export default function MockCustomerDashboardPage() {
           plainInvoicePreview.customerName,
         ),
       customerName: plainInvoicePreview.customerName,
+      bookerId: plainInvoiceForm.bookerId,
+      bookingReference: plainInvoiceForm.bookingReference,
       documentState,
       documentType: "invoice" as CustomerBillingDocumentType,
       dueDateIso: plainInvoicePreview.dueDateIso,
@@ -5630,6 +5685,13 @@ export default function MockCustomerDashboardPage() {
       return;
     }
 
+    if (!plainInvoiceForm.bookingReference || !plainInvoiceForm.bookerId) {
+      setPlainInvoiceFeedback("Select an exact saved booking with a verified PA / booker before issuing Create Invoice.");
+      setPlainInvoiceFeedbackTone("error");
+      document.querySelector<HTMLElement>("[data-plain-invoice-booking-reference='true']")?.focus();
+      return;
+    }
+
     if (
       !confirmInvoiceSafetyAction({
         action: "Issue Create Invoice",
@@ -5707,6 +5769,13 @@ export default function MockCustomerDashboardPage() {
     if (!requestBody) {
       setPlainInvoiceFeedback("Preview first, then email Create Invoice.");
       setPlainInvoiceFeedbackTone("error");
+      return;
+    }
+
+    if (!plainInvoiceForm.bookingReference || !plainInvoiceForm.bookerId) {
+      setPlainInvoiceFeedback("Select an exact saved booking with a verified PA / booker before emailing Create Invoice.");
+      setPlainInvoiceFeedbackTone("error");
+      document.querySelector<HTMLElement>("[data-plain-invoice-booking-reference='true']")?.focus();
       return;
     }
 
@@ -5934,6 +6003,7 @@ export default function MockCustomerDashboardPage() {
       customerEmail: customerInvoiceRecipientEmail,
       customerId: customerInvoicePrepRow.customerId,
       bookerId: customerInvoicePrepRow.bookerId,
+      bookingReference: customerInvoicePrepRow.reference,
       customerName: customerInvoicePrepRow.customerName,
       documentState,
       documentType: customerInvoicePreview.documentType,
@@ -8879,6 +8949,27 @@ export default function MockCustomerDashboardPage() {
                       {plainInvoiceCrmAccountReadState.status === "loading" ? "Loading" : "Load CRM"}
                     </button>
                   </div>
+                  <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500 sm:col-span-2 xl:col-span-2">
+                    Exact saved booking / PA
+                    <select
+                      className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700 disabled:bg-slate-100 disabled:text-slate-500"
+                      data-plain-invoice-booking-reference="true"
+                      disabled={!plainInvoiceForm.crmCustomerId || plainInvoiceSavedBookingOptions.length === 0}
+                      onChange={(event) => updatePlainInvoiceSavedBooking(event.target.value)}
+                      value={plainInvoiceForm.bookingReference}
+                    >
+                      <option value="">Select exact saved booking</option>
+                      {plainInvoiceSavedBookingOptions.map((booking) => {
+                        const reference = savedBookingReference(booking);
+                        return (
+                          <option key={reference} value={reference}>
+                            {reference} — {booking.account_scope_label || "PA not labelled"}
+                            {booking.booker_id ? "" : " — PA not verified"}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </label>
                   <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
                     Bill to
                     <input

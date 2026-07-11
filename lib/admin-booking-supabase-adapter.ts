@@ -1272,7 +1272,26 @@ async function insertRowsWithFallback(
 async function findOrCreateCustomerId(
   client: SupabaseClient,
   booking: AdminBookingRecordInput,
+  actor: AdminBookingPersistenceAdapterActor,
 ): Promise<AdminBookingResult<DbIdentifier>> {
+  const verifiedCustomerId = dbIdentifierOrNull(booking.customer_id);
+  const verifiedCompanyId = dbIdentifierOrNull(booking.company_id);
+  const verifiedBookerId = dbIdentifierOrNull(booking.booker_id);
+
+  if (
+    actor.boundary_mode === "customer-booking-request-surface" &&
+    actor.actor_role === "system" &&
+    actor.source_surface === "customer_booking_request" &&
+    verifiedCustomerId &&
+    verifiedCompanyId &&
+    verifiedBookerId
+  ) {
+    return {
+      data: verifiedCustomerId,
+      ok: true,
+    };
+  }
+
   const displayName = customerPortalScopedDisplayName(booking);
   const { data: existingRows, error: existingError } = await client
     .from("customers")
@@ -1559,7 +1578,7 @@ export async function createAdminBookingThroughSupabaseAdapter(
   }
 
   const client = clientResult.data;
-  const customerIdResult = await findOrCreateCustomerId(client, input.booking);
+  const customerIdResult = await findOrCreateCustomerId(client, input.booking, actor);
 
   if (!customerIdResult.ok) {
     return customerIdResult;
@@ -1659,7 +1678,7 @@ export async function updateAdminBookingThroughSupabaseAdapter(
   let customerId = existingCustomerId;
 
   if (!customerId || bookingCustomerIdentityChanged(existing, input.booking)) {
-    const customerIdResult = await findOrCreateCustomerId(client, input.booking);
+    const customerIdResult = await findOrCreateCustomerId(client, input.booking, actor);
 
     if (!customerIdResult.ok) {
       return customerIdResult;

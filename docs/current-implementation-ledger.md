@@ -16,7 +16,9 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 - The canonical `/book` form remains the only new-booking request form. Public submissions keep their established behavior.
 - When `/book` is opened from a valid signed-in customer portal session, the existing request route resolves the active access account on the server and persists its verified `customer_id + company_id + booker_id` on every outbound/return request leg.
+- The established persistence adapter preserves that supplied customer ID only for its exact system customer-booking-request actor when the verified company/booker pair is also present; anonymous/public requests keep the existing customer find/create behavior.
 - The browser form never supplies identity IDs. A partial or inactive verified PA identity fails closed, and names, company text, email, phone, or parser text are never converted into authorization IDs.
+- After a successful `/book` response, the existing submit button reads `Submitted` and stays disabled until the customer edits a field; failed submissions remain retryable.
 - Focused guard: `scripts/test-customer-booking-request-pa-identity-guard.mjs`.
 
 ### Customer Change Request Reject/Dismiss Safety

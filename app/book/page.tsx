@@ -1122,10 +1122,10 @@ export default function CustomerBookingPage() {
               <button
                 className="min-h-12 rounded-md bg-slate-950 px-5 py-3 text-base font-semibold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300 disabled:cursor-not-allowed disabled:bg-slate-400"
                 data-customer-booking-submit="true"
-                disabled={submitting}
+                disabled={submitting || Boolean(confirmationStatus)}
                 type="submit"
               >
-                {submitting ? "Submitting..." : "Submit Booking Request"}
+                {confirmationStatus ? "Submitted" : submitting ? "Submitting..." : "Submit Booking Request"}
               </button>
               <div
                 className={`rounded-md border px-3 py-3 text-sm leading-6 ${feedbackClass(feedback.tone)}`}

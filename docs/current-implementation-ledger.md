@@ -26,6 +26,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Partial identity pairs fail closed. Sessions without either ID retain the established `customer_id` filter for compatibility.
 - This does not activate PA sign-in or invoice access; company identity alone never widens customer reads.
 - Focused guard: `scripts/test-customer-saved-bookings-pa-scope-guard.mjs`.
+- Existing reference-bearing sessions hydrate nullable verified IDs from the validated active access-account row before choosing PA versus legacy booking filters.
 
 ### Operational Booking Verified CRM Identity Persistence
 

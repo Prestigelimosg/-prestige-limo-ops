@@ -16,6 +16,8 @@ type CustomerPortalAccessAccountStatus = "active" | "pending_setup" | "revoked" 
 
 export type CustomerPortalAccessAccountRecord = {
   account_status: CustomerPortalAccessAccountStatus;
+  company_id: number | null;
+  booker_id: number | null;
   customer_account_reference: string;
   safe_display_label: string | null;
   version: typeof customerPortalAccessAccountVersion;
@@ -23,7 +25,7 @@ export type CustomerPortalAccessAccountRecord = {
 
 const customerPortalAccessAccountTable = "customer_access_accounts";
 const customerPortalAccessAccountSelect =
-  "customer_account_reference, account_status, safe_display_label";
+  "customer_account_reference, account_status, safe_display_label, company_id, booker_id";
 const safeConfigError = "Customer portal access account configuration is not ready.";
 const safeForbiddenError = "Customer portal access requires an active invited customer account.";
 const safeMutationError = "Customer portal access account update failed safely.";
@@ -122,6 +124,12 @@ function safeDisplayLabel(value: unknown, fallback: string) {
   return includesForbiddenFragment(cleaned) ? fallback : cleaned;
 }
 
+function verifiedIdentityId(value: unknown) {
+  const parsed = Number(value);
+
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
 function safeActor(actor: AdminBookingPersistenceAdapterActor): AdminBookingResult<null> {
   if (
     !actor ||
@@ -207,6 +215,8 @@ function toRecord(row: Record<string, unknown>): CustomerPortalAccessAccountReco
 
   return {
     account_status: accountStatus as CustomerPortalAccessAccountStatus,
+    company_id: verifiedIdentityId(row.company_id),
+    booker_id: verifiedIdentityId(row.booker_id),
     customer_account_reference: customerAccountReference,
     safe_display_label: textOrNull(row.safe_display_label, 160),
     version: customerPortalAccessAccountVersion,

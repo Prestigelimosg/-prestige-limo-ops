@@ -35,3 +35,5 @@ The established allowlisted admin legacy-data route accepts PATCH from a verifie
 Customer access accounts have nullable verified `company_id` and unique non-null `booker_id` foundations. The legacy unique customer-account-reference index must remain until the existing `Copy + App Link` upsert is safely converted to booker identity. Never use company/account reference alone to authorize customer invoices or PA-private bookings.
 
 Customer saved-booking reads support an additive verified `company_id + booker_id` scope. Both IDs are mandatory together; a partial pair must fail closed. Legacy sessions without either ID continue using the existing `customer_id` scope.
+
+Reference-bearing customer sessions hydrate verified company/booker IDs only from the validated active `customer_access_accounts` row. Do not trust client-supplied identity IDs.

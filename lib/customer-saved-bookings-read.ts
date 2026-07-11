@@ -1100,6 +1100,9 @@ export async function loadCustomerSavedBookings(
     if (!activeAccessAccount.ok) {
       return customerSavedBookingsAuthRequiredResult();
     }
+
+    companyId = activeAccessAccount.data.company_id;
+    bookerId = activeAccessAccount.data.booker_id;
   }
 
   const hasCompanyIdentity = Boolean(companyId);

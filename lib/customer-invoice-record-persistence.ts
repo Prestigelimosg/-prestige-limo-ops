@@ -47,6 +47,7 @@ export type CustomerInvoiceStoredRecord = CustomerLocalInvoiceRecord & {
 export type CustomerInvoiceCreateInput = {
   amountCents?: unknown;
   billingMonthLabel?: unknown;
+  bookerId?: unknown;
   creditNoteReason?: unknown;
   customerEmail?: unknown;
   customerId?: unknown;
@@ -118,7 +119,7 @@ const customerInvoiceLegacySelect = [
   "created_at",
   "updated_at",
 ].join(", ");
-const customerInvoiceSelect = `${customerInvoiceLegacySelect}, document_type, document_state, original_invoice_number, credit_note_reason`;
+const customerInvoiceSelect = `${customerInvoiceLegacySelect}, booker_id, document_type, document_state, original_invoice_number, credit_note_reason`;
 const customerInvoiceLegacyPdfSelect =
   "invoice_number, customer_id, pdf_base64, pdf_content_type, pdf_filename";
 const customerInvoicePdfSelect = `${customerInvoiceLegacyPdfSelect}, document_type, document_state`;
@@ -414,6 +415,7 @@ function toStoredRecord(row: UnknownRecord): CustomerInvoiceStoredRecord | null 
 function sanitizeCreateInput(input: CustomerInvoiceCreateInput): CustomerInvoiceResult<{
   amountCents: number;
   billingMonthLabel: string;
+  bookerId: number | null;
   creditNoteReason: string | null;
   customerEmail: string | null;
   customerId: string;
@@ -429,6 +431,7 @@ function sanitizeCreateInput(input: CustomerInvoiceCreateInput): CustomerInvoice
   status: CustomerLocalInvoiceStatus;
 }> {
   const amountCents = safeAmountCents(input.amountCents);
+  const bookerId = positiveIdentityId(input.bookerId);
   const customerId = safeText(input.customerId, 160);
   const customerName = safeText(input.customerName, 180);
   const dueDate = dateFromDueDateIso(input.dueDateIso);
@@ -473,6 +476,7 @@ function sanitizeCreateInput(input: CustomerInvoiceCreateInput): CustomerInvoice
     data: {
       amountCents,
       billingMonthLabel: safeText(input.billingMonthLabel, 80) || formatInvoiceMonth(new Date()),
+      bookerId,
       creditNoteReason: safeText(input.creditNoteReason, 240),
       customerEmail: safeEmail(input.customerEmail),
       customerId,
@@ -502,6 +506,12 @@ function safeFailure<T>(
     status,
     version: customerInvoiceRecordVersion,
   };
+}
+
+function positiveIdentityId(value: unknown) {
+  const parsed = Number(value);
+
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 function duplicateInvoiceError(error: unknown) {
@@ -658,6 +668,7 @@ export async function createCustomerInvoiceRecord(
       amount_cents: invoiceForPdf.amountCents,
       amount_label: invoiceForPdf.amountLabel,
       billing_month_label: invoiceForPdf.billingMonthLabel,
+      booker_id: sanitized.data.bookerId,
       credit_note_reason: sanitized.data.creditNoteReason,
       customer_email: sanitized.data.customerEmail,
       customer_id: invoiceForPdf.customerId,

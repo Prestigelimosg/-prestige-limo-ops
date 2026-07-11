@@ -38,7 +38,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Admin Invoice Booker Identity Propagation
 
 - Exact nullable `company_id` and `booker_id` now flow from the established admin saved-booking DTO through unbilled/preparation rows into the invoice request body.
-- This pass does not yet enforce or persist the invoice booker ID; existing issuance behavior remains unchanged until the following guarded enforcement pass.
+- Invoice persistence stores a supplied positive `bookerId` in the new `booker_id` column. Missing IDs remain nullable for legacy admin compatibility until all issuance lanes are covered.
 - Focused guard: `scripts/test-admin-invoice-booker-identity-propagation-guard.mjs`.
 
 ### Operational Booking Verified CRM Identity Persistence

@@ -41,3 +41,5 @@ Reference-bearing customer sessions hydrate verified company/booker IDs only fro
 Customer invoice records have an additive nullable `booker_id` schema foundation. Do not enable customer booker-scoped invoice reads until invoice issuance persists verified `booker_id`; company/customer identity alone is never sufficient for PA-private invoices.
 
 Admin invoice preparation carries nullable verified company/booker IDs from the exact saved booking. Do not infer these IDs from billing labels or account-scope display text.
+
+Customer invoice list/PDF reads require validated access-account `customer_id + booker_id` whenever the active account has a booker. Never accept customer-supplied booker scope or fall back to company-wide invoices for a verified PA.

@@ -35,6 +35,13 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Company/customer identity alone must never authorize PA-private invoice access.
 - Focused guard: `scripts/test-customer-invoice-booker-identity-schema-guard.mjs`.
 
+### Customer Invoice PA Read Isolation
+
+- Customer invoice list and PDF reads obtain nullable `booker_id` only from the validated active access-account row.
+- When present, both reads require `customer_id + booker_id`; another PA in the same company cannot list or download that invoice.
+- Legacy access accounts without a booker retain their established customer scope until assigned; no client-supplied booker identity is trusted.
+- Focused guard: `scripts/test-customer-invoice-booker-scope-guard.mjs`.
+
 ### Admin Invoice Booker Identity Propagation
 
 - Exact nullable `company_id` and `booker_id` now flow from the established admin saved-booking DTO through unbilled/preparation rows into the invoice request body.

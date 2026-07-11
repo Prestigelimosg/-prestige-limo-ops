@@ -1197,7 +1197,9 @@ export async function loadCustomerInvoiceRecordsForPortal(
     return safeFailure(safeCustomerAuthError, 403);
   }
 
-  let { data, error } = await invoiceClient
+  const portalBookerId = activeAccount.data.booker_id;
+
+  let invoiceQuery = invoiceClient
     .from(customerInvoiceRecordTableName)
     .select(customerInvoiceSelect)
     .eq("customer_id", customerAccountReference)
@@ -1205,17 +1207,29 @@ export async function loadCustomerInvoiceRecordsForPortal(
     .order("created_at", { ascending: false })
     .limit(100);
 
+  if (portalBookerId) {
+    invoiceQuery = invoiceQuery.eq("booker_id", portalBookerId);
+  }
+
+  let { data, error } = await invoiceQuery;
+
   if (error) {
     if (!lifecycleColumnUnavailableError(error)) {
       return safeFailure(safeReadError, 500);
     }
 
-    const legacyResult = await invoiceClient
+    let legacyQuery = invoiceClient
       .from(customerInvoiceRecordTableName)
       .select(customerInvoiceLegacySelect)
       .eq("customer_id", customerAccountReference)
       .order("created_at", { ascending: false })
       .limit(100);
+
+    if (portalBookerId) {
+      legacyQuery = legacyQuery.eq("booker_id", portalBookerId);
+    }
+
+    const legacyResult = await legacyQuery;
 
     data = legacyResult.data;
     error = legacyResult.error;
@@ -1259,17 +1273,22 @@ export async function loadCustomerInvoicePdfForPortal(
     return safeFailure(safeCustomerAuthError, 403);
   }
 
+  const portalBookerId = activeAccount.data.booker_id;
+
   if (!invoiceNumber) {
     return safeFailure(safeValidationError, 400);
   }
 
-  const pdfResult = await invoiceClient
+  let pdfQuery = invoiceClient
     .from(customerInvoiceRecordTableName)
     .select(customerInvoicePdfSelect)
     .eq("customer_id", customerAccountReference)
     .eq("invoice_number", invoiceNumber)
-    .eq("document_state", "issued")
-    .maybeSingle();
+    .eq("document_state", "issued");
+  if (portalBookerId) {
+    pdfQuery = pdfQuery.eq("booker_id", portalBookerId);
+  }
+  const pdfResult = await pdfQuery.maybeSingle();
   let data: unknown = pdfResult.data;
   let error = pdfResult.error;
 
@@ -1278,12 +1297,17 @@ export async function loadCustomerInvoicePdfForPortal(
       return safeFailure(safeReadError, 500);
     }
 
-    const legacyResult = await invoiceClient
+    let legacyPdfQuery = invoiceClient
       .from(customerInvoiceRecordTableName)
       .select(customerInvoiceLegacyPdfSelect)
       .eq("customer_id", customerAccountReference)
-      .eq("invoice_number", invoiceNumber)
-      .maybeSingle();
+      .eq("invoice_number", invoiceNumber);
+
+    if (portalBookerId) {
+      legacyPdfQuery = legacyPdfQuery.eq("booker_id", portalBookerId);
+    }
+
+    const legacyResult = await legacyPdfQuery.maybeSingle();
 
     data = legacyResult.data;
     error = legacyResult.error;

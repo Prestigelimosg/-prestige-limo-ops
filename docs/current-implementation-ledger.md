@@ -63,6 +63,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Existing saves remain compatible because the identity fields are nullable. This pass does not add the CRM selectors or PA magic-link sign-in UI, does not activate customer invoice access, and does not change parser behavior.
 - Focused guard: `scripts/test-admin-operational-booking-crm-identity-persistence-guard.mjs`.
 - Loading a saved booking that carries any verified company/booker/traveler ID now automatically invokes the existing guarded CRM/rate option read when those options are not already loaded. This lets the existing selectors render their saved IDs after reload; no new identity API or selector lane was added.
+- The auto-load trigger is state-driven from the committed `companyId/bookerId/travelerId` triplet and request-keyed to prevent duplicate reads during the asynchronous URL handoff; it does not depend on timing inside `loadSelectedBooking`.
 
 ### Dispatch Verified CRM Identity Selectors
 

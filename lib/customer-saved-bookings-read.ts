@@ -18,6 +18,8 @@ export const customerSavedBookingsReadVersion =
 
 export type CustomerSavedBookingsBoundaryContext = {
   auth_user_id: string;
+  company_id?: number | null;
+  booker_id?: number | null;
   customer_account_reference?: string | null;
   mode: "server-session-cookie" | "server-session-token";
   runtime_gate: ControlledCustomerRuntimeGate;
@@ -75,7 +77,7 @@ type CustomerSavedBookingsSessionTokenSource =
   | "request-cookie"
   | "request-header";
 type CustomerSavedBookingsAccountFilter = {
-  column: "customer_id";
+  column: "customer_id" | "company_id" | "booker_id";
   method: "eq";
   value: string;
 };
@@ -87,7 +89,7 @@ const maxSavedBookingsPage = 1000;
 const maxBookingReferenceLength = 120;
 const maxSafeTextLength = 500;
 const customerAccountSelect =
-  "customer_account_reference, account_status";
+  "customer_account_reference, account_status, company_id, booker_id";
 const customerSavedBookingsCurrentSelect =
   "booking_reference, service_type, pickup_at, pickup_location, dropoff_location, passenger_name, customer_facing_status, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, created_at, updated_at";
 const customerSavedBookingsFoundationSelect =
@@ -397,6 +399,12 @@ function customerAccountBookingFilter(
     method: "eq",
     value: customerAccountReference,
   };
+}
+
+function verifiedIdentityId(value: unknown) {
+  const parsed = Number(value);
+
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 function isPlaceholderConfigValue(value: string) {
@@ -738,13 +746,13 @@ function toCustomerSavedBookingRecord(row: UnknownRecord): CustomerSavedBookingR
 
 async function readCustomerSavedBookingRowsForSchema({
   client,
-  customerFilter,
+  bookingFilters,
   parsed,
   pickupColumn,
   selectedColumns,
 }: {
   client: CustomerSavedBookingsClient;
-  customerFilter: CustomerSavedBookingsAccountFilter;
+  bookingFilters: CustomerSavedBookingsAccountFilter[];
   parsed: CustomerSavedBookingsReadParams;
   pickupColumn: "pickup_at" | "pickup_datetime";
   selectedColumns: string;
@@ -757,7 +765,9 @@ async function readCustomerSavedBookingRowsForSchema({
     .select(selectedColumns)
     .order(pickupColumn, { ascending: false });
 
-  bookingQuery = bookingQuery.eq(customerFilter.column, customerFilter.value);
+  for (const filter of bookingFilters) {
+    bookingQuery = bookingQuery.eq(filter.column, filter.value);
+  }
 
   bookingQuery = bookingQuery.gte(pickupColumn, historyWindowStartIso);
 
@@ -781,13 +791,12 @@ async function readCustomerSavedBookingRowsForSchema({
 
 async function readCustomerSavedBookingRows(
   client: CustomerSavedBookingsClient,
-  customerAccountReference: string,
+  bookingFilters: CustomerSavedBookingsAccountFilter[],
   parsed: CustomerSavedBookingsReadParams,
 ): Promise<AdminBookingResult<unknown[]>> {
-  const customerFilter = customerAccountBookingFilter(customerAccountReference);
   const currentResult = await readCustomerSavedBookingRowsForSchema({
     client,
-    customerFilter,
+    bookingFilters,
     parsed,
     pickupColumn: "pickup_at",
     selectedColumns: customerSavedBookingsCurrentSelect,
@@ -799,7 +808,7 @@ async function readCustomerSavedBookingRows(
 
   return readCustomerSavedBookingRowsForSchema({
     client,
-    customerFilter,
+    bookingFilters,
     parsed,
     pickupColumn: "pickup_datetime",
     selectedColumns: customerSavedBookingsFoundationSelect,
@@ -1039,6 +1048,8 @@ export async function loadCustomerSavedBookings(
   }
 
   let customerAccountReference = validBookingReference(context.customer_account_reference);
+  let companyId = verifiedIdentityId(context.company_id);
+  let bookerId = verifiedIdentityId(context.booker_id);
   let activeAccessAccountAlreadyResolved = false;
 
   if (!customerAccountReference) {
@@ -1053,9 +1064,10 @@ export async function loadCustomerSavedBookings(
       return safeAdapterFailure(customerSavedBookingsReadError, 500, accountError);
     }
 
-    customerAccountReference = validBookingReference(
-      asRecord(asArray(accountRows)[0]).customer_account_reference,
-    );
+    const accountRow = asRecord(asArray(accountRows)[0]);
+    customerAccountReference = validBookingReference(accountRow.customer_account_reference);
+    companyId = verifiedIdentityId(accountRow.company_id);
+    bookerId = verifiedIdentityId(accountRow.booker_id);
     activeAccessAccountAlreadyResolved = Boolean(customerAccountReference);
   }
 
@@ -1090,9 +1102,24 @@ export async function loadCustomerSavedBookings(
     }
   }
 
+  const hasCompanyIdentity = Boolean(companyId);
+  const hasBookerIdentity = Boolean(bookerId);
+
+  if (hasCompanyIdentity !== hasBookerIdentity) {
+    return customerSavedBookingsAuthRequiredResult();
+  }
+
+  const bookingFilters: CustomerSavedBookingsAccountFilter[] =
+    companyId && bookerId
+      ? [
+          { column: "company_id", method: "eq", value: String(companyId) },
+          { column: "booker_id", method: "eq", value: String(bookerId) },
+        ]
+      : [customerAccountBookingFilter(customerAccountReference)];
+
   const bookingRowsResult = await readCustomerSavedBookingRows(
     clientResult.data,
-    customerAccountReference,
+    bookingFilters,
     parsed.data,
   );
 

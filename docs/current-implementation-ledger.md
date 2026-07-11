@@ -20,6 +20,13 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Company membership alone never authorizes booking or invoice access; later session/read work must require verified `booker_id`.
 - Focused guard: `scripts/test-customer-access-account-pa-identity-schema-guard.mjs`.
 
+### PA-Scoped Customer Booking Read Foundation
+
+- The existing customer saved-bookings read accepts an optional verified `company_id + booker_id` pair and applies both filters together.
+- Partial identity pairs fail closed. Sessions without either ID retain the established `customer_id` filter for compatibility.
+- This does not activate PA sign-in or invoice access; company identity alone never widens customer reads.
+- Focused guard: `scripts/test-customer-saved-bookings-pa-scope-guard.mjs`.
+
 ### Operational Booking Verified CRM Identity Persistence
 
 - The established `/api/admin-bookings` persistence contract and Supabase adapter now retain nullable verified `company_id`, `booker_id`, and `traveler_id` values already supported by the existing `bookings` schema.

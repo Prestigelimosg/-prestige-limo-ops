@@ -2333,6 +2333,7 @@ export default function MockCustomerDashboardPage() {
   const customerInvoicePrepPanelRef = useRef<HTMLDivElement | null>(null);
   const plainInvoicePanelRef = useRef<HTMLDivElement | null>(null);
   const plainInvoiceCrmRequestSequenceRef = useRef(0);
+  const plainInvoiceSavedBookingRequestSequenceRef = useRef(0);
   const customerInvoicePrepRowKeyRef = useRef("");
   const customerFolderUrlHandoffRef = useRef("");
   const customerFolderReturnHrefRef = useRef("");
@@ -2513,6 +2514,10 @@ export default function MockCustomerDashboardPage() {
   );
   const [plainInvoiceFeedbackTone, setPlainInvoiceFeedbackTone] =
     useState<RegularCustomerBookingFeedbackTone>("info");
+  const [plainInvoiceSavedBookings, setPlainInvoiceSavedBookings] = useState<
+    RegularCustomerSavedBookingReadRecord[]
+  >([]);
+  const [plainInvoiceSavedBookingsLoading, setPlainInvoiceSavedBookingsLoading] = useState(false);
   const [customerInvoiceDrafts, setCustomerInvoiceDrafts] = useState<CustomerInvoiceDraftRecord[]>([]);
   const [customerInvoiceCalculatedAmountCents, setCustomerInvoiceCalculatedAmountCents] =
     useState<number | null>(null);
@@ -2587,12 +2592,12 @@ export default function MockCustomerDashboardPage() {
     const selectedCustomerId = normalizeCustomerFolderMatch(plainInvoiceForm.crmCustomerId);
     if (!selectedCustomerId) return [];
 
-    return regularCustomerSavedBookingReadState.savedBookings.filter(
+    return plainInvoiceSavedBookings.filter(
       (booking) =>
         normalizeCustomerFolderMatch(savedBookingCustomerId(booking)) === selectedCustomerId &&
         Boolean(savedBookingReference(booking)),
     );
-  }, [plainInvoiceForm.crmCustomerId, regularCustomerSavedBookingReadState.savedBookings]);
+  }, [plainInvoiceForm.crmCustomerId, plainInvoiceSavedBookings]);
   const selectedCustomerFolderFinderRow = useMemo(
     () =>
       customerFolderIndexRows.find(
@@ -5387,11 +5392,15 @@ export default function MockCustomerDashboardPage() {
     });
   }
 
-  function updatePlainInvoiceCrmBillingAccount(customerFolderKey: string) {
+  async function updatePlainInvoiceCrmBillingAccount(customerFolderKey: string) {
     const selectedAccount =
       plainInvoiceCrmAccountOptions.find((account) => account.customerFolderKey === customerFolderKey) || null;
 
     setSelectedPlainInvoiceCrmFolderKey(selectedAccount?.customerFolderKey || "");
+    const requestId = plainInvoiceSavedBookingRequestSequenceRef.current + 1;
+    plainInvoiceSavedBookingRequestSequenceRef.current = requestId;
+    setPlainInvoiceSavedBookings([]);
+    setPlainInvoiceSavedBookingsLoading(Boolean(selectedAccount));
     setPlainInvoiceForm((currentForm) => ({
       ...currentForm,
       billToName: selectedAccount?.customerName || currentForm.billToName,
@@ -5403,11 +5412,38 @@ export default function MockCustomerDashboardPage() {
 
     setPlainInvoiceFeedback(
       selectedAccount
-        ? `Create Invoice linked to CRM billing account ${selectedAccount.customerName}. Refresh preview before Draft, Issue, or Email.`
+        ? `Loading exact saved bookings for ${selectedAccount.customerName}...`
         : "Create Invoice switched to manual bill-to. Refresh preview before Draft, Issue, or Email.",
     );
     setPlainInvoiceFeedbackTone("info");
     setPlainInvoiceCrmPickerOpen(false);
+
+    if (!selectedAccount) return;
+
+    try {
+      const result = await readRegularCustomerSavedBookingsForTarget({
+        accountScopeKey: selectedAccount.accountScopeKey,
+        customerId: selectedAccount.customerId,
+        customerName: selectedAccount.customerName,
+      });
+      if (requestId !== plainInvoiceSavedBookingRequestSequenceRef.current) return;
+
+      setPlainInvoiceSavedBookings(result.savedBookings);
+      setPlainInvoiceFeedback(
+        result.savedBookings.length > 0
+          ? `Loaded ${result.savedBookings.length} exact saved booking${result.savedBookings.length === 1 ? "" : "s"} for ${selectedAccount.customerName}. Select one before Issue or Email.`
+          : `No exact saved bookings were returned for ${selectedAccount.customerName}. Draft remains admin-only; Issue and Email are blocked.`,
+      );
+      setPlainInvoiceFeedbackTone(result.savedBookings.length > 0 ? "success" : "error");
+    } catch (error) {
+      if (requestId !== plainInvoiceSavedBookingRequestSequenceRef.current) return;
+      setPlainInvoiceFeedback(customerAdminReadFailureMessage("Exact saved booking read", error));
+      setPlainInvoiceFeedbackTone("error");
+    } finally {
+      if (requestId === plainInvoiceSavedBookingRequestSequenceRef.current) {
+        setPlainInvoiceSavedBookingsLoading(false);
+      }
+    }
   }
 
   function updatePlainInvoiceSavedBooking(bookingReference: string) {
@@ -8954,11 +8990,13 @@ export default function MockCustomerDashboardPage() {
                     <select
                       className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700 disabled:bg-slate-100 disabled:text-slate-500"
                       data-plain-invoice-booking-reference="true"
-                      disabled={!plainInvoiceForm.crmCustomerId || plainInvoiceSavedBookingOptions.length === 0}
+                      disabled={plainInvoiceSavedBookingsLoading || !plainInvoiceForm.crmCustomerId || plainInvoiceSavedBookingOptions.length === 0}
                       onChange={(event) => updatePlainInvoiceSavedBooking(event.target.value)}
                       value={plainInvoiceForm.bookingReference}
                     >
-                      <option value="">Select exact saved booking</option>
+                      <option value="">
+                        {plainInvoiceSavedBookingsLoading ? "Loading exact saved bookings" : "Select exact saved booking"}
+                      </option>
                       {plainInvoiceSavedBookingOptions.map((booking) => {
                         const reference = savedBookingReference(booking);
                         return (

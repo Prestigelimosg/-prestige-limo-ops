@@ -38,6 +38,8 @@ export type AdminRateSetupCompany = {
 };
 
 export type AdminRateSetupTraveler = {
+  booker_id: number | null;
+  booker_name: string | null;
   company_id: number;
   customer_rates: RateRules;
   driver_payout_rules: DriverPayoutRules;
@@ -66,7 +68,7 @@ const rateSettingsSelect =
 const companySelect =
   "id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy";
 const travelerSelect =
-  "id, company_id, traveler_name, customer_rates, driver_payout_rules";
+  "id, company_id, booker_id, booker_name, traveler_name, customer_rates, driver_payout_rules";
 const allowedActorRoles = new Set(["admin", "dispatcher", "system"]);
 const bookingTypes = ["MNG", "DEP", "TRF", "DSP"] as const;
 const maxSafeTextLength = 220;
@@ -458,6 +460,8 @@ function toRateSetupTraveler(row: unknown): AdminRateSetupTraveler | null {
   }
 
   return {
+    booker_id: positiveIntegerOrNull(record.booker_id),
+    booker_name: textOrNull(record.booker_name),
     company_id: companyId,
     customer_rates: rateRulesFromDb(record.customer_rates),
     driver_payout_rules: payoutRulesFromDb(record.driver_payout_rules),

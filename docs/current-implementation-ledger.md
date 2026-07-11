@@ -26,6 +26,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Company selection scopes bookers; booker selection scopes travelers. One verified booker can expose multiple assigned travelers without another sign-in identity.
 - The selectors retain exact numeric IDs only and do not replace or rewrite the existing company, booker, passenger, contact, parser, pricing, or save fields.
 - Focused guard: `scripts/test-admin-dispatch-crm-identity-selectors-guard.mjs`.
+- The established rate-setup traveler projection includes verified `booker_id` and safe `booker_name`, allowing the PA selector to use persisted relationships instead of names or inferred matches.
 
 ### Verified Traveler–Booker Link PATCH Boundary
 

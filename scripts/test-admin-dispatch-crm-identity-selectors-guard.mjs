@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const app = await readFile("app/page.tsx", "utf8");
+const [app, rateSetupRead] = await Promise.all([
+  readFile("app/page.tsx", "utf8"),
+  readFile("lib/admin-rate-setup-read.ts", "utf8"),
+]);
 
 for (const fragment of [
   'data-admin-dispatch-crm-identity-selectors="true"',
@@ -17,5 +20,7 @@ assert.ok(app.includes("companyId: event.target.value"));
 assert.ok(app.includes("bookerId: event.target.value"));
 assert.ok(app.includes("travelerId: event.target.value"));
 assert.ok(!/parseBookingMessageForState[\s\S]{0,1500}companyId/.test(app));
+assert.ok(rateSetupRead.includes('"id, company_id, booker_id, booker_name, traveler_name'));
+assert.ok(rateSetupRead.includes("booker_id: positiveIntegerOrNull(record.booker_id)"));
 
 console.log("Admin Dispatch CRM identity selectors guard passed.");

@@ -562,11 +562,13 @@ function safePayloadRecordFromLink(link: DriverJobLinkPersistenceRow) {
       "driver_plate_number",
       "driverPlate",
       "plate",
+      "assigned_driver_plate",
     ]) || safeTextFromDb(assignedDriver.plate),
     driver_vehicle_model: readFirstText(source, [
       "driver_vehicle_model",
       "driverVehicleModel",
       "vehicle_model",
+      "assigned_driver_vehicle_model",
     ]) || safeTextFromDb(assignedDriver.vehicleModel),
     dropoff_address: readFirstText(source, [
       "dropoff_address",

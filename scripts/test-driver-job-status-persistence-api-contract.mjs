@@ -335,12 +335,10 @@ function createSeededClient({
         safe_link_context: {
           customer_price_amount: 160,
           driver_job_payload: {
-            assigned_driver: {
-              contact: "+65 8000 1001",
-              name: "Safe Driver One",
-              plate: "SLA1234X",
-              vehicleModel: "Mercedes V Class",
-            },
+            assigned_driver_contact: "+65 8000 1001",
+            assigned_driver_name: "Safe Driver One",
+            assigned_driver_plate: "SLA1234X",
+            assigned_driver_vehicle_model: "Mercedes V Class",
             booking_type: bookingType,
             dropoff_location: "Changi Airport Terminal 3",
             flight_no: "SQ001",
@@ -660,6 +658,9 @@ try {
       "Driver token payload should read a compact status history, not only one latest row.",
     );
     assert.equal(result.payload.assignedDriver.name, "Safe Driver One");
+    assert.equal(result.payload.assignedDriver.contact, "+65 8000 1001");
+    assert.equal(result.payload.assignedDriver.plate, "SLA1234X");
+    assert.equal(result.payload.assignedDriver.vehicleModel, "Mercedes V Class");
     assert.equal(client.operations.length, 0);
     assertNoDriverJobLeaks(result);
   }

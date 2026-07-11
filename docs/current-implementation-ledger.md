@@ -3666,6 +3666,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Driver Job Link GET Validation Lock
 - GET/read for `/api/admin-driver-job-links` is fixed at `43c5970 Fix driver job link GET validation`.
+- Admin-created Driver Job Links now preserve the existing safe `assigned_driver_plate` and `assigned_driver_vehicle_model` fields through the production driver-page projection, so the assigned car plate and vehicle model hydrate on the existing Driver Details form without adding a route, field, lane, or write path.
 - GET/read now accepts safe dashboard-style booking refs without noisy 400s.
 - POST create validation remains strict.
 - PATCH revoke behavior is unchanged.

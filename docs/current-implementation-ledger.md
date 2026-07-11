@@ -26,6 +26,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Internal new-request decisions and accepted customer cancellations retain the exact saved `company_id`, `booker_id`, and nullable `traveler_id` while updating status through the existing booking PATCH lane.
 - Status decisions never derive identity from customer/company text, contact details, passenger names, or parser content, and do not add another decision or cancellation path.
 - Focused guard: `scripts/test-customer-request-decision-identity-preservation-guard.mjs`.
+- The established Needs Review / Approve Internally / Decline Internally controls now render on the existing visible Urgent & New Booking Requests row and reuse the same decision handler. Their old hidden Optional Workflow Tools copy was removed.
 
 ### Customer Change Request Reject/Dismiss Safety
 

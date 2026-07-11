@@ -23097,6 +23097,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             operationalCard.route_points_summary ||
             (routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`);
           const bookingId = bookingRecordStableKey(requestBooking, operationalCard);
+          const requestRecord = bookingRecordToAdminBookingPersistenceRecord(requestBooking);
           const passengerText = getLoadBookingsOperationalPassengerDisplay(operationalCard, requestBooking);
           const isUrgentRequest = urgentCustomerBookingRequestKeySet.has(
             getCustomerBookingRequestQueueKey(requestBooking),
@@ -23142,14 +23143,30 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 </div>
               </div>
               <p className="min-w-0 truncate text-slate-700">{routeText}</p>
-              <button
-                className="min-h-9 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-                data-new-customer-booking-request-load={bookingId}
-                onClick={() => loadSelectedBooking(requestBooking, { focusDriverJobLink: true })}
-                type="button"
-              >
-                Open in Driver Job Link
-              </button>
+              <div className="flex flex-wrap gap-1.5 md:justify-end">
+                <button
+                  className="min-h-9 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                  data-new-customer-booking-request-load={bookingId}
+                  onClick={() => loadSelectedBooking(requestBooking, { focusDriverJobLink: true })}
+                  type="button"
+                >
+                  Open in Driver Job Link
+                </button>
+                {requestRecord
+                  ? adminCustomerRequestReviewDecisions.map((decision) => (
+                      <button
+                        className="min-h-9 rounded-md border border-amber-300 bg-white px-2 text-xs font-semibold text-amber-950 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                        data-new-customer-booking-request-decision-button={`${bookingId}:${decision.key}`}
+                        disabled={adminBookingPersistenceAction !== null}
+                        key={decision.key}
+                        onClick={() => updateAdminCustomerRequestReviewDecision(requestRecord, decision.key)}
+                        type="button"
+                      >
+                        {decision.label}
+                      </button>
+                    ))
+                  : null}
+              </div>
             </article>
           );
         })}
@@ -38016,66 +38033,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                             </p>
                           ) : null}
                         </div>
-                        {isCustomerRequest ? (
-                          <details
-                            className="group min-w-0 rounded-md border border-amber-200 bg-amber-50/50 px-2 py-1"
-                            data-admin-booking-customer-request-decision={record.booking_reference}
-                          >
-                            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-[11px] font-semibold text-amber-950 outline-none [&::-webkit-details-marker]:hidden">
-                              <span className="min-w-0 break-words">
-                                Internal review decision only
-                              </span>
-                              <span className="shrink-0 rounded-full bg-white px-1.5 py-0.5 text-[9px] uppercase tracking-[0.06em] text-amber-800">
-                                Review
-                              </span>
-                            </summary>
-                            <p
-                              className="mt-1 text-[10px] leading-3 text-amber-900"
-                              data-admin-booking-customer-request-decision-guidance={record.booking_reference}
-                            >
-                              Status tracking only. It does not contact customers or dispatch drivers.
-                            </p>
-                            <p
-                              className="mt-1 break-words text-[10px] leading-3 text-amber-950"
-                              data-admin-booking-customer-request-review-state={record.booking_reference}
-                            >
-                              Current review state: Admin internal status{" "}
-                              <span className="font-semibold">
-                                {clean(record.admin_internal_status) || "Draft"}
-                              </span>{" "}
-                              · Customer-facing status{" "}
-                              <span className="font-semibold">
-                                {clean(record.customer_facing_status) || "Request Received"}
-                              </span>{" "}
-                              · Short-notice review status{" "}
-                              <span className="font-semibold">
-                                {clean(record.short_notice_review_status) || "Not Required"}
-                              </span>{" "}
-                              · Request review status{" "}
-                              <span className="font-semibold">
-                                {clean(record.request_review_status) || "Pending Review"}
-                              </span>
-                            </p>
-                            <div className="mt-1 flex flex-wrap gap-1">
-                              {adminCustomerRequestReviewDecisions.map((decision) => (
-                                <button
-                                  className="min-h-6 rounded-md border border-amber-300 bg-white px-1.5 py-0.5 text-left text-[10px] font-semibold text-amber-950 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                                  data-admin-booking-customer-request-decision-button={`${record.booking_reference}:${decision.key}`}
-                                  disabled={adminBookingPersistenceAction !== null}
-                                  key={decision.key}
-                                  onClick={() => updateAdminCustomerRequestReviewDecision(record, decision.key)}
-                                  type="button"
-                                >
-                                  {decision.label}
-                                </button>
-                              ))}
-                            </div>
-                          </details>
-                        ) : (
+                        {!isCustomerRequest ? (
                           <p className="break-words font-semibold text-slate-500">
                             {primaryStatus}
                           </p>
-                        )}
+                        ) : null}
                         <div className="flex flex-wrap gap-1.5 lg:justify-end">
                           <button
                             className="min-h-8 rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-left text-xs font-semibold text-emerald-950 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"

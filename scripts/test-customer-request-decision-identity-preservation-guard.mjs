@@ -10,6 +10,29 @@ function between(start, end) {
   return source.slice(a, b);
 }
 
+const visibleRequestPanel = between(
+  "const customerBookingRequestsPanel",
+  "const bookingsFindToolbar",
+);
+for (const fragment of [
+  "bookingRecordToAdminBookingPersistenceRecord(requestBooking)",
+  "adminCustomerRequestReviewDecisions.map",
+  "updateAdminCustomerRequestReviewDecision(requestRecord, decision.key)",
+  "data-new-customer-booking-request-decision-button",
+]) {
+  assert.ok(visibleRequestPanel.includes(fragment), `Visible request decision must include ${fragment}`);
+}
+
+const hiddenOptionalTools = between(
+  'data-dispatch-optional-workflow-tools="true"',
+  'aria-label="Advanced Checks"',
+);
+assert.equal(
+  hiddenOptionalTools.includes("data-admin-booking-customer-request-decision-button"),
+  false,
+  "Hidden Optional Workflow Tools must not keep a duplicate request decision control.",
+);
+
 for (const block of [
   between("function buildAdminCustomerRequestDecisionPayload", "function buildAdminBookingCancellationRequestApplyPayload"),
   between("function buildAdminBookingCancellationRequestApplyPayload", "function parsedSourceReference"),

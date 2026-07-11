@@ -869,9 +869,7 @@ async function loadStatusHistoryForLink(
     .select(driverJobStatusEventSelect)
     .order("occurred_at", { ascending: false })
     .limit(10);
-  const scopedQuery = link.id
-    ? query.eq("driver_job_link_id", link.id)
-    : query.eq("booking_reference", link.booking_reference);
+  const scopedQuery = query.eq("booking_reference", link.booking_reference);
   const { data, error } = await scopedQuery;
 
   if (error) {

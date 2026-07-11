@@ -719,12 +719,12 @@ try {
 
     assert.equal(loaded.ok, true);
     assert.equal(loaded.payload.reference, "DRV-JOB-API-001");
-    assert.equal(loaded.payload.status, "assigned");
-    assert.deepEqual(loaded.payload.statusHistory, []);
+    assert.equal(loaded.payload.status, "completed");
+    assert.equal(loaded.payload.statusHistory.length, 1);
     assert.deepEqual(
       statusRead?.filters,
-      [{ column: "driver_job_link_id", value: freshLinkId }],
-      "Fresh driver links must read status history by driver_job_link_id, not only booking_reference.",
+      [{ column: "booking_reference", value: "DRV-JOB-API-001" }],
+      "Fresh driver links must read booking-wide status history so repeated transitions cannot bypass an older link.",
     );
     assert.equal(client.operations.length, 0);
     assertNoDriverJobLeaks(loaded);
@@ -739,12 +739,9 @@ try {
       (operation) => operation.table === "driver_job_status_events",
     );
 
-    assert.equal(updated.ok, true);
-    assert.equal(updated.status, "driver_otw");
-    assert.equal(updated.payload.status, "driver_otw");
-    assert.equal(insertedStatus?.payload.driver_job_link_id, freshLinkId);
-    assert.equal(insertedStatus?.payload.booking_reference, "DRV-JOB-API-001");
-    assert.equal(insertedStatus?.payload.status_value, "driver_otw");
+    assert.equal(updated.ok, false);
+    assert.equal(updated.reason, "already_completed");
+    assert.equal(insertedStatus, undefined);
     assertNoDriverJobLeaks(updated);
   }
 

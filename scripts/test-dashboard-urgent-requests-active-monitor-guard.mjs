@@ -61,6 +61,11 @@ const bookingsRequestPanel = sliceBetween(
   "const customerBookingRequestsPanel =",
   "const recentBookingsPanel =",
 );
+const customerBookingRequestsReviewHandler = sliceBetween(
+  appPage,
+  "function openCustomerBookingRequestsReview",
+  "function openNewBookingRequestNotificationReview",
+);
 const activeMonitorSource = sliceBetween(
   appPage,
   "const activeJobDashboardSearchTerm = clean(searchTerm);",
@@ -136,6 +141,16 @@ assertExcludes(
   derivedRequestSection,
   "!unhandledCustomerBookingRequestKeySet.has(getCustomerBookingRequestQueueKey(bookingRecord))",
   "Bookings saved jobs list must not hide active customer/new booking requests",
+);
+assertIncludes(
+  customerBookingRequestsReviewHandler,
+  'selectAppTab("bookings")',
+  "dashboard Review handoff selects Bookings",
+);
+assertExcludes(
+  customerBookingRequestsReviewHandler,
+  'selectAppTab("dashboard")',
+  "dashboard Review handoff must not remain on Dashboard",
 );
 
 for (const fragment of [
@@ -374,7 +389,7 @@ for (const forbiddenPattern of [
 for (const phrase of [
   "Dashboard request panel is now `Urgent / Customer Requests` and displays open customer requests, saved Driver TBC jobs inside the 1-hour pickup monitor window, and customer change/cancel requests using the existing guarded notification handlers.",
   "Dashboard `Open Urgent` and urgent rows load the selected urgent booking into Dispatch with the existing Driver Job Link panel focused, a visible booking handoff notice, and keyboard focus on `Create Link` so admin can create and copy the driver link before a driver is assigned.",
-  "Dashboard keeps a secondary `Review` action for the existing request review path; it does not replace the Driver Job Link urgent handoff.",
+  "Dashboard keeps a secondary `Review` action that switches to Bookings and focuses the existing `Urgent & New Booking Requests` queue; it does not remain on Dashboard, create a duplicate request lane, or replace the Driver Job Link urgent handoff.",
   "The Dashboard request panel remains the queue for open customer requests outside the 1-hour dispatch window as `Urgent & New Booking Requests`, with row badges separating under-24h-but-not-dispatch-window requests from new non-urgent requests; Bookings remains for saved booking search/load/list work.",
   "Unhandled customer requests are hidden from Current / Upcoming until admin loads them from the Dashboard urgent lane or the Bookings request lane, preventing duplicate cards while preserving the existing post-review booking list.",
   "Day-of-trip jobs are shown as `Today's Jobs` on Dashboard, replacing the duplicate Today/Upcoming booking summaries while keeping Bookings as the saved-job finder.",

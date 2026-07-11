@@ -19,15 +19,13 @@ assert.match(adapter, /company_id, booker_id, traveler_id/);
 assert.match(app, /company_id: adminDispatchVerifiedIdentityId\(bookingValue\.companyId\)/);
 assert.match(app, /booker_id: adminDispatchVerifiedIdentityId\(bookingValue\.bookerId\)/);
 assert.match(app, /traveler_id: adminDispatchVerifiedIdentityId\(bookingValue\.travelerId\)/);
-assert.match(app, /verifiedIdentityOptionAutoLoadKeyRef/);
-assert.match(app, /\[booking\.companyId, booking\.bookerId, booking\.travelerId\]/);
-assert.match(app, /Saved booking verified CRM identity options loaded/);
 assert.match(app, /adminDispatchVerifiedCompanyOptions\.push/);
 assert.match(app, /adminDispatchVerifiedBookerOptions\.push/);
 assert.match(app, /adminDispatchVerifiedTravelerOptions\.push/);
 assert.match(app, /name: clean\(booking\.company\)/);
 assert.match(app, /name: clean\(booking\.booker\)/);
 assert.match(app, /traveler_name: clean\(booking\.name\)/);
+assert.doesNotMatch(app, /verifiedIdentityOptionAutoLoadKeyRef/);
 assert.doesNotMatch(app, /parseBookingMessageForState[\s\S]{0,1500}(companyId|bookerId|travelerId)/);
 
 console.log("Admin operational booking CRM identity persistence guard passed.");

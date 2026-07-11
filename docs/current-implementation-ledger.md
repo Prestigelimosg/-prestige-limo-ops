@@ -62,8 +62,6 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - IDs are accepted only as positive integers. Blank or malformed values persist as `null`; names, email addresses, phone numbers, parser text, and display labels are never converted into identity IDs.
 - Existing saves remain compatible because the identity fields are nullable. This pass does not add the CRM selectors or PA magic-link sign-in UI, does not activate customer invoice access, and does not change parser behavior.
 - Focused guard: `scripts/test-admin-operational-booking-crm-identity-persistence-guard.mjs`.
-- Loading a saved booking that carries any verified company/booker/traveler ID now automatically invokes the existing guarded CRM/rate option read when those options are not already loaded. This lets the existing selectors render their saved IDs after reload; no new identity API or selector lane was added.
-- The auto-load trigger is state-driven from the committed `companyId/bookerId/travelerId` triplet and request-keyed to prevent duplicate reads during the asynchronous URL handoff; it does not depend on timing inside `loadSelectedBooking`.
 - Each verified selector also renders the currently loaded saved ID as an immediate fallback option using that same booking's saved company/booker/passenger label. The guarded option read enriches the list, but a delayed read can no longer make persisted verified IDs appear as `Not selected`.
 
 ### Dispatch Verified CRM Identity Selectors

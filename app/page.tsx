@@ -12950,7 +12950,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const [rateCompanies, setRateCompanies] = useState<CompanyRecord[]>([]);
   const [rateTravelers, setRateTravelers] = useState<TravelerRecord[]>([]);
   const [ratesLoaded, setRatesLoaded] = useState(false);
-  const verifiedIdentityOptionAutoLoadKeyRef = useRef("");
   const [savingRates, setSavingRates] = useState(false);
   const [rateAction, setRateAction] = useState<"load" | "defaults" | "override" | "remove-override" | null>(null);
   const [rateMessageTarget, setRateMessageTarget] = useState<"header" | "override">("header");
@@ -17807,26 +17806,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       setSavingRates(false);
     }
   }
-
-  useEffect(() => {
-    const identityKey = [booking.companyId, booking.bookerId, booking.travelerId]
-      .map((value) => clean(value))
-      .filter(Boolean)
-      .join(":");
-
-    if (!identityKey || ratesLoaded || verifiedIdentityOptionAutoLoadKeyRef.current === identityKey) {
-      return;
-    }
-
-    verifiedIdentityOptionAutoLoadKeyRef.current = identityKey;
-    void loadRates("Saved booking verified CRM identity options loaded.", { preserveAction: true })
-      .then((result) => {
-        if (!result.ok && verifiedIdentityOptionAutoLoadKeyRef.current === identityKey) {
-          verifiedIdentityOptionAutoLoadKeyRef.current = "";
-        }
-      });
-    // The ID triplet is the stable trigger; loadRates reads the existing guarded option lane.
-  }, [booking.companyId, booking.bookerId, booking.travelerId, ratesLoaded]);
 
   async function saveDefaultRates() {
     if (!adminLegacyDataClient) {

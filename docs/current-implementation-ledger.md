@@ -21,6 +21,12 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - After a successful `/book` response, the existing submit button reads `Submitted` and stays disabled until the customer edits a field; failed submissions remain retryable.
 - Focused guard: `scripts/test-customer-booking-request-pa-identity-guard.mjs`.
 
+### Customer Request Decision Identity Preservation
+
+- Internal new-request decisions and accepted customer cancellations retain the exact saved `company_id`, `booker_id`, and nullable `traveler_id` while updating status through the existing booking PATCH lane.
+- Status decisions never derive identity from customer/company text, contact details, passenger names, or parser content, and do not add another decision or cancellation path.
+- Focused guard: `scripts/test-customer-request-decision-identity-preservation-guard.mjs`.
+
 ### Customer Change Request Reject/Dismiss Safety
 
 - The established Urgent / Customer Requests lane keeps one set of `Accept + Cal`, `Reject`, and `Dismiss` actions; no duplicate request panel or handler lane was added.

@@ -124,11 +124,11 @@ const safeEnableReadinessError =
 const defaultAdminBookingListLimit = 25;
 const maxAdminBookingListLimit = 200;
 const adminBookingCurrentLoadSelect =
-  "id, booking_reference, customer_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, flight_no, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, admin_internal_status, customer_facing_status, short_notice_review_status, request_review_status, change_review_status, cancellation_review_status, source_surface, created_at, updated_at, booking_route_points(point_type, sequence, location, notes), booking_service_items(item_type, quantity, notes)";
+  "id, booking_reference, customer_id, company_id, booker_id, traveler_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, flight_no, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, admin_internal_status, customer_facing_status, short_notice_review_status, request_review_status, change_review_status, cancellation_review_status, source_surface, created_at, updated_at, booking_route_points(point_type, sequence, location, notes), booking_service_items(item_type, quantity, notes)";
 const adminBookingFoundationLoadSelect =
-  "id, booking_reference, customer_id, source_channel, pickup_datetime, pickup_location, dropoff_location, route_type, customer_display_name, contact_phone, contact_email, flight_no, driver_name, driver_contact, driver_plate_number, pax_count, luggage_count, vehicle_type_or_category, customer_facing_status, admin_internal_status, short_notice_review_status, parser_source_reference, created_at, updated_at, booking_route_points(point_type, sequence_number, location_text, timing_note), booking_service_items(service_item_type, quantity, blocks_count)";
+  "id, booking_reference, customer_id, company_id, booker_id, traveler_id, source_channel, pickup_datetime, pickup_location, dropoff_location, route_type, customer_display_name, contact_phone, contact_email, flight_no, driver_name, driver_contact, driver_plate_number, pax_count, luggage_count, vehicle_type_or_category, customer_facing_status, admin_internal_status, short_notice_review_status, parser_source_reference, created_at, updated_at, booking_route_points(point_type, sequence_number, location_text, timing_note), booking_service_items(service_item_type, quantity, blocks_count)";
 const adminBookingFoundationLoadSelectWithoutDriver =
-  "id, booking_reference, customer_id, source_channel, pickup_datetime, pickup_location, dropoff_location, route_type, customer_display_name, contact_phone, contact_email, flight_no, pax_count, luggage_count, vehicle_type_or_category, customer_facing_status, admin_internal_status, short_notice_review_status, parser_source_reference, created_at, updated_at, booking_route_points(point_type, sequence_number, location_text, timing_note), booking_service_items(service_item_type, quantity, blocks_count)";
+  "id, booking_reference, customer_id, company_id, booker_id, traveler_id, source_channel, pickup_datetime, pickup_location, dropoff_location, route_type, customer_display_name, contact_phone, contact_email, flight_no, pax_count, luggage_count, vehicle_type_or_category, customer_facing_status, admin_internal_status, short_notice_review_status, parser_source_reference, created_at, updated_at, booking_route_points(point_type, sequence_number, location_text, timing_note), booking_service_items(service_item_type, quantity, blocks_count)";
 
 const allowedAdapterRoles = new Set(["admin", "dispatcher", "system"]);
 const allowedAdapterSourceSurfaces = new Set(["admin_api", "customer_booking_request", "system"]);
@@ -912,6 +912,9 @@ function bookingToDbRow(
   customerId: DbIdentifier | null,
   actor: AdminBookingPersistenceAdapterActor,
 ) {
+  const companyId = dbIdentifierOrNull(booking.company_id);
+  const bookerId = dbIdentifierOrNull(booking.booker_id);
+  const travelerId = dbIdentifierOrNull(booking.traveler_id);
   const pickupAt = textOrNull(booking.pickup_at) || textOrNull(booking.pickup_datetime) || new Date().toISOString();
   const pickupLocation = textOrNull(booking.pickup_location) || "Pickup To Confirm";
   const dropoffLocation = textOrNull(booking.dropoff_location) || "Drop-off To Confirm";
@@ -919,6 +922,9 @@ function bookingToDbRow(
   return {
     booking_reference: textOrNull(booking.booking_reference) || "Booking Reference To Confirm",
     customer_id: customerId,
+    company_id: companyId,
+    booker_id: bookerId,
+    traveler_id: travelerId,
     customer_display_name: textOrNull(booking.customer_display_name) || "Customer To Confirm",
     contact_display_name: textOrNull(booking.contact_display_name),
     contact_phone: textOrNull(booking.contact_phone),
@@ -959,6 +965,9 @@ function bookingToFoundationDbRow(
   return {
     booking_reference: currentRow.booking_reference,
     customer_id: customerId,
+    company_id: currentRow.company_id,
+    booker_id: currentRow.booker_id,
+    traveler_id: currentRow.traveler_id,
     source_channel:
       textOrNull(booking.source_channel) ||
       sourceSurfaceToUi(currentRow.source_surface) ||
@@ -1065,6 +1074,9 @@ function toAdminBookingDto(row: UnknownRecord): AdminBookingPersistenceRecord {
     source_channel: sourceSurfaceToUi(sourceSurface),
     source_surface: sourceSurface,
     customer_id: dbIdentifierTextOrNull(row.customer_id),
+    company_id: integerOrNull(row.company_id),
+    booker_id: integerOrNull(row.booker_id),
+    traveler_id: integerOrNull(row.traveler_id),
     pickup_datetime: pickupAt,
     pickup_at: pickupAt,
     pickup_location: textOrNull(row.pickup_location),

@@ -12,6 +12,14 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Operational Booking Verified CRM Identity Persistence
+
+- The established `/api/admin-bookings` persistence contract and Supabase adapter now retain nullable verified `company_id`, `booker_id`, and `traveler_id` values already supported by the existing `bookings` schema.
+- Admin booking form state carries these IDs separately from company, booker, and passenger display text. Loaded records retain their IDs through apply, update, calendar projection, and return-trip save payloads.
+- IDs are accepted only as positive integers. Blank or malformed values persist as `null`; names, email addresses, phone numbers, parser text, and display labels are never converted into identity IDs.
+- Existing saves remain compatible because the identity fields are nullable. This pass does not add the CRM selectors or PA magic-link sign-in UI, does not activate customer invoice access, and does not change parser behavior.
+- Focused guard: `scripts/test-admin-operational-booking-crm-identity-persistence-guard.mjs`.
+
 ### Customer Driver Details Copy + App Link
 
 - Dispatch Customer Copy now has one explicit `Copy + App Link` action in the existing Customer Copy row.

@@ -445,6 +445,7 @@ async function updateAdminDriverAvailability(
 
 type BookingForm = {
   company: string;
+  companyId: string;
   bookingType: string;
   vehicle: string;
   date: string;
@@ -459,9 +460,11 @@ type BookingForm = {
   returnPickup: string;
   returnDropoff: string;
   booker: string;
+  bookerId: string;
   bookerContact: string;
   bookerEmail: string;
   name: string;
+  travelerId: string;
   pax: string;
   childSeatRequired: string;
   childSeatCount: string;
@@ -502,6 +505,7 @@ function draftDriverAssignmentSignature(booking: Pick<
 type LoadBookingsOperationalFormFields = Pick<
   BookingForm,
   | "booker"
+  | "bookerId"
   | "bookerContact"
   | "bookerEmail"
   | "bookingType"
@@ -509,6 +513,7 @@ type LoadBookingsOperationalFormFields = Pick<
   | "childSeatRequired"
   | "childSeatType"
   | "company"
+  | "companyId"
   | "date"
   | "driverContact"
   | "driverId"
@@ -520,6 +525,7 @@ type LoadBookingsOperationalFormFields = Pick<
   | "extraStopLocation"
   | "flight"
   | "name"
+  | "travelerId"
   | "pax"
   | "pickup"
   | "time"
@@ -2276,6 +2282,9 @@ type AdminBookingPersistenceRecord = {
   source_channel?: string | null;
   source_surface?: string | null;
   customer_id?: number | string | null;
+  company_id?: number | null;
+  booker_id?: number | null;
+  traveler_id?: number | null;
   pickup_datetime?: string | null;
   pickup_at?: string | null;
   pickup_location?: string | null;
@@ -2329,6 +2338,9 @@ type AdminBookingPersistenceRequestBody = {
     source_channel: string;
     source_surface?: string | null;
     customer_id: number | string | null;
+    company_id?: number | null;
+    booker_id?: number | null;
+    traveler_id?: number | null;
     pickup_datetime: string | null;
     pickup_location: string | null;
     dropoff_location: string | null;
@@ -2907,6 +2919,7 @@ const requiredFields: Array<keyof BookingForm> = [];
 function createInitialBooking(): BookingForm {
   return {
     company: "",
+    companyId: "",
     bookingType: "MNG",
     vehicle: "AVF",
     date: "",
@@ -2921,9 +2934,11 @@ function createInitialBooking(): BookingForm {
     returnPickup: "",
     returnDropoff: "",
     booker: "",
+    bookerId: "",
     bookerContact: "",
     bookerEmail: "",
     name: "",
+    travelerId: "",
     pax: "1",
     childSeatRequired: "",
     childSeatCount: "",
@@ -2988,6 +3003,7 @@ function adminDispatchSelectableBookingForm(bookingForm: BookingForm): BookingFo
 
 const fieldLabels: Record<keyof BookingForm, string> = {
   company: "Company / Account",
+  companyId: "Verified company",
   bookingType: "Booking type",
   vehicle: "Vehicle",
   date: "Pickup date",
@@ -3002,9 +3018,11 @@ const fieldLabels: Record<keyof BookingForm, string> = {
   returnPickup: "Return pickup",
   returnDropoff: "Return drop-off",
   booker: "Booker",
+  bookerId: "Verified booker",
   bookerContact: "Booker WhatsApp / Contact",
   bookerEmail: "Booker email (optional)",
   name: "Passenger name",
+  travelerId: "Verified traveler",
   pax: "Pax",
   childSeatRequired: "Child seat required",
   childSeatCount: "Child seat count",
@@ -8224,6 +8242,7 @@ function bookingRecordToOperationalFormFields(bookingRecord: BookingRecord): Loa
   return {
     company:
       getBookingCustomerAccountDisplayName(bookingRecord),
+    companyId: bookingRecord.company_id ? String(bookingRecord.company_id) : "",
     bookingType: serviceType,
     vehicle: vehicleDisplay,
     date: getBookingDateKey(bookingRecord),
@@ -8233,9 +8252,11 @@ function bookingRecordToOperationalFormFields(bookingRecord: BookingRecord): Loa
     extraStopLocation: extraStopLocations.join(" > "),
     dropoff,
     booker: getBookerName(bookingRecord),
+    bookerId: bookingRecord.booker_id ? String(bookingRecord.booker_id) : "",
     bookerContact: clean(bookingRecord.contact_phone) || clean(bookingRecord.bookers?.phone),
     bookerEmail: clean(bookingRecord.contact_email) || clean(bookingRecord.bookers?.email),
     name: getBookingName(bookingRecord),
+    travelerId: bookingRecord.traveler_id ? String(bookingRecord.traveler_id) : "",
     pax: String(bookingRecord.pax_count || bookingRecord.pax || 1),
     driverId: bookingRecord.driver_id ? String(bookingRecord.driver_id) : "",
     driverName: clean(bookingRecord.driver_name),
@@ -8474,6 +8495,12 @@ function createAdminBookingReference() {
   return `ADM-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`;
 }
 
+function adminDispatchVerifiedIdentityId(value: string | number | null | undefined) {
+  const parsed = Number(value);
+
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
 function getAdminExtraStopLocations(value: string) {
   const cleanedValue = clean(value);
 
@@ -8585,6 +8612,9 @@ function buildAdminBookingPersistencePayload(
       booking_reference: bookingReference,
       source_channel: "admin-dashboard",
       customer_id: null,
+      company_id: adminDispatchVerifiedIdentityId(bookingValue.companyId),
+      booker_id: adminDispatchVerifiedIdentityId(bookingValue.bookerId),
+      traveler_id: adminDispatchVerifiedIdentityId(bookingValue.travelerId),
       pickup_datetime: pickupDateTime,
       pickup_location: pickupLocation,
       dropoff_location: dropoffLocation,
@@ -9305,8 +9335,8 @@ function adminBookingPersistenceRecordToCalendarBookingRecord(
   return {
     booking_reference: bookingReference,
     booking_type: adminBookingPersistenceServiceType(record) || null,
-    booker_id: null,
-    company_id: null,
+    booker_id: adminDispatchVerifiedIdentityId(record.booker_id),
+    company_id: adminDispatchVerifiedIdentityId(record.company_id),
     contact_display_name: clean(record.contact_display_name) || null,
     contact_email: clean(record.contact_email) || null,
     contact_phone: clean(record.contact_phone) || null,
@@ -9336,7 +9366,7 @@ function adminBookingPersistenceRecordToCalendarBookingRecord(
     source_channel: clean(record.source_channel) || null,
     source_surface: clean(record.source_surface) || null,
     status: adminBookingPersistencePrimaryStatus(record),
-    traveler_id: null,
+    traveler_id: adminDispatchVerifiedIdentityId(record.traveler_id),
     updated_at: clean(record.updated_at) || null,
     vehicle,
     vehicle_type_or_category: vehicle || null,

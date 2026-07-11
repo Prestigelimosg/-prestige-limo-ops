@@ -11,6 +11,9 @@ export type AdminBookingRecordInput = {
   source_channel?: string | null;
   source_surface?: string | null;
   customer_id?: number | string | null;
+  company_id?: number | null;
+  booker_id?: number | null;
+  traveler_id?: number | null;
   pickup_datetime?: string | null;
   pickup_at?: string | null;
   pickup_location?: string | null;
@@ -190,6 +193,9 @@ const bookingFields = new Set([
   "source_channel",
   "source_surface",
   "customer_id",
+  "company_id",
+  "booker_id",
+  "traveler_id",
   "pickup_datetime",
   "pickup_at",
   "pickup_location",
@@ -468,6 +474,9 @@ function sanitizeBooking(record: UnknownRecord): AdminBookingRecordInput {
     source_channel: sourceChannel || sourceSurface,
     source_surface: sourceSurface || sourceChannel,
     customer_id: integerOrNull(record.customer_id),
+    company_id: integerOrNull(record.company_id),
+    booker_id: integerOrNull(record.booker_id),
+    traveler_id: integerOrNull(record.traveler_id),
     pickup_datetime: pickupDateTime,
     pickup_at: pickupDateTime,
     pickup_location: pickupLocation,

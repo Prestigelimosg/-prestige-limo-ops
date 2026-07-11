@@ -23,3 +23,7 @@ Follow TEST → FIX → REVIEW → COMMIT in one bounded pass. Do not claim runt
 Until the owner explicitly declares that real operations have started, existing booking, driver, and customer records may be reused as test data because the owner will fully clean those records before live operations. Prefer reusing an existing test record over creating a duplicate, and keep every test scoped to the exact workflow under review.
 
 This test-data permission does not authorize external sends or contacts without explicit action-time approval. It also does not authorize payment, payout, PayNow, invoice, billing, GPS, provider, authentication, environment, or Supabase configuration changes without the owner's specific approval. Customer and driver privacy boundaries remain mandatory, and testing must stop and report immediately when an issue is found.
+
+# Verified PA identity implementation checkpoint
+
+The operational admin booking persistence lane now supports nullable verified `company_id`, `booker_id`, and `traveler_id` fields already present in the established `bookings` schema. Do not recreate this persistence work, add another booking lane, or derive these IDs from names, email, phone, parser output, or display labels. The remaining work is explicit CRM selection and PA authentication/authorization on top of this existing identity persistence foundation.

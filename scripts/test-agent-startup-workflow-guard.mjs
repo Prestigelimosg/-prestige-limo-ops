@@ -15,6 +15,11 @@ for (const requiredRule of [
   "Do not add a second lane, panel, route, helper, button, or write path for an existing workflow",
   "Record every approved fix in the implementation ledger and protect it with a focused regression guard",
   "npm run guard:staged-app-change",
+  "Until the owner explicitly declares that real operations have started",
+  "existing booking, driver, and customer records may be reused as test data",
+  "Prefer reusing an existing test record over creating a duplicate",
+  "This test-data permission does not authorize external sends",
+  "payment, payout, PayNow, invoice, billing, GPS, provider, authentication, environment, or Supabase configuration changes",
 ]) {
   assert.ok(agents.includes(requiredRule), `AGENTS.md missing startup workflow rule: ${requiredRule}`);
 }

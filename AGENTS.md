@@ -17,3 +17,9 @@ Before proposing, testing, or editing a feature:
 7. Before committing an application change, stage the bounded files and run `npm run guard:staged-app-change`. Do not commit until the staged application change includes both `docs/current-implementation-ledger.md` and an appropriate focused `scripts/test-*.mjs` guard update.
 
 Follow TEST → FIX → REVIEW → COMMIT in one bounded pass. Do not claim runtime behavior works from source inspection or a passing guard alone.
+
+# Pre-operation test-data permission
+
+Until the owner explicitly declares that real operations have started, existing booking, driver, and customer records may be reused as test data because the owner will fully clean those records before live operations. Prefer reusing an existing test record over creating a duplicate, and keep every test scoped to the exact workflow under review.
+
+This test-data permission does not authorize external sends or contacts without explicit action-time approval. It also does not authorize payment, payout, PayNow, invoice, billing, GPS, provider, authentication, environment, or Supabase configuration changes without the owner's specific approval. Customer and driver privacy boundaries remain mandatory, and testing must stop and report immediately when an issue is found.

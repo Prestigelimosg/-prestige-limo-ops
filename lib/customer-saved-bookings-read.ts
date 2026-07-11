@@ -69,6 +69,12 @@ export type CustomerSavedBookingsReadResult = {
   version: typeof customerSavedBookingsReadVersion;
 };
 
+export type CustomerSavedBookingsVerifiedIdentity = {
+  booker_id: number;
+  company_id: number;
+  customer_account_reference: string;
+};
+
 type UnknownRecord = Record<string, unknown>;
 type CustomerSavedBookingsClient = Pick<SupabaseClient, "from">;
 type CustomerSavedBookingsSessionTokenSource =
@@ -888,6 +894,7 @@ export function parseCustomerSavedBookingsReadParams(
 export function resolveCustomerSavedBookingsBoundaryForPurpose(
   request: Request,
   expectedPurpose = "customer-saved-bookings-read",
+  allowedRefererPathname = "/my-bookings",
 ): AdminBookingResult<CustomerSavedBookingsBoundaryContext> {
   const requestUrl = new URL(request.url);
   const origin = request.headers.get("origin");
@@ -909,7 +916,10 @@ export function resolveCustomerSavedBookingsBoundaryForPurpose(
   try {
     const refererUrl = new URL(referer);
 
-    if (refererUrl.origin !== requestUrl.origin || refererUrl.pathname !== "/my-bookings") {
+    if (
+      refererUrl.origin !== requestUrl.origin ||
+      (refererUrl.pathname !== "/my-bookings" && refererUrl.pathname !== allowedRefererPathname)
+    ) {
       return customerSavedBookingsAuthRequiredResult();
     }
   } catch {
@@ -1020,6 +1030,72 @@ export function resolveCustomerSavedBookingsBoundaryForPurpose(
       mode: providedToken.source === "request-cookie" ? "server-session-cookie" : "server-session-token",
       runtime_gate: runtimeGate.data,
       source_surface: "customer_api",
+    },
+    ok: true,
+  };
+}
+
+export async function resolveCustomerSavedBookingsVerifiedIdentity(
+  context: CustomerSavedBookingsBoundaryContext,
+): Promise<AdminBookingResult<CustomerSavedBookingsVerifiedIdentity>> {
+  const clientResult = getServerOnlyCustomerSavedBookingsSupabaseClient(context);
+
+  if (!clientResult.ok) {
+    return clientResult;
+  }
+
+  let customerAccountReference = validBookingReference(context.customer_account_reference);
+  let companyId = verifiedIdentityId(context.company_id);
+  let bookerId = verifiedIdentityId(context.booker_id);
+
+  if (!customerAccountReference) {
+    const { data, error } = await clientResult.data
+      .from("customer_access_accounts")
+      .select(customerAccountSelect)
+      .eq("auth_user_id", context.auth_user_id)
+      .eq("account_status", "active")
+      .limit(1);
+
+    if (error) {
+      return safeAdapterFailure(customerSavedBookingsReadError, 500, error);
+    }
+
+    const accountRow = asRecord(asArray(data)[0]);
+    customerAccountReference = validBookingReference(accountRow.customer_account_reference);
+    companyId = verifiedIdentityId(accountRow.company_id);
+    bookerId = verifiedIdentityId(accountRow.booker_id);
+  } else {
+    const account = await assertActiveCustomerPortalAccessAccount(
+      customerAccountReference,
+      clientResult.data,
+    );
+
+    if (!account.ok) {
+      return customerSavedBookingsAuthRequiredResult();
+    }
+
+    companyId = account.data.company_id;
+    bookerId = account.data.booker_id;
+  }
+
+  const hasCompanyIdentity = Boolean(companyId);
+  const hasBookerIdentity = Boolean(bookerId);
+
+  if (
+    !customerAccountReference ||
+    !customerAccountAllowedByControlledRuntime(customerAccountReference, context.runtime_gate) ||
+    hasCompanyIdentity !== hasBookerIdentity ||
+    !companyId ||
+    !bookerId
+  ) {
+    return customerSavedBookingsAuthRequiredResult();
+  }
+
+  return {
+    data: {
+      booker_id: bookerId,
+      company_id: companyId,
+      customer_account_reference: customerAccountReference,
     },
     ok: true,
   };

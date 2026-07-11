@@ -12,6 +12,13 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### PA-Scoped New Booking Requests
+
+- The canonical `/book` form remains the only new-booking request form. Public submissions keep their established behavior.
+- When `/book` is opened from a valid signed-in customer portal session, the existing request route resolves the active access account on the server and persists its verified `customer_id + company_id + booker_id` on every outbound/return request leg.
+- The browser form never supplies identity IDs. A partial or inactive verified PA identity fails closed, and names, company text, email, phone, or parser text are never converted into authorization IDs.
+- Focused guard: `scripts/test-customer-booking-request-pa-identity-guard.mjs`.
+
 ### Customer Change Request Reject/Dismiss Safety
 
 - The established Urgent / Customer Requests lane keeps one set of `Accept + Cal`, `Reject`, and `Dismiss` actions; no duplicate request panel or handler lane was added.

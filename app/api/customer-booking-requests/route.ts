@@ -7,6 +7,10 @@ import { createCustomerBookingRequestAdminAppNotification } from "../../../lib/a
 import { customerBookingRequestPersistenceAdapterActor } from "../../../lib/admin-booking-supabase-adapter";
 import { sendAdminNewBookingDevicePushAlert } from "../../../lib/admin-device-push-notification";
 import { sendAdminNewBookingEmailAlert } from "../../../lib/admin-new-booking-email-alert";
+import {
+  resolveCustomerSavedBookingsBoundaryForPurpose,
+  resolveCustomerSavedBookingsVerifiedIdentity,
+} from "../../../lib/customer-saved-bookings-read";
 
 export const dynamic = "force-dynamic";
 
@@ -157,10 +161,34 @@ export async function POST(request: Request) {
       );
     }
 
+    const portalBoundary = resolveCustomerSavedBookingsBoundaryForPurpose(
+      request,
+      "customer-booking-request",
+      "/book",
+    );
+    const verifiedIdentity = portalBoundary.ok
+      ? await resolveCustomerSavedBookingsVerifiedIdentity(portalBoundary.data)
+      : null;
+
+    if (verifiedIdentity && !verifiedIdentity.ok) {
+      return Response.json({ ok: false, error: "Verified PA booking identity is not ready." }, { status: 403 });
+    }
+
     const savedRequests: AdminBookingPersistenceRecord[] = [];
 
     for (const requestPayload of parsed.data.requests) {
-      const result = await createAdminBooking(requestPayload, customerBookingRequestPersistenceAdapterActor, {
+      const verifiedRequestPayload = verifiedIdentity?.ok
+        ? {
+            ...requestPayload,
+            booking: {
+              ...requestPayload.booking,
+              customer_id: verifiedIdentity.data.customer_account_reference,
+              company_id: verifiedIdentity.data.company_id,
+              booker_id: verifiedIdentity.data.booker_id,
+            },
+          }
+        : requestPayload;
+      const result = await createAdminBooking(verifiedRequestPayload, customerBookingRequestPersistenceAdapterActor, {
         action: "customer_booking_request_create",
         source_route: "/book",
         actor_label: "Customer booking request",

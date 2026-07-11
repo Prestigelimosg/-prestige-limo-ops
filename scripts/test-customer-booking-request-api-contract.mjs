@@ -36,6 +36,7 @@ async function loadRouteHarness() {
   const adapterPath = path.join(tempDir, "lib/admin-booking-supabase-adapter.js");
   const emailAlertPath = path.join(tempDir, "lib/admin-new-booking-email-alert.js");
   const devicePushAlertPath = path.join(tempDir, "lib/admin-device-push-notification.js");
+  const customerSavedBookingsReadPath = path.join(tempDir, "lib/customer-saved-bookings-read.js");
 
   await mkdir(path.dirname(outputPath), { recursive: true });
   await mkdir(path.dirname(persistencePath), { recursive: true });
@@ -118,6 +119,21 @@ async function loadRouteHarness() {
       "  return { ok: false, reason: 'push_gate_closed', status: 'blocked' };",
       "}",
       "module.exports = { sendAdminNewBookingDevicePushAlert };",
+    ].join("\n"),
+  );
+  await writeFile(
+    customerSavedBookingsReadPath,
+    [
+      "function mock() { return globalThis.__prestigeCustomerBookingRequestApiMock; }",
+      "function resolveCustomerSavedBookingsBoundaryForPurpose() {",
+      "  const state = mock();",
+      "  return state.portalBoundary || { ok: false, error: 'no portal session', status: 403 };",
+      "}",
+      "async function resolveCustomerSavedBookingsVerifiedIdentity() {",
+      "  const state = mock();",
+      "  return state.verifiedIdentity || { ok: false, error: 'identity unavailable', status: 403 };",
+      "}",
+      "module.exports = { resolveCustomerSavedBookingsBoundaryForPurpose, resolveCustomerSavedBookingsVerifiedIdentity };",
     ].join("\n"),
   );
 
@@ -332,6 +348,30 @@ try {
     "CUST-SAFE-001",
   );
   assertSafeCustomerBody(success.body, "short-notice success body");
+
+  const verifiedPaMock = installMock({
+    portalBoundary: { data: { auth_user_id: "verified-pa" }, ok: true },
+    verifiedIdentity: {
+      data: {
+        booker_id: 5,
+        company_id: 1,
+        customer_account_reference: "120",
+      },
+      ok: true,
+    },
+  });
+  const verifiedPaSuccess = await readJson(
+    await harness.route.POST(postRequest({ passengerName: "Safe PA Passenger" })),
+  );
+
+  assert.equal(verifiedPaSuccess.status, 200);
+  assert.deepEqual(verifiedPaMock.createCalls[0].data.booking, {
+    booking_reference: "CUST-SAFE-001",
+    booker_id: 5,
+    company_id: 1,
+    customer_id: "120",
+  });
+  assertSafeCustomerBody(verifiedPaSuccess.body, "verified PA success body");
 
   installMock({
     createResults: [

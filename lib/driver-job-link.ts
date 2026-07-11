@@ -15,6 +15,7 @@ export const defaultDriverJobLinkMaxFutureHours = defaultDriverJobLinkTtlHours;
 export type DriverJobBookingLike = Record<string, unknown>;
 
 export type SafeDriverJobPayload = {
+  acknowledged: boolean;
   reference: string;
   pickupDate: string;
   pickupTime: string;
@@ -179,6 +180,7 @@ export function mapBookingToSafeDriverJobPayload(booking: DriverJobBookingLike):
   const status = stringField(booking, "status") || "pending";
 
   return {
+    acknowledged: Boolean(stringField(booking, "driver_acknowledged_at", "driverAcknowledgedAt")),
     reference: stringField(booking, "public_reference", "driver_job_reference", "reference"),
     pickupDate,
     pickupTime,

@@ -551,6 +551,7 @@ function safePayloadRecordFromLink(link: DriverJobLinkPersistenceRow) {
 
   return {
     booking_type: readFirstText(source, ["booking_type", "bookingType"]),
+    driver_acknowledged_at: safeTextFromDb(context.driver_acknowledged_at, 80),
     driver_contact: readFirstText(source, [
       "driver_contact",
       "driverContact",

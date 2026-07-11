@@ -711,8 +711,8 @@ export default function DriverJobPage() {
         };
 
         setDriverDetails(loadedDriverDetails);
-        setSavedDriverDetails(null);
-        setAcknowledged(false);
+        setSavedDriverDetails(result.payload.acknowledged ? loadedDriverDetails : null);
+        setAcknowledged(result.payload.acknowledged);
         setWorkflowStatus(result.payload.status || "assigned");
         setPageState({ kind: "ready", job: result.payload });
 

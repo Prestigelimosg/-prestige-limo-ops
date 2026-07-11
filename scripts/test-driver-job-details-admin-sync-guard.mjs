@@ -215,8 +215,8 @@ for (const fragment of [
 
 for (const fragment of [
   "setDriverDetails(loadedDriverDetails)",
-  "setSavedDriverDetails(null)",
-  "setAcknowledged(false)",
+  "setSavedDriverDetails(result.payload.acknowledged ? loadedDriverDetails : null)",
+  "setAcknowledged(result.payload.acknowledged)",
   "Driver details saved and job acknowledged.",
 ]) {
   assertIncludes(driverJobPage, fragment, `Driver job page acknowledgement fragment ${fragment}`);

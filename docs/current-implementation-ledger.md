@@ -1060,6 +1060,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 - Driver job link `Save & Acknowledge Job` now persists safe driver name/contact/plate/vehicle details through the verified driver job token path.
 - The driver job page may prefill assigned driver details, but it does not mark the job acknowledged or show confirmed saved driver details until the driver presses `Save & Acknowledge Job`.
+- After acknowledgement, the existing safe `driver_acknowledged_at` timestamp is projected as a boolean in the public driver-job payload. Refreshing the same active link restores the visible `Acknowledged` state and confirmed driver details without exposing the timestamp or adding another status/write path. Focused guard: `scripts/test-driver-job-acknowledgement-refresh-guard.mjs`.
 - The update is scoped to the resolved driver job token and matching booking reference only; the driver browser cannot choose another booking/customer.
 - The server updates only safe assigned-driver fields on `driver_job_links.safe_link_context` and safe driver detail fields on the matching booking record.
 - Admin Dashboard, Bookings, and Dispatch silently re-read the existing admin-safe booking list every 3 seconds while loaded and merge only driver name/contact/plate/vehicle into the currently opened booking.

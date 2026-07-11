@@ -22964,11 +22964,46 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         ]),
     ).values(),
   );
+  if (
+    booking.bookerId &&
+    !adminDispatchVerifiedBookerOptions.some((booker) => booker.id === booking.bookerId)
+  ) {
+    adminDispatchVerifiedBookerOptions.push({
+      id: booking.bookerId,
+      name: clean(booking.booker) || `Booker ${booking.bookerId}`,
+    });
+  }
   const adminDispatchVerifiedTravelerOptions = rateTravelers.filter(
     (traveler) =>
       (!booking.companyId || traveler.company_id === Number(booking.companyId)) &&
       (!booking.bookerId || traveler.booker_id === Number(booking.bookerId)),
   );
+  if (
+    booking.travelerId &&
+    !adminDispatchVerifiedTravelerOptions.some(
+      (traveler) => String(traveler.id) === booking.travelerId,
+    )
+  ) {
+    adminDispatchVerifiedTravelerOptions.push({
+      booker_id: booking.bookerId ? Number(booking.bookerId) : null,
+      company_id: booking.companyId ? Number(booking.companyId) : 0,
+      id: Number(booking.travelerId),
+      traveler_name: clean(booking.name) || `Traveler ${booking.travelerId}`,
+    });
+  }
+  const adminDispatchVerifiedCompanyOptions = rateCompanies.map((company) => ({
+    id: String(company.id),
+    name: clean(company.company_name) || `Company ${company.id}`,
+  }));
+  if (
+    booking.companyId &&
+    !adminDispatchVerifiedCompanyOptions.some((company) => company.id === booking.companyId)
+  ) {
+    adminDispatchVerifiedCompanyOptions.push({
+      id: booking.companyId,
+      name: clean(booking.company) || `Company ${booking.companyId}`,
+    });
+  }
 
   const customerBookingRequestsPanel = customerBookingRequestDisplayItems.length > 0 ? (
     <div
@@ -36853,7 +36888,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     value={booking.companyId}
                   >
                     <option value="">Not selected</option>
-                    {rateCompanies.map((company) => <option key={company.id} value={company.id}>{clean(company.company_name) || `Company ${company.id}`}</option>)}
+                    {adminDispatchVerifiedCompanyOptions.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
                   </select>
                 </label>
                 <label className="text-xs font-semibold text-slate-700">

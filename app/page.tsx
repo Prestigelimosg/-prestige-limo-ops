@@ -40773,14 +40773,15 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 ))}
               </div>
               <details
-                className="mb-2 rounded-md border border-amber-200 bg-amber-50/80 px-2 py-1 text-sm text-amber-950"
+                className="group mb-2 rounded-md border border-amber-200 bg-amber-50/80 px-2 py-1 text-sm text-amber-950"
                 data-dispatch-compact-panel="manual-extra-charges"
                 data-manual-extra-charges-review-preview="true"
               >
                 <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 rounded px-1 py-1 text-xs font-semibold uppercase tracking-wide text-amber-800 [&::-webkit-details-marker]:hidden">
                   <span>Manual Extra Charges Review</span>
                   <span className="rounded-full border border-amber-200 bg-white/70 px-2 py-0.5 text-[11px] font-semibold uppercase text-amber-800">
-                    Expand
+                    <span className="group-open:hidden">Expand</span>
+                    <span className="hidden group-open:inline">Collapse</span>
                   </span>
                 </summary>
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">

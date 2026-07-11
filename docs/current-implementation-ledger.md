@@ -774,6 +774,12 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This reuses existing admin live-location runtime, map read paths, and guarded admin map search/route estimate routes for evidence when available; it does not add provider sends, notification sends, customer/driver messages, env changes, DB schema changes, billing/payment/PDF/invoice/payout, calendar sync, parser changes, or shims.
 - Guard coverage lives in `scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Dispatch Manual Extra Charges Review Toggle
+
+- The existing `Manual Extra Charges Review` details control now displays `Expand` while closed and `Collapse` while open.
+- This is display-only and preserves the existing manual-entry boundary: no total calculation, persistence, invoice, statement, payment, PDF, payout, accounting, finance export, API, Supabase, or notification behavior was added.
+- Guard coverage lives in `scripts/test-manual-extra-charges-review-toggle-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Driver Completed History Grouping Lock
 
 - Saved driver `Job Completed` reports now persist the saved booking status as `completed`, moving the loaded booking out of Today/Upcoming and `Today's Jobs` and into Completed / History.

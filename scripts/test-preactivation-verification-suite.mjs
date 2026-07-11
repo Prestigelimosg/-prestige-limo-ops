@@ -226,6 +226,10 @@ const guardChecks = [
     script: "scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs",
   },
   {
+    label: "manual Extra Charges review toggle guard",
+    script: "scripts/test-manual-extra-charges-review-toggle-guard.mjs",
+  },
+  {
     label: "driver completed history grouping guard",
     script: "scripts/test-driver-completed-history-grouping-guard.mjs",
   },

@@ -8349,11 +8349,14 @@ function bookingRecordToAdminBookingPersistenceRecord(
     cancellation_review_status:
       isCancelledStatus ? "cancelled" : clean(bookingRecord.cancellation_review_status) || null,
     change_review_status: clean(bookingRecord.change_review_status) || null,
+    company_id: adminDispatchVerifiedIdentityId(bookingRecord.company_id),
+    booker_id: adminDispatchVerifiedIdentityId(bookingRecord.booker_id),
     contact_display_name: clean(bookingRecord.contact_display_name) || clean(bookingRecord.bookers?.booker_name) || null,
     contact_email: clean(bookingRecord.contact_email) || clean(bookingRecord.bookers?.email) || null,
     contact_phone: clean(bookingRecord.contact_phone) || clean(bookingRecord.bookers?.phone) || null,
     created_at: clean(bookingRecord.created_at) || null,
     customer_display_name: clean(bookingRecord.customer_display_name) || getBookingCompanyName(bookingRecord) || null,
+    customer_id: safeAdminBookingPersistenceIdentifier(bookingRecord.customer_id),
     customer_facing_status:
       archivedStatus || clean(bookingRecord.customer_facing_status) || clean(bookingRecord.status) || null,
     driver_contact: clean(bookingRecord.driver_contact) || null,
@@ -8389,6 +8392,7 @@ function bookingRecordToAdminBookingPersistenceRecord(
     source_channel: clean(bookingRecord.source_channel) || null,
     source_surface: clean(bookingRecord.source_surface) || null,
     updated_at: clean(bookingRecord.updated_at) || null,
+    traveler_id: adminDispatchVerifiedIdentityId(bookingRecord.traveler_id),
     vehicle_type_or_category:
       clean(bookingRecord.vehicle_type_or_category) ||
       clean(bookingRecord.vehicle_type) ||

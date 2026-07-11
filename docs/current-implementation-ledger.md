@@ -451,6 +451,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### WhatsApp Job Card Preview Format
 
 - Dispatch `Job Card Preview` uses the compact WhatsApp job-card format William requested: `VEHICLE - SERVICE`, blank line, `D Mon (Day), HHMMhrs`, blank line, route, blank line, then pax/operational notes only when present.
+- The readable summary under the driver-message preview excludes billing-account identity. Passenger, reference, service, route, assigned driver, and vehicle remain operationally visible. Focused guard: `scripts/test-driver-job-card-billing-privacy-guard.mjs`.
 - The WhatsApp job-card target must not show any identity name line or value: no passenger/traveller name, customer/company/account name, booker name, contact name, `Name:`, `Passenger:`, `Customer:`, `Company:`, or `Booker:`. Route/place names remain because the driver still needs pickup/drop-off context.
 - Vehicle defaults to `E / AVF` when no vehicle is stated. The formatter normalizes `E-Class / AVF` to `E / AVF` and maps short service codes as `DEP`, `MNG`, `TRF`, `DSP`, and `DWPU` only when explicitly present.
 - Departure routes prefer `pickup > flight number`; if no flight is present they fall back to `pickup > airport/drop-off`. Arrival routes prefer `flight number > drop-off`. Transfer/hourly routes keep `pickup > stop(s) > destination`.

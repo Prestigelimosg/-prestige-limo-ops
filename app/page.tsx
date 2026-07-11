@@ -23893,12 +23893,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     safeDriverVehicleModelDisplay(booking.driverVehicleModel) ||
       safeDriverVehicleModelDisplay(assignedDriverRecord?.vehicle_type),
   ].filter(Boolean).join(" / ");
-  const dispatchReadableBillingAccount =
-    clean(confirmedSaveCrmBillingIdentity?.accountLabel) ||
-    saveCrmDefaultCustomerAccount(booking) ||
-    "Account not set";
   const dispatchReadableSummaryItems = [
-    { label: "Billing account", value: dispatchReadableBillingAccount },
     { label: "Passenger", value: clean(booking.name) || "Passenger not set" },
     {
       label: "Reference",
@@ -23923,9 +23918,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       : []),
   ];
   const customerCopyReadableSummaryItems = [
-    ...dispatchReadableSummaryItems.filter(
-      (item) => item.label !== "Billing account" && item.label !== "Vehicle",
-    ),
+    ...dispatchReadableSummaryItems.filter((item) => item.label !== "Vehicle"),
     ...(dispatchReadableCustomerVehicleValue
       ? [{ label: "Car", value: dispatchReadableCustomerVehicleValue }]
       : []),

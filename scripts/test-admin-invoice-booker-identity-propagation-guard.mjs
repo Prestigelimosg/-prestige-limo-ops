@@ -13,6 +13,8 @@ for (const fragment of [
   "companyId: booking.company_id ?? null",
   "bookerId: booking.booker_id ?? null",
   "bookerId: customerInvoicePrepRow.bookerId",
+  "if (!customerInvoicePrepRow.bookerId)",
+  "Assign a verified PA / booker to the exact saved booking before issuing.",
 ]) assert.ok((read + page).includes(fragment), `Missing ${fragment}`);
 
 console.log("Admin invoice booker identity propagation guard passed.");

@@ -47,6 +47,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Exact nullable `company_id` and `booker_id` now flow from the established admin saved-booking DTO through unbilled/preparation rows into the invoice request body.
 - Invoice persistence stores a supplied positive `bookerId` in the new `booker_id` column. Missing IDs remain nullable for legacy admin compatibility until all issuance lanes are covered.
 - Focused guard: `scripts/test-admin-invoice-booker-identity-propagation-guard.mjs`.
+- The established prepared-booking Issue action now blocks before confirmation/API write when the exact saved booking lacks verified `bookerId`. Draft saving remains nullable and admin-only.
 
 ### Operational Booking Verified CRM Identity Persistence
 

@@ -6013,6 +6013,13 @@ export default function MockCustomerDashboardPage() {
       return;
     }
 
+    if (!customerInvoicePrepRow.bookerId) {
+      setCustomerInvoiceIssueFeedback(
+        "Assign a verified PA / booker to the exact saved booking before issuing. Draft saving remains admin-only.",
+      );
+      return;
+    }
+
     const amountCents = parseInvoiceAmountToCents(customerInvoiceIssueAmount);
 
     if (!amountCents) {

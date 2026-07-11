@@ -29490,6 +29490,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       ? companyProfileDraft.logo_image_url
       : "";
   const companyProfilePreviewContactLines = companyProfileContactLines(companyProfileDraft);
+  const deployedBuildCommit = clean(process.env.PRESTIGE_BUILD_COMMIT).toLowerCase();
+  const deployedBuildCommitShort = /^[a-f0-9]{7,40}$/.test(deployedBuildCommit)
+    ? deployedBuildCommit.slice(0, 8)
+    : "unavailable";
 
   return (
     <main className="admin-ops-shell min-h-screen bg-stone-50 text-slate-950">
@@ -29502,6 +29506,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             <h1 className="mt-0.5 text-2xl font-semibold tracking-normal text-slate-950">
               Prestige Limo Ops Dispatch
             </h1>
+            <p
+              className="mt-1 text-[11px] font-medium text-slate-500"
+              data-admin-deployment-commit-marker="true"
+              data-admin-deployment-commit-sha={deployedBuildCommit}
+              title={deployedBuildCommit || "Build commit unavailable"}
+            >
+              Build {deployedBuildCommitShort}
+            </p>
           </div>
           <div className="flex flex-col gap-1.5 sm:min-w-72">
             <div className="grid grid-cols-3 gap-1.5 text-center">

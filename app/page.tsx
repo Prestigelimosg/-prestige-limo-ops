@@ -22929,6 +22929,25 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       </div>
     );
   };
+  const adminDispatchVerifiedBookerOptions = Array.from(
+    new Map(
+      rateTravelers
+        .filter((traveler) => !booking.companyId || traveler.company_id === Number(booking.companyId))
+        .filter((traveler) => traveler.booker_id)
+        .map((traveler) => [
+          String(traveler.booker_id),
+          {
+            id: String(traveler.booker_id),
+            name: clean(traveler.booker_name) || `Booker ${traveler.booker_id}`,
+          },
+        ]),
+    ).values(),
+  );
+  const adminDispatchVerifiedTravelerOptions = rateTravelers.filter(
+    (traveler) =>
+      (!booking.companyId || traveler.company_id === Number(booking.companyId)) &&
+      (!booking.bookerId || traveler.booker_id === Number(booking.bookerId)),
+  );
 
   const customerBookingRequestsPanel = customerBookingRequestDisplayItems.length > 0 ? (
     <div
@@ -36799,6 +36818,50 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               <div className="mb-1.5">
                 <h3 className="text-sm font-semibold text-slate-900">Booking Details</h3>
                 <p className="text-xs text-slate-500">Account, passenger, booker, and contact details.</p>
+              </div>
+              <div
+                className="mb-2 grid gap-2 rounded-md border border-sky-200 bg-sky-50 p-2 md:grid-cols-3"
+                data-admin-dispatch-crm-identity-selectors="true"
+              >
+                <label className="text-xs font-semibold text-slate-700">
+                  Verified company
+                  <select
+                    className="mt-1 h-8 w-full rounded-md border border-sky-300 bg-white px-2 text-sm"
+                    data-admin-dispatch-company-identity-select="true"
+                    onChange={(event) => setBooking((current) => ({ ...current, companyId: event.target.value, bookerId: "", travelerId: "" }))}
+                    value={booking.companyId}
+                  >
+                    <option value="">Not selected</option>
+                    {rateCompanies.map((company) => <option key={company.id} value={company.id}>{clean(company.company_name) || `Company ${company.id}`}</option>)}
+                  </select>
+                </label>
+                <label className="text-xs font-semibold text-slate-700">
+                  Verified PA / booker
+                  <select
+                    className="mt-1 h-8 w-full rounded-md border border-sky-300 bg-white px-2 text-sm"
+                    data-admin-dispatch-booker-identity-select="true"
+                    disabled={!booking.companyId}
+                    onChange={(event) => setBooking((current) => ({ ...current, bookerId: event.target.value, travelerId: "" }))}
+                    value={booking.bookerId}
+                  >
+                    <option value="">Not selected</option>
+                    {adminDispatchVerifiedBookerOptions.map((booker) => <option key={booker.id} value={booker.id}>{booker.name}</option>)}
+                  </select>
+                </label>
+                <label className="text-xs font-semibold text-slate-700">
+                  Verified traveler / boss
+                  <select
+                    className="mt-1 h-8 w-full rounded-md border border-sky-300 bg-white px-2 text-sm"
+                    data-admin-dispatch-traveler-identity-select="true"
+                    disabled={!booking.bookerId}
+                    onChange={(event) => setBooking((current) => ({ ...current, travelerId: event.target.value }))}
+                    value={booking.travelerId}
+                  >
+                    <option value="">Not selected</option>
+                    {adminDispatchVerifiedTravelerOptions.map((traveler) => <option key={traveler.id} value={traveler.id}>{clean(traveler.traveler_name) || `Traveler ${traveler.id}`}</option>)}
+                  </select>
+                </label>
+                {!ratesLoaded ? <button className="h-8 rounded-md border border-sky-300 bg-white px-2 text-xs font-semibold" onClick={() => loadRates("CRM identities loaded.")} type="button">Load CRM identities</button> : null}
               </div>
               <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                 {bookingDetailFieldOrder.map(renderDispatchBookingField)}

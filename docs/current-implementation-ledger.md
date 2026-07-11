@@ -20,6 +20,13 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Existing saves remain compatible because the identity fields are nullable. This pass does not add the CRM selectors or PA magic-link sign-in UI, does not activate customer invoice access, and does not change parser behavior.
 - Focused guard: `scripts/test-admin-operational-booking-crm-identity-persistence-guard.mjs`.
 
+### Dispatch Verified CRM Identity Selectors
+
+- The existing Booking Details section now includes verified company, PA/booker, and traveler/boss selectors backed by the established admin rate-setup CRM list read.
+- Company selection scopes bookers; booker selection scopes travelers. One verified booker can expose multiple assigned travelers without another sign-in identity.
+- The selectors retain exact numeric IDs only and do not replace or rewrite the existing company, booker, passenger, contact, parser, pricing, or save fields.
+- Focused guard: `scripts/test-admin-dispatch-crm-identity-selectors-guard.mjs`.
+
 ### Customer Driver Details Copy + App Link
 
 - Dispatch Customer Copy now has one explicit `Copy + App Link` action in the existing Customer Copy row.

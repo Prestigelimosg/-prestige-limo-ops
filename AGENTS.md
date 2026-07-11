@@ -27,3 +27,5 @@ This test-data permission does not authorize external sends or contacts without 
 # Verified PA identity implementation checkpoint
 
 The operational admin booking persistence lane now supports nullable verified `company_id`, `booker_id`, and `traveler_id` fields already present in the established `bookings` schema. Do not recreate this persistence work, add another booking lane, or derive these IDs from names, email, phone, parser output, or display labels. The remaining work is explicit CRM selection and PA authentication/authorization on top of this existing identity persistence foundation.
+
+Dispatch now has explicit verified company, PA/booker, and traveler selectors in the existing Booking Details section. They reuse the established rate-setup CRM list and operational save lane. Do not add a duplicate identity panel or infer selection from parser/display text.

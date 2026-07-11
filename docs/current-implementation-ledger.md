@@ -12,6 +12,14 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### PA Customer Access-Account Schema Foundation
+
+- Additive migration `202607110002_customer_access_accounts_pa_identity.sql` adds nullable verified `company_id` and `booker_id` relationships to existing customer access accounts.
+- The old unique company/account-reference index is removed so multiple PAs may belong to one company. Unique non-null `booker_id` prevents one PA identity from being assigned to multiple customer logins.
+- Existing controlled portal accounts remain valid because the new identity columns are nullable. No account rows are updated or deleted by this migration.
+- Company membership alone never authorizes booking or invoice access; later session/read work must require verified `booker_id`.
+- Focused guard: `scripts/test-customer-access-account-pa-identity-schema-guard.mjs`.
+
 ### Operational Booking Verified CRM Identity Persistence
 
 - The established `/api/admin-bookings` persistence contract and Supabase adapter now retain nullable verified `company_id`, `booker_id`, and `traveler_id` values already supported by the existing `bookings` schema.

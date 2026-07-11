@@ -31,3 +31,5 @@ The operational admin booking persistence lane now supports nullable verified `c
 Dispatch now has explicit verified company, PA/booker, and traveler selectors in the existing Booking Details section. They reuse the established rate-setup CRM list and operational save lane. Do not add a duplicate identity panel or infer selection from parser/display text.
 
 The established allowlisted admin legacy-data route accepts PATCH from a verified same-origin admin/dispatcher server session so exact traveler `booker_id` links can be maintained. Do not broaden this exception to POST or DELETE, public/cross-origin callers, unsupported tables, or unsafe fields.
+
+Customer access accounts support multiple PAs under one company through nullable verified `company_id` and unique non-null `booker_id`. Never use company/account reference alone to authorize customer invoices or PA-private bookings.

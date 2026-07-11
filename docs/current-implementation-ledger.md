@@ -50,6 +50,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The established prepared-booking Issue action now blocks before confirmation/API write when the exact saved booking lacks verified `bookerId`. Draft saving remains nullable and admin-only.
 - The existing manual Create Invoice lane reuses loaded saved bookings through one exact-booking selector. Its shared Draft/Issue/Email request builder carries the selected booking's verified `bookerId`; Draft remains admin-only, while Issue and Email stop before confirmation or persistence when exact PA ownership is missing.
 - Editing the invoice reference or changing its CRM account clears the exact-booking/PA link so stale ownership cannot be reused.
+- When a linked invoice reference is edited, the Create Invoice success feedback is replaced immediately with an error-tone instruction to reselect the exact saved booking and verified PA; the stale linked message is not retained.
 - The existing invoice persistence route independently verifies every issued invoice's `bookingReference + customerId + bookerId` against the saved booking before generating a number or PDF; altered or stale ownership claims fail closed. Admin-only drafts remain nullable.
 - Selecting a Create Invoice CRM billing account now performs an account-scoped read through the existing guarded saved-bookings API and stores the result in selector-specific state. Request sequencing prevents a slower prior account read from replacing the latest selection; the general customer-folder cache is not reused or overwritten.
 

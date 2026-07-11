@@ -20,6 +20,8 @@ for (const fragment of [
   "plainInvoiceSavedBookingRequestSequenceRef",
   "setPlainInvoiceSavedBookings(result.savedBookings)",
   "Loading exact saved bookings for",
+  "referenceClearsVerifiedOwnership",
+  "Reference changed. Select the exact saved booking and verified PA again before Issue or Email.",
   "bookerId: plainInvoiceForm.bookerId",
   "bookingReference: plainInvoiceForm.bookingReference",
   "Select an exact saved booking with a verified PA / booker before issuing Create Invoice.",

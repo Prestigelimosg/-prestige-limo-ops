@@ -5352,6 +5352,12 @@ export default function MockCustomerDashboardPage() {
     field: K,
     value: PlainInvoiceForm[K],
   ) {
+    const referenceClearsVerifiedOwnership =
+      field === "reference" &&
+      typeof value === "string" &&
+      Boolean(plainInvoiceForm.bookingReference) &&
+      value.trim() !== plainInvoiceForm.bookingReference;
+
     if (field === "billToName") {
       setSelectedPlainInvoiceCrmFolderKey("");
     }
@@ -5390,6 +5396,14 @@ export default function MockCustomerDashboardPage() {
 
       return nextForm;
     });
+
+    if (referenceClearsVerifiedOwnership) {
+      setPlainInvoicePreview(null);
+      setPlainInvoiceFeedback(
+        "Reference changed. Select the exact saved booking and verified PA again before Issue or Email.",
+      );
+      setPlainInvoiceFeedbackTone("error");
+    }
   }
 
   async function updatePlainInvoiceCrmBillingAccount(customerFolderKey: string) {

@@ -598,11 +598,13 @@ export function createCustomerInvoicePdfBytes(
     ...(contactLine ? [pdfTextAt(contactLine, 50, companyHeaderStartY - 70, 8)] : []),
   ];
   const billToY = 565;
+  const billToNameLines = wrapText(invoice.customerName, 62).slice(0, 2);
+  const billToExtraLineOffset = (billToNameLines.length - 1) * 12;
   const billToCommands = [
     pdfTextAt("Bill To", 50, billToY, 9, "0.35 g"),
-    pdfTextAt(invoice.customerName, 50, billToY - 17, 9),
-    pdfTextAt(invoice.customerId, 50, billToY - 30, 8, "0.25 g"),
-    pdfTextAt(`Reference: ${invoice.reference}`, 50, billToY - 43, 8, "0.25 g"),
+    ...billToNameLines.map((line, index) => pdfTextAt(line, 50, billToY - 17 - index * 12, 9)),
+    pdfTextAt(invoice.customerId, 50, billToY - 30 - billToExtraLineOffset, 8, "0.25 g"),
+    pdfTextAt(`Reference: ${invoice.reference}`, 50, billToY - 43 - billToExtraLineOffset, 8, "0.25 g"),
   ];
   const dateX = 390;
   const dateValueRightX = 562;

@@ -1166,6 +1166,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The customer portal `Invoices` tab reads only server-stored invoice records under compact `Unpaid` and `Paid` monthly folders when the secure portal session is active; browser-local invoice fallback is not rendered in the customer portal.
 - The customer portal invoice/PDF reads explicitly send same-origin credentials, keep the secure account session invisible to the page, and show stored/sign-in state plus Downloading/Downloaded/Try again button feedback.
 - Downloaded invoice PDFs embed the safe Company Profile JPEG logo when available and keep company name, contact, accounting email, address, bank/payment instructions, and footer terms in the same customer-facing profile path.
+- Long Bill To names wrap to two bounded lines; customer ID and reference move down so they do not overlap the invoice date/terms column.
 - Admin must click `Preview Invoice` before `Issue Invoice + PDF`; changing amount, due date, folder, or adjustment reason makes the preview stale and blocks issue until refreshed.
 - The per-invoice Card payment checkbox is off by default; when enabled it appends customer-facing card payment wording to that invoice line item, with an optional 10% card processing fee note.
 - Changing the card payment checkbox or card fee note makes the invoice preview stale and blocks issue until admin refreshes the preview.

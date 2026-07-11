@@ -115,6 +115,7 @@ const saveCrmBillingIdentityReviewReadLimit = 200;
 const adminHandledCustomerBookingRequestsStorageKey =
   "prestige-admin-handled-customer-booking-requests";
 const adminLoadBookingsTypedReadApiPath = "/api/admin-load-bookings-typed-read";
+const driverJobLinkSuccessFeedbackResetMs = 3_000;
 const adminSavedBookingStatusesApiPath = "/api/admin-saved-booking-statuses";
 const adminBookingCalendarGoogleSyncApiPath =
   "/api/admin-booking-calendar-google-sync";
@@ -13326,6 +13327,42 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   }, [activeTab, adminDriverJobLinkState.action, driverJobLinkHandoffReference]);
 
   useEffect(() => {
+    if (driverJobLinkCopyMessage?.tone !== "success") {
+      return;
+    }
+
+    const successText = driverJobLinkCopyMessage.text;
+    const timeoutId = window.setTimeout(() => {
+      setDriverJobLinkCopyMessage((current) =>
+        current?.tone === "success" && current.text === successText ? null : current,
+      );
+    }, driverJobLinkSuccessFeedbackResetMs);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [driverJobLinkCopyMessage]);
+
+  useEffect(() => {
+    const successMessage = adminDriverJobLinkState.message;
+
+    if (
+      successMessage?.tone !== "success" ||
+      !/created|revoked/i.test(successMessage.text)
+    ) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setAdminDriverJobLinkState((current) =>
+        current.message?.tone === "success" && current.message.text === successMessage.text
+          ? { ...current, message: null }
+          : current,
+      );
+    }, driverJobLinkSuccessFeedbackResetMs);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [adminDriverJobLinkState.message]);
+
+  useEffect(() => {
     loadedBookingIdRef.current = loadedBookingId;
   }, [loadedBookingId]);
 
@@ -16946,6 +16983,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     setLoadedBookingId("");
     setAppliedAdminBookingSnapshotReference("");
     setDriverJobLinkHandoffReference("");
+    setDriverJobLinkCopyMessage(null);
     setDispatchLoadFocusTarget(null);
   }
 
@@ -19323,6 +19361,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     const loadedAdminBookingRecord = bookingRecordToAdminBookingPersistenceRecord(bookingRecord);
 
     rememberHandledCustomerBookingRequest(bookingRecord);
+    setDriverJobLinkCopyMessage(null);
     setBooking(() => loadedBookingForm);
     if (bookingReference) {
       delete driverJobLinkVehicleFallbackRefreshLastRequestedRef.current[bookingReference];
@@ -21923,10 +21962,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
   async function revokeDriverJobLink() {
     const driverJobLinkId = clean(activeAdminDriverJobLink?.id);
-    const driverJobLinkBookingReference =
-      cleanReferenceText(activeAdminDriverJobLink?.booking_reference) ||
-      cleanReferenceText(dispatchReleaseWorkflowBookingReference) ||
-      cleanReferenceText(loadedBookingId);
 
     if (!driverJobLinkId) {
       setAdminDriverJobLinkState((current) => ({
@@ -21966,37 +22001,16 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         throw new Error(result?.error || "Driver job link revoke failed.");
       }
 
-      const driverJobLinkBookingRecord = findLoadedBookingRecordByReference(
-        bookings,
-        driverJobLinkBookingReference,
-      );
-      const statusResult = driverJobLinkBookingReference
-        ? await patchBookingStatusReference(
-            driverJobLinkBookingReference,
-            "cancelled",
-            driverJobLinkBookingRecord ?? undefined,
-          )
-        : {
-            errorText: "No loaded booking reference was available for status update.",
-            ok: false as const,
-          };
-
       setAdminDriverJobLinkState((current) => ({
         action: null,
         link: null,
         loadedReference: current.loadedReference,
         message: {
-          tone: statusResult.ok ? "success" : "error",
-          text: statusResult.ok
-            ? "Driver job link revoked. Booking status changed to Cancelled and moved to Completed / History."
-            : `Driver job link revoked, but booking status was not changed: ${statusResult.errorText}`,
+          tone: "success",
+          text: "Driver job link revoked. Booking status was not changed.",
         },
         oneTimeUrl: "",
       }));
-
-      if (statusResult.ok) {
-        await loadBookings("Bookings synced.", { silent: true });
-      }
     } catch (error) {
       setAdminDriverJobLinkState((current) => ({
         ...current,

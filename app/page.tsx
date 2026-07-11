@@ -19393,6 +19393,15 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     rememberHandledCustomerBookingRequest(bookingRecord);
     setDriverJobLinkCopyMessage(null);
     setBooking(() => loadedBookingForm);
+    if (
+      !ratesLoaded &&
+      (loadedBookingForm.companyId || loadedBookingForm.bookerId || loadedBookingForm.travelerId)
+    ) {
+      void loadRates(
+        `Booking ${bookingReference || "selected booking"} loaded with verified CRM identity options.`,
+        { preserveAction: true },
+      );
+    }
     if (bookingReference) {
       delete driverJobLinkVehicleFallbackRefreshLastRequestedRef.current[bookingReference];
     }

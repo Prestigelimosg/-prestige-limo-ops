@@ -27,6 +27,13 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The selectors retain exact numeric IDs only and do not replace or rewrite the existing company, booker, passenger, contact, parser, pricing, or save fields.
 - Focused guard: `scripts/test-admin-dispatch-crm-identity-selectors-guard.mjs`.
 
+### Verified Traveler–Booker Link PATCH Boundary
+
+- The established allowlisted admin legacy-data route now accepts PATCH from the verified same-origin admin/dispatcher server-session role used by the signed-in production dashboard.
+- Anonymous, cross-origin, local-development-mode production access, unsupported tables, unsafe fields, POST, and DELETE remain unchanged and blocked by their existing boundaries.
+- This repair supports exact traveler `booker_id` relationship maintenance; it does not change parser, booking, invoice, payment, payout, customer, driver, or authentication behavior.
+- Focused guard: `scripts/test-admin-legacy-traveler-link-patch-boundary-guard.mjs`.
+
 ### Customer Driver Details Copy + App Link
 
 - Dispatch Customer Copy now has one explicit `Copy + App Link` action in the existing Customer Copy row.

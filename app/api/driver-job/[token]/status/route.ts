@@ -21,6 +21,7 @@ const blockedStatusByReason = {
   invalid_status: 400,
   not_configured: 503,
   out_of_order: 409,
+  ots_photo_required: 409,
   revoked: 403,
   unauthorized: 401,
 } as const;

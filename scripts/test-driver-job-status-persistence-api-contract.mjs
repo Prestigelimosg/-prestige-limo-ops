@@ -189,6 +189,7 @@ class MockSupabaseClient {
     this.tables = {
       driver_job_dsp_actual_time_events: seed.driver_job_dsp_actual_time_events || [],
       driver_job_links: seed.driver_job_links || [],
+      driver_ots_photo_proofs: seed.driver_ots_photo_proofs || [],
       driver_job_status_events: seed.driver_job_status_events || [],
       driver_live_location_latest_positions: seed.driver_live_location_latest_positions || [],
     };
@@ -320,6 +321,7 @@ function createSeededClient({
   latestOccurredAt = "2026-06-07T09:00:00.000Z",
   latestSafeStatusNote = null,
   latestStatus = "ots",
+  hasOtsPhotoProof = true,
   priorStatusEvents = [],
 } = {}) {
   return new MockSupabaseClient({
@@ -401,6 +403,14 @@ function createSeededClient({
         : []),
       ...priorStatusEvents,
     ],
+    driver_ots_photo_proofs: hasOtsPhotoProof
+      ? [{
+          booking_reference: "DRV-JOB-API-001",
+          id: "ots-proof-001",
+          photo_type: "ots",
+          proof_status: "uploaded",
+        }]
+      : [],
     driver_live_location_latest_positions: [
       {
         booking_reference: "DRV-JOB-API-001",
@@ -866,6 +876,23 @@ try {
     assert.equal(client.tables.driver_live_location_latest_positions.length, 1);
     assertInsertedStatusEvent(client, "pob");
     assertNoDriverJobLeaks(result);
+  }
+
+  {
+    const client = createSeededClient({ hasOtsPhotoProof: false });
+    const result = await saveDriverJobStatusThroughStatusPersistence({
+      client,
+      now,
+      status: "POB",
+      token: validToken,
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, "ots_photo_required");
+    assert.equal(
+      client.operations.some((operation) => operation.table === "driver_job_status_events"),
+      false,
+    );
   }
 
   {

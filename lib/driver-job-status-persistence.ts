@@ -24,6 +24,7 @@ export type DriverJobPersistenceBlockedReason =
   | "invalid_details"
   | "invalid_status"
   | "not_configured"
+  | "ots_photo_required"
   | "out_of_order"
   | "revoked"
   | "unauthorized";
@@ -39,7 +40,7 @@ export type DriverJobProductionPayloadResult =
       payload: null;
       reason: Exclude<
         DriverJobPersistenceBlockedReason,
-        "already_completed" | "invalid_details" | "invalid_status" | "out_of_order"
+        "already_completed" | "invalid_details" | "invalid_status" | "ots_photo_required" | "out_of_order"
       >;
     };
 
@@ -123,7 +124,7 @@ type LinkResolveResult =
       ok: false;
     reason: Exclude<
       DriverJobPersistenceBlockedReason,
-      "already_completed" | "invalid_details" | "invalid_status" | "out_of_order"
+      "already_completed" | "invalid_details" | "invalid_status" | "ots_photo_required" | "out_of_order"
     >;
   };
 
@@ -460,7 +461,7 @@ function safeWaypointList(value: unknown) {
 function linkBlockedResult(
   reason: Exclude<
     DriverJobPersistenceBlockedReason,
-    "already_completed" | "invalid_details" | "invalid_status" | "out_of_order"
+    "already_completed" | "invalid_details" | "invalid_status" | "ots_photo_required" | "out_of_order"
   >,
 ): DriverJobProductionPayloadResult {
   return {
@@ -1064,6 +1065,24 @@ export async function saveDriverJobStatusThroughStatusPersistence(
         ? transitionGuard.reason
         : "invalid_status",
     );
+  }
+
+  if (nextStatus === "pob") {
+    const { data: otsProofData, error: otsProofError } = await input.client
+      .from("driver_ots_photo_proofs")
+      .select("id")
+      .eq("booking_reference", resolvedLink.link.booking_reference)
+      .eq("photo_type", "ots")
+      .eq("proof_status", "uploaded")
+      .limit(1);
+
+    if (otsProofError) {
+      return statusBlockedResult("not_configured");
+    }
+
+    if (asArray(otsProofData).length === 0) {
+      return statusBlockedResult("ots_photo_required");
+    }
   }
 
   const safeStatusDetails = safeStatusNoteAndContextFromInput(input);

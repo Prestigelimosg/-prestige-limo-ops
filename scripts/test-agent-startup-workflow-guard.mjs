@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const agents = await readFile("AGENTS.md", "utf8");
+const packageJson = JSON.parse(await readFile("package.json", "utf8"));
 
 for (const requiredRule of [
   "Before proposing, testing, or editing a feature",
@@ -13,8 +14,25 @@ for (const requiredRule of [
   "Treat documented behavior with a passing guard as already implemented unless the exact workflow is reproduced as broken in the approved runtime surface",
   "Do not add a second lane, panel, route, helper, button, or write path for an existing workflow",
   "Record every approved fix in the implementation ledger and protect it with a focused regression guard",
+  "npm run guard:staged-app-change",
 ]) {
   assert.ok(agents.includes(requiredRule), `AGENTS.md missing startup workflow rule: ${requiredRule}`);
+}
+
+assert.equal(
+  packageJson.scripts?.["guard:staged-app-change"],
+  "node scripts/test-staged-app-change-ledger-guard.mjs",
+  "package.json must expose the staged app-change ledger guard",
+);
+
+const stagedGuard = await readFile("scripts/test-staged-app-change-ledger-guard.mjs", "utf8");
+for (const requiredFragment of [
+  "git diff --cached --name-only --diff-filter=ACMR",
+  "docs/current-implementation-ledger.md",
+  "scripts/test-",
+  "Application changes require the implementation ledger",
+]) {
+  assert.ok(stagedGuard.includes(requiredFragment), `staged app-change guard missing: ${requiredFragment}`);
 }
 
 console.log("Agent startup workflow guard passed.");

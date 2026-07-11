@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "guard:staged-app-change": "node scripts/test-staged-app-change-ledger-guard.mjs",
     "test:parser": "node --experimental-strip-types scripts/test-booking-parser.mjs",
     "test:pricing": "node --experimental-strip-types scripts/test-child-seat-pricing.mjs",
     "test:customer-company-profile": "node --experimental-strip-types scripts/test-customer-company-profile-contract.mjs",

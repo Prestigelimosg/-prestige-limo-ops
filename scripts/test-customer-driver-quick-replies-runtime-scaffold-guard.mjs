@@ -73,6 +73,7 @@ for (const phrase of [
   "I am at the lobby.",
   "I have arrived.",
   "did not expose the customer’s driver-directed row or any private Admin → Driver row",
+  "Quick-reply row counts were identical before and after both negative passes",
   "Rollback is to disable `PRESTIGE_CUSTOMER_DRIVER_QUICK_REPLIES_ENABLED`",
 ]) {
   assertIncludes(activationSection, phrase, `quick reply production activation evidence ${phrase}`);

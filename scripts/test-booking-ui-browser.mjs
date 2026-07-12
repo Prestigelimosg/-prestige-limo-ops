@@ -1284,9 +1284,6 @@ const forbiddenRuntimeText = [
   "formatOverrideSummary is not defined",
 ];
 const forbiddenAdminBookingRequestKeyFragments = [
-  "company_id",
-  "booker_id",
-  "traveler_id",
   "customer_price",
   "customer_rate",
   "customer_rates",
@@ -1636,7 +1633,7 @@ function assertBookingUiState(state) {
   assert.doesNotMatch(state.jobCardPreview, /Guest details hidden for privacy/);
   assert.doesNotMatch(state.jobCardPreview, /BROWSER UI TEST BOOKER/);
   assert.doesNotMatch(state.jobCardPreview, /BROWSER UI TEST TRAVELER/);
-  assert.match(state.visibleText, /Driver Dispatch/);
+  assert.match(state.visibleText, /Driver Message/);
   assert.match(state.driverDispatch, /DRIVER DISPATCH/);
   assert.match(state.visibleText, /Pricing/);
   assert.equal(state.dispatchReleaseChecklist.visible, true);
@@ -1951,15 +1948,13 @@ function assertBookingUiState(state) {
   assert.match(state.dayOfTripDispatchMonitor.boundary, /payout/);
   assert.match(state.dayOfTripDispatchMonitor.boundary, /parser-learning/);
   assert.match(state.dayOfTripDispatchMonitor.boundary, /broad tracking/);
-  assert.equal(state.dayOfTripDispatchMonitor.savedDriverStatus.visible, true);
-  assert.equal(state.dayOfTripDispatchMonitor.savedDriverStatus.state, "No saved status");
-  assert.equal(state.dayOfTripDispatchMonitor.savedDriverStatus.latest, "No saved driver status");
-  assert.equal(state.dayOfTripDispatchMonitor.savedDriverStatus.time, "Time not recorded");
-  assert.equal(state.dayOfTripDispatchMonitor.savedDriverStatus.history, "No saved history loaded.");
-  assert.match(
-    state.dayOfTripDispatchMonitor.savedDriverStatus.message,
-    /Load saved booking before reading saved driver status/,
-  );
+  assert.equal(state.dayOfTripDispatchMonitor.savedDriverStatus.visible, false);
+  assert.equal(state.dayOfTripDispatchMonitor.savedDriverStatus.open, false);
+  assert.equal(state.dayOfTripDispatchMonitor.savedDriverStatus.state, "");
+  assert.equal(state.dayOfTripDispatchMonitor.savedDriverStatus.latest, "");
+  assert.equal(state.dayOfTripDispatchMonitor.savedDriverStatus.time, "");
+  assert.equal(state.dayOfTripDispatchMonitor.savedDriverStatus.history, "");
+  assert.equal(state.dayOfTripDispatchMonitor.savedDriverStatus.message, "");
   assert.deepEqual(state.dayOfTripDispatchMonitor.forbiddenPanelText, []);
   assert.equal(state.dayOfTripExceptionEscalation.visible, true);
   assert.match(state.dayOfTripExceptionEscalation.text, /Day-of-Trip Exception Escalation/);
@@ -3439,8 +3434,26 @@ async function runChromeTest() {
     assert.equal(adminDispatchDropdownInitialState.serviceValue, "MNG");
     assert.equal(adminDispatchDropdownInitialState.vehicleValue, "AVF");
 
-    await setFieldValueByLabel("Booking type", "DEP", "admin service type dropdown");
-    await setFieldValueByLabel("Vehicle", "Combi", "admin vehicle type dropdown");
+    await setInputValue(
+      "[data-admin-booking-service-type-select='true']",
+      "DEP",
+      "admin service type dropdown",
+    );
+    await waitForCondition(
+      () => evaluate(`document.querySelector("[data-admin-booking-service-type-select='true']")?.value === "DEP"`),
+      5000,
+      "admin service type controlled render",
+    );
+    await setInputValue(
+      "[data-admin-booking-vehicle-type-select='true']",
+      "Combi",
+      "admin vehicle type dropdown",
+    );
+    await waitForCondition(
+      () => evaluate(`document.querySelector("[data-admin-booking-vehicle-type-select='true']")?.value === "Combi"`),
+      5000,
+      "admin vehicle type controlled render",
+    );
     const adminDispatchDropdownUpdatedState = await waitForCondition(
       () =>
         evaluate(`(() => {
@@ -3475,8 +3488,26 @@ async function runChromeTest() {
     assert.match(adminDispatchDropdownUpdatedState.customerCopyPreview, /Service:\s*Departure/);
     assert.match(adminDispatchDropdownUpdatedState.driverDispatchPreview, /Combi\s*(?:-|\s)\s*DEP/);
 
-    await setFieldValueByLabel("Booking type", "MNG", "admin service type reset");
-    await setFieldValueByLabel("Vehicle", "AVF", "admin vehicle type reset");
+    await setInputValue(
+      "[data-admin-booking-service-type-select='true']",
+      "MNG",
+      "admin service type reset",
+    );
+    await waitForCondition(
+      () => evaluate(`document.querySelector("[data-admin-booking-service-type-select='true']")?.value === "MNG"`),
+      5000,
+      "admin service type reset controlled render",
+    );
+    await setInputValue(
+      "[data-admin-booking-vehicle-type-select='true']",
+      "AVF",
+      "admin vehicle type reset",
+    );
+    await waitForCondition(
+      () => evaluate(`document.querySelector("[data-admin-booking-vehicle-type-select='true']")?.value === "AVF"`),
+      5000,
+      "admin vehicle type reset controlled render",
+    );
 
     await evaluate(`window.__prestigeErrors = [];
       window.__prestigeConsoleErrors = [];
@@ -4412,6 +4443,7 @@ async function runChromeTest() {
       };
       const dayOfTripDispatchMonitor = () => {
         const section = document.querySelector("[data-admin-day-of-trip-dispatch-monitor='true']");
+        const driverReports = document.querySelector("[data-admin-driver-reports-disclosure='true']");
         const rect = section?.getBoundingClientRect();
         const text = section?.textContent || "";
         const lowerText = text.toLowerCase();
@@ -4450,26 +4482,27 @@ async function runChromeTest() {
           ),
           savedDriverStatus: {
             history:
-              section?.querySelector("[data-admin-driver-job-status-readout-detail='status-history']")
+              driverReports?.querySelector("[data-admin-driver-job-status-readout-detail='status-history']")
                 ?.textContent.replace(/\\s+/g, " ")
                 .trim() || "",
             latest:
-              section?.querySelector("[data-admin-driver-job-status-readout-detail='latest-status']")
+              driverReports?.querySelector("[data-admin-driver-job-status-readout-detail='latest-status']")
                 ?.textContent.replace(/\\s+/g, " ")
                 .trim() || "",
             message:
-              section?.querySelector("[data-admin-driver-job-status-readout-message='true']")
+              driverReports?.querySelector("[data-admin-driver-job-status-readout-message='true']")
                 ?.textContent.replace(/\\s+/g, " ")
                 .trim() || "",
             state:
-              section?.querySelector("[data-admin-driver-job-status-readout-state='true']")
+              driverReports?.querySelector("[data-admin-driver-job-status-readout-state='true']")
                 ?.textContent.replace(/\\s+/g, " ")
                 .trim() || "",
             time:
-              section?.querySelector("[data-admin-driver-job-status-readout-detail='status-time']")
+              driverReports?.querySelector("[data-admin-driver-job-status-readout-detail='status-time']")
                 ?.textContent.replace(/\\s+/g, " ")
                 .trim() || "",
-            visible: Boolean(section?.querySelector("[data-admin-driver-job-status-readout='true']")),
+            open: driverReports?.open ?? false,
+            visible: Boolean(driverReports?.querySelector("[data-admin-driver-job-status-readout='true']")),
           },
           options: [...(section?.querySelectorAll("[data-admin-day-of-trip-dispatch-monitor-option]") || [])].map(
             (option) => ({
@@ -5877,7 +5910,7 @@ async function runChromeTest() {
 
         return null;
       };
-      const section = sectionForHeading("Driver Dispatch");
+      const section = sectionForHeading("Driver Message");
       const copyButton = [...(section?.querySelectorAll("button") || [])].find(
         (button) => button.textContent.trim() === "Copy",
       );
@@ -5910,7 +5943,7 @@ async function runChromeTest() {
 
             return null;
           };
-          const section = sectionForHeading("Driver Dispatch");
+          const section = sectionForHeading("Driver Message");
           const copyButton = section?.querySelector("[data-copy-copy-button='driverDispatch']");
 
           if (copyButton?.textContent.trim() !== "Copied") {
@@ -7283,21 +7316,17 @@ async function runChromeTest() {
       };
     })()`);
 
-    await clickTab("Bookings", "Load Bookings");
-
-    const clickedLoadBookings = await evaluate(`(() => {
-      const loadButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Load Bookings",
-      );
-
-      if (!loadButton || loadButton.disabled) {
-        return false;
-      }
-
-      loadButton.click();
-      return true;
-    })()`);
-    assert.equal(clickedLoadBookings, true, "Expected Load Bookings button to be clickable");
+    await clickTab("Bookings", "Find saved jobs");
+    await waitForCondition(
+      () => evaluate(`document.body.innerText.includes("Bookings loaded. Choose a booking below.")`),
+      10000,
+      "automatic Bookings list read completed",
+    );
+    assert.equal(
+      await evaluate(`![...document.querySelectorAll("button")].some((button) => button.textContent.trim() === "Load Bookings")`),
+      true,
+      "Expected the retired manual Load Bookings button to stay absent",
+    );
 
     await clickTab("Completed", "Completed / History");
 
@@ -7669,8 +7698,8 @@ async function runChromeTest() {
       0,
       "Expected Dashboard command centre not to duplicate detailed assignment/status controls",
     );
-    assert.match(dashboardCommandCentreState.visibleText, /Urgent Booking Requests/);
-    assert.match(dashboardCommandCentreState.visibleText, /Today Bookings/);
+    assert.match(dashboardCommandCentreState.visibleText, /Urgent \/ Customer Requests/);
+    assert.match(dashboardCommandCentreState.visibleText, /Today's Jobs/);
     assert.match(dashboardCommandCentreState.visibleText, /Admin App Notifications/);
 
     const clickedDashboardOpenCompletedHistory = await evaluate(`(() => {
@@ -8777,7 +8806,7 @@ async function runChromeTest() {
 
         return null;
       };
-      const section = sectionForHeading("Driver Dispatch");
+      const section = sectionForHeading("Driver Message");
       const copyButton = [...(section?.querySelectorAll("button") || [])].find(
         (button) => button.textContent.trim() === "Copy",
       );
@@ -8817,7 +8846,7 @@ async function runChromeTest() {
 
             return null;
           };
-          const section = sectionForHeading("Driver Dispatch");
+          const section = sectionForHeading("Driver Message");
           const copyButton = [...(section?.querySelectorAll("button") || [])].find(
             (button) => button.textContent.trim() === "Copy",
           );
@@ -10365,31 +10394,19 @@ async function runChromeTest() {
       "Expected completed delete success feedback not to appear only in the global status panel",
     );
 
-    await clickTab("Bookings", "Load Bookings");
-
-    const clickedReloadAfterCompletedDelete = await evaluate(`(() => {
-      const loadButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Load Bookings",
-      );
-
-      if (!loadButton || loadButton.disabled) {
-        return false;
-      }
-
-      loadButton.click();
-      return true;
+    await evaluate(`(() => {
+      window.__prestigeFetchCalls = [];
+      window.__prestigeAdminSavedBookingListRequests = [];
     })()`);
-    assert.equal(
-      clickedReloadAfterCompletedDelete,
-      true,
-      "Expected Load Bookings button to be clickable after completed delete",
-    );
+    await clickTab("Bookings", "Find saved jobs");
 
     await waitForCondition(
       () =>
-        evaluate(`document.body.innerText.includes("Recent Bookings")`),
+        evaluate(`(window.__prestigeAdminSavedBookingListRequests || []).some(
+          (request) => request.method === "GET" && request.limit === "100"
+        )`),
       10000,
-      "bookings reloaded after completed delete",
+      "automatic bookings synchronization after completed delete",
     );
 
     await clickTab("Completed", "Completed / History");
@@ -10421,7 +10438,7 @@ async function runChromeTest() {
     assert.equal(
       completedDeleteReloadState.deletedBookingVisible,
       false,
-      "Expected deleted completed job not to reappear after Load Bookings",
+      "Expected deleted completed job not to reappear after automatic bookings synchronization",
     );
     assert.equal(
       completedDeleteReloadState.otherCompletedVisible,
@@ -12462,7 +12479,7 @@ async function runChromeTest() {
       "Expected Driver Dispatch copy not to keep stale old driver payout after profile assignment",
     );
 
-    await clickTab("Bookings", "Current / Upcoming Bookings");
+    await clickTab("Bookings", "Find saved jobs");
     const profilePayoutBookingsCardState = await waitForCondition(
       () =>
         evaluate(`(() => {
@@ -12981,28 +12998,28 @@ async function runChromeTest() {
       window.__prestigeDriverDeleteConfirmMessages = [];
     })()`);
 
-    await clickTab("Bookings", "Load saved bookings");
-    const clickedLoadBookingsForDriverDelete = await evaluate(`(() => {
-      const loadButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Load Bookings",
+    await clickTab("Dashboard", "Refresh Loaded Bookings");
+    const clickedDashboardBookingRefreshForDriverDelete = await evaluate(`(() => {
+      const refreshButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Refresh Loaded Bookings",
       );
 
-      if (!loadButton || loadButton.disabled) {
+      if (!refreshButton || refreshButton.disabled) {
         return false;
       }
 
-      loadButton.click();
+      refreshButton.click();
       return true;
     })()`);
     assert.equal(
-      clickedLoadBookingsForDriverDelete,
+      clickedDashboardBookingRefreshForDriverDelete,
       true,
-      "Expected bookings reload before driver delete cleanup test",
+      "Expected existing Dashboard booking refresh before driver delete cleanup test",
     );
     await waitForCondition(
-      () => evaluate(`document.body.innerText.includes("Bookings loaded.")`),
+      () => evaluate(`document.body.innerText.match(/Saved\\s+19/) !== null`),
       10000,
-      "bookings reload before driver delete cleanup",
+      "Dashboard assigned-booking fixture refresh before driver delete cleanup",
     );
     await clickTab("Drivers", "Driver Database");
 
@@ -13490,6 +13507,9 @@ async function runChromeTest() {
       "safe booking update after driver delete request",
     );
     assert.equal(updateAfterDriverDeleteState.bookingUpdate?.target_booking_reference, "990509");
+    assert.equal(updateAfterDriverDeleteState.bookingUpdate?.booking?.company_id, null);
+    assert.equal(updateAfterDriverDeleteState.bookingUpdate?.booking?.booker_id, 906102);
+    assert.equal(updateAfterDriverDeleteState.bookingUpdate?.booking?.traveler_id, 906103);
     assert.equal(updateAfterDriverDeleteState.bookingUpdate?.booking?.pax_count, 4);
     assert.equal(updateAfterDriverDeleteState.bookingUpdate?.booking?.source_channel, "admin-dashboard");
     assert.equal(
@@ -13578,14 +13598,24 @@ async function runChromeTest() {
         hasDetailedAssignment: bodyText.includes("Assign driver to this booking") ||
           Boolean(document.querySelector("[data-dashboard-assign-driver]")),
         hasInactiveDriverProfile: bodyText.includes("RENAMED REUSABLE PROFILE TEST DRIVER"),
-        hasActiveJobsMonitor: Boolean(document.querySelector("[data-admin-multi-driver-active-jobs-monitor='true']")),
+        activeJobsMonitorCount: document.querySelectorAll(
+          "[data-admin-multi-driver-active-jobs-monitor='true']",
+        ).length,
+        liveDispatchMapCount: document.querySelectorAll(
+          "[data-admin-multi-driver-active-jobs-monitor='true'] [data-dispatch-live-driver-map='true']",
+        ).length,
       };
     })()`);
     assert.equal(dashboardAfterDriverProfileSaveState.hasCommandCentre, true);
     assert.equal(
-      dashboardAfterDriverProfileSaveState.hasActiveJobsMonitor,
-      false,
-      "Expected Dashboard not to duplicate the Dispatch active jobs/live map monitor",
+      dashboardAfterDriverProfileSaveState.activeJobsMonitorCount,
+      1,
+      "Expected Dashboard to contain exactly one protected Today's Jobs monitor",
+    );
+    assert.equal(
+      dashboardAfterDriverProfileSaveState.liveDispatchMapCount,
+      1,
+      "Expected Dashboard Today's Jobs to contain exactly one compact Live Dispatch Map",
     );
     assert.equal(
       dashboardAfterDriverProfileSaveState.hasDetailedAssignment,
@@ -15558,7 +15588,7 @@ async function runChromeTest() {
               };
             })(),
             savedDriverStatusReadout: (() => {
-              const section = document.querySelector("[data-admin-day-of-trip-dispatch-monitor='true']");
+              const section = document.querySelector("[data-admin-driver-reports-disclosure='true']");
               const refreshButton = section?.querySelector("[data-admin-driver-job-status-refresh='true']");
 
               return {
@@ -15593,7 +15623,7 @@ async function runChromeTest() {
             })(),
             workflowStatusRequests: window.__prestigeWorkflowStatusRequests || [],
             jobCardPreview: preTextByHeading("Job Card Preview"),
-            driverDispatch: preTextByHeading("Driver Dispatch"),
+            driverDispatch: preTextByHeading("Driver Message"),
             pastedMessage: document.querySelector("textarea")?.value || "",
             fields: {
               company: fieldValue("Company / Account"),
@@ -15909,12 +15939,12 @@ async function runChromeTest() {
         message: "Loaded 1 saved driver status event for ui-cleanup-load-fixture.",
         refreshButton: {
           disabled: false,
-          text: "Refresh",
+          text: "Refresh status",
         },
-        state: "Saved status",
+        state: "",
         time: "2026-06-07 17:25 SGT",
       },
-      "Expected saved driver status readout in the existing Day-of-Trip Dispatch Monitor",
+      "Expected saved driver status readout in the visible Driver Reports disclosure",
     );
     const clickedDriverStatusRefresh = await evaluate(`(() => {
       const button = document.querySelector("[data-admin-driver-job-status-refresh='true']");
@@ -16880,7 +16910,7 @@ async function runChromeTest() {
             request.booking_reference === "ui-cleanup-load-fixture" &&
             request.limit === "3",
         ) &&
-          candidateState?.dspEvidence === "DSP actual time: 195 total min / 195 billable min." &&
+          candidateState?.dspEvidence === "DSP actual time: 195 total min / 180 billable min." &&
           !candidateState?.saveButton?.disabled
           ? candidateState
           : false;
@@ -17000,7 +17030,7 @@ async function runChromeTest() {
           booking_reference: "ui-cleanup-load-fixture",
           booking_type: "DSP",
           calculation_basis: "dsp_actual_time",
-          dsp_billable_minutes: 195,
+          dsp_billable_minutes: 180,
           dsp_total_minutes: 195,
           price_decision: "include_in_invoice",
           price_review_status: "approved_for_invoice_draft",
@@ -18300,7 +18330,7 @@ async function runChromeTest() {
             fetchCalls: window.__prestigeFetchCalls || [],
             workflowStatusRequests: window.__prestigeWorkflowStatusRequests || [],
             jobCardPreview: preTextByHeading("Job Card Preview"),
-            driverDispatch: preTextByHeading("Driver Dispatch"),
+            driverDispatch: preTextByHeading("Driver Message"),
             pastedMessage: document.querySelector("textarea")?.value || "",
             fields: {
               company: fieldValue("Company / Account"),
@@ -19104,7 +19134,7 @@ async function runChromeTest() {
       "Expected duplicate manual Calendar / ICS controls to be removed after Save + CRM; Google auto-sync is the only calendar write lane",
     );
 
-    await clickTab("Bookings", "Current / Upcoming Bookings");
+    await clickTab("Bookings", "Find saved jobs");
     const safeSaveRecentBookingState = await waitForCondition(
       () =>
         evaluate(`(() => {
@@ -19116,12 +19146,12 @@ async function runChromeTest() {
               [...article.querySelectorAll("button")].some((button) => button.textContent.trim() === "Load this booking"),
           );
 
-          return bodyText.includes("Current / Upcoming Bookings")
+          return bodyText.includes("Find saved jobs")
             ? { hasLegacyCrmRecentBooking }
             : false;
         })()`),
       10000,
-      "safe Save Booking + CRM Current / Upcoming boundary",
+      "safe Save Booking + CRM current Bookings boundary",
     );
     assert.equal(
       safeSaveRecentBookingState.hasLegacyCrmRecentBooking,
@@ -20610,9 +20640,9 @@ async function runChromeTest() {
       /\b(?:AVF|VVV|Combi|Alphard|Vellfire|V-Class|V Class|Viano|minibus|mini bus|car type|vehicle type|service vehicle|TRF)\b/i,
       "Expected Customer Copy to show City Transfer without vehicle type or the TRF booking code",
     );
-    assert.match(freeformTransferState.pricingPanel, /Customer\s+\$85\.00/);
+    assert.match(freeformTransferState.pricingPanel, /Customer\s+\$95\.00/);
     assert.match(freeformTransferState.pricingPanel, /Driver\s+\$65\.00/);
-    assert.match(freeformTransferState.pricingPanel, /Profit\s+\$20\.00/);
+    assert.match(freeformTransferState.pricingPanel, /Profit\s+\$30\.00/);
     assert.doesNotMatch(freeformTransferState.visibleText, /Negative profit/);
 
     const focusedDspTextarea = await evaluate(`(() => {
@@ -21031,28 +21061,35 @@ async function runChromeTest() {
       };
     })()`);
 
-    await clickTab("Bookings", "Load Bookings");
-
-    const clickedEmptyStateLoadBookings = await evaluate(`(() => {
-      const loadButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Load Bookings",
+    await clickTab("Dashboard", "Refresh Loaded Bookings");
+    const clickedEmptyStateDashboardRefresh = await evaluate(`(() => {
+      const button = [...document.querySelectorAll("button")].find(
+        (candidate) => candidate.textContent.trim() === "Refresh Loaded Bookings",
       );
 
-      if (!loadButton || loadButton.disabled) {
+      if (!button || button.disabled) {
         return false;
       }
 
-      loadButton.click();
+      button.click();
       return true;
     })()`);
-    assert.equal(clickedEmptyStateLoadBookings, true, "Expected empty-state Load Bookings button to be clickable");
-
+    assert.equal(
+      clickedEmptyStateDashboardRefresh,
+      true,
+      "Expected Dashboard booking refresh to be available for the completed-only empty-state fixture",
+    );
     await waitForCondition(
       () =>
-        evaluate(`document.body.innerText.includes("Bookings loaded. Choose a booking below.")`),
+        evaluate(`(window.__prestigeFetchCalls || []).some(
+          (call) => call.startsWith("GET ") && call.includes("/api/admin-load-bookings-typed-read")
+        ) && (window.__prestigeAdminSavedBookingListRequests || []).some(
+          (request) => request.method === "GET" && request.limit === "100"
+        )`),
       10000,
-      "empty-state Load Bookings list read completed",
+      "completed-only fixture guarded booking refresh",
     );
+    await clickTab("Bookings", "Find saved jobs");
 
     const emptyStateLoadBookingsReadState = await evaluate(`(() => {
       const typedOperationalDisplayReads = (window.__prestigeFetchCalls || [])
@@ -21080,33 +21117,33 @@ async function runChromeTest() {
     })()`);
     assert.ok(
       emptyStateLoadBookingsReadState.typedOperationalDisplayReads.length >= 1,
-      "Expected empty-state Load Bookings to use the typed operational display read API",
+      "Expected completed-only refresh to use the typed operational display read API",
     );
     assert.deepEqual(
       [...new Set(emptyStateLoadBookingsReadState.typedOperationalDisplayReads.map(({ limit, method }) => `${method}:${limit}`))],
       ["GET:25"],
-      "Expected empty-state Load Bookings typed operational display reads to stay on the safe GET limit=25 API",
+      "Expected completed-only typed operational display reads to stay on the safe GET limit=25 API",
     );
     assert.deepEqual(
       emptyStateLoadBookingsReadState.typedOperationalDisplayReads
         .filter(({ booking_id, id }) => booking_id || id)
         .map(({ url }) => url),
       [],
-      "Expected empty-state Load Bookings typed operational display reads to stay list-mode only",
+      "Expected completed-only typed operational display reads to stay list-mode only",
     );
     assert.ok(
       emptyStateLoadBookingsReadState.savedBookingListReads.length >= 1,
-      "Expected empty-state Load Bookings to use the bounded admin saved booking list API",
+      "Expected completed-only refresh to use the bounded admin saved booking list API",
     );
     assert.deepEqual(
       [...new Set(emptyStateLoadBookingsReadState.savedBookingListReads.map(({ limit, method }) => `${method}:${limit}`))],
       ["GET:100"],
-      "Expected empty-state Load Bookings saved booking reads to stay on the bounded GET limit=100 list API",
+      "Expected completed-only saved booking reads to stay on the bounded GET limit=100 list API",
     );
     assert.deepEqual(
       emptyStateLoadBookingsReadState.legacyBookingListReads,
       [],
-      "Expected empty-state Load Bookings not to read the booking list through the legacy admin data shim",
+      "Expected completed-only refresh not to read the booking list through the legacy admin data shim",
     );
 
     await clickTab("Completed", "Completed / History");
@@ -21336,10 +21373,8 @@ async function runChromeTest() {
 
       assert.equal(
         beforeWindowState.helperText,
-        bookingType === "MNG"
-          ? "Customer app link can be copied now; arrival live location appears only after manual arrival readiness and driver sharing."
-          : "Customer app link can be copied now; live location appears only when ready around 30 minutes before pickup.",
-        `Expected ${bookingType} before-window helper`,
+        "Save + CRM or load the saved booking first.",
+        `Expected ${bookingType} unsaved before-window helper to fail closed`,
       );
       assert.doesNotMatch(
         beforeWindowState.customerCopy,
@@ -21369,8 +21404,8 @@ async function runChromeTest() {
 
       assert.equal(
         insideWindowState.helperText,
-        "Customer app link can still be copied; live location appears only after secure driver location setup is ready.",
-        `Expected ${bookingType} inside-window helper when no secure live link exists`,
+        "Save + CRM or load the saved booking first.",
+        `Expected ${bookingType} unsaved inside-window helper to fail closed`,
       );
       assert.doesNotMatch(
         insideWindowState.customerCopy,

@@ -88,11 +88,10 @@ for (const fragment of [
 for (const fragment of [
   "const liveLocationNoLinkPattern = /live location|tracking|track your ride|https?:\\/\\/\\S+/i;",
   "for (const bookingType of [\"MNG\", \"DEP\", \"TRF\", \"DSP\"])",
-  'bookingType === "MNG"',
-  "Customer app link can be copied now; arrival live location appears only after manual arrival readiness and driver sharing.",
-  "Customer app link can be copied now; live location appears only when ready around 30 minutes before pickup.",
+  "Save + CRM or load the saved booking first.",
+  "Expected ${bookingType} unsaved before-window helper to fail closed",
   "Expected ${bookingType} before-window Customer Copy not to include a live location link",
-  "Customer app link can still be copied; live location appears only after secure driver location setup is ready.",
+  "Expected ${bookingType} unsaved inside-window helper to fail closed",
   "Expected ${bookingType} inside-window Customer Copy not to copy a fake live location link",
 ]) {
   assertIncludes(bookingUiBrowserTest, fragment, `customer live-location browser guard ${fragment}`);

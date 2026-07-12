@@ -194,7 +194,7 @@ for (const fragment of [
   "[data-admin-driver-job-status-readout='true']",
   "GET /api/admin-driver-job-statuses?booking_reference=ui-cleanup-load-fixture&limit=4",
   "Expected saved booking load to GET saved driver status through the guarded read API path",
-  "Expected saved driver status readout in the existing Day-of-Trip Dispatch Monitor",
+  "Expected saved driver status readout in the visible Driver Reports disclosure",
   "Expected driver status read request shape to avoid private finance, parser, secret, and token/link internals",
 ]) {
   assertIncludes(bookingUiBrowser, fragment, `booking UI day-of-trip monitor fragment ${fragment}`);

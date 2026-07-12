@@ -18,11 +18,19 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The action reuses the existing active Driver Job Link GET, existing `POST /api/admin-customer-driver-app-notifications`, existing `customer_driver_app_notification_outbox`, and existing token-scoped driver notification GET. No duplicate route, table, message format, provider, or driver read path was added.
 - The server write stays `delivery_surface: driver_app`, exact booking-reference and active driver-link scoped, with audience `admin_driver`. The established create persistence independently verifies the supplied driver-link ID, booking reference, active status, and expiry before insert. Customer reads remain authenticated and `customer_app` only, so customers cannot read Admin-to-Driver messages.
 - When no active Driver Job Link exists, no notification row is written. The typed message remains and the card shows one human `Open Driver Link Setup` action that reuses the established Dispatch link handoff.
-- This pass does not add Driver-to-Admin free text or activate Driver-to-Customer / Customer-to-Driver quick replies. Existing urgent issue alerts and gate-closed quick-reply scaffolds are unchanged.
+- Admin-to-Driver remains private from customers. Driver-to-Admin free text is not added; the existing urgent issue alert remains the driver escalation lane.
 - No Email, WhatsApp, SMS, Telegram, provider send, booking/status/GPS write, environment change, schema change, payment, invoice, payout, internal note, parser/debug data, token, secret, or other-booking data is included.
 - Focused lock: `scripts/test-today-jobs-admin-driver-message-guard.mjs`.
 - The broader public runtime-gate lock now follows the established verified PA request payload (`verifiedRequestPayload`) rather than the superseded raw request variable; customer booking behavior was not changed by this messaging pass.
 - The existing production notification evidence harness now carries the current customer portal access-account, access-link, and runtime-session-map dependencies and creates one exact temporary active Driver Job Link because `driver_app` writes must remain link-bound. Controlled production evidence passed admin save/load/mark-read, all access/unsafe-content gates, exact outbox deletion, exact temporary-link deletion, and zero-row verification on both tables. No external send or real booking/customer write occurred; this repairs the isolated harness only and does not change customer authentication runtime behavior.
+
+### Driver-to-Customer One-Tap Replies
+
+- The existing token-scoped Driver Job page now shows one visible `Message Customer` card with four approved fixed replies: on the way, arrived, meet at pickup, and waiting nearby. One tap uses the established `/api/driver-job/[token]/quick-replies` route and existing notification outbox; no free-text field, duplicate route, external provider, or new write lane was added.
+- The server still verifies the exact active Driver Job Link, controlled customer scope, approved template key, and pre-POB state. The UI also disables all four replies at POB/completed, while the server remains authoritative and returns a safe conflict if state changed between display and tap.
+- Successful replies are `customer_app` only, so the customer can see them in the existing authenticated My Bookings trip-update read and admin can inspect them through the existing booking-scoped notification read. They are not exposed as Admin-to-Driver messages and do not send Email, WhatsApp, SMS, or Telegram.
+- Runtime remains controlled by the existing quick-reply and customer-runtime environment gates; this UI change does not alter environment configuration or broaden the approved customer allowlist.
+- Focused lock: `scripts/test-driver-customer-quick-reply-ui-guard.mjs` plus the existing quick-reply readiness/runtime guards.
 
 ### Today’s Jobs Assigned-Work Reporting Center
 

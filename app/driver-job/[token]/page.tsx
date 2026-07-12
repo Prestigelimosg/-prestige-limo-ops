@@ -62,6 +62,11 @@ type ControlFeedback = {
   text: string;
 };
 
+type DriverQuickReplyState = {
+  feedback: ControlFeedback | null;
+  sendingKey: string;
+};
+
 type DriverAppUpdateRecord = {
   created_at?: string | null;
   id?: string | null;
@@ -197,6 +202,13 @@ const statusActions = [
   { displayLabel: "I've arrived", label: "OTS", value: "OTS" },
   { displayLabel: "Passenger on board", label: "POB", value: "POB" },
   { displayLabel: "Completed", label: "Job Completed", value: "Job Completed" },
+] as const;
+
+const driverCustomerQuickReplies = [
+  { key: "driver_on_the_way", label: "I am on the way." },
+  { key: "driver_arrived", label: "I have arrived." },
+  { key: "driver_meet_pickup", label: "Please meet me at pickup point." },
+  { key: "driver_waiting_nearby", label: "I am waiting nearby." },
 ] as const;
 
 const statusTimingSteps: DriverStatusTimingStep[] = [
@@ -599,6 +611,10 @@ export default function DriverJobPage() {
   const [selectedDriverIssue, setSelectedDriverIssue] = useState("");
   const [driverAppUpdates, setDriverAppUpdates] =
     useState<DriverAppUpdateState>(emptyDriverAppUpdateState);
+  const [driverQuickReply, setDriverQuickReply] = useState<DriverQuickReplyState>({
+    feedback: null,
+    sendingKey: "",
+  });
   const [driverLiveLocation, setDriverLiveLocation] =
     useState<DriverLiveLocationState>(emptyDriverLiveLocationState);
   const [driverOtsPhotoProof, setDriverOtsPhotoProof] =
@@ -630,6 +646,45 @@ export default function DriverJobPage() {
         time: activityTime(),
       },
     ]);
+  }
+
+  async function sendDriverCustomerQuickReply(templateKey: string, message: string) {
+    if (!token || driverQuickReply.sendingKey) return;
+
+    setDriverQuickReply({ feedback: null, sendingKey: templateKey });
+
+    try {
+      const response = await fetch(
+        `/api/driver-job/${encodeURIComponent(token)}/quick-replies`,
+        {
+          body: JSON.stringify({ template_key: templateKey }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        },
+      );
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.ok || result?.direction !== "driver_to_customer") {
+        throw new Error(
+          response.status === 409
+            ? "Customer replies close after Passenger on board."
+            : result?.error || "Reply could not be sent. Please contact dispatch.",
+        );
+      }
+
+      setDriverQuickReply({
+        feedback: { tone: "success", text: `Sent to customer: ${message}` },
+        sendingKey: "",
+      });
+    } catch (error) {
+      setDriverQuickReply({
+        feedback: {
+          tone: "error",
+          text: error instanceof Error ? error.message : "Reply could not be sent. Please contact dispatch.",
+        },
+        sendingKey: "",
+      });
+    }
   }
 
   const stopDriverLiveLocationBrowserWatch = useCallback((options: { resetLastPostAt?: boolean } = {}) => {
@@ -1697,6 +1752,47 @@ export default function DriverJobPage() {
                       </li>
                     ))}
                   </ol>
+                ) : null}
+              </div>
+            </section>
+
+            <section
+              aria-labelledby="driver-customer-message-heading"
+              className="order-[91] space-y-2"
+              data-driver-customer-quick-replies="true"
+            >
+              <h2 id="driver-customer-message-heading" className="text-base font-semibold text-slate-900">
+                Message Customer
+              </h2>
+              <div className="space-y-2 rounded-md border border-sky-200 bg-sky-50 p-2.5">
+                <p className="text-sm font-medium text-sky-950">
+                  Tap one reply. The customer receives it in My Bookings and admin can see it.
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {driverCustomerQuickReplies.map((reply) => (
+                    <button
+                      className="min-h-11 rounded-md border border-sky-700 bg-white px-3 py-2 text-left text-sm font-semibold text-sky-950 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      data-driver-customer-quick-reply={reply.key}
+                      disabled={Boolean(driverQuickReply.sendingKey) || ["pob", "completed"].includes(workflowStatus)}
+                      key={reply.key}
+                      onClick={() => void sendDriverCustomerQuickReply(reply.key, reply.label)}
+                      type="button"
+                    >
+                      {driverQuickReply.sendingKey === reply.key ? "Sending..." : reply.label}
+                    </button>
+                  ))}
+                </div>
+                {["pob", "completed"].includes(workflowStatus) ? (
+                  <p className="text-xs font-semibold text-slate-600">Customer replies close after Passenger on board.</p>
+                ) : null}
+                {driverQuickReply.feedback ? (
+                  <p
+                    aria-live="polite"
+                    className={`rounded-md border px-2.5 py-2 text-sm font-semibold ${feedbackClassName(driverQuickReply.feedback.tone)}`}
+                    data-driver-customer-quick-reply-feedback="true"
+                  >
+                    {driverQuickReply.feedback.text}
+                  </p>
                 ) : null}
               </div>
             </section>

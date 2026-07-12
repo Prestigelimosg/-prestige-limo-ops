@@ -37,6 +37,10 @@ type PortalBookingsLoadState = "blocked" | "loading" | "ready";
 type PortalInvoicesLoadState = "blocked" | "loading" | "stored";
 type DriverTrackingByBookingId = Record<string, CustomerPortalDriverTrackingResult>;
 type TripUpdatesByBookingId = Record<string, CustomerPortalTripUpdatesResult>;
+type CustomerQuickReplyState = Record<
+  string,
+  { feedback: BookingRequestFeedback | null; sendingKey: string }
+>;
 
 type BookingRequestFeedback = {
   tone: "info" | "success" | "error";
@@ -81,6 +85,12 @@ const invoiceFolders: InvoiceFolder[] = [
   "Credit Notes",
 ];
 const portalSections: PortalSection[] = ["New Booking Request", "Invoices", ...bookingFilters];
+const customerDriverQuickReplies = [
+  { key: "customer_at_lobby", label: "I am at the lobby." },
+  { key: "customer_running_late", label: "I am running 5 minutes late." },
+  { key: "customer_wait_pickup", label: "Please wait at pickup point." },
+  { key: "customer_cannot_find_car", label: "I cannot find the car." },
+] as const;
 
 const initialBookingPages: Record<BookingFilter, number> = {
   Cancelled: 1,
@@ -272,6 +282,7 @@ export default function CustomerPortalPage() {
   const [activeTrackingBookingId, setActiveTrackingBookingId] = useState("");
   const [tripUpdatesByBookingId, setTripUpdatesByBookingId] = useState<TripUpdatesByBookingId>({});
   const [checkingTripUpdatesId, setCheckingTripUpdatesId] = useState("");
+  const [customerQuickReplies, setCustomerQuickReplies] = useState<CustomerQuickReplyState>({});
   const [deepLinkApplied, setDeepLinkApplied] = useState(false);
   const [bookingPages, setBookingPages] = useState<Record<BookingFilter, number>>(initialBookingPages);
   const [selectedBookingMonths, setSelectedBookingMonths] =
@@ -283,6 +294,57 @@ export default function CustomerPortalPage() {
     useState<Record<string, InvoiceDownloadState>>({});
   const companyName = companyProfile.company_name || defaultCompanyProfile.company_name;
   const companyContactLines = companyProfileContactLines(companyProfile);
+
+  async function sendCustomerDriverQuickReply(booking: CustomerPortalBooking, templateKey: string, message: string) {
+    const bookingReference = bookingReferenceFromPortalId(booking.id);
+
+    if (!bookingReference || customerQuickReplies[booking.id]?.sendingKey) return;
+
+    setCustomerQuickReplies((current) => ({
+      ...current,
+      [booking.id]: { feedback: null, sendingKey: templateKey },
+    }));
+
+    try {
+      const response = await fetch("/api/customer-driver-quick-replies", {
+        body: JSON.stringify({ booking_reference: bookingReference, template_key: templateKey }),
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-customer-purpose": "customer-driver-quick-reply",
+        },
+        method: "POST",
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.ok || result?.direction !== "customer_to_driver") {
+        throw new Error(
+          response.status === 409
+            ? "Driver replies close after Passenger on board."
+            : result?.error || "Reply could not be sent. Please contact Prestige Limo.",
+        );
+      }
+
+      setCustomerQuickReplies((current) => ({
+        ...current,
+        [booking.id]: {
+          feedback: { tone: "success", text: `Sent to driver: ${message}` },
+          sendingKey: "",
+        },
+      }));
+    } catch (error) {
+      setCustomerQuickReplies((current) => ({
+        ...current,
+        [booking.id]: {
+          feedback: {
+            tone: "error",
+            text: error instanceof Error ? error.message : "Reply could not be sent. Please contact Prestige Limo.",
+          },
+          sendingKey: "",
+        },
+      }));
+    }
+  }
 
   const activeFilter: BookingFilter = bookingFilterSet.has(activeSection)
     ? (activeSection as BookingFilter)
@@ -1542,6 +1604,14 @@ export default function CustomerPortalPage() {
                     latestTripStatus.includes("passenger onboard") ||
                     latestTripStatus.includes("trip in progress") ||
                     latestTripStatus.includes("completed");
+                  const customerQuickReplyState = customerQuickReplies[expandedBooking.id] || {
+                    feedback: null,
+                    sendingKey: "",
+                  };
+                  const customerQuickRepliesClosed =
+                    tripStatusStopsCustomerTracking ||
+                    expandedBooking.status === "Completed" ||
+                    expandedBooking.status === "Cancelled";
                   const safeDriverTracking =
                     tripStatusStopsCustomerTracking && driverTracking
                       ? {
@@ -1665,6 +1735,45 @@ export default function CustomerPortalPage() {
                               </dd>
                             </div>
                           </dl>
+                        </div>
+                      ) : null}
+                      {driverDetails ? (
+                        <div
+                          className="mt-3 rounded-md border border-sky-200 bg-sky-50 p-3"
+                          data-customer-driver-quick-replies={expandedBooking.id}
+                        >
+                          <h3 className="text-sm font-semibold text-sky-950">Message Driver</h3>
+                          <p className="mt-1 text-xs font-medium text-sky-900">
+                            Tap one reply. Your driver receives it in this job and admin can see it.
+                          </p>
+                          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                            {customerDriverQuickReplies.map((reply) => (
+                              <button
+                                className="min-h-11 rounded-md border border-sky-700 bg-white px-3 py-2 text-left text-sm font-semibold text-sky-950 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                data-customer-driver-quick-reply={reply.key}
+                                disabled={Boolean(customerQuickReplyState.sendingKey) || customerQuickRepliesClosed}
+                                key={reply.key}
+                                onClick={() => void sendCustomerDriverQuickReply(expandedBooking, reply.key, reply.label)}
+                                type="button"
+                              >
+                                {customerQuickReplyState.sendingKey === reply.key ? "Sending..." : reply.label}
+                              </button>
+                            ))}
+                          </div>
+                          {customerQuickRepliesClosed ? (
+                            <p className="mt-2 text-xs font-semibold text-slate-600">
+                              Driver replies close after Passenger on board.
+                            </p>
+                          ) : null}
+                          {customerQuickReplyState.feedback ? (
+                            <p
+                              aria-live="polite"
+                              className={`mt-2 rounded-md border px-2.5 py-2 text-sm font-semibold ${feedbackClass(customerQuickReplyState.feedback.tone)}`}
+                              data-customer-driver-quick-reply-feedback={expandedBooking.id}
+                            >
+                              {customerQuickReplyState.feedback.text}
+                            </p>
+                          ) : null}
                         </div>
                       ) : null}
                       <div

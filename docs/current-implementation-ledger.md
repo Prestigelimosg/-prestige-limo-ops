@@ -32,6 +32,14 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Runtime remains controlled by the existing quick-reply and customer-runtime environment gates; this UI change does not alter environment configuration or broaden the approved customer allowlist.
 - Focused lock: `scripts/test-driver-customer-quick-reply-ui-guard.mjs` plus the existing quick-reply readiness/runtime guards.
 
+### Customer-to-Driver One-Tap Replies
+
+- The existing authenticated My Bookings detail now shows one visible `Message Driver` card after assigned driver details, with four approved fixed replies: at lobby, five minutes late, wait at pickup, and cannot find car. One tap uses the established `/api/customer-driver-quick-replies` route and notification outbox; there is no free-text customer chat, duplicate route, provider, or new write lane.
+- The browser supplies only the exact saved-booking reference and approved template key. The server independently verifies the same-origin customer session, exact customer account and booking, controlled allowlist, approved template, and pre-POB state. The UI closes at POB/completed/cancelled while the server remains authoritative.
+- Replies are `driver_app` only, visible on the exact token-scoped driver job and through the existing admin booking-scoped notification read. Customers cannot read Admin-to-Driver messages because their existing notification read remains `customer_app` only.
+- Runtime remains controlled by the existing quick-reply/customer gates. This pass does not change environment configuration, customer authentication, or the approved allowlist.
+- Focused lock: `scripts/test-customer-driver-quick-reply-ui-guard.mjs` plus the existing quick-reply readiness/runtime guards.
+
 ### Today’s Jobs Assigned-Work Reporting Center
 
 - Dashboard `Today’s Jobs` is the single human-readable reporting center for all assigned active operational jobs, including advance and last-minute work. It no longer hides assigned jobs until the one-hour-before-pickup window.

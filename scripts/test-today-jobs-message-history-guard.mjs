@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const source = await readFile("app/page.tsx", "utf8");
+const persistence = await readFile("lib/customer-driver-app-notification-persistence.ts", "utf8");
 
 for (const expected of [
   "refreshAdminTodayJobMessageHistory",
@@ -15,5 +16,10 @@ for (const expected of [
 ]) {
   assert.ok(source.includes(expected), `Today’s Jobs message history must retain ${expected}`);
 }
+
+assert.ok(
+  persistence.includes("actor_role: record.actor_role"),
+  "admin message history must receive the persisted safe actor role for human direction labels",
+);
 
 console.log("Today’s Jobs message history guard passed.");

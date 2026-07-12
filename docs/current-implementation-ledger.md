@@ -47,6 +47,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The existing report refresh and 10-second reporting cycle request the same message history, and the card keeps one explicit `Refresh messages` fallback. A successful Admin-to-Driver send also reloads the history.
 - Only the two approved workflow areas are rendered: fixed customer/driver quick replies and private admin/driver job messages. Customer reads remain `customer_app` only, so Admin-to-Driver history cannot appear in My Bookings.
 - Focused lock: `scripts/test-today-jobs-message-history-guard.mjs`.
+- Live two-direction proof found the admin notification DTO omitted `actor_role`, causing correct customer/driver rows to display as `Admin → Driver`. The existing safe DTO now includes only the bounded actor role while continuing to strip actor label, event key, driver-link ID, and source surface. Customer notification reads still use their separate `customer_app`-only DTO and never receive private Admin-to-Driver rows.
 
 ### Today’s Jobs Assigned-Work Reporting Center
 

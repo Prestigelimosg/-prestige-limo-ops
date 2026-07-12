@@ -111,7 +111,7 @@ export type CustomerDriverAppNotificationRecord =
 
 export type CustomerDriverAppNotificationSafeRecord = Omit<
   CustomerDriverAppNotificationRecord,
-  "actor_label" | "actor_role" | "driver_job_link_id" | "event_key" | "source_surface"
+  "actor_label" | "driver_job_link_id" | "event_key" | "source_surface"
 >;
 
 export type CustomerDriverQuickReplyTemplateKey =
@@ -2876,6 +2876,7 @@ function toSafeRecord(
   record: CustomerDriverAppNotificationRecord,
 ): CustomerDriverAppNotificationSafeRecord {
   return {
+    actor_role: record.actor_role,
     booking_reference: record.booking_reference,
     created_at: record.created_at,
     delivery_surface: record.delivery_surface,

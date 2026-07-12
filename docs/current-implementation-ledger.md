@@ -12,6 +12,16 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Single-Booking Customer/Driver Quick-Reply Production Activation
+
+- Owner approved controlled activation for exact prior test booking `ADM-20260712015729` and its verified saved customer account reference `128`. Broad/all-customer activation remains forbidden.
+- One active `customer_access_accounts` row was created through the established deterministic portal-account identity. Vercel production uses the existing portal-access, customer in-app runtime, and quick-reply gates with `one-customer` allowlists scoped only to account `128`; secret values are not recorded or printed.
+- The exact booking has one active 24-hour Driver Job Link after one duplicate created during clipboard diagnosis was revoked. A separate temporary driver-read evidence link was deleted immediately after proof.
+- Live production evidence passed Customer → Driver with fixed reply `I am at the lobby.` and Driver → Customer with fixed reply `I have arrived.`. No Email, WhatsApp, SMS, Telegram, push provider, or other external send occurred.
+- Admin Today’s Jobs displayed both saved rows with correct human labels after the safe actor-role DTO repair. Driver token read returned only `driver_app` and saw the customer reply; authenticated customer read returned only `customer_app`, saw the driver reply, and did not expose the customer’s driver-directed row or any private Admin → Driver row.
+- Rollback is to disable `PRESTIGE_CUSTOMER_DRIVER_QUICK_REPLIES_ENABLED` and `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_ENABLED`, disable/remove the portal-access allowlist for account `128`, redeploy production, revoke the active test links/account, and verify blocked reads/writes. No rollback was required because all exact live checks passed.
+- Focused locks: `scripts/test-customer-driver-quick-replies-runtime-scaffold-guard.mjs`, `scripts/test-customer-driver-quick-reply-ui-guard.mjs`, `scripts/test-driver-customer-quick-reply-ui-guard.mjs`, and `scripts/test-today-jobs-message-history-guard.mjs`.
+
 ### Today’s Jobs Admin-to-Driver Messages
 
 - Every valid Today’s Jobs card has one always-visible `Messages · Driver` box directly below the report and optional OTS-photo readouts. Admin types one bounded message and explicitly selects `Send to Driver`; there is no extra disclosure or separate messaging page.

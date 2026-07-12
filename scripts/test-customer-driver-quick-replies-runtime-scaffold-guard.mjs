@@ -61,6 +61,22 @@ const ledgerSection = sectionBetween(
   ledger,
   "### Customer/Driver Quick Replies Disabled Runtime Scaffold Lock",
 );
+const activationSection = sectionBetween(
+  ledger,
+  "### Single-Booking Customer/Driver Quick-Reply Production Activation",
+);
+
+for (const phrase of [
+  "ADM-20260712015729",
+  "verified saved customer account reference `128`",
+  "Broad/all-customer activation remains forbidden.",
+  "I am at the lobby.",
+  "I have arrived.",
+  "did not expose the customer’s driver-directed row or any private Admin → Driver row",
+  "Rollback is to disable `PRESTIGE_CUSTOMER_DRIVER_QUICK_REPLIES_ENABLED`",
+]) {
+  assertIncludes(activationSection, phrase, `quick reply production activation evidence ${phrase}`);
+}
 
 for (const phrase of [
   "disabled-by-default runtime scaffold",

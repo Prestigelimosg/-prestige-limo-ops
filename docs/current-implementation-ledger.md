@@ -1366,7 +1366,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 - Customer folder `Jobs not billed yet` rows and expanded details render saved pickup timestamps in Singapore local time with an explicit `SGT` suffix instead of exposing raw UTC ISO values.
 - Timezone-bearing timestamps such as `2026-07-13T03:00:00+00:00` display as `13 Jul 2026, 1100hrs SGT`; bare saved local timestamps keep their Singapore clock face.
-- The existing Customers folder latest-pickup summary reuses the same canonical formatter so these admin customer-folder consumers cannot drift independently again.
+- The existing Customers folder latest-pickup summary and expanded saved-job detail reuse the same canonical formatter so these admin customer-folder consumers cannot drift independently again.
+- The focused guard rejects direct raw `pickup_at` rendering in both the customer folder invoice-candidate panel and the main Customers saved-job detail.
 - This is display-only. It does not change saved pickup timestamps, booking/calendar data, CRM/parser behavior, invoice preparation or generation, billing, payments, payouts, provider sends, environment, or Supabase.
 - Focused lock: `scripts/test-customer-folder-operator-row-layout-guard.mjs`.
 

@@ -8041,7 +8041,7 @@ export default function MockCustomerDashboardPage() {
                                     <span className="block text-[10px] uppercase tracking-[0.12em] text-slate-500">
                                       Pickup
                                     </span>
-                                    {savedBookingDisplayText(booking.pickup_at, "Not available")}
+                                    {formatSingaporePickupDisplay(booking.pickup_at, "Not available")}
                                   </p>
                                   <p>
                                     <span className="block text-[10px] uppercase tracking-[0.12em] text-slate-500">

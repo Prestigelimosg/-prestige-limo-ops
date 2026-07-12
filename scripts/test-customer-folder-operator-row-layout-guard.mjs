@@ -4,12 +4,15 @@ import { readFile } from "node:fs/promises";
 import { formatSingaporePickupDisplay } from "../lib/singapore-pickup-display.ts";
 
 const pagePath = "app/customers/[customerId]/page.tsx";
+const customersPagePath = "app/customers/page.tsx";
 const invoiceFolderPanelPath = "app/customers/[customerId]/customer-invoice-folder-panel.tsx";
 const prefixPanelPath = "app/customers/[customerId]/invoice-prefix-settings-panel.tsx";
 const savedBookingsPanelPath = "app/customers/[customerId]/saved-bookings-panel.tsx";
 
-const [page, invoiceFolderPanel, prefixPanel, savedBookingsPanel] = await Promise.all(
-  [pagePath, invoiceFolderPanelPath, prefixPanelPath, savedBookingsPanelPath].map((path) => readFile(path, "utf8")),
+const [page, customersPage, invoiceFolderPanel, prefixPanel, savedBookingsPanel] = await Promise.all(
+  [pagePath, customersPagePath, invoiceFolderPanelPath, prefixPanelPath, savedBookingsPanelPath].map((path) =>
+    readFile(path, "utf8"),
+  ),
 );
 
 function assertIncludes(source, fragment, label = fragment) {
@@ -73,6 +76,21 @@ assertIncludes(
   savedBookingsPanel,
   '["Pickup time", formatSingaporePickupDisplay(booking.pickup_at)]',
   "customer folder expanded Singapore pickup display",
+);
+assertIncludes(
+  customersPage,
+  'formatSingaporePickupDisplay(booking.pickup_at, "Not available")',
+  "main Customers saved-job detail Singapore pickup display",
+);
+assert.equal(
+  savedBookingsPanel.includes("{displayText(booking.pickup_at"),
+  false,
+  "customer folder rows must not render raw pickup_at values",
+);
+assert.equal(
+  customersPage.includes("{savedBookingDisplayText(booking.pickup_at"),
+  false,
+  "main Customers saved-job details must not render raw pickup_at values",
 );
 assert.equal(
   formatSingaporePickupDisplay("2026-07-13T03:00:00+00:00"),

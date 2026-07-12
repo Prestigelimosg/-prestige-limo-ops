@@ -29,6 +29,13 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - A compatible constraint replacement is prepared in `supabase/migrations/202607120001_dsp_billable_hours_amendment.sql` but must not be applied without explicit owner approval. No migration, deployment, environment/Supabase configuration, invoice, PDF, payment, payout, provider send, CRM rate calculation, parser, messaging, GPS, or operational record was applied or created in this pass.
 - Focused locks: `scripts/test-admin-monthly-invoice-dsp-billable-hours-amendment-guard.mjs`, `scripts/test-admin-driver-job-dsp-actual-time-read-api-contract.mjs`, `scripts/test-admin-monthly-invoice-billable-item-price-review-schema-contract.mjs`, and `scripts/test-admin-monthly-invoice-billable-item-price-review-api-contract.mjs`.
 
+### DSP Constraint Apply And Local Error Diagnosis
+
+- Owner approved and the existing DSP whole-hour constraint replacement was applied through the signed-in Supabase SQL editor to linked project `kvvsguhklmfgkebhxatm` (`main Production`). Supabase returned `Success. No rows returned`; no booking, driver link, driver status/timing event, calendar event, invoice, billing row, payment, payout, message, or provider send was created during that apply.
+- The attempted visible local booking proof stopped before save because the local runtime intentionally lacked server-only admin persistence configuration and the typed-read gate was closed. Exact API responses were `Admin saved booking read configuration is not ready.` and `Load Bookings typed read is not enabled on this server.`; this was not evidence of database corruption, schema failure, or RLS failure.
+- Dispatch previously passed that safe string response into an object-only formatter and displayed `Unknown Supabase error.`. The existing formatter now preserves bounded non-empty string errors, so operators see the actual safe configuration message. No credential, environment value, gate, route, database behavior, or customer/driver surface was changed.
+- Focused lock: `scripts/test-admin-load-bookings-safe-error-message-guard.mjs`.
+
 ### Dispatch Current-Schema Vehicle Persistence Repair
 
 - Live creation inspection proved the established Dispatch payload carried `vehicle_type_or_category: AVF`, but the current-schema `bookingToDbRow` mapper omitted that safe field while the foundation fallback mapper retained it. The current mapper now persists the selected vehicle category in place; no duplicate save route, booking lane, pricing field, driver lane, or billing write was added.

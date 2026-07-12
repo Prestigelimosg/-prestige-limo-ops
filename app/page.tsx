@@ -5512,6 +5512,10 @@ function formatRatesSetupError(value: string, fallbackPrefix: string) {
 }
 
 function formatSupabaseError(error: unknown) {
+  if (typeof error === "string") {
+    return clean(error) || "Unknown Supabase error.";
+  }
+
   if (!error || typeof error !== "object") {
     return error instanceof Error ? error.message : "Unknown Supabase error.";
   }

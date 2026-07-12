@@ -1244,6 +1244,12 @@ type AdminCustomerDriverDetailsDriverInAppActionState = {
   notificationType: "trip_update";
 };
 
+type AdminTodayJobDriverMessageState = {
+  draft: string;
+  message: string;
+  status: "idle" | "loading" | "success" | "error";
+};
+
 function adminCustomerDriverDetailsEmailReviewFallbackItem(): AdminCustomerDriverDetailsEmailReviewItem {
   return {
     actionLabel: "Review email to customer",
@@ -13249,6 +13255,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   ] = useState<AdminCustomerDriverDetailsDriverInAppActionState>(() =>
     adminCustomerDriverDetailsDriverInAppFallbackState(),
   );
+  const [adminTodayJobDriverMessageStates, setAdminTodayJobDriverMessageStates] = useState<
+    Record<string, AdminTodayJobDriverMessageState>
+  >({});
   const [driverAcknowledgementFollowUpStatus, setDriverAcknowledgementFollowUpStatus] =
     useState<DriverAcknowledgementFollowUpStatus>("pending");
   const [driverAcknowledgementFollowUpNote, setDriverAcknowledgementFollowUpNote] = useState("");
@@ -25893,6 +25902,136 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     }
   }
 
+  function updateAdminTodayJobDriverMessageDraft(bookingReferenceValue: string, draft: string) {
+    const bookingReference = cleanReferenceText(bookingReferenceValue);
+
+    if (!bookingReference) {
+      return;
+    }
+
+    setAdminTodayJobDriverMessageStates((current) => ({
+      ...current,
+      [bookingReference]: {
+        draft,
+        message: "",
+        status: "idle",
+      },
+    }));
+  }
+
+  async function sendAdminTodayJobDriverMessage(bookingReferenceValue: string) {
+    const bookingReference = cleanReferenceText(bookingReferenceValue);
+    const currentState = adminTodayJobDriverMessageStates[bookingReference];
+    const safeMessage = clean(currentState?.draft).slice(0, 500);
+
+    if (!bookingReference || !safeMessage) {
+      setAdminTodayJobDriverMessageStates((current) => ({
+        ...current,
+        [bookingReference]: {
+          draft: current[bookingReference]?.draft || "",
+          message: "Type a message for the driver first.",
+          status: "error",
+        },
+      }));
+      return;
+    }
+
+    setAdminTodayJobDriverMessageStates((current) => ({
+      ...current,
+      [bookingReference]: {
+        draft: current[bookingReference]?.draft || safeMessage,
+        message: "Checking the driver link...",
+        status: "loading",
+      },
+    }));
+
+    try {
+      const linkParams = new URLSearchParams({
+        booking_reference: bookingReference,
+        limit: "1",
+        link_status: "active",
+        page: "1",
+      });
+      const linkResponse = await fetch(`${adminDriverJobLinksApiPath}?${linkParams.toString()}`, {
+        cache: "no-store",
+        headers: { "x-prestige-admin-purpose": adminLegacyDataPurpose },
+        method: "GET",
+      });
+      const linkResult = await linkResponse.json().catch(() => null);
+      const activeLink = Array.isArray(linkResult?.links)
+        ? (linkResult.links as AdminDriverJobLinkRecord[]).find(
+            (link) =>
+              link.link_status === "active" &&
+              cleanReferenceText(link.booking_reference) === bookingReference,
+          ) || null
+        : null;
+
+      if (!linkResponse.ok || !linkResult?.ok) {
+        throw new Error(linkResult?.error || "Driver link could not be checked.");
+      }
+
+      if (!activeLink?.id) {
+        throw new Error("Driver link required. Open Driver Link Setup, create the link, and send it to the driver first.");
+      }
+
+      const response = await fetch(adminCustomerDriverAppNotificationsApiPath, {
+        body: JSON.stringify({
+          booking_reference: bookingReference,
+          delivery_surface: "driver_app",
+          driver_job_link_id: activeLink.id,
+          event_key: `${bookingReference}:admin-driver-message:${Date.now()}`,
+          notification_status: "queued",
+          notification_type: "trip_update",
+          priority: "normal",
+          safe_context: {
+            audience: "admin_driver",
+            external_send: false,
+            provider_send: false,
+            recipient_role: "driver",
+            sender_role: "admin",
+            source: "today_jobs",
+          },
+          safe_message: safeMessage,
+          safe_title: "Message from dispatch",
+          workflow_area: "admin_driver_job_messages",
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "POST",
+      });
+      const result = await response.json().catch(() => null);
+
+      if (
+        !response.ok ||
+        !result?.ok ||
+        result?.notification?.delivery_surface !== "driver_app" ||
+        cleanReferenceText(result?.notification?.booking_reference) !== bookingReference
+      ) {
+        throw new Error(result?.error || "Message could not be queued for this driver.");
+      }
+
+      setAdminTodayJobDriverMessageStates((current) => ({
+        ...current,
+        [bookingReference]: {
+          draft: "",
+          message: "Message queued in the driver’s job page.",
+          status: "success",
+        },
+      }));
+    } catch (error) {
+      setAdminTodayJobDriverMessageStates((current) => ({
+        ...current,
+        [bookingReference]: {
+          draft: current[bookingReference]?.draft || safeMessage,
+          message: error instanceof Error ? error.message : "Message could not be queued for this driver.",
+          status: "error",
+        },
+      }));
+    }
+  }
+
   const activeJobsMonitorPanel = (
     <section
       aria-label="Today's Jobs"
@@ -26038,6 +26177,12 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 ? activeJobDriverStatusLabel
                 : bookingStatusLabel(activeJobBooking.status);
             const activeJobKey = bookingRecordStableKey(activeJobBooking);
+            const activeJobDriverMessageState =
+              adminTodayJobDriverMessageStates[activeJobBookingReference] || {
+                draft: "",
+                message: "",
+                status: "idle" as const,
+              };
             const activeJobCompletionMessage =
               bookingCompletionMessages[activeJobKey] ?? null;
             const activeJobPickupRiskState = pickupRiskStateForActiveJob(
@@ -26209,6 +26354,73 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       activeJobDriverOtsPhotoProofReadState?.message?.text ||
                       "Photo will appear here after driver sends it."}
                   </p>
+                </div>
+                <div
+                  className="mt-2 rounded-md border border-sky-200 bg-sky-50 px-2 py-1.5 text-xs text-sky-950"
+                  data-admin-active-job-driver-message="true"
+                >
+                  <div className="font-semibold">Messages · Driver</div>
+                  <div className="mt-2 grid gap-2">
+                    <label className="grid gap-1 font-semibold">
+                      Message
+                      <textarea
+                        aria-label={`Message driver for ${activeJobBookingReference}`}
+                        className="min-h-20 w-full rounded-md border border-sky-300 bg-white p-2 text-sm font-normal text-slate-950 outline-none focus:border-sky-700"
+                        data-admin-active-job-driver-message-input="true"
+                        maxLength={500}
+                        onChange={(event) =>
+                          updateAdminTodayJobDriverMessageDraft(
+                            activeJobBookingReference,
+                            event.target.value,
+                          )
+                        }
+                        placeholder="Type a short instruction for this driver"
+                        value={activeJobDriverMessageState.draft}
+                      />
+                    </label>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <button
+                        className="h-8 flex-1 rounded-md border border-sky-700 bg-sky-700 px-2 font-semibold text-white transition hover:bg-sky-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                        data-admin-active-job-driver-message-send="true"
+                        disabled={
+                          activeJobDriverMessageState.status === "loading" ||
+                          !clean(activeJobDriverMessageState.draft)
+                        }
+                        onClick={() => void sendAdminTodayJobDriverMessage(activeJobBookingReference)}
+                        type="button"
+                      >
+                        {activeJobDriverMessageState.status === "loading" ? "Checking link" : "Send to Driver"}
+                      </button>
+                      {activeJobDriverMessageState.status === "error" &&
+                      activeJobDriverMessageState.message.startsWith("Driver link required") ? (
+                        <button
+                          className="h-8 flex-1 rounded-md border border-indigo-300 bg-white px-2 font-semibold text-indigo-900 hover:bg-indigo-50"
+                          data-admin-active-job-driver-message-open-link-setup="true"
+                          onClick={() => loadSelectedBooking(activeJobBooking, { focusDriverJobLink: true })}
+                          type="button"
+                        >
+                          Open Driver Link Setup
+                        </button>
+                      ) : null}
+                    </div>
+                    {activeJobDriverMessageState.message ? (
+                      <p
+                        className={`rounded-md border px-2 py-1 font-semibold ${
+                          activeJobDriverMessageState.status === "success"
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                            : activeJobDriverMessageState.status === "error"
+                              ? "border-rose-200 bg-rose-50 text-rose-900"
+                              : "border-sky-200 bg-white text-sky-900"
+                        }`}
+                        data-admin-active-job-driver-message-status="true"
+                      >
+                        {activeJobDriverMessageState.message}
+                      </p>
+                    ) : null}
+                    <p className="text-[11px] text-sky-800">
+                      Visible to admin and this driver only. Customers cannot see this message.
+                    </p>
+                  </div>
                 </div>
                 <div
                   className={`mt-2 grid gap-2 ${!isSelectedActiveJob ? "sm:grid-cols-2" : ""}`}

@@ -730,7 +730,16 @@ try {
     assert.equal(wrongTemplatePostMock.client.insertHistory.length, 0, "Wrong customer_app template must not insert.");
 
     setEnv(validEnv());
-    const driverPostMock = installMockClient();
+    const driverPostMock = installMockClient({
+      driver_job_links: [
+        {
+          booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
+          expires_at: "2099-12-31T23:59:59.000Z",
+          id: "11111111-1111-4111-8111-111111111111",
+          link_status: "active",
+        },
+      ],
+    });
     const driverPostResult = await responseJson(
       await adminRoute.POST(
         new Request("http://localhost/api/admin-customer-driver-app-notifications", {

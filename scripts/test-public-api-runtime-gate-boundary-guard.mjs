@@ -301,7 +301,7 @@ const customerBookingRequestRoute = files["app/api/customer-booking-requests/rou
 for (const fragment of [
   "parseCustomerBookingRequestPayloads",
   "for (const requestPayload of parsed.data.requests)",
-  "createAdminBooking(requestPayload, customerBookingRequestPersistenceAdapterActor",
+  "createAdminBooking(verifiedRequestPayload, customerBookingRequestPersistenceAdapterActor",
   "source_route: \"/book\"",
   "return_trip_requested: parsed.data.returnTripRequested",
   "customerSafeError",

@@ -1755,6 +1755,51 @@ function customerAppNotificationUsesApprovedRuntimeTemplate(
   return driverDetailsReadyTemplate || bookingRequestConfirmedTemplate;
 }
 
+async function assertAdminDriverAppNotificationWriteScope(
+  client: NotificationClient,
+  input: CustomerDriverAppNotificationInput,
+): Promise<AdminBookingResult<null>> {
+  if (input.delivery_surface !== "driver_app") {
+    return { data: null, ok: true };
+  }
+
+  if (!input.booking_reference || !input.driver_job_link_id) {
+    return {
+      error: "Driver app notification requires the exact active driver job link.",
+      ok: false,
+      status: 400,
+    };
+  }
+
+  const { data, error } = await client
+    .from("driver_job_links")
+    .select("id, booking_reference, expires_at, link_status")
+    .eq("id", input.driver_job_link_id)
+    .eq("booking_reference", input.booking_reference)
+    .eq("link_status", "active")
+    .maybeSingle();
+
+  if (error) {
+    return safeAdapterFailure(safeNotificationCreateError, 500, error);
+  }
+
+  const link = asRecord(data);
+
+  if (
+    safeUuidOrNull(link.id) !== input.driver_job_link_id ||
+    safeIdentifier(link.booking_reference, maxBookingReferenceLength) !== input.booking_reference ||
+    isDriverJobLinkExpired(String(link.expires_at || ""))
+  ) {
+    return {
+      error: "Driver app notification requires the exact active driver job link.",
+      ok: false,
+      status: 409,
+    };
+  }
+
+  return { data: null, ok: true };
+}
+
 async function assertControlledCustomerAppNotificationWriteAllowed(
   client: NotificationClient,
   input: CustomerDriverAppNotificationInput,
@@ -2849,6 +2894,15 @@ export async function createCustomerDriverAppNotification(
 
   if (!clientResult.ok) {
     return clientResult;
+  }
+
+  const driverAppWriteScope = await assertAdminDriverAppNotificationWriteScope(
+    clientResult.data,
+    input,
+  );
+
+  if (!driverAppWriteScope.ok) {
+    return driverAppWriteScope;
   }
 
   const customerAppWriteGate = await assertControlledCustomerAppNotificationWriteAllowed(

@@ -12,6 +12,17 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Today’s Jobs Admin-to-Driver Messages
+
+- Every valid Today’s Jobs card has one always-visible `Messages · Driver` box directly below the report and optional OTS-photo readouts. Admin types one bounded message and explicitly selects `Send to Driver`; there is no extra disclosure or separate messaging page.
+- The action reuses the existing active Driver Job Link GET, existing `POST /api/admin-customer-driver-app-notifications`, existing `customer_driver_app_notification_outbox`, and existing token-scoped driver notification GET. No duplicate route, table, message format, provider, or driver read path was added.
+- The server write stays `delivery_surface: driver_app`, exact booking-reference and active driver-link scoped, with audience `admin_driver`. The established create persistence independently verifies the supplied driver-link ID, booking reference, active status, and expiry before insert. Customer reads remain authenticated and `customer_app` only, so customers cannot read Admin-to-Driver messages.
+- When no active Driver Job Link exists, no notification row is written. The typed message remains and the card shows one human `Open Driver Link Setup` action that reuses the established Dispatch link handoff.
+- This pass does not add Driver-to-Admin free text or activate Driver-to-Customer / Customer-to-Driver quick replies. Existing urgent issue alerts and gate-closed quick-reply scaffolds are unchanged.
+- No Email, WhatsApp, SMS, Telegram, provider send, booking/status/GPS write, environment change, schema change, payment, invoice, payout, internal note, parser/debug data, token, secret, or other-booking data is included.
+- Focused lock: `scripts/test-today-jobs-admin-driver-message-guard.mjs`.
+- The broader public runtime-gate lock now follows the established verified PA request payload (`verifiedRequestPayload`) rather than the superseded raw request variable; customer booking behavior was not changed by this messaging pass.
+
 ### Today’s Jobs Assigned-Work Reporting Center
 
 - Dashboard `Today’s Jobs` is the single human-readable reporting center for all assigned active operational jobs, including advance and last-minute work. It no longer hides assigned jobs until the one-hour-before-pickup window.

@@ -12,6 +12,14 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### DSP Two-Hour Minimum Calculation Foundation
+
+- The existing shared hourly-billing module now contains one canonical DSP billable-minute helper. DSP has a two-hour/120-minute minimum and reuses the established 15-minute grace: 1–135 actual minutes bill as 120, minute 136 starts 180, and minute 196 starts 240.
+- The existing general hourly helper keeps its one-hour minimum and existing consumers unchanged. No duplicate calculator, rate table, booking lane, invoice lane, persistence lane, or route was added.
+- This bounded foundation is not yet wired into invoice, billing-summary, or persistence consumers. It does not make test booking `ADM-20260712063110` billable, and billing for that test booking remains blocked.
+- No database constraint or migration, vehicle/category rate, CRM selection, parser, deployment, environment configuration, invoice, payment, payout, or operational record was changed in this step.
+- Focused lock: `scripts/test-dsp-two-hour-minimum-billing-guard.mjs` plus the existing customer-terms/hourly-billing guard.
+
 ### Dispatch Current-Schema Vehicle Persistence Repair
 
 - Live creation inspection proved the established Dispatch payload carried `vehicle_type_or_category: AVF`, but the current-schema `bookingToDbRow` mapper omitted that safe field while the foundation fallback mapper retained it. The current mapper now persists the selected vehicle category in place; no duplicate save route, booking lane, pricing field, driver lane, or billing write was added.

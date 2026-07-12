@@ -1,8 +1,13 @@
 export const hourlyBillingGraceMinutes = 15;
 export const hourlyBillingUnitMinutes = 60;
 export const hourlyBillingDefaultRateCents = 6500;
+export const dspBillingMinimumHours = 2;
+export const dspBillingMinimumMinutes = dspBillingMinimumHours * hourlyBillingUnitMinutes;
 
-export function calculateHourlyBillableMinutes(totalMinutes: number | null | undefined) {
+function calculateBillableMinutesWithMinimum(
+  totalMinutes: number | null | undefined,
+  minimumHours: number,
+) {
   if (typeof totalMinutes !== "number" || !Number.isFinite(totalMinutes) || totalMinutes < 0) {
     return null;
   }
@@ -14,15 +19,26 @@ export function calculateHourlyBillableMinutes(totalMinutes: number | null | und
   }
 
   const billableHours = Math.max(
-    1,
+    minimumHours,
     Math.ceil(Math.max(0, roundedTotalMinutes - hourlyBillingGraceMinutes) / hourlyBillingUnitMinutes),
   );
 
   return billableHours * hourlyBillingUnitMinutes;
 }
 
+export function calculateHourlyBillableMinutes(totalMinutes: number | null | undefined) {
+  return calculateBillableMinutesWithMinimum(totalMinutes, 1);
+}
+
+export function calculateDspBillableMinutes(totalMinutes: number | null | undefined) {
+  return calculateBillableMinutesWithMinimum(totalMinutes, dspBillingMinimumHours);
+}
+
 export const hourlyBillingGraceRuleText =
   "Hourly bookings include 15 minutes grace after each hour; 16 minutes or more starts the next chargeable hour.";
+
+export const dspBillingRuleText =
+  "Disposal bookings have a two-hour minimum and include 15 minutes grace after each chargeable hour; the 136th minute starts the third chargeable hour.";
 
 function parseClockTimeToMinutes(value: string) {
   const trimmedValue = value.trim();

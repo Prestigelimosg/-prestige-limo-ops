@@ -11548,7 +11548,7 @@ async function saveAdminMonthlyInvoiceBillablePriceReviewFromItemReview({
   existingPriceReview: AdminMonthlyInvoiceBillableItemPriceReviewRecord | null;
   invoiceDraft: AdminMonthlyInvoiceDraftRecord;
   itemReview: AdminMonthlyInvoiceDraftItemReviewRecord;
-  reviewedAmountCents: number;
+  reviewedAmountCents: number | null;
 }) {
   const draftId = clean(invoiceDraft.id);
   const itemReviewId = clean(itemReview.id);
@@ -11632,7 +11632,7 @@ async function saveAdminMonthlyInvoiceBillablePriceReviewFromItemReview({
       ...(clean(existingPriceReview?.id) ? { price_review_id: clean(existingPriceReview?.id) } : {}),
       price_decision: priceDecision,
       price_review_status: priceReviewStatus,
-      reviewed_customer_amount_cents: reviewedAmountCents,
+      reviewed_customer_amount_cents: bookingType === "DSP" ? null : reviewedAmountCents,
       safe_price_review_context: {
         ...(bookingType === "DSP" && dspBillableMinutes !== null
           ? {
@@ -29390,7 +29390,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     !monthlyInvoiceDraftItemReviewPrimaryReview ||
     !clean(monthlyInvoiceDraftPrimaryDraft.id) ||
     !clean(monthlyInvoiceDraftItemReviewPrimaryReview.id) ||
-    !monthlyInvoiceBillablePriceReviewAmountCents ||
+    (monthlyInvoiceBillableBookingType !== "DSP" &&
+      !monthlyInvoiceBillablePriceReviewAmountCents) ||
     !monthlyInvoiceBillableDspFinalHoursValid ||
     (monthlyInvoiceBillableDspHoursAmended &&
       !clean(adminMonthlyInvoiceDspHoursAmendmentReason)) ||
@@ -29418,7 +29419,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         message: {
           tone: "info",
           text: monthlyInvoiceDraftItemReviewPrimaryReview
-            ? "Enter a reviewed customer amount before saving billable price review."
+            ? monthlyInvoiceBillableBookingType === "DSP"
+              ? "Complete DSP timing and verified CRM pricing details before saving billable price review."
+              : "Enter a reviewed customer amount before saving billable price review."
             : "Load a saved monthly invoice draft item review before saving billable price review.",
         },
       }));
@@ -41141,15 +41144,16 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       </label>
                     ) : null}
                     <label className="min-w-0 text-[11px] font-semibold text-teal-950">
-                      <span>Reviewed amount</span>
+                      <span>{monthlyInvoiceBillableBookingType === "DSP" ? "Calculated amount" : "Reviewed amount"}</span>
                       <input
                         className="mt-1 h-9 w-full min-w-0 rounded-md border border-teal-200 bg-white px-2 text-xs font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
                         data-admin-monthly-invoice-billable-price-review-amount-input="true"
                         inputMode="decimal"
+                        disabled={monthlyInvoiceBillableBookingType === "DSP"}
                         onChange={(event) =>
                           setAdminMonthlyInvoiceBillablePriceReviewAmountInput(event.target.value)
                         }
-                        placeholder="0.00"
+                        placeholder={monthlyInvoiceBillableBookingType === "DSP" ? "Calculated on save" : "0.00"}
                         value={adminMonthlyInvoiceBillablePriceReviewAmountInput}
                       />
                     </label>

@@ -12,6 +12,7 @@ import {
 } from "./admin-booking-supabase-adapter";
 import { assertAdminMonthlyInvoiceDraftUnlocked } from "./admin-monthly-invoice-draft-lock-enforcement";
 import { calculateDspBillableMinutes, calculateHourlyBillableMinutes } from "./hourly-billing";
+import { initialRateSettings, resolvePricing } from "./pricing";
 
 export const adminMonthlyInvoiceBillableItemPriceReviewVersion =
   "stage-monthly-invoice-billable-item-price-review-api-v1";
@@ -164,6 +165,8 @@ const safePriceReviewServerSessionActorError =
   "Admin monthly invoice billable item price review persistence requires a verified admin or dispatcher server session.";
 const safePriceReviewSaveError =
   "Admin monthly invoice billable item price review save failed safely.";
+const safeDspPricingIdentityError =
+  "DSP amount calculation requires the exact saved booking with verified CRM company identity and vehicle category.";
 const safePriceReviewLoadError =
   "Admin monthly invoice billable item price review load failed safely.";
 const allowedBookingTypes = new Set<string>(adminMonthlyInvoiceBillableBookingTypes);
@@ -1186,7 +1189,8 @@ export function parseAdminMonthlyInvoiceBillableItemPriceReviewSavePayload(
   if (
     (priceDecision === "include_in_invoice" ||
       priceReviewStatus === "approved_for_invoice_draft") &&
-    reviewedAmount === null
+    reviewedAmount === null &&
+    bookingType !== "DSP"
   ) {
     return {
       error: "Including a billable item requires a reviewed customer amount.",
@@ -1340,6 +1344,113 @@ export async function saveAdminMonthlyInvoiceBillableItemPriceReview(
     return lockResult;
   }
 
+  let reviewedCustomerAmountCents = input.reviewed_customer_amount_cents;
+  let sourcePriceContext = input.source_price_context;
+
+  if (input.booking_type === "DSP") {
+    const finalBillableMinutes = input.dsp_billable_minutes;
+
+    if (finalBillableMinutes === null || finalBillableMinutes < 60 || finalBillableMinutes % 60 !== 0) {
+      return {
+        error: "DSP amount calculation requires final positive whole billable hours.",
+        ok: false,
+        status: 400,
+      };
+    }
+
+    const { data: bookingRows, error: bookingError } = await clientResult.data
+      .from("bookings")
+      .select("booking_reference, company_id, traveler_id, service_type, pickup_at, vehicle_type_or_category")
+      .eq("booking_reference", input.booking_reference)
+      .limit(2);
+    const bookingRecords = asArray(bookingRows).map(asRecord);
+    const bookingRecord = bookingRecords.length === 1 ? bookingRecords[0] : null;
+    const companyId = positiveInteger(bookingRecord?.company_id, 0, Number.MAX_SAFE_INTEGER);
+    const travelerId = positiveInteger(bookingRecord?.traveler_id, 0, Number.MAX_SAFE_INTEGER);
+    const vehicle = textOrNull(bookingRecord?.vehicle_type_or_category);
+
+    if (
+      bookingError ||
+      !bookingRecord ||
+      !companyId ||
+      !vehicle ||
+      validBookingType(bookingRecord.service_type) !== "DSP"
+    ) {
+      return bookingError
+        ? safeAdapterFailure(safePriceReviewSaveError, 500, bookingError)
+        : { error: safeDspPricingIdentityError, ok: false, status: 409 };
+    }
+
+    const { data: companyRows, error: companyError } = await clientResult.data
+      .from("companies")
+      .select("id, customer_rates")
+      .eq("id", companyId)
+      .limit(2);
+    const companyRecords = asArray(companyRows).map(asRecord);
+    const companyRecord = companyRecords.length === 1 ? companyRecords[0] : null;
+
+    if (companyError || !companyRecord) {
+      return companyError
+        ? safeAdapterFailure(safePriceReviewSaveError, 500, companyError)
+        : { error: safeDspPricingIdentityError, ok: false, status: 409 };
+    }
+
+    let travelerRecord: UnknownRecord | null = null;
+
+    if (travelerId) {
+      const { data: travelerRows, error: travelerError } = await clientResult.data
+        .from("travelers")
+        .select("id, company_id, customer_rates")
+        .eq("id", travelerId)
+        .eq("company_id", companyId)
+        .limit(2);
+      const travelerRecords = asArray(travelerRows).map(asRecord);
+
+      if (travelerError || travelerRecords.length !== 1) {
+        return travelerError
+          ? safeAdapterFailure(safePriceReviewSaveError, 500, travelerError)
+          : { error: safeDspPricingIdentityError, ok: false, status: 409 };
+      }
+
+      travelerRecord = travelerRecords[0];
+    }
+
+    const pickupAt = textOrNull(bookingRecord.pickup_at) || "";
+    const pickupTime = pickupAt.match(/T(\d{2}):(\d{2})/)?.slice(1).join("") || "";
+    const pricing = resolvePricing(
+      { bookingType: "DSP", time: pickupTime, vehicle },
+      companyRecord,
+      travelerRecord,
+      initialRateSettings,
+    );
+    const finalBillableHours = finalBillableMinutes / 60;
+    const calculatedAmountCents = Math.round(pricing.customerRate * finalBillableHours * 100);
+
+    if (calculatedAmountCents <= 0 || calculatedAmountCents > maxReviewedAmountCents) {
+      return { error: safeDspPricingIdentityError, ok: false, status: 409 };
+    }
+
+    if (
+      reviewedCustomerAmountCents !== null &&
+      reviewedCustomerAmountCents !== calculatedAmountCents
+    ) {
+      return {
+        error: "DSP reviewed amount does not match the verified CRM vehicle rate and final billable hours.",
+        ok: false,
+        status: 409,
+      };
+    }
+
+    reviewedCustomerAmountCents = calculatedAmountCents;
+    sourcePriceContext = {
+      ...sourcePriceContext,
+      calculated_billable_hours: String(finalBillableHours),
+      calculated_hourly_rate_cents: Math.round(pricing.customerRate * 100),
+      pricing_source: pricing.pricingSource,
+      vehicle_rate_category: vehicle,
+    };
+  }
+
   const payload = {
     actor_label: actor.actor_label,
     actor_role: actor.actor_role,
@@ -1355,10 +1466,10 @@ export async function saveAdminMonthlyInvoiceBillableItemPriceReview(
     item_review_id: input.item_review_id,
     price_decision: input.price_decision,
     price_review_status: input.price_review_status,
-    reviewed_customer_amount_cents: input.reviewed_customer_amount_cents,
+    reviewed_customer_amount_cents: reviewedCustomerAmountCents,
     safe_price_review_context: input.safe_price_review_context,
     safe_price_review_note: input.safe_price_review_note,
-    source_price_context: input.source_price_context,
+    source_price_context: sourcePriceContext,
     source_surface: actor.source_surface,
     updated_at: new Date().toISOString(),
   };

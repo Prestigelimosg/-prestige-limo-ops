@@ -36,6 +36,14 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Dispatch previously passed that safe string response into an object-only formatter and displayed `Unknown Supabase error.`. The existing formatter now preserves bounded non-empty string errors, so operators see the actual safe configuration message. No credential, environment value, gate, route, database behavior, or customer/driver surface was changed.
 - Focused lock: `scripts/test-admin-load-bookings-safe-error-message-guard.mjs`.
 
+### DSP Verified CRM Vehicle-Rate Amount Calculation
+
+- The established Monthly Billing billable-item price-review save now calculates DSP customer amount on the server from the exact saved booking, its verified numeric company identity, optional verified traveler identity under that company, the saved vehicle category, the existing `resolvePricing()` precedence, and the admin-reviewed final whole billable hours. No duplicate calculator, rate table, route, panel, or write path was added.
+- DSP amount is the resolved hourly vehicle rate multiplied by final whole billable hours. The existing admin field is read-only for DSP and displays the saved server result after review; MNG, DEP, TRF, and legacy `hourly` retain their existing reviewed-amount behavior.
+- Missing/duplicate saved booking identity, missing verified company, mismatched traveler/company ownership, missing vehicle category, non-DSP saved service, invalid/zero resolved rate, and client amount mismatch all fail closed before the price-review write. Test booking `ADM-20260712063110` remains excluded.
+- The server persists only bounded admin price-source context (whole hours, hourly-rate cents, pricing source, and vehicle rate category). It does not expose or change driver payout, PayNow, customer/driver messaging, live location, parser, invoice generation, payment, provider sends, environment, or Supabase configuration.
+- Focused locks: `scripts/test-admin-monthly-invoice-dsp-billable-hours-amendment-guard.mjs` and `scripts/test-admin-monthly-invoice-billable-item-price-review-api-contract.mjs`.
+
 ### Dispatch Current-Schema Vehicle Persistence Repair
 
 - Live creation inspection proved the established Dispatch payload carried `vehicle_type_or_category: AVF`, but the current-schema `bookingToDbRow` mapper omitted that safe field while the foundation fallback mapper retained it. The current mapper now persists the selected vehicle category in place; no duplicate save route, booking lane, pricing field, driver lane, or billing write was added.

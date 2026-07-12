@@ -2163,13 +2163,42 @@ function resolveCustomerQuickReplyRuntimeBoundary(
     };
   }
 
+  const providedToken = readCustomerSavedBookingsSessionToken(request);
+
+  if (isCustomerPortalAccessToken(providedToken.token)) {
+    const portalAccessSession = resolveCustomerPortalAccessSession(
+      providedToken.token,
+      runtimeGate,
+    );
+
+    if (!portalAccessSession.ok) {
+      return portalAccessSession.status === 503
+        ? {
+            error: customerInAppRuntimeConfigError,
+            ok: false,
+            status: 503,
+          }
+        : customerAppNotificationsRequireAuthResult();
+    }
+
+    return {
+      data: {
+        auth_user_id: portalAccessSession.data.auth_user_id,
+        booking_reference: bookingReference,
+        customer_account_reference: portalAccessSession.data.customer_account_reference,
+        mode: "server-session-cookie",
+        runtime_gate: runtimeGate,
+      },
+      ok: true,
+    };
+  }
+
   if (process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_ENABLED !== "true") {
     return customerAppNotificationsRequireAuthResult();
   }
 
   const mode = configValueOrNull(process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_MODE);
   const expectedToken = configValueOrNull(process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_TOKEN);
-  const providedToken = readCustomerSavedBookingsSessionToken(request);
 
   if (mode !== "server-session-token") {
     return customerAppNotificationsRequireAuthResult();

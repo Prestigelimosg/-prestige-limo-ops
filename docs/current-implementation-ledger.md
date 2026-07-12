@@ -39,6 +39,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Replies are `driver_app` only, visible on the exact token-scoped driver job and through the existing admin booking-scoped notification read. Customers cannot read Admin-to-Driver messages because their existing notification read remains `customer_app` only.
 - Runtime remains controlled by the existing quick-reply/customer gates. This pass does not change environment configuration, customer authentication, or the approved allowlist.
 - Focused lock: `scripts/test-customer-driver-quick-reply-ui-guard.mjs` plus the existing quick-reply readiness/runtime guards.
+- Pre-activation inspection found the quick-reply POST accepted only the older static saved-bookings token even though `Copy + App Link` sets the established signed portal cookie. The customer quick-reply boundary now accepts that same cryptographically verified portal session, derives its exact customer account, and then keeps the existing active-account, exact-booking, allowlist, template, and pre-POB checks. No second auth lane, broader customer access, or provider send was added.
 
 ### Today’s Jobs Unified Message History
 

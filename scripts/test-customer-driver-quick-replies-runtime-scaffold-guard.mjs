@@ -113,6 +113,8 @@ for (const fragment of [
   "sendDriverQuickReplyToCustomer",
   "resolveCustomerDriverQuickRepliesRuntimeGate",
   "resolveCustomerQuickReplyRuntimeBoundary",
+  "isCustomerPortalAccessToken(providedToken.token)",
+  "resolveCustomerPortalAccessSession",
   "customer-driver-quick-reply",
   "resolveExactTwoCustomerRuntimeSessionMap",
   "verifyControlledCustomerBookingReference",

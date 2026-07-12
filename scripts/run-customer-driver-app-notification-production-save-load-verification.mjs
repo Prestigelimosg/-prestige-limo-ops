@@ -1,5 +1,6 @@
 import { constants, existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { createHash, randomBytes } from "node:crypto";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -26,6 +27,7 @@ const fakeSafeContext = {
   cleanup_scope: "exact_event_key_and_reference",
   verification_stage: "customer_driver_app_notification_outbox",
 };
+let temporaryDriverJobLinkId = null;
 const liveAttemptMarkerPath = path.join(
   os.tmpdir(),
   "prestige-customer-driver-app-notification-live-write-attempted.marker",
@@ -43,6 +45,9 @@ const sourceFiles = [
   "lib/admin-booking-supabase-adapter.ts",
   "lib/admin-booking-persistence.ts",
   "lib/admin-dispatcher-auth-boundary.ts",
+  "lib/customer-portal-access-account.ts",
+  "lib/customer-portal-access-link.ts",
+  "lib/customer-runtime-session-map.ts",
   "lib/driver-job-link.ts",
   "lib/driver-job-status-workflow.ts",
   "lib/driver-job-link-mode.ts",
@@ -345,10 +350,11 @@ async function loadHarness() {
   };
 }
 
-function fakePayload() {
+function fakePayload(driverJobLinkId = temporaryDriverJobLinkId) {
   return {
     booking_reference: fakeBookingReference,
     delivery_surface: fakeDeliverySurface,
+    driver_job_link_id: driverJobLinkId,
     event_key: fakeEventKey,
     notification_status: fakeNotificationStatus,
     notification_type: fakeNotificationType,
@@ -358,6 +364,79 @@ function fakePayload() {
     safe_title: fakeSafeTitle,
     workflow_area: fakeWorkflowArea,
   };
+}
+
+async function createExactTemporaryDriverJobLink() {
+  const client = cleanupClientFromEnv();
+  const now = new Date();
+  const tokenHash = createHash("sha256").update(randomBytes(32)).digest("hex");
+  const { data, error } = await client
+    .from("driver_job_links")
+    .insert({
+      actor_label: "customer-driver-app-notification-production-verification",
+      actor_role: "system",
+      booking_reference: fakeBookingReference,
+      expires_at: new Date(now.getTime() + 60 * 60 * 1000).toISOString(),
+      issued_at: now.toISOString(),
+      link_status: "active",
+      safe_link_context: {
+        evidence_reference: fakeBookingReference,
+        link_purpose: "temporary_customer_driver_app_notification_verification",
+      },
+      source_surface: "system",
+      token_hash: tokenHash,
+      updated_at: now.toISOString(),
+    })
+    .select("id, booking_reference")
+    .single();
+
+  if (error || !data?.id || data.booking_reference !== fakeBookingReference) {
+    failSafely("controlled_customer_driver_app_notification_temp_driver_link_create_failed", {
+      productionDbTouched: true,
+      verificationReference: fakeBookingReference,
+    });
+  }
+
+  temporaryDriverJobLinkId = data.id;
+  return data.id;
+}
+
+async function cleanupExactTemporaryDriverJobLink() {
+  if (!temporaryDriverJobLinkId) return { deletedRows: 0, postCleanupRows: 0 };
+
+  const client = cleanupClientFromEnv();
+  const exactId = temporaryDriverJobLinkId;
+  const { data, error } = await client
+    .from("driver_job_links")
+    .delete()
+    .eq("id", exactId)
+    .eq("booking_reference", fakeBookingReference)
+    .select("id");
+
+  if (error || !Array.isArray(data) || data.length !== 1) {
+    failSafely("controlled_customer_driver_app_notification_temp_driver_link_cleanup_failed", {
+      deletedRows: Array.isArray(data) ? data.length : 0,
+      productionDbTouched: true,
+      verificationReference: fakeBookingReference,
+    });
+  }
+
+  const { count, error: verifyError } = await client
+    .from("driver_job_links")
+    .select("id", { count: "exact", head: true })
+    .eq("id", exactId)
+    .eq("booking_reference", fakeBookingReference);
+
+  if (verifyError || count !== 0) {
+    failSafely("controlled_customer_driver_app_notification_temp_driver_link_cleanup_verify_failed", {
+      postCleanupRows: count,
+      productionDbTouched: true,
+      verificationReference: fakeBookingReference,
+    });
+  }
+
+  temporaryDriverJobLinkId = null;
+  return { deletedRows: data.length, postCleanupRows: count };
 }
 
 function adminHeaders() {
@@ -544,7 +623,7 @@ async function main() {
 
   try {
     const parsed = harness.notificationPersistence.parseCustomerDriverAppNotificationCreatePayload(
-      fakePayload(),
+      fakePayload("00000000-0000-4000-8000-000000000001"),
     );
 
     if (!parsed.ok) {
@@ -634,6 +713,8 @@ async function main() {
         verificationReference: fakeBookingReference,
       });
     }
+
+    await createExactTemporaryDriverJobLink();
 
     await writeLiveAttemptMarker();
 
@@ -770,6 +851,7 @@ async function main() {
     }
 
     const cleanupResult = await cleanupExactFakeRow();
+    const driverLinkCleanupResult = await cleanupExactTemporaryDriverJobLink();
     const postCleanupRouteLoad = await readResponse(
       await harness.route.GET(
         getRequest(
@@ -818,6 +900,8 @@ async function main() {
         persistenceDefaultAfter: "off",
         postCleanupDirectRows: cleanupResult.postCleanupDirectRows,
         postCleanupRouteLoadMatchedRows: 0,
+        temporaryDriverLinkDeletedRows: driverLinkCleanupResult.deletedRows,
+        temporaryDriverLinkPostCleanupRows: driverLinkCleanupResult.postCleanupRows,
         processKillSwitchAfter: "off",
       },
       env: {
@@ -872,9 +956,11 @@ async function main() {
       targetMatchesPriorProductionEvidence: true,
       touchScope: [
         "one admin-gated POST save through /api/admin-customer-driver-app-notifications",
+        "one exact temporary active driver job link create for the fake booking reference",
         "one admin-gated GET load through /api/admin-customer-driver-app-notifications for the exact fake booking reference",
         "one admin-gated PATCH update through /api/admin-customer-driver-app-notifications for the exact fake notification id",
         "one exact cleanup delete scoped to customer_driver_app_notification_outbox by event_key and booking_reference",
+        "one exact cleanup delete scoped to driver_job_links by id and booking_reference",
         "one admin-gated GET load after cleanup to confirm no exact fake reference remains",
       ],
       unsafeFieldsWritten: false,
@@ -886,7 +972,7 @@ async function main() {
         bookings: "none",
         customerContacts: "none",
         customers: "none",
-        driverJobLinks: "none",
+        driverJobLinks: "one exact temporary active link, deleted with zero rows remaining",
         externalNotificationSends: "none",
         invoices: "none",
         payments: "none",
@@ -895,6 +981,9 @@ async function main() {
     });
   } finally {
     forcePersistenceOff();
+    if (temporaryDriverJobLinkId) {
+      await cleanupExactTemporaryDriverJobLink();
+    }
     await harness.cleanup();
   }
 }

@@ -40,6 +40,13 @@ assertIncludes(
   "lib/driver-job-status-workflow.ts",
   "runner harness must include the driver token helper dependency",
 );
+for (const dependency of [
+  "lib/customer-portal-access-account.ts",
+  "lib/customer-portal-access-link.ts",
+  "lib/customer-runtime-session-map.ts",
+]) {
+  assertIncludes(dependency, `runner harness must include ${dependency}`);
+}
 assertIncludes(
   "sanitizedUnexpectedDiagnostic",
   "runner must keep unexpected diagnostics sanitized",
@@ -102,8 +109,20 @@ assertIncludes(
   "runner must verify unsafe payload content is rejected before live write",
 );
 assertIncludes(
-  "driverJobLinks: \"none\"",
-  "runner must not create or mutate driver job link rows",
+  "createExactTemporaryDriverJobLink",
+  "runner must create one exact temporary active driver job link before the driver-app write",
+);
+assertIncludes(
+  '.from("driver_job_links")',
+  "runner must scope temporary driver link creation and cleanup to driver_job_links",
+);
+assertIncludes(
+  '.eq("id", exactId)',
+  "runner must clean up the exact temporary driver link id",
+);
+assertIncludes(
+  "temporaryDriverLinkPostCleanupRows",
+  "runner must prove the temporary driver link has zero rows remaining",
 );
 
 assertNotMatches(/\bsupabase\s+db\b|\bsupabase\s+migration\b|\bsupabase\s+reset\b/i, "runner must not run Supabase CLI commands");

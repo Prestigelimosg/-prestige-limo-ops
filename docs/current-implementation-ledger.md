@@ -22,6 +22,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No Email, WhatsApp, SMS, Telegram, provider send, booking/status/GPS write, environment change, schema change, payment, invoice, payout, internal note, parser/debug data, token, secret, or other-booking data is included.
 - Focused lock: `scripts/test-today-jobs-admin-driver-message-guard.mjs`.
 - The broader public runtime-gate lock now follows the established verified PA request payload (`verifiedRequestPayload`) rather than the superseded raw request variable; customer booking behavior was not changed by this messaging pass.
+- The existing production notification evidence harness now carries the current customer portal access-account, access-link, and runtime-session-map dependencies and creates one exact temporary active Driver Job Link because `driver_app` writes must remain link-bound. Controlled production evidence passed admin save/load/mark-read, all access/unsafe-content gates, exact outbox deletion, exact temporary-link deletion, and zero-row verification on both tables. No external send or real booking/customer write occurred; this repairs the isolated harness only and does not change customer authentication runtime behavior.
 
 ### Today’s Jobs Assigned-Work Reporting Center
 

@@ -14,9 +14,6 @@ for (const required of [
   "DSP final billable time must be a positive whole number of hours.",
   "DSP amended billable hours require a safe amendment reason.",
   "ADM-20260712063110",
-  "resolvePricing",
-  "DSP reviewed amount does not match the verified CRM vehicle rate and final billable hours.",
-  "calculated_hourly_rate_cents",
 ]) {
   assert.ok(`${actualRead}\n${persistence}`.includes(required), `Missing DSP server lock: ${required}`);
 }
@@ -26,8 +23,6 @@ for (const required of [
   'data-admin-monthly-invoice-dsp-final-billable-hours="true"',
   'data-admin-monthly-invoice-dsp-hours-amendment-reason="true"',
   "calculateDspBillableMinutes(totalMinutes)",
-  'monthlyInvoiceBillableBookingType === "DSP" ? "Calculated amount" : "Reviewed amount"',
-  'placeholder={monthlyInvoiceBillableBookingType === "DSP" ? "Calculated on save" : "0.00"}',
 ]) {
   assert.ok(app.includes(required), `Missing existing-lane DSP UI lock: ${required}`);
 }

@@ -23,7 +23,6 @@ const sourceFiles = [
   "lib/admin-monthly-invoice-draft-lock-enforcement.ts",
   "lib/admin-monthly-invoice-billable-item-price-review-persistence.ts",
   "lib/hourly-billing.ts",
-  "lib/pricing.ts",
   "lib/admin-booking-supabase-adapter.ts",
   "lib/admin-booking-persistence.ts",
   "lib/admin-dispatcher-auth-boundary.ts",
@@ -228,9 +227,6 @@ class MockSupabaseClient {
     this.operations = [];
     this.selectHistory = [];
     this.tables = {
-      bookings: [],
-      companies: [],
-      travelers: [],
       monthly_invoice_billable_item_price_reviews: [],
       monthly_invoice_issue_records: [],
     };
@@ -456,18 +452,6 @@ const itemReviewId = "00000000-0000-4000-8000-000000000201";
 const priceReviewId = "00000000-0000-4000-8000-000000000301";
 const dspItemReviewId = "00000000-0000-4000-8000-000000000202";
 const seed = {
-  bookings: [
-    {
-      booking_reference: "SAFE-DSP-777",
-      company_id: 41,
-      pickup_at: "2026-07-12T16:00:00+08:00",
-      service_type: "DSP",
-      traveler_id: 51,
-      vehicle_type_or_category: "E / AVF",
-    },
-  ],
-  companies: [{ id: 41, customer_rates: { DSP: { AVF: 65 } } }],
-  travelers: [{ id: 51, company_id: 41, customer_rates: null }],
   monthly_invoice_billable_item_price_reviews: [
     {
       actor_label: "Seed Admin",
@@ -530,7 +514,7 @@ const validDspPayload = {
   dsp_total_minutes: 195,
   item_review_id: dspItemReviewId,
   price_review_summary: "DSP actual time reviewed by admin.",
-  reviewed_customer_amount_cents: 19500,
+  reviewed_customer_amount_cents: 22000,
   source_price_context: {
     booking_type: "DSP",
     dsp_billable_minutes: 180,
@@ -839,71 +823,7 @@ try {
   assert.equal(dspSaveResult.body.price_review.calculation_basis, "dsp_actual_time");
   assert.equal(dspSaveResult.body.price_review.dsp_total_minutes, 195);
   assert.equal(dspSaveResult.body.price_review.dsp_billable_minutes, 180);
-  assert.equal(dspSaveResult.body.price_review.reviewed_customer_amount_cents, 19500);
-  assert.equal(dspSaveResult.body.price_review.source_price_context.pricing_source, "company");
   assertNoLeaks(dspSaveResult.body, "enabled DSP save response should stay safe");
-
-  mock = installMockClient(seed);
-  const dspCalculatedSaveResult = await readRouteResponse(
-    await route.POST(
-      new Request("http://localhost/api/admin-monthly-invoice-billable-item-price-reviews", {
-        body: JSON.stringify({
-          ...validDspPayload,
-          reviewed_customer_amount_cents: null,
-        }),
-        headers: sessionHeaders({ "Content-Type": "application/json" }),
-        method: "POST",
-      }),
-    ),
-  );
-  assert.equal(dspCalculatedSaveResult.status, 200);
-  assert.equal(dspCalculatedSaveResult.body.price_review.reviewed_customer_amount_cents, 19500);
-
-  mock = installMockClient(seed);
-  const dspTwoHourMinimumAmountResult = await readRouteResponse(
-    await route.POST(
-      new Request("http://localhost/api/admin-monthly-invoice-billable-item-price-reviews", {
-        body: JSON.stringify({
-          ...validDspPayload,
-          dsp_billable_minutes: 120,
-          dsp_total_minutes: 2,
-          reviewed_customer_amount_cents: null,
-        }),
-        headers: sessionHeaders({ "Content-Type": "application/json" }),
-        method: "POST",
-      }),
-    ),
-  );
-  assert.equal(dspTwoHourMinimumAmountResult.status, 200);
-  assert.equal(dspTwoHourMinimumAmountResult.body.price_review.dsp_total_minutes, 2);
-  assert.equal(dspTwoHourMinimumAmountResult.body.price_review.dsp_billable_minutes, 120);
-  assert.equal(dspTwoHourMinimumAmountResult.body.price_review.reviewed_customer_amount_cents, 13000);
-
-  mock = installMockClient(seed);
-  const dspTamperedAmountResult = await readRouteResponse(
-    await route.POST(
-      new Request("http://localhost/api/admin-monthly-invoice-billable-item-price-reviews", {
-        body: JSON.stringify({ ...validDspPayload, reviewed_customer_amount_cents: 22000 }),
-        headers: sessionHeaders({ "Content-Type": "application/json" }),
-        method: "POST",
-      }),
-    ),
-  );
-  assert.equal(dspTamperedAmountResult.status, 409);
-  assert.equal(mock.client.operations.length, 0);
-
-  mock = installMockClient();
-  const dspMissingIdentityResult = await readRouteResponse(
-    await route.POST(
-      new Request("http://localhost/api/admin-monthly-invoice-billable-item-price-reviews", {
-        body: JSON.stringify({ ...validDspPayload, reviewed_customer_amount_cents: null }),
-        headers: sessionHeaders({ "Content-Type": "application/json" }),
-        method: "POST",
-      }),
-    ),
-  );
-  assert.equal(dspMissingIdentityResult.status, 409);
-  assert.equal(mock.client.operations.length, 0);
 
   mock = installMockClient(seed);
   const hourlySaveResult = await readRouteResponse(

@@ -43,3 +43,16 @@ Customer invoice records have an additive nullable `booker_id` schema foundation
 Admin invoice preparation carries nullable verified company/booker IDs from the exact saved booking. Do not infer these IDs from billing labels or account-scope display text.
 
 Customer invoice list/PDF reads require validated access-account `customer_id + booker_id` whenever the active account has a booker. Never accept customer-supplied booker scope or fall back to company-wide invoices for a verified PA.
+
+# Completed customer/driver messaging lane — do not duplicate
+
+The customer/driver/admin in-app messaging workflow is implemented and live in the established lane. Before changing it, read `docs/current-implementation-ledger.md` sections `Single-Booking Customer/Driver Quick-Reply Production Activation`, `Today’s Jobs Admin-to-Driver Messages`, `Driver-to-Customer One-Tap Replies`, `Customer-to-Driver One-Tap Replies`, and `Today’s Jobs Unified Message History`, then run the focused guards named there.
+
+Do not add another chat page, message panel, route, table, composer, notification format, customer session lane, driver-token lane, provider send, or polling path. Repair these established consumers in place:
+
+- Admin: the existing `Messages` card inside Dashboard `Today’s Jobs`.
+- Driver: the existing token-scoped Driver Job page and `/api/driver-job/[token]/quick-replies` plus token-scoped notification read.
+- Customer: the existing authenticated My Bookings detail and `/api/customer-driver-quick-replies` plus `customer_app` notification read.
+- Persistence/admin visibility: the existing `customer_driver_app_notification_outbox` and `/api/admin-customer-driver-app-notifications`.
+
+Privacy remains mandatory: customers must never see Admin ↔ Driver messages; admin must see Customer ↔ Driver messages; customer reads remain `customer_app` only; driver reads remain `driver_app` only. Customer/driver replies stay fixed-template, exact-booking scoped, authenticated/link-bound, and blocked after POB/completion. No Email, WhatsApp, SMS, Telegram, or other external provider send is part of this lane.

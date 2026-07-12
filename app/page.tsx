@@ -1250,6 +1250,19 @@ type AdminTodayJobDriverMessageState = {
   status: "idle" | "loading" | "success" | "error";
 };
 
+type AdminTodayJobMessageRecord = {
+  actor_role?: string | null;
+  created_at?: string | null;
+  id?: string | null;
+  safe_message?: string | null;
+  workflow_area?: string | null;
+};
+
+type AdminTodayJobMessageHistoryState = {
+  messages: AdminTodayJobMessageRecord[];
+  status: "idle" | "loading" | "loaded" | "error";
+};
+
 function adminCustomerDriverDetailsEmailReviewFallbackItem(): AdminCustomerDriverDetailsEmailReviewItem {
   return {
     actionLabel: "Review email to customer",
@@ -13257,6 +13270,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   );
   const [adminTodayJobDriverMessageStates, setAdminTodayJobDriverMessageStates] = useState<
     Record<string, AdminTodayJobDriverMessageState>
+  >({});
+  const [adminTodayJobMessageHistories, setAdminTodayJobMessageHistories] = useState<
+    Record<string, AdminTodayJobMessageHistoryState>
   >({});
   const [driverAcknowledgementFollowUpStatus, setDriverAcknowledgementFollowUpStatus] =
     useState<DriverAcknowledgementFollowUpStatus>("pending");
@@ -25899,6 +25915,46 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       dashboardDriverJobStatusAutoRequestedRef.current.add(bookingReference);
       void refreshDashboardDriverJobStatusRead(bookingReference);
       void refreshDashboardDriverOtsPhotoProofRead(bookingReference);
+      void refreshAdminTodayJobMessageHistory(bookingReference);
+    }
+  }
+
+  async function refreshAdminTodayJobMessageHistory(bookingReferenceValue: string) {
+    const bookingReference = cleanReferenceText(bookingReferenceValue);
+
+    if (!bookingReference) return;
+
+    setAdminTodayJobMessageHistories((current) => ({
+      ...current,
+      [bookingReference]: { messages: current[bookingReference]?.messages || [], status: "loading" },
+    }));
+
+    try {
+      const params = new URLSearchParams({ booking_reference: bookingReference, limit: "20", page: "1" });
+      const response = await fetch(`${adminCustomerDriverAppNotificationsApiPath}?${params.toString()}`, {
+        cache: "no-store",
+        headers: { "x-prestige-admin-purpose": adminLegacyDataPurpose },
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.ok || !Array.isArray(result.notifications)) {
+        throw new Error("Message history could not be loaded.");
+      }
+
+      const messages = (result.notifications as AdminTodayJobMessageRecord[]).filter(
+        (message) =>
+          message.workflow_area === "customer_driver_quick_replies" ||
+          message.workflow_area === "admin_driver_job_messages",
+      );
+      setAdminTodayJobMessageHistories((current) => ({
+        ...current,
+        [bookingReference]: { messages, status: "loaded" },
+      }));
+    } catch {
+      setAdminTodayJobMessageHistories((current) => ({
+        ...current,
+        [bookingReference]: { messages: current[bookingReference]?.messages || [], status: "error" },
+      }));
     }
   }
 
@@ -26020,6 +26076,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           status: "success",
         },
       }));
+      void refreshAdminTodayJobMessageHistory(bookingReference);
     } catch (error) {
       setAdminTodayJobDriverMessageStates((current) => ({
         ...current,
@@ -26183,6 +26240,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 message: "",
                 status: "idle" as const,
               };
+            const activeJobMessageHistory = adminTodayJobMessageHistories[activeJobBookingReference] || {
+              messages: [],
+              status: "idle" as const,
+            };
             const activeJobCompletionMessage =
               bookingCompletionMessages[activeJobKey] ?? null;
             const activeJobPickupRiskState = pickupRiskStateForActiveJob(
@@ -26359,7 +26420,41 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   className="mt-2 rounded-md border border-sky-200 bg-sky-50 px-2 py-1.5 text-xs text-sky-950"
                   data-admin-active-job-driver-message="true"
                 >
-                  <div className="font-semibold">Messages · Driver</div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="font-semibold">Messages</div>
+                    <button
+                      className="rounded border border-sky-300 bg-white px-2 py-1 text-[11px] font-semibold"
+                      data-admin-active-job-message-history-refresh="true"
+                      disabled={activeJobMessageHistory.status === "loading"}
+                      onClick={() => void refreshAdminTodayJobMessageHistory(activeJobBookingReference)}
+                      type="button"
+                    >
+                      {activeJobMessageHistory.status === "loading" ? "Loading" : "Refresh messages"}
+                    </button>
+                  </div>
+                  <div className="mt-2 rounded-md border border-sky-100 bg-white p-2" data-admin-active-job-message-history="true">
+                    {activeJobMessageHistory.messages.length > 0 ? (
+                      <ol className="grid gap-1.5">
+                        {activeJobMessageHistory.messages.map((message, index) => (
+                          <li className="rounded bg-slate-50 px-2 py-1.5" key={message.id || index}>
+                            <p className="font-semibold">
+                              {message.actor_role === "customer"
+                                ? "Customer → Driver"
+                                : message.actor_role === "driver"
+                                  ? "Driver → Customer"
+                                  : "Admin → Driver"}
+                            </p>
+                            <p className="mt-0.5 break-words text-slate-800">{message.safe_message || "Message unavailable"}</p>
+                            {message.created_at ? <p className="mt-0.5 text-[10px] text-slate-500">{adminDriverJobStatusTimeLabel(message.created_at)}</p> : null}
+                          </li>
+                        ))}
+                      </ol>
+                    ) : (
+                      <p className="text-[11px] text-sky-800">
+                        {activeJobMessageHistory.status === "error" ? "Messages could not be loaded." : "No messages yet."}
+                      </p>
+                    )}
+                  </div>
                   <div className="mt-2 grid gap-2">
                     <label className="grid gap-1 font-semibold">
                       Message

@@ -40,6 +40,13 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Runtime remains controlled by the existing quick-reply/customer gates. This pass does not change environment configuration, customer authentication, or the approved allowlist.
 - Focused lock: `scripts/test-customer-driver-quick-reply-ui-guard.mjs` plus the existing quick-reply readiness/runtime guards.
 
+### Today’s Jobs Unified Message History
+
+- The existing Today’s Jobs `Messages` card now reads the established booking-scoped notification lane and shows human labels for `Customer → Driver`, `Driver → Customer`, and private `Admin → Driver` messages in one place. Admin no longer needs to inspect codes or leave the job card.
+- The existing report refresh and 10-second reporting cycle request the same message history, and the card keeps one explicit `Refresh messages` fallback. A successful Admin-to-Driver send also reloads the history.
+- Only the two approved workflow areas are rendered: fixed customer/driver quick replies and private admin/driver job messages. Customer reads remain `customer_app` only, so Admin-to-Driver history cannot appear in My Bookings.
+- Focused lock: `scripts/test-today-jobs-message-history-guard.mjs`.
+
 ### Today’s Jobs Assigned-Work Reporting Center
 
 - Dashboard `Today’s Jobs` is the single human-readable reporting center for all assigned active operational jobs, including advance and last-minute work. It no longer hides assigned jobs until the one-hour-before-pickup window.

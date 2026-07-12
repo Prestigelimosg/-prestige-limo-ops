@@ -21,7 +21,7 @@ for (const fragment of [
   'data-admin-active-job-driver-message-input="true"',
   'data-admin-active-job-driver-message-send="true"',
   'data-admin-active-job-driver-message-open-link-setup="true"',
-  "Messages · Driver",
+  ">Messages</div>",
   "Send to Driver",
   "Open Driver Link Setup",
   "Visible to admin and this driver only. Customers cannot see this message.",

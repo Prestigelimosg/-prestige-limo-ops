@@ -206,7 +206,6 @@ for (const fragment of [
 
 for (const forbiddenPattern of [
   /navigator\.geolocation|getCurrentPosition|watchPosition|clearWatch|GeolocationPosition/i,
-  /request\.json|FormData|arrayBuffer|blob\(/i,
   /createClient|@supabase\/supabase-js|\.from\(|\.(?:insert|upsert|update|delete|select)\s*\(/i,
   /fetch\s*\(|XMLHttpRequest|WebSocket|sendBeacon/i,
   /PRESTIGE_GOOGLE_MAPS_API_KEY|GOOGLE_MAPS_API_KEY|google\.maps|maps\.google|OneMap|ONEMAP|FlightAware|AeroAPI/i,
@@ -221,6 +220,14 @@ for (const forbiddenPattern of [
     "closed-gate route smoke source",
   );
 }
+
+assertExcludes(driverRouteSource, /request\.json|FormData|arrayBuffer|blob\(/i, "closed driver route smoke source");
+assert.equal(
+  adminRouteSource.indexOf("const body = await request.json()") >
+    adminRouteSource.indexOf('if (!runtimeGateOpen())'),
+  true,
+  "closed admin map gate must reject stale-pin DELETE before request-body parsing",
+);
 
 applyLocalAdminBoundary();
 

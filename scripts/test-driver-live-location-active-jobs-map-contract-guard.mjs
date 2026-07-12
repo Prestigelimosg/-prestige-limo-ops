@@ -251,8 +251,30 @@ for (const fragment of [
   "collapseAdminActiveJobsMapDriverDuplicates",
   "older duplicate",
   "adminActiveJobsMapPollIntervalMs",
+  "removeAdminStaleLiveLocationPin",
+  'data-admin-remove-stale-live-location-pin="true"',
+  "Remove stale pin",
+  "Booking unchanged.",
 ]) {
   assertIncludes(adminPage, fragment, `admin active-jobs moving map component fragment ${fragment}`);
+}
+
+for (const fragment of [
+  'export async function DELETE(request: Request)',
+  'allowServerSessionRoleMethodsWithoutRequestToken: ["DELETE"]',
+  "handleAdminRemoveStaleLiveLocationPinRuntimeRequest",
+  'method: "DELETE"',
+  "booking_reference: bookingReference",
+  "updated_at: updatedAt",
+  'eventType: "evidence_cleanup"',
+  'customerVisible: false',
+  'external_send: false',
+]) {
+  assertIncludes(
+    `${adminPage}\n${await readFile("app/api/admin-active-jobs-map-locations/route.ts", "utf8")}\n${await readFile("lib/driver-live-location-runtime.ts", "utf8")}`,
+    fragment,
+    `admin stale-pin-only deletion fragment ${fragment}`,
+  );
 }
 
 const dayOfTripMonitorStart = adminPage.indexOf('data-admin-day-of-trip-dispatch-monitor="true"');

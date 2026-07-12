@@ -132,7 +132,6 @@ for (const fragment of [
 const publicRouteSource = `${driverRoute}\n${adminRoute}\n${scaffoldHelper}`;
 
 for (const forbiddenPattern of [
-  /request\.json|FormData|arrayBuffer|blob\(/i,
   /createClient|@supabase\/supabase-js|\.from\(|\.(?:insert|upsert|update|delete|select)\s*\(/i,
   /navigator\.geolocation|getCurrentPosition|watchPosition|clearWatch|GeolocationPosition/i,
   /PRESTIGE_GOOGLE_MAPS_API_KEY|google\.maps|maps\.google|OneMap|ONEMAP|FlightAware|AeroAPI/i,
@@ -141,6 +140,14 @@ for (const forbiddenPattern of [
 ]) {
   assertExcludes(publicRouteSource, forbiddenPattern, "public live-location route closed path");
 }
+
+assertExcludes(driverRoute, /request\.json|FormData|arrayBuffer|blob\(/i, "public driver route closed path");
+assert.equal(
+  adminRoute.indexOf("const body = await request.json()") >
+    adminRoute.indexOf('if (!runtimeGateOpen())'),
+  true,
+  "admin stale-pin DELETE must reject the closed runtime gate before reading its body",
+);
 
 for (const forbiddenPattern of [
   /NEXT_PUBLIC|PRESTIGE_GOOGLE_MAPS_API_KEY|google\.maps|maps\.google|OneMap|ONEMAP|FlightAware|AeroAPI/i,

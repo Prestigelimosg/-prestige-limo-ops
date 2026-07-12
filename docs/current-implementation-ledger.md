@@ -12,6 +12,14 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Admin Stale Live-Location Pin Removal
+
+- Each stale row in the existing Dashboard Live Dispatch Map marker list has one admin-only `Remove stale pin` action. Current/active markers never show this action.
+- The action reuses the existing guarded `/api/admin-active-jobs-map-locations` route with `DELETE` and sends only the safe booking reference plus exact last-updated timestamp. The server resolves the internal row, requires the booking to remain allowlisted, verifies the row is actually stale, and deletes only that exact `driver_live_location_latest_positions` row.
+- Removing a stale pin does not delete or update the booking, driver assignment, driver status, calendar, customer/PA identity, customer portal, invoice, payment, payout, provider message, OTS photo, or any other GPS row. Internal driver-link IDs are never exposed to the browser.
+- Anonymous, cross-origin, non-admin/dispatcher, malformed, current-pin, non-allowlisted, and mismatched-timestamp deletes fail closed. Successful cleanup is recorded with the existing bounded `evidence_cleanup` audit event.
+- Focused guard coverage lives in `scripts/test-driver-live-location-active-jobs-map-contract-guard.mjs`, `scripts/test-driver-live-location-gated-runtime-path-guard.mjs`, and `scripts/test-driver-live-location-closed-gate-route-smoke-guard.mjs`.
+
 ### PA-Scoped New Booking Requests
 
 - The canonical `/book` form remains the only new-booking request form. Public submissions keep their established behavior.

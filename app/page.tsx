@@ -13038,6 +13038,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       status: "idle",
     });
   const [adminActiveJobsMapExpanded, setAdminActiveJobsMapExpanded] = useState(false);
+  const [adminActiveJobsMapRemovingStalePinKey, setAdminActiveJobsMapRemovingStalePinKey] =
+    useState("");
   const [
     adminPickupApproachEvidenceByReference,
     setAdminPickupApproachEvidenceByReference,
@@ -20783,6 +20785,64 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     }
   }
 
+  async function removeAdminStaleLiveLocationPin(location: AdminActiveJobsMapLocation) {
+    const bookingReference = cleanReferenceText(location.assigned_job_reference);
+    const updatedAt = clean(location.updated_at);
+    const removalKey = `${bookingReference}|${updatedAt}`;
+
+    if (!location.is_stale || !bookingReference || !updatedAt) {
+      return;
+    }
+
+    setAdminActiveJobsMapRemovingStalePinKey(removalKey);
+
+    try {
+      const response = await fetch(adminActiveJobsMapLocationsApiPath, {
+        body: JSON.stringify({ booking_reference: bookingReference, updated_at: updatedAt }),
+        cache: "no-store",
+        headers: {
+          "content-type": "application/json",
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "DELETE",
+      });
+      const result = await response.json().catch(() => null) as {
+        customerVisible?: false;
+        error?: string;
+        external_send?: false;
+        ok?: boolean;
+      } | null;
+
+      if (!response.ok || !result?.ok || result.customerVisible !== false || result.external_send !== false) {
+        throw new Error(result?.error || "Stale pin could not be removed.");
+      }
+
+      setAdminActiveJobsMapReadState((current) => ({
+        ...current,
+        activeJobs: current.activeJobs.filter(
+          (job) =>
+            cleanReferenceText(job.assigned_job_reference) !== bookingReference ||
+            clean(job.updated_at) !== updatedAt,
+        ),
+        markerCount: Math.max(0, current.markerCount - 1),
+        message: {
+          tone: "success",
+          text: `Removed stale pin for ${compactBookingReference(bookingReference)}. Booking unchanged.`,
+        },
+      }));
+    } catch (error) {
+      setAdminActiveJobsMapReadState((current) => ({
+        ...current,
+        message: {
+          tone: "error",
+          text: adminLiveLocationFailureMessage(error),
+        },
+      }));
+    } finally {
+      setAdminActiveJobsMapRemovingStalePinKey("");
+    }
+  }
+
   async function openAdminLiveLocationRuntimeForActiveJobs() {
     const bookingReferences = liveDispatchMapReferenceList;
 
@@ -26327,6 +26387,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             >
               {activeJobsMapVisibleJobs.map((job) => {
                 const mapUrl = googleMapsLocationUrl(job.latitude, job.longitude);
+                const stalePinRemovalKey = `${cleanReferenceText(job.assigned_job_reference)}|${clean(
+                  job.updated_at,
+                )}`;
                 const markerRiskState = activeJobPickupRiskByReference.get(
                   cleanReferenceText(job.assigned_job_reference),
                 );
@@ -26367,18 +26430,34 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                         </p>
                       ) : null}
                     </div>
-                    {mapUrl ? (
-                      <a
-                        aria-label="Open driver location in Google Maps"
-                        className="rounded border border-lime-300 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-lime-950 hover:bg-lime-100"
-                        href={mapUrl}
-                        rel="noreferrer"
-                        target="_blank"
-                        title="Open driver location in Google Maps"
-                      >
-                        Open Map
-                      </a>
-                    ) : null}
+                    <div className="flex flex-col gap-1">
+                      {mapUrl ? (
+                        <a
+                          aria-label="Open driver location in Google Maps"
+                          className="rounded border border-lime-300 bg-white px-1.5 py-0.5 text-center text-[10px] font-semibold text-lime-950 hover:bg-lime-100"
+                          href={mapUrl}
+                          rel="noreferrer"
+                          target="_blank"
+                          title="Open driver location in Google Maps"
+                        >
+                          Open Map
+                        </a>
+                      ) : null}
+                      {job.is_stale ? (
+                        <button
+                          className="rounded border border-rose-300 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-rose-800 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          data-admin-remove-stale-live-location-pin="true"
+                          disabled={adminActiveJobsMapRemovingStalePinKey === stalePinRemovalKey}
+                          onClick={() => void removeAdminStaleLiveLocationPin(job)}
+                          title="Remove this stale GPS pin only; the booking is unchanged"
+                          type="button"
+                        >
+                          {adminActiveJobsMapRemovingStalePinKey === stalePinRemovalKey
+                            ? "Removing"
+                            : "Remove stale pin"}
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                 );
               })}

@@ -33,7 +33,9 @@ function blockedResponse(error: string) {
 }
 
 function requireAdminDispatcherBoundary(request: Request): AdminDispatcherBoundaryCheck {
-  const boundary = resolveAdminDispatcherBoundary(request, adminBookingPersistencePurpose);
+  const boundary = resolveAdminDispatcherBoundary(request, adminBookingPersistencePurpose, {
+    allowServerSessionRoleMethodsWithoutRequestToken: ["DELETE"],
+  });
 
   return boundary.ok
     ? {
@@ -44,6 +46,37 @@ function requireAdminDispatcherBoundary(request: Request): AdminDispatcherBounda
         ok: false,
         response: blockedResponse(boundary.error),
       };
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const boundary = requireAdminDispatcherBoundary(request);
+
+    if (!boundary.ok) {
+      return boundary.response;
+    }
+
+    if (!runtimeGateOpen()) {
+      return Response.json({ error: "Admin active-jobs map is closed.", ok: false }, { status: 503 });
+    }
+
+    const body = await request.json().catch(() => null) as {
+      booking_reference?: unknown;
+      updated_at?: unknown;
+    } | null;
+    const { handleAdminRemoveStaleLiveLocationPinRuntimeRequest } = await import(
+      "../../../lib/driver-live-location-runtime"
+    );
+    const result = await handleAdminRemoveStaleLiveLocationPinRuntimeRequest({
+      actorRole: boundary.context.role,
+      bookingReference: body?.booking_reference,
+      updatedAt: body?.updated_at,
+    });
+
+    return Response.json(result.body, { status: result.status });
+  } catch {
+    return safeFailureResponse();
+  }
 }
 
 function safeFailureResponse() {

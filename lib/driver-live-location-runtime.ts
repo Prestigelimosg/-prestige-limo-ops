@@ -600,7 +600,7 @@ async function insertAuditEvent({
   client: DriverLiveLocationClient;
   driverJobLinkId: string | null;
   env: DriverLiveLocationEnv;
-  eventType: "admin_read" | "position_updated" | "share_stopped";
+  eventType: "admin_read" | "evidence_cleanup" | "position_updated" | "share_stopped";
   sourceSurface: "admin_api" | "driver_job_api";
 }) {
   const { error } = await client.from(auditEventsTable).insert({
@@ -985,6 +985,111 @@ export async function handleAdminActiveJobsMapRuntimeRequest({
       map_rendered: false,
       marker_count: activeJobs.length,
       ok: true,
+      version: driverLiveLocationRuntimeVersion,
+    },
+    status: 200,
+  };
+}
+
+export async function handleAdminRemoveStaleLiveLocationPinRuntimeRequest({
+  actorRole,
+  bookingReference: bookingReferenceValue,
+  env = process.env,
+  updatedAt: updatedAtValue,
+}: {
+  actorRole: "admin" | "dispatcher" | "local-dev-admin";
+  bookingReference: unknown;
+  env?: DriverLiveLocationEnv;
+  updatedAt: unknown;
+}) {
+  if (!adminActiveJobsMapRuntimeGateOpen(env)) {
+    return blockedResult("admin_active_jobs_map_gate_closed", 503);
+  }
+
+  const bookingReference = safeIdentifier(bookingReferenceValue);
+  const updatedAt = cleanText(updatedAtValue, 80);
+  const updatedAtMs = new Date(updatedAt).getTime();
+
+  if (!bookingReference || !updatedAt || !Number.isFinite(updatedAtMs)) {
+    return blockedResult("driver_live_location_invalid_position", 400);
+  }
+
+  const clientResult = runtimeClient(env);
+
+  if (!clientResult.ok) {
+    return blockedResult(clientResult.reason, 503);
+  }
+
+  const runtimePolicy = await readAdminControlledRuntimePolicy({
+    client: clientResult.client,
+    env,
+    purpose: "admin_map",
+  });
+
+  if (!runtimePolicy.ok) {
+    return blockedResult(runtimePolicy.reason, runtimePolicy.status);
+  }
+
+  if (!runtimePolicy.policy.allowedJobReferences.includes(bookingReference)) {
+    return blockedResult("driver_live_location_job_not_allowlisted", 403);
+  }
+
+  const { data, error } = await clientResult.client
+    .from(latestPositionsTable)
+    .select("booking_reference, driver_job_link_id, sharing_state, stale_after, updated_at")
+    .eq("booking_reference", bookingReference)
+    .eq("updated_at", updatedAt)
+    .maybeSingle();
+
+  if (error) {
+    return blockedResult("driver_live_location_config_not_ready", 503);
+  }
+
+  const row = asRecord(data);
+  const driverJobLinkId = safeIdentifier(row.driver_job_link_id);
+  const staleAfter = cleanText(row.stale_after, 80);
+  const staleAfterMs = new Date(staleAfter).getTime();
+  const isStale =
+    cleanText(row.sharing_state, 40) === "stale" ||
+    (Number.isFinite(staleAfterMs) && Date.now() >= staleAfterMs);
+
+  if (!driverJobLinkId || !isStale) {
+    return blockedResult("driver_live_location_invalid_position", 409);
+  }
+
+  const { error: deleteError } = await clientResult.client
+    .from(latestPositionsTable)
+    .delete()
+    .eq("driver_job_link_id", driverJobLinkId)
+    .eq("booking_reference", bookingReference)
+    .eq("updated_at", updatedAt);
+
+  if (deleteError) {
+    return blockedResult("driver_live_location_write_failed", 503);
+  }
+
+  const auditInserted = await insertAuditEvent({
+    actorRole: actorRole === "dispatcher" ? "dispatcher" : "admin",
+    bookingReference,
+    client: clientResult.client,
+    driverJobLinkId,
+    env,
+    eventType: "evidence_cleanup",
+    sourceSurface: "admin_api",
+  });
+
+  if (!auditInserted) {
+    return blockedResult("driver_live_location_write_failed", 503);
+  }
+
+  return {
+    body: {
+      action: "remove_stale_pin",
+      booking_reference: bookingReference,
+      customerVisible: false,
+      external_send: false,
+      ok: true,
+      removed_updated_at: updatedAt,
       version: driverLiveLocationRuntimeVersion,
     },
     status: 200,

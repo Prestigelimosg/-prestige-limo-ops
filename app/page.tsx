@@ -41590,15 +41590,17 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               )}
             </div>
 
-            <div
+            <details
               className="order-[56] min-w-0 rounded-md border border-stone-200 bg-white p-3"
               data-dispatch-workflow-step="driver-dispatch-copy"
+              data-driver-message-disclosure="true"
             >
-              <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold">Driver Dispatch</h2>
-                  <p className="text-xs text-slate-500">Assigned-driver copy.</p>
-                </div>
+              <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                <h2 className="text-lg font-semibold">Driver Message</h2>
+                <p className="text-xs text-slate-500">Short update or manual fallback for the assigned driver.</p>
+              </summary>
+              <div className="mt-3">
+              <div className="mb-2 flex flex-col items-start gap-2 sm:items-end">
                 <div className="flex flex-col items-start gap-2 sm:items-end">
                   <div className="flex flex-col gap-2 sm:flex-row">
                     {driverDispatchCopyEditState.isEditing ? (
@@ -41730,7 +41732,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   </pre>
                 </details>
               )}
-            </div>
+              </div>
+            </details>
 
             {showDriverJobLinkCopy ? (
               <div
@@ -41846,13 +41849,43 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 </div>
                 {driverJobLinkHandoffReference ? (
                   <div
-                    className="mb-2 rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-950"
+                    className="mb-2 rounded-md border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-950"
+                    data-driver-job-link-booking-details="true"
                     data-driver-job-link-handoff-notice="true"
                   >
-                    Booking {driverJobLinkHandoffReference} loaded here. Next: Create Link,
-                    then Copy Link and send it to the driver.
+                    <p className="font-semibold">Booking {driverJobLinkHandoffReference}</p>
+                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                      <div>
+                        <p className="text-xs font-semibold uppercase text-indigo-700">Passenger</p>
+                        <p className="break-words font-semibold">{clean(booking.name) || "Passenger not set"}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold uppercase text-indigo-700">Pickup</p>
+                        <p className="break-words font-semibold">
+                          {[clean(booking.date), formatPickupTime(booking.time)].filter(Boolean).join(", ") ||
+                            "Pickup time not set"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold uppercase text-indigo-700">Route</p>
+                        <p className="break-words font-semibold">{route || "Route not set"}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold uppercase text-indigo-700">Assigned driver</p>
+                        <p className="break-words font-semibold">
+                          {clean(booking.driverName) || clean(assignedDriverRecord?.driver_name) || "Driver not assigned"}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 ) : null}
+                <details
+                  className="mb-2 rounded-md border border-slate-200 bg-slate-50 p-2"
+                  data-admin-driver-reports-disclosure="true"
+                >
+                  <summary className="cursor-pointer list-none text-sm font-semibold text-slate-900 [&::-webkit-details-marker]:hidden">
+                    Driver Reports
+                  </summary>
                 <div
                   className="mb-2 rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-950"
                   data-admin-driver-job-status-readout="true"
@@ -41960,7 +41993,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     </div>
                   </div>
                 </div>
+                </details>
                 <details
+                  open
                   className="rounded-md border border-indigo-100 bg-white px-2 py-1.5"
                   data-dispatch-compact-panel="driver-job-link-preview"
                   data-driver-job-link-preview-disclosure="true"

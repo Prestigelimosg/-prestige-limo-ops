@@ -12,6 +12,14 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Human Driver Message and Job-Link Layout
+
+- The established Driver Dispatch copy lane is now labelled `Driver Message` and is collapsed by default. Its existing Edit, Copy, and Driver In-App controls and write paths are unchanged; it remains a short-update/manual-fallback lane rather than a second dispatch requirement.
+- The existing Driver Job Link copy preview is open by default, so the one-time link message is visible immediately after creation without another disclosure click.
+- The reference-only handoff instruction is replaced by human-readable booking details for the exact loaded booking: passenger, pickup, route, and assigned driver.
+- Saved driver status and optional OTS Photo to Admin remain the existing guarded exact-booking reads, but are visually separated inside a collapsed `Driver Reports` disclosure so the link actions and booking information stay primary.
+- Focused guards: `scripts/test-driver-message-job-link-human-ui-guard.mjs` and `scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs`.
+
 ### Admin Stale Live-Location Pin Removal
 
 - Each stale row in the existing Dashboard Live Dispatch Map marker list has one admin-only `Remove stale pin` action. Current/active markers never show this action.

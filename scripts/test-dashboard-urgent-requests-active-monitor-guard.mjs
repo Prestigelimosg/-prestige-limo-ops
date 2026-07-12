@@ -233,7 +233,12 @@ for (const fragment of [
   "setDriverJobLinkHandoffReference(options.focusDriverJobLink ? bookingReference : \"\");",
   'data-dispatch-workflow-step="driver-job-link"',
   'data-driver-job-link-handoff-notice="true"',
-  "Booking {driverJobLinkHandoffReference} loaded here. Next: Create Link,",
+  'data-driver-job-link-booking-details="true"',
+  "<p className=\"font-semibold\">Booking {driverJobLinkHandoffReference}</p>",
+  "Passenger",
+  "Pickup",
+  "Route",
+  "Assigned driver",
   "Driver Job Link is ready for admin action.",
 ]) {
   assertIncludes(appPage, fragment, `dispatch driver job link focus fragment ${fragment}`);

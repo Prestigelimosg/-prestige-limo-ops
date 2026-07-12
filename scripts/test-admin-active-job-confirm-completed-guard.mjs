@@ -135,7 +135,7 @@ for (const fragment of [
   "bookingRecordStatusReferenceCandidates(bookingRecord).includes(cleanedReference)",
   "sourceBookingRecord?: BookingRecord",
   "responseBookingReference",
-  "bookingRecordStatusReferenceCandidates(sourceBookingRecord, [",
+  "bookingRecordStatusReferenceCandidates(sourceBookingRecord, extraReferences)",
 ]) {
   assertIncludes(statusPatchHelper, fragment, `status patch helper fragment ${fragment}`);
 }
@@ -144,8 +144,6 @@ for (const fragment of [
   "patchBookingStatusReference(\n        bookingStatusReference,\n        nextStatus,\n        bookingRecord,",
   'await loadBookings("Bookings synced.", { silent: true });',
   "patchBookingStatusReference(\n      bookingStatusReference,\n      \"completed\",\n      matchingBooking,",
-  "const driverJobLinkBookingRecord = findLoadedBookingRecordByReference(",
-  "driverJobLinkBookingRecord ?? undefined",
 ]) {
   assertIncludes(appPage, fragment, `status update source-record fragment ${fragment}`);
 }

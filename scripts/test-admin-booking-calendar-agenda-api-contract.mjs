@@ -224,8 +224,8 @@ async function main() {
       assert.match(body.ics, /TRIGGER:-PT2H/);
       assert.match(body.ics, /TRIGGER:-PT30M/);
       assert.match(body.ics, /Prestige booking reminder/);
-      assert.match(body.ics, /SUMMARY:Prestige - MNG - Safe Traveler/);
-      assert.match(body.ics, /SUMMARY:Prestige - MNG - Second Safe Traveler/);
+      assert.match(body.ics, /SUMMARY:SLV1234 > Safe Traveler - MNG - Prestige/);
+      assert.match(body.ics, /SUMMARY:SLV1234 > Second Safe Traveler - MNG - Prestige/);
       assertNoLeaks(body, "safe calendar agenda response must not leak unsafe fields");
     }
 

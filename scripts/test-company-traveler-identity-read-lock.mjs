@@ -115,13 +115,13 @@ for (const [label, source] of [
 
 assertIncludes(
   companiesHelper,
-  'const companyIdentitySelect = "id, company_name, domain";',
-  "Companies identity safe select",
+  '"id, company_name, domain, billing_address, main_phone, mobile_phone, website, primary_contact_name, billing_email, accounts_email, operations_email";',
+  "Companies identity/contact safe select",
 );
 assertExcludes(
-  companiesHelper.match(/const companyIdentitySelect = "([^"]+)";/)?.[1] ?? "",
-  /customer_rates|driver_payout_rules|pricing|payout|payment|billing|pdf/i,
-  "Companies identity safe select",
+  companiesHelper.match(/const companyIdentitySelect\s*=\s*\n?\s*"([^"]+)";/)?.[1] ?? "",
+  /customer_rates|driver_payout_rules|pricing|payout|payment|pdf|finance|internal_admin_note|admin_note/i,
+  "Companies identity/contact safe select",
 );
 
 assertIncludes(

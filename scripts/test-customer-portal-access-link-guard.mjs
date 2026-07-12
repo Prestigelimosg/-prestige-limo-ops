@@ -111,8 +111,8 @@ const customerPortalLinkCopyHandler = sectionBetween(
 );
 const customerFinderSection = sectionBetween(
   customersPage,
-  'data-customer-folder-finder="true"',
-  'data-unbilled-customers-sector="true"',
+  'data-selected-customer-dashboard="true"',
+  'data-customer-billing-workbench-drawer="true"',
 );
 
 for (const phrase of [
@@ -121,7 +121,7 @@ for (const phrase of [
   "The new portal-account link does not carry a link expiry; access is stopped by changing the server-side access account away from `active`.",
   "The guarded revoke route remains available at the backend, but the normal Customers finder row does not show portal invite/revoke controls.",
   "Opening the link sets the existing customer saved-bookings HttpOnly Secure SameSite=Lax Priority=High cookie and redirects to `/my-bookings`, preserving a safe booking/tracking query when the admin copied the link from a loaded booking.",
-  "`/my-bookings` still calls only the existing saved-bookings and stored-invoice read adapters with same-origin credentials and purpose headers.",
+  "`/my-bookings` reads still use the existing saved-bookings and stored-invoice adapters with same-origin credentials and purpose headers; its sole direct write caller is the separately guarded fixed-template customer-to-driver quick-reply POST.",
   "Portal reads remain scoped to the signed customer account and require `customer_access_accounts.account_status = active` before booking, invoice, PDF, or amendment reads proceed.",
   "Customer portal booking history is read from the existing `bookings` table and filtered to the last 12 calendar months by pickup date; older rows stay admin-side and are not deleted.",
   "The public access route verifies the signed account is active before setting the cookie and does not create invoices, generate PDFs, send providers, send email, activate Stripe/payment, expose billing internals, expose customer price, expose driver payout, or expose parser/debug/mock archive data.",

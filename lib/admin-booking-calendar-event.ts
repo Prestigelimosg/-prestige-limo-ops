@@ -615,7 +615,7 @@ function buildMidnightCalendarDisplayAdjustment(
 function isMidnightCalendarSafetyWindow(value: CalendarDateTimeParts) {
   const minutesAfterMidnight = value.hour * 60 + value.minute;
 
-  return minutesAfterMidnight >= 1 && minutesAfterMidnight <= 3 * 60;
+  return minutesAfterMidnight >= 0 && minutesAfterMidnight <= 3 * 60;
 }
 
 function previousDayAtLocalTime(

@@ -8,7 +8,6 @@ import { formatSingaporePickupDisplay } from "../../../lib/singapore-pickup-disp
 const adminCustomerSavedBookingsApiPath = "/api/admin-customer-saved-bookings";
 const customerFolderFocusBookingReferenceParam = "focus_booking_reference";
 const customerFolderLoadSavedJobsParam = "load_saved_jobs";
-const fakeRitzDispatchEditStorageKey = "prestige-fake-ritz-dispatch-edits";
 
 type CustomerFolderSavedBookingRecord = {
   admin_status?: string | null;
@@ -201,75 +200,6 @@ function customerFolderReturnContext() {
   };
 }
 
-function customerFolderFakeUnbilledJobs(customerId: string, customerName: string) {
-  if (!/ritz\s+carlton/i.test(customerName)) {
-    return [];
-  }
-
-  return [
-    {
-      admin_status: "Fake test unbilled",
-      booking_month: "2026-07",
-      booking_reference: "FAKE-RITZ-0001",
-      customer_price_label: "$420.00",
-      customer_account: customerName,
-      customer_id: customerId,
-      customer_status: "Ready for billing test",
-      pickup_at: "2026-07-10 09:00",
-      service_type: "MNG / Arrival",
-    },
-    {
-      admin_status: "Fake test unbilled",
-      booking_month: "2026-07",
-      booking_reference: "FAKE-RITZ-0002",
-      customer_price_label: "$420.00",
-      customer_account: customerName,
-      customer_id: customerId,
-      customer_status: "Ready for billing test",
-      pickup_at: "2026-07-11 14:30",
-      service_type: "TRF / Transfer",
-    },
-    {
-      admin_status: "Fake test unbilled",
-      booking_month: "2026-07",
-      booking_reference: "FAKE-RITZ-0003",
-      customer_price_label: "$420.00",
-      customer_account: customerName,
-      customer_id: customerId,
-      customer_status: "Ready for billing test",
-      pickup_at: "2026-07-12 23:15",
-      service_type: "DSP / Hourly",
-    },
-  ] satisfies CustomerFolderSavedBookingRecord[];
-}
-
-function readFakeRitzDispatchEdits() {
-  if (typeof window === "undefined") {
-    return {};
-  }
-
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(fakeRitzDispatchEditStorageKey) || "{}");
-
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, Partial<CustomerFolderSavedBookingRecord>>)
-      : {};
-  } catch {
-    return {};
-  }
-}
-
-function applyFakeRitzDispatchEdits(bookings: CustomerFolderSavedBookingRecord[]) {
-  const edits = readFakeRitzDispatchEdits();
-
-  return bookings.map((booking) => {
-    const reference = safeDispatchReference(booking);
-    const edit = reference ? edits[reference] : null;
-
-    return edit ? { ...booking, ...edit } : booking;
-  });
-}
-
 function savedBookingReadFailureMessage(rawError: unknown) {
   const message = rawError instanceof Error ? rawError.message.toLowerCase() : String(rawError ?? "").toLowerCase();
 
@@ -348,17 +278,12 @@ export function CustomerFolderSavedBookingsPanel({
       const savedBookings = Array.isArray(result.saved_bookings)
         ? (result.saved_bookings as CustomerFolderSavedBookingRecord[])
         : [];
-      const fakeFallbackJobs =
-        savedBookings.length === 0
-          ? applyFakeRitzDispatchEdits(customerFolderFakeUnbilledJobs(customerId, customerName))
-          : [];
-      const displaySavedBookings = savedBookings.length > 0 ? savedBookings : fakeFallbackJobs;
       const returnedCount = Number(result.summary?.returned_count ?? savedBookings.length);
-      const visibleSavedBookings = displaySavedBookings.filter(
+      const visibleSavedBookings = savedBookings.filter(
         (booking) => !isClearlyBilledOrClosedJob(booking),
       );
       const focusReturned = focusBookingReference
-        ? displaySavedBookings.some((booking) => safeDispatchReference(booking) === focusBookingReference)
+        ? savedBookings.some((booking) => safeDispatchReference(booking) === focusBookingReference)
         : false;
       const focusVisible = focusBookingReference
         ? visibleSavedBookings.some((booking) => safeDispatchReference(booking) === focusBookingReference)
@@ -380,42 +305,15 @@ export function CustomerFolderSavedBookingsPanel({
       setReadState({
         message:
           returnMessage ||
-          (fakeFallbackJobs.length > 0
-            ? `Loaded ${countLabel(fakeFallbackJobs.length, "fake unbilled job")} for UI testing only. No booking, invoice, payment, send, payout, GPS, provider, or Supabase record was created.`
-            : returnedCount > 0
+          (returnedCount > 0
             ? `Loaded ${countLabel(returnedCount, "saved job")} for ${customerName}.`
             : `No saved jobs returned for ${customerName}.`),
-        savedBookings: displaySavedBookings,
+        savedBookings,
         status: "loaded",
-        summary: fakeFallbackJobs.length > 0
-          ? {
-              matched_count: fakeFallbackJobs.length,
-              recent_read_count: 0,
-              returned_count: fakeFallbackJobs.length,
-            }
-          : result.summary || null,
+        summary: result.summary || null,
         tone: "success",
       });
     } catch (error) {
-      const fakeFallbackJobs = applyFakeRitzDispatchEdits(
-        customerFolderFakeUnbilledJobs(customerId, customerName),
-      );
-
-      if (fakeFallbackJobs.length > 0) {
-        setReadState({
-          message: `Saved booking read was unavailable, so ${countLabel(fakeFallbackJobs.length, "fake unbilled job")} loaded for UI testing only. No booking, invoice, payment, send, payout, GPS, provider, or Supabase record was created.`,
-          savedBookings: fakeFallbackJobs,
-          status: "loaded",
-          summary: {
-            matched_count: fakeFallbackJobs.length,
-            recent_read_count: 0,
-            returned_count: fakeFallbackJobs.length,
-          },
-          tone: "success",
-        });
-        return;
-      }
-
       setReadState({
         message: savedBookingReadFailureMessage(error),
         savedBookings: [],

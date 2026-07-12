@@ -161,7 +161,7 @@ function safeCalendarEvent(overrides = {}) {
     location: "Changi Airport Terminal 3",
     starts_at_local: "2026-06-15T15:30:00",
     timezone: "Asia/Singapore",
-    title: "Prestige - MNG - Safe Traveler",
+    title: "SLV1234 > Safe Traveler - MNG - Prestige",
     ...overrides,
   };
 }

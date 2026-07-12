@@ -245,7 +245,8 @@ for (const fragment of [
   "function customerAccountBookingFilter",
   'column: "customer_id"',
   'method: "eq"',
-  "bookingQuery.eq(customerFilter.column, customerFilter.value)",
+  "for (const filter of bookingFilters)",
+  "bookingQuery = bookingQuery.eq(filter.column, filter.value)",
   "parsed.data.booking_reference && rawRows.length === 0",
   "Targeted booking lookups are isolation checks: a ref outside this account must hard-block.",
 ]) {

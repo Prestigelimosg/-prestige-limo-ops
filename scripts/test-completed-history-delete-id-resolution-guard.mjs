@@ -44,7 +44,7 @@ const deleteResolver = sliceBetween(
 const deleteAction = sliceBetween(
   appPage,
   "async function deleteCompletedHistoryBooking",
-  "function renderDashboardBookingSummaries",
+  "const pricingPanel = (",
 );
 const completedHistoryPanel = sliceBetween(
   appPage,

@@ -78,6 +78,7 @@ for (const phrase of [
   "The latest-position table is one-row-per-driver-job-link through `driver_live_location_latest_positions_job_link_key`.",
   "The scaffold stores safe driver/job/location operational fields only and excludes raw driver job tokens, token hashes, cookies, JWTs, API keys, service-role keys, customer contact details, customer messages, pricing, payout, PayNow, `driver_payout_rules`, `customer_rates`, billing/payment/PDF/invoice, internal/admin notes, parser/debug fields, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, OTS/photo/storage, and calendar data.",
   "A later separately approved route/helper evidence lane must prove server-side driver job token resolution, driver write isolation, admin read isolation, stale cleanup, evidence cleanup, zero temporary rows, rollback disabled state, and no customer live map before GPS capture or active map runtime is enabled.",
+  "The later approved admin stale-pin DELETE may parse only its bounded booking reference and last-updated timestamp after the admin/dispatcher boundary and closed runtime gate checks; the driver route and scaffold helper still parse no request body.",
   "This lane adds `supabase/migrations/202606240001_driver_live_location_table_rls_retention_foundation.sql`, `scripts/test-driver-live-location-table-rls-migration-scaffold-guard.mjs`, updates the table/RLS/retention contract guard for the new migration-scaffold state, and registers the new guard in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {
   assertIncludes(ledgerSection, phrase, `ledger migration scaffold phrase ${phrase}`);
@@ -161,10 +162,35 @@ for (const fragment of [
   assertIncludes(runtimeScaffold, fragment, `runtime remains closed fragment ${fragment}`);
 }
 
+const adminDeleteStart = adminRoute.indexOf("export async function DELETE(request: Request)");
+const adminDeleteEnd = adminRoute.indexOf("function safeFailureResponse()", adminDeleteStart);
+assert.notEqual(adminDeleteStart, -1, "Admin stale-pin DELETE route must exist.");
+assert.notEqual(adminDeleteEnd, -1, "Admin stale-pin DELETE route must end before the shared failure helper.");
+const adminDeleteRoute = adminRoute.slice(adminDeleteStart, adminDeleteEnd);
+const adminBoundaryCheck = adminDeleteRoute.indexOf("const boundary = requireAdminDispatcherBoundary(request);");
+const adminClosedGateCheck = adminDeleteRoute.indexOf("if (!runtimeGateOpen())");
+const adminBoundedBodyParser = adminDeleteRoute.indexOf("const body = await request.json().catch(() => null)");
+assert.notEqual(adminBoundaryCheck, -1, "Admin stale-pin DELETE must check the admin boundary.");
+assert.equal(
+  adminBoundaryCheck < adminClosedGateCheck && adminClosedGateCheck < adminBoundedBodyParser,
+  true,
+  "Admin stale-pin DELETE must authenticate and fail closed before parsing its bounded request body.",
+);
+assert.equal(
+  (adminRoute.match(/request\.json\(/g) ?? []).length,
+  1,
+  "Admin route must keep exactly one approved stale-pin JSON parser.",
+);
+assertExcludes(
+  `${helper}\n${driverRoute}`,
+  /request\.json/i,
+  "driver live-location route and scaffold helper",
+);
+
 for (const forbiddenPattern of [
   /driver_live_location_latest_positions|driver_live_location_audit_events/i,
   /navigator\.geolocation|getCurrentPosition|watchPosition|clearWatch|GeolocationPosition/i,
-  /request\.json|FormData|arrayBuffer|blob\(/i,
+  /FormData|arrayBuffer|blob\(/i,
   /createClient|@supabase\/supabase-js|\.from\(|\.(?:insert|upsert|update|delete|select)\s*\(/i,
   /fetch\s*\(|XMLHttpRequest|WebSocket|sendBeacon/i,
   /setInterval|setTimeout|cron|queueMicrotask|new Worker|retryLoop|retry_loop|polling/i,

@@ -19,7 +19,6 @@ const [customersPage, preactivationSuite] = await Promise.all([
 ]);
 
 for (const fragment of [
-  "Monthly Billing Queue",
   "Customer Billing Overview",
   "type CustomerBillingOverviewRow = {",
   "type SelectedCustomerBillingInvoiceRow = {",
@@ -31,8 +30,9 @@ for (const fragment of [
   "selectedCustomerPrimaryMonthlyBillingGroup",
   "selectedCustomerWorkspaceOpen",
   "function prepareSelectedCustomerMonthlyInvoice()",
-  "async function viewCustomerJobsFromBillingOverviewRow(row: CustomerBillingOverviewRow)",
   'data-customer-billing-overview="true"',
+  'data-selected-customer-dashboard="true"',
+  'data-customer-folder-finder-list="true"',
   "data-customer-billing-overview-row={row.customerFolderKey}",
   "data-customer-billing-overview-open={row.customerFolderKey}",
   'data-selected-customer-prepare-monthly-invoice="true"',
@@ -52,24 +52,18 @@ for (const fragment of [
   "data-selected-customer-invoice-detail-item={`${selectedCustomerBillingInvoiceDetail.key}-${itemIndex}`}",
   "Advanced invoice workbench",
   "Open only after review",
-  "Prepare monthly bill",
-  "async function viewCustomerJobsFromBillingRow(row: UnbilledCustomerRow)",
+  "Prepare monthly invoice",
   "readRegularCustomerSavedBookingsForTarget(",
-  'data-customer-folder-finder-name-jobs={customer.customerFolderKey}',
-  "onClick={() => viewCustomerFolderJobs(customer)}",
-  'data-unbilled-customer-view-jobs={row.key}',
-  "onClick={() => viewCustomerJobsFromBillingRow(row)}",
-  "Search the customer or company, open the correct folder, then use Monthly Billing Queue below to",
-  "Choose the customer/month with ready completed jobs, then click Prepare monthly bill.",
-  "before any invoice number, PDF, payment, or send action.",
-  "Same company names stay",
-  "separate by saved account ID and passenger scope.",
-  'data-customer-monthly-billing-group-select="true"',
 ]) {
-  assertIncludes(customersPage, fragment, `real monthly billing queue fragment ${fragment}`);
+  assertIncludes(customersPage, fragment, `selected-customer billing workflow fragment ${fragment}`);
 }
 
 for (const fragment of [
+  'data-customer-folder-finder="true"',
+  'data-customer-monthly-billing-queue="true"',
+  'data-customer-monthly-billing-group-select="true"',
+  "Monthly Billing Queue",
+  "Prepare monthly bill",
   'data-collection-follow-up-queue="true"',
   'data-monthly-statement-preview="true"',
   'data-customer-invoice-workspace-panel="outstanding"',

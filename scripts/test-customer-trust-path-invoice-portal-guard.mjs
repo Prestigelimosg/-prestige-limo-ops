@@ -63,10 +63,10 @@ const portalInvoiceSection = sectionBetween(
   'activeSection === "Invoices"',
   'aria-labelledby="booking-search-title"',
 );
-const unbilledSection = sectionBetween(
+const selectedCustomerSection = sectionBetween(
   customersPage,
-  'data-unbilled-customers-sector="true"',
-  'data-customer-invoice-workspace="true"',
+  'data-selected-customer-dashboard="true"',
+  'data-customer-billing-workbench-drawer="true"',
 );
 const ledgerSection = sectionBetween(
   ledger,
@@ -163,30 +163,33 @@ for (const fragment of [
 }
 
 for (const fragment of [
-  'data-unbilled-customers-sector="true"',
-  'data-unbilled-customers-dropdown="true"',
-  'data-unbilled-customers-select="true"',
-  'data-unbilled-customers-scroll-list="true"',
-  'data-unbilled-customers-list="true"',
-  'data-unbilled-customer-prepare-invoice={row.key}',
+  'data-customer-billing-overview="true"',
+  'data-selected-customer-dashboard="true"',
+  'data-selected-customer-prepare-monthly-invoice="true"',
+  'data-selected-customer-no-monthly-invoice-ready="true"',
+  'data-selected-customer-monthly-invoice-summary="true"',
+  "selectedCustomerPrimaryMonthlyBillingGroup",
+  "selectedCustomerMonthlyBillingGroups",
+  "function prepareSelectedCustomerMonthlyInvoice()",
   "invoicedReferenceSetFrom(issuedCustomerInvoices)",
   "normalizedInvoiceReference(row.reference)",
   "suppressedInvoiceReferences",
   ".filter((row) => !suppressedInvoiceReferences.has(normalizedInvoiceReference(row.reference)))",
   "regularCustomerSavedBookingBillingReadinessState.closeoutsByReference",
   "regularCustomerSavedBookingReadState.savedBookings",
+  'data-customer-billing-workbench-drawer="true"',
   'data-customer-invoice-workspace="true"',
-  "Preparing a monthly bill only loads the invoice workbench for staff review;",
-  "it does not issue invoices, reserve invoice numbers, email PDFs, create payment links, write payouts,",
 ]) {
   assertIncludes(customersPage, fragment, `admin customers invoice checkpoint fragment ${fragment}`);
 }
 
 for (const duplicateFragment of [
+  'data-unbilled-customers-sector="true"',
+  'data-customer-monthly-billing-queue="true"',
   'data-unbilled-customers-selected-label="true"',
   "preparedUnbilledCustomerLabel",
 ]) {
-  assertExcludes(unbilledSection, duplicateFragment, "unbilled customer duplicate wording under dropdown");
+  assertExcludes(selectedCustomerSection, duplicateFragment, "selected-customer checkpoint retired queue fragment");
 }
 
 for (const fragment of [
@@ -222,12 +225,13 @@ for (const forbiddenPattern of [
 }
 
 for (const phrase of [
-  "Customer `/book` and `/my-bookings` request forms both require contact number, passenger name, pickup date, pickup time, pickup location, and drop-off location before submission.",
+  "Customer `/book` remains the single request form and requires contact number, passenger name, pickup date, pickup time, pickup location, and drop-off location before submission; `/my-bookings` links to it instead of duplicating the form.",
   "The customer portal has a compact `Invoices` section with `Unpaid` and `Paid` folders grouped by month, reading only server-stored customer invoice records through the existing secure customer portal session boundary.",
   "Customer portal stored invoice and PDF reads explicitly use same-origin credentials so the secure HttpOnly account session is sent without exposing token plumbing in the page.",
   "The portal invoice section shows whether the customer is seeing stored account PDFs or a sign-in-required state, and PDF buttons change through Downloading, Downloaded, or Try again.",
   "The portal invoice folders do not import admin mock customer data and do not call admin APIs, Stripe/payment providers, email/SMS/WhatsApp providers, or write APIs.",
-  "Admin Customers keeps the Unbilled Customers checkpoint as one dropdown plus a compact scrollable table; the duplicate wording block below the dropdown is removed.",
+  "Admin Customers uses the selected-customer monthly preparation checkpoint with one exact customer/account/month group before loading the existing invoice workbench.",
+  "Admin Customers subtracts already-issued invoice references from selected-customer monthly preparation, including server-stored invoice records and browser-local issued invoice records, so an already-invoiced job does not remain available for duplicate billing.",
   "Customer saved-booking reads remain booking-only and strip invoice/payment/PDF/finance/internal fields; invoice rows now use their own customer-scoped source and PDF download route filtered by the portal customer account.",
   "Hourly billing remains locked to the 15-minute grace rule: 16 minutes or more starts the next chargeable hour.",
   "This trust-path pass does not activate Stripe/payment links, bank debit, payouts, provider job sending, GPS/live location, or automatic payment reconciliation.",

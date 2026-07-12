@@ -7,6 +7,10 @@ const customerFolderSource = readFileSync(
   "utf8",
 );
 const customerDashboardSource = readFileSync("app/customers/page.tsx", "utf8");
+const customerInvoiceFolderSource = readFileSync(
+  "app/customers/[customerId]/customer-invoice-folder-panel.tsx",
+  "utf8",
+);
 const savedBookingsReadSource = readFileSync(
   "lib/admin-customer-saved-bookings-read.ts",
   "utf8",
@@ -28,6 +32,10 @@ function assertIncludes(source, fragment, label) {
     source.includes(fragment),
     `${label} missing expected fragment: ${fragment}`,
   );
+}
+
+function assertExcludes(source, fragment, label) {
+  assert.equal(source.includes(fragment), false, `${label} must exclude ${fragment}`);
 }
 
 function assertBefore(source, earlier, later, label) {
@@ -98,22 +106,6 @@ assertIncludes(
   "customer folder edit href must open the Dispatch tab",
 );
 assertIncludes(
-  customerFolderSource,
-  "prestige-fake-ritz-dispatch-edits",
-  "customer folder must read browser-local fake Ritz edit state",
-);
-assertIncludes(
-  customerFolderSource,
-  "applyFakeRitzDispatchEdits(customerFolderFakeUnbilledJobs(customerId, customerName))",
-  "customer folder fake fallback rows must reflect edited fake Ritz values",
-);
-
-assertIncludes(
-  dispatchPageSource,
-  "prestige-fake-ritz-dispatch-edits",
-  "Dispatch must write browser-local fake Ritz edit state",
-);
-assertIncludes(
   dispatchPageSource,
   "data-dashboard-quick-search-results",
   "Operations Dashboard quick search must render visible loaded-booking results",
@@ -139,21 +131,6 @@ assertIncludes(
   "Operations Dashboard quick search must use the shared booking matcher",
 );
 assertIncludes(
-  dispatchPageSource,
-  "function saveFakeRitzDispatchEdit",
-  "Dispatch must keep the fake Ritz no-write edit persistence helper",
-);
-assertIncludes(
-  updateAppliedSource,
-  "if (/^FAKE-RITZ-\\d{4}$/.test(targetBookingReference))",
-  "Update + Cal must branch fake Ritz jobs away from real persistence",
-);
-assertIncludes(
-  updateAppliedSource,
-  "No booking, invoice, payment, send, payout, GPS, provider, Google Calendar, or Supabase record was changed",
-  "fake Ritz Update + Cal must remain an explicit no-real-write lane",
-);
-assertIncludes(
   updateAppliedSource,
   "window.location.assign(customerReturnUrl)",
   "Dispatch update must return to the customer folder after save/update",
@@ -170,8 +147,8 @@ assertIncludes(
 );
 assertIncludes(
   savedBookingsReadSource,
-  "if (!baseMatches && !exactReferenceMatches)",
-  "saved booking read must not match unrelated bookings unless the exact returned reference matches",
+  "if (!baseMatches || (requestedBookingReference && !exactReferenceMatches))",
+  "saved booking read must require both the selected customer and exact returned reference to match",
 );
 assertIncludes(
   savedBookingsReadSource,
@@ -190,15 +167,37 @@ assertIncludes(
 );
 assertBefore(
   updateAppliedSource,
-  "if (/^FAKE-RITZ-\\d{4}$/.test(targetBookingReference))",
-  "method: \"PATCH\"",
-  "fake Ritz Update + Cal guard must run before the real PATCH path",
-);
-assertBefore(
-  updateAppliedSource,
   "const updateMessage = {",
   "returnToCustomerFolderAfterUpdate();",
   "successful real update must prepare message before returning",
 );
+
+assertIncludes(
+  customerFolderSource,
+  "savedBookingReadFailureMessage(error)",
+  "customer folder read failures must use the real safe error state",
+);
+assertIncludes(
+  customerFolderSource,
+  "`No saved jobs returned for ${customerName}.`",
+  "customer folder empty reads must remain empty instead of fabricating jobs",
+);
+for (const [label, source] of [
+  ["Dispatch", dispatchPageSource],
+  ["Customers dashboard", customerDashboardSource],
+  ["Customer saved-bookings panel", customerFolderSource],
+  ["Customer invoice folder", customerInvoiceFolderSource],
+]) {
+  for (const forbidden of [
+    "FAKE-RITZ",
+    "Fake Ritz",
+    "fakeRitz",
+    "prestige-fake-ritz-dispatch-edits",
+    "ready_fake_ritz_invoice",
+    "ready-fake-ritz-invoice",
+  ]) {
+    assertExcludes(source, forbidden, `${label} retired fake booking lane`);
+  }
+}
 
 console.log("customer folder dispatch Update + Cal guard passed");

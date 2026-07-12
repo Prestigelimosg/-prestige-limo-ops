@@ -18,7 +18,7 @@ const crmRuntimeWriteGateEnvName =
 const legacyShimPattern =
   /adminLegacyDataClient|adminLegacyTables|\/api\/admin-legacy-data|legacy_shim|shim\s*\(/i;
 const unsafeSourcePattern =
-  /customer_rates|driver_payout_rules|customer_price|driver_payout|rate_override|pricing|payout|paynow|pay_now|payment|billing|invoice|pdf|finance|provider|send_state|send_log|auth_session|live_location|location_url|photo|calendar|internal_admin|admin_notes|parser_debug|debug_payload|mock_archive|mock_qa|secret|api_key|access_token|raw_token/i;
+  /customer_rates|driver_payout_rules|customer_price|driver_payout|rate_override|pricing|payout|paynow|pay_now|payment|billing_amount|billing_status|invoice|pdf|finance|provider|send_state|send_log|auth_session|live_location|location_url|photo|calendar|internal_admin|admin_notes|parser_debug|debug_payload|mock_archive|mock_qa|secret|api_key|access_token|raw_token/i;
 
 const requiredLedgerPhrases = [
   "CRM identity/contact runtime write env/table-policy readiness is guarded without opening the write gate or executing a live DB write.",
@@ -38,7 +38,19 @@ const requiredLedgerPhrases = [
   "This lock adds `scripts/test-company-traveler-crm-runtime-write-env-table-policy-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.",
 ];
 
-const allowedCompanySelectColumns = new Set(["id", "company_name", "domain"]);
+const allowedCompanySelectColumns = new Set([
+  "accounts_email",
+  "billing_address",
+  "billing_email",
+  "company_name",
+  "domain",
+  "id",
+  "main_phone",
+  "mobile_phone",
+  "operations_email",
+  "primary_contact_name",
+  "website",
+]);
 const allowedTravelerSelectColumns = new Set([
   "booker_contact",
   "booker_email",
@@ -213,7 +225,7 @@ assert.ok(gateIndex >= 0, "CRM runtime execute must check write gate.");
 assert.ok(actorIndex > gateIndex, "CRM runtime execute must validate actor after write gate.");
 assert.ok(clientIndex > actorIndex, "CRM runtime execute must create DB client only after actor validation.");
 
-const companySelect = helperSource.match(/const companyWriteSelect = "([^"]+)";/)?.[1] || "";
+const companySelect = helperSource.match(/const companyWriteSelect\s*=\s*\n?\s*"([^"]+)";/)?.[1] || "";
 const travelerSelect = helperSource.match(/const travelerWriteSelect =\n\s+"([^"]+)";/)?.[1] || "";
 assertAllowedColumns(companySelect, allowedCompanySelectColumns, "CRM company write select");
 assertAllowedColumns(travelerSelect, allowedTravelerSelectColumns, "CRM traveler write select");

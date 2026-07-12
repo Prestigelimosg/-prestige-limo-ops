@@ -425,6 +425,13 @@ try {
     },
     ok: true,
   });
+  assert.equal(
+    reader.parseAdminSavedBookingReadParams({
+      booking_reference: "ADM-SAVE-READ-1",
+      id: "save-read-1",
+    }).ok,
+    false,
+  );
   assert.equal(reader.parseAdminSavedBookingReadParams({ id: "save-read-1", limit: "2" }).ok, false);
   assert.equal(reader.parseAdminSavedBookingListReadParams({ limit: "0" }).ok, false);
   assert.equal(reader.parseAdminSavedBookingListReadParams({ id: "save-read-1" }).ok, false);
@@ -548,6 +555,24 @@ try {
   assert.equal(bookingReferenceMock.client.selectHistory[0].limit, 1);
   assertNoWrites(bookingReferenceMock, "valid booking reference read");
   assertNoUnsafeResponse(bookingReferenceReadResult, "valid booking reference read response");
+
+  setEnv(enabledEnv());
+
+  const mixedIdentifierMock = installMockClient(seed);
+  const mixedIdentifierResult = await routeJson(
+    await route.GET(
+      new Request(
+        "http://localhost/api/admin-saved-bookings?id=save-read-1&booking_reference=ADM-SAVE-READ-1",
+        { headers: sessionHeaders() },
+      ),
+    ),
+  );
+
+  assert.equal(mixedIdentifierResult.status, 400);
+  assert.equal(mixedIdentifierResult.body.ok, false);
+  assert.equal(mixedIdentifierMock.createdClients.length, 0);
+  assert.equal(mixedIdentifierMock.client.operations.length, 0);
+  assertNoUnsafeResponse(mixedIdentifierResult, "mixed identifier response");
 
   setEnv(enabledEnv());
 

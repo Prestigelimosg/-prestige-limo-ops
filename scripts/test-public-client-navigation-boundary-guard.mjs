@@ -29,7 +29,7 @@ const contractChecks = [
 ];
 
 const forbiddenNavigationPattern =
-  /\b(?:window\.open|window\.location|location\.href|location\.assign|location\.replace|router\.(?:push|replace)|useRouter\s*\(|redirect\s*\()/;
+  /\b(?:window\.open|window\.location\s*=|window\.location\.href|location\.href|location\.assign|location\.replace|router\.(?:push|replace)|useRouter\s*\(|redirect\s*\()/;
 const forbiddenExternalLinkPattern =
   /https?:\/\/|mailto:|tel:|sms:|whatsapp:|wa\.me|api\.whatsapp\.com|intent:\/\/|prestige:\/\//i;
 const forbiddenAdminOrSessionPathPattern =
@@ -110,6 +110,7 @@ for (const phrase of [
   "`/my-bookings` may keep only the existing internal New Booking Request link to `/book`.",
   "`/driver-job/[token]` and the driver job demo page must not add public outbound links, deep links, app-store/native-app links, admin links, or session-issue links.",
   "Public client pages must not call `window.open`, imperative navigation helpers, `mailto:`, `tel:`, SMS/WhatsApp deep links, external HTTP URLs, `/api/admin*`, `/api/customer-portal-sessions`, or `/api/admin-saved-bookings`.",
+  "`/my-bookings` may read `window.location.search` only through the bounded owned-booking/tracking deep-link parser; this read-only query inspection is not navigation and must not permit location assignment, redirect, external URL, token, or unowned booking access.",
   "Public navigation contracts must continue coordinating the public route source privacy guard, public API client caller guard, and customer booking page API audit in the preactivation suite.",
   "No Save Booking + CRM change.",
   "No `/api/admin-saved-bookings` change.",
@@ -144,6 +145,16 @@ assertIncludes(
 assert.deepEqual(hrefValues(customerPortalPage), ["/book"], "/my-bookings public href allowlist");
 assert.equal(countOccurrences(customerPortalPage, "<Link"), 1, "/my-bookings public Link count");
 assert.equal(countOccurrences(customerPortalPage, "</Link>"), 1, "/my-bookings public Link closing count");
+for (const fragment of [
+  "function readCustomerPortalBookingDeepLink()",
+  "new URLSearchParams(window.location.search)",
+  'safePortalBookingReference(params.get("booking"))',
+  'safePortalBookingReference(params.get("booking_reference"))',
+  'openTracking: params.get("tracking") === "1"',
+  "portalBookings.find((booking) => booking.id === targetBookingId)",
+]) {
+  assertIncludes(customerPortalPage, fragment, `/my-bookings bounded query read ${fragment}`);
+}
 
 for (const [path, source] of publicPagePaths.map((path) => [path, files[path]])) {
   assertExcludes(source, /<a\b/i, `${path} raw anchor tags`);

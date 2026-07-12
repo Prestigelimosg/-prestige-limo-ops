@@ -214,7 +214,7 @@ function bookingMatchesCustomer(
   const exactReferenceMatches =
     Boolean(requestedBookingReference) && bookingReference === requestedBookingReference;
 
-  if (!baseMatches && !exactReferenceMatches) {
+  if (!baseMatches || (requestedBookingReference && !exactReferenceMatches)) {
     return false;
   }
 

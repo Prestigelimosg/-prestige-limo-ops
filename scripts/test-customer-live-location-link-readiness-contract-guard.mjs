@@ -56,6 +56,7 @@ for (const phrase of [
   "This is a docs/test-only guard for future customer-visible live-location link/readiness behavior.",
   "This lock does not activate customer live map links, GPS capture, live-location runtime, admin active-jobs map runtime, route/helper reads or writes, table writes, migration application, env changes, deploy, provider calls, provider sends, billing/payment/PDF/payout, or production activation.",
   "Current state remains closed: Customer Copy may show eligibility/help text only, must not generate or copy a live-location URL, customer visibility is false, and no customer map link is active.",
+  "Customer app-link copying remains available independently of live-location readiness; helper text must distinguish the app link from tracking and must never imply that a fake or unavailable live-location URL will be copied.",
   "Future customer live-location links require separate owner approval after driver GPS capture, table/RLS/retention evidence, admin active-jobs map evidence, browser map key readiness, stale/offline proof, POB auto-stop proof, customer access proof, rollback proof, and no-forbidden-field proof.",
   "Future customer live-location links are approved for MNG/Arrival, DEP/Departure, TRF/Transfer, and DSP/Hourly only through the scoped customer Driver Tracking panel after OTW and driver location sharing.",
   "Future customer link window remains 30 minutes before pickup by default and must fail closed outside the window or when secure driver live-location setup is incomplete.",
@@ -73,11 +74,12 @@ assertIncludes(preactivationSuite, guardScript, "preactivation customer live-loc
 for (const fragment of [
   "data-customer-live-location-helper=\"true\"",
   "function customerLiveLocationState",
-  "Customer live location link is not available for this service type.",
-  "Customer live location link requires pickup date and time.",
-  "Customer live location link becomes available 30 minutes before pickup.",
-  "Customer live location link is only available within 30 minutes before pickup.",
-  "Customer live location link requires secure driver live location setup.",
+  "Customer app link can still be copied; live location is not available for this service type.",
+  "Customer app link can still be copied after booking and driver details are ready; live location requires pickup date and time.",
+  "Customer app link can be copied now; arrival live location appears only after manual arrival readiness and driver sharing.",
+  "Customer app link can be copied now; live location appears only when ready around 30 minutes before pickup.",
+  "Customer app link remains available for trip status; live location is only available within 30 minutes before pickup.",
+  "Customer app link can still be copied; live location appears only after secure driver location setup is ready.",
   "copyLine: `Live location: ${secureLink}`",
 ]) {
   assertIncludes(appPage, fragment, `customer live-location app fragment ${fragment}`);
@@ -86,9 +88,11 @@ for (const fragment of [
 for (const fragment of [
   "const liveLocationNoLinkPattern = /live location|tracking|track your ride|https?:\\/\\/\\S+/i;",
   "for (const bookingType of [\"MNG\", \"DEP\", \"TRF\", \"DSP\"])",
-  "Customer live location link becomes available 30 minutes before pickup.",
+  'bookingType === "MNG"',
+  "Customer app link can be copied now; arrival live location appears only after manual arrival readiness and driver sharing.",
+  "Customer app link can be copied now; live location appears only when ready around 30 minutes before pickup.",
   "Expected ${bookingType} before-window Customer Copy not to include a live location link",
-  "Customer live location link requires secure driver live location setup.",
+  "Customer app link can still be copied; live location appears only after secure driver location setup is ready.",
   "Expected ${bookingType} inside-window Customer Copy not to copy a fake live location link",
 ]) {
   assertIncludes(bookingUiBrowserTest, fragment, `customer live-location browser guard ${fragment}`);

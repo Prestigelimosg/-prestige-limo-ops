@@ -158,8 +158,13 @@ for (const fragment of [
   '.from("bookings")',
   "function customerAccountBookingFilter",
   'column: "customer_id"',
+  'column: "company_id"',
+  'column: "booker_id"',
   'method: "eq"',
-  "bookingQuery.eq(customerFilter.column, customerFilter.value)",
+  "if (hasCompanyIdentity !== hasBookerIdentity)",
+  "for (const filter of bookingFilters)",
+  "bookingQuery = bookingQuery.eq(filter.column, filter.value)",
+  ": [customerAccountBookingFilter(customerAccountReference)]",
 ]) {
   assertIncludes(customerSavedBookingsRead, fragment, `customer saved-bookings auth/isolation fragment ${fragment}`);
 }

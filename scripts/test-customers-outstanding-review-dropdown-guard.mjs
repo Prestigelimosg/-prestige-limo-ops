@@ -19,8 +19,10 @@ const [customersPage, preactivationSuite] = await Promise.all([
 ]);
 
 for (const fragment of [
-  'data-customer-folder-finder="true"',
-  'data-customer-monthly-billing-queue="true"',
+  'data-customer-billing-overview="true"',
+  'data-selected-customer-dashboard="true"',
+  'data-customer-folder-finder-list="true"',
+  'data-selected-customer-prepare-monthly-invoice="true"',
   'data-customer-billing-workbench-drawer="true"',
   'data-customer-invoice-workspace="true"',
 ]) {
@@ -28,6 +30,8 @@ for (const fragment of [
 }
 
 for (const fragment of [
+  'data-customer-folder-finder="true"',
+  'data-customer-monthly-billing-queue="true"',
   'data-outstanding-payments-review="true"',
   'data-collection-follow-up-queue="true"',
   'data-monthly-statement-preview="true"',

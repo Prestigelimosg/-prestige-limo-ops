@@ -282,13 +282,14 @@ async function main() {
         reference: "PL-NORMAL-2330",
       },
       {
-        expectedEnd: "2026-07-05T01:30:00",
-        expectedIcsStart: /DTSTART:20260705T000000/,
-        expectedStart: "2026-07-05T00:00:00",
-        midnight: false,
+        actualPickupText: "5 July 2026, 00:00hrs",
+        expectedEnd: "2026-07-05T01:00:00",
+        expectedIcsStart: /DTSTART:20260704T233000/,
+        expectedStart: "2026-07-04T23:30:00",
+        midnight: true,
         pickupAt: "2026-07-05T00:00:00+08:00",
         pickupTime: "0000hrs",
-        reference: "PL-NORMAL-0000",
+        reference: "PL-MIDNIGHT-0000",
       },
     ]) {
       const payload = safePayload({

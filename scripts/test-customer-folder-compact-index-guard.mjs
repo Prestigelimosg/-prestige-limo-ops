@@ -36,12 +36,13 @@ const [customerPage, ledger, preactivationSuite] = await Promise.all([
 
 const finderSection = sectionBetween(
   customerPage,
-  'data-customer-folder-finder="true"',
-  'data-unbilled-customers-sector="true"',
+  'data-selected-customer-dashboard="true"',
+  'data-customer-billing-workbench-drawer="true"',
 );
 
 for (const fragment of [
-  'data-customer-folder-finder="true"',
+  'data-customer-billing-overview="true"',
+  'data-selected-customer-dashboard="true"',
   'data-customer-folder-finder-select="true"',
   'data-customer-folder-finder-count="true"',
   "{filteredCustomers.length} folders",
@@ -60,13 +61,13 @@ for (const fragment of [
   "All customers",
   "10 per page",
   "Open folder",
-  "href={customer.folderHref || customerFolderHrefFromIndexRow(customer)}",
+  "href={customer.folderHref}",
   'data-customer-billing-workbench-drawer="true"',
   'data-customer-billing-workbench-summary="true"',
   'data-customer-billing-workbench-contents="true"',
-  "Monthly Billing Queue",
-  'data-customer-monthly-billing-group-select="true"',
-  'data-customer-monthly-billing-prepare-group="true"',
+  "Prepare monthly invoice",
+  'data-selected-customer-prepare-monthly-invoice="true"',
+  'data-selected-customer-monthly-invoice-summary="true"',
 ]) {
   assertIncludes(customerPage, fragment, `compact customer finder fragment ${fragment}`);
 }
@@ -79,9 +80,9 @@ assert.equal(
   "customer billing workbench must be inside a collapsed native details drawer",
 );
 assert.equal(
-  customerPage.indexOf('data-unbilled-customers-sector="true"') < billingDrawerStart,
+  customerPage.indexOf('data-selected-customer-dashboard="true"') < billingDrawerStart,
   true,
-  "Monthly Billing Queue must stay before the collapsed invoice workbench drawer",
+  "selected-customer workspace must stay before the collapsed invoice workbench drawer",
 );
 assert.equal(
   billingDrawerStart < customerPage.indexOf('data-customer-invoice-workspace="true"'),
@@ -91,6 +92,13 @@ assert.equal(
 
 for (const forbiddenFragment of [
   'data-customer-summary-strip="true"',
+  'data-customer-folder-finder="true"',
+  'data-unbilled-customers-sector="true"',
+  'data-customer-monthly-billing-queue="true"',
+  'data-customer-monthly-billing-group-select="true"',
+  'data-customer-monthly-billing-prepare-group="true"',
+  "Monthly Billing Queue",
+  "Prepare monthly bill",
   '{ label: "Statements", value: "statements" }',
   '{ label: "Outstanding", value: "outstanding" }',
   '{ label: "Follow-up", value: "follow-up" }',
@@ -146,7 +154,7 @@ for (const phrase of [
   "The compact finder keeps 10-row pages and an `All customers` dropdown with numbered page buttons for 200-plus accounts.",
   "Finder load/search/selected feedback is a quiet one-line status under the controls, not a large success card, so the customer table stays visually dominant.",
   "The fake top payment summary strip is removed from the daily Customers page.",
-  "The invoice workbench is collapsed behind an admin-only drawer, leaving the daily visible Customers page focused on the customer folder finder and Monthly Billing Queue.",
+  "The invoice workbench is collapsed behind an admin-only drawer, leaving the daily visible Customers page focused on the customer overview and selected-customer monthly preparation.",
   "The mock statement, outstanding, follow-up, advanced booking, and support log drawers are not rendered in normal operation.",
   "The normal finder row opens the customer's own folder page instead of showing a duplicate inline job-view sector; customer app links stay in Dispatch Customer Copy `Copy + App Link`.",
   "Customer folder pages load compact scrollable saved-job rows with an `Open/Edit` Dispatch handoff for exact booking references.",

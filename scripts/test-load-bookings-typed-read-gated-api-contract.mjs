@@ -287,12 +287,12 @@ function installMockClient() {
           mock.selectedColumns.push(columns);
 
           return {
-            eq(field, value) {
-              mock.eq = { field, value };
+            limit(limit) {
+              mock.detailLimit = limit;
 
               return {
-                limit(limit) {
-                  mock.detailLimit = limit;
+                eq(field, value) {
+                  mock.eq = { field, value };
 
                   return {
                     maybeSingle() {

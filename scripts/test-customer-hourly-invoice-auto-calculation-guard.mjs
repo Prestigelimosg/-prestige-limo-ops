@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const hourlyHelperPath = "lib/hourly-billing.ts";
-const localInvoicesHelperPath = "lib/customer-local-invoices.ts";
 const customersPagePath = "app/customers/page.tsx";
-const mockCustomersPath = "app/customers/_data/mock-customers.ts";
 const ledgerPath = "docs/current-implementation-ledger.md";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
 const guardScript = "scripts/test-customer-hourly-invoice-auto-calculation-guard.mjs";
@@ -31,20 +28,21 @@ function sectionBetween(source, startFragment, endFragment) {
   return source.slice(start, end);
 }
 
-const [hourlyHelper, localInvoicesHelper, customersPage, mockCustomers, ledger, preactivationSuite] =
-  await Promise.all([
-    readFile(hourlyHelperPath, "utf8"),
-    readFile(localInvoicesHelperPath, "utf8"),
-    readFile(customersPagePath, "utf8"),
-    readFile(mockCustomersPath, "utf8"),
-    readFile(ledgerPath, "utf8"),
-    readFile(preactivationSuitePath, "utf8"),
-  ]);
+const [customersPage, ledger, preactivationSuite] = await Promise.all([
+  readFile(customersPagePath, "utf8"),
+  readFile(ledgerPath, "utf8"),
+  readFile(preactivationSuitePath, "utf8"),
+]);
 
-const invoiceIssuePanel = sectionBetween(
+const savedBookingBillingRow = sectionBetween(
   customersPage,
-  'data-customer-invoice-issue-panel="true"',
-  "</main>",
+  "function savedBookingUnbilledRow",
+  "function customerBillingScopeNeedsReview",
+);
+const activeMonthlyPreparation = sectionBetween(
+  customersPage,
+  "function prepareMonthlyBillingGroupForInvoice",
+  "async function readCustomerInvoiceDriverActualTimeSummary",
 );
 const ledgerSection = sectionBetween(
   ledger,
@@ -53,95 +51,58 @@ const ledgerSection = sectionBetween(
 );
 
 for (const fragment of [
-  "export const hourlyBillingDefaultRateCents = 6500;",
-  "function parseClockTimeToMinutes(value: string)",
-  "export function calculateActualTimeMinutesFromClockTimes(startTime: string, endTime: string)",
-  "const totalMinutes = sameDayMinutes > 0 ? sameDayMinutes : sameDayMinutes + 24 * 60;",
-  "export function calculateHourlyInvoiceAmountCents(",
-  "const billableHours = billableMinutes / hourlyBillingUnitMinutes;",
-  "amountCents: Math.round(billableHours * rateCents)",
+  "const billingAmountCents = savedBookingCustomerBillingAmountCents(booking);",
+  "const billingAmountLabel = billingAmountCents ? formatInvoiceAmount(billingAmountCents) : \"\";",
+  'amount: billingAmountLabel || "Draft amount not set"',
+  "Enter the approved customer amount before previewing or issuing.",
+  "invoiceLineDescription: `${billableServiceLabel} - ${reference}`",
 ]) {
-  assertIncludes(hourlyHelper, fragment, `hourly helper fragment ${fragment}`);
+  assertIncludes(savedBookingBillingRow, fragment, `saved reviewed amount boundary ${fragment}`);
 }
 
 for (const fragment of [
-  "lineItems?: CustomerLocalInvoiceLineItem[];",
-  "const lineItems =",
-  "input.lineItems?.length",
-  "lineItems,",
+  "function prepareMonthlyBillingGroupForInvoice(group: CustomerMonthlyBillingGroup)",
+  "amount: monthlyBillingInvoiceAmountInput(firstRow)",
+  "lineDescription: monthlyBillingInvoiceLineDescription(firstRow)",
+  "additionalRows.map((row) => ({",
+  "amount: monthlyBillingInvoiceAmountInput(row)",
+  "lineDescription: monthlyBillingInvoiceLineDescription(row)",
+  "Enter approved amounts before Preview, Draft, Issue, or Email.",
+  "function prepareSelectedCustomerMonthlyInvoice()",
+  "prepareMonthlyBillingGroupForInvoice(selectedCustomerPrimaryMonthlyBillingGroup);",
 ]) {
-  assertIncludes(localInvoicesHelper, fragment, `local invoice helper line item fragment ${fragment}`);
+  assertIncludes(activeMonthlyPreparation, fragment, `active monthly preparation ${fragment}`);
 }
 
-for (const fragment of [
+for (const forbidden of [
+  "readCustomerInvoiceDriverActualTimeSummary",
+  "getCustomerInvoiceDriverActualTimeCalculatedAmount",
   "calculateHourlyInvoiceAmountCents",
+  "calculateHourlyBillableMinutes",
   "hourlyBillingDefaultRateCents",
-  "hourlyBillingGraceRuleText",
-  "function getRegularCustomerHourlyInvoiceReview(form: RegularCustomerBookingForm)",
-  "const regularCustomerHourlyInvoiceReview = useMemo(",
-  "function getCustomerInvoiceDriverActualTimeCalculatedAmount(",
-  "Driver JC timing: ${actualMinutes} actual min / ${billableMinutes} billable min",
-  "invoiceLineDescription: `Driver JC actual time | ${actualMinutes} actual min | ${billableMinutes} billable min | ${rateLabel}`",
-  "customerInvoiceCalculatedLineDescription ||",
-  "row.invoiceLineDescription ||",
-  "lineItems: [",
+  "customerInvoiceCalculatedAmountCents",
+  "customerInvoiceCalculatedBillingBreakdown",
+  "customerInvoiceCalculatedLineDescription",
 ]) {
-  assertIncludes(customersPage, fragment, `customers hourly invoice fragment ${fragment}`);
+  assertExcludes(activeMonthlyPreparation, forbidden, `active monthly automatic amount ${forbidden}`);
 }
 
-for (const fragment of [
+assertExcludes(
+  customersPage,
+  'onClick={() => prepareCustomerInvoiceFromUnbilled(row)}',
+  "removed per-row automatic invoice preparation action",
+);
+assertExcludes(
+  customersPage,
   'data-unbilled-customer-billing-breakdown={row.key}',
-  'data-customer-invoice-prep-billing-breakdown="true"',
-]) {
-  assertIncludes(customersPage, fragment, `invoice prep calculation fragment ${fragment}`);
-}
-
-for (const fragment of [
-  'data-customer-invoice-prep-next-action="true"',
-  'data-customer-invoice-issued-local-email={invoice.invoiceNumber}',
-  'data-customer-invoice-issued-local-mark-paid={invoice.invoiceNumber}',
-  'data-customer-invoice-issued-local-mark-unpaid={invoice.invoiceNumber}',
-  'data-customer-invoice-issued-local-status-toggle={invoice.invoiceNumber}',
-]) {
-  assertIncludes(invoiceIssuePanel, fragment, `invoice issue action fragment ${fragment}`);
-}
-
-for (const fragment of [
-  "handleCustomerInvoiceEmailAction(invoice)",
-  "markIssuedCustomerInvoicePaid(invoice)",
-  "markIssuedCustomerInvoiceUnpaid(invoice)",
-  "saveCustomerLocalInvoice(paidInvoice)",
-  "saveCustomerLocalInvoice(unpaidInvoice)",
-]) {
-  assertIncludes(customersPage, fragment, `invoice action handler fragment ${fragment}`);
-}
-
-for (const fragment of [
-  'id: "hourly-test-customer"',
-  'companyName: "Hourly Test Customer"',
-  'invoicePrefix: "HTC"',
-  "Mock/local browser invoice testing only",
-]) {
-  assertIncludes(mockCustomers, fragment, `mock hourly customer fragment ${fragment}`);
-}
-
-for (const forbiddenPattern of [
-  /sendMail|new\s+Resend|api\.telegram\.org|twilio|messages\.create|client\.messages/i,
-  /checkout\.sessions|paymentIntent|paymentLink|loadStripe|new\s+Stripe/i,
-  /createClient|service_role|process\.env/i,
-  /driver payout|PayNow payout|payout comparisons|internal admin notes|parser\/debug|mock QA|dev archive/i,
-]) {
-  assertExcludes(invoiceIssuePanel, forbiddenPattern, "hourly invoice issue provider/db/privacy boundary");
-  assertExcludes(localInvoicesHelper, forbiddenPattern, "local invoice helper provider/db/privacy boundary");
-}
+  "removed global unbilled-row calculation display",
+);
 
 for (const phrase of [
-  "Admin Customers can create a mock/local hourly booking row with actual start time, actual end time, and a default `$65/hr` rate.",
-  "Hourly invoice amounts use the locked 15-minute grace rule: 16 minutes or more starts the next chargeable hour.",
-  "Preparing an hourly unbilled row carries the calculated amount and calculation breakdown into the Send Invoice Workbench.",
-  "The generated invoice/PDF line item includes the hourly start/end, actual minutes, billable minutes, and hourly rate.",
-  "Issued invoices show compact PDF, gated Email, and one Paid/Unpaid status toggle in the issued invoice table.",
-  "The added `Hourly Test Customer` is mock/local test data only and does not create real customer, payment, provider, bank, or Supabase records.",
+  "The removed mock/local hourly unbilled-row auto-calculation UI is not part of the active selected-customer monthly invoice workflow.",
+  "Selected-customer monthly preparation copies only an existing saved reviewed customer amount; when no approved amount exists, the row remains `Draft amount not set` and admin must enter and review it before Preview, Draft, Issue, or Email.",
+  "The active `prepareMonthlyBillingGroupForInvoice` path must not call Driver JC timing reads, the default `$65/hr` calculator, or customer-page automatic hourly amount state.",
+  "DSP whole-hour counting and the established monthly billable-item review remain separate and unchanged; this lock must not recreate automatic CRM vehicle-rate DSP amount calculation.",
   "Guard coverage lives in `scripts/test-customer-hourly-invoice-auto-calculation-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {
   assertIncludes(ledgerSection, phrase, `ledger phrase ${phrase}`);
@@ -149,4 +110,4 @@ for (const phrase of [
 
 assertIncludes(preactivationSuite, guardScript, "preactivation hourly invoice guard registration");
 
-console.log("Customer hourly invoice auto calculation guard passed");
+console.log("Customer hourly invoice fail-safe amount guard passed");

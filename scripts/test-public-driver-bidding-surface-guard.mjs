@@ -145,7 +145,7 @@ const contractChecks = [
     label: "public API client caller boundary guard",
     requiredFragments: [
       "driver page fetch call count",
-      "`/driver-job/[token]` must keep driver API calls no-store and limited to safe job GET, token-scoped driver-details PATCH, notification GET, issue-alert POST with `issue_type`, admin-only OTS photo proof POST, and status PATCH with `status` only.",
+      "`/driver-job/[token]` must keep driver API calls limited to safe job GET, token-scoped driver-details PATCH, notification GET, issue-alert POST with `issue_type`, fixed-template customer quick-reply POST with `template_key` only, admin-only OTS photo proof POST, and status PATCH with `status` only.",
       "Public API client caller boundary guard passed",
     ],
     script: "scripts/test-public-api-client-caller-boundary-guard.mjs",
@@ -456,7 +456,7 @@ for (const [label, source] of [
 ]) {
   assertExcludes(source, forbiddenPublicCallerPattern, `${label} bidding caller/secret exposure`);
 }
-assert.equal(countOccurrences(files[driverPagePath], "fetch("), 9, "driver job page fetch count must not grow for bidding");
+assert.equal(countOccurrences(files[driverPagePath], "fetch("), 10, "driver job page fetch count must not grow beyond approved non-bidding callers");
 assert.equal(
   countOccurrences(files[driverPagePath], 'cache: "no-store"'),
   8,
@@ -481,6 +481,16 @@ assertIncludes(
   files[driverPagePath],
   "driver_vehicle_model: nextDetails.vehicleModel",
   "driver job page approved token-scoped driver details caller",
+);
+assertIncludes(
+  files[driverPagePath],
+  "`/api/driver-job/${encodeURIComponent(token)}/quick-replies`",
+  "driver job page separately approved fixed-template quick-reply caller",
+);
+assertIncludes(
+  files[driverPagePath],
+  "body: JSON.stringify({ template_key: templateKey })",
+  "driver job page quick-reply caller must send only its approved template key",
 );
 assertIncludes(
   files[driverPagePath],

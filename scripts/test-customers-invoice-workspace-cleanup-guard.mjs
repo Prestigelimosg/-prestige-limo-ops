@@ -44,19 +44,17 @@ const ledgerSection = sectionBetween(ledger, "### Customers Invoice Workspace Cl
 for (const fragment of [
   'const customerInvoiceWorkspaceTabs: Array<{ label: string; value: CustomerInvoiceWorkspaceTab }> = [];',
   'useState<CustomerInvoiceWorkspaceTab>("create-invoice")',
+  'data-customer-billing-overview="true"',
+  'data-selected-customer-dashboard="true"',
+  'data-customer-folder-finder-list="true"',
+  'data-selected-customer-prepare-monthly-invoice="true"',
+  'data-selected-customer-monthly-invoice-summary="true"',
   'data-customer-invoice-workspace="true"',
-  'data-customer-folder-finder="true"',
-  'data-customer-monthly-billing-queue="true"',
-  'data-customer-monthly-billing-group-select="true"',
-  'data-customer-monthly-billing-prepare-group="true"',
-  'data-customer-monthly-billing-group-summary="true"',
-  'data-unbilled-customers-sector="true"',
   'data-customer-billing-workbench-drawer="true"',
   'data-customer-billing-workbench-summary="true"',
   'data-customer-billing-workbench-contents="true"',
-  "Invoice workbench",
-  "Monthly Billing Queue",
-  "Prepare monthly bill",
+  "Advanced invoice workbench",
+  "Prepare monthly invoice",
   "Send Invoice Workbench",
   "Customers & Invoices",
 ]) {
@@ -65,8 +63,8 @@ for (const fragment of [
 
 assertIncludes(
   customersPage,
-  "{selectedMonthlyBillingGroup ? (",
-  "Monthly Billing Queue prepare action must be conditional on selecting an exact billing account/month group.",
+  "{selectedCustomerPrimaryMonthlyBillingGroup ? (",
+  "Selected-customer monthly invoice action must require an exact billing account/month group.",
 );
 
 assert.equal(
@@ -76,18 +74,26 @@ assert.equal(
 );
 
 assert.equal(
-  customersPage.indexOf('data-customer-folder-finder="true"') <
-    customersPage.indexOf('data-unbilled-customers-sector="true"') &&
-    customersPage.indexOf('data-customer-monthly-billing-queue="true"') <
+  customersPage.indexOf('data-customer-billing-overview="true"') <
+    customersPage.indexOf('data-selected-customer-dashboard="true"') &&
+    customersPage.indexOf('data-selected-customer-dashboard="true"') <
       customersPage.indexOf('data-customer-billing-workbench-drawer="true"') &&
     customersPage.indexOf('data-customer-billing-workbench-drawer="true"') <
       customersPage.indexOf('data-customer-invoice-workspace="true"'),
   true,
-  "daily Customers page order must be finder, monthly billing queue, then collapsed invoice workbench drawer.",
+  "daily Customers page order must be overview, selected-customer workspace, then collapsed invoice workbench drawer.",
 );
 
 for (const forbiddenFragment of [
   'data-customer-summary-strip="true"',
+  'data-customer-folder-finder="true"',
+  'data-customer-monthly-billing-queue="true"',
+  'data-customer-monthly-billing-group-select="true"',
+  'data-customer-monthly-billing-prepare-group="true"',
+  'data-customer-monthly-billing-group-summary="true"',
+  'data-unbilled-customers-sector="true"',
+  "Monthly Billing Queue",
+  "Prepare monthly bill",
   '{ label: "Statements", value: "statements" }',
   '{ label: "Outstanding", value: "outstanding" }',
   '{ label: "Follow-up", value: "follow-up" }',
@@ -125,8 +131,9 @@ for (const forbiddenPattern of [
 }
 
 for (const phrase of [
-  "Customers page daily flow is compact: customer finder and Monthly Billing Queue stay visible for normal operation; the fake payment summary strip is removed.",
-  "The Monthly Billing Queue groups real closeout-ready saved bookings by saved billing account/month and no longer mixes mock/local draft rows into the visible billing queue.",
+  "Customers page daily flow is compact: the customer billing overview opens one selected-customer workspace, and the fake payment summary strip is removed.",
+  "The removed global Monthly Billing Queue stays retired; real closeout-ready saved bookings are grouped by saved billing account/month inside the selected customer workspace.",
+  "The selected-customer `Prepare monthly invoice` action requires an exact billing account/month group and loads it into the existing collapsed advanced invoice workbench.",
   "The invoice workbench no longer exposes the mock statement, outstanding, or follow-up tabs in daily operation.",
   "The duplicate folder handoff support drawer, advanced booking mock drawer, and mock logs are removed from the rendered daily customer dashboard.",
   "This is UI-only structure cleanup; it does not activate invoice/PDF/payment/provider sending, DB writes, env changes, GPS/live location, billing/payout, calendar sync, parser changes, or shims.",

@@ -62,12 +62,7 @@ const customerCompactReferenceHelper = sectionBetween(
 const customerFolderJobsSection = sectionBetween(
   customersPage,
   'data-customer-folder-jobs-panel="true"',
-  'data-unbilled-customers-sector="true"',
-);
-const monthlyBillingQueueSection = sectionBetween(
-  customersPage,
-  'data-unbilled-customers-sector="true"',
-  'data-customer-invoice-prep-panel="true"',
+  "{advancedInvoiceWorkbenchVisible ? (",
 );
 const invoicePrepSection = sectionBetween(
   customersPage,
@@ -141,10 +136,13 @@ for (const fragment of [
 }
 
 for (const fragment of [
-  "title={row.reference}",
-  "{compactCustomerBookingReference(row.reference)}",
+  "selectedCustomerPrimaryMonthlyBillingGroup",
+  'data-selected-customer-prepare-monthly-invoice="true"',
+  "onClick={prepareSelectedCustomerMonthlyInvoice}",
+  'data-selected-customer-monthly-invoice-summary="true"',
+  "completed billing-ready job",
 ]) {
-  assertIncludes(monthlyBillingQueueSection, fragment, `monthly billing compact reference ${fragment}`);
+  assertIncludes(customerFolderJobsSection, fragment, `selected customer monthly billing ${fragment}`);
 }
 
 for (const fragment of [

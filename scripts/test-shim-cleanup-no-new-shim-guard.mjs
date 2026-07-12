@@ -97,9 +97,17 @@ for (const [label, source] of [
 }
 
 assertIncludes(companiesRoute, "findAdminCompanyCrmIdentity", "Companies CRM identity route");
-assertIncludes(companiesHelper, 'const companyIdentitySelect = "id, company_name, domain";', "Companies helper");
+assertIncludes(
+  companiesHelper,
+  '"id, company_name, domain, billing_address, main_phone, mobile_phone, website, primary_contact_name, billing_email, accounts_email, operations_email";',
+  "Companies helper safe identity/contact select",
+);
 assertIncludes(companiesHelper, 'source: "typed_companies_crm_identity"', "Companies helper readiness");
-assertIncludes(companiesTest, "selectedColumns: \"id, company_name, domain\"", "Companies typed API test");
+assertIncludes(
+  companiesTest,
+  '"id, company_name, domain, billing_address, main_phone, mobile_phone, website, primary_contact_name, billing_email, accounts_email, operations_email";',
+  "Companies typed API safe identity/contact select",
+);
 assertIncludes(companiesTest, "Companies CRM identity route must remain read-only.", "Companies typed API test");
 
 assertIncludes(travelersRoute, "findAdminTravelerCrmIdentity", "Travelers CRM identity route");

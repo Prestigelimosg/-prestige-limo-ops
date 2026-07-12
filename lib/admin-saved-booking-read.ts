@@ -616,7 +616,7 @@ export function parseAdminSavedBookingReadParams(
     readParamsValue(params, "booking_reference"),
   );
 
-  if (!id && !bookingReference) {
+  if ((id && bookingReference) || (!id && !bookingReference)) {
     return {
       error: malformedParamsError,
       ok: false,

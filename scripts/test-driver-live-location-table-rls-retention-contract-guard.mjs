@@ -64,6 +64,7 @@ for (const phrase of [
   "Future audit-event rows are limited to event type, driver job link reference, booking reference, occurred at, safe event context, source surface, actor role, evidence reference when applicable, and created at.",
   "Future driver write isolation must resolve the current driver job token server-side, must not accept arbitrary booking references from the browser, and must allow writes only for the resolved active assigned driver job.",
   "Future admin read isolation must require the internal admin/dispatcher boundary, same-origin admin surface, and gate approval before any active-jobs map rows are read.",
+  "The later approved admin stale-pin DELETE may parse only its bounded booking reference and last-updated timestamp after the admin/dispatcher boundary and closed runtime gate checks; the driver route and scaffold helper still parse no request body.",
   "Future direct table access must block anonymous, customer, wrong-driver, wrong-token, and non-admin paths through RLS or equivalent database policy proof.",
   "Future retention must prefer one latest-position row per active sharing driver/job plus bounded audit events, not unbounded coordinate history.",
   "Future stale cleanup must define stale/offline thresholds, retention minutes, evidence row cleanup, and zero matching temporary rows after evidence.",
@@ -109,11 +110,36 @@ for (const fragment of [
   assertIncludes(runtimeScaffold, fragment, `current scaffold remains closed fragment ${fragment}`);
 }
 
+const adminDeleteStart = adminRoute.indexOf("export async function DELETE(request: Request)");
+const adminDeleteEnd = adminRoute.indexOf("function safeFailureResponse()", adminDeleteStart);
+assert.notEqual(adminDeleteStart, -1, "Admin stale-pin DELETE route must exist.");
+assert.notEqual(adminDeleteEnd, -1, "Admin stale-pin DELETE route must end before the shared failure helper.");
+const adminDeleteRoute = adminRoute.slice(adminDeleteStart, adminDeleteEnd);
+const adminBoundaryCheck = adminDeleteRoute.indexOf("const boundary = requireAdminDispatcherBoundary(request);");
+const adminClosedGateCheck = adminDeleteRoute.indexOf("if (!runtimeGateOpen())");
+const adminBoundedBodyParser = adminDeleteRoute.indexOf("const body = await request.json().catch(() => null)");
+assert.notEqual(adminBoundaryCheck, -1, "Admin stale-pin DELETE must check the admin boundary.");
+assert.equal(
+  adminBoundaryCheck < adminClosedGateCheck && adminClosedGateCheck < adminBoundedBodyParser,
+  true,
+  "Admin stale-pin DELETE must authenticate and fail closed before parsing its bounded request body.",
+);
+assert.equal(
+  (adminRoute.match(/request\.json\(/g) ?? []).length,
+  1,
+  "Admin route must keep exactly one approved stale-pin JSON parser.",
+);
+assertExcludes(
+  `${helper}\n${driverRoute}`,
+  /request\.json/i,
+  "driver live-location route and scaffold helper",
+);
+
 for (const forbiddenPattern of [
   new RegExp(futureLatestTable, "i"),
   new RegExp(futureAuditTable, "i"),
   /navigator\.geolocation|getCurrentPosition|watchPosition|clearWatch|GeolocationPosition/i,
-  /request\.json|FormData|arrayBuffer|blob\(/i,
+  /FormData|arrayBuffer|blob\(/i,
   /createClient|@supabase\/supabase-js|\.from\(|\.(?:insert|upsert|update|delete|select)\s*\(/i,
   /fetch\s*\(|XMLHttpRequest|WebSocket|sendBeacon/i,
   /PRESTIGE_GOOGLE_MAPS_API_KEY|GOOGLE_MAPS_API_KEY|google\.maps|maps\.google|OneMap|ONEMAP/i,

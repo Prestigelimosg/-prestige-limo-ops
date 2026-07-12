@@ -322,6 +322,10 @@ const dashboardSource = await readFile(path.join(process.cwd(), dashboardPath), 
 const savedBookingStatusFetchBlock = dashboardSource.match(
   /fetch\(adminSavedBookingStatusesApiPath,[\s\S]*?method: "PATCH",\n\s*\}\);/,
 )?.[0];
+const driverJobLinkRevokeBlock = dashboardSource.slice(
+  dashboardSource.indexOf("async function revokeDriverJobLink()"),
+  dashboardSource.indexOf("function assignDraftDriver()"),
+);
 
 assert.ok(savedBookingStatusFetchBlock, "Dashboard must call the saved booking status API.");
 assert.equal(
@@ -330,9 +334,9 @@ assert.equal(
   "Dashboard saved booking status updates must resolve a stable booking status reference.",
 );
 assert.equal(
-  savedBookingStatusFetchBlock.includes("booking_id: bookingStatusReference"),
+  savedBookingStatusFetchBlock.includes("booking_id: cleanedBookingStatusReference"),
   true,
-  "Dashboard saved booking status updates must send the stable booking reference to the status API.",
+  "Dashboard saved booking status updates must send the cleaned stable booking reference to the status API.",
 );
 assert.equal(
   savedBookingStatusFetchBlock.includes('"x-prestige-admin-purpose": "admin-booking-persistence"'),
@@ -345,19 +349,34 @@ assert.equal(
   "Dashboard saved booking status updates must not use the legacy data boundary.",
 );
 assert.equal(
-  dashboardSource.includes('patchBookingStatusReference(driverJobLinkBookingReference, "cancelled")'),
-  true,
-  "Driver job link revoke must persist the booking status as cancelled.",
+  driverJobLinkRevokeBlock.includes("patchBookingStatusReference("),
+  false,
+  "Driver job link revoke must not change the booking status.",
 );
 assert.equal(
-  dashboardSource.includes("Driver job link revoked. Booking status changed to Cancelled and moved to Completed / History."),
+  driverJobLinkRevokeBlock.includes("Driver job link revoked. Booking status was not changed."),
   true,
-  "Driver job link revoke success must tell the admin the cancelled booking moved to Completed / History.",
+  "Driver job link revoke success must tell the admin the booking status was preserved.",
 );
 assert.equal(
-  dashboardSource.includes("applyBookingStatusToLocalRecord(currentBooking, nextStatus, responseUpdatedAt)"),
+  driverJobLinkRevokeBlock.includes('"cancelled"'),
+  false,
+  "Driver job link revoke must not contain a cancellation status.",
+);
+assert.equal(
+  dashboardSource.includes("function applyBookingStatusLocally("),
   true,
-  "Saved booking status updates must mirror the new status into the local booking record immediately.",
+  "Saved booking status updates must retain the centralized local status mirror.",
+);
+assert.equal(
+  dashboardSource.includes("applyBookingStatusToLocalRecord(currentBooking, nextStatus, updatedAt)"),
+  true,
+  "Centralized status sync must update the matching local booking record immediately.",
+);
+assert.equal(
+  dashboardSource.includes("[cleanedBookingStatusReference, responseBookingId, responseBookingReference]"),
+  true,
+  "Successful status PATCH must sync using cleaned request and returned booking identifiers.",
 );
 assert.equal(
   dashboardSource.includes("setLoadBookingsTypedOperationalCardsById((current) => {"),
@@ -365,14 +384,28 @@ assert.equal(
   "Saved booking status updates must also refresh the typed dashboard card status locally.",
 );
 assert.equal(
+  dashboardSource.includes("booking_status: nextStatus,") &&
+    dashboardSource.includes("updated_at: updatedAt || card.updated_at"),
+  true,
+  "Centralized status sync must update typed-card status and timestamp.",
+);
+assert.equal(
+  dashboardSource.includes("updatedBookingRecord.customer_facing_status = nextStatus;") &&
+    dashboardSource.includes('updatedBookingRecord.cancellation_review_status = "cancelled";'),
+  true,
+  "Completed/cancelled local sync must retain customer-facing and cancellation status mapping.",
+);
+assert.equal(
   dashboardSource.includes("String(responseBody.booking.id) !== bookingStatusReference"),
   false,
   "Saved booking status updates must not reject valid booking-reference responses only because the API identifier shape differs.",
 );
 assert.equal(
-  dashboardSource.includes('patchBookingStatusReference(bookingStatusReference, "completed")'),
+  dashboardSource.includes(
+    'patchBookingStatusReference(\n      bookingStatusReference,\n      "completed",\n      matchingBooking,',
+  ),
   true,
-  "Driver Job Completed reports must persist the booking status as completed.",
+  "Driver Job Completed reports must persist completed status with the exact matching source booking.",
 );
 assert.equal(
   dashboardSource.includes("function bookingRecordIsCancelledStatus"),

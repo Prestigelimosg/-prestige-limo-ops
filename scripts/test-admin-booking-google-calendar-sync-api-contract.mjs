@@ -430,7 +430,7 @@ try {
 
     const firstEvent = parseJsonBody(providerCalls[0]);
     assert.match(firstEvent.id, /^prestige[0-9a-v]{40,}$/);
-    assert.equal(firstEvent.summary, "Prestige - MNG - Safe Traveler");
+    assert.equal(firstEvent.summary, "SLV1234 > Safe Traveler - MNG - Prestige");
     assert.equal(firstEvent.location, "Changi Airport Terminal 3");
     assert.equal(firstEvent.start.dateTime, "2026-06-15T15:30:00");
     assert.equal(firstEvent.end.dateTime, "2026-06-15T17:00:00");
@@ -489,12 +489,13 @@ try {
       reference: "PL-NORMAL-2330",
     },
     {
-      expectedEnd: "2026-07-05T01:30:00",
-      expectedStart: "2026-07-05T00:00:00",
-      midnight: false,
+      actualPickupText: "5 July 2026, 00:00hrs",
+      expectedEnd: "2026-07-05T01:00:00",
+      expectedStart: "2026-07-04T23:30:00",
+      midnight: true,
       pickupAt: "2026-07-05T00:00:00+08:00",
       pickupTime: "0000hrs",
-      reference: "PL-NORMAL-0000",
+      reference: "PL-MIDNIGHT-0000",
     },
   ]) {
     setEnv(validEnv());
@@ -545,7 +546,10 @@ try {
     );
 
     if (calendarCase.midnight) {
-      assert.match(event.summary, /^MIDNIGHT JOB - Prestige/);
+      assert.match(
+        event.summary,
+        new RegExp(`^MIDNIGHT JOB - SLV1234 > Safe ${calendarCase.reference} - MNG - Prestige`),
+      );
       assert.match(
         event.description,
         new RegExp(`MIDNIGHT JOB — actual pickup is ${calendarCase.actualPickupText}\\.`),
@@ -602,7 +606,7 @@ try {
     assert.match(providerCalls[2].url, new RegExp(`/events/${originalEvent.id}$`));
     assert.equal(originalEvent.start.dateTime, "2026-06-15T15:30:00");
     assert.equal(updatedEvent.start.dateTime, "2026-06-15T18:00:00");
-    assert.equal(updatedEvent.summary, "Prestige - MNG - Stable Calendar Traveler Updated");
+    assert.equal(updatedEvent.summary, "SLV1234 > Stable Calendar Traveler Updated - MNG - Prestige");
     assert.equal(
       updatedEvent.extendedProperties.private.prestigeBookingReference,
       "PL-EDIT-STABLE-001",

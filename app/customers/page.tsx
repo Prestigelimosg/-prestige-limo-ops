@@ -143,7 +143,8 @@ const outstandingReviewSortOptions: Array<{ label: string; value: OutstandingRev
 
 const outstandingReviewPageSizeOptions = [10, 25];
 const customerQueuePageSizeOptions = [10, 25];
-const customerFolderFinderPageSize = 20;
+const customerFolderFinderPageSize = 10;
+const customerBillingOverviewPageSize = 20;
 const customerBillingDocumentPageSize = 5;
 type CustomerInvoiceWorkspaceTab = "create-invoice" | "statements" | "outstanding" | "follow-up";
 
@@ -935,86 +936,6 @@ function plainInvoiceTotalAmountCents(form: PlainInvoiceForm) {
     (total, item) => total + item.amountCents,
     0,
   );
-}
-
-function fakeRitzInvoiceService(reference: string) {
-  if (reference === "FAKE-RITZ-0001") {
-    return "MNG / Arrival";
-  }
-
-  if (reference === "FAKE-RITZ-0002") {
-    return "TRF / Transfer";
-  }
-
-  return "DSP / Hourly";
-}
-
-function fakeRitzInvoiceLineDescription(reference: string) {
-  return `${fakeRitzInvoiceService(reference)} - ${reference} - Ritz Carlton fake billing UI test`;
-}
-
-function fakeRitzInvoiceLineMeta(description: string) {
-  if (description.includes("FAKE-RITZ-0001")) {
-    return { date: "10 Jul 2026", time: "0900hr", reference: "FAKE-RITZ-0001" };
-  }
-
-  if (description.includes("FAKE-RITZ-0002")) {
-    return { date: "11 Jul 2026", time: "1430hr", reference: "FAKE-RITZ-0002" };
-  }
-
-  if (description.includes("FAKE-RITZ-0003")) {
-    return { date: "12 Jul 2026", time: "2315hr", reference: "FAKE-RITZ-0003" };
-  }
-
-  return { date: "Date not set", time: "Time not set", reference: "" };
-}
-
-function fakeRitzPickupAt(reference: string) {
-  if (reference === "FAKE-RITZ-0001") {
-    return "2026-07-10 09:00";
-  }
-
-  if (reference === "FAKE-RITZ-0002") {
-    return "2026-07-11 14:30";
-  }
-
-  return "2026-07-12 23:15";
-}
-
-function fakeRitzSavedBooking(reference: string, customerId: string, customerName: string) {
-  return {
-    admin_status: "Fake test unbilled",
-    booking_month: "2026-07",
-    booking_reference: reference,
-    customer_account: customerName,
-    customer_id: customerId,
-    customer_price_amount: 420,
-    customer_status: "Ready for billing test",
-    pickup_at: fakeRitzPickupAt(reference),
-    pricing_source: "fake-ritz-ui-test",
-    route_type: fakeRitzInvoiceService(reference),
-    service_type: fakeRitzInvoiceService(reference),
-  } satisfies RegularCustomerSavedBookingReadRecord;
-}
-
-function fakeRitzExactBooking(reference: string, customerId: string, customerName: string) {
-  return {
-    admin_internal_status: "dispatch_edit_test",
-    booking_reference: reference,
-    contact_display_name: "Ritz Carlton",
-    customer_display_name: customerName,
-    customer_facing_status: "ready_for_billing_test",
-    customer_id: customerId,
-    dropoff_location: "Marina Bay Cruise Centre",
-    passenger_name: "Ritz Carlton guest",
-    pickup_at: fakeRitzPickupAt(reference),
-    pickup_location: "Ritz Carlton",
-    route_summary: "Ritz Carlton > Marina Bay Cruise Centre",
-    route_type: fakeRitzInvoiceService(reference),
-    service_type: fakeRitzInvoiceService(reference),
-    source_surface: "fake-ritz-customer-url-edit-test",
-    vehicle_type_or_category: "E / AVF",
-  } satisfies CustomerFolderExactBookingRecord;
 }
 
 function customerInvoiceCardPaymentPreviewLabel(
@@ -2458,7 +2379,7 @@ export default function MockCustomerDashboardPage() {
   const [preparingUnbilledCustomerRowKey, setPreparingUnbilledCustomerRowKey] = useState("");
   const [customerInvoicePrepRowKey, setCustomerInvoicePrepRowKey] = useState("");
   const [customerInvoicePrepFeedback, setCustomerInvoicePrepFeedback] = useState(
-    "Choose Prepare monthly bill from the Monthly Billing Queue to load a billing account/month into the invoice workbench.",
+    "Open the selected customer workspace and choose Prepare monthly invoice to load a billing account/month into the invoice workbench.",
   );
   const [customerInvoiceIssueAmount, setCustomerInvoiceIssueAmount] = useState("");
   const [customerInvoiceIssueDueDate, setCustomerInvoiceIssueDueDate] = useState(() =>
@@ -2481,11 +2402,6 @@ export default function MockCustomerDashboardPage() {
   );
   const [plainInvoicePreview, setPlainInvoicePreview] =
     useState<CustomerInvoicePreview | null>(null);
-  const [fakeRitzInvoiceHandoffActive, setFakeRitzInvoiceHandoffActive] = useState(false);
-  const [fakeRitzInvoiceCustomerTarget, setFakeRitzInvoiceCustomerTarget] = useState({
-    customerId: "",
-    customerName: "",
-  });
   const [plainInvoiceFeedback, setPlainInvoiceFeedback] = useState(
     "Create Invoice is ready for manual bill-to. No invoice number is created until Draft or Issue.",
   );
@@ -3132,7 +3048,7 @@ export default function MockCustomerDashboardPage() {
   }, [customerBillingOverviewRows, normalizedSearchTerm]);
   const customerBillingOverviewTotalPages = Math.max(
     1,
-    Math.ceil(filteredCustomerBillingOverviewRows.length / customerFolderFinderPageSize),
+    Math.ceil(filteredCustomerBillingOverviewRows.length / customerBillingOverviewPageSize),
   );
   const activeCustomerBillingOverviewPage = Math.min(
     currentCustomerFolderFinderPage,
@@ -3141,15 +3057,15 @@ export default function MockCustomerDashboardPage() {
   const customerBillingOverviewStartIndex =
     filteredCustomerBillingOverviewRows.length === 0
       ? 0
-      : (activeCustomerBillingOverviewPage - 1) * customerFolderFinderPageSize;
+      : (activeCustomerBillingOverviewPage - 1) * customerBillingOverviewPageSize;
   const paginatedCustomerBillingOverviewRows = filteredCustomerBillingOverviewRows.slice(
     customerBillingOverviewStartIndex,
-    customerBillingOverviewStartIndex + customerFolderFinderPageSize,
+    customerBillingOverviewStartIndex + customerBillingOverviewPageSize,
   );
   const customerBillingOverviewShowingStart =
     filteredCustomerBillingOverviewRows.length === 0 ? 0 : customerBillingOverviewStartIndex + 1;
   const customerBillingOverviewShowingEnd = Math.min(
-    customerBillingOverviewStartIndex + customerFolderFinderPageSize,
+    customerBillingOverviewStartIndex + customerBillingOverviewPageSize,
     filteredCustomerBillingOverviewRows.length,
   );
   const customerBillingOverviewPageNumbers = Array.from(
@@ -3434,17 +3350,6 @@ export default function MockCustomerDashboardPage() {
   const isPlainInvoicePreviewCurrent =
     Boolean(plainInvoicePreview) &&
     plainInvoicePreview?.previewKey === plainInvoiceCurrentPreviewKey;
-  const fakeRitzInvoicePreviewRows = useMemo(
-    () =>
-      fakeRitzInvoiceHandoffActive
-        ? plainInvoiceLineItemsFromForm(plainInvoiceForm).map((item, index) => ({
-            ...item,
-            meta: fakeRitzInvoiceLineMeta(item.description),
-            rowNumber: index + 1,
-          }))
-        : [],
-    [fakeRitzInvoiceHandoffActive, plainInvoiceForm],
-  );
   const plainInvoiceCrmPickerLabel =
     (selectedPlainInvoiceCrmAccountOption
       ? `${selectedPlainInvoiceCrmAccountOption.customerName}${
@@ -4011,7 +3916,7 @@ export default function MockCustomerDashboardPage() {
 
     if (safeTargets.length === 0) {
       setRegularCustomerSavedBookingReadState({
-        message: "No customer accounts were available for the Monthly Billing Queue.",
+        message: "No customer accounts were available for selected-customer monthly invoice preparation.",
         savedBookings: [],
         status: "error",
         summary: null,
@@ -4027,7 +3932,7 @@ export default function MockCustomerDashboardPage() {
     }
 
     setRegularCustomerSavedBookingReadState({
-      message: "Loading saved bookings for the Monthly Billing Queue...",
+      message: "Loading saved bookings for selected-customer monthly invoice preparation...",
       savedBookings: [],
       status: "loading",
       summary: null,
@@ -4080,7 +3985,7 @@ export default function MockCustomerDashboardPage() {
       const firstFailedRead = reads.find((read) => !read.ok) as { error?: unknown } | undefined;
       setRegularCustomerSavedBookingReadState({
         message: customerAdminReadFailureMessage(
-          "Saved booking read for the Monthly Billing Queue",
+          "Saved booking read for selected-customer monthly invoice preparation",
           firstFailedRead?.error,
         ),
         savedBookings: [],
@@ -4100,8 +4005,8 @@ export default function MockCustomerDashboardPage() {
     setRegularCustomerSavedBookingReadState({
       message:
         returnedCount > 0
-          ? `Loaded ${returnedCount} saved booking${returnedCount === 1 ? "" : "s"} for the Monthly Billing Queue.`
-          : "No saved bookings returned for the Monthly Billing Queue.",
+          ? `Loaded ${returnedCount} saved booking${returnedCount === 1 ? "" : "s"} for selected-customer monthly invoice preparation.`
+          : "No saved bookings returned for selected-customer monthly invoice preparation.",
       savedBookings,
       status: "loaded",
       summary: {
@@ -4190,7 +4095,7 @@ export default function MockCustomerDashboardPage() {
               "Completed closeout billing readiness",
               (closeoutReads.find((item) => !item.ok) as { error?: unknown } | undefined)?.error,
             )
-          : `Verified ${readyCount} closeout-ready saved booking${readyCount === 1 ? "" : "s"} for the Monthly Billing Queue.`,
+          : `Verified ${readyCount} closeout-ready saved booking${readyCount === 1 ? "" : "s"} for selected-customer monthly invoice preparation.`,
       status: failedCount === closeoutReads.length ? "error" : "loaded",
       tone: failedCount === closeoutReads.length ? "error" : "success",
     });
@@ -4712,10 +4617,7 @@ export default function MockCustomerDashboardPage() {
     bookingReference: string,
     action: "edit" | "delete" | "open",
     invoiceAction = "",
-    selectedBookingReferences = "",
   ) {
-    setFakeRitzInvoiceHandoffActive(false);
-    setFakeRitzInvoiceCustomerTarget({ customerId: "", customerName: "" });
     customerFolderReturnHrefRef.current =
       action === "edit" || action === "delete" ? customerFolderHrefFor(customerId, customerName) : "";
     setCustomerFolderFinderSelectedId("");
@@ -4737,94 +4639,6 @@ export default function MockCustomerDashboardPage() {
       tone: "info",
     });
     scrollCustomerFolderJobsPanelIntoView();
-
-    if (action === "edit" && /^FAKE-RITZ-\d{4}$/.test(bookingReference)) {
-      const fakeBooking = fakeRitzSavedBooking(bookingReference, customerId, customerName);
-      const fakeExactBooking = fakeRitzExactBooking(bookingReference, customerId, customerName);
-
-      setExpandedCustomerFolderJobReference(bookingReference);
-      setCustomerFolderJobViewState({
-        customerId,
-        customerName,
-        message: `Fake job ${bookingReference} is open for dispatch edit testing. No booking, invoice, payment, send, payout, GPS, provider, or Supabase record was created.`,
-        savedBookings: [fakeBooking],
-        status: "loaded",
-        summary: {
-          matched_count: 1,
-          recent_read_count: 0,
-          returned_count: 1,
-        },
-        tone: "success",
-      });
-      setCustomerFolderExactBookingEditorState({
-        booking: fakeExactBooking,
-        bookingReference,
-        form: customerFolderExactBookingFormFromRecord(fakeExactBooking),
-        message: `Fake job ${bookingReference} loaded into dispatch edit fields. Review only; no real booking record is attached.`,
-        status: "loaded",
-        tone: "success",
-      });
-      return;
-    }
-
-    if (invoiceAction === "create" && /^FAKE-RITZ-\d{4}$/.test(bookingReference)) {
-      const selectedFakeReferences = selectedBookingReferences
-        .split(",")
-        .map((reference) => reference.trim())
-        .filter((reference, index, references) =>
-          /^FAKE-RITZ-\d{4}$/.test(reference) && references.indexOf(reference) === index,
-        );
-      const fakeReferences =
-        selectedFakeReferences.length > 0
-          ? selectedFakeReferences
-          : [bookingReference];
-      const [firstFakeReference, ...additionalFakeReferences] = fakeReferences;
-      const fakeService =
-        fakeReferences.length === 1
-          ? fakeRitzInvoiceService(firstFakeReference)
-          : `${fakeReferences.length} Ritz Carlton completed jobs`;
-
-      setPlainInvoiceForm({
-        ...plainInvoiceInitialForm(),
-        amount: "420.00",
-        billToName: customerName,
-        crmCustomerId: customerId,
-        crmCustomerName: customerName,
-        lineDescription: fakeRitzInvoiceLineDescription(firstFakeReference),
-        lineItems: additionalFakeReferences.map((reference) => ({
-          amount: "420.00",
-          lineDescription: fakeRitzInvoiceLineDescription(reference),
-        })),
-        reference: fakeReferences.join(", "),
-        route: "Ritz Carlton > Marina Bay Cruise Centre",
-        service: fakeService,
-      });
-      setSelectedPlainInvoiceCrmFolderKey("");
-      setPlainInvoiceCrmPickerOpen(false);
-      setFakeRitzInvoiceCustomerTarget({ customerId, customerName });
-      setFakeRitzInvoiceHandoffActive(true);
-      setPlainInvoicePreview(null);
-      setCustomerInvoiceWorkspaceTab("statements");
-      setPlainInvoiceFeedback(
-        `Fake invoice handoff received for ${fakeReferences.length} selected job${
-          fakeReferences.length === 1 ? "" : "s"
-        }. Review the full invoice preview below. Draft, Issue, and Email still create real billing documents, so stop before those unless approved.`,
-      );
-      setPlainInvoiceFeedbackTone("success");
-      setCustomerFolderJobViewState({
-        customerId,
-        customerName,
-        message: "",
-        savedBookings: [],
-        status: "idle",
-        summary: null,
-        tone: "info",
-      });
-      window.setTimeout(() => {
-        plainInvoicePanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-      }, 100);
-      return;
-    }
 
     try {
       const result = await readRegularCustomerSavedBookingsForTarget(
@@ -4975,7 +4789,6 @@ export default function MockCustomerDashboardPage() {
       bookingReference,
       action,
       invoiceAction,
-      selectedBookingReferences,
     );
     // URL handoff runs once so normal page interactions do not reload the selected customer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -5254,7 +5067,7 @@ export default function MockCustomerDashboardPage() {
     setCollectionFollowUpPage(1);
     setMonthlyStatementPage(1);
     setCustomerInvoicePrepFeedback(
-      `${row.customerName} loaded from the Monthly Billing Queue. Review the amount and route, then issue only when the invoice is correct.`,
+      `${row.customerName} loaded for selected-customer invoice preparation. Review the amount and route, then issue only when the invoice is correct.`,
     );
     setCustomerInvoiceIssueFeedback(
       suggestedAmountCents
@@ -5356,7 +5169,7 @@ export default function MockCustomerDashboardPage() {
     setOutstandingReviewSearchTerm("");
     setOutstandingReviewPage(1);
     setCustomerInvoicePrepFeedback(
-      "Invoice prep selection cleared. Choose Prepare monthly bill from the Monthly Billing Queue to load a billing account/month.",
+      "Invoice prep selection cleared. Open the selected customer workspace and choose Prepare monthly invoice to load a billing account/month.",
     );
     setCustomerInvoiceIssueFeedback(
       "Review the amount and due date before issuing. Invoice number is created only when you click issue.",
@@ -5564,8 +5377,6 @@ export default function MockCustomerDashboardPage() {
 
   function clearPlainInvoiceForm() {
     setPlainInvoiceForm(plainInvoiceInitialForm());
-    setFakeRitzInvoiceHandoffActive(false);
-    setFakeRitzInvoiceCustomerTarget({ customerId: "", customerName: "" });
     setPlainInvoicePreview(null);
     setPlainInvoiceFeedback(
       "Create Invoice cleared. No invoice number, PDF, email, payment, or customer folder was created.",
@@ -5965,7 +5776,7 @@ export default function MockCustomerDashboardPage() {
   function previewPreparedCustomerInvoice() {
     if (!customerInvoicePrepRow) {
       setCustomerInvoiceIssueFeedback(
-        `Choose Prepare monthly bill from the Monthly Billing Queue before previewing a ${customerBillingDocumentLabel(
+        `Choose Prepare monthly invoice in the selected customer workspace before previewing a ${customerBillingDocumentLabel(
           customerInvoiceDocumentType,
         ).toLowerCase()}.`,
       );
@@ -6095,7 +5906,7 @@ export default function MockCustomerDashboardPage() {
 
   async function saveCustomerInvoiceDraft() {
     if (!customerInvoicePrepRow) {
-      setCustomerInvoiceIssueFeedback("Choose Prepare monthly bill from the Monthly Billing Queue before saving a draft.");
+      setCustomerInvoiceIssueFeedback("Choose Prepare monthly invoice in the selected customer workspace before saving a draft.");
       return;
     }
 
@@ -6156,7 +5967,7 @@ export default function MockCustomerDashboardPage() {
 
   async function issuePreparedCustomerInvoice() {
     if (!customerInvoicePrepRow) {
-      setCustomerInvoiceIssueFeedback("Choose Prepare monthly bill from the Monthly Billing Queue before issuing an invoice.");
+      setCustomerInvoiceIssueFeedback("Choose Prepare monthly invoice in the selected customer workspace before issuing an invoice.");
       return;
     }
 
@@ -7395,7 +7206,7 @@ export default function MockCustomerDashboardPage() {
                 <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
                   {selectedCustomerWorkspaceOpen
                     ? "Only the selected customer's jobs, invoices, and monthly invoice prep are shown here."
-                    : "Search the customer or company, open the correct folder, then use Monthly Billing Queue below to prepare the bill."}
+                    : "Search the customer or company, open the correct folder, then choose Prepare monthly invoice."}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2 lg:justify-end">
@@ -7736,8 +7547,7 @@ export default function MockCustomerDashboardPage() {
                   {customerFolderJobViewState.message}
                 </p>
 
-                {!fakeRitzInvoiceHandoffActive ? (
-                  <div
+                <div
                     className="mt-3 overflow-hidden rounded-md border border-slate-200 bg-white"
                     data-selected-customer-invoice-list="true"
                   >
@@ -7945,7 +7755,6 @@ export default function MockCustomerDashboardPage() {
                     </div>
                   ) : null}
                   </div>
-                ) : null}
 
                 {customerFolderJobViewState.status === "loaded" &&
                 customerFolderJobViewState.savedBookings.length > 0 ? (
@@ -8290,7 +8099,6 @@ export default function MockCustomerDashboardPage() {
             className="rounded-lg border border-slate-200 bg-white shadow-sm"
             data-customer-billing-workbench-drawer="true"
             open={
-              fakeRitzInvoiceHandoffActive ||
               Boolean(customerInvoicePrepRow) ||
               Boolean(plainInvoicePreview) ||
               Boolean(plainInvoiceForm.billToName.trim())
@@ -8753,148 +8561,10 @@ export default function MockCustomerDashboardPage() {
                       Manual bill-to
                     </h3>
                   </div>
-                  {fakeRitzInvoiceHandoffActive ? (
-                    <Link
-                      className="fixed right-4 top-4 z-50 inline-flex min-h-9 max-w-full items-center rounded-md border border-emerald-300 bg-emerald-50 px-3 text-xs font-bold text-emerald-800 shadow-sm transition hover:bg-emerald-100"
-                      data-fake-ritz-ready-email="true"
-                      href={customerFolderHrefFor(
-                        fakeRitzInvoiceCustomerTarget.customerId || plainInvoiceForm.crmCustomerId || "Ritz Carlton",
-                        fakeRitzInvoiceCustomerTarget.customerName || plainInvoiceForm.crmCustomerName || "Ritz Carlton",
-                      ).replace(
-                        /$/,
-                        `${customerFolderHrefFor(
-                          fakeRitzInvoiceCustomerTarget.customerId || plainInvoiceForm.crmCustomerId || "Ritz Carlton",
-                          fakeRitzInvoiceCustomerTarget.customerName || plainInvoiceForm.crmCustomerName || "Ritz Carlton",
-                        ).includes("?") ? "&" : "?"}ready_fake_ritz_invoice=1&selected_booking_references=${encodeURIComponent(
-                          plainInvoiceForm.reference,
-                        )}`,
-                      )}
-                    >
-                      Ready to email
-                    </Link>
-                  ) : (
-                    <p className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-600">
-                      No number yet
-                    </p>
-                  )}
+                  <p className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-600">
+                    No number yet
+                  </p>
                 </div>
-                {fakeRitzInvoiceHandoffActive ? (
-                  <div
-                    className="mt-3 rounded-md border border-slate-200 bg-white p-4 text-xs text-slate-700 shadow-sm"
-                    data-fake-ritz-invoice-preview="true"
-                  >
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
-                        <Image
-                          alt="Prestige Limo SG"
-                          className="h-12 w-auto object-contain"
-                          height={48}
-                          src="/prestige-limo-sg-logo.jpg"
-                          width={180}
-                        />
-                        <div className="mt-3 leading-5">
-                          <p className="font-bold text-slate-950">Prestige Limo Sg</p>
-                          <p>10 Anson Road #10-11</p>
-                          <p>International Plaza 079903</p>
-                          <p>Singapore</p>
-                        </div>
-                      </div>
-                      <div className="text-left sm:text-right">
-                        <p className="text-3xl font-semibold uppercase tracking-normal text-slate-950">Invoice</p>
-                        <p className="mt-2 font-bold text-slate-700" data-fake-ritz-invoice-reference="true">
-                          Draft from {plainInvoiceForm.reference}
-                        </p>
-                        <p className="mt-4 text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
-                          Balance Due
-                        </p>
-                        <p className="mt-1 text-lg font-bold text-slate-950">
-                          {plainInvoiceForm.isPaid ? formatInvoiceAmount(0) : formatInvoiceAmount(plainInvoiceAmountCents)}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="mt-8 grid gap-4 sm:grid-cols-2">
-                      <div>
-                        <p className="font-bold text-slate-500">Bill To</p>
-                        <p className="mt-1 font-bold text-sky-700" data-fake-ritz-invoice-bill-to="true">
-                          {plainInvoiceForm.billToName || "Ritz Carlton"}
-                        </p>
-                        <p>{plainInvoiceForm.billToName || "Ritz Carlton"}</p>
-                        <p>Singapore</p>
-                      </div>
-                      <dl className="grid gap-2 sm:justify-end sm:text-right">
-                        <div className="grid grid-cols-[8rem_1fr] gap-3 sm:grid-cols-[9rem_9rem]">
-                          <dt className="font-semibold text-slate-600">Invoice Date :</dt>
-                          <dd className="font-semibold text-slate-800">{formatInvoiceDate(new Date())}</dd>
-                        </div>
-                        <div className="grid grid-cols-[8rem_1fr] gap-3 sm:grid-cols-[9rem_9rem]">
-                          <dt className="font-semibold text-slate-600">Terms :</dt>
-                          <dd className="font-semibold text-slate-800">Net 7</dd>
-                        </div>
-                        <div className="grid grid-cols-[8rem_1fr] gap-3 sm:grid-cols-[9rem_9rem]">
-                          <dt className="font-semibold text-slate-600">Due Date :</dt>
-                          <dd className="font-semibold text-slate-800">
-                            {formatInvoiceDate(new Date(`${plainInvoiceForm.dueDateIso}T00:00:00+08:00`))}
-                          </dd>
-                        </div>
-                      </dl>
-                    </div>
-                    <div className="mt-6 overflow-x-auto">
-                      <table className="w-full min-w-[620px] border-collapse text-left">
-                        <thead className="bg-slate-800 text-white">
-                          <tr>
-                            <th className="px-3 py-2 font-semibold">#</th>
-                            <th className="px-3 py-2 font-semibold">Item &amp; Description</th>
-                            <th className="px-3 py-2 text-right font-semibold">Qty</th>
-                            <th className="px-3 py-2 text-right font-semibold">Rate</th>
-                            <th className="px-3 py-2 text-right font-semibold">Amount</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {fakeRitzInvoicePreviewRows.map((row) => (
-                            <tr className="border-b border-slate-200" key={`${row.meta.reference}-${row.rowNumber}`}>
-                              <td className="px-3 py-4 align-top font-semibold text-slate-700">{row.rowNumber}</td>
-                              <td className="px-3 py-4 align-top">
-                                <p className="font-bold text-slate-900">{row.description}</p>
-                                <p className="mt-2">Date: {row.meta.date}</p>
-                                <p>Time: {row.meta.time}</p>
-                                <p>Name of pax: Ritz Carlton guest</p>
-                                <p>Remark: Fake billing UI test</p>
-                              </td>
-                              <td className="px-3 py-4 text-right align-top font-semibold">1.00</td>
-                              <td className="px-3 py-4 text-right align-top font-semibold">
-                                {row.amountLabel.replace(/^\$/, "")}
-                              </td>
-                              <td className="px-3 py-4 text-right align-top font-semibold">
-                                {row.amountLabel.replace(/^\$/, "")}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    <div className="mt-5 grid gap-2 sm:ml-auto sm:w-80">
-                      <div className="flex justify-between gap-3">
-                        <span>Sub Total</span>
-                        <span className="font-semibold">{formatInvoiceAmount(plainInvoiceAmountCents)}</span>
-                      </div>
-                      <div className="flex justify-between gap-3 font-bold text-slate-950">
-                        <span>Total</span>
-                        <span>{formatInvoiceAmount(plainInvoiceAmountCents)}</span>
-                      </div>
-                      <div className="flex justify-between gap-3 rounded-md bg-slate-50 px-3 py-2 font-bold text-slate-950">
-                        <span>Balance Due</span>
-                        <span>
-                          {plainInvoiceForm.isPaid ? formatInvoiceAmount(0) : formatInvoiceAmount(plainInvoiceAmountCents)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="mt-4 flex flex-wrap items-center justify-start gap-2 border-t border-slate-200 pt-3">
-                      <p className="text-xs font-semibold text-slate-500">
-                        Preview only. Email is still guarded below.
-                      </p>
-                    </div>
-                  </div>
-                ) : null}
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(9rem,1fr)_minmax(9rem,0.9fr)_minmax(8rem,0.75fr)_minmax(8rem,0.7fr)] xl:items-end">
                   <div className="grid gap-2 sm:col-span-2 xl:col-span-4 xl:grid-cols-[minmax(12rem,1fr)_auto] xl:items-end">
                     <div className="relative grid gap-1 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
@@ -9156,10 +8826,7 @@ export default function MockCustomerDashboardPage() {
                     </label>
                   </div>
                 </div>
-                <div
-                  className={fakeRitzInvoiceHandoffActive ? "hidden" : "mt-3"}
-                  data-plain-invoice-line-items="true"
-                >
+                <div className="mt-3" data-plain-invoice-line-items="true">
                   <div className="flex flex-wrap items-end justify-between gap-2">
                     <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
                       Line items
@@ -9333,7 +9000,7 @@ export default function MockCustomerDashboardPage() {
                     Clear
                   </button>
                 </div>
-                {!fakeRitzInvoiceHandoffActive && plainInvoicePreview ? (
+                {plainInvoicePreview ? (
                   <div
                     className={`mt-3 rounded-md border px-3 py-2 text-xs leading-5 ${
                       isPlainInvoicePreviewCurrent
@@ -9430,7 +9097,7 @@ export default function MockCustomerDashboardPage() {
                   guarded email route. Paid only changes invoice status; it does not record a payment.
                 </p>
               </div>
-              {!fakeRitzInvoiceHandoffActive && customerInvoiceDrafts.length > 0 ? (
+              {customerInvoiceDrafts.length > 0 ? (
                 <div
                   className="mt-3 border-t border-slate-200 pt-3"
                   data-customer-invoice-draft-list="true"

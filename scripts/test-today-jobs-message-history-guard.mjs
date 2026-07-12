@@ -18,7 +18,9 @@ for (const expected of [
 }
 
 assert.ok(
-  persistence.includes("actor_role: record.actor_role"),
+  persistence.includes("function toAdminSafeRecord(") &&
+    persistence.includes("actor_role: record.actor_role") &&
+    persistence.includes(".map(toAdminSafeRecord)"),
   "admin message history must receive the persisted safe actor role for human direction labels",
 );
 

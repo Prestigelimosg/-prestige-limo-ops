@@ -146,7 +146,37 @@ for (const fragment of [
   assertIncludes(portalAdapter, fragment, `customer portal change request adapter ${fragment}`);
 }
 
-assertExcludes(portal, "fetch(", "customer portal page raw fetch");
+const portalChangeRequestSubmitBlock = sliceBetween(
+  portal,
+  "async function submitCustomerBookingChangeRequest(",
+  "async function downloadPortalInvoice(",
+);
+const portalCustomerQuickReplyBlock = sliceBetween(
+  portal,
+  "async function sendCustomerDriverQuickReply(",
+  "const activeFilter:",
+);
+
+assertExcludes(
+  portalChangeRequestSubmitBlock,
+  "fetch(",
+  "customer portal change-request handler raw fetch",
+);
+assertIncludes(
+  portalChangeRequestSubmitBlock,
+  "await submitCustomerPortalBookingChangeRequest({",
+  "customer portal change-request handler adapter delegation",
+);
+assertIncludes(
+  portalCustomerQuickReplyBlock,
+  'fetch("/api/customer-driver-quick-replies", {',
+  "separate customer-to-driver quick-reply write",
+);
+assertExcludes(
+  portalCustomerQuickReplyBlock,
+  "submitCustomerPortalBookingChangeRequest",
+  "customer quick reply must not submit a booking change request",
+);
 assertExcludes(route, "notification_id", "customer route must not expose internal admin notification id");
 
 const adminChangeHelper = sliceBetween(
@@ -208,8 +238,8 @@ for (const fragment of [
   "data-dashboard-change-cancel-request-row",
   "data-dashboard-change-cancel-request-action=\"accept\"",
   "handleAdminBookingChangeRequestApply(notification)",
-  "handleAdminBookingChangeRequestCancelDecision(notification, \"reject\")",
-  "handleAdminBookingChangeRequestCancelDecision(notification, \"dismiss\")",
+  "handleAdminBookingChangeRequestCloseDecision(notification, \"reject\")",
+  "handleAdminBookingChangeRequestCloseDecision(notification, \"dismiss\")",
 ]) {
   assertIncludes(adminPage, fragment, `admin inbox change request render ${fragment}`);
 }

@@ -24,7 +24,7 @@ const gateEnvName = "PRESTIGE_COMPANY_TRAVELER_CRM_IDENTITY_CONTACT_WRITE_ENABLE
 const forbiddenRuntimeWiringPattern =
   /adminLegacyDataClient|adminLegacyTables|\/api\/admin-legacy-data|legacy_shim|shim\s*\(/i;
 const forbiddenOutputPattern =
-  /customer_rates|driver_payout_rules|customer_price|driver_payout|rate_override|pricing|payout|paynow|pay_now|payment|billing|invoice|pdf|finance|provider|send_state|send_log|auth_session|live_location|photo|calendar|internal_admin|admin_notes|parser_debug|debug_payload|mock_archive|mock_qa|service_role|server_secret|secret|api_key|access_token|raw_token/i;
+  /customer_rates|driver_payout_rules|customer_price|driver_payout|rate_override|pricing|payout|paynow|pay_now|payment|billing_amount|billing_status|invoice|pdf|finance|provider|send_state|send_log|auth_session|live_location|photo|calendar|internal_admin|admin_notes|parser_debug|debug_payload|mock_archive|mock_qa|service_role|server_secret|secret|api_key|access_token|raw_token/i;
 const forbiddenFieldFragments = [
   "customer_rates",
   "driver_payout_rules",
@@ -34,7 +34,8 @@ const forbiddenFieldFragments = [
   "pricing",
   "payout",
   "payment",
-  "billing",
+  "billing_amount",
+  "billing_status",
   "invoice",
   "pdf",
   "provider",
@@ -395,7 +396,7 @@ assertIncludes(helperSource, ".select(companyWriteSelect)", "CRM runtime company
 assertIncludes(helperSource, ".select(travelerWriteSelect)", "CRM runtime traveler safe select");
 assertExcludes(helperSource, forbiddenRuntimeWiringPattern, "CRM runtime write action helper");
 
-const companySelectLine = helperSource.match(/const companyWriteSelect = "([^"]+)";/)?.[1] || "";
+const companySelectLine = helperSource.match(/const companyWriteSelect\s*=\s*\n?\s*"([^"]+)";/)?.[1] || "";
 const travelerSelectLine = helperSource.match(/const travelerWriteSelect =\n  "([^"]+)";/)?.[1] || "";
 
 assertIncludes(companySelectLine, "company_name", "CRM runtime company safe select");
@@ -578,7 +579,8 @@ try {
         company_name: "Acme Travel Desk",
         domain: "acme.example",
       },
-      select: "id, company_name, domain",
+      select:
+        "id, company_name, domain, billing_address, main_phone, mobile_phone, website, primary_contact_name, billing_email, accounts_email, operations_email",
       table: "companies",
     },
   ]);

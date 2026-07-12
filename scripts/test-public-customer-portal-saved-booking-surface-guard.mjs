@@ -59,6 +59,7 @@ const safeDetailLabels = [
   "Route",
   "Driver Tracking",
   "Trip Updates",
+  "Message Driver",
 ];
 
 const unsafePortalSurfacePattern =
@@ -217,13 +218,15 @@ const ledgerSection = sectionBetween(
 
 for (const phrase of [
   "Public customer portal saved-booking display/action surfaces are guarded across `/my-bookings`, `lib/customer-portal-saved-bookings-adapter.ts`, `lib/customer-portal-booking-change-request-adapter.ts`, and `lib/customer-saved-bookings-read.ts`.",
-  "This guard allows only the approved customer booking change-request review write; it does not approve env changes, deployment by CLI, live provider sends, migrations, direct customer booking mutation, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/GPS activation, UI sectors, or new shims.",
+  "This guard allows only the approved customer booking change-request review write plus the exact fixed-template customer-to-driver quick-reply write; neither may directly mutate a saved booking, and no other write is approved.",
   "`/my-bookings` saved-booking rows must render only customer-safe status, passenger, pickup/drop-off, service, vehicle, date/time, flight, and optional request-note display fields; the expanded detail view may additionally render a customer-safe assigned-driver details card and one approved Driver Tracking panel that combines gated in-app map viewing with compact Trip Updates for safe customer-app driver progress only.",
-  "`/my-bookings` saved-booking actions must stay limited to disabled PDF, customer-safe edit/cancel review request form, and local detail expansion.",
+  "`/my-bookings` saved-booking row actions must stay limited to disabled PDF, customer-safe edit/cancel review request form, and local detail expansion; the expanded assigned-driver detail may additionally offer the separately guarded fixed-template `Message Driver` action.",
   "The customer PDF control must remain disabled/no-op and must not create files, links, downloads, invoices, payment records, or provider sends.",
   "Edit and cancel controls may submit only through `lib/customer-portal-booking-change-request-adapter.ts` to `/api/customer-booking-change-requests`; they must not mutate bookings, update calendar, or change `/api/customer-saved-bookings`.",
   "The customer portal saved-bookings adapter must keep using the guarded read endpoint with `cache: \"no-store\"`, `credentials: \"same-origin\"`, and the customer saved-bookings purpose header without manual Cookie, Authorization, customer session-token, or admin headers.",
   "Customer saved-booking API and adapter output must stay limited to the approved saved-booking record fields plus optional `customer_driver_details` with driver name, driver contact, car plate, and car type only; it must exclude customer price, driver payout, PayNow payout, billing, invoice/payment/PDF, internal finance/admin notes, parser/debug, secrets/tokens, provider/send, notification payloads, raw live location/photo/proof, and mock QA/dev archive fields.",
+  "Customer tracking rendering must use `safeDriverTracking`: POB, trip-in-progress, or completed updates force tracking to blocked, clear the map URL and accuracy label, and prevent a previously available map from remaining visible.",
+  "Verified PA saved-booking reads apply exact `company_id + booker_id` filters together, reject partial identity pairs, and use the legacy exact `customer_id` filter only when neither verified identity is present.",
   "This guard coordinates the customer portal saved-bookings adapter contract, customer saved-bookings API contract, public API response privacy guard, and public API client caller guard in the preactivation suite.",
   "No Save Booking + CRM change.",
   "No `/api/admin-saved-bookings` change.",
@@ -240,7 +243,32 @@ assertIncludes(
   "preactivation public customer portal saved-booking surface guard registration",
 );
 
-assertExcludes(portalPage, /\bfetch\s*\(/, "/my-bookings raw fetch");
+assert.equal(portalPage.split("fetch(").length - 1, 1, "/my-bookings exact direct fetch count");
+const customerQuickReplyBlock = blockBetween(
+  portalPage,
+  "async function sendCustomerDriverQuickReply",
+  "const activeFilter:",
+);
+for (const fragment of [
+  'fetch("/api/customer-driver-quick-replies"',
+  "body: JSON.stringify({ booking_reference: bookingReference, template_key: templateKey })",
+  'credentials: "same-origin"',
+  '"x-prestige-customer-purpose": "customer-driver-quick-reply"',
+  'method: "POST"',
+  'result?.direction !== "customer_to_driver"',
+]) {
+  assertIncludes(customerQuickReplyBlock, fragment, `/my-bookings fixed quick reply ${fragment}`);
+}
+assertExcludes(
+  customerQuickReplyBlock,
+  /setPortalBookings|loadCustomerPortalSavedBookings|submitCustomerPortalBookingChangeRequest|\/api\/admin|\/api\/customer-saved-bookings/i,
+  "/my-bookings quick reply saved-booking read/mutation coupling",
+);
+assertExcludes(
+  customerQuickReplyBlock,
+  /customer_price|driver_payout|paynow|invoice|payment|internal|parser|debug|token_hash|session_token/i,
+  "/my-bookings quick reply forbidden fields",
+);
 assertExcludes(portalPage, /submitCustomerBookingRequest/, "/my-bookings saved-booking surface submit adapter");
 assertExcludes(portalPage, /\/api\/admin|\/api\/admin-saved-bookings/i, "/my-bookings admin API path");
 assertExcludes(portalPage, /x-prestige-admin-purpose/i, "/my-bookings admin purpose header");
@@ -341,6 +369,14 @@ for (const fragment of [
 }
 
 const detailBlock = blockBetween(portalPage, 'data-customer-portal-detail={expandedBooking.id}', "</section>");
+for (const fragment of [
+  "tripStatusStopsCustomerTracking && driverTracking",
+  'mapEmbedUrl: ""',
+  'status: "blocked" as const',
+  "safeDriverTracking?.status === \"available\"",
+]) {
+  assertIncludes(portalPage, fragment, `/my-bookings safe tracking calculation ${fragment}`);
+}
 assertIncludes(
   detailBlock,
   "driverDetails ? (",
@@ -369,8 +405,8 @@ for (const fragment of [
   "driverDetails.carType",
   "handleTrackDriver(expandedBooking)",
   "refreshCustomerTrackingForBooking(expandedBooking)",
-  "driverTracking.status === \"available\"",
-  "driverTracking.mapEmbedUrl",
+  "safeDriverTracking?.mapEmbedUrl",
+  "src={safeDriverTracking.mapEmbedUrl}",
   "data-customer-portal-driver-tracking-map",
   "loadTripUpdatesForBooking(expandedBooking)",
   "tripUpdates.updates.map",
@@ -463,7 +499,12 @@ assertIncludes(
   "customer saved bookings foundation-schema safe DB select",
 );
 assertIncludes(savedBookingsRead, 'refererUrl.pathname !== "/my-bookings"', "customer saved bookings my-bookings referer boundary");
-assertIncludes(savedBookingsRead, 'bookingQuery.eq(customerFilter.column, customerFilter.value)', "customer saved bookings strict customer_id account filter");
+assertIncludes(savedBookingsRead, "for (const filter of bookingFilters)", "customer saved bookings exact filter loop");
+assertIncludes(savedBookingsRead, "bookingQuery = bookingQuery.eq(filter.column, filter.value);", "customer saved bookings exact filter application");
+assertIncludes(savedBookingsRead, "if (hasCompanyIdentity !== hasBookerIdentity)", "customer saved bookings partial PA identity rejection");
+assertIncludes(savedBookingsRead, '{ column: "company_id", method: "eq", value: String(companyId) }', "customer saved bookings company filter");
+assertIncludes(savedBookingsRead, '{ column: "booker_id", method: "eq", value: String(bookerId) }', "customer saved bookings booker filter");
+assertIncludes(savedBookingsRead, ": [customerAccountBookingFilter(customerAccountReference)]", "customer saved bookings legacy customer-id fallback");
 assertExcludes(savedBookingsRead, 'bookingQuery.ilike(customerFilter.column, customerFilter.value)', "customer saved bookings must not use text/display-name account filter");
 assertExcludes(savedBookingsRead, 'column: "customer_display_name"', "customer saved bookings must not isolate by display name");
 assertExcludes(

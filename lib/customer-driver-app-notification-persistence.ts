@@ -111,8 +111,12 @@ export type CustomerDriverAppNotificationRecord =
 
 export type CustomerDriverAppNotificationSafeRecord = Omit<
   CustomerDriverAppNotificationRecord,
-  "actor_label" | "driver_job_link_id" | "event_key" | "source_surface"
+  "actor_label" | "actor_role" | "driver_job_link_id" | "event_key" | "source_surface"
 >;
+
+export type AdminCustomerDriverAppNotificationSafeRecord =
+  CustomerDriverAppNotificationSafeRecord &
+    Pick<CustomerDriverAppNotificationRecord, "actor_role">;
 
 export type CustomerDriverQuickReplyTemplateKey =
   | "customer_at_lobby"
@@ -2876,7 +2880,6 @@ function toSafeRecord(
   record: CustomerDriverAppNotificationRecord,
 ): CustomerDriverAppNotificationSafeRecord {
   return {
-    actor_role: record.actor_role,
     booking_reference: record.booking_reference,
     created_at: record.created_at,
     delivery_surface: record.delivery_surface,
@@ -2889,6 +2892,15 @@ function toSafeRecord(
     safe_title: record.safe_title,
     updated_at: record.updated_at,
     workflow_area: record.workflow_area,
+  };
+}
+
+function toAdminSafeRecord(
+  record: CustomerDriverAppNotificationRecord,
+): AdminCustomerDriverAppNotificationSafeRecord {
+  return {
+    ...toSafeRecord(record),
+    actor_role: record.actor_role,
   };
 }
 
@@ -3032,7 +3044,7 @@ export async function loadCustomerDriverAppNotifications(
 
   const allRecords = asArray(data)
     .map(normalizeRecord)
-    .map(toSafeRecord);
+    .map(toAdminSafeRecord);
 
   return {
     data: {

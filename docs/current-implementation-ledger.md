@@ -31,7 +31,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### DSP Constraint Apply And Local Error Diagnosis
 
-- Owner approved and the existing DSP whole-hour constraint replacement was applied through the signed-in Supabase SQL editor to linked project `kvvsguhklmfgkebhxatm` (`main Production`). Supabase returned `Success. No rows returned`; no booking, driver link, driver status/timing event, calendar event, invoice, billing row, payment, payout, message, or provider send was created during that apply.
+- Owner approved and the existing DSP whole-hour constraint replacement was applied through the signed-in Supabase SQL editor to the linked production Supabase project. Supabase returned `Success. No rows returned`; no booking, driver link, driver status/timing event, calendar event, invoice, billing row, payment, payout, message, or provider send was created during that apply.
 - The attempted visible local booking proof stopped before save because the local runtime intentionally lacked server-only admin persistence configuration and the typed-read gate was closed. Exact API responses were `Admin saved booking read configuration is not ready.` and `Load Bookings typed read is not enabled on this server.`; this was not evidence of database corruption, schema failure, or RLS failure.
 - Dispatch previously passed that safe string response into an object-only formatter and displayed `Unknown Supabase error.`. The existing formatter now preserves bounded non-empty string errors, so operators see the actual safe configuration message. No credential, environment value, gate, route, database behavior, or customer/driver surface was changed.
 - Focused lock: `scripts/test-admin-load-bookings-safe-error-message-guard.mjs`.
@@ -92,7 +92,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The existing report refresh and 10-second reporting cycle request the same message history, and the card keeps one explicit `Refresh messages` fallback. A successful Admin-to-Driver send also reloads the history.
 - Only the two approved workflow areas are rendered: fixed customer/driver quick replies and private admin/driver job messages. Customer reads remain `customer_app` only, so Admin-to-Driver history cannot appear in My Bookings.
 - Focused lock: `scripts/test-today-jobs-message-history-guard.mjs`.
-- Live two-direction proof found the admin notification DTO omitted `actor_role`, causing correct customer/driver rows to display as `Admin → Driver`. The existing safe DTO now includes only the bounded actor role while continuing to strip actor label, event key, driver-link ID, and source surface. Customer notification reads still use their separate `customer_app`-only DTO and never receive private Admin-to-Driver rows.
+- Live two-direction proof found the admin notification DTO omitted `actor_role`, causing correct customer/driver rows to display as `Admin → Driver`. The authenticated admin history DTO includes the bounded actor role for those direction labels while continuing to strip actor label, event key, driver-link ID, and source surface.
+- Customer and driver public response DTOs omit `actor_role`; the role remains persisted for routing and authenticated admin history only. Customer notification reads also remain `customer_app` only and never receive private Admin-to-Driver rows.
 
 ### Today’s Jobs Assigned-Work Reporting Center
 
@@ -240,11 +241,11 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Google Calendar Midnight Display Safety
 
-- Google Calendar event payloads now apply a calendar-only safety display rule for Singapore-local pickup times from `00:01` through `03:00` inclusive: the Google event starts at `23:30` on the previous calendar day so admin sees the after-midnight job on the operational night before.
+- Google Calendar event payloads apply a calendar-only safety display rule for Singapore-local pickup times from `00:00` through `03:00` inclusive: the Google event starts at `23:30` on the previous calendar day so admin sees the after-midnight job on the operational night before.
 - The Google Calendar title and description clearly mark these as midnight jobs; the description includes `MIDNIGHT JOB — actual pickup is [actual date/time].`
 - This lane does not change the saved booking pickup time, driver job link pickup time, Customer Copy, Driver Dispatch, invoice/closeout/hourly billing timing, parser behavior, payment/payout, provider sends, GPS/live-location, env, or DB schema.
 - Google Calendar event identity remains keyed by booking reference only, and provider writes continue with `sendUpdates=none` and no attendees/guest email.
-- `00:00` pickup remains unchanged because inspection found no existing calendar-side business rule that treats exactly `00:00` as a midnight pickup. `03:01` and normal `23:xx` pickups also remain at actual time.
+- Exact `00:00` is a midnight pickup and receives the same previous-day `23:30` calendar display plus `MIDNIGHT JOB` warning. `03:01` and normal `23:xx` pickups remain at actual time.
 - Focused guard coverage lives in `scripts/test-admin-booking-calendar-event-api-contract.mjs` and `scripts/test-admin-booking-google-calendar-sync-api-contract.mjs`.
 
 ### Linked Return Trip Request Lane
@@ -291,7 +292,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Customer Folder Operator Row Compaction
 
 - Individual customer folders now use compact operator rows and slim tables instead of large cube/card blocks for the top summary, service handoff, payment collection detail, invoice prefix controls, saved booking references, booking history, notes, documents, and collection rules.
-- The invoice prefix settings panel remains admin-only inside the guarded customer folder invoice area; this UI pass does not change prefix storage, invoice numbering, reservation, PDFs, issue/email actions, payments, payouts, routes, APIs, schema, or env.
+- The invoice prefix settings panel remains admin-only in the existing customer company-profile header; the invoice folder does not mount a duplicate. This UI pass does not change prefix storage, invoice numbering, reservation, PDFs, issue/email actions, payments, payouts, routes, APIs, schema, or env.
 - Saved booking references and prefix settings keep their existing guarded read/write routes and purpose headers. Public booking, customer portal, and driver pages are not wired to customer-folder internals.
 - Focused guard coverage lives in `scripts/test-customer-folder-operator-row-layout-guard.mjs`, alongside the existing `scripts/test-customer-folder-job-history-compact-guard.mjs`.
 
@@ -309,7 +310,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The implementation stores settings in the existing `customer_invoice_sequences` table through `lib/admin-customer-invoice-prefix-settings.ts` and `/api/admin-customer-invoice-prefix-settings`.
 - The existing admin monthly invoice number reservation RPC now treats the browser-derived prefix as an auto-generated fallback only: an existing saved `customer_invoice_sequences` prefix wins, and if no row exists the RPC creates one from the fallback prefix and starts at `-0001`.
 - The new route allows same-origin `/customers` and `/customers/*` referers only, requires the existing admin purpose header, allows guarded reads for admin/dispatcher server sessions, and requires the admin role or local admin surface for writes.
-- The UI is limited to the existing customer folder Invoices area via `CustomerInvoicePrefixSettingsPanel`; `/settings/invoice`, the dashboard monthly invoice reservation workbench, customer portal, public booking, and driver pages are not wired to this prefix route.
+- The UI is limited to the existing admin customer company-profile header via `CustomerInvoicePrefixSettingsPanel`; the invoice folder does not mount a duplicate, and `/settings/invoice`, the dashboard monthly invoice reservation workbench, customer portal, public booking, and driver pages are not wired to this prefix route.
 - This lane does not create invoices, execute invoice-number reservations, generate PDFs, send invoice/customer/provider messages, activate payment links, record payments, create payouts, change the running-number digit width, change DB schema, change env, use Vercel CLI, or touch GPS/live-location.
 - Focused guard coverage lives in `scripts/test-admin-customer-invoice-prefix-settings-guard.mjs` and `scripts/test-admin-monthly-invoice-saved-prefix-precedence-guard.mjs`.
 
@@ -364,7 +365,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The new portal-account link does not carry a link expiry; access is stopped by changing the server-side access account away from `active`.
 - The guarded revoke route remains available at the backend, but the normal Customers finder row does not show portal invite/revoke controls.
 - Opening the link sets the existing customer saved-bookings HttpOnly Secure SameSite=Lax Priority=High cookie and redirects to `/my-bookings`, preserving a safe booking/tracking query when the admin copied the link from a loaded booking.
-- `/my-bookings` still calls only the existing saved-bookings and stored-invoice read adapters with same-origin credentials and purpose headers.
+- `/my-bookings` reads still use the existing saved-bookings and stored-invoice adapters with same-origin credentials and purpose headers; its sole direct write caller is the separately guarded fixed-template customer-to-driver quick-reply POST.
 - Portal reads remain scoped to the signed customer account and require `customer_access_accounts.account_status = active` before booking, invoice, PDF, or amendment reads proceed.
 - Customer portal booking history is read from the existing `bookings` table and filtered to the last 12 calendar months by pickup date; older rows stay admin-side and are not deleted.
 - The public access route verifies the signed account is active before setting the cookie and does not create invoices, generate PDFs, send providers, send email, activate Stripe/payment, expose billing internals, expose customer price, expose driver payout, or expose parser/debug/mock archive data.
@@ -379,7 +380,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Admin App Notifications now show exactly three compact admin-only actions for queued customer booking change requests: `Accept + Cal`, `Reject`, and `Dismiss`.
 - The decision paths use the existing admin-only `/api/admin-bookings?limit=200` read to resolve the saved booking/customer account before writing. There is no separate duplicate `Review` / `Apply + Cal` / `Cancel + Cal` button lane. The customer portal still only submits an internal request and does not mutate bookings, CRM, calendar, invoices, payments, providers, GPS/live-location, or external messages.
 - `Accept + Cal` merges only approved amendment fields into the existing saved booking update path, sends a `PATCH` to `/api/admin-bookings`, then uses the existing Google Calendar upsert path keyed by booking reference. The notification is archived only after the Google Calendar sync succeeds, so a failed calendar sync leaves the request pending for admin review.
-- `Reject` and `Dismiss` use the same guarded cancellation path as customer cancellation approval: the saved booking is marked cancelled, the existing Google Calendar event is synced on the same booking reference, the request is archived, and the app selects Completed / History. No external customer/driver message is sent from these buttons.
+- `Reject` and `Dismiss` archive only the exact request notification through the close-only path; they do not write the saved booking, sync Google Calendar, inspect invoice blockers, select Completed / History, or send an external customer/driver message. Only `Accept + Cal` may apply an approved cancellation through the guarded booking and calendar path.
 - Service-type amendments are defensive-gated: if a request carries a changed service type, the app loads Dispatch and requires the existing `Service Change Price Review` / `Update + Cal` flow instead of one-click applying the change.
 - Already-issued stored invoice records for the same booking reference block one-click amendment apply and guide admin toward adjustment, credit note, or new invoice review. Existing invoices are not silently mutated.
 - This apply lane does not add a customer-side direct write, new DB schema, duplicate amendment route/workbench, customer Email/WhatsApp/SMS/Telegram send, Stripe/payment/payout/provider/GPS/live-location behavior, or public/customer/driver exposure of admin amendment internals.
@@ -418,6 +419,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Successful requests create one internal `admin_app` inbox item with workflow area `customer_booking_change_request`, booking reference, passenger, current safe trip fields, and requested safe date/time/pickup/drop-off/note values.
 - The customer response does not expose the internal admin inbox id and explicitly reports `crm_update: false`, `calendar_update: false`, and `external_send: false`.
 - The customer route does not mutate bookings, does not update Google Calendar, and does not create duplicate billing, invoice, PDF, payment, payout, customer provider sends, SMS, WhatsApp, Telegram, GPS/live-location, parser, or admin saved-booking behavior. The admin-only Email alert is handled by the separate gated runtime lane above.
+- The customer booking-change submit handler remains adapter-owned and contains no raw fetch. The separately guarded fixed-template customer-to-driver quick-reply handler may use its established `/api/customer-driver-quick-replies` POST, but it has independent state and must never call the booking-change adapter or submit booking-change fields.
 - Admin App Notifications now show compact request details for customer booking change requests inside the existing admin inbox. Admin still reviews the request, loads the booking, applies approved edits, and uses the existing `Update + Cal` path to update the saved booking and existing calendar event.
 - Guard coverage lives in `scripts/test-customer-booking-change-request-review-guard.mjs`; related public portal/runtime/privacy guards were updated to allow only this approved review wire while preserving the saved-bookings read boundary.
 
@@ -736,6 +738,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The Dashboard command centre no longer shows the duplicate Operations Calendar panel; save/update actions auto-sync Google Calendar from the real saved-booking lane.
 - Manual ICS/calendar-file export controls are removed from normal admin operation. They are no longer a visible operator path beside Save + CRM / Update + Cal.
 - Auto-sync uses the same safe calendar payload boundary as loaded-booking Google sync and continues to exclude customer pricing/rates, driver payout, billing/payment/invoice/PDF fields, internal admin/finance notes, parser/debug/mock archive fragments, provider payloads, secrets/tokens, live location, proof/photo, and unsafe notification fragments.
+- Calendar titles put an assigned driver plate first for admin scanning (`[plate] > [traveler] - [service] - Prestige`) and retain `Prestige - [service] - [traveler]` when no plate is assigned. Event identity remains keyed only by booking reference, so title or trip-detail changes update the same event instead of creating duplicates.
 - This pass did not change Vercel/env/DB schema, send email, activate Stripe/payment, create payouts, send provider jobs, or change GPS/live-location behavior.
 - Focused checks passed: dashboard urgent requests/active monitor guard, admin booking Google Calendar sync API contract, admin booking calendar agenda/event/sync-status API contracts, admin route flow lock guard, staging deployment approval packet guard, `node --check scripts/test-booking-ui-browser.mjs`, `npx tsc --noEmit --pretty false`, `npm run lint` with only the existing `loadBookings` dependency warnings, `npm run build`, and `git diff --check`.
 
@@ -1040,9 +1043,10 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 - The old Customer Folder / Job History Handoff support drawer is removed from the normal Customers page flow; the compact finder is now the single customer-folder lookup surface.
 - The compact finder keeps 10-row pages and an `All customers` dropdown with numbered page buttons for 200-plus accounts.
+- The separate Customer Billing Overview keeps 20-row pages; it does not reuse or change the finder/dropdown's documented 10-row page size.
 - Finder load/search/selected feedback is a quiet one-line status under the controls, not a large success card, so the customer table stays visually dominant.
 - The fake top payment summary strip is removed from the daily Customers page.
-- The invoice workbench is collapsed behind an admin-only drawer, leaving the daily visible Customers page focused on the customer folder finder and Monthly Billing Queue.
+- The invoice workbench is collapsed behind an admin-only drawer, leaving the daily visible Customers page focused on the customer overview and selected-customer monthly preparation.
 - The mock statement, outstanding, follow-up, advanced booking, and support log drawers are not rendered in normal operation.
 - The normal finder row opens the customer's own folder page instead of showing a duplicate inline job-view sector; customer app links stay in Dispatch Customer Copy `Copy + App Link`.
 - Customer folder pages load compact scrollable saved-job rows with an `Open/Edit` Dispatch handoff for exact booking references.
@@ -1051,9 +1055,10 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Customers Page Scaled Queue Pagination UI Lock
 
-- The Customers & Payments follow-up queue and monthly statement preview now render through compact paginated row lists instead of mapping every visible customer row at once.
-- Default page size is 10 rows with a 25-row option, keeping desktop scanning practical for larger customer lists while mobile remains stacked and touch-friendly.
-- This is UI-only pagination on existing local/admin sections; it does not add routes, APIs, DB reads/writes, env changes, Vercel changes, provider sends, GPS/live-location, billing/payment/PDF/payout activation, calendar sync, or shims.
+- The retired Customers follow-up, monthly-statement preview, and global Monthly Billing Queue surfaces remain removed from the normal Customers page.
+- The current Customer Folder Finder and `All customers` dropdown use numbered 10-row pages; the separate Customer Billing Overview uses numbered 20-row pages.
+- Monthly invoice preparation remains inside the exact selected-customer workspace and hands off to the existing reviewed invoice workbench; there is no duplicate global billing queue or write path.
+- This is UI-only pagination on existing admin surfaces; it does not add routes, APIs, DB reads/writes, env changes, Vercel changes, provider sends, GPS/live-location, billing/payment/PDF/payout activation, calendar sync, or shims.
 - Existing admin-only boundaries remain unchanged and customer/driver forbidden finance/internal/mock-archive data remains blocked from public surfaces.
 - This polish is guarded by `scripts/test-customers-page-scaled-queues-guard.mjs` and registered in `scripts/test-preactivation-verification-suite.mjs`.
 
@@ -1243,8 +1248,9 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Customers Invoice Workspace Cleanup
 
-- Customers page daily flow is compact: customer finder and Monthly Billing Queue stay visible for normal operation; the fake payment summary strip is removed.
-- The Monthly Billing Queue groups real closeout-ready saved bookings by saved billing account/month and no longer mixes mock/local draft rows into the visible billing queue.
+- Customers page daily flow is compact: the customer billing overview opens one selected-customer workspace, and the fake payment summary strip is removed.
+- The removed global Monthly Billing Queue stays retired; real closeout-ready saved bookings are grouped by saved billing account/month inside the selected customer workspace.
+- The selected-customer `Prepare monthly invoice` action requires an exact billing account/month group and loads it into the existing collapsed advanced invoice workbench.
 - The invoice workbench no longer exposes the mock statement, outstanding, or follow-up tabs in daily operation.
 - The duplicate folder handoff support drawer, advanced booking mock drawer, and mock logs are removed from the rendered daily customer dashboard.
 - This is UI-only structure cleanup; it does not activate invoice/PDF/payment/provider sending, DB writes, env changes, GPS/live location, billing/payout, calendar sync, parser changes, or shims.
@@ -1254,17 +1260,17 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 - Customers page now has a visible Customer Folder Finder that searches all loaded customer folders and paginates the compact folder rows 10 per page by default.
 - The finder uses a visible `All customers` dropdown for direct folder selection; it shows 10 customer folders at a time and keeps numbered page buttons inside the dropdown for larger 200-plus account lists.
-- The finder keeps the existing guarded `Load Accounts` control visible as a compact one-line button, with the folder count shown as a small `1-10 of N folders` chip; that same button now refreshes the guarded saved-booking bridge for the Monthly Billing Queue without adding a new route/API.
+- The finder keeps the existing guarded `Load Accounts` control visible as a compact one-line button, with the folder count shown as a small `1-10 of N folders` chip; that same button refreshes the guarded saved-booking bridge for selected-customer monthly invoice preparation without adding a new route/API.
 - Customer rows no longer show a meaningless `Pending` folder placeholder; `Open folder` moves the user into that exact customer's folder page.
 - Customer finder rows no longer expose portal invite/revoke controls; customer app link copying stays in the existing Dispatch Customer Copy `Copy + App Link` lane.
 - The inline saved-job panel groups jobs by booking month before the exact job `View/Edit`, safe `Delete job`, and `Open in Dispatch` controls.
-- The Monthly Billing Queue sits before the invoice workspace so completed closeout-ready jobs are visible before invoice work starts.
-- Guarded saved-booking reads now check the existing completed closeout status for those references and bridge only closeout-ready saved bookings into the Monthly Billing Queue with `Draft amount not set`.
-- Customer Finder job reads and closeout-ready saved-booking rows keep the real saved customer/account id as the invoice `customerId`; the old mock folder match fallback is removed from this billing queue.
-- Monthly Billing Queue groups only by the saved billing account ID plus passenger/traveller account scope plus billing month; it does not fall back to company, booker, passenger, display name, or booking reference.
+- The selected-customer workspace shows completed closeout-ready jobs before the collapsed invoice workbench.
+- Guarded saved-booking reads check the existing completed closeout status and bridge only closeout-ready saved bookings into selected-customer monthly preparation with `Draft amount not set`.
+- Customer Finder job reads and closeout-ready saved-booking rows keep the real saved customer/account id as the invoice `customerId`; the old mock folder match fallback is removed from monthly invoice preparation.
+- Selected-customer monthly preparation groups only by the saved billing account ID plus passenger/traveller account scope plus billing month; it does not fall back to company, booker, passenger, display name, or booking reference.
 - Closeout-ready jobs without a saved billing account ID or passenger/traveller billing scope are held behind an `account review needed` count instead of being prepared under the wrong customer.
-- The Monthly Billing Queue has one billing account/month group selector plus one primary `Prepare monthly bill` action that fills the existing Create Invoice workbench for admin review.
-- The `Prepare monthly bill` action stays hidden until admin selects an exact billing account/month group, so the normal Customer dashboard does not show a disabled/noisy prepare button when there are no billable jobs.
+- The selected-customer workspace has one primary `Prepare monthly invoice` action that fills the existing Create Invoice workbench for admin review.
+- The `Prepare monthly invoice` action is shown only for an exact selected-customer billing account/month group; otherwise the workspace shows `No billing-ready jobs`.
 - The finder no longer shows noisy selected-dropdown wording; selecting a customer now shows a short `Selected customer` status only.
 - This is a UI handoff into the existing admin invoice workflow; it does not add a second invoice engine, create invoice numbers, generate PDFs, send invoices, activate payment/provider sending, write DB rows, change env, activate GPS/live location, billing/payout automation, calendar sync, parser changes, or shims.
 - Guard coverage lives in `scripts/test-customers-folder-finder-unbilled-queue-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
@@ -1274,6 +1280,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer folder pages expose one safe `Edit` Dispatch handoff for each saved booking row with an exact booking reference.
 - The handoff uses `/?tab=dispatch&booking_reference=...`, performs one exact guarded admin GET read through `/api/admin-bookings?booking_reference=...`, and then calls the existing Dispatch `loadSelectedBooking` editor/review path.
 - It does not rely on the recent bookings list window, so older customer-folder jobs can still open by exact reference.
+- Dispatch-return saved-job reloads require both the selected customer identity and the optional exact booking reference to match. An exact reference can narrow the selected customer's rows but cannot bypass customer scope; if the booking was reassigned, the old folder reports that it was not returned.
 - Customer Folder `View/Edit` now loads the exact booking by reference before showing compact operational edit controls for passenger, pickup time, pickup, drop-off, service, vehicle, driver, driver contact, and plate.
 - `/api/admin-bookings` accepts `/customers` and `/customers/*` as additional same-origin internal admin referers only for this exact customer-folder `GET` read and `PATCH` save path; create `POST` and other admin routes keep their existing referer boundaries.
 - Customer Folder save uses the existing guarded `/api/admin-bookings` PATCH path with the loaded booking as the base payload, so account/contact/status fields are preserved and missing required operational fields are reported instead of guessed.
@@ -1286,13 +1293,13 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Customer Trust Path And Portal Invoice Folder Lock
 
-- Customer `/book` and `/my-bookings` request forms both require contact number, passenger name, pickup date, pickup time, pickup location, and drop-off location before submission.
+- Customer `/book` remains the single request form and requires contact number, passenger name, pickup date, pickup time, pickup location, and drop-off location before submission; `/my-bookings` links to it instead of duplicating the form.
 - The customer portal has a compact `Invoices` section with `Unpaid` and `Paid` folders grouped by month, reading only server-stored customer invoice records through the existing secure customer portal session boundary.
 - Customer portal stored invoice and PDF reads explicitly use same-origin credentials so the secure HttpOnly account session is sent without exposing token plumbing in the page.
 - The portal invoice section shows whether the customer is seeing stored account PDFs or a sign-in-required state, and PDF buttons change through Downloading, Downloaded, or Try again.
 - The portal invoice folders do not import admin mock customer data and do not call admin APIs, Stripe/payment providers, email/SMS/WhatsApp providers, or write APIs.
-- Admin Customers keeps the Unbilled Customers checkpoint as one dropdown plus a compact scrollable table; the duplicate wording block below the dropdown is removed.
-- Admin Customers subtracts already-issued invoice references from the Unbilled Customers checkpoint, including server-stored invoice records and browser-local issued invoice records, so an already-invoiced job does not remain available for duplicate billing.
+- Admin Customers uses the selected-customer monthly preparation checkpoint with one exact customer/account/month group before loading the existing invoice workbench.
+- Admin Customers subtracts already-issued invoice references from selected-customer monthly preparation, including server-stored invoice records and browser-local issued invoice records, so an already-invoiced job does not remain available for duplicate billing.
 - Customer saved-booking reads remain booking-only and strip invoice/payment/PDF/finance/internal fields; invoice rows now use their own customer-scoped source and PDF download route filtered by the portal customer account.
 - Hourly billing remains locked to the 15-minute grace rule: 16 minutes or more starts the next chargeable hour.
 - This trust-path pass does not activate Stripe/payment links, bank debit, payouts, provider job sending, GPS/live location, or automatic payment reconciliation.
@@ -1319,13 +1326,10 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Customer Hourly Invoice Auto Calculation Lock
 
-- Admin Customers can create a mock/local hourly booking row with actual start time, actual end time, and a default `$65/hr` rate.
-- Hourly invoice amounts use the locked 15-minute grace rule: 16 minutes or more starts the next chargeable hour.
-- Preparing an hourly unbilled row carries the calculated amount and calculation breakdown into the Send Invoice Workbench.
-- The generated invoice/PDF line item includes the hourly start/end, actual minutes, billable minutes, and hourly rate.
-- Issued invoices show compact PDF, gated Email, and one Paid/Unpaid status toggle in the issued invoice table.
-- The added `Hourly Test Customer` is mock/local test data only and does not create real customer, payment, provider, bank, or Supabase records.
-- This pass does not create Stripe/payment links, write bank/provider/payout records, change env, activate GPS/live location, or activate automatic payment reconciliation.
+- The removed mock/local hourly unbilled-row auto-calculation UI is not part of the active selected-customer monthly invoice workflow.
+- Selected-customer monthly preparation copies only an existing saved reviewed customer amount; when no approved amount exists, the row remains `Draft amount not set` and admin must enter and review it before Preview, Draft, Issue, or Email.
+- The active `prepareMonthlyBillingGroupForInvoice` path must not call Driver JC timing reads, the default `$65/hr` calculator, or customer-page automatic hourly amount state.
+- DSP whole-hour counting and the established monthly billable-item review remain separate and unchanged; this lock must not recreate automatic CRM vehicle-rate DSP amount calculation.
 - Guard coverage lives in `scripts/test-customer-hourly-invoice-auto-calculation-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Customer Invoice Driver JC Timing And Override Guard
@@ -1370,6 +1374,28 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The focused guard rejects direct raw `pickup_at` rendering in both the customer folder invoice-candidate panel and the main Customers saved-job detail.
 - This is display-only. It does not change saved pickup timestamps, booking/calendar data, CRM/parser behavior, invoice preparation or generation, billing, payments, payouts, provider sends, environment, or Supabase.
 - Focused lock: `scripts/test-customer-folder-operator-row-layout-guard.mjs`.
+
+### Companies Identity Contact Guard Alignment
+
+- The typed read-only Companies identity selector already approved in `1a47e685` includes safe company profile/contact fields alongside `id`, `company_name`, and `domain`.
+- The no-new-shim and company/traveler identity-read guards now protect that current selector instead of requiring the obsolete three-column form. They continue rejecting legacy shim use, write verbs, rates, pricing, payouts, payments, PDFs, finance, and internal admin notes.
+- The existing CRM runtime contract, activation-readiness, and env/table-policy guards also protect the same approved company profile/contact fields and accept multiline selector formatting. `billing_address` and `billing_email` are company contact fields; automatic billing amounts/status, invoices, payments, rates, pricing, and payouts remain forbidden.
+- The connected disabled-action and audit-payload setup guards apply the same distinction while preserving their blocked/no-op, no-live, and value-minimization contracts; `billing_account` remains rejected.
+- No Companies helper, route, runtime response, CRM write path, database row, schema, environment, Supabase configuration, provider send, invoice, payment, or payout behavior changed in this guard-only alignment.
+- Focused locks: `scripts/test-shim-cleanup-no-new-shim-guard.mjs`, `scripts/test-company-traveler-identity-read-lock.mjs`, and `scripts/test-admin-companies-crm-identity-api-contract.mjs`.
+
+### Customer Request Decision Audit Alignment
+
+- The Stage 4A-410 audit now checks the current visible `data-new-customer-booking-request-decision-button` marker established by `e88711f0` instead of the removed hidden optional-tools marker.
+- The established Needs Review, Approve Internally, and Decline Internally controls and their existing decision handler remain unchanged; no duplicate request panel, decision control, helper, route, or write path was added.
+- Focused locks: `scripts/test-business-workflow-resume-stage4a410.mjs` and `scripts/test-customer-request-decision-identity-preservation-guard.mjs`.
+
+### Fake Ritz Runtime Lane Retirement
+
+- The browser-runtime `FAKE-RITZ` fallback, localStorage Dispatch edits, fabricated booking records, fake Save/Update branches, fake invoice handoff/preview, and special URL-triggered stored-invoice creation path are removed from the established customer-folder and Dispatch surfaces.
+- Empty customer-folder reads now stay empty, and failed reads show the existing safe error state instead of substituting fake jobs. Real saved-booking reads, exact Dispatch handoffs, guarded Save/Update paths, and reviewed Create Invoice workflow remain unchanged.
+- No Supabase row was read, created, updated, or deleted for this removal. No invoice, payment, payout, provider send, environment/configuration change, migration, deployment, CRM/parser change, messaging change, or GPS/live-location action occurred.
+- Focused lock: `scripts/test-customer-folder-dispatch-update-cal-guard.mjs`, which rejects reintroduction of the retired fake markers across all four former runtime consumers while preserving the real read/handoff/update boundaries.
 
 ### Live William Walkthrough CRM And Driver Job Proof
 
@@ -2390,6 +2416,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Load Bookings typed-read detail mode is isolated before any future endpoint migration.
 - This is a docs/test-only guard; it does not approve endpoint migration, env changes, deployment, live reads, or DB writes.
 - Typed detail responses may exist only on `GET /api/admin-load-bookings-typed-read` when an `id` or `booking_id` query param is supplied by an approved internal caller.
+- The shared saved-booking detail reader accepts either one internal ID (`id` or `booking_id`) or one exact `booking_reference`, never both identity forms together. Mixed ID/reference requests fail with HTTP 400 before client creation or a database read, preventing a supplied reference from overriding a different typed-detail ID.
 - The app typed-read Load Bookings bridge must request only typed list mode with `limit=25`; it must not send `id` or `booking_id` to the typed-read endpoint.
 - The app typed-read response type and bridge must consume only `bookings` list payloads; they must not consume a singular `booking` detail payload or branch on typed `mode=detail`.
 - Typed detail data must not feed `loadSelectedBooking`, `bookingRecordToForm`, Save Booking + CRM, driver dispatch payout copy, driver assignment payout controls, billing readiness, or finance/payout/internal paths.
@@ -2622,11 +2649,11 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Public API Client Caller Boundary Guard Lock
 - Public customer/driver browser caller boundaries are guarded across `/book`, `/my-bookings`, and `/driver-job/[token]` client surfaces plus their customer-safe adapters.
-- This guard approves only the existing customer-safe adapter reads plus the `/my-bookings` trip-updates adapter read; it does not approve endpoint migration, env changes, deployment by CLI, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.
-- `/book` and `/my-bookings` must delegate public API calls to customer-safe adapters instead of owning raw fetch/session plumbing.
+- This guard approves the existing customer-safe adapter reads plus exactly one `/my-bookings` direct POST to the established customer-to-driver fixed quick-reply route; it does not approve any other raw customer fetch, endpoint migration, env change, deployment by CLI, provider send, migration, parser change, Save Booking change, `/api/admin-saved-bookings` change, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector, or new shim.
+- `/book` must delegate public API calls to customer-safe adapters; `/my-bookings` reads remain adapter-owned and its sole direct fetch is the exact fixed-template customer quick-reply POST without raw session plumbing.
 - Public Company Profile reads and customer portal invoice/PDF reads now live in dedicated customer-safe adapters, so `/book` and `/my-bookings` pages do not own raw fetch calls.
 - Customer client adapters must use `cache: "no-store"`, `credentials: "same-origin"`, and purpose headers while never manually attaching Cookie, Authorization, customer session-token, admin purpose, or server env-token plumbing.
-- `/driver-job/[token]` must keep driver API calls no-store and limited to safe job GET, token-scoped driver-details PATCH, notification GET, issue-alert POST with `issue_type`, admin-only OTS photo proof POST, and status PATCH with `status` only.
+- `/driver-job/[token]` must keep driver API calls limited to safe job GET, token-scoped driver-details PATCH, notification GET, issue-alert POST with `issue_type`, fixed-template customer quick-reply POST with `template_key` only, admin-only OTS photo proof POST, and status PATCH with `status` only.
 - Driver client code must not expose customer price, billing, invoice/payment, payout comparisons, PayNow payout details, internal finance/admin notes, parser/debug internals, token secrets, or mock QA/dev archive fields.
 - Public client caller contracts must continue coordinating the existing customer booking page API audit, customer booking memory UI contract, customer portal saved-bookings adapter contract, and customer portal trip-updates adapter contract in the preactivation suite.
 - No Save Booking + CRM change.
@@ -2668,6 +2695,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - `/my-bookings` may keep only the existing internal New Booking Request link to `/book`.
 - `/driver-job/[token]` and the driver job demo page must not add public outbound links, deep links, app-store/native-app links, admin links, or session-issue links.
 - Public client pages must not call `window.open`, imperative navigation helpers, `mailto:`, `tel:`, SMS/WhatsApp deep links, external HTTP URLs, `/api/admin*`, `/api/customer-portal-sessions`, or `/api/admin-saved-bookings`.
+- `/my-bookings` may read `window.location.search` only through the bounded owned-booking/tracking deep-link parser; this read-only query inspection is not navigation and must not permit location assignment, redirect, external URL, token, or unowned booking access.
 - Public navigation contracts must continue coordinating the public route source privacy guard, public API client caller guard, and customer booking page API audit in the preactivation suite.
 - No Save Booking + CRM change.
 - No `/api/admin-saved-bookings` change.
@@ -2709,6 +2737,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer request field data attributes and static control names must stay on the approved form-field allowlist and must not introduce pricing, payout, PayNow, billing, invoice, payment/PDF, provider/send, auth, location-photo, calendar, parser/debug, token/secret, internal/admin finance/note, mock archive, or rate fields.
 - `/book` continues to submit through `submitCustomerBookingRequest` and the customer-safe adapter, not raw fetch/session/admin plumbing.
 - `/my-bookings` new-request link must not submit to customer booking request persistence.
+- The separately guarded fixed-template customer-to-driver quick-reply POST does not create a duplicate booking-request form, submit booking-request fields, or call customer booking-request persistence.
 - Customer request copy must remain request-only and must not create a price, payment, invoice, PDF, or billing file from these forms.
 - The customer request adapter may submit only the approved API payload fields and must not forward `specialRequest` or finance/internal/free-note fields.
 - This guard coordinates the customer booking page API audit, public route source privacy guard, public API request input guard, and customer booking request adapter contract in the preactivation suite.
@@ -2908,13 +2937,15 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Public Customer Portal Saved-Booking Surface Guard Lock
 - Public customer portal saved-booking display/action surfaces are guarded across `/my-bookings`, `lib/customer-portal-saved-bookings-adapter.ts`, `lib/customer-portal-booking-change-request-adapter.ts`, and `lib/customer-saved-bookings-read.ts`.
-- This guard allows only the approved customer booking change-request review write; it does not approve env changes, deployment by CLI, live provider sends, migrations, direct customer booking mutation, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/GPS activation, UI sectors, or new shims.
+- This guard allows only the approved customer booking change-request review write plus the exact fixed-template customer-to-driver quick-reply write; neither may directly mutate a saved booking, and no other write is approved.
 - `/my-bookings` saved-booking rows must render only customer-safe status, passenger, pickup/drop-off, service, vehicle, date/time, flight, and optional request-note display fields; the expanded detail view may additionally render a customer-safe assigned-driver details card and one approved Driver Tracking panel that combines gated in-app map viewing with compact Trip Updates for safe customer-app driver progress only.
-- `/my-bookings` saved-booking actions must stay limited to disabled PDF, customer-safe edit/cancel review request form, and local detail expansion.
+- `/my-bookings` saved-booking row actions must stay limited to disabled PDF, customer-safe edit/cancel review request form, and local detail expansion; the expanded assigned-driver detail may additionally offer the separately guarded fixed-template `Message Driver` action.
 - The customer PDF control must remain disabled/no-op and must not create files, links, downloads, invoices, payment records, or provider sends.
 - Edit and cancel controls may submit only through `lib/customer-portal-booking-change-request-adapter.ts` to `/api/customer-booking-change-requests`; they must not mutate bookings, update calendar, or change `/api/customer-saved-bookings`.
 - The customer portal saved-bookings adapter must keep using the guarded read endpoint with `cache: "no-store"`, `credentials: "same-origin"`, and the customer saved-bookings purpose header without manual Cookie, Authorization, customer session-token, or admin headers.
 - Customer saved-booking API and adapter output must stay limited to the approved saved-booking record fields plus optional `customer_driver_details` with driver name, driver contact, car plate, and car type only; it must exclude customer price, driver payout, PayNow payout, billing, invoice/payment/PDF, internal finance/admin notes, parser/debug, secrets/tokens, provider/send, notification payloads, raw live location/photo/proof, and mock QA/dev archive fields.
+- Customer tracking rendering must use `safeDriverTracking`: POB, trip-in-progress, or completed updates force tracking to blocked, clear the map URL and accuracy label, and prevent a previously available map from remaining visible.
+- Verified PA saved-booking reads apply exact `company_id + booker_id` filters together, reject partial identity pairs, and use the legacy exact `customer_id` filter only when neither verified identity is present.
 - This guard coordinates the customer portal saved-bookings adapter contract, customer saved-bookings API contract, public API response privacy guard, and public API client caller guard in the preactivation suite.
 - No Save Booking + CRM change.
 - No `/api/admin-saved-bookings` change.
@@ -2951,7 +2982,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Public Driver Job Action Surface Guard Lock
 - Public driver job display/action surfaces are guarded across `/driver-job/[token]`, the driver job status workflow, issue choices, and driver job action routes.
 - This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.
-- The driver page action surface must stay limited to safe job GET, token-scoped driver-details PATCH, saved app-update GET, issue-alert POST with `issue_type`, driver-consented live-location calls, admin-only OTS photo proof POST, and status PATCH with the guarded status value.
+- The driver page action surface must stay limited to safe job GET, token-scoped driver-details PATCH, saved app-update GET, issue-alert POST with `issue_type`, fixed-template driver-to-customer quick-reply POST with `template_key`, driver-consented live-location calls, admin-only OTS photo proof POST, and status PATCH with the guarded status value.
 - Driver status controls must stay limited to OTW, OTS, POB, and Job Completed, coordinated with `guardDriverJobStatusTransition`.
 - Driver issue choices must stay limited to operational/safety issue values and must not include finance, billing, payment, PayNow, payout, invoice, PDF, parser/debug, internal admin, or mock QA/archive issue types.
 - Driver app updates and status timing must render only safe fields: `safe_title`, `safe_message`, notification metadata, and status labels/times; visible activity-log and saved-status-history panels stay hidden from the driver page.
@@ -6047,8 +6078,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - OTS title: `Driver arrived`.
 - OTS message: `Your Prestige Limo driver is at the pickup location.`
 - POB status queues exactly one safe `customer_app` notification scoped to the correct customer/account/booking.
-- POB title: `Trip in progress`.
-- POB message: `Your trip is in progress.`
+- POB title: `Passenger onboard`.
+- POB message: `Passenger is onboard. Your trip is in progress.`
 - Job Completed status queues exactly one safe `customer_app` notification scoped to the correct customer/account/booking.
 - Job Completed title: `Completed`.
 - Job Completed message: `Your trip is completed. Thank you for choosing Prestige Limo.`
@@ -6277,6 +6308,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The button is placed beside the existing compact Customer Copy `Email`, `WhatsApp`, and `SMS` controls.
 - Customer Copy status polish keeps the same in-app route, gate, payload, and no-provider-send behavior while replacing long visible technical labels with compact admin labels: `SMS/WA off`, `Email gate off`, and `Needs copy` / `In-App ready`.
 - The longer technical safety details for provider send disabled state, email activation preflight, and Customer In-App readiness remain available in title/status metadata for review and guards; they are no longer forced into the visible admin row.
+- The existing Copy + App Link feedback may retain `no-provider-send="true"` evidence; the compact Customer In-App guard distinguishes that explicit negative safety marker from a forbidden provider-send panel.
 - The button is admin-selected only and sends no automatic fallback, no automatic multi-channel blast, and no provider message.
 - The button requires a loaded saved booking reference and complete customer copy readiness for the current booking.
 - The customer target is the currently selected booking's customer app notification surface; no free-form customer selection is introduced.
@@ -6335,6 +6367,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The disabled-by-default controlled runtime gate scaffold is now implemented in `lib/customer-saved-bookings-read.ts`, `lib/customer-driver-app-notification-persistence.ts`, and `app/api/customer-app-notifications/route.ts`.
 - The scaffold defaults closed unless the relevant runtime gate is explicitly enabled, mode is `one-customer` or `small-allowlist`, and the customer account reference is present in the allowlist.
 - Customer Portal saved-bookings reads require the existing customer saved-bookings session boundary plus `PRESTIGE_CUSTOMER_PORTAL_RUNTIME_ENABLED`, `PRESTIGE_CUSTOMER_PORTAL_RUNTIME_MODE`, and `PRESTIGE_CUSTOMER_PORTAL_RUNTIME_ACCOUNT_ALLOWLIST` before reading booking rows.
+- Controlled customer saved-booking reads apply verified `company_id + booker_id` filters together when both are hydrated from the active access account, fail closed on a partial pair, and retain the exact legacy `customer_id` filter only when neither verified ID exists.
 - Customer In-App notification runtime reads require the existing saved-bookings session boundary plus `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_ENABLED`, `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_MODE`, and `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_ACCOUNT_ALLOWLIST`, then verify the booking belongs to the allowlisted customer account before reading notifications.
 - Customer In-App `customer_app` writes require the existing admin/dispatcher boundary, the approved fixed `Driver details ready` template, a safe booking reference, and the controlled customer in-app account allowlist before inserting a row.
 - `driver_app` notification writes remain separate from customer runtime activation and are not unlocked or blocked by the customer allowlist scaffold.
@@ -6882,6 +6915,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - `DELETE /api/driver-job/[token]/live-location` is present as a future driver stop-sharing scaffold, but returns safe HTTP 503 no-op.
 - `GET /api/admin-active-jobs-map-locations` is present as a future admin active-jobs map read scaffold, but remains admin-boundary protected and returns safe HTTP 503 no-op with an empty active-jobs list.
 - The scaffold does not call browser GPS APIs, does not parse coordinate request bodies, does not create a Supabase client, does not read or write location rows, does not render a map, does not read map/provider keys, and does not call Google Maps, OneMap, Telegram, WhatsApp, Email, SMS, or any provider.
+- The later approved admin stale-pin DELETE may parse only its bounded booking reference and last-updated timestamp after the admin/dispatcher boundary and closed runtime gate checks; the driver route and scaffold helper still parse no request body.
 - The driver scaffold does not print or return the driver token; it exposes only whether a token parameter was present.
 - The admin scaffold reuses the internal admin/dispatcher boundary before returning the closed no-op payload.
 - Gate/env names are names-only and values must not be printed: `PRESTIGE_DRIVER_LIVE_LOCATION_CAPTURE_ENABLED`, `PRESTIGE_ADMIN_ACTIVE_JOBS_MAP_ENABLED`, `PRESTIGE_DRIVER_LIVE_LOCATION_MODE`, `PRESTIGE_DRIVER_LIVE_LOCATION_ALLOWED_JOB_REFERENCES`, `PRESTIGE_DRIVER_LIVE_LOCATION_UPDATE_INTERVAL_SECONDS`, `PRESTIGE_DRIVER_LIVE_LOCATION_STALE_AFTER_SECONDS`, and `PRESTIGE_DRIVER_LIVE_LOCATION_RETENTION_MINUTES`.
@@ -6911,6 +6945,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Future audit-event rows are limited to event type, driver job link reference, booking reference, occurred at, safe event context, source surface, actor role, evidence reference when applicable, and created at.
 - Future driver write isolation must resolve the current driver job token server-side, must not accept arbitrary booking references from the browser, and must allow writes only for the resolved active assigned driver job.
 - Future admin read isolation must require the internal admin/dispatcher boundary, same-origin admin surface, and gate approval before any active-jobs map rows are read.
+- The later approved admin stale-pin DELETE may parse only its bounded booking reference and last-updated timestamp after the admin/dispatcher boundary and closed runtime gate checks; the driver route and scaffold helper still parse no request body.
 - Future direct table access must block anonymous, customer, wrong-driver, wrong-token, and non-admin paths through RLS or equivalent database policy proof.
 - Future retention must prefer one latest-position row per active sharing driver/job plus bounded audit events, not unbounded coordinate history.
 - Future stale cleanup must define stale/offline thresholds, retention minutes, evidence row cleanup, and zero matching temporary rows after evidence.
@@ -6931,6 +6966,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The latest-position table is one-row-per-driver-job-link through `driver_live_location_latest_positions_job_link_key`.
 - The scaffold stores safe driver/job/location operational fields only and excludes raw driver job tokens, token hashes, cookies, JWTs, API keys, service-role keys, customer contact details, customer messages, pricing, payout, PayNow, `driver_payout_rules`, `customer_rates`, billing/payment/PDF/invoice, internal/admin notes, parser/debug fields, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, OTS/photo/storage, and calendar data.
 - A later separately approved route/helper evidence lane must prove server-side driver job token resolution, driver write isolation, admin read isolation, stale cleanup, evidence cleanup, zero temporary rows, rollback disabled state, and no customer live map before GPS capture or active map runtime is enabled.
+- The later approved admin stale-pin DELETE may parse only its bounded booking reference and last-updated timestamp after the admin/dispatcher boundary and closed runtime gate checks; the driver route and scaffold helper still parse no request body.
 - This lane adds `supabase/migrations/202606240001_driver_live_location_table_rls_retention_foundation.sql`, `scripts/test-driver-live-location-table-rls-migration-scaffold-guard.mjs`, updates the table/RLS/retention contract guard for the new migration-scaffold state, and registers the new guard in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Driver Live Location Table/RLS Evidence Runner Guard Lock
@@ -6990,6 +7026,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Future capture must never auto-start from page load, driver status buttons, POB, OTW, OTS, Completed, copy, email, in-app, Telegram, WhatsApp, SMS, customer portal, or admin map actions.
 - Future driver writes must resolve the current driver job token server-side and may write only for the resolved active assigned driver job; browser-submitted booking references, arbitrary job IDs, wrong tokens, and wrong drivers must be blocked.
 - Future admin active-jobs reads must require the internal admin/dispatcher boundary and same-origin admin surface before any location rows are read.
+- The established admin-only stale-pin DELETE may parse its bounded booking reference and last-updated timestamp only after the admin/dispatcher boundary and closed runtime gate checks; this approved cleanup parser must not weaken the ban on pre-gate, coordinate, binary, or form-data parsing.
 - Future admin UI proof must show one admin-only marker/status row per actively sharing driver/job, visible stale/offline state, and no silent hiding or pretending stale drivers are live.
 - Future customer visibility remains blocked; no customer live map link, Customer Copy live-location URL, customer portal tracking, customer in-app tracking, or customer-visible driver movement is approved by this lock.
 - Future browser map rendering remains blocked unless a separately approved browser-safe, domain-restricted map key plan is complete; the existing server-side `PRESTIGE_GOOGLE_MAPS_API_KEY` must never be exposed to client code.
@@ -7190,6 +7227,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Future admin active-jobs UI must be compact and placed in the existing admin dispatch/active-jobs area, not a new giant card, not a new sector, and not inside Customer Copy.
 - Future admin active-jobs UI must support simultaneous active jobs with one admin-only marker/status row per actively sharing driver/job and visible stale/offline state.
 - Future admin active-jobs UI must remain admin/dispatcher-only, same-origin/admin-boundary protected, and must not expose driver coordinates to customers.
+- The established admin-only stale-pin DELETE may parse its bounded booking reference and last-updated timestamp only after the admin/dispatcher boundary and closed runtime gate checks; this cleanup parser is separate from driver consent and must not permit pre-gate, coordinate, binary, or form-data parsing.
 - Future customer live map links remain not approved; customer portal, customer in-app notifications, and customer copy must not display live driver movement unless separately approved.
 - Future browser map rendering must not use the existing server-side `PRESTIGE_GOOGLE_MAPS_API_KEY`; any browser key requires a separately approved domain-restricted names-only env plan.
 - Future driver-visible fields are limited to current job sharing state, browser permission state, last shared time, stale/offline state, and share/stop controls.
@@ -7239,6 +7277,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This is a docs/test-only guard for future customer-visible live-location link/readiness behavior.
 - This lock does not activate customer live map links, GPS capture, live-location runtime, admin active-jobs map runtime, route/helper reads or writes, table writes, migration application, env changes, deploy, provider calls, provider sends, billing/payment/PDF/payout, or production activation.
 - Current state remains closed: Customer Copy may show eligibility/help text only, must not generate or copy a live-location URL, customer visibility is false, and no customer map link is active.
+- Customer app-link copying remains available independently of live-location readiness; helper text must distinguish the app link from tracking and must never imply that a fake or unavailable live-location URL will be copied.
 - Future customer live-location links require separate owner approval after driver GPS capture, table/RLS/retention evidence, admin active-jobs map evidence, browser map key readiness, stale/offline proof, POB auto-stop proof, customer access proof, rollback proof, and no-forbidden-field proof.
 - Future customer live-location links are approved for MNG/Arrival, DEP/Departure, TRF/Transfer, and DSP/Hourly only through the scoped customer Driver Tracking panel after OTW and driver location sharing.
 - Future customer link window remains 30 minutes before pickup by default and must fail closed outside the window or when secure driver live-location setup is incomplete.

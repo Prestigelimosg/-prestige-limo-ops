@@ -17,7 +17,19 @@ const guardScript =
   "scripts/test-company-traveler-crm-runtime-write-activation-readiness-guard.mjs";
 const routePathFragment = "/api/admin-company-traveler-crm-runtime-write-action";
 const gateEnvName = "PRESTIGE_COMPANY_TRAVELER_CRM_IDENTITY_CONTACT_WRITE_ENABLED";
-const allowedCompanyFields = ["company_name", "domain", "id"];
+const allowedCompanyFields = [
+  "accounts_email",
+  "billing_address",
+  "billing_email",
+  "company_name",
+  "domain",
+  "id",
+  "main_phone",
+  "mobile_phone",
+  "operations_email",
+  "primary_contact_name",
+  "website",
+];
 const allowedTravelerFields = [
   "booker_contact",
   "booker_email",
@@ -42,7 +54,8 @@ const forbiddenActivationFields = [
   "paynow",
   "pay_now",
   "payment",
-  "billing",
+  "billing_amount",
+  "billing_status",
   "invoice",
   "pdf",
   "finance",
@@ -243,7 +256,11 @@ assertExcludes(preflightHelper, "process.env", "CRM runtime preflight env value 
 assertIncludes(helperSource, "server-only", "CRM runtime helper server-only boundary");
 assertIncludes(helperSource, gateEnvName, "CRM runtime env gate name");
 assertIncludes(helperSource, "const allowedActorRoles = new Set([\"admin\", \"dispatcher\"]);", "CRM runtime allowed actor roles");
-assertIncludes(helperSource, "const companyWriteSelect = \"id, company_name, domain\";", "CRM runtime company safe select");
+assertIncludes(
+  helperSource,
+  '"id, company_name, domain, billing_address, main_phone, mobile_phone, website, primary_contact_name, billing_email, accounts_email, operations_email";',
+  "CRM runtime company safe select",
+);
 assertIncludes(
   helperSource,
   "const travelerWriteSelect =\n  \"id, company_id, traveler_name, preferred_vehicle, default_address, default_pickup_address, default_dropoff_address, booker_name, booker_contact, booker_email\";",
@@ -280,7 +297,7 @@ assertBefore(executeBlock, "client = getRuntimeWriteClient(options)", "await wri
 assertBefore(executeBlock, "client = getRuntimeWriteClient(options)", "await writeTraveler", "CRM runtime DB client before traveler write");
 
 const companyPayload = sliceBetween(helperSource, "function companyPayload", "function travelerPayload");
-for (const field of ["company_name", "domain"]) {
+for (const field of allowedCompanyFields.filter((field) => field !== "id")) {
   assertIncludes(companyPayload, `company_fields.${field}`, `CRM company payload field ${field}`);
 }
 for (const forbiddenField of forbiddenActivationFields) {
@@ -305,7 +322,7 @@ for (const forbiddenField of forbiddenActivationFields) {
   assertExcludes(travelerPayload, forbiddenField, `CRM traveler payload forbidden field ${forbiddenField}`);
 }
 
-const companySelectLine = helperSource.match(/const companyWriteSelect = "([^"]+)";/)?.[1] || "";
+const companySelectLine = helperSource.match(/const companyWriteSelect\s*=\s*\n?\s*"([^"]+)";/)?.[1] || "";
 const travelerSelectLine = helperSource.match(/const travelerWriteSelect =\n\s+"([^"]+)";/)?.[1] || "";
 for (const field of allowedCompanyFields) {
   assertIncludes(companySelectLine, field, `CRM company select field ${field}`);

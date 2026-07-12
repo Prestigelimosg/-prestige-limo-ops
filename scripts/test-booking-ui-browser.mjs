@@ -6477,12 +6477,16 @@ async function runChromeTest() {
                   location: parsedBody?.pickup_address || "",
                   starts_at_local: "2026-05-28T09:45:00",
                   timezone: "Asia/Singapore",
-                  title: \`Prestige - \${parsedBody?.booking_type || "Booking"} - \${parsedBody?.traveler_name || bookingReference}\`,
+                  title: parsedBody?.driver_plate_number
+                    ? \`\${parsedBody.driver_plate_number} > \${parsedBody?.traveler_name || bookingReference} - \${parsedBody?.booking_type || "Booking"} - Prestige\`
+                    : \`Prestige - \${parsedBody?.booking_type || "Booking"} - \${parsedBody?.traveler_name || bookingReference}\`,
                 },
                 ics: [
                   "BEGIN:VCALENDAR",
                   "BEGIN:VEVENT",
-                  \`SUMMARY:Prestige - \${parsedBody?.booking_type || "Booking"} - \${parsedBody?.traveler_name || bookingReference}\`,
+                  parsedBody?.driver_plate_number
+                    ? \`SUMMARY:\${parsedBody.driver_plate_number} > \${parsedBody?.traveler_name || bookingReference} - \${parsedBody?.booking_type || "Booking"} - Prestige\`
+                    : \`SUMMARY:Prestige - \${parsedBody?.booking_type || "Booking"} - \${parsedBody?.traveler_name || bookingReference}\`,
                   "END:VEVENT",
                   "END:VCALENDAR",
                 ].join("\\r\\n"),
@@ -18738,12 +18742,16 @@ async function runChromeTest() {
               location: parsedBody?.pickup_address || "",
               starts_at_local: "2026-05-27T15:30:00",
               timezone: "Asia/Singapore",
-              title: \`Prestige - \${parsedBody?.booking_type || "Booking"} - \${parsedBody?.traveler_name || "Traveler"}\`,
+              title: parsedBody?.driver_plate_number
+                ? \`\${parsedBody.driver_plate_number} > \${parsedBody?.traveler_name || "Traveler"} - \${parsedBody?.booking_type || "Booking"} - Prestige\`
+                : \`Prestige - \${parsedBody?.booking_type || "Booking"} - \${parsedBody?.traveler_name || "Traveler"}\`,
             },
             ics: [
               "BEGIN:VCALENDAR",
               "BEGIN:VEVENT",
-              \`SUMMARY:Prestige - \${parsedBody?.booking_type || "Booking"} - \${parsedBody?.traveler_name || "Traveler"}\`,
+              parsedBody?.driver_plate_number
+                ? \`SUMMARY:\${parsedBody.driver_plate_number} > \${parsedBody?.traveler_name || "Traveler"} - \${parsedBody?.booking_type || "Booking"} - Prestige\`
+                : \`SUMMARY:Prestige - \${parsedBody?.booking_type || "Booking"} - \${parsedBody?.traveler_name || "Traveler"}\`,
               "END:VEVENT",
               "END:VCALENDAR",
             ].join("\\r\\n"),
@@ -21328,7 +21336,9 @@ async function runChromeTest() {
 
       assert.equal(
         beforeWindowState.helperText,
-        "Customer live location link becomes available 30 minutes before pickup.",
+        bookingType === "MNG"
+          ? "Customer app link can be copied now; arrival live location appears only after manual arrival readiness and driver sharing."
+          : "Customer app link can be copied now; live location appears only when ready around 30 minutes before pickup.",
         `Expected ${bookingType} before-window helper`,
       );
       assert.doesNotMatch(
@@ -21359,7 +21369,7 @@ async function runChromeTest() {
 
       assert.equal(
         insideWindowState.helperText,
-        "Customer live location link requires secure driver live location setup.",
+        "Customer app link can still be copied; live location appears only after secure driver location setup is ready.",
         `Expected ${bookingType} inside-window helper when no secure live link exists`,
       );
       assert.doesNotMatch(

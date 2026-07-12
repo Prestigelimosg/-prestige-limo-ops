@@ -154,11 +154,25 @@ assertExcludes(detailBranch, "booking: result.data.booking", "typed detail raw r
 assertExcludes(detailBranch, writePathPattern, "typed detail write path");
 assert.equal(countMatches(typedReadRoute, "booking: mapped.booking"), 1, "only one typed detail response.");
 
-assertIncludes(savedBookingRead, 'const allowedSingleReadQueryParams = new Set(["booking_id", "id"]);', "typed detail params");
+assertIncludes(
+  savedBookingRead,
+  'const allowedSingleReadQueryParams = new Set(["booking_id", "booking_reference", "id"]);',
+  "shared saved-booking detail params",
+);
 assertIncludes(
   savedBookingRead,
   'readParamsValue(params, "id") || readParamsValue(params, "booking_id")',
   "typed detail id fallback order",
+);
+assertIncludes(
+  savedBookingRead,
+  "if ((id && bookingReference) || (!id && !bookingReference))",
+  "mixed detail identifiers fail closed",
+);
+assertIncludes(
+  savedBookingRead,
+  '? query.eq("booking_reference", parsed.data.booking_reference)',
+  "saved-bookings exact reference filter",
 );
 assertIncludes(savedBookingRead, ".eq(\"id\", parsed.data.id)", "typed detail id filter");
 assertIncludes(savedBookingRead, ".limit(1)", "typed detail limit");

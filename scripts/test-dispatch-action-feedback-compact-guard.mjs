@@ -42,7 +42,7 @@ const actionFeedbackHelperBlock = sectionBetween(
 const actionFeedbackStateBlock = sectionBetween(
   appPage,
   "const currentBookingSaveGuardKey = getBookingSaveGuardKey();",
-  "return (",
+  "const companyProfileLogoPreviewUrl =",
 );
 const dispatchCopyUiBlock = sectionBetween(
   appPage,
@@ -169,13 +169,18 @@ for (const fragment of [
 
 for (const fragment of [
   "link: null,",
-  "patchBookingStatusReference(",
-  'driverJobLinkBookingReference,\n            "cancelled"',
-  "Driver job link revoked. Booking status changed to Cancelled and moved to Completed / History.",
-  "Driver job link revoked, but booking status was not changed:",
+  "Driver job link revoked. Booking status was not changed.",
   "oneTimeUrl: \"\",",
 ]) {
   assertIncludes(driverJobLinkRevokeBlock, fragment, `driver job link revoke clears preview fragment ${fragment}`);
+}
+for (const forbidden of [
+  "patchBookingStatusReference(",
+  '"cancelled"',
+  "Booking status changed to Cancelled",
+  'loadBookings("Bookings synced.", { silent: true })',
+]) {
+  assertExcludes(driverJobLinkRevokeBlock, forbidden, `driver job link revoke preserves booking fragment ${forbidden}`);
 }
 
 for (const fragment of [

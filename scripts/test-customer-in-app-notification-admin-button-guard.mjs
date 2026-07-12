@@ -189,8 +189,14 @@ assertExcludes(
 
 assertExcludes(
   customerCopyUi,
-  /<div[^>]*(?:giant|provider-send|duplicate)|template menu|textarea[^>]*customer-in-app/i,
+  /<div[^>]*(?:giant|(?<!no-)provider-send|duplicate)|template menu|textarea[^>]*customer-in-app/i,
   "customer in-app compact UI must not add a giant card, provider panel, free-text body, or template menu",
+);
+
+assertIncludes(
+  customerCopyUi,
+  'data-admin-customer-driver-details-copy-with-portal-link-feedback-no-provider-send="true"',
+  "Customer Copy portal-link feedback retains explicit no-provider-send evidence",
 );
 
 console.log("Customer In-App Notification admin button guard passed");

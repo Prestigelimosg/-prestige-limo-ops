@@ -68,7 +68,7 @@ for (const currentSurface of [
   "Assigned Driver",
   "Driver Dispatch",
   "Driver Job Link",
-  "data-admin-booking-customer-request-decision",
+  "data-new-customer-booking-request-decision-button",
 ]) {
   assertIncludes(adminPage, currentSurface);
 }

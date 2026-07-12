@@ -493,14 +493,26 @@ assert.equal(
   "Dashboard, recent, and completed operational display cards must not call bookingCardPriceLine(savedBooking).",
 );
 
+for (const removedDashboardSummary of [
+  "function renderDashboardBookingSummaries",
+  "todayBookingDisplayItems",
+  "upcomingBookingDisplayItems",
+  "data-dashboard-command-centre-bookings",
+]) {
+  assertExcludes(
+    appPage,
+    removedDashboardSummary,
+    `Removed duplicate Dashboard booking summary ${removedDashboardSummary}`,
+  );
+}
+assertIncludes(appPage, "{activeJobsMonitorPanel}", "Dashboard existing active jobs monitor");
+assertIncludes(
+  appPage,
+  'data-dashboard-day-of-trip-operations-monitor="true"',
+  "Dashboard day-of-trip monitor boundary",
+);
+
 for (const [label, start, end, expectedDisplayItemMap, requiresVehiclePax] of [
-  [
-    "dashboard command-centre booking summaries",
-    "function renderDashboardBookingSummaries",
-    "const pricingPanel",
-    "sectionItems.slice(0, 8).map(({ bookingRecord: savedBooking, operationalCard })",
-    false,
-  ],
   [
     "recent operational cards",
     "const recentBookingsPanel",

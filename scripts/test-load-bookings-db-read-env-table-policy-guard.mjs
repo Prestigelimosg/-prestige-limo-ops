@@ -59,6 +59,7 @@ const allowedSelectedColumns = new Set([
   "contact_email",
   "contact_phone",
   "created_at",
+  "customer_id",
   "customer_display_name",
   "customer_facing_status",
   "customer_price_amount",
@@ -283,7 +284,11 @@ assertExcludes(routeSource, legacyShimPattern, "typed route legacy shim path");
 assertExcludes(routeSource, "console.", "typed route env/log output");
 
 assertIncludes(savedBookingRead, 'new Set(["admin", "dispatcher", "system"])', "read helper actor roles");
-assertIncludes(savedBookingRead, 'new Set(["booking_id", "id"])', "detail read params");
+assertIncludes(
+  savedBookingRead,
+  'new Set(["booking_id", "booking_reference", "id"])',
+  "detail read params",
+);
 assertIncludes(savedBookingRead, 'new Set(["limit"])', "list read params");
 assertIncludes(savedBookingRead, "const defaultListLimit = 25;", "default list limit");
 assertIncludes(savedBookingRead, "const maxListLimit = 100;", "max list limit");
@@ -333,6 +338,11 @@ assertExcludes(savedBookingRead, /\.from\((?!["']bookings["'])/i, "typed read no
 assertIncludes(savedBookingRead, "loadAdminSavedBookingsWithSchemaFallback", "typed read schema fallback helper");
 assertIncludes(savedBookingRead, "isColumnMissingFailure", "typed read fallback scope");
 assertIncludes(savedBookingRead, ".select(selectedColumns)", "typed read explicit fallback select");
+assertIncludes(
+  savedBookingRead,
+  '.eq("booking_reference", parsed.data.booking_reference)',
+  "typed detail booking reference filter",
+);
 assertIncludes(savedBookingRead, ".eq(\"id\", parsed.data.id)", "typed detail id filter");
 assertIncludes(savedBookingRead, ".order(\"created_at\", { ascending: false })", "typed list order");
 assertIncludes(savedBookingRead, ".limit(1)", "typed detail limit");

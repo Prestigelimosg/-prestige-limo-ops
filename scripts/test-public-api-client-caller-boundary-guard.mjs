@@ -131,10 +131,10 @@ const ledgerSection = sectionBetween(ledger, "### Public API Client Caller Bound
 
 for (const phrase of [
   "Public customer/driver browser caller boundaries are guarded across `/book`, `/my-bookings`, and `/driver-job/[token]` client surfaces plus their customer-safe adapters.",
-  "This guard approves only the existing customer-safe adapter reads plus the `/my-bookings` trip-updates adapter read; it does not approve endpoint migration, env changes, deployment by CLI, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.",
-  "`/book` and `/my-bookings` must delegate public API calls to customer-safe adapters instead of owning raw fetch/session plumbing.",
+  "This guard approves the existing customer-safe adapter reads plus exactly one `/my-bookings` direct POST to the established customer-to-driver fixed quick-reply route; it does not approve any other raw customer fetch, endpoint migration, env change, deployment by CLI, provider send, migration, parser change, Save Booking change, `/api/admin-saved-bookings` change, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector, or new shim.",
+  "`/book` must delegate public API calls to customer-safe adapters; `/my-bookings` reads remain adapter-owned and its sole direct fetch is the exact fixed-template customer quick-reply POST without raw session plumbing.",
   "Customer client adapters must use `cache: \"no-store\"`, `credentials: \"same-origin\"`, and purpose headers while never manually attaching Cookie, Authorization, customer session-token, admin purpose, or server env-token plumbing.",
-  "`/driver-job/[token]` must keep driver API calls no-store and limited to safe job GET, token-scoped driver-details PATCH, notification GET, issue-alert POST with `issue_type`, admin-only OTS photo proof POST, and status PATCH with `status` only.",
+  "`/driver-job/[token]` must keep driver API calls limited to safe job GET, token-scoped driver-details PATCH, notification GET, issue-alert POST with `issue_type`, fixed-template customer quick-reply POST with `template_key` only, admin-only OTS photo proof POST, and status PATCH with `status` only.",
   "Driver client code must not expose customer price, billing, invoice/payment, payout comparisons, PayNow payout details, internal finance/admin notes, parser/debug internals, token secrets, or mock QA/dev archive fields.",
   "Public client caller contracts must continue coordinating the existing customer booking page API audit, customer booking memory UI contract, customer portal saved-bookings adapter contract, and customer portal trip-updates adapter contract in the preactivation suite.",
   "No Save Booking + CRM change.",
@@ -170,7 +170,25 @@ for (const fragment of [
 }
 
 const portalPage = files["app/my-bookings/page.tsx"];
-assertExcludes(portalPage, /\bfetch\s*\(/, "/my-bookings raw fetch");
+assert.equal(countOccurrences(portalPage, "fetch("), 1, "/my-bookings exact direct fetch count");
+const customerQuickReplyCaller = sectionBetween(
+  portalPage,
+  "async function sendCustomerDriverQuickReply",
+  "const activeFilter:",
+);
+for (const fragment of [
+  'fetch("/api/customer-driver-quick-replies"',
+  "body: JSON.stringify({ booking_reference: bookingReference, template_key: templateKey })",
+  'credentials: "same-origin"',
+  '"Content-Type": "application/json"',
+  '"x-prestige-customer-purpose": "customer-driver-quick-reply"',
+  'method: "POST"',
+  'result?.direction !== "customer_to_driver"',
+]) {
+  assertIncludes(customerQuickReplyCaller, fragment, `/my-bookings quick-reply caller ${fragment}`);
+}
+assertExcludes(customerQuickReplyCaller, /Authorization|Cookie|session[_-]?token|x-prestige-admin-purpose/i, "/my-bookings quick-reply raw auth plumbing");
+assertExcludes(customerQuickReplyCaller, /customer_price|driver_payout|invoice|payment|paynow|internal|parser|debug/i, "/my-bookings quick-reply forbidden payload fields");
 for (const fragment of [
   "loadCustomerPortalSavedBookings",
   "loadCustomerPortalDriverTracking",
@@ -278,12 +296,13 @@ for (const [label, source] of [
 }
 
 const driverPage = files[driverPagePath];
-assert.equal(countOccurrences(driverPage, "fetch("), 9, "driver page fetch call count");
+assert.equal(countOccurrences(driverPage, "fetch("), 10, "driver page fetch call count");
 assert.equal(countOccurrences(driverPage, 'cache: "no-store"'), 8, "driver page no-store fetch count");
 for (const fragment of [
   "fetch(`/api/driver-job/${encodeURIComponent(token)}`",
   "`/api/driver-job/${encodeURIComponent(token)}/notifications?limit=5&page=1`",
   "fetch(`/api/driver-job/${encodeURIComponent(token)}/issue-alert`",
+  "`/api/driver-job/${encodeURIComponent(token)}/quick-replies`",
   "fetch(driverLiveLocationRoute()",
   "fetch(driverOtsPhotoProofRoute()",
   "fetch(`/api/driver-job/${encodeURIComponent(token)}/status`",
@@ -292,6 +311,8 @@ for (const fragment of [
   "driver_plate_number: nextDetails.plate",
   "driver_vehicle_model: nextDetails.vehicleModel",
   "body: JSON.stringify({ issue_type: issueChoice.value })",
+  "body: JSON.stringify({ template_key: templateKey })",
+  'result?.direction !== "driver_to_customer"',
   "result.proof?.customerVisible !== false",
   "result.proof?.external_send !== false",
   "const formData = new FormData();",
@@ -309,7 +330,7 @@ for (const fragment of [
 ]) {
   assertIncludes(driverPage, fragment, `driver page caller ${fragment}`);
 }
-assert.equal(countOccurrences(driverPage, 'method: "POST"'), 3, "driver page POST count");
+assert.equal(countOccurrences(driverPage, 'method: "POST"'), 4, "driver page POST count");
 assert.equal(countOccurrences(driverPage, 'method: "DELETE"'), 1, "driver page DELETE count");
 assert.equal(countOccurrences(driverPage, 'method: "PATCH"'), 2, "driver page PATCH count");
 assertIncludes(driverPage, "const driverPaymentDetailLinePattern =", "driver page pasted payment-detail filter");

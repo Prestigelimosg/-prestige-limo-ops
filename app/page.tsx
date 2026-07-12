@@ -111,7 +111,6 @@ const dispatchHandoffAlternateReferenceQueryParam = "dispatch_booking_reference"
 const dispatchHandoffCustomerReturnQueryParam = "customer_return_url";
 const completedHandoffReferenceQueryParam = "completed_booking_reference";
 const completedHandoffActionQueryParam = "completed_action";
-const fakeRitzDispatchEditStorageKey = "prestige-fake-ritz-dispatch-edits";
 const saveCrmBillingIdentityReviewReadLimit = 200;
 const adminHandledCustomerBookingRequestsStorageKey =
   "prestige-admin-handled-customer-booking-requests";
@@ -587,158 +586,6 @@ type AdminSavedBookingReadResponse = {
   ok?: boolean;
   version?: string;
 };
-
-function fakeRitzDispatchService(reference: string) {
-  if (reference === "FAKE-RITZ-0001") {
-    return "MNG / Arrival";
-  }
-
-  if (reference === "FAKE-RITZ-0002") {
-    return "TRF / Transfer";
-  }
-
-  return "DSP / Hourly";
-}
-
-function fakeRitzDispatchPickupAt(reference: string) {
-  if (reference === "FAKE-RITZ-0001") {
-    return "2026-07-10T09:00:00+08:00";
-  }
-
-  if (reference === "FAKE-RITZ-0002") {
-    return "2026-07-11T14:30:00+08:00";
-  }
-
-  return "2026-07-12T23:15:00+08:00";
-}
-
-function readFakeRitzDispatchEdit(reference: string) {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(fakeRitzDispatchEditStorageKey) || "{}");
-    const edit =
-      parsed && typeof parsed === "object" && !Array.isArray(parsed)
-        ? (parsed as Record<string, { pickup_at?: string; service_type?: string }>)[reference]
-        : null;
-
-    return edit && typeof edit === "object" ? edit : null;
-  } catch {
-    return null;
-  }
-}
-
-function fakeRitzDispatchBooking(reference: string): BookingRecord {
-  const edit = readFakeRitzDispatchEdit(reference);
-  const pickupAt = clean(edit?.pickup_at) || fakeRitzDispatchPickupAt(reference);
-  const serviceType = clean(edit?.service_type) || fakeRitzDispatchService(reference);
-
-  return {
-    admin_internal_status: "fake_dispatch_edit_test",
-    booking_reference: reference,
-    booking_type: serviceType,
-    company_id: null,
-    contact_display_name: "Ritz Carlton",
-    contact_email: "billing-test@ritzcarlton.example",
-    contact_phone: "90000000",
-    customer_display_name: "Ritz Carlton",
-    customer_facing_status: "ready_for_billing_test",
-    customer_id: "Ritz Carlton",
-    driver_name: null,
-    dropoff_address: "Marina Bay Cruise Centre",
-    dropoff_location: "Marina Bay Cruise Centre",
-    flight_no: null,
-    id: reference,
-    job_card: `${serviceType} - ${reference} - Ritz Carlton fake billing UI test`,
-    passenger_name: "Ritz Carlton guest",
-    pax: 1,
-    pax_count: 1,
-    pickup_address: "Ritz Carlton",
-    pickup_at: pickupAt,
-    pickup_datetime: pickupAt,
-    pickup_location: "Ritz Carlton",
-    pickup_time: pickupAt,
-    route: "Ritz Carlton > Marina Bay Cruise Centre",
-    route_summary: "Ritz Carlton > Marina Bay Cruise Centre",
-    route_type: serviceType,
-    service_type: serviceType,
-    source_channel: "fake-ritz-customer-url-edit",
-    source_surface: "fake-ritz-dispatch-handoff",
-    status: "completed",
-    traveler_id: null,
-    vehicle: "E / AVF",
-    vehicle_type: "E / AVF",
-    vehicle_type_or_category: "E / AVF",
-    booker_id: null,
-  };
-}
-
-function fakeRitzDisplayPickupAt(date: string, time: string) {
-  const cleanDate = clean(date);
-  const digits = clean(time).replace(/\D/g, "");
-  const hour = digits.length >= 3 ? digits.slice(0, -2).padStart(2, "0") : "";
-  const minute = digits.length >= 2 ? digits.slice(-2).padStart(2, "0") : "";
-
-  return cleanDate && hour && minute ? `${cleanDate} ${hour}:${minute}` : cleanDate || clean(time);
-}
-
-function fakeRitzDisplayServiceType(value: string) {
-  const service = normalizeBookingType(value);
-
-  if (service === "MNG") {
-    return "MNG / Arrival";
-  }
-
-  if (service === "DEP") {
-    return "DEP / Departure";
-  }
-
-  if (service === "TRF") {
-    return "TRF / Transfer";
-  }
-
-  if (service === "DSP") {
-    return "DSP / Hourly";
-  }
-
-  return clean(value) || "MNG / Arrival";
-}
-
-function saveFakeRitzDispatchEdit(reference: string, editedBooking: BookingForm) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  const safeReference = cleanReferenceText(reference);
-
-  if (!/^FAKE-RITZ-\d{4}$/.test(safeReference)) {
-    return;
-  }
-
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(fakeRitzDispatchEditStorageKey) || "{}");
-    const current =
-      parsed && typeof parsed === "object" && !Array.isArray(parsed)
-        ? (parsed as Record<string, Record<string, string>>)
-        : {};
-
-    current[safeReference] = {
-      admin_status: "Fake test unbilled",
-      booking_month: clean(editedBooking.date).slice(0, 7) || "2026-07",
-      booking_reference: safeReference,
-      customer_price_label: "$420.00",
-      customer_status: "Ready for billing test",
-      pickup_at: fakeRitzDisplayPickupAt(editedBooking.date, editedBooking.time),
-      service_type: fakeRitzDisplayServiceType(editedBooking.bookingType),
-    };
-
-    window.localStorage.setItem(fakeRitzDispatchEditStorageKey, JSON.stringify(current));
-  } catch {
-    // Fake Ritz edits are browser-local test data only; real bookings still use the guarded API path.
-  }
-}
 
 function cleanDispatchHandoffCustomerReturnUrl(value: string | null | undefined) {
   const cleanedValue = clean(value);
@@ -19080,21 +18927,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       }, 700);
     };
 
-    if (/^FAKE-RITZ-\d{4}$/.test(activeSavedBookingReference)) {
-      const saveMessage = {
-        tone: "success",
-        text: `Fake Ritz job ${activeSavedBookingReference} edit reviewed in Dispatch. No booking, invoice, payment, send, payout, GPS, provider, or Supabase record was created.${
-          customerReturnUrl ? " Returning to the customer URL..." : ""
-        }`,
-      } satisfies Message;
-
-      setMessage(saveMessage);
-      setBookingSaveMessage(saveMessage);
-      setAdminBookingPersistenceMessage(saveMessage);
-      returnToCustomerFolderAfterSave();
-      return null;
-    }
-
     if (bookingSaveInFlightKeyRef.current) {
       const saveMessage = {
         tone: "info",
@@ -19819,25 +19651,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         window.history.replaceState(null, "", window.location.pathname);
       }
     } catch (error) {
-      if (/^FAKE-RITZ-\d{4}$/.test(safeTargetBookingReference)) {
-        const fakeBooking = fakeRitzDispatchBooking(safeTargetBookingReference);
-
-        setBookings((currentBookings) => {
-          const filteredBookings = currentBookings.filter(
-            (currentBooking) =>
-              bookingRecordPersistedReference(currentBooking) !== safeTargetBookingReference,
-          );
-
-          return [fakeBooking, ...filteredBookings];
-        });
-        loadSelectedBooking(fakeBooking, { focusCustomerCopy: true });
-        setMessage({
-          tone: "success",
-          text: `Fake Ritz job ${safeTargetBookingReference} opened in Dispatch for edit testing. No booking, invoice, payment, send, payout, GPS, provider, or Supabase record was created.`,
-        });
-        return;
-      }
-
       const errorMessage = error instanceof Error ? error.message : "Unknown dispatch handoff error.";
 
       setMessage({
@@ -19950,14 +19763,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         window.history.replaceState(null, "", window.location.pathname);
       }
     } catch (error) {
-      if (/^FAKE-RITZ-\d{4}$/.test(safeTargetBookingReference)) {
-        openBookingInCompletedCancelReview(
-          fakeRitzDispatchBooking(safeTargetBookingReference),
-          safeTargetBookingReference,
-        );
-        return;
-      }
-
       const errorMessage = error instanceof Error ? error.message : "Unknown completed cancel handoff error.";
 
       setMessage({
@@ -21492,23 +21297,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         window.location.assign(customerReturnUrl);
       }, 700);
     };
-
-    if (/^FAKE-RITZ-\d{4}$/.test(targetBookingReference)) {
-      saveFakeRitzDispatchEdit(targetBookingReference, booking);
-
-      const updateMessage = {
-        tone: "success",
-        text: `Fake Ritz job ${targetBookingReference} updated for customer URL testing. No booking, invoice, payment, send, payout, GPS, provider, Google Calendar, or Supabase record was changed.${
-          customerReturnUrl ? " Returning to the customer URL..." : ""
-        }`,
-      } satisfies Message;
-
-      setAdminBookingPersistenceMessage(updateMessage);
-      setMessage(updateMessage);
-      setBookingSaveMessage(updateMessage);
-      returnToCustomerFolderAfterUpdate();
-      return;
-    }
 
     const missingPickupMessage = adminDispatchSaveCrmMissingPickupMessage(
       booking,

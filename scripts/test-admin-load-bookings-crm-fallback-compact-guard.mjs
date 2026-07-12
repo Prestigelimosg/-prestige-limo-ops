@@ -63,10 +63,10 @@ for (const phrase of [
   "Loading a saved booking into Dispatch refreshes the typed operational display once immediately and pauses one background sync tick, keeping the existing guarded read set stable while Customer Copy focuses for review.",
   "The Dashboard now uses the active day-of-trip monitor instead of duplicate Today/Upcoming booking summaries; single-booking driver assignment, status, copy, job-card, and completion work stays in Dispatch/Bookings so page purposes do not duplicate.",
   "`Today's Jobs` is shown on Dashboard for multi-driver day-of-trip scanning and is no longer duplicated inside the Dispatch driver-assignment workflow.",
-  "`Today's Jobs` shows assigned operational jobs inside the 1-hour pickup monitor window without a separate expand/collapse toggle.",
+  "`Today's Jobs` shows all assigned active operational jobs, including advance and last-minute work, without a separate expand/collapse toggle.",
   "`Today's Jobs` excludes customer-request rows and unassigned/Driver TBC rows from the live-dispatch queue; unassigned saved jobs inside the 1-hour pickup monitor window stay in the Dashboard `Urgent Booking Requests` panel until admin loads them for driver assignment.",
   "`Today's Jobs` shows a compact saved driver report readout per visible job, using the existing guarded admin `GET /api/admin-driver-job-statuses` path only, with monitor-wide/per-card refresh controls and auto-refresh on by default.",
-  "`Today's Jobs` includes compact live-map controls that reuse the existing admin-only live-location runtime for the jobs inside the monitor window.",
+  "`Today's Jobs` includes compact live-map controls that reuse the existing admin-only live-location runtime for assigned active jobs.",
   "The lower Dispatch saved-record finder and internal advanced checks stay in the source as an archived `Optional Workflow Tools` block, but the block is hidden from normal operation so it cannot distract dispatch with unused saved-record or readiness panels.",
   "Dispatch internal readiness, handoff, follow-up, day-of-trip monitor, recovery, exception, closeout-review, and billing-prep panels remain colocated under the archived optional workflow block and nested `Advanced Checks` disclosure for guard coverage, while the default operator view stays focused on daily trip work.",
   "The `Today's Jobs` driver report readout is read-only and does not create driver status events, notification rows, provider sends, GPS/live-location records, billing/payment/PDF/invoice/payout records, or a duplicate single-booking Dispatch workflow.",
@@ -258,8 +258,13 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  "const customerBookingChangeRequestCount = adminAppNotificationReadState.notifications.filter((notification) =>",
+  "const customerBookingChangeRequestNotifications = adminAppNotificationReadState.notifications.filter((notification) =>",
   "Dashboard action badge customer change request source",
+);
+assertIncludes(
+  appPage,
+  "const customerBookingChangeRequestCount = customerBookingChangeRequestNotifications.length;",
+  "Dashboard action badge customer change request count",
 );
 assertIncludes(
   appPage,
@@ -358,7 +363,7 @@ assertExcludes(appPage, "Jump to request", "New booking notification row old jum
 assertExcludes(appPage, "Review request", "New booking notification row old review label");
 assertIncludes(
   appPage,
-  "openNewBookingRequestNotificationReview(newBookingRequestReference)",
+  'openNewBookingRequestNotificationReview(\n                                newBookingRequestCanOpenExact ? newBookingRequestReference : "",',
   "New booking notification review action opens matching booking when possible",
 );
 assertIncludes(
@@ -689,12 +694,12 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  'aria-label="Urgent Booking Requests"',
+  'aria-label="Urgent and Customer Requests"',
   "Dashboard urgent booking panel label",
 );
 assertIncludes(
   appPage,
-  "Open urgent bookings in Driver Job Link, then create and copy the driver link.",
+  "Open urgent bookings in Driver Job Link, or review customer change/cancel requests.",
   "Dashboard urgent booking workflow copy points to Driver Job Link",
 );
 assertIncludes(

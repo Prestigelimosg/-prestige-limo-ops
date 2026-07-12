@@ -48,8 +48,8 @@ for (const phrase of [
   "Customer `/book` requests now create an internal admin-app inbox item after the booking request is saved.",
   "The admin-app notification payload is safe and template-only: no phone, email, pricing, payout, billing, provider payload, live location, token, parser/debug, or internal note data is included.",
   "Customer Copy and Driver Dispatch keep using the existing active driver job link safe-summary fallback for driver-entered vehicle models, and the fallback read can retry after a driver save instead of getting stuck behind an early stale read.",
-  "Dispatch `Today's Jobs` only lists jobs inside the one-hour-before-pickup monitor window.",
-  "Dashboard Upcoming booking rows show assigned driver name/contact/plate/vehicle details when available.",
+  "Dashboard `Today's Jobs` lists all assigned active jobs, including advance and last-minute work, without changing the existing status, OTS-photo, or live-location APIs.",
+  "Dashboard Today’s Jobs cards show human-readable passenger, assigned driver, route, latest report, report time, and recent report history.",
   "`Today's Jobs` driver report auto-refresh has an explicit 10-second on/off switch, defaults on, and manual Refresh remains available.",
   "The old Customers mock payment review rows stay removed from the daily Customers page.",
   "No app smoke, provider send, external notification delivery, GPS/live location, billing/payment/PDF/invoice/payout, env, DB schema, parser, calendar, or duplicate workflow sector was added.",
@@ -79,7 +79,7 @@ assertIncludes(adminAppNotificationPersistence, 'notification_type: "booking_wor
 assertIncludes(adminAppNotificationPersistence, 'safe_title: "New booking request"', "safe new booking title");
 assertIncludes(
   adminAppNotificationPersistence,
-  'safe_message: "New booking request received. Open Bookings to review."',
+  'safe_message: "New booking request received. Review in Dashboard."',
   "safe new booking message",
 );
 
@@ -113,16 +113,16 @@ for (const fragment of [
   "driverJobLinkVehicleFallbackRefreshLastRequestedRef",
   "requestDriverJobLinkVehicleFallbackRefresh",
   "now - lastRequestedAt < 8_000",
-  "activeJobIsInMonitorWindow",
-  "pickupTimeMs - 60 * 60 * 1000",
-  "No assigned jobs inside the 1-hour pickup monitor window.",
+  "All assigned active jobs, including advance and last-minute work. Driver reports refresh automatically.",
+  "No assigned active jobs to monitor.",
+  'data-admin-multi-driver-active-job-driver-report-history="true"',
   "dashboardDriverJobAutoRefreshEnabled",
   "data-admin-multi-driver-active-jobs-auto-refresh-state",
   "Auto-refresh 10s {dashboardDriverJobAutoRefreshEnabled ? \"On\" : \"Off\"}",
-  "data-dashboard-assigned-driver-details",
-  "Contact ${driverContactText}",
-  "Plate ${driverPlateText}",
-  "Vehicle ${driverVehicleText}",
+  'data-admin-active-job-passenger="true"',
+  'data-admin-active-job-assigned-driver="true"',
+  'data-admin-multi-driver-active-job-driver-report-history="true"',
+  "{activeJobPickup} &gt; {activeJobDropoff}",
 ]) {
   assertIncludes(appPage, fragment, `app page follow-up fragment ${fragment}`);
 }

@@ -25393,9 +25393,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
     return dateKey >= todayKey ? 0 : 1;
   }
-  function activeJobIsInMonitorWindow(bookingRecord: BookingRecord) {
-    return bookingRecordIsInsideActiveJobMonitorWindow(bookingRecord, currentTimeMs);
-  }
   const dayOfTripActiveJobBookings = operationalBookings
     .filter(bookingRecordIsDispatchActiveJobsMonitorEligible)
     .filter((bookingRecord) => {
@@ -25405,7 +25402,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         !bookingRecordHasCompletedDriverReport(bookingRecord)
       );
     })
-    .filter(activeJobIsInMonitorWindow)
     .filter((bookingRecord) =>
       activeJobDashboardSearchTerm
         ? bookingMatchesLocalSearch(bookingRecord, activeJobDashboardSearchTerm)
@@ -25449,9 +25445,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   }
   const dayOfTripActiveJobVisibleBookings = dayOfTripActiveJobBookings;
   const dayOfTripActiveJobGridClass =
-    dayOfTripActiveJobVisibleBookings.length >= 4
-      ? "grid-cols-1 sm:grid-cols-2 xl:grid-cols-4"
-      : dayOfTripActiveJobVisibleBookings.length === 3
+    dayOfTripActiveJobVisibleBookings.length >= 3
         ? "grid-cols-1 sm:grid-cols-2 xl:grid-cols-3"
         : dayOfTripActiveJobVisibleBookings.length === 2
           ? "grid-cols-1 sm:grid-cols-2"
@@ -25895,7 +25889,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         <div className="min-w-0">
           <h3 className="text-base font-semibold text-lime-950">Today&apos;s Jobs</h3>
           <p className="text-xs text-lime-900 sm:text-sm">
-            Assigned jobs appear here 1 hour before pickup. Driver reports auto-refresh every 10s.
+            All assigned active jobs, including advance and last-minute work. Driver reports refresh automatically.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -25945,7 +25939,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             className="w-fit rounded-full bg-lime-100 px-2.5 py-1 text-xs font-semibold uppercase text-lime-900 ring-1 ring-lime-200"
             data-admin-multi-driver-active-jobs-count={String(dayOfTripActiveJobBookings.length)}
           >
-            {dayOfTripActiveJobBookings.length} in window
+            {dayOfTripActiveJobBookings.length} active
           </span>
         </div>
       </div>
@@ -25964,6 +25958,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               clean(activeJobBooking.dropoff_address) ||
               "Drop-off";
             const activeJobPickupTime = formatPickupTimeFromRecord(activeJobBooking);
+            const activeJobPassenger = getBookingName(activeJobBooking) || "Passenger not set";
             const activeJobDriver =
               clean(activeJobBooking.driver_name) ||
               (isSelectedActiveJob ? clean(booking.driverName) : "") ||
@@ -25987,6 +25982,18 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     activeJobDriverStatusLatest.created_at,
                 )
               : "";
+            const activeJobDriverStatusHistory = activeJobDriverStatusReadState?.statuses.length
+              ? activeJobDriverStatusReadState.statuses
+                  .slice(0, 4)
+                  .reverse()
+                  .map(
+                    (status) =>
+                      `${adminDriverJobStatusDisplayLabel(status.status_value)} ${adminDriverJobStatusTimeLabel(
+                        status.occurred_at || status.created_at,
+                      )}`,
+                  )
+                  .join(" → ")
+              : "No driver reports yet";
             const activeJobDriverOtsPhotoProofReadState =
               activeJobDriverOtsPhotoProofReadStateForBooking(
                 activeJobBookingReference,
@@ -26082,7 +26089,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     ) : null}
                   </div>
                 </div>
-                <p className="mt-1 truncate text-slate-800">{activeJobDriver}</p>
+                <div className="mt-2 grid gap-1 text-xs text-slate-800">
+                  <p className="break-words" data-admin-active-job-passenger="true">
+                    <span className="font-semibold">Passenger:</span> {activeJobPassenger}
+                  </p>
+                  <p className="break-words" data-admin-active-job-assigned-driver="true">
+                    <span className="font-semibold">Driver:</span> {activeJobDriver}
+                  </p>
+                </div>
                 <p className="mt-0.5 truncate text-xs text-lime-800">
                   {activeJobPickup} &gt; {activeJobDropoff}
                 </p>
@@ -26108,7 +26122,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 >
                   <div className="flex min-w-0 items-center justify-between gap-2">
                     <p className="min-w-0 truncate font-semibold">
-                      Driver report: {activeJobDriverStatusLabel}
+                      Latest report: {activeJobDriverStatusLabel}
                     </p>
                     <button
                       className="shrink-0 rounded border border-current bg-white/70 px-1.5 py-0.5 text-[10px] font-semibold transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
@@ -26129,10 +26143,18 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     </button>
                   </div>
                   <p
-                    className="mt-0.5 truncate text-[11px]"
+                    className="mt-0.5 break-words text-[11px]"
                     data-admin-multi-driver-active-job-driver-report-time="true"
                   >
-                    {activeJobDriverStatusTime || "Latest driver update will show here."}
+                    {activeJobDriverStatusTime
+                      ? `Reported ${activeJobDriverStatusTime}`
+                      : "Waiting for the driver’s first report."}
+                  </p>
+                  <p
+                    className="mt-1 break-words border-t border-current/20 pt-1 text-[11px]"
+                    data-admin-multi-driver-active-job-driver-report-history="true"
+                  >
+                    <span className="font-semibold">History:</span> {activeJobDriverStatusHistory}
                   </p>
                 </div>
                 <div
@@ -26221,7 +26243,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         </div>
       ) : (
         <p className="mt-3 rounded-md border border-lime-100 bg-white px-3 py-2 text-sm font-semibold text-lime-900">
-          No assigned jobs inside the 1-hour pickup monitor window.
+          No assigned active jobs to monitor.
         </p>
       )}
       <div

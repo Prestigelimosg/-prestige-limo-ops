@@ -12,6 +12,15 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Today’s Jobs Assigned-Work Reporting Center
+
+- Dashboard `Today’s Jobs` is the single human-readable reporting center for all assigned active operational jobs, including advance and last-minute work. It no longer hides assigned jobs until the one-hour-before-pickup window.
+- Each existing job card shows booking reference, pickup date/time, passenger, assigned driver, route, latest OTW/OTS/POB/Job Completed report, report time, recent report history, and optional OTS Photo to Admin. The existing live-map control remains on the same page.
+- The existing guarded driver-status and OTS-photo reads, 10-second auto-refresh toggle, manual refresh, live-location runtime, booking open action, and admin completion action are reused unchanged. No duplicate API, status write, GPS write, job-link lane, message lane, booking write, provider send, or schema was added.
+- Driver Job Link remains the create/copy/revoke access lane. Messaging is not added in this pass.
+- Customer and driver privacy boundaries are unchanged; no pricing, billing, invoice/payment, payout/PayNow, internal notes, parser/debug data, tokens, secrets, or mock/archive data is exposed.
+- Focused locks: `scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs` and `scripts/test-admin-dashboard-live-followup-fixes-guard.mjs`.
+
 ### Human Driver Message and Job-Link Layout
 
 - The established Driver Dispatch copy lane is now labelled `Driver Message` and is collapsed by default. Its existing Edit, Copy, and Driver In-App controls and write paths are unchanged; it remains a short-update/manual-fallback lane rather than a second dispatch requirement.
@@ -846,10 +855,10 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Loading a saved booking into Dispatch refreshes the typed operational display once immediately and pauses one background sync tick, keeping the existing guarded read set stable while Customer Copy focuses for review.
 - The Dashboard now uses the active day-of-trip monitor instead of duplicate Today/Upcoming booking summaries; single-booking driver assignment, status, copy, job-card, and completion work stays in Dispatch/Bookings so page purposes do not duplicate.
 - `Today's Jobs` is shown on Dashboard for multi-driver day-of-trip scanning and is no longer duplicated inside the Dispatch driver-assignment workflow.
-- `Today's Jobs` shows assigned operational jobs inside the 1-hour pickup monitor window without a separate expand/collapse toggle.
+- `Today's Jobs` shows all assigned active operational jobs, including advance and last-minute work, without a separate expand/collapse toggle.
 - `Today's Jobs` excludes customer-request rows and unassigned/Driver TBC rows from the live-dispatch queue; unassigned saved jobs inside the 1-hour pickup monitor window stay in the Dashboard `Urgent Booking Requests` panel until admin loads them for driver assignment.
 - `Today's Jobs` shows a compact saved driver report readout per visible job, using the existing guarded admin `GET /api/admin-driver-job-statuses` path only, with monitor-wide/per-card refresh controls and auto-refresh on by default.
-- `Today's Jobs` includes compact live-map controls that reuse the existing admin-only live-location runtime for the jobs inside the monitor window.
+- `Today's Jobs` includes compact live-map controls that reuse the existing admin-only live-location runtime for assigned active jobs.
 - Admin live-map display collapses duplicate live rows for the same driver identity, preferring current/newest movement, so one driver does not look like two live cars.
 - The legacy Dispatch Day-of-Trip Dispatch Monitor remains hidden from the normal UI so it does not compete with the Dispatch `Today's Jobs` sector.
 - The lower Dispatch saved-record finder and internal advanced checks stay in the source as an archived `Optional Workflow Tools` block, but the block is hidden from normal operation so it cannot distract dispatch with unused saved-record or readiness panels.
@@ -885,8 +894,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Unhandled customer requests are hidden from Current / Upcoming until admin loads them from the Dashboard urgent lane or the Bookings request lane, preventing duplicate cards while preserving the existing post-review booking list.
 - Day-of-trip jobs are shown as `Today's Jobs` on Dashboard, replacing the duplicate Today/Upcoming booking summaries while keeping Bookings as the saved-job finder.
 - `Today's Jobs` driver report auto-refresh is on by default, still uses the guarded admin driver-status read path, and can be switched off by the operator.
-- The `Today's Jobs` live map control opens the existing admin-only live-location runtime for assigned jobs in the monitor window and refreshes shared markers every 10 seconds while the sector is open.
-- The same live map control stays visible at zero assigned jobs, shows the actual active live-map slot count, and stays disabled until at least one assigned active job enters the 1-hour window.
+- The `Today's Jobs` live map control opens the existing admin-only live-location runtime for assigned active jobs and refreshes shared markers every 10 seconds while the sector is open.
+- The same live map control stays visible at zero assigned jobs, shows the actual active live-map slot count, and stays disabled until at least one assigned active job is available.
 - The pickup risk monitor defaults off, can be toggled by admin, highlights only the affected driver/job row and marker for no-pin, stale/offline, near-pickup watch, route ETA risk, and route-distance moving-away states, and does not claim route direction/ETA certainty unless guarded pickup approach evidence is ready.
 - This reuses existing admin live-location runtime, map read paths, and guarded admin map search/route estimate routes for evidence when available; it does not add provider sends, notification sends, customer/driver messages, env changes, DB schema changes, billing/payment/PDF/invoice/payout, calendar sync, parser changes, or shims.
 - Guard coverage lives in `scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
@@ -1101,8 +1110,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer `/book` requests now create an internal admin-app inbox item after the booking request is saved.
 - The admin-app notification payload is safe and template-only: no phone, email, pricing, payout, billing, provider payload, live location, token, parser/debug, or internal note data is included.
 - Customer Copy and Driver Dispatch keep using the existing active driver job link safe-summary fallback for driver-entered vehicle models, and the fallback read can retry after a driver save instead of getting stuck behind an early stale read.
-- Dispatch `Today's Jobs` only lists jobs inside the one-hour-before-pickup monitor window.
-- Dashboard Upcoming booking rows show assigned driver name/contact/plate/vehicle details when available.
+- Dashboard `Today's Jobs` lists all assigned active jobs, including advance and last-minute work, without changing the existing status, OTS-photo, or live-location APIs.
+- Dashboard Today’s Jobs cards show human-readable passenger, assigned driver, route, latest report, report time, and recent report history.
 - `Today's Jobs` driver report auto-refresh has an explicit 10-second on/off switch, defaults on, and manual Refresh remains available.
 - The old Customers mock payment review rows stay removed from the daily Customers page.
 - No app smoke, provider send, external notification delivery, GPS/live location, billing/payment/PDF/invoice/payout, env, DB schema, parser, calendar, or duplicate workflow sector was added.

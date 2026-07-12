@@ -347,7 +347,6 @@ for (const fragment of [
 
 for (const fragment of [
   ".filter(bookingRecordIsDispatchActiveJobsMonitorEligible)",
-  "bookingRecordIsInsideActiveJobMonitorWindow(bookingRecord, currentTimeMs)",
   "normaliseTimeForSort(formatPickupTimeFromRecord(firstBooking))",
   "normaliseTimeForSort(formatPickupTimeFromRecord(secondBooking))",
   "const dayOfTripActiveJobVisibleBookings = dayOfTripActiveJobBookings;",
@@ -361,12 +360,16 @@ for (const fragment of [
 
 for (const fragment of [
   "Today's Jobs",
-  "Assigned jobs appear here 1 hour before pickup. Driver reports auto-refresh every 10s.",
-  "{dayOfTripActiveJobBookings.length} in window",
-  "inside the 1-hour pickup monitor window",
-  "No assigned jobs inside the 1-hour pickup monitor window.",
+  "All assigned active jobs, including advance and last-minute work. Driver reports refresh automatically.",
+  "{dayOfTripActiveJobBookings.length} active",
+  "No assigned active jobs to monitor.",
   "Auto-refresh 10s {dashboardDriverJobAutoRefreshEnabled ? \"On\" : \"Off\"}",
   "const activeJobPickupTime = formatPickupTimeFromRecord(activeJobBooking);",
+  'data-admin-active-job-passenger="true"',
+  'data-admin-active-job-assigned-driver="true"',
+  "Latest report: {activeJobDriverStatusLabel}",
+  'data-admin-multi-driver-active-job-driver-report-history="true"',
+  "History:</span> {activeJobDriverStatusHistory}",
   "(isSelectedActiveJob ? clean(booking.driverName) : \"\")",
   'data-dispatch-live-driver-map="true"',
   "Open Live Dispatch Map",
@@ -386,7 +389,6 @@ for (const fragment of [
   'data-admin-pickup-approach-evidence-summary="true"',
   'data-admin-pickup-approach-evidence-marker-state=',
   "Wrong-direction/ETA alerts use guarded pickup geocode and route evidence when available; otherwise the row says evidence unavailable.",
-  "Driver reports auto-refresh every 10s.",
   "AdminActiveJobsBrowserMap",
 ]) {
   assertIncludes(activeMonitorPanel, fragment, `active monitor fragment ${fragment}`);
@@ -394,7 +396,8 @@ for (const fragment of [
 
 for (const forbidden of [
   "const activeJobsMonitorDefaultVisibleCount = 1;",
-  "slice(0, 4)",
+  "dayOfTripActiveJobBookings.slice(",
+  ".filter(activeJobIsInMonitorWindow)",
   "first four active jobs",
   "Show all active jobs",
   "Show other active jobs",
@@ -426,8 +429,8 @@ for (const phrase of [
   "Unhandled customer requests are hidden from Current / Upcoming until admin loads them from the Dashboard urgent lane or the Bookings request lane, preventing duplicate cards while preserving the existing post-review booking list.",
   "Day-of-trip jobs are shown as `Today's Jobs` on Dashboard, replacing the duplicate Today/Upcoming booking summaries while keeping Bookings as the saved-job finder.",
   "`Today's Jobs` driver report auto-refresh is on by default, still uses the guarded admin driver-status read path, and can be switched off by the operator.",
-  "The `Today's Jobs` live map control opens the existing admin-only live-location runtime for assigned jobs in the monitor window and refreshes shared markers every 10 seconds while the sector is open.",
-  "The same live map control stays visible at zero assigned jobs, shows the actual active live-map slot count, and stays disabled until at least one assigned active job enters the 1-hour window.",
+  "The `Today's Jobs` live map control opens the existing admin-only live-location runtime for assigned active jobs and refreshes shared markers every 10 seconds while the sector is open.",
+  "The same live map control stays visible at zero assigned jobs, shows the actual active live-map slot count, and stays disabled until at least one assigned active job is available.",
   "The pickup risk monitor defaults off, can be toggled by admin, highlights only the affected driver/job row and marker for no-pin, stale/offline, near-pickup watch, route ETA risk, and route-distance moving-away states, and does not claim route direction/ETA certainty unless guarded pickup approach evidence is ready.",
   "This reuses existing admin live-location runtime, map read paths, and guarded admin map search/route estimate routes for evidence when available; it does not add provider sends, notification sends, customer/driver messages, env changes, DB schema changes, billing/payment/PDF/invoice/payout, calendar sync, parser changes, or shims.",
   "Guard coverage lives in `scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",

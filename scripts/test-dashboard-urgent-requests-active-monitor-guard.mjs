@@ -341,12 +341,18 @@ for (const fragment of [
 for (const fragment of [
   "bookingRecordHasDispatchActiveJobsMonitorDriver(bookingRecord)",
   "!bookingRecordIsCustomerBookingRequest(bookingRecord)",
+  "Boolean(cleanReferenceText(bookingRecord.booking_reference))",
+  "bookingRecordPickupDateTimeMs(bookingRecord) !== null",
+  "routePoints.length >= 2",
+  "function bookingRecordIsCurrentAssignedActiveJob(",
+  "pickupTimeMs >= currentTimeMs - 24 * 60 * 60 * 1000",
 ]) {
   assertIncludes(appPage, fragment, `assigned active monitor eligibility helper fragment ${fragment}`);
 }
 
 for (const fragment of [
   ".filter(bookingRecordIsDispatchActiveJobsMonitorEligible)",
+  ".filter((bookingRecord) => bookingRecordIsCurrentAssignedActiveJob(bookingRecord, currentTimeMs))",
   "normaliseTimeForSort(formatPickupTimeFromRecord(firstBooking))",
   "normaliseTimeForSort(formatPickupTimeFromRecord(secondBooking))",
   "const dayOfTripActiveJobVisibleBookings = dayOfTripActiveJobBookings;",

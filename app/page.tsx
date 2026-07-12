@@ -7702,10 +7702,24 @@ function bookingRecordHasDispatchActiveJobsMonitorDriver(bookingRecord: BookingR
 }
 
 function bookingRecordIsDispatchActiveJobsMonitorEligible(bookingRecord: BookingRecord) {
+  const routePoints = getRoutePoints(bookingRecord);
+
   return (
     bookingRecordHasDispatchActiveJobsMonitorDriver(bookingRecord) &&
-    !bookingRecordIsCustomerBookingRequest(bookingRecord)
+    !bookingRecordIsCustomerBookingRequest(bookingRecord) &&
+    Boolean(cleanReferenceText(bookingRecord.booking_reference)) &&
+    bookingRecordPickupDateTimeMs(bookingRecord) !== null &&
+    routePoints.length >= 2
   );
+}
+
+function bookingRecordIsCurrentAssignedActiveJob(
+  bookingRecord: BookingRecord,
+  currentTimeMs: number,
+) {
+  const pickupTimeMs = bookingRecordPickupDateTimeMs(bookingRecord);
+
+  return pickupTimeMs !== null && pickupTimeMs >= currentTimeMs - 24 * 60 * 60 * 1000;
 }
 
 function getBookingName(bookingRecord: BookingRecord) {
@@ -25395,6 +25409,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   }
   const dayOfTripActiveJobBookings = operationalBookings
     .filter(bookingRecordIsDispatchActiveJobsMonitorEligible)
+    .filter((bookingRecord) => bookingRecordIsCurrentAssignedActiveJob(bookingRecord, currentTimeMs))
     .filter((bookingRecord) => {
       return (
         !bookingRecordIsCompletedStatus(bookingRecord) &&
@@ -25433,6 +25448,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     });
   const liveDispatchMapEligibleBookings = operationalBookings
     .filter(bookingRecordIsDispatchActiveJobsMonitorEligible)
+    .filter((bookingRecord) => bookingRecordIsCurrentAssignedActiveJob(bookingRecord, currentTimeMs))
     .filter((bookingRecord) => {
       return (
         !bookingRecordIsCompletedStatus(bookingRecord) &&

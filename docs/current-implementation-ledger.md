@@ -15,10 +15,12 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Today’s Jobs Assigned-Work Reporting Center
 
 - Dashboard `Today’s Jobs` is the single human-readable reporting center for all assigned active operational jobs, including advance and last-minute work. It no longer hides assigned jobs until the one-hour-before-pickup window.
+- A reportable row must have an explicit saved booking reference, valid pickup date/time, real pickup and drop-off, and an assigned driver; jobs more than 24 hours overdue are excluded while future advance jobs remain eligible. This prevents incomplete legacy numeric-ID residue from appearing or triggering status/OTS reads.
 - Each existing job card shows booking reference, pickup date/time, passenger, assigned driver, route, latest OTW/OTS/POB/Job Completed report, report time, recent report history, and optional OTS Photo to Admin. The existing live-map control remains on the same page.
 - The existing guarded driver-status and OTS-photo reads, 10-second auto-refresh toggle, manual refresh, live-location runtime, booking open action, and admin completion action are reused unchanged. No duplicate API, status write, GPS write, job-link lane, message lane, booking write, provider send, or schema was added.
 - Driver Job Link remains the create/copy/revoke access lane. Messaging is not added in this pass.
 - Customer and driver privacy boundaries are unchanged; no pricing, billing, invoice/payment, payout/PayNow, internal notes, parser/debug data, tokens, secrets, or mock/archive data is exposed.
+- Live inspection found incomplete legacy rows `9`, `7`, `5`, `4`, and `3`; they were excluded by the operational completeness rule and were not deleted or modified.
 - Focused locks: `scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs` and `scripts/test-admin-dashboard-live-followup-fixes-guard.mjs`.
 
 ### Human Driver Message and Job-Link Layout

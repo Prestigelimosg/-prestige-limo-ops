@@ -41847,13 +41847,13 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     ) : null}
                   </div>
                 </div>
-                {driverJobLinkHandoffReference ? (
+                {clean(dispatchReleaseWorkflowBookingReference) ? (
                   <div
                     className="mb-2 rounded-md border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-950"
                     data-driver-job-link-booking-details="true"
                     data-driver-job-link-handoff-notice="true"
                   >
-                    <p className="font-semibold">Booking {driverJobLinkHandoffReference}</p>
+                    <p className="font-semibold">Booking {dispatchReleaseWorkflowBookingReference}</p>
                     <div className="mt-2 grid gap-2 sm:grid-cols-2">
                       <div>
                         <p className="text-xs font-semibold uppercase text-indigo-700">Passenger</p>

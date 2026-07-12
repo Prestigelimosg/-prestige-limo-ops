@@ -16,7 +16,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 - The established Driver Dispatch copy lane is now labelled `Driver Message` and is collapsed by default. Its existing Edit, Copy, and Driver In-App controls and write paths are unchanged; it remains a short-update/manual-fallback lane rather than a second dispatch requirement.
 - The existing Driver Job Link copy preview is open by default, so the one-time link message is visible immediately after creation without another disclosure click.
-- The reference-only handoff instruction is replaced by human-readable booking details for the exact loaded booking: passenger, pickup, route, and assigned driver.
+- The reference-only handoff instruction is replaced by human-readable booking details for the exact loaded booking: passenger, pickup, route, and assigned driver. The detail card uses the established loaded saved-booking reference, so it appears whether the booking was opened from Today’s Jobs, an urgent handoff, Bookings, or another existing admin entry point.
 - Saved driver status and optional OTS Photo to Admin remain the existing guarded exact-booking reads, but are visually separated inside a collapsed `Driver Reports` disclosure so the link actions and booking information stay primary.
 - Focused guards: `scripts/test-driver-message-job-link-human-ui-guard.mjs` and `scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs`.
 

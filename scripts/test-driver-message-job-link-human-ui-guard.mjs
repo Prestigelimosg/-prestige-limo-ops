@@ -25,6 +25,8 @@ assert.ok(!messagePanel.includes(">Driver Dispatch<"), "Visible Driver Dispatch 
 
 for (const fragment of [
   'data-driver-job-link-booking-details="true"',
+  "clean(dispatchReleaseWorkflowBookingReference)",
+  "Booking {dispatchReleaseWorkflowBookingReference}",
   "Passenger",
   "Pickup",
   "Route",

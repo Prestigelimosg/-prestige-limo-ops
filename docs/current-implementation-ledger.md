@@ -12,6 +12,16 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Dispatch Current-Schema Vehicle Persistence Repair
+
+- Live creation inspection proved the established Dispatch payload carried `vehicle_type_or_category: AVF`, but the current-schema `bookingToDbRow` mapper omitted that safe field while the foundation fallback mapper retained it. The current mapper now persists the selected vehicle category in place; no duplicate save route, booking lane, pricing field, driver lane, or billing write was added.
+- The isolated admin booking adapter contract harness now includes the established customer portal account/link and saved-booking read dependencies imported transitively by the notification and customer booking routes. This is test wiring only; no notification, customer access, parser, pricing, or booking runtime behavior changed.
+- The isolated admin booking API-gate harness keeps its unrelated customer saved-booking boundary fail-closed through a local test mock, matching its existing notification/email/push isolation. Its ordinary customer sample uses a future-stable pickup while the separate dynamic short-notice case remains intact. This does not activate customer access or change the runtime route.
+- The isolated booking enable-readiness harness uses the same fail-closed customer saved-booking boundary isolation; this is test wiring only and does not broaden customer access or persistence enablement.
+- The isolated staging-config harness mirrors the established no-op notification/email/push and fail-closed customer authentication mocks. Its route-gate case uses an explicitly wrong token because tokenless same-origin POST is the established live admin-save boundary; wrong token, wrong referer, driver referer, and public origin remain blocked. No external send, customer access, or staging configuration is activated by this test wiring.
+- DSP service remains sourced from current `service_type`; operational state remains sourced from current admin/customer status fields. Customer hourly pricing remains the established later rate/actual-time billing review and is not copied into legacy booking-rate columns.
+- Focused lock: `scripts/test-admin-booking-current-vehicle-persistence-guard.mjs` plus the existing admin booking adapter contract.
+
 ### Single-Booking Customer/Driver Quick-Reply Production Activation
 
 - Owner approved controlled activation for exact prior test booking `ADM-20260712015729` and its verified saved customer account reference `128`. Broad/all-customer activation remains forbidden.

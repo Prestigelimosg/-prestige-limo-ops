@@ -942,6 +942,7 @@ function bookingToDbRow(
     driver_contact: textOrNull(booking.driver_contact),
     driver_name: textOrNull(booking.driver_name),
     driver_plate_number: textOrNull(booking.driver_plate_number),
+    vehicle_type_or_category: textOrNull(booking.vehicle_type_or_category),
     admin_internal_status: normalizeAdminInternalStatus(booking.admin_internal_status),
     customer_facing_status: normalizeCustomerFacingStatus(booking.customer_facing_status),
     short_notice_review_status: normalizeShortNoticeReviewStatus(booking.short_notice_review_status),

@@ -150,6 +150,18 @@ async function writeMockModules(tempDir, options = {}) {
       "module.exports = { createCustomerDriverAppNotification, maybePersistCustomerDriverAppNotification };",
     ].join("\n"),
   );
+  await writeFile(
+    path.join(tempDir, "lib/customer-saved-bookings-read.js"),
+    [
+      "function resolveCustomerSavedBookingsBoundaryForPurpose() {",
+      "  return { error: 'Customer portal authentication is required.', ok: false, status: 401 };",
+      "}",
+      "async function resolveCustomerSavedBookingsVerifiedIdentity() {",
+      "  return { error: 'Customer portal authentication is required.', ok: false, status: 401 };",
+      "}",
+      "module.exports = { resolveCustomerSavedBookingsBoundaryForPurpose, resolveCustomerSavedBookingsVerifiedIdentity };",
+    ].join("\n"),
+  );
 }
 
 async function loadHarness() {

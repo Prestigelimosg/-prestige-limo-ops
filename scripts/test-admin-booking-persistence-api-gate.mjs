@@ -143,6 +143,18 @@ async function writeMockModules(tempDir) {
       "module.exports = { sendAdminNewBookingEmailAlert };",
     ].join("\n"),
   );
+  await writeFile(
+    path.join(tempDir, "lib/customer-saved-bookings-read.js"),
+    [
+      "function resolveCustomerSavedBookingsBoundaryForPurpose() {",
+      "  return { error: 'Customer portal authentication is required.', ok: false, status: 401 };",
+      "}",
+      "async function resolveCustomerSavedBookingsVerifiedIdentity() {",
+      "  return { error: 'Customer portal authentication is required.', ok: false, status: 401 };",
+      "}",
+      "module.exports = { resolveCustomerSavedBookingsBoundaryForPurpose, resolveCustomerSavedBookingsVerifiedIdentity };",
+    ].join("\n"),
+  );
 }
 
 async function loadHarness() {
@@ -520,7 +532,7 @@ function customerPayload(overrides = {}) {
     luggage: "1",
     passengerCount: "2",
     passengerName: "Gate Customer Passenger",
-    pickupDate: "2026-07-08",
+    pickupDate: "2030-07-08",
     pickupLocation: "Gate Customer Pickup",
     pickupTime: "10:30",
     serviceType: "Airport Arrival",
@@ -662,7 +674,7 @@ function assertSafeCustomerBookingRequestOperations(mock) {
   assert.equal(bookingRow.contact_phone, "+65 9000 0202");
   assert.equal(bookingRow.contact_email, "gate-customer@example.com");
   assert.equal(bookingRow.passenger_name, "Gate Customer Passenger");
-  assert.equal(bookingRow.pickup_at, "2026-07-08T10:30:00+08:00");
+  assert.equal(bookingRow.pickup_at, "2030-07-08T10:30:00+08:00");
   assert.equal(bookingRow.pickup_location, "Gate Customer Pickup");
   assert.equal(bookingRow.dropoff_location, "Gate Customer Dropoff");
   assert.equal(bookingRow.route_summary, "Gate Customer Pickup > Gate Customer Dropoff");

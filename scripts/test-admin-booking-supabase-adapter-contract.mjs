@@ -42,6 +42,9 @@ const sourceFiles = [
   "lib/admin-new-booking-email-alert.ts",
   "lib/customer-runtime-session-map.ts",
   "lib/customer-driver-app-notification-persistence.ts",
+  "lib/customer-portal-access-account.ts",
+  "lib/customer-portal-access-link.ts",
+  "lib/customer-saved-bookings-read.ts",
   "lib/driver-job-link.ts",
   "lib/driver-job-link-mode.ts",
   "lib/driver-job-status-workflow.ts",
@@ -594,6 +597,7 @@ function canonicalAdminPayload(overrides = {}) {
       service_type: "MNG",
       short_notice_review_status: "not_required",
       source_surface: "admin-dashboard",
+      vehicle_type_or_category: "AVF",
       ...overrides.booking,
     },
     route_points: [
@@ -759,6 +763,7 @@ function assertSixTableCreateMapping(mock) {
   });
   assert.deepEqual(insertedOperation(client, "bookings").payload, {
     admin_internal_status: "needs_review",
+    booker_id: null,
     booking_reference: "SAFE-ADM-001",
     cancellation_review_status: "pending_review",
     change_review_status: "pending_review",
@@ -768,6 +773,7 @@ function assertSixTableCreateMapping(mock) {
     customer_display_name: "Safe Ops Account",
     customer_facing_status: "pending_review",
     customer_id: 1,
+    company_id: null,
     driver_contact: null,
     driver_name: null,
     driver_plate_number: null,
@@ -782,6 +788,8 @@ function assertSixTableCreateMapping(mock) {
     service_type: "MNG",
     short_notice_review_status: "not_required",
     source_surface: "admin_dashboard",
+    traveler_id: null,
+    vehicle_type_or_category: "AVF",
   });
   assert.deepEqual(insertedOperation(client, "booking_route_points").payload, [
     {
@@ -1219,7 +1227,9 @@ try {
   assert.equal(foundationSchemaResult.data.service_type, "MNG");
   assert.deepEqual(foundationBookingInsert.payload, {
     admin_internal_status: "needs_review",
+    booker_id: null,
     booking_reference: "SAFE-FOUNDATION-CREATE-001",
+    company_id: null,
     contact_email: "safe-ops@example.com",
     contact_phone: "+65 9000 0001",
     customer_display_name: "Safe Ops Account",
@@ -1238,7 +1248,8 @@ try {
     route_type: "MNG",
     short_notice_review_status: "not_required",
     source_channel: "admin-dashboard",
-    vehicle_type_or_category: null,
+    traveler_id: null,
+    vehicle_type_or_category: "AVF",
   });
   assert.doesNotMatch(
     JSON.stringify(foundationBookingInsert.payload),

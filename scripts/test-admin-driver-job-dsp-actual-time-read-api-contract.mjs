@@ -18,6 +18,7 @@ const unsafeDspActualTimeLeakPattern =
   /token_hash|raw_token|driver_job_link_id|safe_link_context|customer_price|quoted_price|rate_amount|driver_payout|paynow|invoice|payment|pdf|billing|finance|parser_debug|raw_ai|parser_prompt|live_location|proof|photo|notification|mock_archive|mock_qa|dev_workbench|internal_admin_note|admin_note|server_secret/i;
 const sourceFiles = [
   "lib/admin-driver-job-dsp-actual-time-read.ts",
+  "lib/hourly-billing.ts",
   "lib/admin-booking-supabase-adapter.ts",
   "lib/admin-booking-persistence.ts",
   "lib/admin-dispatcher-auth-boundary.ts",
@@ -408,7 +409,7 @@ try {
   assert.equal(readResult.body.booking_reference, "SAFE-DSP-001");
   assert.equal(readResult.body.latest_summary.actual_time_status, "complete");
   assert.equal(readResult.body.latest_summary.dsp_total_minutes, 195);
-  assert.equal(readResult.body.latest_summary.dsp_billable_minutes, 195);
+  assert.equal(readResult.body.latest_summary.dsp_billable_minutes, 180);
   assert.equal(readResult.body.summary.has_complete_actual_time, true);
   assert.deepEqual(mock.client.selectHistory, [
     {

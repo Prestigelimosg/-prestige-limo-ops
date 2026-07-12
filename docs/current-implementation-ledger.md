@@ -16,9 +16,18 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 - The existing shared hourly-billing module now contains one canonical DSP billable-minute helper. DSP has a two-hour/120-minute minimum and reuses the established 15-minute grace: 1–135 actual minutes bill as 120, minute 136 starts 180, and minute 196 starts 240.
 - The existing general hourly helper keeps its one-hour minimum and existing consumers unchanged. No duplicate calculator, rate table, booking lane, invoice lane, persistence lane, or route was added.
-- This bounded foundation is not yet wired into invoice, billing-summary, or persistence consumers. It does not make test booking `ADM-20260712063110` billable, and billing for that test booking remains blocked.
+- This helper began as a calculation-only foundation and is now wired only through the existing admin DSP billable-item review as recorded below. It does not make test booking `ADM-20260712063110` billable, and billing for that test booking remains blocked.
 - No database constraint or migration, vehicle/category rate, CRM selection, parser, deployment, environment configuration, invoice, payment, payout, or operational record was changed in this step.
 - Focused lock: `scripts/test-dsp-two-hour-minimum-billing-guard.mjs` plus the existing customer-terms/hourly-billing guard.
+
+### DSP Whole-Hour Billing Review Wiring
+
+- The canonical DSP two-hour calculation is now wired into the existing admin DSP actual-time read and Monthly Billing billable-item price-review row. Raw OTS→JC minutes remain read-only evidence; suggested DSP hours use the two-hour minimum and recurring 15-minute grace rule.
+- Admin may amend only the final positive whole number of DSP billable hours. A changed value requires a bounded safe amendment reason saved in the existing price-review context with the calculated suggestion; no driver status event or raw timing evidence is rewritten.
+- The existing server validator accepts DSP minimum billing above raw actual minutes, rejects fractional final hours, requires an amendment reason when the final hours differ from the suggestion, and blocks exact test booking `ADM-20260712063110` from price-review persistence.
+- MNG, DEP, and TRF remain unchanged on the existing fixed-trip/manual reviewed-amount lane. Legacy `hourly` keeps its existing one-hour minimum helper and server validation.
+- A compatible constraint replacement is prepared in `supabase/migrations/202607120001_dsp_billable_hours_amendment.sql` but must not be applied without explicit owner approval. No migration, deployment, environment/Supabase configuration, invoice, PDF, payment, payout, provider send, CRM rate calculation, parser, messaging, GPS, or operational record was applied or created in this pass.
+- Focused locks: `scripts/test-admin-monthly-invoice-dsp-billable-hours-amendment-guard.mjs`, `scripts/test-admin-driver-job-dsp-actual-time-read-api-contract.mjs`, `scripts/test-admin-monthly-invoice-billable-item-price-review-schema-contract.mjs`, and `scripts/test-admin-monthly-invoice-billable-item-price-review-api-contract.mjs`.
 
 ### Dispatch Current-Schema Vehicle Persistence Repair
 

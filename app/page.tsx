@@ -35,6 +35,7 @@ import {
 } from "../lib/pricing";
 import { customerTermsAndSurchargeSummary } from "../lib/customer-facing-booking-terms";
 import {
+  calculateDspBillableMinutes,
   calculateHourlyBillableMinutes,
   hourlyBillingGraceMinutes,
   hourlyBillingGraceRuleText,
@@ -11528,6 +11529,8 @@ async function saveAdminMonthlyInvoiceDraftItemReviewFromDraft({
 
 async function saveAdminMonthlyInvoiceBillablePriceReviewFromItemReview({
   bookingTypeHint,
+  dspFinalBillableHours,
+  dspHoursAmendmentReason,
   dspActualTimeSummary,
   existingPriceReview,
   invoiceDraft,
@@ -11535,6 +11538,8 @@ async function saveAdminMonthlyInvoiceBillablePriceReviewFromItemReview({
   reviewedAmountCents,
 }: {
   bookingTypeHint: string | null;
+  dspFinalBillableHours: number | null;
+  dspHoursAmendmentReason: string;
   dspActualTimeSummary: AdminDriverJobDspActualTimeSummaryRecord | null;
   existingPriceReview: AdminMonthlyInvoiceBillableItemPriceReviewRecord | null;
   invoiceDraft: AdminMonthlyInvoiceDraftRecord;
@@ -11587,9 +11592,18 @@ async function saveAdminMonthlyInvoiceBillablePriceReviewFromItemReview({
     dspTotalMinutes,
     savedDspBillableMinutes,
   );
+  const finalDspBillableMinutes =
+    bookingType === "DSP" && dspFinalBillableHours !== null
+      ? dspFinalBillableHours * 60
+      : dspBillableMinutes;
+  const dspHoursAmended =
+    bookingType === "DSP" &&
+    dspBillableMinutes !== null &&
+    finalDspBillableMinutes !== null &&
+    finalDspBillableMinutes !== dspBillableMinutes;
   const isDspBillableReview = calculationBasis === "dsp_actual_time";
   const hasDspActualMinutes =
-    !isDspBillableReview || (dspTotalMinutes !== null && dspBillableMinutes !== null);
+    !isDspBillableReview || (dspTotalMinutes !== null && finalDspBillableMinutes !== null);
   const dspActualTimeStatus = clean(dspActualTimeSummary?.actual_time_status);
   const priceReviewStatus: AdminMonthlyInvoicePriceReviewStatus = hasDspActualMinutes
     ? "approved_for_invoice_draft"
@@ -11606,8 +11620,8 @@ async function saveAdminMonthlyInvoiceBillablePriceReviewFromItemReview({
       currency: "SGD",
       draft_id: draftId,
       ...(draftTripLinkId ? { draft_trip_link_id: draftTripLinkId } : {}),
-      ...(isDspBillableReview && dspBillableMinutes !== null
-        ? { dsp_billable_minutes: dspBillableMinutes }
+      ...(isDspBillableReview && finalDspBillableMinutes !== null
+        ? { dsp_billable_minutes: finalDspBillableMinutes }
         : {}),
       ...(isDspBillableReview && dspTotalMinutes !== null ? { dsp_total_minutes: dspTotalMinutes } : {}),
       item_review_id: itemReviewId,
@@ -11616,6 +11630,15 @@ async function saveAdminMonthlyInvoiceBillablePriceReviewFromItemReview({
       price_review_status: priceReviewStatus,
       reviewed_customer_amount_cents: reviewedAmountCents,
       safe_price_review_context: {
+        ...(bookingType === "DSP" && dspBillableMinutes !== null
+          ? {
+              billable_hours_amended: dspHoursAmended ? "yes" : "no",
+              ...(dspHoursAmended
+                ? { billable_hours_amendment_reason: clean(dspHoursAmendmentReason) }
+                : {}),
+              suggested_billable_hours: String(dspBillableMinutes / 60),
+            }
+          : {}),
         ...(bookingType === "hourly" && dspTotalMinutes !== null && dspBillableMinutes !== null
           ? {
               hourly_billing_grace_minutes: hourlyBillingGraceMinutes,
@@ -11641,8 +11664,8 @@ async function saveAdminMonthlyInvoiceBillablePriceReviewFromItemReview({
         ...(isDspBillableReview && dspActualTimeStatus
           ? { dsp_actual_time_status: dspActualTimeStatus }
           : {}),
-        ...(isDspBillableReview && dspBillableMinutes !== null
-          ? { dsp_billable_minutes: dspBillableMinutes }
+        ...(isDspBillableReview && finalDspBillableMinutes !== null
+          ? { dsp_billable_minutes: finalDspBillableMinutes }
           : {}),
         ...(isDspBillableReview && dspTotalMinutes !== null
           ? { dsp_total_minutes: dspTotalMinutes }
@@ -12291,6 +12314,10 @@ function adminMonthlyInvoiceActualTimeBillableMinutes(
 ) {
   if (bookingType === "hourly") {
     return calculateHourlyBillableMinutes(totalMinutes);
+  }
+
+  if (bookingType === "DSP") {
+    return calculateDspBillableMinutes(totalMinutes);
   }
 
   return savedBillableMinutes;
@@ -13186,6 +13213,12 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const [
     adminMonthlyInvoiceBillablePriceReviewAmountInput,
     setAdminMonthlyInvoiceBillablePriceReviewAmountInput,
+  ] = useState("");
+  const [adminMonthlyInvoiceDspFinalHoursInput, setAdminMonthlyInvoiceDspFinalHoursInput] =
+    useState("");
+  const [
+    adminMonthlyInvoiceDspHoursAmendmentReason,
+    setAdminMonthlyInvoiceDspHoursAmendmentReason,
   ] = useState("");
   const [adminMonthlyInvoiceIssueReviewReadState, setAdminMonthlyInvoiceIssueReviewReadState] =
     useState<AdminMonthlyInvoiceIssueReviewReadState>({
@@ -28633,6 +28666,33 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     monthlyInvoiceBillableDspTotalMinutes,
     monthlyInvoiceBillableSavedDspBillableMinutes,
   );
+  const monthlyInvoiceBillableDspSuggestedHours =
+    monthlyInvoiceBillableBookingType === "DSP" &&
+    monthlyInvoiceBillableDspBillableMinutes !== null
+      ? monthlyInvoiceBillableDspBillableMinutes / 60
+      : null;
+  const monthlyInvoiceBillableDspFinalHours = Number(adminMonthlyInvoiceDspFinalHoursInput);
+  const monthlyInvoiceBillableDspFinalHoursValid =
+    monthlyInvoiceBillableBookingType !== "DSP" ||
+    (Number.isInteger(monthlyInvoiceBillableDspFinalHours) &&
+      monthlyInvoiceBillableDspFinalHours >= 1);
+  const monthlyInvoiceBillableDspHoursAmended =
+    monthlyInvoiceBillableBookingType === "DSP" &&
+    monthlyInvoiceBillableDspSuggestedHours !== null &&
+    monthlyInvoiceBillableDspFinalHoursValid &&
+    monthlyInvoiceBillableDspFinalHours !== monthlyInvoiceBillableDspSuggestedHours;
+  useEffect(() => {
+    if (monthlyInvoiceBillableBookingType !== "DSP") {
+      setAdminMonthlyInvoiceDspFinalHoursInput("");
+      setAdminMonthlyInvoiceDspHoursAmendmentReason("");
+      return;
+    }
+
+    if (monthlyInvoiceBillableDspSuggestedHours !== null) {
+      setAdminMonthlyInvoiceDspFinalHoursInput(String(monthlyInvoiceBillableDspSuggestedHours));
+      setAdminMonthlyInvoiceDspHoursAmendmentReason("");
+    }
+  }, [monthlyInvoiceBillableBookingType, monthlyInvoiceBillableDspSuggestedHours]);
   const monthlyInvoiceBillableDspActualTimeComplete =
     !monthlyInvoiceBillableUsesDspActualTime ||
     (monthlyInvoiceBillableDspTotalMinutes !== null &&
@@ -29327,6 +29387,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     !clean(monthlyInvoiceDraftPrimaryDraft.id) ||
     !clean(monthlyInvoiceDraftItemReviewPrimaryReview.id) ||
     !monthlyInvoiceBillablePriceReviewAmountCents ||
+    !monthlyInvoiceBillableDspFinalHoursValid ||
+    (monthlyInvoiceBillableDspHoursAmended &&
+      !clean(adminMonthlyInvoiceDspHoursAmendmentReason)) ||
     (monthlyInvoiceBillableUsesDspActualTime &&
       adminDriverJobDspActualTimeReadState.status === "loading") ||
     monthlyInvoiceDraftLoading ||
@@ -29370,6 +29433,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     try {
       const savedPriceReview = await saveAdminMonthlyInvoiceBillablePriceReviewFromItemReview({
         bookingTypeHint: booking.bookingType,
+        dspFinalBillableHours:
+          monthlyInvoiceBillableBookingType === "DSP"
+            ? monthlyInvoiceBillableDspFinalHours
+            : null,
+        dspHoursAmendmentReason: adminMonthlyInvoiceDspHoursAmendmentReason,
         dspActualTimeSummary: adminDriverJobDspActualTimeReadState.latestSummary,
         existingPriceReview: monthlyInvoiceBillablePriceReviewPrimaryReview,
         invoiceDraft: monthlyInvoiceDraftPrimaryDraft,
@@ -41036,7 +41104,38 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       </p>
                     ) : null}
                   </div>
-                  <div className="grid min-w-0 grid-cols-1 gap-1 sm:grid-cols-[minmax(0,10rem)_auto] lg:shrink-0">
+                  <div className="grid min-w-0 grid-cols-1 gap-1 sm:grid-cols-[minmax(0,10rem)_minmax(0,10rem)_auto] lg:shrink-0">
+                    {monthlyInvoiceBillableBookingType === "DSP" ? (
+                      <label className="min-w-0 text-[11px] font-semibold text-teal-950">
+                        <span>Final billable hours</span>
+                        <input
+                          className="mt-1 h-9 w-full min-w-0 rounded-md border border-teal-200 bg-white px-2 text-xs font-medium text-slate-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                          data-admin-monthly-invoice-dsp-final-billable-hours="true"
+                          inputMode="numeric"
+                          min="1"
+                          onChange={(event) =>
+                            setAdminMonthlyInvoiceDspFinalHoursInput(event.target.value)
+                          }
+                          step="1"
+                          type="number"
+                          value={adminMonthlyInvoiceDspFinalHoursInput}
+                        />
+                      </label>
+                    ) : null}
+                    {monthlyInvoiceBillableDspHoursAmended ? (
+                      <label className="min-w-0 text-[11px] font-semibold text-teal-950">
+                        <span>Amendment reason</span>
+                        <input
+                          className="mt-1 h-9 w-full min-w-0 rounded-md border border-teal-200 bg-white px-2 text-xs font-medium text-slate-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                          data-admin-monthly-invoice-dsp-hours-amendment-reason="true"
+                          maxLength={240}
+                          onChange={(event) =>
+                            setAdminMonthlyInvoiceDspHoursAmendmentReason(event.target.value)
+                          }
+                          value={adminMonthlyInvoiceDspHoursAmendmentReason}
+                        />
+                      </label>
+                    ) : null}
                     <label className="min-w-0 text-[11px] font-semibold text-teal-950">
                       <span>Reviewed amount</span>
                       <input

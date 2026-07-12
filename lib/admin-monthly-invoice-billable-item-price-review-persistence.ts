@@ -11,7 +11,7 @@ import {
   type AdminBookingPersistenceAdapterActor,
 } from "./admin-booking-supabase-adapter";
 import { assertAdminMonthlyInvoiceDraftUnlocked } from "./admin-monthly-invoice-draft-lock-enforcement";
-import { calculateHourlyBillableMinutes } from "./hourly-billing";
+import { calculateDspBillableMinutes, calculateHourlyBillableMinutes } from "./hourly-billing";
 
 export const adminMonthlyInvoiceBillableItemPriceReviewVersion =
   "stage-monthly-invoice-billable-item-price-review-api-v1";
@@ -72,6 +72,9 @@ export type AdminMonthlyInvoicePriceDecision =
   (typeof adminMonthlyInvoicePriceDecisions)[number];
 
 export type AdminMonthlyInvoiceBillableItemPriceReviewContext = {
+  billable_hours_amended?: string;
+  billable_hours_amendment_reason?: string;
+  suggested_billable_hours?: string;
   next_action?: string;
   price_review_summary?: string;
   review_status?: string;
@@ -148,6 +151,7 @@ const maxPriceReviewPage = 1000;
 const maxReadRows = 500;
 const maxReviewedAmountCents = 100_000_000;
 const maxDspMinutes = 60 * 24 * 30;
+const excludedDspBillingBookingReferences = new Set(["ADM-20260712063110"]);
 const billableItemPriceReviewSelect =
   "id, draft_id, draft_trip_link_id, item_review_id, booking_reference, booking_type, billing_item_type, calculation_basis, price_review_status, price_decision, reviewed_customer_amount_cents, currency, dsp_total_minutes, dsp_billable_minutes, source_price_context, safe_price_review_note, safe_price_review_context, source_surface, actor_role, actor_label, created_at, updated_at";
 const disabledPriceReviewPersistenceError =
@@ -205,9 +209,12 @@ const allowedSaveFields = new Set([
   "source_price_context",
 ]);
 const allowedSafeContextFields = new Set([
+  "billable_hours_amended",
+  "billable_hours_amendment_reason",
   "next_action",
   "price_review_summary",
   "review_status",
+  "suggested_billable_hours",
 ]);
 const forbiddenPriceReviewFragments = [
   "auth_link",
@@ -498,6 +505,18 @@ function parseSafeContext(record: UnknownRecord) {
     contextRecord.review_status ?? record.review_status,
     maxSafeContextTextLength,
   );
+  const billableHoursAmended = optionalSafeText(
+    contextRecord.billable_hours_amended,
+    maxSafeContextTextLength,
+  );
+  const billableHoursAmendmentReason = optionalSafeText(
+    contextRecord.billable_hours_amendment_reason,
+    maxSafeContextTextLength,
+  );
+  const suggestedBillableHours = optionalSafeText(
+    contextRecord.suggested_billable_hours,
+    maxSafeContextTextLength,
+  );
 
   if (
     ((contextRecord.price_review_summary ?? record.price_review_summary) &&
@@ -509,9 +528,14 @@ function parseSafeContext(record: UnknownRecord) {
   }
 
   return {
+    ...(billableHoursAmended ? { billable_hours_amended: billableHoursAmended } : {}),
+    ...(billableHoursAmendmentReason
+      ? { billable_hours_amendment_reason: billableHoursAmendmentReason }
+      : {}),
     ...(priceReviewSummary ? { price_review_summary: priceReviewSummary } : {}),
     ...(nextAction ? { next_action: nextAction } : {}),
     ...(reviewStatus ? { review_status: reviewStatus } : {}),
+    ...(suggestedBillableHours ? { suggested_billable_hours: suggestedBillableHours } : {}),
   };
 }
 
@@ -1010,7 +1034,7 @@ export function parseAdminMonthlyInvoiceBillableItemPriceReviewSavePayload(
   const dspTotalMinutes = integerOrNull(record.dsp_total_minutes, maxDspMinutes);
   const dspBillableMinutes = integerOrNull(record.dsp_billable_minutes, maxDspMinutes);
   const sourcePriceContext = safeObject(record.source_price_context, maxSafeJsonLength);
-  const safePriceReviewContext = parseSafeContext(record);
+  let safePriceReviewContext = parseSafeContext(record);
   const safePriceReviewNote = optionalSafeText(
     record.safe_price_review_note,
     maxSafeNoteLength,
@@ -1032,6 +1056,14 @@ export function parseAdminMonthlyInvoiceBillableItemPriceReviewSavePayload(
   if (!bookingReference || !bookingType) {
     return {
       error: "Admin monthly invoice billable item price review booking details are malformed.",
+      ok: false,
+      status: 400,
+    };
+  }
+
+  if (bookingType === "DSP" && excludedDspBillingBookingReferences.has(bookingReference)) {
+    return {
+      error: "This DSP test booking is excluded from billing.",
       ok: false,
       status: 400,
     };
@@ -1074,12 +1106,9 @@ export function parseAdminMonthlyInvoiceBillableItemPriceReviewSavePayload(
     };
   }
 
-  if (
-    dspBillableMinutes !== null &&
-    (dspTotalMinutes === null || (bookingType !== "hourly" && dspBillableMinutes > dspTotalMinutes))
-  ) {
+  if (dspBillableMinutes !== null && dspTotalMinutes === null) {
     return {
-      error: "DSP billable minutes must not exceed saved actual minutes.",
+      error: "DSP billable minutes require saved actual minutes.",
       ok: false,
       status: 400,
     };
@@ -1089,6 +1118,56 @@ export function parseAdminMonthlyInvoiceBillableItemPriceReviewSavePayload(
     bookingType === "hourly" && dspTotalMinutes !== null
       ? calculateHourlyBillableMinutes(dspTotalMinutes)
       : null;
+  const suggestedDspBillableMinutes =
+    bookingType === "DSP" && dspTotalMinutes !== null
+      ? calculateDspBillableMinutes(dspTotalMinutes)
+      : null;
+
+  if (
+    bookingType === "DSP" &&
+    dspBillableMinutes !== null &&
+    (dspBillableMinutes < 60 || dspBillableMinutes % 60 !== 0)
+  ) {
+    return {
+      error: "DSP final billable time must be a positive whole number of hours.",
+      ok: false,
+      status: 400,
+    };
+  }
+
+  if (
+    bookingType === "DSP" &&
+    suggestedDspBillableMinutes !== null &&
+    dspBillableMinutes !== null &&
+    safePriceReviewContext
+  ) {
+    const amended = dspBillableMinutes !== suggestedDspBillableMinutes;
+    safePriceReviewContext = {
+      ...safePriceReviewContext,
+      billable_hours_amended: amended ? "yes" : "no",
+      ...(amended
+        ? {
+            billable_hours_amendment_reason:
+              safePriceReviewContext.billable_hours_amendment_reason,
+          }
+        : { billable_hours_amendment_reason: undefined }),
+      suggested_billable_hours: String(suggestedDspBillableMinutes / 60),
+    };
+  }
+
+  if (
+    bookingType === "DSP" &&
+    suggestedDspBillableMinutes !== null &&
+    dspBillableMinutes !== null &&
+    dspBillableMinutes !== suggestedDspBillableMinutes &&
+    !safePriceReviewContext?.billable_hours_amendment_reason
+  ) {
+    return {
+      error: "DSP amended billable hours require a safe amendment reason.",
+      ok: false,
+      status: 400,
+    };
+  }
 
   if (
     bookingType === "hourly" &&

@@ -10,6 +10,7 @@ import {
   checkAdminBookingPersistenceStagingConfigReadiness,
   type AdminBookingPersistenceAdapterActor,
 } from "./admin-booking-supabase-adapter";
+import { calculateDspBillableMinutes } from "./hourly-billing";
 
 export const adminDriverJobDspActualTimeReadVersion =
   "stage-admin-driver-job-dsp-actual-time-read-api-v1";
@@ -348,7 +349,8 @@ function toAdminDriverJobDspActualTimeSummary(
   return {
     actual_time_status: actualTimeStatus,
     booking_reference: bookingReference,
-    dsp_billable_minutes: actualTimeStatus === "complete" ? totalMinutes : null,
+    dsp_billable_minutes:
+      actualTimeStatus === "complete" ? calculateDspBillableMinutes(totalMinutes) : null,
     dsp_ended_at: safeDateTextFromDb(row.dsp_ended_at),
     dsp_started_at: safeDateTextFromDb(row.dsp_started_at),
     dsp_total_minutes: totalMinutes,

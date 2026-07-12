@@ -588,6 +588,12 @@ try {
 
   assert.equal(parsedDsp.ok, true, "Expected DSP actual-time price review accepted");
   assert.equal(parsedDsp.data.calculation_basis, "dsp_actual_time");
+  const parsedShortDsp = persistence.parseAdminMonthlyInvoiceBillableItemPriceReviewSavePayload({
+    ...validDspPayload,
+    dsp_billable_minutes: 120,
+    dsp_total_minutes: 60,
+  });
+  assert.equal(parsedShortDsp.ok, true, "DSP two-hour minimum must be allowed above raw actual minutes");
 
   for (const [label, params, expectedError] of [
     [
@@ -665,13 +671,29 @@ try {
       "Non-DSP billable item price review must not include DSP actual minutes.",
     ],
     [
-      "DSP billable exceeds total",
+      "DSP billable must use whole hours",
       {
         ...validDspPayload,
         dsp_billable_minutes: 200,
         dsp_total_minutes: 120,
       },
-      "DSP billable minutes must not exceed saved actual minutes.",
+      "DSP final billable time must be a positive whole number of hours.",
+    ],
+    [
+      "DSP amended whole hours require reason",
+      {
+        ...validDspPayload,
+        dsp_billable_minutes: 240,
+      },
+      "DSP amended billable hours require a safe amendment reason.",
+    ],
+    [
+      "excluded DSP test booking",
+      {
+        ...validDspPayload,
+        booking_reference: "ADM-20260712063110",
+      },
+      "This DSP test booking is excluded from billing.",
     ],
     [
       "hourly billable ignores grace rule",

@@ -42,8 +42,8 @@ assert.ok(
   "Implementation ledger must record the bounded DSP calculation foundation.",
 );
 assert.ok(
-  ledger.includes("not yet wired into invoice, billing-summary, or persistence consumers"),
-  "Ledger must prevent this calculation-only step from being mistaken for active billing wiring.",
+  ledger.includes("### DSP Whole-Hour Billing Review Wiring"),
+  "Ledger must record the existing-lane DSP billing review wiring.",
 );
 
 console.log("DSP two-hour minimum billing guard passed");

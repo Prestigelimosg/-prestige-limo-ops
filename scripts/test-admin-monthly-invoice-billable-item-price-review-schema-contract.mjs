@@ -20,6 +20,10 @@ function assertNotMatches(text, pattern, message = `Forbidden pattern present: $
 }
 
 const migration = await readFile(migrationPath, "utf8");
+const dspAmendmentMigration = await readFile(
+  path.join(process.cwd(), "supabase/migrations/202607120001_dsp_billable_hours_amendment.sql"),
+  "utf8",
+);
 
 for (const requiredText of [
   "do not apply without explicit approval",
@@ -160,6 +164,21 @@ assertNotMatches(migration, /\balter\s+policy\b/i);
 assertNotMatches(migration, /\bgrant\b/i);
 assertNotMatches(migration, /\busing\s*\(\s*true\s*\)/i);
 assertNotMatches(migration, /\bwith\s+check\s*\(\s*true\s*\)/i);
+assertIncludes(dspAmendmentMigration, "do not apply without explicit owner approval");
+assertIncludes(
+  dspAmendmentMigration,
+  "drop constraint if exists monthly_invoice_billable_item_price_reviews_dsp_minutes_check",
+);
+assertMatches(
+  dspAmendmentMigration,
+  /booking_type = 'hourly'\s+or dsp_billable_minutes % 60 = 0/,
+  "DSP compatibility migration must allow minimum billing above actual time while requiring whole hours.",
+);
+assertNotMatches(
+  dspAmendmentMigration,
+  /dsp_billable_minutes\s*<=\s*dsp_total_minutes/,
+  "DSP compatibility migration must remove the obsolete billable-at-most-actual constraint.",
+);
 
 for (const forbiddenColumn of [
   "invoice_sent_at",

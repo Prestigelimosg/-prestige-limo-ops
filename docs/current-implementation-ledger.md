@@ -1271,7 +1271,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Customer Folder Dispatch Handoff
 
-- Customer folder pages expose one safe `Open/Edit` Dispatch handoff for each saved booking row with an exact booking reference.
+- Customer folder pages expose one safe `Edit` Dispatch handoff for each saved booking row with an exact booking reference.
 - The handoff uses `/?tab=dispatch&booking_reference=...`, performs one exact guarded admin GET read through `/api/admin-bookings?booking_reference=...`, and then calls the existing Dispatch `loadSelectedBooking` editor/review path.
 - It does not rely on the recent bookings list window, so older customer-folder jobs can still open by exact reference.
 - Customer Folder `View/Edit` now loads the exact booking by reference before showing compact operational edit controls for passenger, pickup time, pickup, drop-off, service, vehicle, driver, driver contact, and plate.
@@ -1357,10 +1357,18 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Customer Folder Job History Compact Rows
 
-- Customer folder `Job history snapshot` now uses one slim summary strip plus a compact scrollable table instead of summary cards and large job cards.
-- The duplicate Upcoming/Completed job blocks are removed from the customer folder; job status now stays in the compact job rows.
+- Customer folder `All booking history` uses one compact table instead of summary cards and large job cards.
+- The duplicate Upcoming/Completed job blocks remain removed from the customer folder; job and payment status stay in the compact rows.
 - This is customer-folder UI-only polish on existing mock/customer data; it does not add routes, APIs, DB reads/writes, env changes, Vercel changes, invoice/PDF/payment/provider sending, payout automation, GPS/live location, calendar sync, parser changes, or shims.
 - Guard coverage lives in `scripts/test-customer-folder-job-history-compact-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+
+### Customer Folder Singapore Pickup Display
+
+- Customer folder `Jobs not billed yet` rows and expanded details render saved pickup timestamps in Singapore local time with an explicit `SGT` suffix instead of exposing raw UTC ISO values.
+- Timezone-bearing timestamps such as `2026-07-13T03:00:00+00:00` display as `13 Jul 2026, 1100hrs SGT`; bare saved local timestamps keep their Singapore clock face.
+- The existing Customers folder latest-pickup summary reuses the same canonical formatter so these admin customer-folder consumers cannot drift independently again.
+- This is display-only. It does not change saved pickup timestamps, booking/calendar data, CRM/parser behavior, invoice preparation or generation, billing, payments, payouts, provider sends, environment, or Supabase.
+- Focused lock: `scripts/test-customer-folder-operator-row-layout-guard.mjs`.
 
 ### Live William Walkthrough CRM And Driver Job Proof
 

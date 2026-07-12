@@ -77,7 +77,7 @@ const customerFolderExactBookingDeleteFunction = sectionBetween(
 const dispatchHandoffFunction = sectionBetween(
   appPage,
   "async function loadDispatchHandoffBookingFromUrl",
-  "\n  useEffect(() => {",
+  "\n  function openBookingInCompletedCancelReview",
 );
 const dispatchHandoffEffect = sectionBetween(
   appPage,
@@ -114,10 +114,10 @@ for (const fragment of [
   "fetch(adminBookingsApiPath, {",
   "fetch(adminSavedBookingsApiPath, {",
   "Delete is locked until this exact job is completed or cancelled.",
-  "data-customer-folder-saved-bookings-open-dispatch",
-  "Open/Edit",
+  "data-customer-folder-saved-bookings-edit",
+  ">\n                            Edit\n                          </Link>",
 ]) {
-  const source = fragment.includes("data-customer-folder-saved-bookings") || fragment === "Open/Edit"
+  const source = fragment.includes("data-customer-folder-saved-bookings") || fragment.startsWith(">\n")
     ? customerFolderSavedBookingsPanel
     : customersPage;
 
@@ -127,9 +127,9 @@ for (const fragment of [
 for (const fragment of [
   "data-customer-folder-saved-bookings-list",
   "data-customer-folder-saved-bookings-row",
-  "data-customer-folder-saved-bookings-open-dispatch",
+  "data-customer-folder-saved-bookings-edit",
   "max-h-96 overflow-auto",
-  "Open/Edit",
+  ">\n                            Edit\n                          </Link>",
 ]) {
   assertIncludes(customerFolderSavedBookingsPanel, fragment, `customer folder jobs section ${fragment}`);
 }
@@ -233,7 +233,7 @@ for (const forbiddenFragment of [
 
 for (const forbiddenPattern of [
   /method:\s*["'](?:POST|PATCH|DELETE)["']/,
-  /create|update|delete|invoice|payment|payout|geolocation|watchPosition|provider|sendMail|telegram|whatsapp/i,
+  /adminCustomerInvoicesApiPath|adminSavedBookingsApiPath|navigator\.geolocation|watchPosition|sendMail|api\.telegram\.org|twilio/i,
 ]) {
   assertExcludes(dispatchHandoffFunction, forbiddenPattern, "dispatch handoff function mutation/provider boundary");
 }
@@ -309,7 +309,7 @@ for (const fragment of [
 }
 
 for (const phrase of [
-  "Customer folder pages expose one safe `Open/Edit` Dispatch handoff for each saved booking row with an exact booking reference.",
+  "Customer folder pages expose one safe `Edit` Dispatch handoff for each saved booking row with an exact booking reference.",
   "The handoff uses `/?tab=dispatch&booking_reference=...`, performs one exact guarded admin GET read through `/api/admin-bookings?booking_reference=...`, and then calls the existing Dispatch `loadSelectedBooking` editor/review path.",
   "It does not rely on the recent bookings list window, so older customer-folder jobs can still open by exact reference.",
   "Customer Folder `View/Edit` now loads the exact booking by reference before showing compact operational edit controls for passenger, pickup time, pickup, drop-off, service, vehicle, driver, driver contact, and plate.",

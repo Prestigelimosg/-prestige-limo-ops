@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { Fragment, useEffect, useRef, useState } from "react";
 
+import { formatSingaporePickupDisplay } from "../../../lib/singapore-pickup-display";
+
 const adminCustomerSavedBookingsApiPath = "/api/admin-customer-saved-bookings";
 const customerFolderFocusBookingReferenceParam = "focus_booking_reference";
 const customerFolderLoadSavedJobsParam = "load_saved_jobs";
@@ -74,7 +76,7 @@ function savedBookingDescriptionItems(booking: CustomerFolderSavedBookingRecord)
     ["Reference", booking.booking_reference],
     ["Passenger", booking.passenger_name],
     ["Customer", booking.customer_account],
-    ["Pickup time", booking.pickup_at],
+    ["Pickup time", formatSingaporePickupDisplay(booking.pickup_at)],
     ["Pickup", booking.pickup_location],
     ["Drop-off", booking.dropoff_location],
     ["Route", booking.route_summary],
@@ -639,7 +641,7 @@ export function CustomerFolderSavedBookingsPanel({
                       </button>
                     </td>
                     <td className="px-3 py-2 font-semibold text-slate-800">
-                      {displayText(booking.pickup_at, "Pickup not available")}
+                      {formatSingaporePickupDisplay(booking.pickup_at, "Pickup not available")}
                     </td>
                     <td className="px-3 py-2 text-slate-700">
                       <span>{displayText(booking.service_type, "Service not available")}</span>

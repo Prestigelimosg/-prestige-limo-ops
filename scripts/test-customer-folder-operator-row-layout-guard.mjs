@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
+import { formatSingaporePickupDisplay } from "../lib/singapore-pickup-display.ts";
+
 const pagePath = "app/customers/[customerId]/page.tsx";
 const invoiceFolderPanelPath = "app/customers/[customerId]/customer-invoice-folder-panel.tsx";
 const prefixPanelPath = "app/customers/[customerId]/invoice-prefix-settings-panel.tsx";
@@ -61,5 +63,26 @@ for (const fragment of [
 ]) {
   assertIncludes(savedBookingsPanel, fragment, `customer folder jobs action ${fragment}`);
 }
+
+assertIncludes(
+  savedBookingsPanel,
+  'formatSingaporePickupDisplay(booking.pickup_at, "Pickup not available")',
+  "customer folder unbilled row Singapore pickup display",
+);
+assertIncludes(
+  savedBookingsPanel,
+  '["Pickup time", formatSingaporePickupDisplay(booking.pickup_at)]',
+  "customer folder expanded Singapore pickup display",
+);
+assert.equal(
+  formatSingaporePickupDisplay("2026-07-13T03:00:00+00:00"),
+  "13 Jul 2026, 1100hrs SGT",
+  "UTC saved pickup must render in Singapore local time",
+);
+assert.equal(
+  formatSingaporePickupDisplay("2026-07-13 11:00"),
+  "13 Jul 2026, 1100hrs SGT",
+  "bare saved pickup must retain its Singapore-local clock face",
+);
 
 console.log("Customer folder operator row layout guard passed");

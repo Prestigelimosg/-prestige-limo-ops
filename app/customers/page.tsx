@@ -17,6 +17,7 @@ import {
   hourlyBillingGraceRuleText,
   hourlyBillingUnitMinutes,
 } from "../../lib/hourly-billing";
+import { formatSingaporePickupDisplay } from "../../lib/singapore-pickup-display";
 import {
   downloadCustomerInvoicePdf,
   formatInvoiceAmount,
@@ -1823,31 +1824,7 @@ function compactCustomerBookingReference(value: string | null | undefined, fallb
 }
 
 function customerFolderLatestPickupDisplay(value: string | null | undefined) {
-  const pickupAt = savedBookingDisplayText(value, "");
-
-  if (!pickupAt) {
-    return "";
-  }
-
-  const parsedPickupAt = new Date(pickupAt);
-
-  if (Number.isNaN(parsedPickupAt.getTime())) {
-    return pickupAt;
-  }
-
-  const parts = new Intl.DateTimeFormat("en-SG", {
-    day: "2-digit",
-    hour: "2-digit",
-    hour12: false,
-    minute: "2-digit",
-    month: "short",
-    timeZone: "Asia/Singapore",
-    year: "numeric",
-  }).formatToParts(parsedPickupAt);
-  const partValue = (type: string) => parts.find((part) => part.type === type)?.value || "";
-  const hour = partValue("hour") === "24" ? "00" : partValue("hour");
-
-  return `${partValue("day")} ${partValue("month")} ${partValue("year")}, ${hour}${partValue("minute")}hrs`;
+  return formatSingaporePickupDisplay(value);
 }
 
 function customerFolderLatestSummary(customer: {

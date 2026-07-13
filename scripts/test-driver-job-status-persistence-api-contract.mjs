@@ -666,6 +666,56 @@ try {
   }
 
   {
+    const client = createSeededClient();
+    client.tables.bookings = [
+      {
+        admin_internal_status: "confirmed",
+        booking_reference: "DRV-JOB-API-001",
+        customer_price_amount: 999,
+        driver_contact: "+65 8111 1111",
+        driver_name: "Stale Booking Driver",
+        driver_plate_number: "STALE1",
+        dropoff_location: "Amended Marina Bay Dropoff",
+        flight_no: "SQ999",
+        internal_admin_note: "SECRET_AMENDMENT_NOTE",
+        passenger_name: "Safe Passenger",
+        pickup_at: "2026-07-15T00:30:00+08:00",
+        pickup_location: "Amended Changi Pickup",
+        route_summary: "Amended Changi Pickup > Amended Marina Bay Dropoff",
+        service_type: "MNG",
+        vehicle_type_or_category: "Mercedes V Class",
+      },
+    ];
+    const result = await loadDriverJobPayloadThroughStatusPersistence({
+      client,
+      now,
+      token: validToken,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.payload.pickupDate, "2026-07-15");
+    assert.equal(result.payload.pickupTime, "0030hrs");
+    assert.equal(result.payload.pickupLocation, "Amended Changi Pickup");
+    assert.equal(result.payload.dropoffLocation, "Amended Marina Bay Dropoff");
+    assert.equal(result.payload.route, "Amended Changi Pickup > Amended Marina Bay Dropoff");
+    assert.equal(result.payload.bookingType, "MNG");
+    assert.equal(result.payload.assignedDriver.name, "Safe Driver One");
+    assert.equal(result.payload.assignedDriver.contact, "+65 8000 1001");
+    assert.equal(result.payload.assignedDriver.plate, "SLA1234X");
+    assert.equal(result.payload.acknowledged, false);
+    assert.doesNotMatch(
+      JSON.stringify(result),
+      /customer_price_amount|SECRET_AMENDMENT_NOTE/,
+    );
+    assert.deepEqual(
+      client.selectHistory.find((query) => query.table === "bookings")?.filters,
+      [{ column: "booking_reference", value: "DRV-JOB-API-001" }],
+      "Driver token read must scope the current safe booking schedule to the exact link reference.",
+    );
+    assertNoDriverJobLeaks(result);
+  }
+
+  {
     const oldLinkId = "11111111-1111-4111-8111-111111111111";
     const freshLinkId = "22222222-2222-4222-8222-222222222222";
     const client = new MockSupabaseClient({

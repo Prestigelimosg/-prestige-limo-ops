@@ -175,6 +175,8 @@ type DriverJobSharingCleanupResult = {
 
 const driverJobLinkSelect =
   "id, booking_reference, link_status, expires_at, revoked_at, safe_link_context";
+const currentSafeBookingScheduleSelect =
+  "booking_reference, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, flight_no, admin_internal_status, customer_facing_status, updated_at";
 const driverJobStatusEventSelect =
   "id, booking_reference, driver_job_link_id, status_value, status_source, safe_status_note, safe_status_context, occurred_at, source_surface, actor_role, actor_label, created_at";
 const driverJobActualTimeEventSelect =
@@ -595,16 +597,98 @@ function safePayloadRecordFromLink(link: DriverJobLinkPersistenceRow) {
   };
 }
 
+function singaporePickupParts(value: string) {
+  const parsed = new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  const parts = new Intl.DateTimeFormat("en-SG", {
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+    minute: "2-digit",
+    month: "2-digit",
+    timeZone: "Asia/Singapore",
+    year: "numeric",
+  }).formatToParts(parsed);
+  const valueFor = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value || "";
+  const year = valueFor("year");
+  const month = valueFor("month");
+  const day = valueFor("day");
+  const rawHour = valueFor("hour");
+  const hour = rawHour === "24" ? "00" : rawHour;
+  const minute = valueFor("minute");
+
+  return year && month && day && hour && minute
+    ? {
+        pickupDate: `${year}-${month}-${day}`,
+        pickupDateTime: `${year}-${month}-${day}T${hour}:${minute}`,
+        pickupTime: `${hour}${minute}hrs`,
+      }
+    : null;
+}
+
+async function loadCurrentSafeBookingSchedule(
+  client: DriverJobStatusPersistenceClient,
+  link: DriverJobLinkPersistenceRow,
+) {
+  try {
+    const { data, error } = await client
+      .from("bookings")
+      .select(currentSafeBookingScheduleSelect)
+      .eq("booking_reference", link.booking_reference)
+      .maybeSingle();
+
+    if (error) {
+      return null;
+    }
+
+    const row = asRecord(data);
+    const pickupAt = safeDateTextFromDb(row.pickup_at);
+    const pickup = singaporePickupParts(pickupAt);
+
+    if (!pickup) {
+      return null;
+    }
+
+    return {
+      booking_type: safeTextFromDb(row.service_type, 80),
+      dropoff_address: safeTextFromDb(row.dropoff_location),
+      flight_no: safeTextFromDb(row.flight_no),
+      passenger_name: safeTextFromDb(row.passenger_name),
+      pickup_address: safeTextFromDb(row.pickup_location),
+      pickup_date: pickup.pickupDate,
+      pickup_datetime: pickup.pickupDateTime,
+      pickup_time: pickup.pickupTime,
+      public_reference: link.booking_reference,
+      route: safeTextFromDb(row.route_summary),
+      status:
+        safeTextFromDb(row.admin_internal_status, 80) ||
+        safeTextFromDb(row.customer_facing_status, 80) ||
+        "assigned",
+    };
+  } catch {
+    return null;
+  }
+}
+
 function payloadForLink(
   link: DriverJobLinkPersistenceRow,
   statusOverride: DriverJobStatusUpdate | null,
   statusHistory: DriverJobStatusEventRow[] = [],
+  currentSafeSchedule: UnknownRecord | null = null,
 ) {
   const safePayloadRecord = safePayloadRecordFromLink(link);
+  const scheduleSource = currentSafeSchedule || safePayloadRecordFromLink(link);
 
   return mapBookingToSafeDriverJobPayload({
     ...safePayloadRecord,
-    status: statusOverride || safePayloadRecord.status,
+    ...scheduleSource,
+    driver_acknowledged_at: safePayloadRecord.driver_acknowledged_at,
+    status: statusOverride || readFirstText(scheduleSource, ["status"]) || safePayloadRecord.status,
     statusHistory: statusHistory.map((event) => ({
       occurredAt: event.occurred_at,
       safeNote: event.safe_status_note,
@@ -900,10 +984,10 @@ export async function loadDriverJobPayloadThroughStatusPersistence(
     return linkBlockedResult(resolvedLink.reason);
   }
 
-  const statusHistory = await loadStatusHistoryForLink(
-    input.client,
-    resolvedLink.link,
-  );
+  const [statusHistory, currentSafeSchedule] = await Promise.all([
+    loadStatusHistoryForLink(input.client, resolvedLink.link),
+    loadCurrentSafeBookingSchedule(input.client, resolvedLink.link),
+  ]);
 
   if (!statusHistory.ok) {
     return linkBlockedResult(statusHistory.reason);
@@ -915,6 +999,7 @@ export async function loadDriverJobPayloadThroughStatusPersistence(
       resolvedLink.link,
       statusHistory.statuses[0]?.status_value || null,
       statusHistory.statuses,
+      currentSafeSchedule,
     ),
     reason: "ok",
   };
@@ -1016,12 +1101,15 @@ export async function saveDriverJobDetailsThroughStatusPersistence(
     return detailsBlockedResult("not_configured");
   }
 
+  const currentSafeSchedule = await loadCurrentSafeBookingSchedule(input.client, updatedLink);
+
   return {
     ok: true,
     payload: payloadForLink(
       updatedLink,
       statusHistory.statuses[0]?.status_value || null,
       statusHistory.statuses,
+      currentSafeSchedule,
     ),
     reason: "updated",
   };
@@ -1042,10 +1130,10 @@ export async function saveDriverJobStatusThroughStatusPersistence(
     return statusBlockedResult(resolvedLink.reason);
   }
 
-  const statusHistory = await loadStatusHistoryForLink(
-    input.client,
-    resolvedLink.link,
-  );
+  const [statusHistory, currentSafeSchedule] = await Promise.all([
+    loadStatusHistoryForLink(input.client, resolvedLink.link),
+    loadCurrentSafeBookingSchedule(input.client, resolvedLink.link),
+  ]);
 
   if (!statusHistory.ok) {
     return statusBlockedResult(statusHistory.reason);
@@ -1127,7 +1215,7 @@ export async function saveDriverJobStatusThroughStatusPersistence(
     payload: payloadForLink(resolvedLink.link, nextStatus, [
       persistedEvent,
       ...statusHistory.statuses,
-    ]),
+    ], currentSafeSchedule),
     reason: "updated",
     sharing_cleanup: sharingCleanup,
     status: nextStatus,

@@ -181,6 +181,7 @@ export function applyDriverJobDetailsUpdateContract(
   const bookingKey = String(resolvedLink.link.bookingId);
   const updatedBooking = {
     ...resolvedLink.booking,
+    driver_acknowledged_at: statusEventTime(input.now),
     driver_contact: nextDetails.contact,
     driver_name: nextDetails.name,
     driver_plate_number: nextDetails.plate,

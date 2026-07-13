@@ -308,6 +308,8 @@ assert.equal(countOccurrences(driverPage, 'cache: "no-store"'), 8, "driver page 
 assert.equal(countOccurrences(driverPage, 'method: "POST"'), 4, "driver page POST count");
 assert.equal(countOccurrences(driverPage, 'method: "DELETE"'), 1, "driver page DELETE count");
 assert.equal(countOccurrences(driverPage, 'method: "PATCH"'), 2, "driver page PATCH count");
+assert.equal(countOccurrences(driverPage, "href="), 1, "driver page approved link count");
+assert.equal(countOccurrences(driverPage, "download"), 1, "driver page approved download count");
 for (const fragment of [
   "fetch(`/api/driver-job/${encodeURIComponent(token)}`",
   "`/api/driver-job/${encodeURIComponent(token)}/notifications?limit=5&page=1`",
@@ -336,6 +338,8 @@ for (const fragment of [
   'method: "POST"',
   'method: "DELETE"',
   'method: "PATCH"',
+  'data-driver-job-calendar-action="true"',
+  'href={`/api/driver-job/${encodeURIComponent(token)}/calendar`}',
 ]) {
   assertIncludes(driverPage, fragment, `driver page action caller ${fragment}`);
 }
@@ -345,7 +349,7 @@ for (const forbiddenPagePattern of [
   forbiddenClientAuthPattern,
   /localStorage|sessionStorage|navigator\.credentials/i,
   /navigator\.mediaDevices|getUserMedia|URL\.createObjectURL/i,
-  /type="submit"|formAction|download|href=/,
+  /type="submit"|formAction/,
   /\/api\/admin|\/api\/admin-saved-bookings|\/api\/ai-parse/i,
   /method:\s*"PATCH"[\s\S]{0,220}notifications/i,
   /JSON\.stringify\(\s*(driverDetails|driverDetailsRaw|savedDriverDetails)/,

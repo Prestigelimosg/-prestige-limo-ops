@@ -1936,6 +1936,23 @@ export default function DriverJobPage() {
                     </dl>
                   </div>
                 ) : null}
+                {acknowledged ? (
+                  <div className="space-y-1.5 rounded-md border border-sky-200 bg-sky-50 px-2.5 py-2">
+                    <a
+                      className="flex h-11 w-full items-center justify-center rounded-md border border-sky-700 bg-white px-3 text-sm font-semibold text-sky-950 transition hover:bg-sky-100"
+                      data-driver-job-calendar-action="true"
+                      data-driver-job-calendar-source="current-driver-job-schedule"
+                      download
+                      href={`/api/driver-job/${encodeURIComponent(token)}/calendar`}
+                    >
+                      Add / Update Calendar
+                    </a>
+                    <p className="text-xs font-medium leading-5 text-sky-900">
+                      Saves the current Driver Job schedule with a one-hour reminder. After an amendment,
+                      open this page again and use this same action. The Driver Job page remains the source of truth.
+                    </p>
+                  </div>
+                ) : null}
               </div>
             </section>
 

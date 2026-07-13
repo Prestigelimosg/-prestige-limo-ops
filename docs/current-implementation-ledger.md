@@ -1,13 +1,13 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-01fc2ee8 Hide names from WhatsApp job cards
+07749ad4 Align booking browser suite with protected workflows
 
 Latest pushed main/staging runtime checkpoint:
-01fc2ee8 Hide names from WhatsApp job cards
+07749ad4 Align booking browser suite with protected workflows
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-01fc2ee8 Hide names from WhatsApp job cards
+07749ad4 Align booking browser suite with protected workflows
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -7604,6 +7604,17 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The contract allows max one provider request per invocation, uses a strict timeout, and has no scheduler, cron, queue, polling loop, server retry, provider send, notification send, DB persistence, UI sector/button/card, parser change, Save Booking change, `/api/admin-saved-bookings` change, pricing/rates/payout/payment/PDF/billing change, auth/location/photo/calendar/OTS activation, or shim change.
 - Guards added: `scripts/test-admin-flightaware-aeroapi-live-lookup-action-api-contract.mjs` and `scripts/test-flightaware-aeroapi-live-lookup-no-scheduler-guard.mjs`.
 - This contract remains not-live until a separate owner-approved staging evidence pass names the staging target, opens the gate for one bounded live lookup window, records rollback/closed-gate proof, and confirms no forbidden surfaces were activated.
+
+### Driver Job Calendar Add And Amendment Update
+
+- The existing token-scoped Driver Job page now reveals one compact `Add / Update Calendar` action only after the driver has acknowledged the assigned job; no duplicate acknowledgement panel, booking lane, calendar provider lane, or driver link is added.
+- The calendar download reuses the verified Driver Job Link token boundary and returns one private, no-store `.ics` file. The event contains only the booking reference, service, safe route/flight/pickup details, actual Singapore pickup time, and one display alarm at one hour before pickup.
+- Driver calendar events never use the admin-only midnight display adjustment. A `00:00`–`03:00` pickup remains at its actual pickup date/time for the driver, while the established admin Google Calendar previous-night display rule and its two-hour/30-minute reminders remain unchanged.
+- The event UID is stable by booking reference and the sequence changes with pickup schedule/route changes. Calendar clients vary in how imported `.ics` updates are handled, so the Driver Job page remains the source of truth and instructs the driver to use the same `Add / Update Calendar` action after an amendment.
+- The verified production Driver Job read now prefers the current saved booking's safe operational schedule for the exact link booking reference, with the link's existing safe snapshot retained as a fail-closed fallback when the current safe read is unavailable. Driver-entered acknowledgement and vehicle details plus driver status history remain on their established persistence lanes.
+- The raw Driver Job token is used only in the token-scoped request URL and is never embedded in the calendar file. Customer price, billing, invoice/payment, payout comparisons, PayNow, finance/internal/admin notes, parser/debug internals, secrets, raw provider data, and mock QA/dev archive content remain excluded.
+- No Google Calendar provider write, customer calendar, external send, Email, WhatsApp, SMS, Telegram, push notification, scheduler, migration, environment change, payment, invoice, payout, GPS/live-location write, OTS/photo change, CRM write, parser change, or deployment is introduced.
+- Focused lock: `scripts/test-driver-job-calendar-download-guard.mjs`, alongside the existing Driver Job page, status-persistence, public-route privacy, and admin calendar guards.
 
 ## FlightAware/AeroAPI Commercial Activation Constraint Lock
 

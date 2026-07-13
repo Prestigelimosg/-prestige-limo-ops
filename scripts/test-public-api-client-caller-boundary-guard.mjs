@@ -134,7 +134,7 @@ for (const phrase of [
   "This guard approves the existing customer-safe adapter reads plus exactly one `/my-bookings` direct POST to the established customer-to-driver fixed quick-reply route; it does not approve any other raw customer fetch, endpoint migration, env change, deployment by CLI, provider send, migration, parser change, Save Booking change, `/api/admin-saved-bookings` change, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector, or new shim.",
   "`/book` must delegate public API calls to customer-safe adapters; `/my-bookings` reads remain adapter-owned and its sole direct fetch is the exact fixed-template customer quick-reply POST without raw session plumbing.",
   "Customer client adapters must use `cache: \"no-store\"`, `credentials: \"same-origin\"`, and purpose headers while never manually attaching Cookie, Authorization, customer session-token, admin purpose, or server env-token plumbing.",
-  "`/driver-job/[token]` must keep driver API calls limited to safe job GET, token-scoped driver-details PATCH, notification GET, issue-alert POST with `issue_type`, fixed-template customer quick-reply POST with `template_key` only, admin-only OTS photo proof POST, and status PATCH with `status` only.",
+  "`/driver-job/[token]` must keep driver API calls limited to safe job GET, token-scoped driver-details PATCH, notification GET, acknowledged calendar attachment GET, issue-alert POST with `issue_type`, fixed-template customer quick-reply POST with `template_key` only, admin-only OTS photo proof POST, and status PATCH with `status` only.",
   "Driver client code must not expose customer price, billing, invoice/payment, payout comparisons, PayNow payout details, internal finance/admin notes, parser/debug internals, token secrets, or mock QA/dev archive fields.",
   "Public client caller contracts must continue coordinating the existing customer booking page API audit, customer booking memory UI contract, customer portal saved-bookings adapter contract, and customer portal trip-updates adapter contract in the preactivation suite.",
   "No Save Booking + CRM change.",
@@ -296,7 +296,7 @@ for (const [label, source] of [
 }
 
 const driverPage = files[driverPagePath];
-assert.equal(countOccurrences(driverPage, "fetch("), 10, "driver page fetch call count");
+assert.equal(countOccurrences(driverPage, "fetch("), 11, "driver page fetch call count");
 assert.equal(countOccurrences(driverPage, 'cache: "no-store"'), 8, "driver page no-store fetch count");
 for (const fragment of [
   "fetch(`/api/driver-job/${encodeURIComponent(token)}`",
@@ -306,6 +306,9 @@ for (const fragment of [
   "fetch(driverLiveLocationRoute()",
   "fetch(driverOtsPhotoProofRoute()",
   "fetch(`/api/driver-job/${encodeURIComponent(token)}/status`",
+  'fetch(`/api/driver-job/${encodeURIComponent(token)}/calendar`',
+  'headers: { accept: "text/calendar" }',
+  "downloadDriverCalendarBlob(await response.blob(), filename)",
   "driver_contact: nextDetails.contact",
   "driver_name: nextDetails.name",
   "driver_plate_number: nextDetails.plate",
@@ -347,8 +350,13 @@ assertIncludes(
 );
 assertExcludes(
   driverPage,
-  /navigator\.mediaDevices|getUserMedia|URL\.createObjectURL/i,
+  /navigator\.mediaDevices|getUserMedia/i,
   "driver page background media capture/photo preview client APIs",
+);
+assert.equal(
+  countOccurrences(driverPage, "window.URL.createObjectURL(blob)"),
+  1,
+  "driver page calendar attachment object URL count",
 );
 
 console.log("Public API client caller boundary guard passed");

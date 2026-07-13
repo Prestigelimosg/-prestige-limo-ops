@@ -590,6 +590,18 @@ function activityTime() {
   });
 }
 
+function downloadDriverCalendarBlob(blob: Blob, filename: string) {
+  const url = window.URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.URL.revokeObjectURL(url);
+}
+
 export default function DriverJobPage() {
   const params = useParams<{ token?: string | string[] }>();
   const token = useMemo(() => {
@@ -620,6 +632,8 @@ export default function DriverJobPage() {
   const [driverOtsPhotoProof, setDriverOtsPhotoProof] =
     useState<DriverOtsPhotoProofState>(emptyDriverOtsPhotoProofState);
   const [statusFeedback, setStatusFeedback] = useState<StatusFeedback | null>(null);
+  const [calendarDownloadFeedback, setCalendarDownloadFeedback] = useState<ControlFeedback | null>(null);
+  const [downloadingCalendar, setDownloadingCalendar] = useState(false);
   const [workflowStatus, setWorkflowStatus] = useState("assigned");
   const [updatingStatus, setUpdatingStatus] = useState("");
   const driverOtsPhotoProofInputRef = useRef<HTMLInputElement | null>(null);
@@ -968,6 +982,42 @@ export default function DriverJobPage() {
       });
     } finally {
       setSavingDriverDetails(false);
+    }
+  }
+
+  async function downloadDriverJobCalendar() {
+    if (!acknowledged || !token || downloadingCalendar) {
+      return;
+    }
+
+    setDownloadingCalendar(true);
+    setCalendarDownloadFeedback(null);
+
+    try {
+      const response = await fetch(`/api/driver-job/${encodeURIComponent(token)}/calendar`, {
+        headers: { accept: "text/calendar" },
+      });
+
+      if (!response.ok) {
+        throw new Error("calendar_download_failed");
+      }
+
+      const contentDisposition = response.headers.get("content-disposition") || "";
+      const responseFilename = contentDisposition.match(/filename="?([^";]+)"?/i)?.[1] || "";
+      const filename = responseFilename.trim() || "prestige-driver-job-calendar.ics";
+
+      downloadDriverCalendarBlob(await response.blob(), filename);
+      setCalendarDownloadFeedback({
+        tone: "success",
+        text: "Calendar file downloaded. Open it to add or update this job.",
+      });
+    } catch {
+      setCalendarDownloadFeedback({
+        tone: "error",
+        text: "Calendar download failed. Keep this Driver Job page open and try again.",
+      });
+    } finally {
+      setDownloadingCalendar(false);
     }
   }
 
@@ -1938,19 +1988,31 @@ export default function DriverJobPage() {
                 ) : null}
                 {acknowledged ? (
                   <div className="space-y-1.5 rounded-md border border-sky-200 bg-sky-50 px-2.5 py-2">
-                    <a
+                    <button
                       className="flex h-11 w-full items-center justify-center rounded-md border border-sky-700 bg-white px-3 text-sm font-semibold text-sky-950 transition hover:bg-sky-100"
                       data-driver-job-calendar-action="true"
                       data-driver-job-calendar-source="current-driver-job-schedule"
-                      download
-                      href={`/api/driver-job/${encodeURIComponent(token)}/calendar`}
+                      disabled={downloadingCalendar}
+                      onClick={downloadDriverJobCalendar}
+                      type="button"
                     >
-                      Add / Update Calendar
-                    </a>
+                      {downloadingCalendar ? "Downloading Calendar..." : "Add / Update Calendar"}
+                    </button>
                     <p className="text-xs font-medium leading-5 text-sky-900">
                       Saves the current Driver Job schedule with a one-hour reminder. After an amendment,
                       open this page again and use this same action. The Driver Job page remains the source of truth.
                     </p>
+                    {calendarDownloadFeedback ? (
+                      <p
+                        className={[
+                          "text-xs font-semibold leading-5",
+                          calendarDownloadFeedback.tone === "success" ? "text-emerald-800" : "text-red-700",
+                        ].join(" ")}
+                        data-driver-job-calendar-feedback={calendarDownloadFeedback.tone}
+                      >
+                        {calendarDownloadFeedback.text}
+                      </p>
+                    ) : null}
                   </div>
                 ) : null}
               </div>

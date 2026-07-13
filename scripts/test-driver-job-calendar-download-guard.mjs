@@ -74,11 +74,18 @@ assert.doesNotMatch(
 for (const fragment of [
   'data-driver-job-calendar-action="true"',
   'data-driver-job-calendar-source="current-driver-job-schedule"',
+  "async function downloadDriverJobCalendar()",
+  'fetch(`/api/driver-job/${encodeURIComponent(token)}/calendar`',
+  "downloadDriverCalendarBlob(await response.blob(), filename)",
+  "onClick={downloadDriverJobCalendar}",
+  'type="button"',
   "Add / Update Calendar",
   "/calendar",
 ]) {
   assert.equal(page.includes(fragment), true, `Driver Job page must include ${fragment}.`);
 }
+
+assert.doesNotMatch(page, /<a\b/i, "Driver calendar download must not reopen raw public anchor navigation.");
 
 assert.equal(
   ledger.includes("### Driver Job Calendar Add And Amendment Update"),

@@ -294,9 +294,13 @@ for (const fragment of [
   "/flight-eta-acknowledgement-setup",
   "FlightAware",
   "mediaDevices",
-  "createObjectURL",
 ]) {
   assertExcludes(driverPage, fragment, `public driver page Flight ETA setup caller fragment`);
 }
+assertIncludes(
+  driverPage,
+  "window.URL.createObjectURL(blob)",
+  "public driver page approved calendar attachment blob URL",
+);
 
 console.log("Public driver Flight ETA setup surface guard passed");

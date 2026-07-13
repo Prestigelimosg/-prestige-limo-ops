@@ -144,7 +144,12 @@ async function assertNoRealLocationImplementation() {
     /new FormData/,
     "Driver OTS photo proof must post one browser FormData payload through the tokenized route.",
   );
-  assert.doesNotMatch(source, /URL\.createObjectURL|supabase\.storage|storage\.from|\.upload\s*\(/i, "Driver pages must not preview or write storage directly.");
+  assert.doesNotMatch(source, /supabase\.storage|storage\.from|\.upload\s*\(/i, "Driver pages must not preview or write storage directly.");
+  assert.equal(
+    (source.match(/window\.URL\.createObjectURL\(blob\)/g) || []).length,
+    1,
+    "Driver page may create one object URL only for the acknowledged calendar attachment download.",
+  );
 }
 
 async function runChromeTest() {

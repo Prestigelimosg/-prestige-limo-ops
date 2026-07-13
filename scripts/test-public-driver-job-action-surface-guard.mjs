@@ -303,13 +303,14 @@ for (const forbiddenIssuePattern of [
   assertExcludes(issueChoices, forbiddenIssuePattern, "driver issue choices forbidden fields");
 }
 
-assert.equal(countOccurrences(driverPage, "fetch("), 10, "driver page fetch count");
+assert.equal(countOccurrences(driverPage, "fetch("), 11, "driver page fetch count");
 assert.equal(countOccurrences(driverPage, 'cache: "no-store"'), 8, "driver page no-store count");
 assert.equal(countOccurrences(driverPage, 'method: "POST"'), 4, "driver page POST count");
 assert.equal(countOccurrences(driverPage, 'method: "DELETE"'), 1, "driver page DELETE count");
 assert.equal(countOccurrences(driverPage, 'method: "PATCH"'), 2, "driver page PATCH count");
-assert.equal(countOccurrences(driverPage, "href="), 1, "driver page approved link count");
-assert.equal(countOccurrences(driverPage, "download"), 1, "driver page approved download count");
+assert.equal(countOccurrences(driverPage, "href="), 0, "driver page public link count");
+assert.equal(countOccurrences(driverPage, "anchor.download = filename"), 1, "driver page calendar attachment download count");
+assert.equal(countOccurrences(driverPage, 'document.createElement("a")'), 1, "driver page calendar attachment anchor helper count");
 for (const fragment of [
   "fetch(`/api/driver-job/${encodeURIComponent(token)}`",
   "`/api/driver-job/${encodeURIComponent(token)}/notifications?limit=5&page=1`",
@@ -339,7 +340,10 @@ for (const fragment of [
   'method: "DELETE"',
   'method: "PATCH"',
   'data-driver-job-calendar-action="true"',
-  'href={`/api/driver-job/${encodeURIComponent(token)}/calendar`}',
+  "async function downloadDriverJobCalendar()",
+  'fetch(`/api/driver-job/${encodeURIComponent(token)}/calendar`',
+  "downloadDriverCalendarBlob(await response.blob(), filename)",
+  "onClick={downloadDriverJobCalendar}",
 ]) {
   assertIncludes(driverPage, fragment, `driver page action caller ${fragment}`);
 }
@@ -348,7 +352,7 @@ for (const forbiddenPagePattern of [
   /credentials\s*:/,
   forbiddenClientAuthPattern,
   /localStorage|sessionStorage|navigator\.credentials/i,
-  /navigator\.mediaDevices|getUserMedia|URL\.createObjectURL/i,
+  /navigator\.mediaDevices|getUserMedia/i,
   /type="submit"|formAction/,
   /\/api\/admin|\/api\/admin-saved-bookings|\/api\/ai-parse/i,
   /method:\s*"PATCH"[\s\S]{0,220}notifications/i,

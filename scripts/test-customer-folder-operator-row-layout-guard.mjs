@@ -56,8 +56,8 @@ for (const fragment of [
 
 assertIncludes(
   savedBookingsPanel,
-  "rounded-md border border-slate-200 bg-white p-3 shadow-sm",
-  "compact saved bookings panel",
+  "rounded-xl border border-amber-300 border-l-8 bg-amber-50 p-4 shadow-sm",
+  "visually distinct saved bookings sector",
 );
 for (const fragment of [
   "data-customer-folder-saved-bookings-edit",

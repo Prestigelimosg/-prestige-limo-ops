@@ -133,7 +133,7 @@ for (const fragment of [
   "data-customer-folder-saved-bookings-list",
   "data-customer-folder-saved-bookings-row",
   "data-customer-folder-saved-bookings-edit",
-  "max-h-96 overflow-auto",
+  "max-h-[32rem] overflow-x-auto overflow-y-auto",
   ">\n                            Edit\n                          </Link>",
 ]) {
   assertIncludes(customerFolderSavedBookingsPanel, fragment, `customer folder jobs section ${fragment}`);

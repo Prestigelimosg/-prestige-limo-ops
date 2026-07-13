@@ -259,7 +259,7 @@ export function CustomerFolderSavedBookingsPanel({
       const params = new URLSearchParams({
         customer_account: customerName,
         customer_id: customerId,
-        limit: "25",
+        limit: "200",
       });
       if (focusBookingReference) {
         params.set("booking_reference", focusBookingReference);
@@ -389,14 +389,19 @@ export function CustomerFolderSavedBookingsPanel({
   }
 
   return (
+    <>
     <section
-      className="rounded-md border border-slate-200 bg-white p-3 shadow-sm"
+      className="rounded-xl border border-amber-300 border-l-8 bg-amber-50 p-4 shadow-sm"
       data-customer-folder-saved-bookings={customerId}
+      data-customer-folder-sector="unbilled-jobs"
     >
       <div>
         <div>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-800">
+            3 · Pending jobs for payment
+          </p>
           <h2
-            className="text-base font-bold text-slate-950"
+            className="mt-1 text-lg font-bold text-slate-950"
             data-customer-folder-saved-bookings-heading="true"
           >
             Jobs not billed yet
@@ -436,9 +441,12 @@ export function CustomerFolderSavedBookingsPanel({
             </p>
             <span className="text-xs font-semibold text-slate-500">Amounts are reviewed before email.</span>
           </div>
-          <div className="max-h-96 overflow-auto rounded-md border border-slate-200">
+          <div
+            className="max-h-[32rem] overflow-x-auto overflow-y-auto rounded-lg border border-amber-300 bg-white shadow-inner"
+            data-customer-folder-unbilled-scroll="true"
+          >
           <table className="w-full min-w-[760px] border-collapse text-left text-sm">
-            <thead className="sticky top-0 bg-white text-[11px] uppercase tracking-[0.12em] text-slate-500">
+            <thead className="sticky top-0 z-10 bg-amber-100 text-[11px] uppercase tracking-[0.12em] text-amber-950 shadow-sm">
               <tr>
                 <th className="border-b border-slate-200 px-3 py-2 font-bold">Select</th>
                 <th className="border-b border-slate-200 px-3 py-2 font-bold">Booking</th>
@@ -566,14 +574,18 @@ export function CustomerFolderSavedBookingsPanel({
           </div>
         </div>
       ) : null}
-
+    </section>
       <section
-            className="mt-3 rounded-md border border-slate-300 bg-slate-50 p-3"
+            className="rounded-xl border border-violet-300 border-l-8 bg-violet-50 p-4 shadow-sm"
+            data-customer-folder-sector="invoice-review"
             data-customer-folder-selected-invoice-layout="true"
           >
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <h3 className="text-sm font-bold text-slate-950">Customer invoice layout</h3>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-800">
+                  4 · Selected jobs invoice review
+                </p>
+                <h3 className="mt-1 text-lg font-bold text-slate-950">Customer invoice layout</h3>
                 <p className="mt-0.5 text-xs font-semibold text-slate-600">
                   Every selected job is carried into the established invoice preview and email lane.
                 </p>
@@ -634,6 +646,6 @@ export function CustomerFolderSavedBookingsPanel({
               <p className="mt-3 text-xs font-semibold text-slate-500">Select jobs above to build this invoice.</p>
             )}
       </section>
-    </section>
+    </>
   );
 }

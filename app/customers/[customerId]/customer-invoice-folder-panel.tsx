@@ -332,14 +332,16 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
 
   return (
     <section
-      className="rounded-md border border-slate-200 bg-white shadow-sm"
+      className="overflow-hidden rounded-xl border border-sky-300 border-l-8 bg-sky-50 shadow-sm"
       data-customer-invoice-rules="true"
       data-customer-invoice-folder-panel={customer.id}
+      data-customer-folder-sector="invoices"
     >
-      <div className="border-b border-slate-200 px-4 py-3">
+      <div className="border-b border-sky-200 bg-sky-100/70 px-4 py-3">
         <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <h2 className="text-lg font-bold text-slate-950">Invoices</h2>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-800">2 · Total invoices</p>
+            <h2 className="mt-1 text-lg font-bold text-slate-950">Invoices</h2>
             <p className="mt-0.5 text-sm font-semibold text-slate-600">
               Date, invoice number, amount, balance due, and paid or pending status for this customer.
             </p>
@@ -365,7 +367,7 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
         {storedInvoiceMessage}
       </p>
 
-      <div className="max-h-72 overflow-auto" data-customer-total-invoices-scroll="true">
+      <div className="max-h-72 overflow-auto bg-white" data-customer-total-invoices-scroll="true">
         <table className="w-full min-w-[760px] border-collapse text-left text-sm" data-customer-invoice-folder-table="true">
           <thead>
             <tr className="border-b border-slate-200 text-xs uppercase tracking-[0.14em] text-slate-500">

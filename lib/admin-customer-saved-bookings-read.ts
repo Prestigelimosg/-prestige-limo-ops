@@ -53,8 +53,8 @@ export type AdminCustomerSavedBookingsReadData = {
 type UnknownRecord = Record<string, unknown>;
 
 const defaultLimit = 10;
-const maxLimit = 25;
 const customerFolderSavedBookingSourceReadLimit = 200;
+const maxLimit = customerFolderSavedBookingSourceReadLimit;
 const maxSafeTextLength = 160;
 const malformedParamsError = "Admin customer saved bookings read parameters are malformed.";
 const forbiddenParamsError =

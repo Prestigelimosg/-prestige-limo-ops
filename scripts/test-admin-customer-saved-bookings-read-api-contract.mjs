@@ -338,6 +338,11 @@ try {
       ok: true,
     },
   );
+  assert.equal(
+    reader.parseAdminCustomerSavedBookingsReadParams({ customer_account: "UBS", limit: "200" }).ok,
+    true,
+    "customer folder should accept the complete bounded 200-record source read",
+  );
   assert.deepEqual(
     reader.parseAdminCustomerSavedBookingsReadParams({
       customer_account: "UBS",

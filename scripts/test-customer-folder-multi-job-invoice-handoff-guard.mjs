@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const guardScript = "scripts/test-customer-folder-multi-job-invoice-handoff-guard.mjs";
-const [folderPage, customersPage, invoicePersistence, localInvoices, ledger, preactivation] =
+const [folderPage, folderShell, invoiceFolder, savedBookingsRead, customersPage, invoicePersistence, localInvoices, ledger, preactivation] =
   await Promise.all([
     readFile("app/customers/[customerId]/saved-bookings-panel.tsx", "utf8"),
+    readFile("app/customers/[customerId]/page.tsx", "utf8"),
+    readFile("app/customers/[customerId]/customer-invoice-folder-panel.tsx", "utf8"),
+    readFile("lib/admin-customer-saved-bookings-read.ts", "utf8"),
     readFile("app/customers/page.tsx", "utf8"),
     readFile("lib/customer-invoice-record-persistence.ts", "utf8"),
     readFile("lib/customer-local-invoices.ts", "utf8"),
@@ -25,9 +28,26 @@ for (const fragment of [
   "Review invoice &amp; email",
   "selected_booking_references",
   "selectedUnbilledBookings.map((booking)",
+  'limit: "200"',
+  'data-customer-folder-sector="unbilled-jobs"',
+  'data-customer-folder-unbilled-scroll="true"',
+  "max-h-[32rem] overflow-x-auto overflow-y-auto",
+  "3 · Pending jobs for payment",
+  "4 · Selected jobs invoice review",
 ]) {
   includes(folderPage, fragment, `customer folder four-sector fragment ${fragment}`);
 }
+
+includes(folderShell, 'data-customer-folder-sector="profile"', "profile sector marker");
+includes(folderShell, "1 · Customer profile &amp; invoice prefix", "profile sector label");
+includes(folderShell, "bg-slate-100", "customer folder contrasting page background");
+includes(invoiceFolder, 'data-customer-folder-sector="invoices"', "invoices sector marker");
+includes(invoiceFolder, "2 · Total invoices", "invoices sector label");
+includes(
+  savedBookingsRead,
+  "const maxLimit = customerFolderSavedBookingSourceReadLimit;",
+  "customer folder returns its complete bounded source read",
+);
 
 assert.equal(
   folderPage.includes("Load unbilled jobs"),

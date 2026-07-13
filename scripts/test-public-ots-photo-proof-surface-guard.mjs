@@ -452,7 +452,7 @@ for (const path of publicClientPaths) {
       );
       assertIncludes(
         source,
-        "window.URL.revokeObjectURL(url);",
+        "window.requestAnimationFrame(() => window.URL.revokeObjectURL(url));",
         "driver calendar attachment blob URL cleanup",
       );
       assert.equal(

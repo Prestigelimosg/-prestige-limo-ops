@@ -599,7 +599,7 @@ function downloadDriverCalendarBlob(blob: Blob, filename: string) {
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  window.URL.revokeObjectURL(url);
+  window.requestAnimationFrame(() => window.URL.revokeObjectURL(url));
 }
 
 export default function DriverJobPage() {

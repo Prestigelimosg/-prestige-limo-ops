@@ -77,6 +77,7 @@ for (const fragment of [
   "async function downloadDriverJobCalendar()",
   'fetch(`/api/driver-job/${encodeURIComponent(token)}/calendar`',
   "downloadDriverCalendarBlob(await response.blob(), filename)",
+  "window.requestAnimationFrame(() => window.URL.revokeObjectURL(url))",
   "onClick={downloadDriverJobCalendar}",
   'type="button"',
   "Add / Update Calendar",

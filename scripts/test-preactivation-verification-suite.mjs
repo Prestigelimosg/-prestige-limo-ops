@@ -238,6 +238,10 @@ const guardChecks = [
     script: "scripts/test-bookings-earlier-history-compact-guard.mjs",
   },
   {
+    label: "Rates mobile layout containment guard",
+    script: "scripts/test-rates-mobile-layout-guard.mjs",
+  },
+  {
     label: "dashboard urgent requests and active monitor guard",
     script: "scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs",
   },

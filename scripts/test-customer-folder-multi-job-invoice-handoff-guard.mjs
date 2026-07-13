@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const guardScript = "scripts/test-customer-folder-multi-job-invoice-handoff-guard.mjs";
-const [folderPage, folderShell, invoiceFolder, savedBookingsRead, customersPage, invoicePersistence, localInvoices, ledger, preactivation] =
+const [folderPage, folderShell, invoiceFolder, savedBookingsRead, customersPage, invoicePersistence, localInvoices, ledger, preactivation, appSmoke] =
   await Promise.all([
     readFile("app/customers/[customerId]/saved-bookings-panel.tsx", "utf8"),
     readFile("app/customers/[customerId]/page.tsx", "utf8"),
@@ -13,6 +13,7 @@ const [folderPage, folderShell, invoiceFolder, savedBookingsRead, customersPage,
     readFile("lib/customer-local-invoices.ts", "utf8"),
     readFile("docs/current-implementation-ledger.md", "utf8"),
     readFile("scripts/test-preactivation-verification-suite.mjs", "utf8"),
+    readFile("scripts/test-app-smoke-browser.mjs", "utf8"),
   ]);
 
 function includes(source, fragment, label = fragment) {
@@ -41,6 +42,16 @@ for (const fragment of [
 includes(folderShell, 'data-customer-folder-sector="profile"', "profile sector marker");
 includes(folderShell, "1 · Customer profile &amp; invoice prefix", "profile sector label");
 includes(folderShell, "bg-slate-100", "customer folder contrasting page background");
+includes(
+  appSmoke,
+  '"[data-customer-folder-sector=\'profile\']"',
+  "browser customer-folder profile readiness marker",
+);
+includes(
+  ledger,
+  "The customer-detail portion of that sweep waits for the established numbered profile sector",
+  "customer-folder browser marker ledger checkpoint",
+);
 includes(invoiceFolder, 'data-customer-folder-sector="invoices"', "invoices sector marker");
 includes(invoiceFolder, "2 · Total invoices", "invoices sector label");
 includes(

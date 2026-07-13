@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [route, readHelper, adapter, persistenceAdapter, bookPage] = await Promise.all([
+const [route, readHelper, adapter, persistenceAdapter, bookPage, appSmoke] = await Promise.all([
   readFile("app/api/customer-booking-requests/route.ts", "utf8"),
   readFile("lib/customer-saved-bookings-read.ts", "utf8"),
   readFile("lib/customer-booking-request-adapter.ts", "utf8"),
   readFile("lib/admin-booking-supabase-adapter.ts", "utf8"),
   readFile("app/book/page.tsx", "utf8"),
+  readFile("scripts/test-app-smoke-browser.mjs", "utf8"),
 ]);
 
 for (const fragment of [
@@ -37,6 +38,13 @@ for (const fragment of [
 ]) {
   assert.ok(bookPage.includes(fragment), `Successful submit button state must include ${fragment}`);
 }
+
+assert.ok(
+  appSmoke.includes('await setCustomerBookingField("luggage", "2 bags");') &&
+    appSmoke.includes('second valid customer booking request for same pickup date/time after edit') &&
+    appSmoke.includes('await setCustomerBookingField("luggage", "2 bags retry");'),
+  "Browser repeat and disabled-intake checks must edit a safe field before retrying the protected submitted form.",
+);
 
 assert.ok(
   readHelper.includes("export async function resolveCustomerSavedBookingsVerifiedIdentity"),

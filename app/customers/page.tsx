@@ -7074,7 +7074,7 @@ export default function MockCustomerDashboardPage() {
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
         <header className="border-b border-slate-200 pb-5">
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Prestige Limo Ops</p>
-          <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div className="mt-3">
             <div>
               <h1 className="text-3xl font-bold tracking-normal text-slate-950">Customers & Invoices</h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
@@ -7082,22 +7082,12 @@ export default function MockCustomerDashboardPage() {
                 the approved invoice workflow.
               </p>
             </div>
-            <div
-              className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950 shadow-sm"
-              data-customer-internal-staff-notice="true"
-            >
-              <p className="font-bold">Internal Staff Dashboard — Not Customer-Facing</p>
-              <p className="mt-1">
-                Use /book for customer booking requests. This page contains dispatcher, billing, payment
-                review, and staff-only planning tools.
-              </p>
-            </div>
           </div>
         </header>
 
         {!selectedCustomerWorkspaceOpen ? (
           <section
-            className="rounded-lg border border-slate-200 bg-white shadow-sm"
+            className="rounded-lg border border-sky-300 border-l-8 bg-sky-50 shadow-sm"
             data-customer-billing-overview="true"
           >
           <div className="border-b border-slate-200 p-4 sm:p-5">
@@ -7284,7 +7274,7 @@ export default function MockCustomerDashboardPage() {
 
         {selectedCustomerWorkspaceOpen ? (
         <section
-          className="rounded-lg border border-slate-200 bg-white shadow-sm"
+          className="rounded-lg border border-emerald-300 border-l-8 bg-emerald-50 shadow-sm"
           data-selected-customer-dashboard="true"
         >
           <div className="border-b border-slate-200 p-4 sm:p-5">
@@ -8186,7 +8176,7 @@ export default function MockCustomerDashboardPage() {
 
         {advancedInvoiceWorkbenchVisible ? (
           <details
-            className="rounded-lg border border-slate-200 bg-white shadow-sm"
+            className="rounded-lg border border-violet-300 border-l-8 bg-violet-50 shadow-sm"
             data-customer-billing-workbench-drawer="true"
             open={
               Boolean(customerInvoicePrepRow) ||

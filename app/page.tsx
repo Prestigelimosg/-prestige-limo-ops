@@ -23232,7 +23232,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         >
           Today
         </button>
-        <label className="min-w-72 flex-1">
+        <label className="relative min-w-72 flex-1">
           <span className="sr-only">Quick search loaded jobs</span>
           <input
             className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
@@ -42446,7 +42446,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           {rateMessageTarget === "override" ? null : statusPanel}
 
           <div className="grid gap-3 lg:grid-cols-2">
-            <div>
+            <div className="min-w-0">
               <h3 className="text-base font-semibold">Default Prestige Rates</h3>
               <div className="mt-3 overflow-x-auto rounded-md border border-stone-200">
                 <table className="min-w-full border-collapse text-sm" data-default-vehicle-customer-rates="true">
@@ -42532,7 +42532,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               </div>
             </div>
 
-            <div>
+            <div className="min-w-0">
               <h3 className="text-base font-semibold">Default Driver Payout</h3>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 {rateBookingTypes.map((bookingType) => {

@@ -38,7 +38,7 @@ const browserConsoleErrors = [];
 const tabLabels = ["Dispatch", "Dashboard", "Bookings", "Drivers", "Completed", "Rates"];
 const tabExpectedText = {
   Dispatch: "Create Job Card",
-  Bookings: "Load Bookings",
+  Bookings: "Find saved jobs",
   Completed: "No completed bookings loaded yet.",
   Dashboard: "Operations Dashboard",
   Drivers: "Driver Database",
@@ -547,8 +547,8 @@ const requiredVisibleText = [
   "Pricing",
   "Route Extras & Child Seat",
   "Job Card Preview",
-  "Driver Dispatch",
-  "Load Bookings",
+  "Driver Message",
+  "Find saved jobs",
   "No completed bookings loaded yet.",
   "Operations Dashboard",
   "Driver Database",
@@ -1076,7 +1076,7 @@ async function runChromeTest() {
             expectedTabLabels.every((label) => visibleTabLabels.includes(label)) &&
             text.includes("Dispatcher Intake") &&
             text.includes("Job Card Preview") &&
-            text.includes("Driver Dispatch"),
+            text.includes("Driver Message"),
           toggleHeight: Math.round(toggle?.getBoundingClientRect().height || 0),
         };
       })()`);
@@ -2359,7 +2359,6 @@ async function runChromeTest() {
             const record = document.querySelector("[data-admin-booking-persistence-record='LOADED-OPS-001']");
             const lowerPriorityRecord = document.querySelector("[data-admin-booking-persistence-record='LOW-REQ-003']");
             const secondRecord = document.querySelector("[data-admin-booking-persistence-record='SECOND-OPS-002']");
-            const reviewState = document.querySelector("[data-admin-booking-customer-request-review-state='LOADED-OPS-001']");
             const calls = window.__adminBookingPersistenceCalls || [];
             const waitLabels = [...document.querySelectorAll("[data-admin-booking-customer-request-wait-time]")]
               .map((label) => ({
@@ -2397,9 +2396,6 @@ async function runChromeTest() {
                     .querySelector("[data-admin-booking-customer-request-filter-summary]")
                     ?.textContent.replace(/\\s+/g, " ")
                     .trim() || "",
-                  reviewStateText: (reviewState?.innerText || reviewState?.textContent || "")
-                    .replace(/\\s+/g, " ")
-                    .trim(),
                   secondRecordText: secondRecord.textContent.replace(/\\s+/g, " ").trim(),
                   summary: document
                     .querySelector("[data-admin-booking-persistence-filter-summary]")
@@ -2499,21 +2495,13 @@ async function runChromeTest() {
         "Expected loaded customer booking request to be shown as admin-review intake",
       );
       assert.equal(
-        loadState.recordText.includes("Internal review decision only") &&
-          loadState.recordText.includes("Current review state") &&
-          loadState.recordText.includes("Approve Internally") &&
-          loadState.recordText.includes("Decline Internally") &&
-          loadState.recordText.includes("Needs Review"),
+        !loadState.recordText.includes("Internal review decision only") &&
+          !loadState.recordText.includes("Current review state") &&
+          !loadState.recordText.includes("Approve Internally") &&
+          !loadState.recordText.includes("Decline Internally") &&
+          !loadState.recordText.includes("Needs Review"),
         true,
-        "Expected loaded customer request to expose compact internal review-decision controls and current state",
-      );
-      assert.equal(
-        loadState.reviewStateText.includes("Admin internal status Admin Review Required") &&
-          loadState.reviewStateText.includes("Customer-facing status Received") &&
-          loadState.reviewStateText.includes("Short-notice review status Admin Review Required") &&
-          loadState.reviewStateText.includes("Request review status pending_review"),
-        true,
-        "Expected loaded customer request to show current safe review/status fields before decision change",
+        "Expected hidden operational snapshots not to duplicate the visible customer-request decision controls",
       );
       assert.equal(
         loadState.recordText.includes("+65 8000 1000") &&
@@ -2928,111 +2916,7 @@ async function runChromeTest() {
         "Expected phone search not to update",
       );
 
-      const decisionClicked = await evaluate(`(() => {
-        const button = document.querySelector(
-          "[data-admin-booking-customer-request-decision-button='LOADED-OPS-001:approve-internally']",
-        );
-        button?.click();
-        return Boolean(button);
-      })()`);
-      assert.equal(decisionClicked, true, "Expected internal review decision control for customer request");
-
-      const decisionState = await waitForCondition(
-        () =>
-          evaluate(`(() => {
-            const feedback = document.querySelector("[data-admin-booking-persistence-feedback]")?.textContent.trim() || "";
-            const record = document.querySelector("[data-admin-booking-persistence-record='LOADED-OPS-001']");
-            const reviewState = document.querySelector("[data-admin-booking-customer-request-review-state='LOADED-OPS-001']");
-            const calls = window.__adminBookingPersistenceCalls || [];
-            const patchCall = [...calls]
-              .reverse()
-              .find((call) => call.method === "PATCH" && call.body?.target_booking_reference === "LOADED-OPS-001");
-            const body = patchCall?.body;
-
-            if (!feedback.includes("Internal review decision saved for LOADED-OPS-001") || !body || !record) {
-              return false;
-            }
-
-            const keys = [];
-            const collectKeys = (value) => {
-              if (Array.isArray(value)) {
-                value.forEach(collectKeys);
-                return;
-              }
-              if (!value || typeof value !== "object") {
-                return;
-              }
-              Object.entries(value).forEach(([key, nested]) => {
-                keys.push(key);
-                collectKeys(nested);
-              });
-            };
-            collectKeys(body);
-            const forbiddenKeyPattern =
-              /price|fare|amount|billing|invoice|payment|pdf|stripe|paynow|payout|finance|notification|telegram|proof|photo|live_location|auth|parser_learning|debug|qa_archive|mock_workbench|admin_note|internal_note|manual_extra_charge/i;
-
-            return {
-              body,
-              feedback,
-              forbiddenKeys: keys.filter((key) => forbiddenKeyPattern.test(key)),
-              recordText: record.textContent.replace(/\\s+/g, " ").trim(),
-              reviewStateText: (reviewState?.innerText || reviewState?.textContent || "")
-                .replace(/\\s+/g, " ")
-                .trim(),
-            };
-          })()`),
-        10000,
-        "admin customer request internal review decision feedback",
-      );
-      assert.deepEqual(
-        decisionState.forbiddenKeys,
-        [],
-        "Expected admin review decision body to include only approved operational/status field names",
-      );
-      assert.equal(decisionState.body.booking.source_channel, "customer-booking-request");
-      assert.equal(decisionState.body.booking.customer_facing_status, "confirmed");
-      assert.equal(decisionState.body.booking.admin_internal_status, "Ready for Confirmation");
-      assert.equal(decisionState.body.booking.request_review_status, "approved");
-      assert.equal(decisionState.body.booking.short_notice_review_status, "reviewed");
-      assert.equal(decisionState.body.booking.contact_phone, "+65 8000 1000");
-      assert.equal(decisionState.body.booking.contact_email, "loaded-ops@example.com");
-      assert.deepEqual(
-        decisionState.body.route_points.map((routePoint) => routePoint.location_text),
-        ["Loaded Ops Pickup", "Loaded Ops Stop", "Loaded Ops Dropoff"],
-        "Expected review decision update to preserve safe route points",
-      );
-      assert.deepEqual(
-        decisionState.body.service_items.map((item) => item.service_item_type),
-        ["child_seat", "extra_stop"],
-        "Expected review decision update to preserve operational service items only",
-      );
-      assert.equal(
-        decisionState.feedback.includes("Approved Internally") &&
-          decisionState.feedback.includes("Customer in-app notification queued"),
-        true,
-        "Expected internal decision feedback to confirm safe customer in-app notification queueing",
-      );
-      assert.equal(
-        decisionState.feedback.includes("Short-notice review was handled by this decision"),
-        true,
-        "Expected short-notice customer request review to be closed by the admin decision",
-      );
-      assert.equal(
-        decisionState.reviewStateText.includes("Admin internal status Ready for Confirmation") &&
-          decisionState.reviewStateText.includes("Customer-facing status confirmed") &&
-          decisionState.reviewStateText.includes("Short-notice review status reviewed") &&
-          decisionState.reviewStateText.includes("Request review status approved"),
-        true,
-        "Expected review state readout to remain visible after internal decision update",
-      );
-      assert.equal(
-        /9999-SHOULD-NOT-APPLY|8888-SHOULD-NOT-APPLY|DO-NOT-LEAK-OPS-NOTE|payments\\.example\\.invalid/i.test(
-          decisionState.recordText,
-        ),
-        false,
-        "Expected forbidden mocked fields not to appear after review decision update",
-      );
-      const patchCallsAfterDecision = await evaluate(`(() => {
+      const patchCallsBeforeSnapshotUpdate = await evaluate(`(() => {
         const calls = window.__adminBookingPersistenceCalls || [];
         return calls.filter((call) => call.method === "PATCH").length;
       })()`);
@@ -3248,14 +3132,14 @@ async function runChromeTest() {
         "Expected applied snapshot identity to show the safe pickup/drop-off summary",
       );
       assert.equal(
-        appliedSnapshotState.identityText.includes("Ready for Confirmation"),
+        appliedSnapshotState.identityText.includes("Admin Review Required"),
         true,
         "Expected applied snapshot identity to show the safe review/admin status",
       );
       assert.equal(
         appliedSnapshotState.feedback.includes("Admin Review Required"),
-        false,
-        "Expected approved customer request snapshot not to revert to Admin Review Required",
+        true,
+        "Expected review-pending customer request snapshot to retain Admin Review Required",
       );
       assert.deepEqual(
         appliedSnapshotState.workflowStatusCalls
@@ -3303,7 +3187,7 @@ async function runChromeTest() {
       );
       assert.equal(
         appliedHiddenByFilterState.patchCalls,
-        patchCallsAfterDecision,
+        patchCallsBeforeSnapshotUpdate,
         "Expected applied hidden-by-filter note not to update",
       );
 
@@ -3498,10 +3382,10 @@ async function runChromeTest() {
       assert.equal(updateState.body.booking.contact_email, "updated-ops@example.com");
       assert.equal(updateState.body.booking.pax_count, 2);
       assert.equal(updateState.body.booking.source_channel, "customer-booking-request");
-      assert.equal(updateState.body.booking.customer_facing_status, "confirmed");
-      assert.equal(updateState.body.booking.admin_internal_status, "Ready for Confirmation");
-      assert.equal(updateState.body.booking.request_review_status, "approved");
-      assert.equal(updateState.body.booking.short_notice_review_status, "reviewed");
+      assert.equal(updateState.body.booking.customer_facing_status, "Received");
+      assert.equal(updateState.body.booking.admin_internal_status, "Admin Review Required");
+      assert.equal(updateState.body.booking.request_review_status, "pending_review");
+      assert.equal(updateState.body.booking.short_notice_review_status, "Admin Review Required");
       assert.deepEqual(
         updateState.body.route_points.map((routePoint) => routePoint.location_text),
         ["Updated Ops Pickup", "Updated Ops Stop", "Updated Ops Dropoff"],
@@ -3520,8 +3404,8 @@ async function runChromeTest() {
       );
       assert.equal(
         updateState.feedback.includes("Admin Review Required"),
-        false,
-        "Expected updated approved customer request snapshot not to revert to Admin Review Required",
+        true,
+        "Expected updated review-pending customer request snapshot to retain Admin Review Required",
       );
       assert.equal(
         updateState.appliedReference.includes("LOADED-OPS-001"),
@@ -26463,7 +26347,7 @@ async function runChromeTest() {
             "no retention approval record generated",
             "not indexed / not approved / not exported / not billed",
           ].filter((value) => text.toLowerCase().includes(value)),
-          helperVisible: Boolean(document.querySelector("[data-customer-search-helper]")),
+          billingOverviewVisible: Boolean(document.querySelector("[data-customer-billing-overview]")),
           links: [...document.querySelectorAll("[data-open-customer-folder]")].map((link) => link.getAttribute("href")),
           outstandingPaidInvoiceMentions: ["UBS-0002", "RITZ-0002", "VIP-0002"].filter((invoiceNumber) =>
             document.querySelector("[data-outstanding-payments-review]")?.innerText.includes(invoiceNumber),
@@ -26822,16 +26706,16 @@ async function runChromeTest() {
         [],
         "Expected customer folder finder not to link mock customer folders by default",
       );
-      assert.equal(dashboardState.helperVisible, true, "Expected customer folder finder helper");
+      assert.equal(dashboardState.billingOverviewVisible, true, "Expected Customer Billing Overview");
       assert.equal(
         dashboardState.monthlyBillingQueueVisible,
-        true,
-        "Expected real Monthly Billing Queue on customers dashboard",
+        false,
+        "Expected retired global Monthly Billing Queue to stay removed from customers dashboard",
       );
       assert.equal(
         dashboardState.monthlyBillingGroupSelectVisible,
-        true,
-        "Expected Monthly Billing Queue billing account/month selector",
+        false,
+        "Expected retired global Monthly Billing Queue selector to stay removed",
       );
       assert.equal(
         dashboardState.monthlyBillingPrepareVisible,
@@ -26840,15 +26724,15 @@ async function runChromeTest() {
       );
       assert.equal(
         dashboardState.monthlyBillingQueueText.includes("Monthly Billing Queue"),
-        true,
-        "Expected Monthly Billing Queue heading",
+        false,
+        "Expected retired global Monthly Billing Queue heading to stay removed",
       );
       assert.equal(
         dashboardState.monthlyBillingQueueText.includes(
           "Same company names stay separate by saved account ID and passenger scope.",
         ),
-        true,
-        "Expected Monthly Billing Queue strict account grouping copy",
+        false,
+        "Expected retired global Monthly Billing Queue grouping copy to stay removed",
       );
       assert.equal(dashboardState.searchInputVisible, true, "Expected visible customer search input");
       assert.equal(
@@ -26859,18 +26743,8 @@ async function runChromeTest() {
       assert.deepEqual(dashboardState.forbiddenText, [], "Expected no sensitive customer payment text");
       assert.equal(
         dashboardState.customerInternalStaffNoticeVisible,
-        true,
-        "Expected /customers internal staff-only notice to be visible",
-      );
-      assert.equal(
-        dashboardState.customerInternalStaffNotice.includes("Internal Staff Dashboard — Not Customer-Facing"),
-        true,
-        "Expected /customers internal staff-only notice heading",
-      );
-      assert.equal(
-        dashboardState.customerInternalStaffNotice.includes("Use /book for customer booking requests."),
-        true,
-        "Expected /customers notice to point customers to /book",
+        false,
+        "Expected redundant /customers internal staff-only notice to stay removed",
       );
       assert.equal(
         dashboardState.driverAssignmentReadinessVisible,
@@ -31512,7 +31386,7 @@ async function runChromeTest() {
         await setCustomerViewportAndLoad(folderUrl, desktopViewport);
         await waitForCondition(
           () =>
-            evaluate(`document.body.innerText.includes("CUSTOMER FOLDER") &&
+            evaluate(`document.body.innerText.includes("CUSTOMER PROFILE & INVOICE PREFIX") &&
               document.body.innerText.includes(${JSON.stringify(customerName)}) &&
               Boolean(document.querySelector("[data-payment-collection-detail='${customerId}']"))`),
           10000,
@@ -32073,7 +31947,7 @@ async function runChromeTest() {
             return {
               docClientWidth: document.documentElement.clientWidth,
               docScrollWidth: document.documentElement.scrollWidth,
-              helperVisible: Boolean(document.querySelector("[data-customer-search-helper]")),
+              billingOverviewVisible: Boolean(document.querySelector("[data-customer-billing-overview]")),
               driverAssignmentReadinessVisible: Boolean(document.querySelector("[data-driver-assignment-readiness]")),
               driverDetailCollectionReadinessVisible: Boolean(
                 document.querySelector("[data-driver-detail-collection-readiness]"),
@@ -32180,16 +32054,11 @@ async function runChromeTest() {
       await assertNoMockOperationsRiskSlaWatchlistWorkbenchLeak("/customers mobile");
       await assertNoMockQuotePricingReviewReadinessWorkbenchLeak("/customers mobile");
 	      assert.equal(mobileDashboardState.rowCount, 0, "Expected no mock customer rows on mobile by default");
-      assert.equal(mobileDashboardState.helperVisible, true, "Expected mobile customer folder finder helper");
+      assert.equal(mobileDashboardState.billingOverviewVisible, true, "Expected mobile Customer Billing Overview");
       assert.equal(
         mobileDashboardState.internalStaffNoticeVisible,
-        true,
-        "Expected mobile /customers internal staff-only notice to be visible",
-      );
-      assert.equal(
-        mobileDashboardState.internalStaffNotice.includes("Use /book for customer booking requests."),
-        true,
-        "Expected mobile /customers internal staff-only notice to mention /book",
+        false,
+        "Expected redundant mobile /customers internal staff-only notice to stay removed",
       );
       assert.equal(
         mobileDashboardState.driverAssignmentReadinessVisible,
@@ -33759,7 +33628,8 @@ async function runChromeTest() {
         "Expected valid /book submit not to show same-date or same-time blocking",
       );
 
-      await clickCustomerBookingSubmit("second valid customer booking request for same pickup date/time");
+      await setCustomerBookingField("luggage", "2 bags");
+      await clickCustomerBookingSubmit("second valid customer booking request for same pickup date/time after edit");
       const sameTimeRepeatState = await waitForCondition(
         async () => {
           const candidateState = await readCustomerBookingPageState();
@@ -33839,6 +33709,7 @@ async function runChromeTest() {
         customerBookingRequestRuntimeAllowedPattern,
       );
 
+      await setCustomerBookingField("luggage", "2 bags retry");
       const failureClicked = await evaluate(`(() => {
         window.__customerBookingRequestMockMode = "disabled";
         const button = document.querySelector("[data-customer-booking-submit]");
@@ -39988,12 +39859,12 @@ async function runChromeTest() {
       const customerFolderIndexHandoffVisible = await evaluate(
         `Boolean(document.querySelector("[data-customer-folder-index-handoff]"))`,
       );
-      const customerFolderFinderVisible = await evaluate(
-        `Boolean(document.querySelector("[data-customer-folder-finder]"))`,
+      const customerBillingOverviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-customer-billing-overview]"))`,
       );
       state.customerFolderIndexHandoffRouteBoundaries.push({
         context: route.context,
-        finderVisible: customerFolderFinderVisible,
+        overviewVisible: customerBillingOverviewVisible,
         visible: customerFolderIndexHandoffVisible,
       });
       assert.equal(
@@ -40002,9 +39873,9 @@ async function runChromeTest() {
         `Expected customer folder index handoff visibility boundary for ${route.context}`,
       );
       assert.equal(
-        customerFolderFinderVisible,
+        customerBillingOverviewVisible,
         route.context === "/customers",
-        `Expected current customer folder finder visibility boundary for ${route.context}`,
+        `Expected current Customer Billing Overview visibility boundary for ${route.context}`,
       );
       const customerAccountServiceHistoryHandoffVisible = await evaluate(
         `Boolean(document.querySelector("[data-customer-account-service-history-handoff]"))`,
@@ -40045,7 +39916,11 @@ async function runChromeTest() {
     }
     reporter.step("route leak guards: /customers/[customerId]");
     await navigateWithLoadEvent(client, new URL("/customers/ubs", appUrl).toString());
-    await waitForBodyText(evaluate, "CUSTOMER FOLDER", "/customers/[customerId] confirmed driver handoff boundary");
+    await waitForSelector(
+      evaluate,
+      "[data-customer-folder-sector='profile']",
+      "/customers/[customerId] profile sector boundary",
+    );
     const customerDetailAdminConfirmedDriverAssignmentHandoffVisible = await evaluate(
       `Boolean(document.querySelector("[data-admin-confirmed-driver-assignment-handoff]"))`,
     );

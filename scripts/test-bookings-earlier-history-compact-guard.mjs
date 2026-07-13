@@ -135,11 +135,17 @@ for (const fragment of [
   "All dates",
   'className="mt-3 overflow-x-auto rounded-md border border-stone-200 bg-white p-2"',
   'className="flex min-w-[56rem] items-center gap-2"',
+  'className="relative min-w-72 flex-1"',
   "bookingsShowAllDates || getBookingDateKey(bookingRecord) === bookingsSelectedDate",
   "Quick search loaded jobs: ref, passenger, flight, route, driver",
 ]) {
   assertIncludes(appPage, fragment, `bookings find toolbar fragment ${fragment}`);
 }
+assertExcludes(
+  appPage,
+  'className="min-w-72 flex-1"',
+  "uncontained Bookings quick-search accessible label",
+);
 for (const fragment of [
   "Load saved bookings and reopen them in Dispatch.",
   "{loading ? \"Loading...\" : \"Load Bookings\"}",

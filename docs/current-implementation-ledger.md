@@ -150,6 +150,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The broad booking UI browser suite requires `Driver Reports` to stay absent for an unsaved draft with no Driver Job Link context, then requires the single disclosure and validates the established saved driver-status content and guarded refresh control from inside it after an exact booking load.
 - The legacy Day-of-Trip sector remains hard-hidden with its established compatibility selectors and shared read state; it is not an operator-facing second status surface. Browser runtime proof validates the visible `Driver Reports` presentation (`Refresh status`, with no legacy state badge) without removing or rewiring the protected legacy sector.
 - The broad booking UI browser suite follows the current automatic guarded Bookings read and background synchronization paths, requires the compact `Find saved jobs` toolbar, and rejects reintroduction of the retired manual `Load Bookings` button while preserving typed `limit=25`, saved-list `limit=100`, no-legacy-read, deletion, and empty-state coverage.
+- The compact `Find saved jobs` toolbar keeps its existing horizontal control scroller, while the visually hidden quick-search label is locally contained so it cannot widen the 375px document. Visible controls, filtering behavior, booking reads, and operational write paths are unchanged.
 - When a driver mutation intentionally pauses background booking synchronization, the browser fixture reuses Dashboard’s existing `Refresh Loaded Bookings` control instead of inventing or restoring a Bookings-tab load button.
 - The broad booking UI browser suite follows the current Dashboard ownership of the single protected `Today's Jobs` monitor and requires exactly one compact `Live Dispatch Map` inside it. It continues to reject a duplicate detailed driver-assignment control on Dashboard; detailed assignment remains in Dispatch.
 - The broad booking UI browser DSP fixture deliberately retains a stale saved `195` billable-minute value while carrying `195` raw total minutes. Runtime proof requires the canonical whole-hour helper to normalize that evidence to `180` billable minutes in both the visible review and guarded payload; the manually reviewed customer amount remains unchanged and no CRM/rate-derived DSP amount calculation is restored.
@@ -175,6 +176,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The established persistence adapter preserves that supplied customer ID only for its exact system customer-booking-request actor when the verified company/booker pair is also present; anonymous/public requests keep the existing customer find/create behavior.
 - The browser form never supplies identity IDs. A partial or inactive verified PA identity fails closed, and names, company text, email, phone, or parser text are never converted into authorization IDs.
 - After a successful `/book` response, the existing submit button reads `Submitted` and stays disabled until the customer edits a field; failed submissions remain retryable.
+- The broad browser same-date/same-time repeat and later disabled-intake proof each edit only the luggage text after a successful submit, respecting that protected post-success lock while leaving pickup date and time unchanged. The same narrow intake endpoint, no-slot-blocking behavior, and safe failed-submit feedback remain covered.
 - Focused guard: `scripts/test-customer-booking-request-pa-identity-guard.mjs`.
 
 ### Customer Request Decision Identity Preservation
@@ -1297,6 +1299,12 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Customers Invoice Workspace Cleanup
 
 - Customers page daily flow is compact: the customer billing overview opens one selected-customer workspace, and the fake payment summary strip is removed.
+- The redundant `Internal Staff Dashboard — Not Customer-Facing` banner is removed from the authenticated Customers page. Route authorization and all customer/public privacy boundaries remain unchanged.
+- The three established top-level workflow sectors are visually separated in place: Customer Billing Overview uses a blue accent, Selected Customer uses a green accent, and Advanced Invoice Workbench uses a violet accent. Their order, controls, data attributes, and wired consumers are unchanged.
+- The broad app smoke follows the established visible `Find saved jobs` and `Driver Message` markers instead of the retired `Load Bookings` and `Driver Dispatch` labels. Its Operational Snapshot scenario keeps review-pending status but no longer expects the customer-request decision controls removed from that hidden panel; the dedicated visible-queue identity guard and booking adapter contract continue protecting the established decision/PATCH lane. Application workflows and write paths are unchanged.
+- The same browser smoke now requires Customer Billing Overview on desktop and mobile and rejects the retired folder-finder helper plus global Monthly Billing Queue, matching the focused cleanup guard. Selected-customer monthly preparation and the advanced invoice workbench remain the only established invoice workflow; no invoice, payment, send, or persistence behavior changes.
+- Its final public-route leak sweep uses that same Customer Billing Overview as the `/customers`-only visibility boundary while continuing to reject the retired folder-index handoff and all admin, driver, finance, and mock/archive surfaces from public routes.
+- The customer-detail portion of that sweep waits for the established numbered profile sector (`data-customer-folder-sector="profile"`) instead of the retired `CUSTOMER FOLDER` heading, then runs the existing privacy boundaries unchanged.
 - The removed global Monthly Billing Queue stays retired; real closeout-ready saved bookings are grouped by saved billing account/month inside the selected customer workspace.
 - The selected-customer `Prepare monthly invoice` action requires an exact billing account/month group and loads it into the existing collapsed advanced invoice workbench.
 - The invoice workbench no longer exposes the mock statement, outstanding, or follow-up tabs in daily operation.
@@ -4877,6 +4885,12 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - `resolvePricing` uses customer_rates and driver_payout_rules.
 - Rates/payout save paths exist.
 - Some rate/pricing save paths still use legacy shim and are parked due pricing/payout risk.
+
+### Rates Mobile Layout Containment
+- The existing Default Prestige Rates matrix and Default Driver Payout remain in their established top grid, with both direct grid children allowed to shrink through `min-w-0` so the wide vehicle-rate matrix scrolls only inside its existing `overflow-x-auto` container.
+- At 375px the Rates document remains viewport-width while the table retains its complete Service, E / AVF, S, VVV, and COMBI columns through internal horizontal scrolling.
+- This is layout-only. Pricing and DSP calculations, customer rates, driver payout rules, rate reads/writes, overrides, environment gates, Supabase configuration, and operational consumers are unchanged.
+- Focused lock: `scripts/test-rates-mobile-layout-guard.mjs`; runtime no-document-overflow coverage remains in `scripts/test-app-smoke-browser.mjs`.
 
 ### Legacy shim retired
 - bookers

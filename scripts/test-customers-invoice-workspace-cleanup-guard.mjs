@@ -57,6 +57,9 @@ for (const fragment of [
   "Prepare monthly invoice",
   "Send Invoice Workbench",
   "Customers & Invoices",
+  'className="rounded-lg border border-sky-300 border-l-8 bg-sky-50 shadow-sm"',
+  'className="rounded-lg border border-emerald-300 border-l-8 bg-emerald-50 shadow-sm"',
+  'className="rounded-lg border border-violet-300 border-l-8 bg-violet-50 shadow-sm"',
 ]) {
   assertIncludes(customersPage, fragment, `customers invoice workspace fragment ${fragment}`);
 }
@@ -85,6 +88,9 @@ assert.equal(
 );
 
 for (const forbiddenFragment of [
+  'data-customer-internal-staff-notice="true"',
+  "Internal Staff Dashboard — Not Customer-Facing",
+  "Use /book for customer booking requests.",
   'data-customer-summary-strip="true"',
   'data-customer-folder-finder="true"',
   'data-customer-monthly-billing-queue="true"',
@@ -132,6 +138,11 @@ for (const forbiddenPattern of [
 
 for (const phrase of [
   "Customers page daily flow is compact: the customer billing overview opens one selected-customer workspace, and the fake payment summary strip is removed.",
+  "The redundant `Internal Staff Dashboard — Not Customer-Facing` banner is removed from the authenticated Customers page. Route authorization and all customer/public privacy boundaries remain unchanged.",
+  "The three established top-level workflow sectors are visually separated in place: Customer Billing Overview uses a blue accent, Selected Customer uses a green accent, and Advanced Invoice Workbench uses a violet accent. Their order, controls, data attributes, and wired consumers are unchanged.",
+  "The broad app smoke follows the established visible `Find saved jobs` and `Driver Message` markers instead of the retired `Load Bookings` and `Driver Dispatch` labels. Its Operational Snapshot scenario keeps review-pending status but no longer expects the customer-request decision controls removed from that hidden panel; the dedicated visible-queue identity guard and booking adapter contract continue protecting the established decision/PATCH lane. Application workflows and write paths are unchanged.",
+  "The same browser smoke now requires Customer Billing Overview on desktop and mobile and rejects the retired folder-finder helper plus global Monthly Billing Queue, matching the focused cleanup guard. Selected-customer monthly preparation and the advanced invoice workbench remain the only established invoice workflow; no invoice, payment, send, or persistence behavior changes.",
+  "Its final public-route leak sweep uses that same Customer Billing Overview as the `/customers`-only visibility boundary while continuing to reject the retired folder-index handoff and all admin, driver, finance, and mock/archive surfaces from public routes.",
   "The removed global Monthly Billing Queue stays retired; real closeout-ready saved bookings are grouped by saved billing account/month inside the selected customer workspace.",
   "The selected-customer `Prepare monthly invoice` action requires an exact billing account/month group and loads it into the existing collapsed advanced invoice workbench.",
   "The invoice workbench no longer exposes the mock statement, outstanding, or follow-up tabs in daily operation.",

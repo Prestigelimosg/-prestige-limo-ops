@@ -1,13 +1,13 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-07749ad4 Align booking browser suite with protected workflows
+8905b66b Clarify customer invoice folder sectors
 
 Latest pushed main/staging runtime checkpoint:
-07749ad4 Align booking browser suite with protected workflows
+8905b66b Clarify customer invoice folder sectors
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-07749ad4 Align booking browser suite with protected workflows
+8905b66b Clarify customer invoice folder sectors
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.

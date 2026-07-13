@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 const ledgerPath = "docs/current-implementation-ledger.md";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
 const guardScript = "scripts/test-ledger-checkpoint-source-of-truth-guard.mjs";
+const expectedRuntimeCheckpoint = "8905b66b Clarify customer invoice folder sectors";
 
 function assertIncludes(source, fragment, label = fragment) {
   assert.equal(source.includes(fragment), true, `${label} must include ${fragment}.`);
@@ -44,6 +45,11 @@ assert.ok(
 
 const [, topRuntimeShortHash, topRuntimeTaskName] = topRuntimeMatch;
 assert.ok(topRuntimeTaskName.trim().length > 0, "Top runtime checkpoint task name must be present.");
+assert.equal(
+  `${topRuntimeShortHash} ${topRuntimeTaskName}`,
+  expectedRuntimeCheckpoint,
+  "Top runtime checkpoint must match the latest approved and runtime-verified application commit.",
+);
 
 const topPushedRuntimeMatch = ledger.match(
   /^Latest pushed main\/staging runtime checkpoint:\n([0-9a-f]{7,12}) (.+)$/m,
@@ -71,6 +77,11 @@ assert.ok(
 const [, topRemoteShortHash, topRemoteTaskName] = topRemoteDeploymentMatch;
 assert.ok(topRemoteShortHash.trim().length > 0, "Top remote deployment checkpoint hash must be present.");
 assert.ok(topRemoteTaskName.trim().length > 0, "Top remote deployment checkpoint task name must be present.");
+assert.equal(
+  `${topRemoteShortHash} ${topRemoteTaskName}`,
+  expectedRuntimeCheckpoint,
+  "Top remote deployment checkpoint must match the approved promotion target.",
+);
 
 const nextGptLock = sectionBetween(
   ledger,

@@ -448,6 +448,7 @@ type PlainInvoiceForm = {
 
 type PlainInvoiceAdditionalLineItem = {
   amount: string;
+  bookingReference?: string;
   lineDescription: string;
 };
 
@@ -861,12 +862,14 @@ function plainInvoiceLineItemRows(form: PlainInvoiceForm) {
   return [
     {
       amount: form.amount,
+      bookingReference: form.bookingReference,
       lineDescription: form.lineDescription,
       required: true,
       rowNumber: 1,
     },
     ...form.lineItems.slice(0, plainInvoiceMaxLineItems - 1).map((item, index) => ({
       amount: item.amount,
+      bookingReference: item.bookingReference || form.bookingReference,
       lineDescription: item.lineDescription,
       required: false,
       rowNumber: index + 2,
@@ -912,6 +915,7 @@ function plainInvoiceLineItemsFromForm(
       return {
         amountCents,
         amountLabel: formatInvoiceAmount(amountCents),
+        bookingReference: row.bookingReference.trim() || undefined,
         description: row.lineDescription.trim(),
       };
     });
@@ -1528,6 +1532,17 @@ function safeCustomerFolderDispatchHandoffReference(booking: RegularCustomerSave
   const reference = savedBookingReference(booking);
 
   return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(reference) ? reference : "";
+}
+
+function selectedInvoiceBookingReferences(value: string) {
+  return Array.from(
+    new Set(
+      value
+        .split(",")
+        .map((reference) => reference.trim())
+        .filter((reference) => /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(reference)),
+    ),
+  ).slice(0, plainInvoiceMaxLineItems);
 }
 
 function customerFolderJobDispatchHref(booking: RegularCustomerSavedBookingReadRecord) {
@@ -3309,7 +3324,7 @@ export default function MockCustomerDashboardPage() {
       includeCardPaymentNote: true,
     });
     const lineItemsKey = lineItems
-      .map((item) => `${item.amountLabel}:${item.description}`)
+      .map((item) => `${item.bookingReference || ""}:${item.amountLabel}:${item.description}`)
       .join(";;");
 
     if (
@@ -3797,7 +3812,7 @@ export default function MockCustomerDashboardPage() {
     mode: RegularCustomerSavedBookingReadMode = "account-or-id",
   ) {
     const params = new URLSearchParams({
-      limit: "10",
+      limit: "25",
     });
 
     if (mode === "customer-id" && target.customerId) {
@@ -4241,6 +4256,31 @@ export default function MockCustomerDashboardPage() {
     }));
   }
 
+  async function readCustomerFolderExactBooking(bookingReference: string) {
+    const params = new URLSearchParams({ booking_reference: bookingReference });
+    const response = await fetch(`${adminBookingsApiPath}?${params.toString()}`, {
+      headers: {
+        "x-prestige-admin-purpose": "admin-booking-persistence",
+      },
+      method: "GET",
+    });
+    const result = (await response.json().catch(() => null)) as
+      | {
+          booking?: CustomerFolderExactBookingRecord | null;
+          error?: string;
+          ok?: boolean;
+        }
+      | null;
+    const exactBooking = result?.booking ?? null;
+    const exactReference = customerFolderExactBookingReference(exactBooking);
+
+    if (!response.ok || result?.ok !== true || !exactBooking || exactReference !== bookingReference) {
+      throw new Error(result?.error || "Exact booking read failed safely.");
+    }
+
+    return exactBooking;
+  }
+
   async function loadCustomerFolderExactBookingForEdit(
     booking: RegularCustomerSavedBookingReadRecord,
   ) {
@@ -4275,26 +4315,7 @@ export default function MockCustomerDashboardPage() {
     });
 
     try {
-      const params = new URLSearchParams({ booking_reference: bookingReference });
-      const response = await fetch(`${adminBookingsApiPath}?${params.toString()}`, {
-        headers: {
-          "x-prestige-admin-purpose": "admin-booking-persistence",
-        },
-        method: "GET",
-      });
-      const result = (await response.json().catch(() => null)) as
-        | {
-            booking?: CustomerFolderExactBookingRecord | null;
-            error?: string;
-            ok?: boolean;
-          }
-        | null;
-      const exactBooking = result?.booking ?? null;
-      const exactReference = customerFolderExactBookingReference(exactBooking);
-
-      if (!response.ok || result?.ok !== true || !exactBooking || exactReference !== bookingReference) {
-        throw new Error(result?.error || "Exact booking read failed safely.");
-      }
+      const exactBooking = await readCustomerFolderExactBooking(bookingReference);
 
       setCustomerFolderExactBookingEditorState({
         booking: exactBooking,
@@ -4615,6 +4636,7 @@ export default function MockCustomerDashboardPage() {
     bookingReference: string,
     action: "edit" | "delete" | "open",
     invoiceAction = "",
+    selectedBookingReferences = "",
   ) {
     customerFolderReturnHrefRef.current =
       action === "edit" || action === "delete" ? customerFolderHrefFor(customerId, customerName) : "";
@@ -4648,36 +4670,63 @@ export default function MockCustomerDashboardPage() {
         "customer-id",
       );
       const savedBookings = result.savedBookings;
-      const targetBooking = bookingReference
-        ? savedBookings.find(
-            (booking) => safeCustomerFolderDispatchHandoffReference(booking) === bookingReference,
-          ) ?? null
-        : null;
+      const requestedInvoiceReferences = selectedInvoiceBookingReferences(selectedBookingReferences);
+      const targetReferences =
+        invoiceAction === "create" && requestedInvoiceReferences.length > 0
+          ? requestedInvoiceReferences
+          : bookingReference
+            ? [bookingReference]
+            : [];
+      const targetBookings = targetReferences
+        .map((reference) =>
+          savedBookings.find(
+            (booking) => safeCustomerFolderDispatchHandoffReference(booking) === reference,
+          ),
+        )
+        .filter((booking): booking is RegularCustomerSavedBookingReadRecord => Boolean(booking));
+      const targetBooking = targetBookings[0] ?? null;
+      const missingTargetReference = targetReferences.find(
+        (reference) =>
+          !targetBookings.some(
+            (booking) => safeCustomerFolderDispatchHandoffReference(booking) === reference,
+          ),
+      );
 
       setCustomerFolderJobViewState({
         customerId,
         customerName,
-        message: bookingReference && !targetBooking
-          ? `Loaded ${savedBookingCountLabel(savedBookings.length, "saved job")}. Job ${bookingReference} was not returned for this customer.`
+        message: missingTargetReference
+          ? `Loaded ${savedBookingCountLabel(savedBookings.length, "saved job")}. Job ${missingTargetReference} was not returned for this customer.`
           : `Loaded ${savedBookingCountLabel(savedBookings.length, "saved job")} for ${customerName}.`,
         savedBookings,
         status: "loaded",
         summary: result.summary,
-        tone: bookingReference && !targetBooking ? "error" : savedBookings.length > 0 ? "success" : "info",
+        tone: missingTargetReference ? "error" : savedBookings.length > 0 ? "success" : "info",
       });
 
-      if (targetBooking) {
+      if (targetBooking && !missingTargetReference) {
         if (invoiceAction === "create") {
           setPlainInvoiceForm(plainInvoiceInitialForm());
           setPlainInvoicePreview(null);
           setPlainInvoiceSavedBookings([]);
         }
-        const exactBooking = await loadCustomerFolderExactBookingForEdit(targetBooking);
+        const exactBookings =
+          invoiceAction === "create"
+            ? await Promise.all(
+                targetBookings.map((booking) =>
+                  readCustomerFolderExactBooking(safeCustomerFolderDispatchHandoffReference(booking)),
+                ),
+              )
+            : [];
+        const exactBooking =
+          invoiceAction === "create"
+            ? exactBookings[0] ?? null
+            : await loadCustomerFolderExactBookingForEdit(targetBooking);
         setCustomerFolderJobViewState((current) => ({
           ...current,
           message:
             invoiceAction === "create"
-              ? `Job ${bookingReference} is open for invoice preparation. Use the billing-ready row or Create Invoice workbench below after reviewing the loaded job.`
+              ? `${targetBookings.length} selected job${targetBookings.length === 1 ? " is" : "s are"} open for invoice preparation.`
               : action === "delete"
               ? `Job ${bookingReference} is open. Delete remains guarded and requires confirmation.`
               : `Job ${bookingReference} is open for review and edit.`,
@@ -4686,42 +4735,83 @@ export default function MockCustomerDashboardPage() {
         if (invoiceAction === "create") {
           setCustomerInvoiceWorkspaceTab("statements");
           setCustomerInvoicePrepFeedback(
-            `Invoice handoff received for ${bookingReference}. Review the loaded job, then prepare the billing row or use Create Invoice before sending to customer.`,
+            `Invoice handoff received for ${targetBookings.length} selected job${targetBookings.length === 1 ? "" : "s"}. Review every line before sending to the customer.`,
           );
           if (exactBooking) {
             const exactCustomerId = String(exactBooking.customer_id ?? customerId).trim();
             const exactCustomerName =
               String(exactBooking.customer_display_name ?? customerName).trim() || customerName;
-            const exactService =
-              String(exactBooking.service_type ?? targetBooking.service_type ?? "").trim();
-            const exactRoute =
-              String(exactBooking.route_summary ?? "").trim() ||
-              [exactBooking.pickup_location, exactBooking.dropoff_location]
-                .map((value) => String(value ?? "").trim())
-                .filter(Boolean)
-                .join(" > ") ||
-              String(exactBooking.route_type ?? targetBooking.route_type ?? "").trim();
             const exactBookerId = exactBooking.booker_id ?? targetBooking.booker_id ?? null;
+            const mismatchedCustomer = exactBookings.some(
+              (booking, index) =>
+                String(booking.customer_id ?? targetBookings[index]?.customer_id ?? customerId).trim() !==
+                exactCustomerId,
+            );
+            const mismatchedBooker = exactBookings.some(
+              (booking, index) =>
+                (booking.booker_id ?? targetBookings[index]?.booker_id ?? null) !== exactBookerId,
+            );
+            const invoiceRows = exactBookings.map((booking, index) => {
+              const selectedBooking = targetBookings[index];
+              const reference = customerFolderExactBookingReference(booking);
+              const service = String(booking.service_type ?? selectedBooking?.service_type ?? "").trim();
+              const route =
+                String(booking.route_summary ?? "").trim() ||
+                [booking.pickup_location, booking.dropoff_location]
+                  .map((value) => String(value ?? "").trim())
+                  .filter(Boolean)
+                  .join(" > ") ||
+                String(booking.route_type ?? selectedBooking?.route_type ?? "").trim();
 
-            setPlainInvoiceSavedBookings([targetBooking]);
+              return {
+                bookingReference: reference,
+                lineDescription: [service || "Service", reference, route].filter(Boolean).join(" | "),
+                route,
+                service: service || "Service",
+              };
+            });
+            const [firstInvoiceRow, ...additionalInvoiceRows] = invoiceRows;
+
+            if (!exactBookerId || mismatchedCustomer || mismatchedBooker || !firstInvoiceRow) {
+              setPlainInvoiceFeedback(
+                !exactBookerId
+                  ? "The selected jobs do not have one verified PA / booker. Draft remains admin-only; Issue and Email are blocked."
+                  : "The selected jobs do not share the same verified customer and PA / booker. Issue and Email are blocked.",
+              );
+              setPlainInvoiceFeedbackTone("error");
+              return;
+            }
+
+            setPlainInvoiceSavedBookings(targetBookings);
             setPlainInvoiceForm({
               ...plainInvoiceInitialForm(),
               billToName: exactCustomerName,
               bookerId: exactBookerId,
-              bookingReference,
+              bookingReference: firstInvoiceRow.bookingReference,
               crmCustomerId: exactCustomerId,
               crmCustomerName: exactCustomerName,
-              lineDescription: exactService ? `${exactService} - ${bookingReference}` : bookingReference,
-              reference: bookingReference,
-              route: exactRoute,
-              service: exactService,
+              lineDescription: firstInvoiceRow.lineDescription,
+              lineItems: additionalInvoiceRows.map((row) => ({
+                amount: "",
+                bookingReference: row.bookingReference,
+                lineDescription: row.lineDescription,
+              })),
+              reference:
+                invoiceRows.length === 1
+                  ? firstInvoiceRow.bookingReference
+                  : `MULTI-${firstInvoiceRow.bookingReference}-${invoiceRows.length}`.slice(0, 160),
+              route: `${invoiceRows.length} job${invoiceRows.length === 1 ? "" : "s"}: ${invoiceRows
+                .map((row) => row.bookingReference)
+                .join(", ")}`,
+              service:
+                invoiceRows.length === 1
+                  ? firstInvoiceRow.service
+                  : `Selected customer jobs (${invoiceRows.length})`,
             });
             setPlainInvoiceFeedback(
-              exactBookerId
-                ? `Exact customer-folder job ${bookingReference} loaded with its verified PA. Enter only the approved amount, then Preview before Draft, Issue, or Email.`
-                : `Exact customer-folder job ${bookingReference} has no verified PA. Draft remains admin-only; Issue and Email are blocked.`,
+              `All ${invoiceRows.length} selected job${invoiceRows.length === 1 ? "" : "s"} loaded with one verified PA. Enter and review every approved amount, then Preview before Draft, Issue, or Email.`,
             );
-            setPlainInvoiceFeedbackTone(exactBookerId ? "success" : "error");
+            setPlainInvoiceFeedbackTone("success");
             window.setTimeout(() => {
               plainInvoicePanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
             }, 100);
@@ -4787,6 +4877,7 @@ export default function MockCustomerDashboardPage() {
       bookingReference,
       action,
       invoiceAction,
+      selectedBookingReferences,
     );
     // URL handoff runs once so normal page interactions do not reload the selected customer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -5392,8 +5483,9 @@ export default function MockCustomerDashboardPage() {
     const lineItemsValidationMessage = plainInvoiceLineItemValidationMessage(plainInvoiceForm);
     const lineItems = plainInvoiceLineItemsFromForm(plainInvoiceForm, {
       includeCardPaymentNote: true,
-    }).map(({ amountLabel, description }) => ({
+    }).map(({ amountLabel, bookingReference, description }) => ({
       amountLabel,
+      bookingReference,
       description,
     }));
 

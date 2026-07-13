@@ -84,7 +84,7 @@ type CustomerInvoiceResult<T> =
   | {
       error: string;
       ok: false;
-      status: 400 | 403 | 404 | 500 | 503;
+      status: 400 | 403 | 404 | 409 | 500 | 503;
       version: typeof customerInvoiceRecordVersion;
     };
 
@@ -312,13 +312,24 @@ function safeLineItems(value: unknown): CustomerLocalInvoiceLineItem[] | null {
     return [];
   }
 
+  if (value.length > 4) {
+    return null;
+  }
+
   const lineItems = value
     .map((item) => {
       const record = asRecord(item);
       const amountLabel = safeText(record.amountLabel, 40);
+      const bookingReference = safeText(record.bookingReference, 160);
       const description = safeText(record.description, 500);
 
-      return amountLabel && description ? { amountLabel, description } : null;
+      if (!amountLabel || !description) {
+        return null;
+      }
+
+      return bookingReference
+        ? { amountLabel, bookingReference, description }
+        : { amountLabel, description };
     })
     .filter((item): item is CustomerLocalInvoiceLineItem => Boolean(item));
 
@@ -502,12 +513,117 @@ function sanitizeCreateInput(input: CustomerInvoiceCreateInput): CustomerInvoice
 
 function safeFailure<T>(
   error: string,
-  status: 400 | 403 | 404 | 500 | 503,
+  status: 400 | 403 | 404 | 409 | 500 | 503,
 ): CustomerInvoiceResult<T> {
   return {
     error,
     ok: false,
     status,
+    version: customerInvoiceRecordVersion,
+  };
+}
+
+function uniqueInvoiceBookingReferences(input: {
+  bookingReference: string | null;
+  lineItems: CustomerLocalInvoiceLineItem[];
+}) {
+  return Array.from(
+    new Set(
+      [
+        input.bookingReference || "",
+        ...input.lineItems.map((item) => item.bookingReference || ""),
+      ]
+        .map((reference) => reference.trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
+async function verifyIssuedInvoiceBookingOwnership(
+  input: {
+    bookerId: number | null;
+    bookingReference: string | null;
+    customerId: string;
+    lineItems: CustomerLocalInvoiceLineItem[];
+  },
+  invoiceClient: CustomerInvoiceClient,
+): Promise<CustomerInvoiceResult<true>> {
+  if (!input.bookerId || !input.bookingReference) {
+    return safeFailure(safeValidationError, 400);
+  }
+
+  const bookingReferences = uniqueInvoiceBookingReferences(input);
+
+  if (
+    bookingReferences.length === 0 ||
+    bookingReferences.length > 4 ||
+    input.lineItems.some((item) => !item.bookingReference)
+  ) {
+    return safeFailure(safeValidationError, 400);
+  }
+
+  if (bookingReferences.includes("ADM-20260712063110")) {
+    return safeFailure("Selected jobs are not ready for billing.", 409);
+  }
+
+  const { data: ownedBookings, error: ownedBookingsError } = await invoiceClient
+    .from("bookings")
+    .select("booking_reference")
+    .in("booking_reference", bookingReferences)
+    .eq("customer_id", input.customerId)
+    .eq("booker_id", input.bookerId);
+  const ownedBookingReferences = new Set(
+    asArray(ownedBookings)
+      .map((row) => safeText(asRecord(row).booking_reference, 160))
+      .filter(Boolean),
+  );
+
+  if (
+    ownedBookingsError ||
+    bookingReferences.some((reference) => !ownedBookingReferences.has(reference))
+  ) {
+    return safeFailure(safeValidationError, 403);
+  }
+
+  const { data: issuedInvoices, error: issuedInvoicesError } = await invoiceClient
+    .from(customerInvoiceRecordTableName)
+    .select("reference, line_items, document_type, document_state")
+    .eq("customer_id", input.customerId);
+
+  if (issuedInvoicesError) {
+    return safeFailure(safeReadError, 503);
+  }
+
+  const alreadyInvoicedReferences = new Set<string>();
+
+  asArray(issuedInvoices).map(asRecord).forEach((invoice) => {
+    const documentType = safeText(invoice.document_type, 40) || "invoice";
+    const documentState = safeText(invoice.document_state, 40) || "issued";
+
+    if (documentType !== "invoice" || documentState !== "issued") {
+      return;
+    }
+
+    const storedReference = safeText(invoice.reference, 160);
+
+    if (storedReference) {
+      alreadyInvoicedReferences.add(storedReference);
+    }
+
+    (safeLineItems(invoice.line_items) || []).forEach((item) => {
+      if (item.bookingReference) {
+        alreadyInvoicedReferences.add(item.bookingReference);
+      }
+    });
+  });
+
+  if (bookingReferences.some((reference) => alreadyInvoicedReferences.has(reference))) {
+    return safeFailure("Invoice already contains one or more selected jobs.", 409);
+  }
+
+  return {
+    data: true,
+    ok: true,
     version: customerInvoiceRecordVersion,
   };
 }
@@ -620,32 +736,31 @@ export async function createCustomerInvoiceRecord(
   }
 
   const invoiceClient = client ?? createServerClient();
+  const invoiceLineItems = sanitized.data.lineItems.map((item) => ({
+    ...item,
+    bookingReference: item.bookingReference || sanitized.data.bookingReference || undefined,
+  }));
+
   if (sanitized.data.documentState === "issued") {
-    if (!sanitized.data.bookerId || !sanitized.data.bookingReference) {
-      return safeFailure(safeValidationError, 400);
-    }
+    const verification = await verifyIssuedInvoiceBookingOwnership(
+      { ...sanitized.data, lineItems: invoiceLineItems },
+      invoiceClient,
+    );
 
-    const { data: ownedBooking, error: ownedBookingError } = await invoiceClient
-      .from("bookings")
-      .select("booking_reference")
-      .eq("booking_reference", sanitized.data.bookingReference)
-      .eq("customer_id", sanitized.data.customerId)
-      .eq("booker_id", sanitized.data.bookerId)
-      .maybeSingle();
-
-    if (ownedBookingError || !ownedBooking) {
-      return safeFailure(safeValidationError, 403);
+    if (!verification.ok) {
+      return verification;
     }
   }
   const issueDate = new Date();
   const invoiceDateKey = issueDate.toISOString().slice(0, 10).replace(/-/g, "");
   const amountLabel = formatInvoiceAmount(sanitized.data.amountCents);
   const lineItems =
-    sanitized.data.lineItems.length > 0
-      ? sanitized.data.lineItems
+    invoiceLineItems.length > 0
+      ? invoiceLineItems
       : [
           {
             amountLabel,
+            bookingReference: sanitized.data.bookingReference || undefined,
             description: `${sanitized.data.service} - ${sanitized.data.reference} - ${sanitized.data.route}`,
           },
         ];

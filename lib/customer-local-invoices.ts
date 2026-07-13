@@ -10,6 +10,7 @@ export type CustomerLocalInvoiceStatus = "Paid" | "Unpaid";
 
 export type CustomerLocalInvoiceLineItem = {
   amountLabel: string;
+  bookingReference?: string;
   description: string;
 };
 
@@ -120,8 +121,15 @@ function safeLineItems(value: unknown): CustomerLocalInvoiceLineItem[] {
 
       const description = text(item.description);
       const amountLabel = text(item.amountLabel);
+      const bookingReference = text(item.bookingReference);
 
-      return description && amountLabel ? { amountLabel, description } : null;
+      if (!description || !amountLabel) {
+        return null;
+      }
+
+      return bookingReference
+        ? { amountLabel, bookingReference, description }
+        : { amountLabel, description };
     })
     .filter((item): item is CustomerLocalInvoiceLineItem => Boolean(item));
 }

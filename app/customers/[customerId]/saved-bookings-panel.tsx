@@ -8,6 +8,7 @@ import { formatSingaporePickupDisplay } from "../../../lib/singapore-pickup-disp
 const adminCustomerSavedBookingsApiPath = "/api/admin-customer-saved-bookings";
 const customerFolderFocusBookingReferenceParam = "focus_booking_reference";
 const customerFolderLoadSavedJobsParam = "load_saved_jobs";
+const customerFolderInvoiceSelectionLimit = 4;
 
 type CustomerFolderSavedBookingRecord = {
   admin_status?: string | null;
@@ -331,18 +332,14 @@ export function CustomerFolderSavedBookingsPanel({
 
     const returnContext = customerFolderReturnContext();
 
-    if (!returnContext) {
-      return;
-    }
-
     autoLoadAttemptedRef.current = true;
     window.setTimeout(() => {
       void loadSavedBookings({
-        focusBookingReference: returnContext.focusBookingReference,
-        source: "return",
+        focusBookingReference: returnContext?.focusBookingReference,
+        source: returnContext ? "return" : "manual",
       });
     }, 0);
-    // The return URL should trigger exactly one guarded read when this panel mounts.
+    // The customer folder performs exactly one guarded read on mount or return from Dispatch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -354,7 +351,6 @@ export function CustomerFolderSavedBookingsPanel({
 
     return reference && selectedReferences[reference];
   });
-  const matchedCount = Number(readState.summary?.matched_count ?? 0);
   const firstSelectedBooking = selectedUnbilledBookings[0] ?? null;
   const createInvoiceHref = firstSelectedBooking
     ? customerWorkspaceHref(firstSelectedBooking, customerId, customerName, "open") +
@@ -371,8 +367,12 @@ export function CustomerFolderSavedBookingsPanel({
     }
 
     setSelectedReferences((current) => ({
-      ...current,
-      [reference]: selected,
+      ...(selected && Object.values(current).filter(Boolean).length >= customerFolderInvoiceSelectionLimit
+        ? current
+        : {
+            ...current,
+            [reference]: selected,
+          }),
     }));
   }
 
@@ -393,7 +393,7 @@ export function CustomerFolderSavedBookingsPanel({
       className="rounded-md border border-slate-200 bg-white p-3 shadow-sm"
       data-customer-folder-saved-bookings={customerId}
     >
-      <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+      <div>
         <div>
           <h2
             className="text-base font-bold text-slate-950"
@@ -405,43 +405,13 @@ export function CustomerFolderSavedBookingsPanel({
             className="mt-0.5 max-w-4xl text-xs font-semibold leading-5 text-slate-600"
             data-customer-folder-saved-bookings-boundary="true"
           >
-            Shows saved jobs not clearly billed, paid, cancelled, or closed. Edit opens Dispatch; Delete opens the
-            exact job in Completed / History for cancel review. No invoice, payment, send, payout, GPS, or provider
-            action runs here.
+            Pending jobs load automatically. Select up to four jobs, or use Edit, Delete, and Invoice on one exact job.
           </p>
         </div>
-        <button
-          className="rounded-md border border-slate-900 bg-slate-900 px-3 py-2 text-sm font-bold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-          data-customer-folder-saved-bookings-action="true"
-          disabled={readState.status === "loading"}
-          onClick={() => {
-            void loadSavedBookings();
-          }}
-          type="button"
-        >
-          {readState.status === "loading" ? "Loading" : "Load unbilled jobs"}
-        </button>
-      </div>
-
-      <div className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
-        {[
-          ["Customer", customerName],
-          ["Jobs not billed", countLabel(unbilledSavedBookings.length, "job")],
-          ["Matched", countLabel(matchedCount, "recent admin record")],
-        ].map(([label, description]) => (
-          <div
-            className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 leading-5 text-slate-700"
-            data-customer-folder-saved-bookings-summary={label}
-            key={label}
-          >
-            <p className="font-bold text-slate-950">{label}</p>
-            <p className="mt-1">{description}</p>
-          </div>
-        ))}
       </div>
 
       <p
-        className={`mt-3 rounded-md border px-3 py-2 text-xs font-semibold leading-5 ${feedbackClass(
+        className={`mt-2 rounded-md border px-3 py-2 text-xs font-semibold leading-5 ${feedbackClass(
           readState.tone,
         )}`}
         data-customer-folder-saved-bookings-note="true"
@@ -462,26 +432,9 @@ export function CustomerFolderSavedBookingsPanel({
         <div className="mt-3" data-customer-folder-saved-bookings-list="true">
           <div className="mb-2 flex flex-col gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs font-bold text-slate-700">
-              {selectedUnbilledBookings.length} selected for new invoice
+              {selectedUnbilledBookings.length} of {customerFolderInvoiceSelectionLimit} selected for new invoice
             </p>
-            {createInvoiceHref ? (
-              <Link
-                className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-xs font-bold text-white transition hover:bg-slate-700"
-                data-customer-folder-create-invoice-selected="true"
-                href={createInvoiceHref}
-              >
-                Open Create Invoice
-              </Link>
-            ) : (
-              <button
-                className="inline-flex min-h-9 cursor-not-allowed items-center justify-center rounded-md border border-slate-200 bg-slate-100 px-3 text-xs font-bold text-slate-400"
-                data-customer-folder-create-invoice-selected-disabled="true"
-                disabled
-                type="button"
-              >
-                Create invoice
-              </button>
-            )}
+            <span className="text-xs font-semibold text-slate-500">Amounts are reviewed before email.</span>
           </div>
           <div className="max-h-96 overflow-auto rounded-md border border-slate-200">
           <table className="w-full min-w-[760px] border-collapse text-left text-sm">
@@ -522,7 +475,11 @@ export function CustomerFolderSavedBookingsPanel({
                         checked={Boolean(bookingReference && selectedReferences[bookingReference])}
                         className="h-4 w-4 rounded border-slate-300 text-slate-900"
                         data-customer-folder-saved-bookings-select={booking.booking_reference || ""}
-                        disabled={!bookingReference}
+                        disabled={
+                          !bookingReference ||
+                          (selectedUnbilledBookings.length >= customerFolderInvoiceSelectionLimit &&
+                            !selectedReferences[bookingReference])
+                        }
                         onChange={(event) => toggleSelectedBooking(booking, event.target.checked)}
                         type="checkbox"
                       />
@@ -609,6 +566,74 @@ export function CustomerFolderSavedBookingsPanel({
           </div>
         </div>
       ) : null}
+
+      <section
+            className="mt-3 rounded-md border border-slate-300 bg-slate-50 p-3"
+            data-customer-folder-selected-invoice-layout="true"
+          >
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-slate-950">Customer invoice layout</h3>
+                <p className="mt-0.5 text-xs font-semibold text-slate-600">
+                  Every selected job is carried into the established invoice preview and email lane.
+                </p>
+              </div>
+              {createInvoiceHref ? (
+                <Link
+                  className="inline-flex min-h-9 items-center justify-center rounded-md border border-sky-800 bg-sky-800 px-3 text-xs font-bold text-white transition hover:bg-sky-700"
+                  data-customer-folder-create-invoice-selected="true"
+                  href={createInvoiceHref}
+                >
+                  Review invoice &amp; email
+                </Link>
+              ) : (
+                <button
+                  className="inline-flex min-h-9 cursor-not-allowed items-center justify-center rounded-md border border-slate-200 bg-slate-100 px-3 text-xs font-bold text-slate-400"
+                  data-customer-folder-create-invoice-selected-disabled="true"
+                  disabled
+                  type="button"
+                >
+                  Select jobs first
+                </button>
+              )}
+            </div>
+            {selectedUnbilledBookings.length > 0 ? (
+              <div className="mt-3 overflow-x-auto rounded-md border border-slate-200 bg-white">
+                <table className="w-full min-w-[560px] text-left text-xs">
+                  <thead className="text-[11px] uppercase tracking-[0.1em] text-slate-500">
+                    <tr>
+                      <th className="border-b border-slate-200 px-3 py-2">Job</th>
+                      <th className="border-b border-slate-200 px-3 py-2">Pickup</th>
+                      <th className="border-b border-slate-200 px-3 py-2">Service</th>
+                      <th className="border-b border-slate-200 px-3 py-2 text-right">Saved amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedUnbilledBookings.map((booking) => (
+                      <tr
+                        className="border-b border-slate-100 last:border-b-0"
+                        data-customer-folder-selected-invoice-job={booking.booking_reference || ""}
+                        key={`invoice-layout-${booking.booking_reference}`}
+                      >
+                        <td className="px-3 py-2 font-bold text-slate-950">
+                          {displayText(booking.booking_reference)}
+                        </td>
+                        <td className="px-3 py-2 text-slate-700">
+                          {formatSingaporePickupDisplay(booking.pickup_at, "Pickup not available")}
+                        </td>
+                        <td className="px-3 py-2 text-slate-700">{displayText(booking.service_type)}</td>
+                        <td className="px-3 py-2 text-right font-bold text-slate-950">
+                          {displayText(booking.customer_price_label, "Review required")}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="mt-3 text-xs font-semibold text-slate-500">Select jobs above to build this invoice.</p>
+            )}
+      </section>
     </section>
   );
 }

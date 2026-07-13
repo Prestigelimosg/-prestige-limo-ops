@@ -12,6 +12,18 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Customer Folder Four-Sector Invoice Workflow
+
+- The established customer selection continues to open the existing `/customers/[customerId]` company profile. The top profile retains the existing admin-only invoice-prefix settings, followed by the existing stored invoice totals and invoice list.
+- `Jobs not billed yet` now performs its existing guarded customer-saved-bookings GET automatically once when the customer folder mounts. The manual `Load unbilled jobs` button and its three noisy summary boxes are removed; no new API, polling path, booking write, invoice write, or provider send was added.
+- Pending jobs keep the existing exact-job description, Edit, guarded Delete/cancel-review, and single Invoice handoffs. Admin may select at most four jobs, matching the current reviewed invoice/PDF line capacity.
+- The same folder now shows one compact `Customer invoice layout` containing every selected job before handoff. `Review invoice & email` enters the established Create Invoice workbench; it does not send immediately and the existing Preview, Issue, confirmation, recipient-email, and Email gates remain mandatory.
+- The existing URL handoff now consumes every safe `selected_booking_references` value instead of silently discarding all but the first. It exact-reads each selected booking, requires one verified customer ID and one verified PA/booker across the set, and fills one existing invoice line per selected job without adding another invoice engine or send route.
+- Issued multi-job invoices persist each exact booking reference in the existing `line_items` JSON. The server independently verifies every selected reference against the same customer ID and booker ID, blocks any already-issued booking reference, and keeps `ADM-20260712063110` excluded from billing. Draft remains admin-only; email still uses the existing guarded invoice email route.
+- A local Chrome runtime used two isolated mocked AAA jobs under one verified customer/booker. Both jobs auto-loaded, both appeared in `Customer invoice layout`, the URL carried both references, and the existing Create Invoice workbench rendered both line descriptions plus its established Email action. The run recorded zero invoice writes and zero sends.
+- Customer, driver, parser, messaging, calendar, live location, pricing/rates, payments, payouts, PayNow, environment, Supabase schema/configuration, and provider lanes are unchanged. No invoice, PDF, email, payment, payout, contact, migration, deployment, or live data write occurred during implementation testing.
+- Focused locks: `scripts/test-customer-folder-multi-job-invoice-handoff-guard.mjs`, the updated `scripts/test-admin-invoice-booker-identity-propagation-guard.mjs`, and the existing customer-folder/invoice safety guards.
+
 ### Ritz Carlton Mock Customer Fixture Retirement
 
 - The built-in `Ritz Carlton` mock customer, mock bookings, mock invoices, mock contacts, payment examples, and follow-up examples were removed from the admin Customers runtime. A read-only live database inspection confirmed there was no matching `public.customers` row and no saved `public.bookings` row, so no operational record required or received deletion.

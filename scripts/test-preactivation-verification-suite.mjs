@@ -30,6 +30,10 @@ const guardChecks = [
     script: "scripts/test-retired-ritz-mock-customer-guard.mjs",
   },
   {
+    label: "customer folder multi-job invoice handoff guard",
+    script: "scripts/test-customer-folder-multi-job-invoice-handoff-guard.mjs",
+  },
+  {
     label: "business-grade forward completion sequence guard",
     script: "scripts/test-business-grade-forward-completion-sequence.mjs",
   },

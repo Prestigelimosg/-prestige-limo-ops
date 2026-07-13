@@ -64,6 +64,11 @@ const customerFolderExactBookingLoadFunction = sectionBetween(
   "async function loadCustomerFolderExactBookingForEdit",
   "\n  function mergeCustomerFolderSavedBookingFromExact",
 );
+const customerFolderExactBookingReadFunction = sectionBetween(
+  customersPage,
+  "async function readCustomerFolderExactBooking",
+  "\n  async function loadCustomerFolderExactBookingForEdit",
+);
 const customerFolderExactBookingSaveFunction = sectionBetween(
   customersPage,
   "async function saveCustomerFolderExactBookingEdit",
@@ -141,11 +146,16 @@ for (const fragment of [
   "exactReference !== bookingReference",
 ]) {
   assertIncludes(
-    customerFolderExactBookingLoadFunction,
+    customerFolderExactBookingReadFunction,
     fragment,
-    `customer folder exact booking load ${fragment}`,
+    `customer folder exact booking read ${fragment}`,
   );
 }
+assertIncludes(
+  customerFolderExactBookingLoadFunction,
+  "const exactBooking = await readCustomerFolderExactBooking(bookingReference);",
+  "customer folder exact booking load reuses guarded read",
+);
 
 for (const fragment of [
   "const payloadResult = customerFolderExactBookingPayload(",
@@ -193,12 +203,14 @@ for (const forbiddenFragment of [
   "adminSavedBookingsApiPath, {",
 ]) {
   assertExcludes(customerFolderExactBookingLoadFunction, forbiddenFragment, "customer folder exact load mutation boundary");
+  assertExcludes(customerFolderExactBookingReadFunction, forbiddenFragment, "customer folder exact read mutation boundary");
 }
 
 for (const forbiddenPattern of [
   /invoice|payment|payout|geolocation|watchPosition|provider|sendMail|telegram|whatsapp/i,
 ]) {
   assertExcludes(customerFolderExactBookingLoadFunction, forbiddenPattern, "customer folder exact load boundary");
+  assertExcludes(customerFolderExactBookingReadFunction, forbiddenPattern, "customer folder exact read boundary");
   assertExcludes(customerFolderExactBookingSaveFunction, forbiddenPattern, "customer folder exact save boundary");
   assertExcludes(customerFolderExactBookingDeleteFunction, forbiddenPattern, "customer folder exact delete boundary");
 }

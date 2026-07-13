@@ -25,6 +25,7 @@ export type SafeDriverJobPayload = {
   pickupLocation: string;
   dropoffLocation: string;
   route: string;
+  scheduleUpdatedAt?: string;
   waypoints: string[];
   flightNumber: string;
   passengerName: string;
@@ -190,6 +191,13 @@ export function mapBookingToSafeDriverJobPayload(booking: DriverJobBookingLike):
     pickupLocation,
     dropoffLocation,
     route: safeRoute,
+    scheduleUpdatedAt: stringField(
+      booking,
+      "schedule_updated_at",
+      "scheduleUpdatedAt",
+      "updated_at",
+      "updatedAt",
+    ),
     waypoints: safeRoutePoints.length >= 3 ? safeRoutePoints.slice(1, -1) : [],
     flightNumber: stringField(booking, "flight_no", "flightNumber", "flight"),
     passengerName: getPassengerName(booking, jobCard),

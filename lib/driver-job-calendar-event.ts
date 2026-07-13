@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 import type { SafeDriverJobPayload } from "./driver-job-link.ts";
 
 export const driverJobCalendarEventVersion = "driver-job-calendar-v1";
@@ -157,9 +155,19 @@ function foldLine(line: string) {
   return lines;
 }
 
+function calendarSequenceFromUpdatedAt(value: string | undefined) {
+  const updatedAt = new Date(clean(value)).getTime();
+  const sequenceEpoch = Date.UTC(2020, 0, 1);
+
+  if (!Number.isFinite(updatedAt) || updatedAt < sequenceEpoch) {
+    return 0;
+  }
+
+  return Math.min(2_147_483_647, Math.floor((updatedAt - sequenceEpoch) / 1000));
+}
+
 function calendarSequence(payload: SafeDriverJobPayload) {
-  const identity = [payload.reference, payload.pickupDate, payload.pickupTime, payload.route].join("|");
-  return Number.parseInt(createHash("sha256").update(identity).digest("hex").slice(0, 7), 16);
+  return calendarSequenceFromUpdatedAt(payload.scheduleUpdatedAt);
 }
 
 export function buildDriverJobCalendarDownload(

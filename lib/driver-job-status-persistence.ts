@@ -665,6 +665,7 @@ async function loadCurrentSafeBookingSchedule(
       pickup_time: pickup.pickupTime,
       public_reference: link.booking_reference,
       route: safeTextFromDb(row.route_summary),
+      schedule_updated_at: safeDateTextFromDb(row.updated_at),
       status:
         safeTextFromDb(row.admin_internal_status, 80) ||
         safeTextFromDb(row.customer_facing_status, 80) ||

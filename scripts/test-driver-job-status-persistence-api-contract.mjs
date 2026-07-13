@@ -683,6 +683,7 @@ try {
         pickup_location: "Amended Changi Pickup",
         route_summary: "Amended Changi Pickup > Amended Marina Bay Dropoff",
         service_type: "MNG",
+        updated_at: "2026-07-13T02:56:44.000Z",
         vehicle_type_or_category: "Mercedes V Class",
       },
     ];
@@ -698,6 +699,7 @@ try {
     assert.equal(result.payload.pickupLocation, "Amended Changi Pickup");
     assert.equal(result.payload.dropoffLocation, "Amended Marina Bay Dropoff");
     assert.equal(result.payload.route, "Amended Changi Pickup > Amended Marina Bay Dropoff");
+    assert.equal(result.payload.scheduleUpdatedAt, "2026-07-13T02:56:44.000Z");
     assert.equal(result.payload.bookingType, "MNG");
     assert.equal(result.payload.assignedDriver.name, "Safe Driver One");
     assert.equal(result.payload.assignedDriver.contact, "+65 8000 1001");

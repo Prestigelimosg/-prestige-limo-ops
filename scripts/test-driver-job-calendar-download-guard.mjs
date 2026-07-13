@@ -20,6 +20,8 @@ const [helper, persistence, route, page, ledger, suite] = await Promise.all([
 
 for (const fragment of [
   "buildDriverJobCalendarDownload",
+  "calendarSequenceFromUpdatedAt",
+  "payload.scheduleUpdatedAt",
   'timezone: "Asia/Singapore"',
   '"TRIGGER:-PT1H"',
   "UID:",
@@ -101,6 +103,7 @@ const initial = buildDriverJobCalendarDownload({
   pickupTime: "0030hrs",
   reference: "ADM-20260715003000",
   route: "Changi Airport Terminal 3 > Marina Bay Sands",
+  scheduleUpdatedAt: "2026-07-13T02:52:22.000Z",
   status: "assigned",
   statusHistory: [],
   statusLabel: "Assigned",
@@ -120,13 +123,14 @@ const amended = buildDriverJobCalendarDownload({
   pickupDate: "2026-07-15",
   pickupDateTime: "15 Jul 2026, 01:00",
   pickupTime: "0100hrs",
+  scheduleUpdatedAt: "2026-07-13T02:56:44.000Z",
 });
 
 assert.equal(amended.ok, true);
 assert.match(amended.ics, /DTSTART;TZID=Asia\/Singapore:20260715T010000/);
 assert.match(amended.ics, /UID:driver-job-ADM-20260715003000@prestige-limo-ops/);
 assert.match(amended.ics, /SEQUENCE:[1-9][0-9]*/);
-assert.notEqual(amended.sequence, initial.sequence);
+assert.equal(amended.sequence > initial.sequence, true, "Amended calendar sequence must increase.");
 
 const originalMode = process.env.DRIVER_JOB_LINK_MODE;
 const originalPublicMode = process.env.NEXT_PUBLIC_DRIVER_JOB_LINK_MODE;

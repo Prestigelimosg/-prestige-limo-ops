@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import {
   findMockCustomer,
   mockCustomers,
@@ -18,6 +19,8 @@ type CustomerFolderPageProps = {
     name?: string;
   }>;
 };
+
+const retiredMockCustomerFolderIds = new Set(["ritz-carlton"]);
 
 export function generateStaticParams() {
   return mockCustomers.map((customer) => ({
@@ -55,6 +58,11 @@ function fallbackCustomerFolder(customerId: string, customerName: string): MockC
 
 export default async function MockCustomerFolderPage({ params, searchParams }: CustomerFolderPageProps) {
   const { customerId } = await params;
+
+  if (retiredMockCustomerFolderIds.has(customerId.trim().toLowerCase())) {
+    notFound();
+  }
+
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const customer = findMockCustomer(customerId) ?? fallbackCustomerFolder(customerId, resolvedSearchParams.name ?? "");
 

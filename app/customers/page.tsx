@@ -1964,8 +1964,6 @@ function getOutstandingDueStatusLabel(dueDate: string) {
 
 function getMockLastFollowUpDate(invoiceNumber: string) {
   const followUpDates: Record<string, string> = {
-    "RITZ-0003": "20 May 2026",
-    "RITZ-0004": "21 May 2026",
     "UBS-0003": "24 May 2026",
     "UBS-0004": "24 May 2026",
     "VIP-0003": "25 May 2026",

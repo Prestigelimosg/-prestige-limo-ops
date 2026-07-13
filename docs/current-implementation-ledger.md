@@ -12,6 +12,15 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Ritz Carlton Mock Customer Fixture Retirement
+
+- The built-in `Ritz Carlton` mock customer, mock bookings, mock invoices, mock contacts, payment examples, and follow-up examples were removed from the admin Customers runtime. A read-only live database inspection confirmed there was no matching `public.customers` row and no saved `public.bookings` row, so no operational record required or received deletion.
+- The exact retired `/customers/ritz-carlton` demo URL now returns the established Next.js not-found boundary, including case-normalized variants. Other numeric CRM customer profiles and booking-derived folder fallbacks remain on the established dynamic route.
+- The exact Ritz mock customer/account rows were also removed from the dormant internal Setup Readiness Archive rather than renamed or hidden. The archive remains disabled by its existing constant-false boundary; unrelated frozen examples remain unchanged.
+- Existing Ritz/Marriott domain matching in Dispatch is deliberately preserved because it belongs to the established CRM/parser matching lane, not this retired demo fixture. No Supabase write, schema/configuration change, booking, invoice, payment, payout, portal account, provider send, customer/driver contact, or deployment is included.
+- Historical ledger entries and disabled evidence/test runners retain their original Ritz wording for audit provenance only; they do not render a customer, create a route, or provide a database write path.
+- Focused lock: `scripts/test-retired-ritz-mock-customer-guard.mjs`.
+
 ### Exact Customer Account Deletion From Customer Profile
 
 - The existing customer directory now supplements its booking-derived account rows with exact `public.customers` records, so a customer with no saved booking remains searchable through the established Customers surface. Existing booking/account-scope rows and their billing consumers remain unchanged.

@@ -26,6 +26,10 @@ const guardChecks = [
     script: "scripts/test-admin-customer-account-delete-runtime.mjs",
   },
   {
+    label: "retired Ritz mock customer guard",
+    script: "scripts/test-retired-ritz-mock-customer-guard.mjs",
+  },
+  {
     label: "business-grade forward completion sequence guard",
     script: "scripts/test-business-grade-forward-completion-sequence.mjs",
   },

@@ -8,14 +8,16 @@ const pagePath = "app/driver-job/[token]/page.tsx";
 const ledgerPath = "docs/current-implementation-ledger.md";
 const suitePath = "scripts/test-preactivation-verification-suite.mjs";
 const guardPath = "scripts/test-driver-job-calendar-download-guard.mjs";
+const browserGuardPath = "scripts/test-driver-job-page-browser.mjs";
 
-const [helper, persistence, route, page, ledger, suite] = await Promise.all([
+const [helper, persistence, route, page, ledger, suite, browserGuard] = await Promise.all([
   readFile(helperPath, "utf8"),
   readFile(persistencePath, "utf8"),
   readFile(routePath, "utf8"),
   readFile(pagePath, "utf8"),
   readFile(ledgerPath, "utf8"),
   readFile(suitePath, "utf8"),
+  readFile(browserGuardPath, "utf8"),
 ]);
 
 for (const fragment of [
@@ -87,6 +89,22 @@ for (const fragment of [
 }
 
 assert.doesNotMatch(page, /<a\b/i, "Driver calendar download must not reopen raw public anchor navigation.");
+
+for (const fragment of [
+  "const downloadDriverJobCalendar = async () =>",
+  'document.querySelector("[data-driver-job-calendar-action=\'true\']")',
+  "window.__driverJobCalendarDownloads",
+  "window.__driverJobCalendarBlobTexts",
+  "window.__driverJobCalendarRevokedUrls",
+  "acknowledged Driver Job calendar attachment download",
+  "TRIGGER:-PT1H",
+]) {
+  assert.equal(
+    browserGuard.includes(fragment),
+    true,
+    `Driver calendar browser guard must include ${fragment}.`,
+  );
+}
 
 assert.equal(
   ledger.includes("### Driver Job Calendar Add And Amendment Update"),

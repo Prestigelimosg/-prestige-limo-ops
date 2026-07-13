@@ -1011,6 +1011,10 @@ const guardChecks = [
     script: "scripts/test-admin-create-invoice-manual-bill-to-guard.mjs",
   },
   {
+    label: "admin human monthly invoice multi-job workflow guard",
+    script: "scripts/test-admin-monthly-invoice-human-workflow-guard.mjs",
+  },
+  {
     label: "admin monthly invoice saved-prefix precedence guard",
     script: "scripts/test-admin-monthly-invoice-saved-prefix-precedence-guard.mjs",
   },

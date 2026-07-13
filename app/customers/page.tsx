@@ -448,7 +448,18 @@ type PlainInvoiceForm = {
 
 type PlainInvoiceAdditionalLineItem = {
   amount: string;
+  bookingReference: string;
   lineDescription: string;
+};
+
+type PlainInvoiceMonthlyContext = {
+  billingMonthLabel: string;
+  customerName: string;
+};
+
+type PlainInvoiceRemovedLineItem = {
+  index: number;
+  item: PlainInvoiceAdditionalLineItem;
 };
 
 type RegularCustomerBookingForm = typeof initialRegularCustomerBookingForm;
@@ -855,18 +866,18 @@ function appendCustomerInvoiceCardPaymentNote(
   return `${description.slice(0, availableDescriptionLength).trim()}...${suffix}`;
 }
 
-const plainInvoiceMaxLineItems = 4;
-
 function plainInvoiceLineItemRows(form: PlainInvoiceForm) {
   return [
     {
       amount: form.amount,
+      bookingReference: form.bookingReference,
       lineDescription: form.lineDescription,
       required: true,
       rowNumber: 1,
     },
-    ...form.lineItems.slice(0, plainInvoiceMaxLineItems - 1).map((item, index) => ({
+    ...form.lineItems.map((item, index) => ({
       amount: item.amount,
+      bookingReference: item.bookingReference,
       lineDescription: item.lineDescription,
       required: false,
       rowNumber: index + 2,
@@ -912,6 +923,7 @@ function plainInvoiceLineItemsFromForm(
       return {
         amountCents,
         amountLabel: formatInvoiceAmount(amountCents),
+        bookingReference: row.bookingReference.trim() || form.bookingReference.trim() || undefined,
         description: row.lineDescription.trim(),
       };
     });
@@ -936,6 +948,12 @@ function plainInvoiceTotalAmountCents(form: PlainInvoiceForm) {
     (total, item) => total + item.amountCents,
     0,
   );
+}
+
+function plainInvoiceMonthlyRouteSummary(bookingReferences: string[]) {
+  const references = bookingReferences.map((reference) => reference.trim()).filter(Boolean);
+
+  return `${references.length} job${references.length === 1 ? "" : "s"}: ${references.join(", ")}`;
 }
 
 function customerInvoiceCardPaymentPreviewLabel(
@@ -1551,6 +1569,19 @@ function customerFolderJobDispatchHref(booking: RegularCustomerSavedBookingReadR
   });
 
   return `/?${params.toString()}`;
+}
+
+function monthlyInvoiceBookingDispatchHref(bookingReference: string) {
+  const reference = bookingReference.trim();
+
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(reference)) {
+    return "";
+  }
+
+  return `/?${new URLSearchParams({
+    [customerFolderDispatchHandoffReferenceParam]: reference,
+    tab: customerFolderDispatchHandoffTab,
+  }).toString()}`;
 }
 
 function customerFolderSavedBookingMonthKey(booking: RegularCustomerSavedBookingReadRecord) {
@@ -2201,7 +2232,10 @@ function invoicedReferenceSetFrom(invoices: CustomerDisplayedInvoiceRecord[]) {
   const references = new Set<string>();
 
   invoices.forEach((invoice) => {
-    if ((invoice.documentType || "invoice") !== "invoice") {
+    if (
+      (invoice.documentType || "invoice") !== "invoice" ||
+      invoice.documentState === "draft"
+    ) {
       return;
     }
 
@@ -2210,6 +2244,14 @@ function invoicedReferenceSetFrom(invoices: CustomerDisplayedInvoiceRecord[]) {
     if (reference) {
       references.add(reference);
     }
+
+    invoice.lineItems.forEach((item) => {
+      const lineItemReference = normalizedInvoiceReference(item.bookingReference || "");
+
+      if (lineItemReference) {
+        references.add(lineItemReference);
+      }
+    });
   });
 
   return references;
@@ -2402,6 +2444,11 @@ export default function MockCustomerDashboardPage() {
   );
   const [plainInvoicePreview, setPlainInvoicePreview] =
     useState<CustomerInvoicePreview | null>(null);
+  const [plainInvoiceMonthlyContext, setPlainInvoiceMonthlyContext] =
+    useState<PlainInvoiceMonthlyContext | null>(null);
+  const [plainInvoiceMonthlyStep, setPlainInvoiceMonthlyStep] = useState<1 | 2 | 3>(1);
+  const [plainInvoiceRemovedLineItem, setPlainInvoiceRemovedLineItem] =
+    useState<PlainInvoiceRemovedLineItem | null>(null);
   const [plainInvoiceFeedback, setPlainInvoiceFeedback] = useState(
     "Create Invoice is ready for manual bill-to. No invoice number is created until Draft or Issue.",
   );
@@ -3311,7 +3358,7 @@ export default function MockCustomerDashboardPage() {
       includeCardPaymentNote: true,
     });
     const lineItemsKey = lineItems
-      .map((item) => `${item.amountLabel}:${item.description}`)
+      .map((item) => `${item.bookingReference || ""}:${item.amountLabel}:${item.description}`)
       .join(";;");
 
     if (
@@ -4923,8 +4970,7 @@ export default function MockCustomerDashboardPage() {
       return;
     }
 
-    const preparedRows = group.rows.slice(0, plainInvoiceMaxLineItems);
-    const overflowCount = Math.max(0, group.rows.length - preparedRows.length);
+    const preparedRows = group.rows;
     const [firstRow, ...additionalRows] = preparedRows;
     const referenceList = group.rows.map((row) => row.reference).filter(Boolean);
     const groupLabel = group.accountScopeLabel
@@ -4947,22 +4993,27 @@ export default function MockCustomerDashboardPage() {
       lineDescription: monthlyBillingInvoiceLineDescription(firstRow),
       lineItems: additionalRows.map((row) => ({
         amount: monthlyBillingInvoiceAmountInput(row),
+        bookingReference: row.reference,
         lineDescription: monthlyBillingInvoiceLineDescription(row),
       })),
       reference: monthlyBillingGroupReference(group),
-      route: `${group.rows.length} job${group.rows.length === 1 ? "" : "s"}: ${referenceList.join(", ")}`,
+      route: plainInvoiceMonthlyRouteSummary(referenceList),
       service: `Monthly billing - ${group.billingMonthLabel}`,
     });
     setSelectedPlainInvoiceCrmFolderKey(group.key);
+    setPlainInvoiceMonthlyContext({
+      billingMonthLabel: group.billingMonthLabel,
+      customerName: group.customerName,
+    });
+    setPlainInvoiceMonthlyStep(1);
+    setPlainInvoiceRemovedLineItem(null);
     setPlainInvoicePreview(null);
     setPlainInvoiceCrmPickerOpen(false);
     setCustomerInvoiceWorkspaceTab("statements");
     setPlainInvoiceFeedback(
-      overflowCount > 0
-        ? `${groupLabel} / ${group.billingMonthLabel} loaded with the first ${preparedRows.length} jobs. ${overflowCount} more job${overflowCount === 1 ? "" : "s"} must be prepared in another invoice or after the invoice line-item limit is expanded. Enter approved amounts before Preview, Draft, Issue, or Email.`
-        : `${groupLabel} / ${group.billingMonthLabel} loaded into Create Invoice. Enter approved amounts, review line descriptions, then Preview before Draft, Issue, or Email.`,
+      `${groupLabel} / ${group.billingMonthLabel} loaded with all ${preparedRows.length} billing-ready job${preparedRows.length === 1 ? "" : "s"}. Check every description and amount before reviewing the invoice.`,
     );
-    setPlainInvoiceFeedbackTone(overflowCount > 0 ? "info" : "success");
+    setPlainInvoiceFeedbackTone("success");
 
     window.setTimeout(() => {
       const drawer = document.querySelector<HTMLDetailsElement>(
@@ -5178,6 +5229,9 @@ export default function MockCustomerDashboardPage() {
 
   function focusPlainInvoicePanel() {
     setCustomerInvoiceWorkspaceTab("statements");
+    setPlainInvoiceMonthlyContext(null);
+    setPlainInvoiceMonthlyStep(1);
+    setPlainInvoiceRemovedLineItem(null);
     setPlainInvoiceFeedback(
       "Create Invoice form ready. Preview first; Draft or Issue creates the invoice number.",
     );
@@ -5251,6 +5305,9 @@ export default function MockCustomerDashboardPage() {
       plainInvoiceCrmAccountOptions.find((account) => account.customerFolderKey === customerFolderKey) || null;
 
     setSelectedPlainInvoiceCrmFolderKey(selectedAccount?.customerFolderKey || "");
+    setPlainInvoiceMonthlyContext(null);
+    setPlainInvoiceMonthlyStep(1);
+    setPlainInvoiceRemovedLineItem(null);
     const requestId = plainInvoiceSavedBookingRequestSequenceRef.current + 1;
     plainInvoiceSavedBookingRequestSequenceRef.current = requestId;
     setPlainInvoiceSavedBookings([]);
@@ -5304,6 +5361,9 @@ export default function MockCustomerDashboardPage() {
     const selectedBooking = plainInvoiceSavedBookingOptions.find(
       (booking) => savedBookingReference(booking) === bookingReference,
     );
+    setPlainInvoiceMonthlyContext(null);
+    setPlainInvoiceMonthlyStep(1);
+    setPlainInvoiceRemovedLineItem(null);
     setPlainInvoiceForm((currentForm) => ({
       ...currentForm,
       bookerId: selectedBooking?.booker_id ?? null,
@@ -5346,18 +5406,13 @@ export default function MockCustomerDashboardPage() {
   }
 
   function addPlainInvoiceLineItem() {
-    if (plainInvoiceForm.lineItems.length >= plainInvoiceMaxLineItems - 1) {
-      setPlainInvoiceFeedback(`Create Invoice supports up to ${plainInvoiceMaxLineItems} visible line items.`);
-      setPlainInvoiceFeedbackTone("error");
-      return;
-    }
-
     setPlainInvoiceForm((currentForm) => ({
       ...currentForm,
       lineItems: [
         ...currentForm.lineItems,
         {
           amount: "",
+          bookingReference: plainInvoiceForm.bookingReference,
           lineDescription: "",
         },
       ],
@@ -5375,8 +5430,81 @@ export default function MockCustomerDashboardPage() {
     setPlainInvoiceFeedbackTone("info");
   }
 
+  function removePlainInvoiceMonthlyJob(index: number) {
+    const rows = plainInvoiceLineItemRows(plainInvoiceForm);
+
+    if (!plainInvoiceMonthlyContext || rows.length <= 1 || !rows[index]) {
+      setPlainInvoiceFeedback("A monthly invoice must keep at least one job.");
+      setPlainInvoiceFeedbackTone("error");
+      return;
+    }
+
+    const removedRow = rows[index];
+    const nextRows = rows.filter((_, rowIndex) => rowIndex !== index);
+    const [firstRow, ...additionalRows] = nextRows;
+
+    setPlainInvoiceRemovedLineItem({
+      index,
+      item: {
+        amount: removedRow.amount,
+        bookingReference: removedRow.bookingReference,
+        lineDescription: removedRow.lineDescription,
+      },
+    });
+    setPlainInvoiceForm((currentForm) => ({
+      ...currentForm,
+      amount: firstRow.amount,
+      bookingReference: firstRow.bookingReference,
+      lineDescription: firstRow.lineDescription,
+      lineItems: additionalRows.map((row) => ({
+        amount: row.amount,
+        bookingReference: row.bookingReference,
+        lineDescription: row.lineDescription,
+      })),
+      route: plainInvoiceMonthlyRouteSummary(nextRows.map((row) => row.bookingReference)),
+    }));
+    setPlainInvoicePreview(null);
+    setPlainInvoiceMonthlyStep(2);
+    setPlainInvoiceFeedback(
+      `${removedRow.bookingReference} removed from this invoice draft only. This does not cancel or delete the booking.`,
+    );
+    setPlainInvoiceFeedbackTone("info");
+  }
+
+  function undoPlainInvoiceMonthlyJobRemoval() {
+    if (!plainInvoiceRemovedLineItem) {
+      return;
+    }
+
+    const restored = plainInvoiceRemovedLineItem;
+    const rows = plainInvoiceLineItemRows(plainInvoiceForm).map((row) => ({
+      amount: row.amount,
+      bookingReference: row.bookingReference,
+      lineDescription: row.lineDescription,
+    }));
+    rows.splice(Math.min(restored.index, rows.length), 0, restored.item);
+    const [firstRow, ...additionalRows] = rows;
+
+    setPlainInvoiceForm((currentForm) => ({
+      ...currentForm,
+      amount: firstRow.amount,
+      bookingReference: firstRow.bookingReference,
+      lineDescription: firstRow.lineDescription,
+      lineItems: additionalRows,
+      route: plainInvoiceMonthlyRouteSummary(rows.map((row) => row.bookingReference)),
+    }));
+    setPlainInvoiceRemovedLineItem(null);
+    setPlainInvoicePreview(null);
+    setPlainInvoiceMonthlyStep(2);
+    setPlainInvoiceFeedback(`${restored.item.bookingReference} restored to this invoice draft.`);
+    setPlainInvoiceFeedbackTone("success");
+  }
+
   function clearPlainInvoiceForm() {
     setPlainInvoiceForm(plainInvoiceInitialForm());
+    setPlainInvoiceMonthlyContext(null);
+    setPlainInvoiceMonthlyStep(1);
+    setPlainInvoiceRemovedLineItem(null);
     setPlainInvoicePreview(null);
     setPlainInvoiceFeedback(
       "Create Invoice cleared. No invoice number, PDF, email, payment, or customer folder was created.",
@@ -5394,8 +5522,9 @@ export default function MockCustomerDashboardPage() {
     const lineItemsValidationMessage = plainInvoiceLineItemValidationMessage(plainInvoiceForm);
     const lineItems = plainInvoiceLineItemsFromForm(plainInvoiceForm, {
       includeCardPaymentNote: true,
-    }).map(({ amountLabel, description }) => ({
+    }).map(({ amountLabel, bookingReference, description }) => ({
       amountLabel,
+      bookingReference,
       description,
     }));
 
@@ -5403,42 +5532,42 @@ export default function MockCustomerDashboardPage() {
       setPlainInvoiceFeedback("Enter the bill-to name before previewing Create Invoice.");
       setPlainInvoiceFeedbackTone("error");
       document.querySelector<HTMLElement>("[data-plain-invoice-bill-to-name='true']")?.focus();
-      return;
+      return false;
     }
 
     if (!reference) {
       setPlainInvoiceFeedback("Enter a manual reference before previewing Create Invoice.");
       setPlainInvoiceFeedbackTone("error");
       document.querySelector<HTMLElement>("[data-plain-invoice-reference='true']")?.focus();
-      return;
+      return false;
     }
 
     if (!service) {
       setPlainInvoiceFeedback("Enter the service label before previewing Create Invoice.");
       setPlainInvoiceFeedbackTone("error");
       document.querySelector<HTMLElement>("[data-plain-invoice-service='true']")?.focus();
-      return;
+      return false;
     }
 
     if (lineItemsValidationMessage) {
       setPlainInvoiceFeedback(lineItemsValidationMessage);
       setPlainInvoiceFeedbackTone("error");
       document.querySelector<HTMLElement>("[data-plain-invoice-line-description='true']")?.focus();
-      return;
+      return false;
     }
 
     if (!amountCents) {
       setPlainInvoiceFeedback("Enter the invoice amount before previewing Create Invoice.");
       setPlainInvoiceFeedbackTone("error");
       document.querySelector<HTMLElement>("[data-plain-invoice-amount='true']")?.focus();
-      return;
+      return false;
     }
 
     if (Number.isNaN(dueDate.getTime())) {
       setPlainInvoiceFeedback("Choose the due date before previewing Create Invoice.");
       setPlainInvoiceFeedbackTone("error");
       document.querySelector<HTMLElement>("[data-plain-invoice-due-date='true']")?.focus();
-      return;
+      return false;
     }
 
     setPlainInvoicePreview({
@@ -5470,6 +5599,13 @@ export default function MockCustomerDashboardPage() {
     window.setTimeout(() => {
       document.querySelector<HTMLElement>("[data-plain-invoice-issue-action='true']")?.focus();
     }, 50);
+    return true;
+  }
+
+  function reviewPlainMonthlyInvoice() {
+    if (previewPlainInvoice()) {
+      setPlainInvoiceMonthlyStep(3);
+    }
   }
 
   function plainInvoiceRequestBodyFromPreview(documentState: CustomerBillingDocumentState) {
@@ -5494,6 +5630,7 @@ export default function MockCustomerDashboardPage() {
       documentType: "invoice" as CustomerBillingDocumentType,
       dueDateIso: plainInvoicePreview.dueDateIso,
       lineItems: plainInvoicePreview.lineItems,
+      monthlyInvoice: Boolean(plainInvoiceMonthlyContext),
       reference: plainInvoicePreview.reference,
       route: plainInvoicePreview.route,
       service: plainInvoicePreview.service,
@@ -8558,13 +8695,14 @@ export default function MockCustomerDashboardPage() {
                       Create Invoice
                     </p>
                     <h3 className="mt-1 text-base font-bold text-slate-950">
-                      Manual bill-to
+                      {plainInvoiceMonthlyContext ? "Monthly invoice" : "Manual bill-to"}
                     </h3>
                   </div>
                   <p className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-600">
                     No number yet
                   </p>
                 </div>
+                {!plainInvoiceMonthlyContext ? (
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(9rem,1fr)_minmax(9rem,0.9fr)_minmax(8rem,0.75fr)_minmax(8rem,0.7fr)] xl:items-end">
                   <div className="grid gap-2 sm:col-span-2 xl:col-span-4 xl:grid-cols-[minmax(12rem,1fr)_auto] xl:items-end">
                     <div className="relative grid gap-1 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
@@ -8826,6 +8964,226 @@ export default function MockCustomerDashboardPage() {
                     </label>
                   </div>
                 </div>
+                ) : null}
+                {plainInvoiceMonthlyContext ? (
+                  <section
+                    className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3"
+                    data-plain-monthly-invoice-workflow="true"
+                  >
+                    <div className="grid gap-2 sm:grid-cols-3" aria-label="Monthly invoice steps">
+                      {[
+                        [1, "Choose month"],
+                        [2, "Check jobs"],
+                        [3, "Review invoice"],
+                      ].map(([step, label]) => (
+                        <div
+                          className={`rounded-md border px-3 py-2 text-xs font-bold ${
+                            plainInvoiceMonthlyStep === step
+                              ? "border-slate-900 bg-slate-900 text-white"
+                              : "border-slate-200 bg-white text-slate-600"
+                          }`}
+                          data-plain-monthly-invoice-step={step}
+                          key={step}
+                        >
+                          {step}. {label}
+                        </div>
+                      ))}
+                    </div>
+
+                    {plainInvoiceMonthlyStep === 1 ? (
+                      <div className="mt-3 rounded-md border border-slate-200 bg-white p-3">
+                        <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
+                          Monthly invoice
+                        </p>
+                        <p className="mt-1 text-base font-bold text-slate-950">
+                          {plainInvoiceMonthlyContext.customerName}
+                        </p>
+                        <p className="mt-1 text-sm font-semibold text-slate-700">
+                          {plainInvoiceMonthlyContext.billingMonthLabel} · {plainInvoiceLineItemRows(plainInvoiceForm).length} completed job
+                          {plainInvoiceLineItemRows(plainInvoiceForm).length === 1 ? "" : "s"}
+                        </p>
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                          <label className="text-xs font-bold text-slate-600">
+                            Due date
+                            <input
+                              className="mt-1 h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-950"
+                              data-plain-monthly-invoice-due-date="true"
+                              onChange={(event) => updatePlainInvoiceForm("dueDateIso", event.target.value)}
+                              type="date"
+                              value={plainInvoiceForm.dueDateIso}
+                            />
+                          </label>
+                          <label className="text-xs font-bold text-slate-600">
+                            Customer email (optional until sending)
+                            <input
+                              className="mt-1 h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-950"
+                              data-plain-monthly-invoice-email="true"
+                              inputMode="email"
+                              onChange={(event) => updatePlainInvoiceForm("billToEmail", event.target.value)}
+                              placeholder="accounts@example.com"
+                              type="email"
+                              value={plainInvoiceForm.billToEmail}
+                            />
+                          </label>
+                        </div>
+                        <button
+                          className="mt-3 inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-xs font-bold text-white transition hover:bg-slate-700"
+                          onClick={() => setPlainInvoiceMonthlyStep(2)}
+                          type="button"
+                        >
+                          Check jobs
+                        </button>
+                      </div>
+                    ) : null}
+
+                    {plainInvoiceMonthlyStep === 2 ? (
+                      <div className="mt-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-sm font-bold text-slate-950">Check every job and price</p>
+                          <p className="text-sm font-bold text-slate-950">
+                            Total {formatInvoiceAmount(plainInvoiceAmountCents)}
+                          </p>
+                        </div>
+                        <div className="mt-2 space-y-2">
+                          {plainInvoiceLineItemRows(plainInvoiceForm).map((row, index) => {
+                            const dispatchHref = monthlyInvoiceBookingDispatchHref(row.bookingReference);
+
+                            return (
+                              <details
+                                className="rounded-md border border-slate-200 bg-white"
+                                key={row.bookingReference || `monthly-invoice-job-${index}`}
+                              >
+                                <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 px-3 py-2 text-sm font-bold text-slate-950">
+                                  <span>{row.bookingReference || `Job ${index + 1}`}</span>
+                                  <span>{row.amount.trim() ? formatInvoiceAmount(parseInvoiceAmountToCents(row.amount) || 0) : "Price needed"}</span>
+                                </summary>
+                                <div className="grid gap-3 border-t border-slate-200 p-3 sm:grid-cols-[minmax(0,1fr)_9rem]">
+                                  <label className="text-xs font-bold text-slate-600">
+                                    Customer description
+                                    <input
+                                      className="mt-1 h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-950"
+                                      onChange={(event) =>
+                                        index === 0
+                                          ? updatePlainInvoiceForm("lineDescription", event.target.value)
+                                          : updatePlainInvoiceAdditionalLineItem(index - 1, "lineDescription", event.target.value)
+                                      }
+                                      value={row.lineDescription}
+                                    />
+                                  </label>
+                                  <label className="text-xs font-bold text-slate-600">
+                                    Amount (SGD)
+                                    <input
+                                      className="mt-1 h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-950"
+                                      inputMode="decimal"
+                                      onChange={(event) =>
+                                        index === 0
+                                          ? updatePlainInvoiceForm("amount", event.target.value)
+                                          : updatePlainInvoiceAdditionalLineItem(index - 1, "amount", event.target.value)
+                                      }
+                                      placeholder="0.00"
+                                      value={row.amount}
+                                    />
+                                  </label>
+                                  <div className="flex flex-wrap gap-2 sm:col-span-2">
+                                    {dispatchHref ? (
+                                      <Link
+                                        className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-white px-3 text-xs font-bold text-slate-900"
+                                        data-plain-invoice-job-open-booking={row.bookingReference}
+                                        href={dispatchHref}
+                                        rel="noreferrer"
+                                        target="_blank"
+                                      >
+                                        Open booking
+                                      </Link>
+                                    ) : null}
+                                    <button
+                                      className="inline-flex min-h-9 items-center justify-center rounded-md border border-rose-300 bg-white px-3 text-xs font-bold text-rose-700"
+                                      data-plain-invoice-job-remove={row.bookingReference}
+                                      onClick={() => removePlainInvoiceMonthlyJob(index)}
+                                      type="button"
+                                    >
+                                      Remove from invoice
+                                    </button>
+                                  </div>
+                                </div>
+                              </details>
+                            );
+                          })}
+                        </div>
+                        {plainInvoiceRemovedLineItem ? (
+                          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950">
+                            <span>
+                              {plainInvoiceRemovedLineItem.item.bookingReference} removed from this draft. This does not cancel or delete the booking.
+                            </span>
+                            <button
+                              className="inline-flex min-h-8 items-center justify-center rounded-md border border-amber-400 bg-white px-2 font-bold"
+                              onClick={undoPlainInvoiceMonthlyJobRemoval}
+                              type="button"
+                            >
+                              Undo remove
+                            </button>
+                          </div>
+                        ) : null}
+                        <div className="mt-3 flex flex-wrap justify-between gap-2">
+                          <button className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700" onClick={() => setPlainInvoiceMonthlyStep(1)} type="button">
+                            Back
+                          </button>
+                          <button className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-xs font-bold text-white" onClick={reviewPlainMonthlyInvoice} type="button">
+                            Review invoice
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {plainInvoiceMonthlyStep === 3 ? (
+                      <div className="mt-3 rounded-md border border-slate-200 bg-white p-3">
+                        <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Final check</p>
+                        <p className="mt-1 text-base font-bold text-slate-950">
+                          {plainInvoiceMonthlyContext.customerName} · {plainInvoiceMonthlyContext.billingMonthLabel}
+                        </p>
+                        <p className="mt-1 text-sm font-semibold text-slate-700">
+                          {plainInvoiceLineItemRows(plainInvoiceForm).length} jobs · {formatInvoiceAmount(plainInvoiceAmountCents)}
+                        </p>
+                        <p className="mt-2 text-xs font-semibold text-slate-600">
+                          Save invoice draft creates an admin-only invoice. It does not email the customer.
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700" onClick={() => setPlainInvoiceMonthlyStep(2)} type="button">
+                            Back to jobs
+                          </button>
+                          <button
+                            className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-xs font-bold text-white disabled:border-slate-300 disabled:bg-slate-200 disabled:text-slate-500"
+                            data-plain-invoice-draft-action="true"
+                            disabled={!isPlainInvoicePreviewCurrent}
+                            onClick={savePlainInvoiceDraft}
+                            type="button"
+                          >
+                            {issuingCustomerInvoiceKey === plainInvoiceDraftActionKey ? "Saving" : "Save invoice draft"}
+                          </button>
+                          <button
+                            className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-700 bg-white px-3 text-xs font-bold text-slate-900 disabled:border-slate-200 disabled:text-slate-400"
+                            disabled={!isPlainInvoicePreviewCurrent}
+                            onClick={issuePlainInvoice}
+                            type="button"
+                          >
+                            Finalise invoice
+                          </button>
+                        </div>
+                        <details className="mt-3 border-t border-slate-200 pt-3">
+                          <summary className="cursor-pointer text-xs font-bold text-slate-700">Send after final review</summary>
+                          <button
+                            className="mt-2 inline-flex min-h-9 items-center justify-center rounded-md border border-sky-300 bg-white px-3 text-xs font-bold text-sky-900 disabled:border-slate-200 disabled:text-slate-400"
+                            disabled={!isPlainInvoicePreviewCurrent}
+                            onClick={emailPlainInvoice}
+                            type="button"
+                          >
+                            Finalise and email invoice
+                          </button>
+                        </details>
+                      </div>
+                    ) : null}
+                  </section>
+                ) : (
                 <div className="mt-3" data-plain-invoice-line-items="true">
                   <div className="flex flex-wrap items-end justify-between gap-2">
                     <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
@@ -8918,19 +9276,16 @@ export default function MockCustomerDashboardPage() {
                     })}
                   </div>
                   <button
-                    className={`mt-2 inline-flex h-7 items-center justify-center rounded-md border px-2 text-[11px] font-bold leading-none transition ${
-                      plainInvoiceForm.lineItems.length >= plainInvoiceMaxLineItems - 1
-                        ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
-                        : "border-slate-300 bg-white text-slate-700 hover:border-slate-500"
-                    }`}
+                    className="mt-2 inline-flex h-7 items-center justify-center rounded-md border border-slate-300 bg-white px-2 text-[11px] font-bold leading-none text-slate-700 transition hover:border-slate-500"
                     data-plain-invoice-add-line-item="true"
-                    disabled={plainInvoiceForm.lineItems.length >= plainInvoiceMaxLineItems - 1}
                     onClick={addPlainInvoiceLineItem}
                     type="button"
                   >
                     Add item
                   </button>
                 </div>
+                )}
+                {!plainInvoiceMonthlyContext ? (
                 <div className="mt-3 flex flex-wrap items-center gap-1.5">
                   <button
                     className={`inline-flex h-7 items-center justify-center whitespace-nowrap rounded-md border px-2 text-[11px] font-bold leading-none transition ${
@@ -9000,6 +9355,7 @@ export default function MockCustomerDashboardPage() {
                     Clear
                   </button>
                 </div>
+                ) : null}
                 {plainInvoicePreview ? (
                   <div
                     className={`mt-3 rounded-md border px-3 py-2 text-xs leading-5 ${

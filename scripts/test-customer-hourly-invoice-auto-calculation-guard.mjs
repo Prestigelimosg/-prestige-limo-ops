@@ -67,7 +67,7 @@ for (const fragment of [
   "additionalRows.map((row) => ({",
   "amount: monthlyBillingInvoiceAmountInput(row)",
   "lineDescription: monthlyBillingInvoiceLineDescription(row)",
-  "Enter approved amounts before Preview, Draft, Issue, or Email.",
+  "Check every description and amount before reviewing the invoice.",
   "function prepareSelectedCustomerMonthlyInvoice()",
   "prepareMonthlyBillingGroupForInvoice(selectedCustomerPrimaryMonthlyBillingGroup);",
 ]) {

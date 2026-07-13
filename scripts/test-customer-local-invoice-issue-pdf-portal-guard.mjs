@@ -115,7 +115,7 @@ for (const fragment of [
   "Terms & Conditions:",
   "Midnight surcharge: $15 applies from 11:00 PM to 6:59 AM.",
   "Hourly jobs: 15 minutes grace; 16 minutes onward counts as the next hour.",
-  "/XObject << /Im1 6 0 R >>",
+  "/XObject << /Im1 ${imageObjectNumber} 0 R >>",
   "/Subtype /Image",
   "/Filter /DCTDecode",
   "%PDF-1.4",

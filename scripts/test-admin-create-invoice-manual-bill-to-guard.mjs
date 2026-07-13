@@ -127,7 +127,7 @@ for (const fragment of [
   "plain-invoice:",
   "plainInvoiceEmailActionKey",
   "plainInvoiceRequestBodyFromPreview(",
-  "plainInvoiceMaxLineItems = 4",
+  "bookingReference: row.bookingReference.trim()",
   "plainInvoiceLineItemsFromForm(",
   "plainInvoiceTotalAmountCents(",
   "loadPlainInvoiceCrmAccounts(",
@@ -216,7 +216,7 @@ for (const publicSource of [customerBookingPage, customerPortalPage, driverJobPa
 for (const phrase of [
   "Admin Customers now has a compact `Create Invoice` entry point inside `/customers` > Invoice Workspace > Send Invoice Workbench.",
   "The lane supports manual bill-to invoices and can explicitly link an invoice to an existing loaded CRM/customer billing account from the guarded saved-account read.",
-  "Create Invoice supports up to four visible manual line items, matching the current stored PDF renderer capacity; Preview sums the rows and Draft/Issue/Email send the reviewed `line_items` array to the existing guarded invoice route.",
+  "Create Invoice supports reviewed line items without the former four-row truncation; Preview sums the rows, stored PDFs paginate them, and Draft/Issue/Email send the reviewed `line_items` array to the existing guarded invoice route.",
   "Loading the panel and clicking Preview do not create an invoice number, PDF, customer folder, portal invite, prefix reservation, payment link, provider send, payout, or GPS/live-location action.",
   "Only the explicit `Draft`, `Issue`, or `Email` action posts to guarded admin invoice routes with the existing admin booking persistence purpose header.",
   "Manual bill-to records without a selected CRM account still use an internal `plain-invoice:` customer id and fixed `invoice` document type; selected CRM billing accounts use the existing saved customer/account id/name without creating a new CRM row.",

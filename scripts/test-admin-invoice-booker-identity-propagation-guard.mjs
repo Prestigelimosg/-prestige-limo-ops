@@ -34,12 +34,12 @@ for (const fragment of [
   "Select an exact saved booking with a verified PA / booker before emailing Create Invoice.",
 ]) assert.ok((read + page).includes(fragment), `Missing ${fragment}`);
 
-console.log("Admin invoice booker identity propagation guard passed.");
 assert.ok(persistence.includes("bookerId?: unknown"));
 assert.ok(persistence.includes("booker_id: sanitized.data.bookerId"));
 assert.ok(persistence.includes('sanitized.data.documentState === "issued"'));
 assert.ok(persistence.includes('.from("bookings")'));
-assert.ok(persistence.includes('.eq("booking_reference", sanitized.data.bookingReference)'));
-assert.ok(persistence.includes('.eq("customer_id", sanitized.data.customerId)'));
-assert.ok(persistence.includes('.eq("booker_id", sanitized.data.bookerId)'));
+assert.ok(persistence.includes('.in("booking_reference", bookingReferences)'));
+assert.ok(persistence.includes('.eq("customer_id", input.customerId)'));
+assert.ok(persistence.includes('.eq("booker_id", input.bookerId)'));
 assert.ok(persistence.includes(", booker_id, document_type"));
+console.log("Admin invoice booker identity propagation guard passed.");

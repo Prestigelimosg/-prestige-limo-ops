@@ -1410,6 +1410,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Customer Folder Job History Compact Rows
 
 - Customer folder `All booking history` uses one compact table instead of summary cards and large job cards.
+- The compact history sector now renders only when the established folder data contains at least one history row. Dynamic customer folders with no history rows no longer show an empty heading and table shell; populated folders retain the same table and fields.
 - The duplicate Upcoming/Completed job blocks remain removed from the customer folder; job and payment status stay in the compact rows.
 - This is customer-folder UI-only polish on existing mock/customer data; it does not add routes, APIs, DB reads/writes, env changes, Vercel changes, invoice/PDF/payment/provider sending, payout automation, GPS/live location, calendar sync, parser changes, or shims.
 - Guard coverage lives in `scripts/test-customer-folder-job-history-compact-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.

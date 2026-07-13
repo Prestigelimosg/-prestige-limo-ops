@@ -105,38 +105,40 @@ export default async function MockCustomerFolderPage({ params, searchParams }: C
 
         <CustomerAccountDangerZone customerId={customer.id} customerName={customer.companyName} />
 
-        <section className="rounded-md border border-slate-200 bg-white p-3 shadow-sm" data-customer-booking-history="true">
-          <h2 className="text-base font-bold text-slate-950">All booking history</h2>
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full min-w-[760px] border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-xs uppercase tracking-[0.14em] text-slate-500">
-                  <th className="py-2 pr-4">Date</th>
-                  <th className="py-2 pr-4">Job</th>
-                  <th className="py-2 pr-4">Route</th>
-                  <th className="py-2 pr-4">Invoice</th>
-                  <th className="py-2 pr-4">Payment status</th>
-                  <th className="py-2">Balance</th>
-                </tr>
-              </thead>
-              <tbody>
-                {customer.bookingHistory.map((booking) => (
-                  <tr className="border-b border-slate-100 last:border-b-0" key={`${booking.invoiceNumber}-${booking.date}`}>
-                    <td className="py-3 pr-4 text-slate-700">{booking.date}</td>
-                    <td className="py-3 pr-4 text-slate-700">
-                      <strong className="block text-slate-950">{booking.jobStatus}</strong>
-                      {booking.service}
-                    </td>
-                    <td className="py-3 pr-4 text-slate-700">{booking.route}</td>
-                    <td className="py-3 pr-4 font-bold text-slate-950">{booking.invoiceNumber}</td>
-                    <td className="py-3 pr-4 text-slate-700">{booking.paymentStatus}</td>
-                    <td className="py-3 text-slate-700">{booking.balanceDue}</td>
+        {customer.bookingHistory.length > 0 ? (
+          <section className="rounded-md border border-slate-200 bg-white p-3 shadow-sm" data-customer-booking-history="true">
+            <h2 className="text-base font-bold text-slate-950">All booking history</h2>
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-xs uppercase tracking-[0.14em] text-slate-500">
+                    <th className="py-2 pr-4">Date</th>
+                    <th className="py-2 pr-4">Job</th>
+                    <th className="py-2 pr-4">Route</th>
+                    <th className="py-2 pr-4">Invoice</th>
+                    <th className="py-2 pr-4">Payment status</th>
+                    <th className="py-2">Balance</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+                </thead>
+                <tbody>
+                  {customer.bookingHistory.map((booking) => (
+                    <tr className="border-b border-slate-100 last:border-b-0" key={`${booking.invoiceNumber}-${booking.date}`}>
+                      <td className="py-3 pr-4 text-slate-700">{booking.date}</td>
+                      <td className="py-3 pr-4 text-slate-700">
+                        <strong className="block text-slate-950">{booking.jobStatus}</strong>
+                        {booking.service}
+                      </td>
+                      <td className="py-3 pr-4 text-slate-700">{booking.route}</td>
+                      <td className="py-3 pr-4 font-bold text-slate-950">{booking.invoiceNumber}</td>
+                      <td className="py-3 pr-4 text-slate-700">{booking.paymentStatus}</td>
+                      <td className="py-3 text-slate-700">{booking.balanceDue}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : null}
 
       </div>
     </main>

@@ -55,9 +55,24 @@ for (const fragment of [
 }
 
 assertIncludes(
+  page,
+  "rounded-xl border border-amber-500 border-l-[12px] border-t-8 border-t-slate-950 bg-amber-50 p-4 shadow-md",
+  "classic black-and-gold customer profile sector",
+);
+assertIncludes(
+  invoiceFolderPanel,
+  "overflow-hidden rounded-xl border border-amber-500 border-l-[12px] border-t-8 border-t-slate-950 bg-amber-50 shadow-md",
+  "classic black-and-gold total invoices sector",
+);
+assertIncludes(
   savedBookingsPanel,
-  "rounded-xl border border-amber-300 border-l-8 bg-amber-50 p-4 shadow-sm",
-  "visually distinct saved bookings sector",
+  "rounded-xl border border-amber-500 border-l-[12px] border-t-8 border-t-slate-950 bg-amber-50 p-4 shadow-md",
+  "classic black-and-gold saved bookings sector",
+);
+assertIncludes(
+  savedBookingsPanel,
+  "rounded-xl border border-amber-500 border-l-[12px] border-t-8 border-t-slate-950 bg-amber-50 p-4 shadow-md",
+  "classic black-and-gold selected invoice review sector",
 );
 for (const fragment of [
   "data-customer-folder-saved-bookings-edit",

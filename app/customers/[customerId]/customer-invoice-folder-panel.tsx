@@ -332,15 +332,15 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
 
   return (
     <section
-      className="overflow-hidden rounded-xl border border-sky-300 border-l-8 bg-sky-50 shadow-sm"
+      className="overflow-hidden rounded-xl border border-amber-500 border-l-[12px] border-t-8 border-t-slate-950 bg-amber-50 shadow-md"
       data-customer-invoice-rules="true"
       data-customer-invoice-folder-panel={customer.id}
       data-customer-folder-sector="invoices"
     >
-      <div className="border-b border-sky-200 bg-sky-100/70 px-4 py-3">
+      <div className="border-b border-amber-300 bg-amber-100 px-4 py-3">
         <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-800">2 · Total invoices</p>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-800">2 · Total invoices</p>
             <h2 className="mt-1 text-lg font-bold text-slate-950">Invoices</h2>
             <p className="mt-0.5 text-sm font-semibold text-slate-600">
               Date, invoice number, amount, balance due, and paid or pending status for this customer.

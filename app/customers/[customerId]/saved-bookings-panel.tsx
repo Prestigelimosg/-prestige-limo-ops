@@ -391,7 +391,7 @@ export function CustomerFolderSavedBookingsPanel({
   return (
     <>
     <section
-      className="rounded-xl border border-amber-300 border-l-8 bg-amber-50 p-4 shadow-sm"
+      className="rounded-xl border border-amber-500 border-l-[12px] border-t-8 border-t-slate-950 bg-amber-50 p-4 shadow-md"
       data-customer-folder-saved-bookings={customerId}
       data-customer-folder-sector="unbilled-jobs"
     >
@@ -576,13 +576,13 @@ export function CustomerFolderSavedBookingsPanel({
       ) : null}
     </section>
       <section
-            className="rounded-xl border border-violet-300 border-l-8 bg-violet-50 p-4 shadow-sm"
+            className="rounded-xl border border-amber-500 border-l-[12px] border-t-8 border-t-slate-950 bg-amber-50 p-4 shadow-md"
             data-customer-folder-sector="invoice-review"
             data-customer-folder-selected-invoice-layout="true"
           >
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-800">
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-800">
                   4 · Selected jobs invoice review
                 </p>
                 <h3 className="mt-1 text-lg font-bold text-slate-950">Customer invoice layout</h3>

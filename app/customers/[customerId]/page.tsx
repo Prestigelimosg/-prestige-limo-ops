@@ -67,10 +67,10 @@ export default async function MockCustomerFolderPage({ params, searchParams }: C
   const customer = findMockCustomer(customerId) ?? fallbackCustomerFolder(customerId, resolvedSearchParams.name ?? "");
 
   return (
-    <main className="min-h-screen bg-slate-100 px-4 py-6 text-slate-950 sm:px-6 lg:px-8">
+    <main className="min-h-screen bg-slate-950 px-4 py-6 text-slate-950 sm:px-6 lg:px-8">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-4">
         <header
-          className="rounded-xl border border-emerald-300 border-l-8 bg-emerald-50 p-4 shadow-sm"
+          className="rounded-xl border border-amber-500 border-l-[12px] border-t-8 border-t-slate-950 bg-amber-50 p-4 shadow-md"
           data-customer-folder-sector="profile"
         >
           <Link className="text-sm font-semibold text-slate-600 underline underline-offset-4" href="/customers">
@@ -78,7 +78,7 @@ export default async function MockCustomerFolderPage({ params, searchParams }: C
           </Link>
           <div className="mt-3 flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
             <div className="min-w-0">
-              <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-800">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-800">
                 1 · Customer profile &amp; invoice prefix
               </p>
               <div className="mt-1 flex flex-wrap items-center gap-2">

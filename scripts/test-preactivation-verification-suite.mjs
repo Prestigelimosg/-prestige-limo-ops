@@ -18,6 +18,14 @@ const guardChecks = [
     script: "scripts/test-pre-edit-source-of-truth-contract.mjs",
   },
   {
+    label: "admin exact customer account delete API contract guard",
+    script: "scripts/test-admin-customer-account-delete-api-contract.mjs",
+  },
+  {
+    label: "admin exact customer account delete runtime guard",
+    script: "scripts/test-admin-customer-account-delete-runtime.mjs",
+  },
+  {
     label: "business-grade forward completion sequence guard",
     script: "scripts/test-business-grade-forward-completion-sequence.mjs",
   },

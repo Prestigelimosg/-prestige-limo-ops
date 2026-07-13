@@ -172,6 +172,7 @@ class MockSupabaseClient {
     this.selectHistory = [];
     this.tables = {
       bookings: [],
+      customers: [],
     };
 
     for (const [table, rows] of Object.entries(seed)) {
@@ -274,7 +275,7 @@ const seed = {
       contact_phone: "+65 9999 0000",
       customer_display_name: "UBS",
       customer_facing_status: "completed",
-      customer_id: "customer-ubs",
+      customer_id: "101",
       dropoff_location: "Private dropoff",
       passenger_name: "Boss Alpha",
       passenger_phone: "+65 8888 0000",
@@ -290,7 +291,7 @@ const seed = {
       contact_phone: "+65 7777 0000",
       customer_display_name: "UBS",
       customer_facing_status: "confirmed",
-      customer_id: "customer-ubs",
+      customer_id: "101",
       passenger_name: "Boss Beta",
       pickup_at: "2026-06-15T10:00:00.000Z",
       service_type: "Hourly / Disposal",
@@ -300,7 +301,7 @@ const seed = {
       booking_reference: "RITZ-SAFE-001",
       customer_display_name: "Ritz Carlton",
       customer_facing_status: "completed",
-      customer_id: "customer-ritz",
+      customer_id: "102",
       pickup_at: "2026-06-18T10:00:00.000Z",
       service_type: "Point-to-Point Transfer",
     },
@@ -313,6 +314,11 @@ const seed = {
       pickup_at: "2026-06-25T10:00:00.000Z",
       service_type: "Airport Departure",
     },
+  ],
+  customers: [
+    { account_status: "active", display_name: "UBS", id: 101, status: "active" },
+    { account_status: "active", display_name: "Ritz Carlton", id: 102, status: "active" },
+    { account_status: "active", display_name: "Directory Only Customer", id: 103, status: "active" },
   ],
 };
 
@@ -416,8 +422,8 @@ try {
   assert.equal(readResult.body.version, "admin-customer-accounts-read-v1");
   assert.deepEqual(readResult.body.summary, {
     recent_read_count: 4,
-    returned_count: 3,
-    total_account_count: 3,
+    returned_count: 4,
+    total_account_count: 4,
   });
   assert.deepEqual(readResult.body.accounts, [
     {
@@ -425,8 +431,8 @@ try {
       account_scope_label: "Passenger: Boss Alpha / Booker: PA Lee",
       completed_count: 1,
       customer_account: "UBS",
-      customer_folder_key: "customer-ubs::boss_alpha",
-      customer_id: "customer-ubs",
+      customer_folder_key: "101::boss_alpha",
+      customer_id: "101",
       latest_booking_reference: "UBS-SAFE-002",
       latest_pickup_at: "2026-06-20T10:00:00.000Z",
       latest_service_type: "Airport Arrival",
@@ -439,8 +445,8 @@ try {
       account_scope_label: null,
       completed_count: 1,
       customer_account: "Ritz Carlton",
-      customer_folder_key: "customer-ritz::booker_traveller_not_set",
-      customer_id: "customer-ritz",
+      customer_folder_key: "102::booker_traveller_not_set",
+      customer_id: "102",
       latest_booking_reference: "RITZ-SAFE-001",
       latest_pickup_at: "2026-06-18T10:00:00.000Z",
       latest_service_type: "Point-to-Point Transfer",
@@ -453,8 +459,8 @@ try {
       account_scope_label: "Passenger: Boss Beta / Booker: PA Lee",
       completed_count: 0,
       customer_account: "UBS",
-      customer_folder_key: "customer-ubs::boss_beta",
-      customer_id: "customer-ubs",
+      customer_folder_key: "101::boss_beta",
+      customer_id: "101",
       latest_booking_reference: "UBS-SAFE-001",
       latest_pickup_at: "2026-06-15T10:00:00.000Z",
       latest_service_type: "Hourly / Disposal",
@@ -462,11 +468,27 @@ try {
       source: "admin_booking_persistence",
       upcoming_count: 1,
     },
+    {
+      account_scope_key: "customer_account",
+      account_scope_label: null,
+      completed_count: 0,
+      customer_account: "Directory Only Customer",
+      customer_folder_key: "103::customer_account",
+      customer_id: "103",
+      latest_booking_reference: null,
+      latest_pickup_at: null,
+      latest_service_type: null,
+      saved_booking_count: 0,
+      source: "customer_directory",
+      upcoming_count: 0,
+    },
   ]);
   assert.equal(readMock.client.operations.length, 0);
-  assert.equal(readMock.client.selectHistory.length, 1);
+  assert.equal(readMock.client.selectHistory.length, 2);
   assert.equal(readMock.client.selectHistory[0].table, "bookings");
   assert.equal(readMock.client.selectHistory[0].limit, 200);
+  assert.equal(readMock.client.selectHistory[1].table, "customers");
+  assert.equal(readMock.client.selectHistory[1].limit, 200);
   assertNoLeaks(readResult, "customer accounts read response should stay safe");
 
   setEnv(enabledEnv());
@@ -484,14 +506,15 @@ try {
   assert.equal(searchResult.body.ok, true);
   assert.deepEqual(searchResult.body.summary, {
     recent_read_count: 4,
-    returned_count: 1,
-    total_account_count: 3,
+    returned_count: 2,
+    total_account_count: 4,
   });
   assert.deepEqual(searchResult.body.accounts.map((account) => account.customer_account), [
     "Ritz Carlton",
+    "Directory Only Customer",
   ]);
   assert.equal(searchMock.client.operations.length, 0);
-  assert.equal(searchMock.client.selectHistory.length, 1);
+  assert.equal(searchMock.client.selectHistory.length, 2);
   assert.equal(searchMock.client.selectHistory[0].limit, 200);
   assertNoLeaks(searchResult, "searched customer accounts response should stay safe");
 
@@ -509,7 +532,7 @@ try {
   assert.equal(tokenReadResult.status, 200);
   assert.equal(tokenReadResult.body.ok, true);
   assert.equal(tokenReadMock.client.operations.length, 0);
-  assert.equal(tokenReadMock.client.selectHistory.length, 1);
+  assert.equal(tokenReadMock.client.selectHistory.length, 2);
   assertNoLeaks(tokenReadResult, "customer accounts token read response should stay safe");
 
   setEnv(enabledEnv());
@@ -528,7 +551,7 @@ try {
   assert.equal(limitedResult.body.accounts[0].customer_account, "UBS");
   assert.equal(limitedResult.body.accounts[0].account_scope_key, "boss_alpha");
   assert.equal(limitedMock.client.operations.length, 0);
-  assert.equal(limitedMock.client.selectHistory.length, 1);
+  assert.equal(limitedMock.client.selectHistory.length, 2);
   assertNoLeaks(limitedResult, "limited customer accounts response should stay safe");
 
   setEnv(enabledEnv());

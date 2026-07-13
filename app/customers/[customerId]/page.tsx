@@ -8,6 +8,7 @@ import { CustomerInvoiceFolderPanel } from "./customer-invoice-folder-panel";
 import { CustomerCompanyProfileEditor } from "./customer-company-profile-editor";
 import { CustomerFolderSavedBookingsPanel } from "./saved-bookings-panel";
 import { CustomerInvoicePrefixSettingsPanel } from "./invoice-prefix-settings-panel";
+import { CustomerAccountDangerZone } from "./customer-account-danger-zone";
 
 type CustomerFolderPageProps = {
   params: Promise<{
@@ -88,6 +89,8 @@ export default async function MockCustomerFolderPage({ params, searchParams }: C
         <CustomerInvoiceFolderPanel customer={customer} />
 
         <CustomerFolderSavedBookingsPanel customerId={customer.id} customerName={customer.companyName} />
+
+        <CustomerAccountDangerZone customerId={customer.id} customerName={customer.companyName} />
 
         <section className="rounded-md border border-slate-200 bg-white p-3 shadow-sm" data-customer-booking-history="true">
           <h2 className="text-base font-bold text-slate-950">All booking history</h2>

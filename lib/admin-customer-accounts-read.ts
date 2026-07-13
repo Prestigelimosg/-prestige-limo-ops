@@ -1,5 +1,7 @@
 import "server-only";
 
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+
 import type {
   AdminBookingPersistenceRecord,
   AdminBookingResult,
@@ -25,7 +27,7 @@ export type AdminCustomerAccountSafeRecord = {
   latest_pickup_at: string | null;
   latest_service_type: string | null;
   saved_booking_count: number;
-  source: "admin_booking_persistence";
+  source: "admin_booking_persistence" | "customer_directory";
   upcoming_count: number;
 };
 
@@ -50,6 +52,7 @@ const defaultLimit = 10;
 const maxLimit = 25;
 const accountSourceReadLimit = 200;
 const maxSearchLength = 80;
+const customerDirectoryReadLimit = 200;
 const malformedParamsError = "Admin customer accounts read parameters are malformed.";
 const forbiddenParamsError =
   "Admin customer accounts read parameters include unsupported or unsafe fields.";
@@ -323,6 +326,100 @@ function toCustomerAccounts(
     .map(toSafeAccount);
 }
 
+function configValueOrNull(value: string | undefined) {
+  const cleaned = value?.trim();
+
+  return cleaned && !/placeholder|change[_-]?me|replace[_-]?me|example/i.test(cleaned)
+    ? cleaned
+    : null;
+}
+
+function validServerDatabaseUrl(value: string | null) {
+  if (!value) return false;
+
+  try {
+    const url = new URL(value);
+
+    return url.protocol === "https:" && url.hostname.endsWith(".supabase.co");
+  } catch {
+    return false;
+  }
+}
+
+function validServerCredential(value: string | null) {
+  const normalized = value?.toLowerCase() || "";
+
+  return Boolean(
+    value &&
+      value.length >= 24 &&
+      normalized !== "anon" &&
+      normalized !== "public" &&
+      !normalized.includes("anon_key") &&
+      !normalized.includes("public_key") &&
+      !normalized.includes("next_public"),
+  );
+}
+
+function customerDirectoryClient() {
+  const supabaseUrl = configValueOrNull(process.env.SUPABASE_URL);
+  const serviceRoleKey = configValueOrNull(process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+  if (!validServerDatabaseUrl(supabaseUrl) || !validServerCredential(serviceRoleKey)) {
+    return null;
+  }
+
+  try {
+    return createClient(supabaseUrl as string, serviceRoleKey as string, {
+      auth: { persistSession: false },
+    });
+  } catch {
+    return null;
+  }
+}
+
+function exactCustomerId(value: unknown) {
+  const parsed = Number(value);
+
+  return Number.isSafeInteger(parsed) && parsed > 0 ? String(parsed) : null;
+}
+
+function mergeCustomerDirectoryRows(
+  bookingAccounts: AdminCustomerAccountSafeRecord[],
+  rows: unknown[],
+) {
+  const linkedCustomerIds = new Set(
+    bookingAccounts.map((account) => exactCustomerId(account.customer_id)).filter(Boolean),
+  );
+  const directoryOnlyAccounts = rows.flatMap((row) => {
+    const record = row !== null && typeof row === "object" && !Array.isArray(row)
+      ? (row as UnknownRecord)
+      : {};
+    const customerId = exactCustomerId(record.id);
+    const customerAccount = safeText(record.display_name, 120);
+
+    if (!customerId || !customerAccount || linkedCustomerIds.has(customerId)) {
+      return [];
+    }
+
+    return [{
+      account_scope_key: "customer_account",
+      account_scope_label: null,
+      completed_count: 0,
+      customer_account: customerAccount,
+      customer_folder_key: `${customerId}::customer_account`,
+      customer_id: customerId,
+      latest_booking_reference: null,
+      latest_pickup_at: null,
+      latest_service_type: null,
+      saved_booking_count: 0,
+      source: "customer_directory" as const,
+      upcoming_count: 0,
+    }];
+  });
+
+  return [...bookingAccounts, ...directoryOnlyAccounts];
+}
+
 export function parseAdminCustomerAccountsReadParams(
   params: URLSearchParams | UnknownRecord,
 ): AdminBookingResult<AdminCustomerAccountsReadParams> {
@@ -374,7 +471,31 @@ export async function loadAdminCustomerAccounts(
     return bookingsResult;
   }
 
-  const accounts = toCustomerAccounts(bookingsResult.data);
+  const client: Pick<SupabaseClient, "from"> | null = customerDirectoryClient();
+
+  if (!client) {
+    return {
+      error: "Admin customer directory configuration is not ready.",
+      ok: false,
+      status: 503,
+    };
+  }
+
+  const { data: customerRows, error: customerError } = await client
+    .from("customers")
+    .select("id, display_name, account_status, status")
+    .order("display_name", { ascending: true })
+    .limit(customerDirectoryReadLimit);
+
+  if (customerError || !Array.isArray(customerRows)) {
+    return {
+      error: "Admin customer directory read failed safely.",
+      ok: false,
+      status: 500,
+    };
+  }
+
+  const accounts = mergeCustomerDirectoryRows(toCustomerAccounts(bookingsResult.data), customerRows);
   const filteredAccounts = filterAccountsBySearch(accounts, parsed.data.search);
   const returnedAccounts = filteredAccounts.slice(0, parsed.data.limit);
 

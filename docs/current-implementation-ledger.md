@@ -12,6 +12,18 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Exact Customer Account Deletion From Customer Profile
+
+- The existing customer directory now supplements its booking-derived account rows with exact `public.customers` records, so a customer with no saved booking remains searchable through the established Customers surface. Existing booking/account-scope rows and their billing consumers remain unchanged.
+- The existing `/customers/[customerId]` profile contains one `Danger zone` action for the exact positive numeric `customers.id`. It never resolves deletion by customer name, company name, account label, booker, traveler, or parser output.
+- The first `Delete customer account` click performs a read-only dependency inspection. Any saved booking, stored invoice, monthly billing draft, or monthly invoice draft blocks deletion and is reported before confirmation is available.
+- An eligible deletion requires typing the exact verified `customers.display_name` and accepting the final browser confirmation. The server repeats the complete dependency inspection immediately before writing.
+- The write order revokes matching `customer_access_accounts` access first, then deletes only the exact `customers.id`; existing `customer_contacts.customer_id ON DELETE CASCADE` removes that account's contacts. Audit rows retain their established `ON DELETE SET NULL` behavior.
+- Company, booker, traveler, booking, invoice, payment, payout, PayNow, driver, pricing, parser, messaging, location, provider-send, environment, and Supabase configuration lanes are not deleted or changed by this action. No schema migration is included.
+- The profile returns to `/customers` only after the server confirms the same deleted customer ID. Blocked, malformed, unauthenticated, cross-origin, wrong-name, and database-failure paths fail closed without deleting the customer.
+- No live customer was deleted during implementation or verification. Runtime proof uses an in-memory Supabase client only.
+- Focused guards: `scripts/test-admin-customer-account-delete-api-contract.mjs`, `scripts/test-admin-customer-account-delete-runtime.mjs`, and the updated `scripts/test-admin-customer-accounts-read-api-contract.mjs`.
+
 ### DSP Two-Hour Minimum Calculation Foundation
 
 - The existing shared hourly-billing module now contains one canonical DSP billable-minute helper. DSP has a two-hour/120-minute minimum and reuses the established 15-minute grace: 1–135 actual minutes bill as 120, minute 136 starts 180, and minute 196 starts 240.

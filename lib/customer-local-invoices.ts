@@ -10,7 +10,6 @@ export type CustomerLocalInvoiceStatus = "Paid" | "Unpaid";
 
 export type CustomerLocalInvoiceLineItem = {
   amountLabel: string;
-  bookingReference?: string;
   description: string;
 };
 
@@ -121,34 +120,10 @@ function safeLineItems(value: unknown): CustomerLocalInvoiceLineItem[] {
 
       const description = text(item.description);
       const amountLabel = text(item.amountLabel);
-      const bookingReference = text(item.bookingReference);
 
-      if (!description || !amountLabel) {
-        return null;
-      }
-
-      const lineItem: CustomerLocalInvoiceLineItem = { amountLabel, description };
-
-      if (bookingReference) {
-        lineItem.bookingReference = bookingReference;
-      }
-
-      return lineItem;
+      return description && amountLabel ? { amountLabel, description } : null;
     })
     .filter((item): item is CustomerLocalInvoiceLineItem => Boolean(item));
-}
-
-export const customerInvoicePdfLineItemsPerPage = 4;
-
-export function customerInvoiceLineItemPages(lineItems: CustomerLocalInvoiceLineItem[]) {
-  const safeItems = lineItems.length > 0 ? lineItems : [];
-  const pages: CustomerLocalInvoiceLineItem[][] = [];
-
-  for (let index = 0; index < safeItems.length; index += customerInvoicePdfLineItemsPerPage) {
-    pages.push(safeItems.slice(index, index + customerInvoicePdfLineItemsPerPage));
-  }
-
-  return pages.length > 0 ? pages : [[]];
 }
 
 function sanitizeInvoiceRecord(value: unknown): CustomerLocalInvoiceRecord | null {
@@ -643,107 +618,83 @@ export function createCustomerInvoicePdfBytes(
   ];
   const tableTopY = 492;
   const tableHeaderY = tableTopY - 20;
+  const lineItemCommands: string[] = [
+    pdfRect(50, tableHeaderY, 512, 22, "0.18 g"),
+    pdfTextAt("#", 62, tableHeaderY + 7, 8, "1 g"),
+    pdfTextAt("Item & Description", 90, tableHeaderY + 7, 8, "1 g"),
+    pdfRightTextAt("Qty", 435, tableHeaderY + 7, 8, "1 g"),
+    pdfRightTextAt("Rate", 495, tableHeaderY + 7, 8, "1 g"),
+    pdfRightTextAt("Amount", 552, tableHeaderY + 7, 8, "1 g"),
+  ];
+  let rowY = tableHeaderY - 18;
+
+  invoice.lineItems.slice(0, 4).forEach((item, index) => {
+    const descriptionLines = wrapText(item.description, 60).slice(0, 7);
+    const rowHeight = Math.max(42, 18 + descriptionLines.length * 11);
+    const itemAmountValue = invoiceMoneyValue(item.amountLabel);
+
+    lineItemCommands.push(pdfTextAt(String(index + 1), 62, rowY, 8));
+    descriptionLines.forEach((line, lineIndex) => {
+      lineItemCommands.push(pdfTextAt(line, 90, rowY - lineIndex * 10, lineIndex === 0 ? 8 : 7));
+    });
+    lineItemCommands.push(pdfRightTextAt("1.00", 435, rowY, 8));
+    lineItemCommands.push(pdfRightTextAt(itemAmountValue, 495, rowY, 8));
+    lineItemCommands.push(pdfRightTextAt(itemAmountValue, 552, rowY, 8));
+    rowY -= rowHeight;
+    lineItemCommands.push(pdfLinePath(50, rowY + 11, 562, rowY + 11));
+  });
+
+  const totalsY = Math.max(360, rowY - 8);
   const signoffY = 320;
   const paymentY = 260;
   const notesY = 135;
   const termsY = 55;
-  const lineItemPages = customerInvoiceLineItemPages(invoice.lineItems);
-  const pageStreams = lineItemPages.map((pageItems, pageIndex) => {
-    const isLastPage = pageIndex === lineItemPages.length - 1;
-    const lineItemCommands: string[] = [
-      pdfRect(50, tableHeaderY, 512, 22, "0.18 g"),
-      pdfTextAt("#", 62, tableHeaderY + 7, 8, "1 g"),
-      pdfTextAt("Item & Description", 90, tableHeaderY + 7, 8, "1 g"),
-      pdfRightTextAt("Qty", 435, tableHeaderY + 7, 8, "1 g"),
-      pdfRightTextAt("Rate", 495, tableHeaderY + 7, 8, "1 g"),
-      pdfRightTextAt("Amount", 552, tableHeaderY + 7, 8, "1 g"),
-    ];
-    let rowY = tableHeaderY - 18;
-
-    pageItems.forEach((item, itemIndex) => {
-      const descriptionLines = wrapText(item.description, 60).slice(0, 7);
-      const rowHeight = Math.max(42, 18 + descriptionLines.length * 11);
-      const itemAmountValue = invoiceMoneyValue(item.amountLabel);
-      const invoiceItemNumber = pageIndex * customerInvoicePdfLineItemsPerPage + itemIndex + 1;
-
-      lineItemCommands.push(pdfTextAt(String(invoiceItemNumber), 62, rowY, 8));
-      descriptionLines.forEach((line, lineIndex) => {
-        lineItemCommands.push(pdfTextAt(line, 90, rowY - lineIndex * 10, lineIndex === 0 ? 8 : 7));
-      });
-      lineItemCommands.push(pdfRightTextAt("1.00", 435, rowY, 8));
-      lineItemCommands.push(pdfRightTextAt(itemAmountValue, 495, rowY, 8));
-      lineItemCommands.push(pdfRightTextAt(itemAmountValue, 552, rowY, 8));
-      rowY -= rowHeight;
-      lineItemCommands.push(pdfLinePath(50, rowY + 11, 562, rowY + 11));
-    });
-
-    const totalsY = Math.max(360, rowY - 8);
-    const finalPageCommands = isLastPage
-      ? [
-          pdfRightTextAt("Sub Total", 495, totalsY, 8),
-          pdfRightTextAt(amountValue, 562, totalsY, 8),
-          pdfRightTextAt("Total", 495, totalsY - 24, 9),
-          pdfRightTextAt(sgdAmount, 562, totalsY - 24, 9),
-          pdfRect(338, totalsY - 58, 224, 26, "0.94 g"),
-          pdfRightTextAt(balanceLabel, 495, totalsY - 50, 9),
-          pdfRightTextAt(sgdAmount, 562, totalsY - 50, 9),
-          pdfLinePath(50, totalsY + 22, 562, totalsY + 22, 0.8, "0.75 G"),
-          pdfTextAt("Thank you for your business", 50, signoffY, 8),
-          pdfTextAt("Best Regards,", 50, signoffY - 21, 8),
-          pdfTextAt("Finance Team", 50, signoffY - 32, 8),
-          pdfTextAt(defaultCompanyProfile.phone, 50, signoffY - 43, 8),
-          pdfTextAt("Bank information", 50, paymentY, 8, "0.35 g"),
-          ...paymentLines.map((line, index) => pdfTextAt(line, 50, paymentY - 15 - index * 8, 7)),
-          pdfTextAt("Notes", 50, notesY, 8, "0.35 g"),
-          ...noteLines.map((line, index) => pdfTextAt(line, 50, notesY - 15 - index * 12, 7)),
-          pdfTextAt("Terms & Conditions:", 50, termsY, 8, "0.35 g"),
-          ...termsLines.map((line, index) => pdfTextAt(line, 50, termsY - 13 - index * 9, 6.5)),
-        ]
-      : [pdfTextAt("Continued on next page", 50, Math.max(330, rowY - 12), 8, "0.35 g")];
-
-    return [
-      ...logoStreamLines,
-      pdfRightTextAt(documentTitle, 562, 725, 30),
-      pdfRightTextAt(`${documentNumberLabel} ${invoice.invoiceNumber}`, 562, 700, 9),
-      pdfRightTextAt(balanceLabel, 562, 672, 8),
-      pdfRightTextAt(sgdAmount, 562, 654, 12),
-      ...companyHeaderCommands,
-      ...billToCommands,
-      ...dateCommands,
-      ...lineItemCommands,
-      ...finalPageCommands,
-      pdfRightTextAt(`Page ${pageIndex + 1} of ${lineItemPages.length}`, 562, 24, 7, "0.35 g"),
-    ].join("\n");
-  });
-  const fontObjectNumber = 3;
-  const imageObjectNumber = logoImage ? 4 : null;
-  const firstPageObjectNumber = imageObjectNumber ? 5 : 4;
-  const pageObjectNumbers = pageStreams.map((_, index) => firstPageObjectNumber + index * 2);
-  const pageResources = imageObjectNumber
-    ? `<< /Font << /F1 ${fontObjectNumber} 0 R >> /XObject << /Im1 ${imageObjectNumber} 0 R >> >>`
-    : `<< /Font << /F1 ${fontObjectNumber} 0 R >> >>`;
-  const pageObjects = pageStreams.flatMap((stream, index) => {
-    const streamBytes = bytesForPdfText(stream);
-    const pageObjectNumber = pageObjectNumbers[index];
-    const contentObjectNumber = pageObjectNumber + 1;
-
-    return [
-      bytesForPdfText(
-        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources ${pageResources} /Contents ${contentObjectNumber} 0 R >>`,
-      ),
-      concatPdfBytes([
-        bytesForPdfText(`<< /Length ${streamBytes.length} >>\nstream\n`),
-        streamBytes,
-        bytesForPdfText("\nendstream"),
-      ]),
-    ];
-  });
+  const streamLines = [
+    ...logoStreamLines,
+    pdfRightTextAt(documentTitle, 562, 725, 30),
+    pdfRightTextAt(`${documentNumberLabel} ${invoice.invoiceNumber}`, 562, 700, 9),
+    pdfRightTextAt(balanceLabel, 562, 672, 8),
+    pdfRightTextAt(sgdAmount, 562, 654, 12),
+    ...companyHeaderCommands,
+    ...billToCommands,
+    ...dateCommands,
+    ...lineItemCommands,
+    pdfRightTextAt("Sub Total", 495, totalsY, 8),
+    pdfRightTextAt(amountValue, 562, totalsY, 8),
+    pdfRightTextAt("Total", 495, totalsY - 24, 9),
+    pdfRightTextAt(sgdAmount, 562, totalsY - 24, 9),
+    pdfRect(338, totalsY - 58, 224, 26, "0.94 g"),
+    pdfRightTextAt(balanceLabel, 495, totalsY - 50, 9),
+    pdfRightTextAt(sgdAmount, 562, totalsY - 50, 9),
+    pdfLinePath(50, totalsY + 22, 562, totalsY + 22, 0.8, "0.75 G"),
+    pdfTextAt("Thank you for your business", 50, signoffY, 8),
+    pdfTextAt("Best Regards,", 50, signoffY - 21, 8),
+    pdfTextAt("Finance Team", 50, signoffY - 32, 8),
+    pdfTextAt(defaultCompanyProfile.phone, 50, signoffY - 43, 8),
+    pdfTextAt("Bank information", 50, paymentY, 8, "0.35 g"),
+    ...paymentLines.map((line, index) => pdfTextAt(line, 50, paymentY - 15 - index * 8, 7)),
+    pdfTextAt("Notes", 50, notesY, 8, "0.35 g"),
+    ...noteLines.map((line, index) => pdfTextAt(line, 50, notesY - 15 - index * 12, 7)),
+    pdfTextAt("Terms & Conditions:", 50, termsY, 8, "0.35 g"),
+    ...termsLines.map((line, index) => pdfTextAt(line, 50, termsY - 13 - index * 9, 6.5)),
+  ];
+  const stream = streamLines.join("\n");
+  const streamBytes = bytesForPdfText(stream);
+  const pageResources = logoImage
+    ? "<< /Font << /F1 4 0 R >> /XObject << /Im1 6 0 R >> >>"
+    : "<< /Font << /F1 4 0 R >> >>";
   const objects = [
     bytesForPdfText("<< /Type /Catalog /Pages 2 0 R >>"),
+    bytesForPdfText("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
     bytesForPdfText(
-      `<< /Type /Pages /Kids [${pageObjectNumbers.map((number) => `${number} 0 R`).join(" ")}] /Count ${pageObjectNumbers.length} >>`,
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources ${pageResources} /Contents 5 0 R >>`,
     ),
     bytesForPdfText("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"),
+    concatPdfBytes([
+      bytesForPdfText(`<< /Length ${streamBytes.length} >>\nstream\n`),
+      streamBytes,
+      bytesForPdfText("\nendstream"),
+    ]),
     ...(logoImage
       ? [
           concatPdfBytes([
@@ -755,7 +706,6 @@ export function createCustomerInvoicePdfBytes(
           ]),
         ]
       : []),
-    ...pageObjects,
   ];
   const pdfChunks = [bytesForPdfText("%PDF-1.4\n")];
   const offsets = [0];

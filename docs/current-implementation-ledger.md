@@ -1,13 +1,13 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-d7a28efc Strengthen driver calendar browser coverage
+07749ad4 Align booking browser suite with protected workflows
 
 Latest pushed main/staging runtime checkpoint:
-d7a28efc Strengthen driver calendar browser coverage
+07749ad4 Align booking browser suite with protected workflows
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-d7a28efc Strengthen driver calendar browser coverage
+07749ad4 Align booking browser suite with protected workflows
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -332,7 +332,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 - Admin Customers now has a compact `Create Invoice` entry point inside `/customers` > Invoice Workspace > Send Invoice Workbench.
 - The lane supports manual bill-to invoices and can explicitly link an invoice to an existing loaded CRM/customer billing account from the guarded saved-account read.
-- Create Invoice supports reviewed line items without the former four-row truncation; Preview sums the rows, stored PDFs paginate them, and Draft/Issue/Email send the reviewed `line_items` array to the existing guarded invoice route.
+- Create Invoice supports up to four visible manual line items, matching the current stored PDF renderer capacity; Preview sums the rows and Draft/Issue/Email send the reviewed `line_items` array to the existing guarded invoice route.
 - Loading the panel and clicking Preview do not create an invoice number, PDF, customer folder, portal invite, prefix reservation, payment link, provider send, payout, or GPS/live-location action.
 - Only the explicit `Draft`, `Issue`, or `Email` action posts to guarded admin invoice routes with the existing admin booking persistence purpose header.
 - Manual bill-to records without a selected CRM account still use an internal `plain-invoice:` customer id and fixed `invoice` document type; selected CRM billing accounts use the existing saved customer/account id/name without creating a new CRM row.
@@ -1345,17 +1345,6 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The active `prepareMonthlyBillingGroupForInvoice` path must not call Driver JC timing reads, the default `$65/hr` calculator, or customer-page automatic hourly amount state.
 - DSP whole-hour counting and the established monthly billable-item review remain separate and unchanged; this lock must not recreate automatic CRM vehicle-rate DSP amount calculation.
 - Guard coverage lives in `scripts/test-customer-hourly-invoice-auto-calculation-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
-
-### Human Monthly Invoice Workflow And Multi-Job Safety
-
-- The existing selected-customer monthly invoice lane now keeps every billing-ready job in one reviewed invoice draft instead of truncating the group to four lines.
-- Each admin row retains its exact booking reference, opens the established booking editor, supports description and amount review, and can be removed from or restored to the invoice draft without cancelling, deleting, or updating the booking.
-- Issued multi-job invoices verify every included booking against the same verified customer and booker, completed closeout billing readiness, and existing issued invoice line-item references before invoice number or PDF creation.
-- Stored customer invoice line items retain bounded booking references for authenticated admin duplicate protection; customer PDFs continue to show only reviewed descriptions, approved references, and amounts.
-- Invoice PDFs paginate reviewed line items instead of silently dropping jobs after the fourth row.
-- The protected test booking `ADM-20260712063110` remains blocked from issuance. Draft removal does not change billing readiness, booking status, customer/PA identity, pricing evidence, or any operational record.
-- Draft, Issue, Email, Paid/Unpaid, credit note, customer portal, and one-off Create Invoice consumers remain on the existing guarded routes. No duplicate invoice route, invoice table, booking write, provider send, payment, payout, calendar, GPS, migration, environment, or Supabase configuration change was added.
-- Focused lock: `scripts/test-admin-monthly-invoice-human-workflow-guard.mjs`.
 
 ### Customer Invoice Driver JC Timing And Override Guard
 

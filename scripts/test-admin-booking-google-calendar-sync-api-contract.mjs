@@ -27,6 +27,7 @@ const unsafeLeakPattern =
 const safeApiLeakPattern =
   /mock-admin-google-calendar-sync-session-token|ya29\.mock-google-calendar-sync-access-token|BEGIN PRIVATE KEY|PRIVATE KEY-----|server-only|server_only|stack|sql|secret|api_key|createClient/i;
 const sourceFiles = [
+  "lib/admin-booking-calendar-policy.ts",
   "lib/admin-booking-calendar-event.ts",
   "lib/admin-booking-google-calendar-sync.ts",
   "lib/admin-dispatcher-auth-boundary.ts",

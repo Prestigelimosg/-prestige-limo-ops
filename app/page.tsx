@@ -11,6 +11,10 @@ import {
   type AiParseResult,
 } from "../lib/ai-parser-schema";
 import { prepareCodexJobCardCorrection } from "../lib/codex-job-card-correction";
+import {
+  evaluateCodexCalendarConflict,
+  type CodexCalendarConflictBooking,
+} from "../lib/codex-calendar-conflict";
 import { mockCustomers } from "./customers/_data/mock-customers";
 import {
   calculateProfit,
@@ -7199,6 +7203,16 @@ function bookingRecordPickupDateTimeMs(bookingRecord: BookingRecord) {
     getBookingDateKey(bookingRecord),
     formatPickupTimeFromRecord(bookingRecord),
   );
+}
+
+function bookingRecordCalendarConflictPickupDateTimeMs(bookingRecord: BookingRecord) {
+  const canonicalPickupParts = singaporePickupDateTimePartsFromTimestamp(
+    clean(bookingRecord.pickup_at) || clean(bookingRecord.pickup_datetime),
+  );
+
+  return canonicalPickupParts
+    ? parsePickupDateTimeMs(canonicalPickupParts.date, canonicalPickupParts.time)
+    : null;
 }
 
 function bookingRecordIsPickupWithinNextHours(
@@ -16248,6 +16262,23 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   }, [driverSearchTerm, driverProfileDisplayDrivers]);
   const driverDatabaseSearchQuery = clean(driverSearchTerm);
   const operationalBookings = useMemo(() => bookings.filter(isOperationalBooking), [bookings]);
+  const codexCalendarConflictLoadedBookings = useMemo<CodexCalendarConflictBooking[]>(
+    () =>
+      operationalBookings.map((bookingRecord) => ({
+        active:
+          !bookingRecordIsCancelledStatus(bookingRecord) &&
+          !bookingRecordIsCompletedStatus(bookingRecord),
+        driverId: bookingRecord.driver_id,
+        driverName: bookingRecord.driver_name,
+        identity: bookingRecordStableKey(bookingRecord),
+        pickupTimeMs: bookingRecordCalendarConflictPickupDateTimeMs(bookingRecord),
+        vehiclePlate: bookingRecord.driver_plate_number,
+      })),
+    [operationalBookings],
+  );
+  const codexCalendarConflictAutomationEnabled =
+    adminAutomationRuntimeState.automationEnabled &&
+    adminAutomationRuntimeState.status === "active";
   const completedHistorySourceBookings = useMemo(() => {
     if (!completedCancelHandoffBooking) {
       return operationalBookings;
@@ -23483,6 +23514,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             Prepared from exact saved requests. Admin reviews every card before calendar action.
           </p>
           <p className="text-xs text-emerald-800">Calendar changes still require admin action in Dispatch.</p>
+          <p className="text-xs text-emerald-800">
+            Loaded Prestige saved jobs only for conflict checks; no calendar write.
+          </p>
         </div>
         <div className="flex flex-wrap gap-1.5">
           <span
@@ -23493,6 +23527,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           </span>
           <span className="inline-flex w-fit rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-emerald-900 ring-1 ring-emerald-200">
             {customerBookingRequestDisplayItems.length} Ready for Admin Review
+          </span>
+          <span
+            className="inline-flex w-fit rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-emerald-900 ring-1 ring-emerald-200"
+            data-codex-calendar-conflict-runtime={
+              codexCalendarConflictAutomationEnabled ? "active" : "off"
+            }
+          >
+            Conflict check {codexCalendarConflictAutomationEnabled ? "ON" : "OFF"}
           </span>
         </div>
       </div>
@@ -23534,6 +23576,16 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               formatPickupDateTime(getBookingDateKey(requestBooking), requestBooking.pickup_time),
             operationalCard.job_card_display,
           ].filter(Boolean).join(" · ");
+          const calendarConflictCandidate = codexCalendarConflictLoadedBookings.find(
+            (loadedBooking) => loadedBooking.identity === bookingId,
+          );
+          const calendarConflictResult =
+            codexCalendarConflictAutomationEnabled && calendarConflictCandidate
+              ? evaluateCodexCalendarConflict(
+                  calendarConflictCandidate,
+                  codexCalendarConflictLoadedBookings,
+                )
+              : null;
 
           return (
             <article
@@ -23617,6 +23669,22 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     ))
                   : null}
               </div>
+              {calendarConflictResult ? (
+                <div
+                  className={`flex flex-col gap-0.5 rounded-md border px-2 py-1.5 text-xs sm:flex-row sm:items-center sm:justify-between md:col-span-4 ${
+                    calendarConflictResult.status === "conflict"
+                      ? "border-rose-200 bg-rose-50 text-rose-900"
+                      : calendarConflictResult.status === "no-conflict"
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                        : "border-amber-200 bg-amber-50 text-amber-900"
+                  }`}
+                  data-codex-calendar-conflict-status={bookingId}
+                  data-codex-calendar-conflict-state={calendarConflictResult.status}
+                >
+                  <span className="font-semibold">{calendarConflictResult.label}</span>
+                  <span>{calendarConflictResult.detail}</span>
+                </div>
+              ) : null}
               <div className="rounded-md border border-emerald-100 bg-emerald-50/70 p-2 md:col-span-4">
                 <label className="block text-xs font-semibold text-emerald-950">
                   Instruction to Codex (internal only)

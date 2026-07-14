@@ -189,10 +189,10 @@ const codexPreparedCustomerRequestFixture = {
   admin_internal_status: "Admin Review Required",
   customer_facing_status: "pending_review",
   request_review_status: "pending_review",
-  driver_id: null,
-  driver_name: null,
-  driver_contact: null,
-  driver_plate_number: null,
+  driver_id: 9091,
+  driver_name: "CODEX CONFLICT DRIVER",
+  driver_contact: "+65 8777 9091",
+  driver_plate_number: "SLC901C",
   companies: {
     company_name: "CODEX REVIEW COMPANY",
     domain: "codex-review.example.com",
@@ -205,6 +205,22 @@ const codexPreparedCustomerRequestFixture = {
   travelers: {
     traveler_name: "CODEX REVIEW TRAVELER",
   },
+};
+const codexCalendarConflictExistingBookingFixture = {
+  ...loadedSavedBookingFixture,
+  id: "ui-codex-calendar-conflict-existing",
+  booking_reference: "CODEX-CONFLICT-EXISTING-001",
+  pickup_at: "2099-01-01T10:30:00+08:00",
+  pickup_datetime: "2099-01-01T10:30:00+08:00",
+  pickup_time: "1030",
+  pickup_address: "Existing Conflict Pickup",
+  dropoff_address: "Existing Conflict Drop-off",
+  route: "Existing Conflict Pickup > Existing Conflict Drop-off",
+  status: "confirmed",
+  driver_id: codexPreparedCustomerRequestFixture.driver_id,
+  driver_name: codexPreparedCustomerRequestFixture.driver_name,
+  driver_contact: codexPreparedCustomerRequestFixture.driver_contact,
+  driver_plate_number: codexPreparedCustomerRequestFixture.driver_plate_number,
 };
 const persistedTestSaveBookingFixture = {
   ...loadedSavedBookingFixture,
@@ -7877,10 +7893,14 @@ async function runChromeTest() {
 
     await evaluate(`(() => {
       const fixture = ${JSON.stringify(codexPreparedCustomerRequestFixture)};
+      const conflictFixture = ${JSON.stringify(codexCalendarConflictExistingBookingFixture)};
       window.__prestigeLoadedBookings = [
         fixture,
+        conflictFixture,
         ...(window.__prestigeLoadedBookings || []).filter(
-          (booking) => String(booking.booking_reference || booking.id) !== fixture.booking_reference,
+          (booking) => ![fixture.booking_reference, conflictFixture.booking_reference].includes(
+            String(booking.booking_reference || booking.id),
+          ),
         ),
       ];
       window.__prestigeWorkflowStatusRequests = [];
@@ -7905,6 +7925,7 @@ async function runChromeTest() {
           const reference = "${codexPreparedCustomerRequestFixture.booking_reference}";
           const instruction = document.querySelector(\`[data-codex-job-card-instruction="\${reference}"]\`);
           const returnButton = document.querySelector(\`[data-codex-job-card-return="\${reference}"]\`);
+          const conflictRuntime = document.querySelector("[data-codex-calendar-conflict-runtime]");
           const workflowRequests = window.__prestigeWorkflowStatusRequests || [];
 
           return instruction && returnButton && workflowRequests.some(
@@ -7917,6 +7938,8 @@ async function runChromeTest() {
                 instructionMaxLength: instruction.maxLength,
                 instructionValue: instruction.value,
                 returnButtonDisabled: returnButton.disabled,
+                conflictRuntime: conflictRuntime?.getAttribute("data-codex-calendar-conflict-runtime") || "",
+                conflictStatusCount: document.querySelectorAll("[data-codex-calendar-conflict-status]").length,
               }
             : false;
         })()`),
@@ -7927,6 +7950,8 @@ async function runChromeTest() {
     assert.equal(codexPreparedRequestState.instructionMaxLength, 500);
     assert.equal(codexPreparedRequestState.instructionValue, "");
     assert.equal(codexPreparedRequestState.returnButtonDisabled, true);
+    assert.equal(codexPreparedRequestState.conflictRuntime, "off");
+    assert.equal(codexPreparedRequestState.conflictStatusCount, 0);
 
     const codexInstruction = "Pickup time: 14:30\nFlight number: SQ318";
     const enteredCodexInstruction = await evaluate(`(() => {
@@ -8098,6 +8123,72 @@ async function runChromeTest() {
     }
     await client.send("Emulation.clearDeviceMetricsOverride");
 
+    const clickedConflictAutomationOn = await evaluate(`(() => {
+      const automationToggle = document.querySelector("[data-admin-automation-runtime-toggle='true']");
+
+      if (!automationToggle || automationToggle.disabled) {
+        return false;
+      }
+
+      automationToggle.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedConflictAutomationOn,
+      true,
+      "Expected the in-memory conflict check to turn Automation on",
+    );
+
+    const codexCalendarConflictState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const reference = "${codexPreparedCustomerRequestFixture.booking_reference}";
+          const status = document.querySelector(
+            \`[data-codex-calendar-conflict-status="\${reference}"]\`,
+          );
+          const runtime = document.querySelector("[data-codex-calendar-conflict-runtime]");
+
+          return status?.getAttribute("data-codex-calendar-conflict-state") === "conflict"
+            ? {
+                runtime: runtime?.getAttribute("data-codex-calendar-conflict-runtime") || "",
+                text: status.textContent.replace(/\\s+/g, " ").trim(),
+              }
+            : false;
+        })()`),
+      10000,
+      "Codex calendar conflict browser state",
+    );
+    assert.equal(codexCalendarConflictState.runtime, "active");
+    assert.match(codexCalendarConflictState.text, /Calendar conflict \(1\)/);
+    assert.match(codexCalendarConflictState.text, /same driver or vehicle/);
+
+    const clickedConflictAutomationOff = await evaluate(`(() => {
+      const automationToggle = document.querySelector("[data-admin-automation-runtime-toggle='true']");
+
+      if (!automationToggle || automationToggle.disabled) {
+        return false;
+      }
+
+      automationToggle.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedConflictAutomationOff,
+      true,
+      "Expected the in-memory conflict check to turn Automation off",
+    );
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const runtime = document.querySelector("[data-codex-calendar-conflict-runtime]");
+          const statusCount = document.querySelectorAll("[data-codex-calendar-conflict-status]").length;
+
+          return runtime?.getAttribute("data-codex-calendar-conflict-runtime") === "off" && statusCount === 0;
+        })()`),
+      10000,
+      "Codex calendar conflict disabled state",
+    );
+
     await evaluate(`window.__prestigeFetchCalls = []`);
     const openedCorrectedJobCard = await evaluate(`(() => {
       const button = [...document.querySelectorAll("button")].find(
@@ -8138,23 +8229,6 @@ async function runChromeTest() {
       `Expected corrected review handoff to avoid booking/calendar/message writes, got ${correctedDispatchPreviewState.fetchCalls.join(", ")}`,
     );
     await clickTab("Dashboard", "Operations Dashboard");
-
-    await evaluate(`(() => {
-      const reference = "${codexPreparedCustomerRequestFixture.booking_reference}";
-      window.__prestigeLoadedBookings = (window.__prestigeLoadedBookings || []).filter(
-        (booking) => String(booking.booking_reference || booking.id) !== reference,
-      );
-      const button = [...document.querySelectorAll("button")].find(
-        (candidate) => candidate.textContent.trim() === "Refresh Loaded Bookings",
-      );
-      button?.click();
-    })()`);
-    await waitForCondition(
-      () =>
-        evaluate(`document.querySelector('[data-codex-prepared-job-card-list="true"]')?.textContent.includes("No Codex-prepared job cards waiting for admin review.") || false`),
-      10000,
-      "Codex prepared request fixture cleanup",
-    );
 
     const clickedAutomationOn = await evaluate(`(() => {
       const automationToggle = document.querySelector("[data-admin-automation-runtime-toggle='true']");
@@ -8223,6 +8297,31 @@ async function runChromeTest() {
     assert.equal(automationOffState.ariaChecked, "false");
     assert.equal(automationOffState.enabled, "false");
     assert.deepEqual(automationOffState.patchBodies.at(-1), { enabled: false });
+    assert.equal(
+      await evaluate(`document.querySelectorAll("[data-codex-calendar-conflict-status]").length`),
+      0,
+      "Expected Automation OFF to remove every per-card conflict result",
+    );
+
+    await evaluate(`(() => {
+      const references = ${JSON.stringify([
+        codexPreparedCustomerRequestFixture.booking_reference,
+        codexCalendarConflictExistingBookingFixture.booking_reference,
+      ])};
+      window.__prestigeLoadedBookings = (window.__prestigeLoadedBookings || []).filter(
+        (booking) => !references.includes(String(booking.booking_reference || booking.id)),
+      );
+      const button = [...document.querySelectorAll("button")].find(
+        (candidate) => candidate.textContent.trim() === "Refresh Loaded Bookings",
+      );
+      button?.click();
+    })()`);
+    await waitForCondition(
+      () =>
+        evaluate(`document.querySelector('[data-codex-prepared-job-card-list="true"]')?.textContent.includes("No Codex-prepared job cards waiting for admin review.") || false`),
+      10000,
+      "Codex prepared request fixture cleanup",
+    );
 
     const clickedDashboardOpenCompletedHistory = await evaluate(`(() => {
       const openButton = [...document.querySelectorAll("button")].find(
@@ -16236,13 +16335,24 @@ async function runChromeTest() {
               request.method === "GET" &&
               request.search ===
                 "?limit=1&page=1&billing_month=2026-05&issue_review_id=33333333-3333-4333-8333-333333333333&draft_id=11111111-1111-4111-8111-111111111111",
-          )
+          ) &&
+          candidateState?.fetchCalls?.includes("GET /api/admin-saved-bookings?limit=100")
           ? candidateState
           : false;
       },
       10000,
       "dashboard loaded saved booking after stale AI cleanup",
     );
+
+    for (const [stateKey, requestRecords] of Object.entries(loadedBookingState)) {
+      if (!stateKey.endsWith("Requests") || !Array.isArray(requestRecords)) {
+        continue;
+      }
+
+      loadedBookingState[stateKey] = Array.from(
+        new Map(requestRecords.map((requestRecord) => [JSON.stringify(requestRecord), requestRecord])).values(),
+      );
+    }
 
     assert.equal(loadedBookingState.aiDraftExists, false, "Expected AI draft panel to clear after loading saved booking");
     assert.equal(loadedBookingState.aiFeedbackExists, false, "Expected AI feedback to clear after loading saved booking");

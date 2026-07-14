@@ -13,6 +13,7 @@ const unsafeLeakPattern =
 const safeApiLeakPattern =
   /mock-admin-booking-calendar-event-session-token|server-only|server_only|stack|sql|secret|api_key|createClient/i;
 const sourceFiles = [
+  "lib/admin-booking-calendar-policy.ts",
   "lib/admin-booking-calendar-event.ts",
   "lib/admin-dispatcher-auth-boundary.ts",
   "app/api/admin-booking-calendar-events/route.ts",

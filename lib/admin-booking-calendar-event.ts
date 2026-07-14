@@ -1,5 +1,7 @@
 import "server-only";
 
+import { adminBookingCalendarDefaultDurationMinutes } from "./admin-booking-calendar-policy";
+
 export const adminBookingCalendarEventVersion = "admin-booking-calendar-event-v1";
 export const adminBookingCalendarAgendaVersion = "admin-booking-calendar-agenda-v1";
 export const adminBookingCalendarTimezone = "Asia/Singapore";
@@ -89,7 +91,6 @@ type BuildAdminBookingCalendarEventPartsResult =
       status: 400;
     };
 
-const defaultDurationMinutes = 90;
 const maxAgendaBookings = 25;
 const genericPayloadError =
   "Calendar event payload must contain only supported saved booking fields.";
@@ -381,7 +382,7 @@ function buildAdminBookingCalendarEventParts(
 
   const midnightDisplayAdjustment = buildMidnightCalendarDisplayAdjustment(startsAt);
   const calendarStartsAt = midnightDisplayAdjustment?.calendarStartsAt || startsAt;
-  const endsAt = addMinutes(calendarStartsAt, defaultDurationMinutes);
+  const endsAt = addMinutes(calendarStartsAt, adminBookingCalendarDefaultDurationMinutes);
   const routePoints = splitRoute(textField(booking, "route"));
   const pickupLocation =
     textField(booking, "pickup_address", "pickupLocation", "pickup_location", "pickup") ||

@@ -37,8 +37,8 @@ function sectionBetween(startHeading, nextHeadingPrefix = "\n## ") {
 
 assertIncludes("Staging Deployment Approval Packet", "packet title");
 assertIncludes("records the approved deployment-safety configuration work", "configuration record boundary");
-assertIncludes("does not deploy Production", "no-Production-deploy boundary");
-assertIncludes("without exposing values", "no-env-value exposure boundary");
+assertIncludes("Before that separate approval it did not deploy Production", "historical no-Production-deploy boundary");
+assertIncludes("without exposing secret values", "no-env-value exposure boundary");
 assertIncludes("enable writes", "no-write boundary");
 assertIncludes("enable providers", "no-provider boundary");
 assertIncludes("activate any live feature", "no-live-feature boundary");
@@ -46,11 +46,15 @@ assertIncludes("activate any live feature", "no-live-feature boundary");
 const checkpointsSection = sectionBetween("## Checkpoints");
 assertSectionIncludes(
   checkpointsSection,
-  "Latest repo commit deployed to isolated Preview: `2acaa3a5 Simplify dashboard booking request review`.",
+  "Latest repo commit deployed to isolated Preview: `b0a68cae Repair dashboard release checkpoint guards`.",
 );
 assertSectionIncludes(
   checkpointsSection,
   "Latest verified runtime checkpoint in the ledger: `2acaa3a5 Simplify dashboard booking request review`.",
+);
+assertSectionIncludes(
+  checkpointsSection,
+  "Latest Production deployment checkpoint: `b0a68cae Repair dashboard release checkpoint guards`.",
 );
 assert.match(
   checkpointsSection,
@@ -92,8 +96,36 @@ for (const fragment of [
   "Verified-author source Preview approval: Owner explicitly approved proceeding with the next safe step on 2026-07-14",
   "Combined automation Preview approval: Owner explicitly approved proceeding with the suggested next safe step on 2026-07-14",
   "Booking Requests layout Preview approval: Owner explicitly approved proceeding with the suggested next safe step on 2026-07-14",
+  "Dashboard Production deployment approval: After approving the protected Preview, the owner separately approved the next stated step on 2026-07-14",
 ]) {
   assertSectionIncludes(approvalSection, fragment, `Approval scope missing ${fragment}`);
+}
+
+const dashboardProductionSection = sectionBetween(
+  "## Dashboard Booking Requests Production Deployment Evidence",
+);
+for (const fragment of [
+  "Exact clean commit `b0a68cae Repair dashboard release checkpoint guards` and its three preceding local commits were pushed to `origin/staging`",
+  "`origin/main` remained at `3bac3c3a`",
+  "automatic READY Preview deployment `dpl_92f1KeAxJohLsu57Wk2BQkfYLoR9`",
+  "`vercel deploy --prod --yes` created READY Production deployment `dpl_GbPQWNHmxoZB8HL7kKMgj9Nx2QxL`",
+  "alias `https://app.prestigelimo.sg`",
+  "one low and three moderate findings",
+  "alias HTTP 200",
+  "exact build marker `b0a68cae46c9423338a2f85e1f3696cc9aa9110b`",
+  "one `Booking Requests` sector with four current new-request rows",
+  "Automation remained ON and Push remained OFF; neither was changed.",
+  "No request decision, notification cleanup, booking write, calendar/map action, invoice action, customer/driver message, provider send, environment or Supabase change, Automation/Push change, or external send occurred.",
+  "zsh's reserved `status` variable",
+  "Raw HTML text counts were not used as hydrated UI proof.",
+  "optional Chrome tab-deliverable marker was unsupported",
+  "Runtime code remains exact application commit `2acaa3a5`",
+]) {
+  assertSectionIncludes(
+    dashboardProductionSection,
+    fragment,
+    `Dashboard Production evidence missing ${fragment}`,
+  );
 }
 
 const branchSeparationSection = sectionBetween("## Current Verified Branch Separation");

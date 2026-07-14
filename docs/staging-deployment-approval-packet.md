@@ -1,11 +1,12 @@
 # Staging Deployment Approval Packet
 
-This packet records the approved deployment-safety configuration work and the later isolated Preview deployments. It does not deploy Production, enable writes, enable providers, or activate any live feature. The Preview isolation change, bounded Production recovery, Preview deployments, and sanitized verification evidence are recorded below without exposing values.
+This packet records the approved deployment-safety configuration work, isolated Preview deployments, and the later separately approved Dashboard Production deployment. Before that separate approval it did not deploy Production, enable writes, enable providers, or activate any live feature. The Preview isolation change, bounded Production recovery, Preview and Production deployment evidence, and sanitized verification results are recorded below without exposing secret values.
 
 ## Checkpoints
 
-- Latest repo commit deployed to isolated Preview: `2acaa3a5 Simplify dashboard booking request review`.
+- Latest repo commit deployed to isolated Preview: `b0a68cae Repair dashboard release checkpoint guards`.
 - Latest verified runtime checkpoint in the ledger: `2acaa3a5 Simplify dashboard booking request review`.
+- Latest Production deployment checkpoint: `b0a68cae Repair dashboard release checkpoint guards`.
 - Source of truth: `docs/current-implementation-ledger.md`.
 
 ## Approval Fields
@@ -30,6 +31,7 @@ This packet records the approved deployment-safety configuration work and the la
 - Verified-author source Preview approval: Owner explicitly approved proceeding with the next safe step on 2026-07-14 after the repository identity repair; scope was exact clean commit `4cf1dc60`, one protected isolated Git-backed source Preview, bounded GET-only and signed-in desktop acceptance, bypass revocation, Production unchanged verification, and evidence recording only; no Git push, Production deployment, Automation activation, live data, calendar/invoice action, environment change, provider action, or external send was approved
 - Combined automation Preview approval: Owner explicitly approved proceeding with the suggested next safe step on 2026-07-14; scope was exact clean commit `b09b82f8`, one protected isolated Git-backed Preview, bounded GET-only API/log checks, signed-in desktop/modern-phone/foldable and invoice-overview acceptance, bypass revocation, Production unchanged verification, and evidence recording only; no Git push, Production deployment, Automation activation, live data, calendar/invoice action, environment change, provider action, or external send was approved
 - Booking Requests layout Preview approval: Owner explicitly approved proceeding with the suggested next safe step on 2026-07-14; scope was exact clean commit `2acaa3a5`, one isolated protected Preview, target/build/protection verification, signed-in desktop/390px/344px layout acceptance, and evidence recording only; no Git push, Production deployment, Automation or Push toggle, live-data action, calendar action, environment change, provider action, or external send was approved
+- Dashboard Production deployment approval: After approving the protected Preview, the owner separately approved the next stated step on 2026-07-14: push the local `staging` commits and deploy Production; this did not approve Automation/Push changes, booking decisions, notification cleanup, calendar/map action, invoice action, environment/database/provider changes, customer/driver messages, or external sends
 - Rollback owner: William / Prestige Limo SG
 - Notes: Keep all live DB/write, migrations, provider/env activation, external APIs, live sending, payment/PDF/payout, auth activation, live location, photo upload/storage, CRM/calendar amendment writes, and risky shim writes blocked.
 
@@ -127,6 +129,16 @@ This packet records the approved deployment-safety configuration work and the la
 - Preview names-only review still shows only the inert `PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS` assignment. No Supabase, admin-session, provider, payment, email, calendar, automation-write, or other live credential/gate was added.
 - Preview therefore remains intentionally fail-closed and cannot prove real booking queue rows. No booking decision, notification cleanup, Automation toggle, Push toggle, calendar/map action, invoice action, customer/driver message, or external send was performed.
 - The deployment command used no Production flag and no Git push occurred. No Production deployment, alias, environment, database, provider, or running Production state was changed.
+
+## Dashboard Booking Requests Production Deployment Evidence
+
+- Exact clean commit `b0a68cae Repair dashboard release checkpoint guards` and its three preceding local commits were pushed to `origin/staging`; `origin/main` remained at `3bac3c3a`. The push created automatic READY Preview deployment `dpl_92f1KeAxJohLsu57Wk2BQkfYLoR9` and did not change Production by itself.
+- The separately approved `vercel deploy --prod --yes` created READY Production deployment `dpl_GbPQWNHmxoZB8HL7kKMgj9Nx2QxL`, URL `https://prestige-limo-ops-staging-h888d9itm-prestigelimosgs-projects.vercel.app`, and alias `https://app.prestigelimo.sg`. Vercel retained the known dependency audit result of one low and three moderate findings.
+- Read-only post-deploy checks confirmed target `production`, status `Ready`, alias HTTP 200, and exact build marker `b0a68cae46c9423338a2f85e1f3696cc9aa9110b`.
+- Signed-in Production Chrome clicked only Dashboard and confirmed one `Booking Requests` sector with four current new-request rows, one `Refresh Dashboard`, one Push Alerts control, no retired request-sector heading, no repeated Admin Actions summary, zero browser logs, and no desktop horizontal overflow. Automation remained ON and Push remained OFF; neither was changed.
+- No request decision, notification cleanup, booking write, calendar/map action, invoice action, customer/driver message, provider send, environment or Supabase change, Automation/Push change, or external send occurred.
+- The first shell check stopped on zsh's reserved `status` variable after read-only inspection/fetch; its corrected run proved HTTP 200 and the build marker. Raw HTML text counts were not used as hydrated UI proof. The optional Chrome tab-deliverable marker was unsupported after verification and changed no page state. These setup errors are recorded, not hidden.
+- Runtime code remains exact application commit `2acaa3a5`; the later three commits contain only deployment evidence and guard repair.
 
 ## Required Checks Before Staging
 

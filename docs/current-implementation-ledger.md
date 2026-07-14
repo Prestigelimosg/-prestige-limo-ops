@@ -4,10 +4,10 @@ Latest verified clean runtime checkpoint:
 2acaa3a5 Simplify dashboard booking request review
 
 Latest pushed main/staging runtime checkpoint:
-3bac3c3a Display admin pickup times in SGT
+2acaa3a5 Simplify dashboard booking request review
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-3bac3c3a Display admin pickup times in SGT
+b0a68cae Repair dashboard release checkpoint guards
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -294,6 +294,16 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Preview intentionally remains fail-closed, so it proves the exact artifact and responsive layout but not real queued booking rows. No booking decision, notification cleanup, Automation/Push toggle, calendar/map action, invoice action, customer/driver message, provider send, environment change, or live-data write occurred.
 - The deployment command used no Production flag, no Git push occurred, and no Production deployment, alias, environment, database, provider, or running Production state was changed.
 - Focused evidence lock remains `docs/staging-deployment-approval-packet.md` and `scripts/test-staging-deployment-approval-packet-guard.mjs`; no duplicate deployment lane was added.
+
+### Dashboard Booking Requests Production Deployment Evidence
+
+- The separately approved push sent exact clean commit `b0a68cae Repair dashboard release checkpoint guards` and its three preceding local commits to `origin/staging`; `origin/main` remained at `3bac3c3a`. Because Vercel Production Branch remains `main`, the push created automatic READY Preview deployment `dpl_92f1KeAxJohLsu57Wk2BQkfYLoR9` and did not change Production by itself.
+- The separately approved `vercel deploy --prod --yes` command then created READY Production deployment `dpl_GbPQWNHmxoZB8HL7kKMgj9Nx2QxL` at `https://prestige-limo-ops-staging-h888d9itm-prestigelimosgs-projects.vercel.app` and aliased it to `https://app.prestigelimo.sg`. Vercel reported the known four dependency audit findings: one low and three moderate, with no high or critical finding.
+- Post-deploy inspection confirmed target `production`, status `Ready`, HTTP 200 from the Production alias, and exact admin build marker `b0a68cae46c9423338a2f85e1f3696cc9aa9110b`.
+- Signed-in Production Chrome clicked only the read-only Dashboard tab and confirmed exactly one `Booking Requests` sector containing four current new-request rows, one `Refresh Dashboard`, one Push Alerts control, no retired `Urgent / Customer Requests` heading, no repeated `ADMIN ACTIONS` summary, zero browser logs, and document scroll width equal to client width at the 1032px desktop viewport. Customer/request details read during the internal admin check are not reproduced in this ledger.
+- The existing runtime states were observed as `Automation ON` and `Push alerts OFF`; neither control was clicked or changed. No request decision, notification cleanup, booking write, calendar/map action, invoice action, customer/driver message, provider send, environment change, Supabase change, or external send occurred during verification.
+- The first shell DOM check used zsh's reserved `status` variable and stopped after the successful read-only Vercel inspection and fetch; the corrected check returned HTTP 200 and the exact build marker. Raw HTML did not contain hydrated Dashboard text, so its zero text counts were not used as visual proof. An optional Chrome tab-deliverable marker call returned `not a function` after verification; the verified Production tab remained open and page state did not change. These setup errors are not hidden as application failures or successful checks.
+- The deployed runtime remains exact application commit `2acaa3a5 Simplify dashboard booking request review`; commits `e86a5022`, `ef3262f0`, and `b0a68cae` add deployment evidence and guard repair only. Focused locks remain the established Dashboard compact guard, booking browser suite, dynamic ledger checkpoint guards, and staging deployment approval packet guard; no second runtime lane was added.
 
 ### Customer Folder Four-Sector Invoice Workflow
 

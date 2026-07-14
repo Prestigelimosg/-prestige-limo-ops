@@ -80,6 +80,7 @@ for (const fragment of [
   "Dashboard consolidation Preview approval: Owner explicitly approved proceeding with the suggested next step on 2026-07-14",
   "Automatic preparation Preview approval: Owner explicitly approved proceeding with the suggested next safe step on 2026-07-14",
   "Calendar conflict Preview approval: Owner explicitly approved proceeding with the suggested next safe step on 2026-07-14",
+  "Repository Git identity repair approval: Owner explicitly approved proceeding with the next safe step on 2026-07-14",
 ]) {
   assertSectionIncludes(approvalSection, fragment, `Approval scope missing ${fragment}`);
 }
@@ -144,6 +145,10 @@ for (const fragment of [
   "final automation-bypass count is zero, and unauthenticated Preview access again returns HTTP 302 with `x-robots-tag: noindex`.",
   "Signed-in Mac Chrome visual acceptance passed at the normal 1021px viewport, iPhone 13 floor 390 x 844, modern Android 412 x 915, and unfolded foldable 841 x 701.",
   "Production remained unchanged and was re-read after the Preview pass",
+  "GitHub CLI is authenticated as exact login `Prestigelimosg`",
+  "GitHub's documented ID-based private no-reply address `283606993+Prestigelimosg@users.noreply.github.com`",
+  "Global Git configuration and all existing commit history remained unchanged.",
+  "does not claim the earlier Vercel authorization failure is fixed end to end",
 ]) {
   assertSectionIncludes(branchSeparationSection, fragment, `Branch separation evidence missing ${fragment}`);
 }
@@ -266,6 +271,14 @@ for (const fragment of [
   "normal 1021px viewport, iPhone 13 floor 390 x 844, modern Android 412 x 915, and unfolded foldable 841 x 701",
   "The in-memory local browser fixture remains the runtime proof for `Calendar conflict (1)` while Automation is ON",
   "Production remained unchanged and was re-read after the Preview pass",
+  "### Repository Git Identity Repair",
+  "authenticated GitHub CLI account is exactly `Prestigelimosg`",
+  "numeric account ID `283606993`",
+  "repository-local Git identity is now `Prestigelimosg`",
+  "283606993+Prestigelimosg@users.noreply.github.com",
+  "Global Git configuration was not changed.",
+  "no source deployment was performed in this repair pass",
+  "protected isolated source Preview remains required before claiming the earlier Vercel authorization failure is resolved end to end",
 ]) {
   assert.equal(
     ledger.includes(fragment),

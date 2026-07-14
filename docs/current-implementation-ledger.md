@@ -38,6 +38,14 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Preview remains intentionally unconfigured and empty, so this deployed pass proves the exact artifact, fail-closed state, and responsive OFF-state interface only. The in-memory local browser fixture remains the runtime proof for `Calendar conflict (1)` while Automation is ON; no live ON conflict result, live booking, calendar action, invoice action, external send, environment edit, or Supabase operation is claimed.
 - Production remained unchanged and was re-read after the Preview pass: `app.prestigelimo.sg` still resolves to READY Production deployment `dpl_7ksuhQENRPiWNACbEM4Y6dGf6ayR`, returns HTTP 200, and serves build marker `f7e253b3`. No alias move, promotion, rollback, Git push, or Production deployment occurred.
 
+### Repository Git Identity Repair
+
+- After the protected calendar-conflict Preview exposed Vercel's exact `Not authorized` source-deployment result, the owner approved proceeding with the suggested identity repair only. No existing commit was amended or rebased, and no Git push, Preview deployment, Production deployment, environment change, Automation activation, live-data action, calendar action, invoice action, or external send was included.
+- Read-only verification found no configured repository or user Git identity, so macOS had generated the prior `Soh Y L <sohyl@Sohs-MacBook-Air.local>` author. The authenticated GitHub CLI account is exactly `Prestigelimosg`; GitHub's authenticated user endpoint reports numeric account ID `283606993`, no public name, and no public email.
+- The repository-local Git identity is now `Prestigelimosg` with GitHub's documented ID-based private no-reply address `283606993+Prestigelimosg@users.noreply.github.com`. Both `git var GIT_AUTHOR_IDENT` and `git var GIT_COMMITTER_IDENT` matched that exact account-linked identity after configuration. Global Git configuration was not changed.
+- Existing commits retain their original authors. This configuration ensures only future commits in this repository use the verified GitHub-linked identity. Vercel's private-repository documentation requires an author associated through the Git provider and project access, but no source deployment was performed in this repair pass; a protected isolated source Preview remains required before claiming the earlier Vercel authorization failure is resolved end to end.
+- Focused protection remains the established `scripts/test-staging-deployment-approval-packet-guard.mjs`, which locks the verified identity, repository-only scope, preserved history, and still-pending source-deployment proof.
+
 ### Modern Phone And Foldable Support Floor
 
 - Owner set the supported admin/mobile usability floor to iPhone 13 size: 390 × 844 CSS pixels. The active general viewport matrix no longer runs the retired 320px, 360px, or 375px device cases and now begins with `iPhone 13 / modern phone 390px`.

@@ -4,8 +4,8 @@ This packet records the approved deployment-safety configuration work and the la
 
 ## Checkpoints
 
-- Latest repo commit deployed to isolated Preview: `f62869b7 Set modern mobile and foldable test matrix`.
-- Latest implementation checkpoint in the ledger: `f62869b7 Set modern mobile and foldable test matrix`.
+- Latest repo commit deployed to isolated Preview: `bdd91bec Update verified runtime checkpoint`.
+- Latest verified runtime checkpoint in the ledger: `17aa7117 Prepare explicit Codex job card corrections`.
 - Source of truth: `docs/current-implementation-ledger.md`.
 
 ## Approval Fields
@@ -16,12 +16,13 @@ This packet records the approved deployment-safety configuration work and the la
 - Original decision: Approved production-branch safety separation and Preview isolation only; no deployment approval at that stage
 - Preview deployment decision: Owner later explicitly approved proceeding with the suggested next step: one isolated Preview deployment and bounded verification
 - Live activation approval: Not approved
-- Approved staging target: Exact local commit `f62869b7` to one refreshed isolated `staging` Preview deployment only; no Git push and no Production deploy
+- Approved staging target: Exact local commit `bdd91bec` to one refreshed isolated `staging` Preview deployment only; no Git push and no Production deploy
 - Preview isolation approval: Approved on 2026-07-14 for Preview environment targeting only; no provider-key rotation, Production deployment, database write, or external send was approved
 - Production recovery approval: Approved on 2026-07-14 for exact existing credential recovery and safe prior-state verification only; no credential creation/rotation, write-gate activation, deployment, push, or external send was approved
 - Resend replacement-key approval: Owner gave separate action-time approval on 2026-07-14 to create one sending-access key and save it to Vercel Production only; deletion of the existing key, Preview assignment, deployment, push, send-gate activation, and external send remained unapproved
 - Isolated Preview deployment approval: Approved on 2026-07-14 after Production recovery and Preview names-only review; scope was one Preview deployment, GET-only smoke/privacy checks, and evidence recording only
 - Isolated Preview refresh approval: Owner later explicitly approved the suggested next step on 2026-07-14; scope was exact local commit `f62869b7`, one refreshed isolated Preview, GET-only checks, and evidence recording only
+- Codex correction Preview approval: Owner then explicitly approved proceeding carefully with the next suggested step on 2026-07-14; scope was exact local commit `bdd91bec`, one isolated Preview refresh, GET-only checks, and evidence recording only
 - Rollback owner: William / Prestige Limo SG
 - Notes: Keep all live DB/write, migrations, provider/env activation, external APIs, live sending, payment/PDF/payout, auth activation, live location, photo upload/storage, CRM/calendar amendment writes, and risky shim writes blocked.
 
@@ -57,6 +58,16 @@ This packet records the approved deployment-safety configuration work and the la
 - The authenticated CLI generated one automation-bypass token without printing it for exact-build and fail-closed GET checks. That exact token was revoked immediately; final automation-bypass count returned to zero, and unauthenticated Preview access again returns HTTP 302 with `x-robots-tag: noindex`.
 - Signed-in visual acceptance remains incomplete because browser control failed before navigation with `Cannot redefine property: process`. No Preview control was clicked and no visual pass is claimed.
 - Production remained unchanged after the refresh: `app.prestigelimo.sg` still resolves to READY Production deployment `dpl_7ksuhQENRPiWNACbEM4Y6dGf6ayR` and renders build marker `f7e253b3`. No Production deploy, alias move, promotion, rollback, Git push, live-data write, Automation activation, provider send, environment edit, or Preview credential addition occurred.
+- The later Codex job-card correction Preview preflight stopped on two stale evidence defects instead of skipping them: the retired dashboard queue guard was repaired in `0cbf91ce`, then the ledger's verified runtime checkpoint was corrected in `bdd91bec`. The complete pre-activation suite passed only after both repairs.
+- Exact local commit `bdd91bec` was deployed with `vercel deploy --target=preview --yes` as READY Preview deployment `dpl_9kRurW7hvqjaDKQ6GbFD7a2HPsXd` at `https://prestige-limo-ops-staging-o50f4kvz2-prestigelimosgs-projects.vercel.app`.
+- Vercel inspection confirms target `preview`; authenticated GET-only root verification confirms exact page build marker `bdd91bec`.
+- Names-only Preview review still shows only the inert `PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS` assignment. No Supabase, admin-session, auth, provider, payment, email, calendar, automation-write, or live credential/gate was added.
+- GET-only checks returned root HTTP 200 and safe HTTP 403 for both `/api/admin-automation-runtime` and `/api/admin-app-notifications?page=1&limit=5`. Sanitized deployment logs contain only those three GETs and no POST, PATCH, PUT, or DELETE request.
+- Vercel CLI generated one automation-bypass token without printing it, then the exact token was revoked immediately. Final automation-bypass count is zero; unauthenticated Preview access again returns HTTP 302 with `x-robots-tag: noindex`.
+- Exact-current-commit build, complete pre-activation suite, app-smoke browser suite, booking-UI browser suite, and diff review passed. Both browser suites reported zero test errors and zero console errors; lint passed with 160 existing warnings and zero errors.
+- Local browser verification used in-memory backend responses. The local Next terminal printed fail-closed 503s and one bundled `supabaseUrl is required` diagnostic for intentionally unconfigured backend paths; this is recorded as disabled-backend evidence, not database connectivity.
+- Vercel's build output reported four dependency audit findings: one low and three moderate. They were not changed or hidden in this deployment-only pass.
+- Signed-in visual acceptance of this latest protected URL is pending; no deployed visual pass is claimed. Production remains unchanged on `dpl_7ksuhQENRPiWNACbEM4Y6dGf6ayR` with build marker `f7e253b3`.
 
 ## Required Checks Before Staging
 

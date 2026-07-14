@@ -51,7 +51,7 @@ assert.match(
 );
 assert.match(
   checkpointsSection,
-  /Latest implementation checkpoint in the ledger:\s*`[0-9a-f]{7,}\s+[^`]+`/,
+  /Latest (?:implementation|verified runtime) checkpoint in the ledger:\s*`[0-9a-f]{7,}\s+[^`]+`/,
   "Packet must include latest implementation checkpoint field.",
 );
 assertSectionIncludes(checkpointsSection, "docs/current-implementation-ledger.md");
@@ -70,12 +70,13 @@ for (const fragment of [
   "Change the Vercel Production Branch from `staging` to `main`, isolate Preview environment assignments from Production, then create and verify one isolated `staging` Preview without pushing or deploying Production",
   "Approved production-branch safety separation and Preview isolation only; no deployment approval at that stage",
   "Preview deployment decision: Owner later explicitly approved proceeding with the suggested next step",
-  "Exact local commit `f62869b7` to one refreshed isolated `staging` Preview deployment only; no Git push and no Production deploy",
+  "Exact local commit `bdd91bec` to one refreshed isolated `staging` Preview deployment only; no Git push and no Production deploy",
   "Preview isolation approval: Approved on 2026-07-14 for Preview environment targeting only",
   "Production recovery approval: Approved on 2026-07-14 for exact existing credential recovery and safe prior-state verification only",
   "Resend replacement-key approval: Owner gave separate action-time approval on 2026-07-14",
   "Isolated Preview deployment approval: Approved on 2026-07-14",
   "Isolated Preview refresh approval: Owner later explicitly approved the suggested next step on 2026-07-14",
+  "Codex correction Preview approval: Owner then explicitly approved proceeding carefully with the next suggested step on 2026-07-14",
 ]) {
   assertSectionIncludes(approvalSection, fragment, `Approval scope missing ${fragment}`);
 }
@@ -116,6 +117,12 @@ for (const fragment of [
   "Deployment logs show only three verification GETs",
   "final automation-bypass count returned to zero",
   "Signed-in visual acceptance remains incomplete because browser control failed before navigation with `Cannot redefine property: process`.",
+  "Exact local commit `bdd91bec` was deployed with `vercel deploy --target=preview --yes` as READY Preview deployment `dpl_9kRurW7hvqjaDKQ6GbFD7a2HPsXd`",
+  "authenticated GET-only root verification confirms exact page build marker `bdd91bec`.",
+  "Sanitized deployment logs contain only those three GETs and no POST, PATCH, PUT, or DELETE request.",
+  "Final automation-bypass count is zero; unauthenticated Preview access again returns HTTP 302 with `x-robots-tag: noindex`.",
+  "Vercel's build output reported four dependency audit findings: one low and three moderate.",
+  "Signed-in visual acceptance of this latest protected URL is pending; no deployed visual pass is claimed.",
 ]) {
   assertSectionIncludes(branchSeparationSection, fragment, `Branch separation evidence missing ${fragment}`);
 }
@@ -200,6 +207,15 @@ for (const fragment of [
   "Deployment logs show only three verification GETs",
   "final automation-bypass count returned to zero",
   "Signed-in visual acceptance remains incomplete because browser control failed before navigation with `Cannot redefine property: process`.",
+  "### Codex Job Card Correction Preview Evidence",
+  "complete pre-activation suite passed",
+  "READY Preview deployment `dpl_9kRurW7hvqjaDKQ6GbFD7a2HPsXd`",
+  "exact deployed commit `bdd91bec`",
+  "Sanitized deployment logs list only those three GET requests",
+  "final automation-bypass count is zero",
+  "one low and three moderate",
+  "no deployed visual pass is claimed",
+  "Production is unchanged: `app.prestigelimo.sg` remains READY deployment `dpl_7ksuhQENRPiWNACbEM4Y6dGf6ayR` with build marker `f7e253b3`.",
 ]) {
   assert.equal(
     ledger.includes(fragment),

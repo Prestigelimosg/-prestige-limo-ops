@@ -7744,6 +7744,8 @@ async function runChromeTest() {
           const rows = [...document.querySelectorAll("[data-dashboard-command-centre-row]")];
           const activeJobs = [...document.querySelectorAll("[data-admin-multi-driver-active-job]")];
           const notificationFeed = document.querySelector("[data-admin-app-notification-feed='true']");
+          const urgentRequestsPanel = document.querySelector("[data-dashboard-urgent-booking-requests-panel='true']");
+          const systemNotices = document.querySelector("[data-dashboard-codex-system-notices='true']");
           const codexPreparedJobCards = document.querySelector("[data-codex-prepared-job-cards='true']");
           const codexPreparedJobCardList = document.querySelector("[data-codex-prepared-job-card-list='true']");
           const automationToggle = document.querySelector("[data-admin-automation-runtime-toggle='true']");
@@ -7777,7 +7779,14 @@ async function runChromeTest() {
                   ? getComputedStyle(codexPreparedJobCardList).overflowY
                   : "",
                 forbiddenDuplicateControlCount: forbiddenDuplicateControls.length,
+                notificationFeedCount: document.querySelectorAll("[data-admin-app-notification-feed='true']").length,
                 rowCount: rows.length,
+                globalStatusPanelOutsideNotificationFeedCount: [...document.querySelectorAll("[data-status-panel='global']")]
+                  .filter((panel) => !notificationFeed.contains(panel)).length,
+                systemNoticesContainedOrAbsent: !systemNotices || notificationFeed.contains(systemNotices),
+                urgentRequestsPanelCount: document.querySelectorAll("[data-dashboard-urgent-booking-requests-panel='true']").length,
+                urgentRequestsPanelInsideNotificationFeed: notificationFeed.contains(urgentRequestsPanel),
+                urgentRequestsPanelText: urgentRequestsPanel?.textContent.replace(/\\s+/g, " ").trim() || "",
                 visibleText: dashboard.innerText.replace(/\\s+/g, " ").trim(),
               }
             : false;
@@ -7796,6 +7805,15 @@ async function runChromeTest() {
     assert.equal(dashboardCommandCentreState.automationEnabled, "false");
     assert.equal(dashboardCommandCentreState.automationRole, "switch");
     assert.equal(dashboardCommandCentreState.automationText, "Automation OFF");
+    assert.equal(dashboardCommandCentreState.notificationFeedCount, 1);
+    assert.equal(dashboardCommandCentreState.globalStatusPanelOutsideNotificationFeedCount, 0);
+    assert.equal(dashboardCommandCentreState.systemNoticesContainedOrAbsent, true);
+    assert.equal(dashboardCommandCentreState.urgentRequestsPanelCount, 1);
+    assert.equal(dashboardCommandCentreState.urgentRequestsPanelInsideNotificationFeed, true);
+    assert.match(
+      dashboardCommandCentreState.urgentRequestsPanelText,
+      /No urgent or customer change\/cancel requests\./,
+    );
     assert.equal(dashboardCommandCentreState.codexPreparedJobCardsInsideNotificationFeed, true);
     assert.equal(dashboardCommandCentreState.codexPreparedJobCardListOverflowY, "auto");
     assert.match(dashboardCommandCentreState.codexPreparedJobCardsText, /Codex Prepared Job Cards/);

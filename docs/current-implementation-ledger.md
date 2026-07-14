@@ -28,6 +28,15 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No second feed, route, API, notification format, persistence path, or background worker was added. No environment, Supabase configuration, authentication, booking, calendar, invoice, payment, payout, provider send, customer/driver message, Preview deployment, Production deployment, or Git push is included.
 - Review found the mobile suite's prior broad notification-layout assertions were below its deliberate reduced-scope early return and therefore not executing; that dormant block was not accepted or represented as runtime proof. The new bounded terminal-polling scenario runs in the active Dashboard viewport path with an in-memory terminal 503 response, observes no further notification GET after the 10-second interval, then restores a successful read through manual Refresh. Focused source lock remains `scripts/test-admin-app-notification-refresh-no-blink-guard.mjs`.
 
+### Dashboard Codex One-Glance Consolidation
+
+- Owner-supplied isolated Preview evidence reproduced the remaining visual defect: `Urgent / Customer Requests` and the conditional Admin Action Center were rendered above the existing `Codex Review & Admin App Notifications` workbench, while booking-load and notification-unavailable feedback used separate full-width error panels. This did not meet the approved one-place, one-glance admin workflow.
+- The established request panel, action summary, handlers, selectors, queue, push controls, and notification rows now render inside the single existing Codex workbench. No second lane, page, route, API, table, helper, request action, or write path was added.
+- The existing global Dashboard feedback and admin-notification feedback are deduplicated into one compact `System notice(s)` block inside that workbench. Every non-default message remains visible, the exact notification feedback selector remains on its own message line, and terminal-unavailable auto-refresh suspension/manual Refresh behavior is unchanged.
+- Empty urgent/change-cancel state is compact, and disabled `Open Urgent` / `Review` controls are hidden only when neither action has a reviewable item. When an item exists, the same one-click handlers and guarded Dispatch/Codex handoffs remain available.
+- This is admin presentation and containment only. It does not activate Automation, connect Preview to Supabase, change a booking/calendar/invoice/payment/payout, send externally, change customer/driver surfaces, edit an environment, push Git, or deploy.
+- Focused lock: `scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs`; runtime lock: the existing Dashboard scenario in `scripts/test-booking-ui-browser.mjs`.
+
 ### Admin Automation Master Control Foundation
 
 - The existing Operations Dashboard header now contains one compact admin-only `Automation ON / OFF` switch; no new review page, route-level UI, booking panel, invoice panel, or duplicate workbench was added.
@@ -1134,7 +1143,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Dashboard Urgent Requests And One-Window Active Monitor
 
-- Dashboard request panel is now `Urgent / Customer Requests` and displays open customer requests, saved Driver TBC jobs inside the 1-hour pickup monitor window, and customer change/cancel requests using the existing guarded notification handlers.
+- Dashboard request panel is `Urgent / Customer Requests` inside the single `Codex Review & Admin App Notifications` workbench and displays open customer requests, saved Driver TBC jobs inside the 1-hour pickup monitor window, and customer change/cancel requests using the existing guarded notification handlers.
 - Dashboard `Open Urgent` and urgent rows load the selected urgent booking into Dispatch with the existing Driver Job Link panel focused, a visible booking handoff notice, and keyboard focus on `Create Link` so admin can create and copy the driver link before a driver is assigned.
 - The existing admin header shows the deployed build commit marker from the hosting Git SHA, with a local Git `HEAD` fallback for development/build verification; customer and driver pages do not render this admin-only marker.
 - Revoking a Driver Job Link now revokes only that access link and never cancels or changes the booking status. Booking cancellation remains a separate explicit booking action.

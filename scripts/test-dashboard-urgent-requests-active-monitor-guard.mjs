@@ -94,7 +94,7 @@ const dashboardCommandCentrePanel = sliceBetween(
 const dashboardUrgentPanel = sliceBetween(
   appPage,
   'aria-label="Urgent and Customer Requests"',
-  "<section\n            aria-label=\"Admin App Notifications\"",
+  "{codexPreparedJobCardsPanel}",
 );
 const ledgerSection = sliceBetween(
   ledger,
@@ -215,10 +215,45 @@ for (const fragment of [
   'handleAdminBookingChangeRequestCloseDecision(notification, "reject")',
   'data-dashboard-change-cancel-request-action="dismiss"',
   'handleAdminBookingChangeRequestCloseDecision(notification, "dismiss")',
-  "No urgent booking requests, Driver TBC jobs, or customer change/cancel requests.",
+  "No urgent or customer change/cancel requests.",
 ]) {
   assertIncludes(dashboardUrgentPanel, fragment, `dashboard urgent panel fragment ${fragment}`);
 }
+
+for (const fragment of [
+  'aria-label="Codex Review and Admin App Notifications"',
+  'data-admin-app-notification-feed="true"',
+  'data-dashboard-codex-system-notices="true"',
+  'data-status-panel="global"',
+  'data-dashboard-admin-action-summary="true"',
+  'aria-label="Urgent and Customer Requests"',
+  "{codexPreparedJobCardsPanel}",
+  'data-admin-device-push-panel="true"',
+]) {
+  assertIncludes(dashboardCommandCentrePanel, fragment, `single Codex workbench fragment ${fragment}`);
+}
+assertSourceOrder(
+  dashboardCommandCentrePanel,
+  [
+    'data-admin-app-notification-feed="true"',
+    'data-dashboard-codex-system-notices="true"',
+    'data-dashboard-admin-action-summary="true"',
+    'aria-label="Urgent and Customer Requests"',
+    "{codexPreparedJobCardsPanel}",
+    'data-admin-device-push-panel="true"',
+  ],
+  "single Codex workbench order",
+);
+assertExcludes(
+  dashboardCommandCentrePanel,
+  "{statusPanel}",
+  "Dashboard must not render a second global feedback panel outside the Codex workbench",
+);
+assert.equal(
+  (dashboardCommandCentrePanel.match(/data-admin-app-notification-feed="true"/g) || []).length,
+  1,
+  "Dashboard must render exactly one Codex/admin notification feed.",
+);
 
 for (const fragment of [
   "const [dispatchLoadFocusTarget, setDispatchLoadFocusTarget] = useState<",
@@ -266,8 +301,8 @@ for (const fragment of [
 assertSourceOrder(
   dashboardCommandCentrePanel,
   [
+    'aria-label="Codex Review and Admin App Notifications"',
     'aria-label="Urgent and Customer Requests"',
-    'aria-label="Admin App Notifications"',
   ],
   "dashboard command centre order",
 );
@@ -430,7 +465,7 @@ for (const forbiddenPattern of [
 }
 
 for (const phrase of [
-  "Dashboard request panel is now `Urgent / Customer Requests` and displays open customer requests, saved Driver TBC jobs inside the 1-hour pickup monitor window, and customer change/cancel requests using the existing guarded notification handlers.",
+  "Dashboard request panel is `Urgent / Customer Requests` inside the single `Codex Review & Admin App Notifications` workbench and displays open customer requests, saved Driver TBC jobs inside the 1-hour pickup monitor window, and customer change/cancel requests using the existing guarded notification handlers.",
   "Dashboard `Open Urgent` and urgent rows load the selected urgent booking into Dispatch with the existing Driver Job Link panel focused, a visible booking handoff notice, and keyboard focus on `Create Link` so admin can create and copy the driver link before a driver is assigned.",
   "Clearing a loaded Dispatch booking now clears its Driver Job Link handoff reference, and a successful new `Save + CRM` replaces it with the newly saved booking reference before focusing the existing Driver Job Link panel; stale prior-booking notices must not survive the save.",
   "Dashboard keeps one secondary `Review` action that remains on Dashboard and focuses the existing `Codex Prepared Job Cards` queue rendered inside `Codex Review & Admin App Notifications`. The shared alert-menu and notification fallbacks use the same helper, so they do not switch to Bookings or search for a retired panel; no duplicate request lane or helper is added, and the Driver Job Link urgent handoff remains unchanged.",

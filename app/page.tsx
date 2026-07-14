@@ -30586,6 +30586,27 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           : adminAutomationRuntimeState.status === "error"
             ? "Automation unavailable"
             : "Automation OFF";
+  const dashboardSystemNoticeCandidates: Message[] = [];
+
+  if (clean(message.text) && clean(message.text) !== "Ready for dispatch.") {
+    dashboardSystemNoticeCandidates.push(message);
+  }
+  if (adminAppNotificationReadState.message?.text) {
+    dashboardSystemNoticeCandidates.push(adminAppNotificationReadState.message);
+  }
+
+  const dashboardSystemNotices = Array.from(
+    new Map(
+      dashboardSystemNoticeCandidates.map((notice) => [clean(notice.text), notice]),
+    ).values(),
+  );
+  const dashboardSystemNoticeTone: Message["tone"] = dashboardSystemNotices.some(
+    (notice) => notice.tone === "error",
+  )
+    ? "error"
+    : dashboardSystemNotices.some((notice) => notice.tone === "info")
+      ? "info"
+      : "success";
 
   return (
     <main className="admin-ops-shell min-h-screen bg-stone-50 text-slate-950">
@@ -43511,8 +43532,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               </button>
             </div>
           </div>
-          {statusPanel}
-
           {clean(searchTerm) ? (
             <section
               aria-label="Dashboard quick search results"
@@ -43580,26 +43599,92 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             </section>
           ) : null}
 
-          {bookingsTabAttentionCount > 0 ? (
-            <section
-              aria-label="Admin Action Center"
-              className={`mb-4 rounded-md border border-emerald-200 bg-emerald-50/60 p-2 sm:p-3 ${
-                adminAlertLocatorHighlight?.target === "admin-action-summary"
-                  ? "animate-pulse shadow-[0_0_0_3px_rgba(16,185,129,0.35)]"
-                  : ""
-              }`}
-              data-admin-alert-locator-highlight={
-                adminAlertLocatorHighlight?.target === "admin-action-summary" ? "true" : undefined
-              }
-              data-dashboard-admin-action-summary="true"
-            >
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0">
-                  <h3 className="text-base font-semibold text-slate-950">Admin Action Center</h3>
-                  <p className="text-xs text-slate-600 sm:text-sm">
-                    Review urgent dispatch items, new customer requests, and customer change/cancel requests from Dashboard.
-                  </p>
+          <section
+            aria-label="Codex Review and Admin App Notifications"
+            className="mb-4 rounded-md border border-sky-200 bg-sky-50/70 p-2"
+            data-admin-app-notification-auto-refresh={
+              adminAppNotificationReadState.status === "unavailable"
+                ? "suspended"
+                : "active"
+            }
+            data-admin-app-notification-feed="true"
+          >
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <h3 className="text-base font-semibold text-slate-950">Codex Review &amp; Admin App Notifications</h3>
+                <p className="hidden text-xs text-slate-600 sm:block sm:text-sm">
+                  Internal admin inbox only. External messages are not sent from here.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                <span
+                  className="rounded-full border border-sky-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-sky-800"
+                  data-admin-app-notification-feed-state="true"
+                >
+                  {adminAppNotificationReadState.status === "loading"
+                    ? "Loading"
+                    : adminAppNotificationReadState.status === "unavailable"
+                      ? "Unavailable"
+                      : adminAppNotificationReadState.status === "error"
+                        ? "Review needed"
+                        : adminAppNotificationReadState.notifications.length > 0
+                          ? "Inbox queued"
+                          : "Clear"}
+                </span>
+                <button
+                  className="h-9 rounded-md border border-sky-300 bg-white px-3 text-sm font-medium text-sky-800 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:text-sky-300"
+                  data-admin-app-notification-feed-refresh="true"
+                  disabled={adminAppNotificationReadState.status === "loading"}
+                  onClick={() => setAdminAppNotificationReadRevision((revision) => revision + 1)}
+                  type="button"
+                >
+                  Refresh
+                </button>
+              </div>
+            </div>
+
+            {dashboardSystemNotices.length > 0 ? (
+              <div
+                className={`mt-2 rounded-md border px-2.5 py-2 text-xs sm:text-sm ${statusClass(
+                  dashboardSystemNoticeTone,
+                )}`}
+                data-dashboard-codex-system-notices="true"
+                data-status-panel="global"
+              >
+                <p className="font-semibold">
+                  {dashboardSystemNotices.length === 1 ? "System notice" : "System notices"}
+                </p>
+                <div className="mt-1 space-y-0.5">
+                  {dashboardSystemNotices.map((notice) => (
+                    <p
+                      data-admin-app-notification-feed-feedback={
+                        notice === adminAppNotificationReadState.message ? "true" : undefined
+                      }
+                      key={`${notice.tone}-${notice.text}`}
+                    >
+                      {notice.text}
+                    </p>
+                  ))}
                 </div>
+              </div>
+            ) : null}
+
+            {bookingsTabAttentionCount > 0 ? (
+              <div
+                aria-label="Admin Action Center"
+                className={`mt-3 flex flex-col gap-2 rounded-md border border-emerald-200 bg-emerald-50/60 p-2 sm:flex-row sm:items-center sm:justify-between ${
+                  adminAlertLocatorHighlight?.target === "admin-action-summary"
+                    ? "animate-pulse shadow-[0_0_0_3px_rgba(16,185,129,0.35)]"
+                    : ""
+                }`}
+                data-admin-alert-locator-highlight={
+                  adminAlertLocatorHighlight?.target === "admin-action-summary" ? "true" : undefined
+                }
+                data-dashboard-admin-action-summary="true"
+              >
+                <span className="text-xs font-semibold uppercase tracking-wide text-emerald-950">
+                  Admin actions
+                </span>
                 <div className="flex flex-wrap gap-1.5">
                   <span
                     className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900 ring-1 ring-amber-200"
@@ -43621,29 +43706,28 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   </span>
                 </div>
               </div>
-            </section>
-          ) : null}
+            ) : null}
 
-          <section
-            aria-label="Urgent and Customer Requests"
-            className={`mb-4 rounded-md border p-2 sm:p-3 ${
-              dashboardUrgentBookingRequestCount > 0 || customerBookingChangeRequestCount > 0
-                ? "border-amber-300 bg-amber-50"
-                : "border-stone-200 bg-stone-50"
-            } ${
-              adminAlertLocatorHighlight?.target === "urgent-booking-requests"
-                ? "shadow-[0_0_0_3px_rgba(245,158,11,0.35)]"
-                : ""
-            }`}
-            data-admin-alert-locator-highlight={
-              adminAlertLocatorHighlight?.target === "urgent-booking-requests" ? "true" : undefined
-            }
-            data-dashboard-new-booking-requests-panel="true"
-            data-dashboard-urgent-booking-requests-panel="true"
-          >
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
+            <section
+              aria-label="Urgent and Customer Requests"
+              className={`mt-3 rounded-md border p-2 ${
+                dashboardUrgentBookingRequestCount > 0 || customerBookingChangeRequestCount > 0
+                  ? "border-amber-300 bg-amber-50"
+                  : "border-stone-200 bg-stone-50"
+              } ${
+                adminAlertLocatorHighlight?.target === "urgent-booking-requests"
+                  ? "shadow-[0_0_0_3px_rgba(245,158,11,0.35)]"
+                  : ""
+              }`}
+              data-admin-alert-locator-highlight={
+                adminAlertLocatorHighlight?.target === "urgent-booking-requests" ? "true" : undefined
+              }
+              data-dashboard-new-booking-requests-panel="true"
+              data-dashboard-urgent-booking-requests-panel="true"
+            >
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
                   <h3 className="text-base font-semibold text-slate-950">Urgent / Customer Requests</h3>
                   <span
                     className={`rounded-full px-2.5 py-1 text-xs font-semibold uppercase ring-1 ${
@@ -43666,12 +43750,13 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   >
                     {customerBookingChangeRequestCount} change/cancel
                   </span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-600 sm:text-sm">
+                    Open urgent bookings in Driver Job Link, or review customer change/cancel requests.
+                  </p>
                 </div>
-                <p className="mt-1 text-xs text-slate-600 sm:text-sm">
-                  Open urgent bookings in Driver Job Link, or review customer change/cancel requests.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2 sm:justify-end">
+                {dashboardUrgentBookingRequestCount > 0 || customerBookingRequestDisplayItems.length > 0 ? (
+                  <div className="flex flex-wrap gap-2 sm:justify-end">
                 <button
                   className="h-9 rounded-md border border-amber-300 bg-white px-3 text-sm font-semibold text-amber-900 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:border-stone-200 disabled:text-slate-400"
                   data-dashboard-open-urgent-driver-job-link="true"
@@ -43698,8 +43783,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 >
                   Review
                 </button>
+                  </div>
+                ) : null}
               </div>
-            </div>
             {dashboardUrgentBookingRequestDisplayItems.length > 0 || customerBookingChangeRequestCount > 0 ? (
               <div className="mt-3 grid gap-2" data-dashboard-new-booking-request-rows="true">
                 {dashboardUrgentBookingRequestDisplayItems.map(({ bookingRecord, operationalCard }) => {
@@ -43847,55 +43933,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 })}
               </div>
             ) : (
-              <p className="mt-3 rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-slate-600">
-                No urgent booking requests, Driver TBC jobs, or customer change/cancel requests.
+              <p className="mt-2 rounded-md border border-stone-200 bg-white px-2.5 py-1.5 text-xs text-slate-600 sm:text-sm">
+                No urgent or customer change/cancel requests.
               </p>
             )}
-          </section>
-
-          <section
-            aria-label="Admin App Notifications"
-            className="mb-4 rounded-md border border-sky-200 bg-sky-50/70 p-2"
-            data-admin-app-notification-auto-refresh={
-              adminAppNotificationReadState.status === "unavailable"
-                ? "suspended"
-                : "active"
-            }
-            data-admin-app-notification-feed="true"
-          >
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0">
-                <h3 className="text-base font-semibold text-slate-950">Codex Review &amp; Admin App Notifications</h3>
-                <p className="hidden text-xs text-slate-600 sm:block sm:text-sm">
-                  Internal admin inbox only. External messages are not sent from here.
-                </p>
-              </div>
-              <div className="flex flex-col gap-2 sm:items-end">
-                <span
-                  className="rounded-full border border-sky-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-sky-800"
-                  data-admin-app-notification-feed-state="true"
-                >
-                  {adminAppNotificationReadState.status === "loading"
-                    ? "Loading"
-                    : adminAppNotificationReadState.status === "unavailable"
-                      ? "Unavailable"
-                      : adminAppNotificationReadState.status === "error"
-                      ? "Review needed"
-                      : adminAppNotificationReadState.notifications.length > 0
-                        ? "Inbox queued"
-                        : "Clear"}
-                </span>
-                <button
-                  className="h-9 rounded-md border border-sky-300 bg-white px-3 text-sm font-medium text-sky-800 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:text-sky-300"
-                  data-admin-app-notification-feed-refresh="true"
-                  disabled={adminAppNotificationReadState.status === "loading"}
-                  onClick={() => setAdminAppNotificationReadRevision((revision) => revision + 1)}
-                  type="button"
-                >
-                  Refresh
-                </button>
-              </div>
-            </div>
+            </section>
 
             {codexPreparedJobCardsPanel}
 
@@ -43953,17 +43995,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 </div>
               ) : null}
             </div>
-
-            {adminAppNotificationReadState.message ? (
-              <div
-                className={`mt-2 rounded-md border px-2 py-1.5 text-xs sm:text-sm ${statusClass(
-                  adminAppNotificationReadState.message.tone,
-                )}`}
-                data-admin-app-notification-feed-feedback="true"
-              >
-                {adminAppNotificationReadState.message.text}
-              </div>
-            ) : null}
 
             {adminAppNotificationReadState.notifications.length > 0 ? (
               <div

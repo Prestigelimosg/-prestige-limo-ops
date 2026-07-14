@@ -37,6 +37,10 @@ async function loadRouteHarness() {
   const emailAlertPath = path.join(tempDir, "lib/admin-new-booking-email-alert.js");
   const devicePushAlertPath = path.join(tempDir, "lib/admin-device-push-notification.js");
   const customerSavedBookingsReadPath = path.join(tempDir, "lib/customer-saved-bookings-read.js");
+  const codexJobCardAutoPreparationPath = path.join(
+    tempDir,
+    "lib/codex-job-card-auto-preparation.js",
+  );
 
   await mkdir(path.dirname(outputPath), { recursive: true });
   await mkdir(path.dirname(persistencePath), { recursive: true });
@@ -136,6 +140,21 @@ async function loadRouteHarness() {
       "module.exports = { resolveCustomerSavedBookingsBoundaryForPurpose, resolveCustomerSavedBookingsVerifiedIdentity };",
     ].join("\n"),
   );
+  await writeFile(
+    codexJobCardAutoPreparationPath,
+    [
+      "function mock() { return globalThis.__prestigeCustomerBookingRequestApiMock; }",
+      "async function prepareCodexJobCardForAdminReview(input) {",
+      "  const state = mock();",
+      "  state.codexPreparationCalls.push(input);",
+      "  if (state.codexPreparationThrows) {",
+      "    throw new Error('mock internal preparation failure');",
+      "  }",
+      "  return { prepared: true, reason: 'prepared', status: 'ready' };",
+      "}",
+      "module.exports = { prepareCodexJobCardForAdminReview };",
+    ].join("\n"),
+  );
 
   return {
     cleanup: () => rm(tempDir, { force: true, recursive: true }),
@@ -150,6 +169,8 @@ function installMock(overrides = {}) {
     alertCalls: [],
     alertThrows: false,
     createCalls: [],
+    codexPreparationCalls: [],
+    codexPreparationThrows: false,
     createResult: {
       data: {
         admin_internal_status: "Admin Review Required",
@@ -347,6 +368,12 @@ try {
     globalThis.__prestigeCustomerBookingRequestApiMock.devicePushAlertCalls[0].booking_reference,
     "CUST-SAFE-001",
   );
+  assert.deepEqual(globalThis.__prestigeCustomerBookingRequestApiMock.codexPreparationCalls, [
+    {
+      bookingReference: "CUST-SAFE-001",
+      event: "new_booking",
+    },
+  ]);
   assertSafeCustomerBody(success.body, "short-notice success body");
 
   const verifiedPaMock = installMock({
@@ -438,7 +465,41 @@ try {
   assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.alertCalls.length, 1);
   assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.adminAppNotificationCalls.length, 1);
   assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.devicePushAlertCalls.length, 1);
+  assert.deepEqual(
+    globalThis.__prestigeCustomerBookingRequestApiMock.codexPreparationCalls,
+    [
+      { bookingReference: "CUST-RETURN-001-OUT", event: "new_booking" },
+      { bookingReference: "CUST-RETURN-001-RET", event: "new_booking" },
+    ],
+  );
   assertSafeCustomerBody(returnTripSuccess.body, "return-trip success body");
+
+  installMock({
+    codexPreparationThrows: true,
+    createResult: {
+      data: {
+        admin_internal_status: "Admin Review Required",
+        booking_reference: "CUST-SAFE-PREPARATION-FAIL",
+        customer_facing_status: "Request Received",
+        short_notice_review_status: "Admin Review Required",
+      },
+      ok: true,
+    },
+  });
+  const codexPreparationFailureStillSucceeds = await readJson(
+    await harness.route.POST(postRequest({ passengerName: "Safe Passenger" })),
+  );
+
+  assert.equal(codexPreparationFailureStillSucceeds.status, 200);
+  assert.equal(
+    codexPreparationFailureStillSucceeds.body.request.booking_reference,
+    "CUST-SAFE-PREPARATION-FAIL",
+  );
+  assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.codexPreparationCalls.length, 1);
+  assertSafeCustomerBody(
+    codexPreparationFailureStillSucceeds.body,
+    "Codex-preparation-failure success body",
+  );
 
   installMock({
     adminAppNotificationThrows: true,

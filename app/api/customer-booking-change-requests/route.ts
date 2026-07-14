@@ -5,6 +5,7 @@ import {
   resolveCustomerSavedBookingsBoundaryForPurpose,
   type CustomerSavedBookingRecord,
 } from "../../../lib/customer-saved-bookings-read";
+import { prepareCodexJobCardForAdminReview } from "../../../lib/codex-job-card-auto-preparation";
 
 export const dynamic = "force-dynamic";
 
@@ -352,6 +353,19 @@ async function createAdminReviewNoticeForBookingChangeRequest(
   return createCustomerBookingChangeRequestAdminAppNotification(alertInput);
 }
 
+async function prepareCustomerBookingChangeJobCardReview(
+  parsed: ParsedBookingChangeRequest,
+) {
+  try {
+    await prepareCodexJobCardForAdminReview({
+      bookingReference: parsed.booking_reference,
+      event: parsed.request_kind,
+    });
+  } catch {
+    // Customer change intake must remain available when internal preparation is unavailable.
+  }
+}
+
 export async function GET() {
   return blockedResponse();
 }
@@ -424,6 +438,8 @@ export async function POST(request: Request) {
     if (!notification.ok) {
       return safeErrorResponse(notification);
     }
+
+    await prepareCustomerBookingChangeJobCardReview(parsed.data);
 
     return Response.json({
       ok: true,

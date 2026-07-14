@@ -29,6 +29,7 @@ export type AdminBookingPersistenceAdapterActor = {
   actor_role: "admin" | "dispatcher" | "system";
   boundary_mode:
     | AdminDispatcherBoundaryContext["mode"]
+    | "codex-job-card-automation-surface"
     | "customer-booking-request-surface";
   source_surface: "admin_api" | "customer_booking_request" | "system";
 };
@@ -1565,6 +1566,13 @@ export const customerBookingRequestPersistenceAdapterActor: AdminBookingPersiste
   actor_role: "system",
   boundary_mode: "customer-booking-request-surface",
   source_surface: "customer_booking_request",
+};
+
+export const codexJobCardAutomationPersistenceAdapterActor: AdminBookingPersistenceAdapterActor = {
+  actor_label: "Codex job-card automation",
+  actor_role: "system",
+  boundary_mode: "codex-job-card-automation-surface",
+  source_surface: "system",
 };
 
 export async function createAdminBookingThroughSupabaseAdapter(

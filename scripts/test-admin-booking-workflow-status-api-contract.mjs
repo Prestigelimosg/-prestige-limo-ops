@@ -605,6 +605,56 @@ try {
 
   setEnv(enabledEnv());
 
+  const automationActorMock = installMockClient();
+  const automationActorResult = await persistence.saveAdminBookingWorkflowStatus(
+    workflowPayload({
+      booking_reference: "CUST-AUTO-WF-001",
+      safe_status_context: {
+        next_action: "Admin review required before any calendar action.",
+      },
+      status_label: "Ready for Admin Review",
+      status_value: "ready",
+      workflow_area: "admin_booking_review",
+    }),
+    {
+      actor_label: "Codex job-card automation",
+      actor_role: "system",
+      boundary_mode: "codex-job-card-automation-surface",
+      source_surface: "system",
+    },
+  );
+
+  assert.equal(automationActorResult.ok, true);
+  assert.equal(automationActorResult.data.actor_role, "system");
+  assert.equal(automationActorResult.data.source_surface, "system");
+  assert.equal(automationActorMock.client.operations.length, 1);
+  assert.equal(automationActorMock.client.operations[0].payload.actor_role, "system");
+  assert.equal(automationActorMock.client.operations[0].payload.source_surface, "system");
+  assert.deepEqual(automationActorMock.client.operations[0].options, {
+    onConflict: "booking_reference,workflow_area",
+  });
+  assertNoLeaks(automationActorResult, "automation actor result should stay safe");
+
+  setEnv(enabledEnv());
+
+  const nearMatchAutomationActorMock = installMockClient();
+  const nearMatchAutomationActorResult = await persistence.saveAdminBookingWorkflowStatus(
+    workflowPayload({ booking_reference: "CUST-AUTO-WF-BLOCKED" }),
+    {
+      actor_label: "Other system process",
+      actor_role: "system",
+      boundary_mode: "codex-job-card-automation-surface",
+      source_surface: "system",
+    },
+  );
+
+  assert.equal(nearMatchAutomationActorResult.ok, false);
+  assert.equal(nearMatchAutomationActorResult.status, 403);
+  assertNoSupabaseTouched(nearMatchAutomationActorMock, "near-match automation actor");
+  assertNoLeaks(nearMatchAutomationActorResult, "near-match automation actor response");
+
+  setEnv(enabledEnv());
+
   const readMock = installMockClient({
     booking_workflow_statuses: [
       {

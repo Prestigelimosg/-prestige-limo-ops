@@ -11,6 +11,7 @@ import {
   resolveCustomerSavedBookingsBoundaryForPurpose,
   resolveCustomerSavedBookingsVerifiedIdentity,
 } from "../../../lib/customer-saved-bookings-read";
+import { prepareCodexJobCardForAdminReview } from "../../../lib/codex-job-card-auto-preparation";
 
 export const dynamic = "force-dynamic";
 
@@ -119,6 +120,29 @@ async function notifyAdminNewBookingRequest(booking: AdminBookingPersistenceReco
   }
 }
 
+async function prepareSavedCustomerBookingRequestJobCards(
+  savedRequests: AdminBookingPersistenceRecord[],
+) {
+  await Promise.all(
+    savedRequests.map(async (savedRequest) => {
+      const bookingReference = savedRequest.booking_reference?.trim();
+
+      if (!bookingReference) {
+        return;
+      }
+
+      try {
+        await prepareCodexJobCardForAdminReview({
+          bookingReference,
+          event: "new_booking",
+        });
+      } catch {
+        // Booking intake must remain available when internal preparation is unavailable.
+      }
+    }),
+  );
+}
+
 export async function GET() {
   return blockedResponse();
 }
@@ -215,6 +239,7 @@ export async function POST(request: Request) {
     const primaryRequest = savedRequests[0];
     const returnRequest = savedRequests[1] ?? null;
 
+    await prepareSavedCustomerBookingRequestJobCards(savedRequests);
     await notifyAdminNewBookingRequest(primaryRequest);
 
     return Response.json({

@@ -7,7 +7,7 @@ Latest pushed main/staging runtime checkpoint:
 2acaa3a5 Simplify dashboard booking request review
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-b0a68cae Repair dashboard release checkpoint guards
+d7f6aff9 Record local release diagnostics
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -305,6 +305,15 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The first shell DOM check used zsh's reserved `status` variable and stopped after the successful read-only Vercel inspection and fetch; the corrected check returned HTTP 200 and the exact build marker. Raw HTML did not contain hydrated Dashboard text, so its zero text counts were not used as visual proof. An optional Chrome tab-deliverable marker call returned `not a function` after verification; the verified Production tab remained open and page state did not change. These setup errors are not hidden as application failures or successful checks.
 - When the temporary local Production server was stopped after browser verification, its terminal repeated the established fail-closed `supabaseUrl is required` diagnostics from intentionally unconfigured local backend reads. The browser suites had already completed with zero console errors, zero blocked Supabase requests, and zero blocked Supabase mutations; no live Supabase connection or write occurred. This local diagnostic is not represented as a Production error.
 - The deployed runtime remains exact application commit `2acaa3a5 Simplify dashboard booking request review`; commits `e86a5022`, `ef3262f0`, and `b0a68cae` add deployment evidence and guard repair only. Focused locks remain the established Dashboard compact guard, booking browser suite, dynamic ledger checkpoint guards, and staging deployment approval packet guard; no second runtime lane was added.
+
+### Main Branch Fast-Forward Production Alignment Evidence
+
+- After the existing Production deployment and branch-drift inspection were reported, the owner explicitly approved the suggested next step on 2026-07-14: align `main` to the already reviewed `staging` history and verify the automatic Production deployment. This approval did not include any Automation/Push toggle, booking decision, notification cleanup, calendar/map action, invoice action, environment/database/provider change, customer/driver message, or external send.
+- Final preflight proved a clean `staging` worktree, remote `main` at `3bac3c3a`, remote `staging` at `d7f6aff9`, a `0 6` left/right count, and `main` as a direct ancestor of `staging`. The complete pre-activation suite and Next.js 16.2.6 Production build both exited zero before the push. The suite retained the two known module-type warnings for `lib/codex-job-card-correction.ts` and `lib/driver-job-calendar-event.ts`; they are not hidden as clean diagnostics.
+- The first `git push origin staging:main` attempt was rejected before any branch changed because Git's saved HTTPS credential was stale. GitHub CLI remained authenticated as `Prestigelimosg` with repository scope; `gh auth setup-git` reconnected Git to that existing authorized keyring account. A fresh remote-head check still showed the exact pre-action hashes, and the same non-force push then fast-forwarded `main` from `3bac3c3a` to `d7f6aff9`. No force push, merge commit, rebase, or history rewrite occurred; remote `main` and `staging` both resolved to exact commit `d7f6aff9df27a0e8499d2a78e2926a5c37ebe338` immediately after alignment.
+- Vercel's configured `main` Production Branch automatically created READY Production deployment `dpl_GEsHpMkUyhSqY8XaniytrgC54pfi` at `https://prestige-limo-ops-staging-qv8a6duf0-prestigelimosgs-projects.vercel.app`. Read-only inspection proved target `production`, status `Ready`, alias `https://app.prestigelimo.sg`, alias HTTP 200, and exact build marker `d7f6aff9df27a0e8499d2a78e2926a5c37ebe338`.
+- Runtime code remains exact application commit `2acaa3a5 Simplify dashboard booking request review`; commits `e86a5022`, `ef3262f0`, `b0a68cae`, `1ff89136`, and `d7f6aff9` contain deployment approval/evidence, release-guard repair, or diagnostics only. The Production runtime therefore matches the previously reviewed Dashboard interface and does not add a second workflow lane.
+- Verification changed no Automation or Push state, booking/customer/driver record, notification item, calendar or Google Maps state, invoice/payment/payout record, environment or Supabase configuration, provider setting, message, or external send. The release-evidence commit that records this result remains documentation/guard-only and is pushed to `staging` only, so it cannot trigger another Production deployment from `main`.
 
 ### Customer Folder Four-Sector Invoice Workflow
 

@@ -4,9 +4,9 @@ This packet records the approved deployment-safety configuration work, isolated 
 
 ## Checkpoints
 
-- Latest repo commit deployed to isolated Preview: `b0a68cae Repair dashboard release checkpoint guards`.
+- Latest repo commit deployed to isolated Preview: `d7f6aff9 Record local release diagnostics`.
 - Latest verified runtime checkpoint in the ledger: `2acaa3a5 Simplify dashboard booking request review`.
-- Latest Production deployment checkpoint: `b0a68cae Repair dashboard release checkpoint guards`.
+- Latest Production deployment checkpoint: `d7f6aff9 Record local release diagnostics`.
 - Source of truth: `docs/current-implementation-ledger.md`.
 
 ## Approval Fields
@@ -32,6 +32,7 @@ This packet records the approved deployment-safety configuration work, isolated 
 - Combined automation Preview approval: Owner explicitly approved proceeding with the suggested next safe step on 2026-07-14; scope was exact clean commit `b09b82f8`, one protected isolated Git-backed Preview, bounded GET-only API/log checks, signed-in desktop/modern-phone/foldable and invoice-overview acceptance, bypass revocation, Production unchanged verification, and evidence recording only; no Git push, Production deployment, Automation activation, live data, calendar/invoice action, environment change, provider action, or external send was approved
 - Booking Requests layout Preview approval: Owner explicitly approved proceeding with the suggested next safe step on 2026-07-14; scope was exact clean commit `2acaa3a5`, one isolated protected Preview, target/build/protection verification, signed-in desktop/390px/344px layout acceptance, and evidence recording only; no Git push, Production deployment, Automation or Push toggle, live-data action, calendar action, environment change, provider action, or external send was approved
 - Dashboard Production deployment approval: After approving the protected Preview, the owner separately approved the next stated step on 2026-07-14: push the local `staging` commits and deploy Production; this did not approve Automation/Push changes, booking decisions, notification cleanup, calendar/map action, invoice action, environment/database/provider changes, customer/driver messages, or external sends
+- Main branch alignment approval: After the exact branch drift and safest non-force sequence were reported, the owner explicitly approved proceeding on 2026-07-14; scope was a clean direct-ancestor fast-forward from reviewed `staging` to `main`, automatic Vercel Production deployment verification, and evidence recording only, with no Automation/Push change, live-data action, calendar/map action, invoice action, environment/database/provider change, customer/driver message, or external send
 - Rollback owner: William / Prestige Limo SG
 - Notes: Keep all live DB/write, migrations, provider/env activation, external APIs, live sending, payment/PDF/payout, auth activation, live location, photo upload/storage, CRM/calendar amendment writes, and risky shim writes blocked.
 
@@ -140,6 +141,16 @@ This packet records the approved deployment-safety configuration work, isolated 
 - The first shell check stopped on zsh's reserved `status` variable after read-only inspection/fetch; its corrected run proved HTTP 200 and the build marker. Raw HTML text counts were not used as hydrated UI proof. The optional Chrome tab-deliverable marker was unsupported after verification and changed no page state. These setup errors are recorded, not hidden.
 - Stopping the temporary local Production server exposed the established fail-closed `supabaseUrl is required` diagnostics from intentionally unconfigured local backend reads. Both browser suites had zero console errors and zero blocked Supabase requests/mutations; no live Supabase connection or write occurred, and this is not represented as a Production error.
 - Runtime code remains exact application commit `2acaa3a5`; the later three commits contain only deployment evidence and guard repair.
+
+## Main Branch Fast-Forward Production Alignment Evidence
+
+- The approved preflight proved a clean `staging` worktree, remote `main` at `3bac3c3a`, remote `staging` at `d7f6aff9`, a `0 6` left/right count, and `main` as a direct ancestor of `staging`. The complete pre-activation suite and Next.js 16.2.6 Production build both exited zero before any push.
+- The suite retained the known module-type warnings for `lib/codex-job-card-correction.ts` and `lib/driver-job-calendar-event.ts`; they are recorded as non-blocking diagnostics rather than hidden.
+- The first `git push origin staging:main` was rejected before mutation by a stale saved HTTPS credential. GitHub CLI was still authenticated as `Prestigelimosg` with repository scope; `gh auth setup-git` connected Git to that existing authorized keyring account. A new remote-head read showed no branch had changed, and the same non-force push then fast-forwarded `main` from `3bac3c3a` to `d7f6aff9` without a merge commit, rebase, history rewrite, or force push.
+- Immediately after alignment, remote `main` and `staging` both resolved to `d7f6aff9df27a0e8499d2a78e2926a5c37ebe338`. Vercel's configured `main` Production Branch automatically created READY Production deployment `dpl_GEsHpMkUyhSqY8XaniytrgC54pfi` at `https://prestige-limo-ops-staging-qv8a6duf0-prestigelimosgs-projects.vercel.app`.
+- Read-only inspection proved target `production`, status `Ready`, alias `https://app.prestigelimo.sg`, alias HTTP 200, and exact build marker `d7f6aff9df27a0e8499d2a78e2926a5c37ebe338`.
+- Runtime code remains exact application commit `2acaa3a5`; the later five commits through `d7f6aff9` contain deployment approval/evidence, release-guard repair, or diagnostics only. The evidence-record commit is documentation/guard-only and is pushed to `staging` only, so it does not trigger another Production deployment from `main`.
+- No Automation or Push control, booking/customer/driver record, notification item, calendar or Google Maps state, invoice/payment/payout record, environment or Supabase configuration, provider setting, customer/driver message, or external send changed during this alignment and verification.
 
 ## Required Checks Before Staging
 

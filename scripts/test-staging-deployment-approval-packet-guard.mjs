@@ -46,7 +46,7 @@ assertIncludes("activate any live feature", "no-live-feature boundary");
 const checkpointsSection = sectionBetween("## Checkpoints");
 assertSectionIncludes(
   checkpointsSection,
-  "Latest repo commit deployed to isolated Preview: `b0a68cae Repair dashboard release checkpoint guards`.",
+  "Latest repo commit deployed to isolated Preview: `d7f6aff9 Record local release diagnostics`.",
 );
 assertSectionIncludes(
   checkpointsSection,
@@ -54,7 +54,7 @@ assertSectionIncludes(
 );
 assertSectionIncludes(
   checkpointsSection,
-  "Latest Production deployment checkpoint: `b0a68cae Repair dashboard release checkpoint guards`.",
+  "Latest Production deployment checkpoint: `d7f6aff9 Record local release diagnostics`.",
 );
 assert.match(
   checkpointsSection,
@@ -97,8 +97,39 @@ for (const fragment of [
   "Combined automation Preview approval: Owner explicitly approved proceeding with the suggested next safe step on 2026-07-14",
   "Booking Requests layout Preview approval: Owner explicitly approved proceeding with the suggested next safe step on 2026-07-14",
   "Dashboard Production deployment approval: After approving the protected Preview, the owner separately approved the next stated step on 2026-07-14",
+  "Main branch alignment approval: After the exact branch drift and safest non-force sequence were reported, the owner explicitly approved proceeding on 2026-07-14",
 ]) {
   assertSectionIncludes(approvalSection, fragment, `Approval scope missing ${fragment}`);
+}
+
+const mainAlignmentSection = sectionBetween(
+  "## Main Branch Fast-Forward Production Alignment Evidence",
+);
+for (const fragment of [
+  "remote `main` at `3bac3c3a`",
+  "remote `staging` at `d7f6aff9`",
+  "a `0 6` left/right count",
+  "`main` as a direct ancestor of `staging`",
+  "complete pre-activation suite and Next.js 16.2.6 Production build both exited zero",
+  "known module-type warnings for `lib/codex-job-card-correction.ts` and `lib/driver-job-calendar-event.ts`",
+  "first `git push origin staging:main` was rejected before mutation",
+  "`gh auth setup-git` connected Git to that existing authorized keyring account",
+  "same non-force push then fast-forwarded `main` from `3bac3c3a` to `d7f6aff9`",
+  "without a merge commit, rebase, history rewrite, or force push",
+  "remote `main` and `staging` both resolved to `d7f6aff9df27a0e8499d2a78e2926a5c37ebe338`",
+  "READY Production deployment `dpl_GEsHpMkUyhSqY8XaniytrgC54pfi`",
+  "alias `https://app.prestigelimo.sg`",
+  "alias HTTP 200",
+  "exact build marker `d7f6aff9df27a0e8499d2a78e2926a5c37ebe338`",
+  "Runtime code remains exact application commit `2acaa3a5`",
+  "documentation/guard-only and is pushed to `staging` only",
+  "No Automation or Push control, booking/customer/driver record, notification item, calendar or Google Maps state, invoice/payment/payout record, environment or Supabase configuration, provider setting, customer/driver message, or external send changed",
+]) {
+  assertSectionIncludes(
+    mainAlignmentSection,
+    fragment,
+    `Main alignment evidence missing ${fragment}`,
+  );
 }
 
 const dashboardProductionSection = sectionBetween(

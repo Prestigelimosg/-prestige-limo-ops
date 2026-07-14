@@ -119,6 +119,10 @@ for (const fragment of [
   "zsh's reserved `status` variable",
   "Raw HTML text counts were not used as hydrated UI proof.",
   "optional Chrome tab-deliverable marker was unsupported",
+  "Stopping the temporary local Production server exposed the established fail-closed `supabaseUrl is required` diagnostics",
+  "Both browser suites had zero console errors and zero blocked Supabase requests/mutations",
+  "no live Supabase connection or write occurred",
+  "this is not represented as a Production error",
   "Runtime code remains exact application commit `2acaa3a5`",
 ]) {
   assertSectionIncludes(
@@ -381,6 +385,14 @@ for (const fragment of [
   "zero blocked Supabase mutation requests",
   "Preview intentionally remains fail-closed",
   "The deployment command used no Production flag, no Git push occurred",
+  "### Dashboard Booking Requests Production Deployment Evidence",
+  "READY Production deployment `dpl_GbPQWNHmxoZB8HL7kKMgj9Nx2QxL`",
+  "exact admin build marker `b0a68cae46c9423338a2f85e1f3696cc9aa9110b`",
+  "The existing runtime states were observed as `Automation ON` and `Push alerts OFF`",
+  "its terminal repeated the established fail-closed `supabaseUrl is required` diagnostics",
+  "no live Supabase connection or write occurred",
+  "This local diagnostic is not represented as a Production error",
+  "The deployed runtime remains exact application commit `2acaa3a5 Simplify dashboard booking request review`",
 ]) {
   assert.equal(
     ledger.includes(fragment),

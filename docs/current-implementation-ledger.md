@@ -1053,6 +1053,12 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Admin Load Bookings CRM Fallback And Compact List Fix
 
+- The established request panel now sits inside the single Dashboard `Codex Review & Admin Notifications` section as `Codex Prepared Job Cards`; it is not a second page, route, table, draft, database, or write path.
+- The prepared-job-card queue is always visible, shows a clear empty state, and keeps more than three visible cards inside one bounded vertical scrolling box so admin can review the queue at one glance without pressing Load Bookings.
+- Each prepared card is derived from the exact saved request, remains `Ready for Admin Review`, and keeps the existing `Review Job Card` handoff; calendar changes still require an explicit admin action in the established Dispatch workflow.
+- This queue placement does not enable background AI mutation, calendar auto-write, invoice creation, external delivery, or Automation. The existing saved request remains the only durable record and the admin remains the actor for every operational write.
+- Focused source lock: the updated `scripts/test-admin-load-bookings-crm-fallback-compact-guard.mjs`. Browser runtime lock: the updated Dashboard command-centre scenario in `scripts/test-booking-ui-browser.mjs`.
+
 - Live manual walkthrough on 2026-06-26 found that the visible admin `Load Bookings` button could still fail with the safe `Admin saved booking read failed safely.` message when `GET /api/admin-saved-bookings?limit=25` failed, even though same-origin admin `GET /api/admin-bookings` returned `ok: true`.
 - The legacy admin booking list fallback is now retired for normal `Load Bookings`, because deleted fake/demo rows can remain in the older `/api/admin-bookings` source and reappear after refresh.
 - Admin `Load Bookings` now keeps typed display hydration at `limit=25`, then uses only the guarded saved-bookings list read at `limit=100` for Dashboard/Bookings/Dispatch records.

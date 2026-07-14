@@ -7708,6 +7708,8 @@ async function runChromeTest() {
           const rows = [...document.querySelectorAll("[data-dashboard-command-centre-row]")];
           const activeJobs = [...document.querySelectorAll("[data-admin-multi-driver-active-job]")];
           const notificationFeed = document.querySelector("[data-admin-app-notification-feed='true']");
+          const codexPreparedJobCards = document.querySelector("[data-codex-prepared-job-cards='true']");
+          const codexPreparedJobCardList = document.querySelector("[data-codex-prepared-job-card-list='true']");
           const automationToggle = document.querySelector("[data-admin-automation-runtime-toggle='true']");
           const completedHistoryButton = [...document.querySelectorAll("button")].find(
             (button) => button.textContent.trim() === "Open Completed / History",
@@ -7733,6 +7735,11 @@ async function runChromeTest() {
                 automationRole: automationToggle.getAttribute("role"),
                 automationText: automationToggle.textContent.trim(),
                 completedHistoryButtonText: completedHistoryButton.textContent.trim(),
+                codexPreparedJobCardsInsideNotificationFeed: notificationFeed.contains(codexPreparedJobCards),
+                codexPreparedJobCardsText: codexPreparedJobCards?.textContent.replace(/\\s+/g, " ").trim() || "",
+                codexPreparedJobCardListOverflowY: codexPreparedJobCardList
+                  ? getComputedStyle(codexPreparedJobCardList).overflowY
+                  : "",
                 forbiddenDuplicateControlCount: forbiddenDuplicateControls.length,
                 rowCount: rows.length,
                 visibleText: dashboard.innerText.replace(/\\s+/g, " ").trim(),
@@ -7753,6 +7760,13 @@ async function runChromeTest() {
     assert.equal(dashboardCommandCentreState.automationEnabled, "false");
     assert.equal(dashboardCommandCentreState.automationRole, "switch");
     assert.equal(dashboardCommandCentreState.automationText, "Automation OFF");
+    assert.equal(dashboardCommandCentreState.codexPreparedJobCardsInsideNotificationFeed, true);
+    assert.equal(dashboardCommandCentreState.codexPreparedJobCardListOverflowY, "auto");
+    assert.match(dashboardCommandCentreState.codexPreparedJobCardsText, /Codex Prepared Job Cards/);
+    assert.match(
+      dashboardCommandCentreState.codexPreparedJobCardsText,
+      /No Codex-prepared job cards waiting for admin review\./,
+    );
     assert.equal(
       dashboardCommandCentreState.forbiddenDuplicateControlCount,
       0,
@@ -7760,7 +7774,7 @@ async function runChromeTest() {
     );
     assert.match(dashboardCommandCentreState.visibleText, /Urgent \/ Customer Requests/);
     assert.match(dashboardCommandCentreState.visibleText, /Today's Jobs/);
-    assert.match(dashboardCommandCentreState.visibleText, /Admin App Notifications/);
+    assert.match(dashboardCommandCentreState.visibleText, /Codex Review & Admin App Notifications/);
 
     const clickedAutomationOn = await evaluate(`(() => {
       const automationToggle = document.querySelector("[data-admin-automation-runtime-toggle='true']");

@@ -61,6 +61,9 @@ for (const phrase of [
   "The Dashboard request row is the review handoff point for open customer requests outside the 1-hour dispatch window. `Review Job Card` loads the exact already-saved request into the existing Dispatch form and focuses the existing Job Card Preview; it does not create another page, table, draft row, booking write, or job-card storage lane.",
   "The existing saved booking record remains the durable queue item, so more than three requests stay in the same guarded saved-bookings source while the compact review panel shows the first five and reports the full open count.",
   "The job-card review handoff is manual and available while Automation is OFF.",
+  "The established request panel now sits inside the single Dashboard `Codex Review & Admin Notifications` section as `Codex Prepared Job Cards`; it is not a second page, route, table, draft, database, or write path.",
+  "The prepared-job-card queue is always visible, shows a clear empty state, and keeps more than three visible cards inside one bounded vertical scrolling box so admin can review the queue at one glance without pressing Load Bookings.",
+  "Each prepared card is derived from the exact saved request, remains `Ready for Admin Review`, and keeps the existing `Review Job Card` handoff; calendar changes still require an explicit admin action in the established Dispatch workflow.",
   "Loading a customer request into Dispatch now records a bounded browser-local handled-request key so that request leaves the Dashboard urgent/new request queues and action badge on that admin browser, then becomes available in Current / Upcoming.",
   "Loading a saved booking into Dispatch refreshes the typed operational display once immediately and pauses one background sync tick, keeping the existing guarded read set stable while Customer Copy focuses for review.",
   "The Dashboard now uses the active day-of-trip monitor instead of duplicate Today/Upcoming booking summaries; single-booking driver assignment, status, copy, job-card, and completion work stays in Dispatch/Bookings so page purposes do not duplicate.",
@@ -432,14 +435,32 @@ for (const customerRequestFragment of [
   "data-new-customer-booking-request-row",
   "data-new-customer-booking-request-load",
   "Review Job Card",
+  "Codex Review &amp; Admin App Notifications",
+  "Codex Prepared Job Cards",
+  "Ready for Admin Review",
+  "No Codex-prepared job cards waiting for admin review.",
+  'data-codex-prepared-job-cards="true"',
+  'data-codex-prepared-job-card-list="true"',
+  "max-h-[28rem] space-y-2 overflow-y-auto",
+  "Calendar changes still require admin action in Dispatch.",
   "onClick={() => loadSelectedBooking(requestBooking, { focusJobCard: true })}",
   "dispatchLoadFocusTarget",
   "scrollIntoView({ behavior: \"smooth\", block: \"start\" })",
   "Driver Job Link is ready for admin action.",
-  "{customerBookingRequestsPanel}",
+  "{codexPreparedJobCardsPanel}",
 ]) {
   assertIncludes(appPage, customerRequestFragment, `Customer request auto-load fragment ${customerRequestFragment}`);
 }
+assert.equal(
+  appPage.match(/data-codex-prepared-job-cards="true"/g)?.length,
+  1,
+  "Expected one established Codex prepared-job-card queue",
+);
+assert.equal(
+  appPage.indexOf("{codexPreparedJobCardsPanel}") > appPage.indexOf('aria-label="Admin App Notifications"'),
+  true,
+  "Expected the prepared-job-card queue inside the established admin notification section",
+);
 assertIncludes(
   appPage,
   '"customerCopy" | "driverJobLink" | "jobCard" | null',

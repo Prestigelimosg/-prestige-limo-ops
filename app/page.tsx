@@ -23252,9 +23252,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     });
   }
 
-  const customerBookingRequestsPanel = customerBookingRequestDisplayItems.length > 0 ? (
+  const codexPreparedJobCardsPanel = (
     <div
-      className={`mt-4 rounded-md border border-emerald-200 bg-emerald-50/60 p-3 ${
+      className={`mt-3 rounded-md border border-emerald-200 bg-emerald-50/60 p-3 ${
         adminAlertLocatorHighlight?.target === "new-booking-requests"
           ? "animate-pulse shadow-[0_0_0_3px_rgba(16,185,129,0.35)]"
           : ""
@@ -23262,14 +23262,16 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       data-admin-alert-locator-highlight={
         adminAlertLocatorHighlight?.target === "new-booking-requests" ? "true" : undefined
       }
+      data-codex-prepared-job-cards="true"
       data-new-customer-booking-requests-panel="true"
     >
       <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-emerald-950">Urgent &amp; New Booking Requests</h3>
+          <h4 className="text-sm font-semibold text-emerald-950">Codex Prepared Job Cards</h4>
           <p className="text-xs text-emerald-800">
-            Requests outside the 1-hour dispatch window stay here until admin loads them.
+            Prepared from exact saved requests. Admin reviews every card before calendar action.
           </p>
+          <p className="text-xs text-emerald-800">Calendar changes still require admin action in Dispatch.</p>
         </div>
         <div className="flex flex-wrap gap-1.5">
           <span
@@ -23279,12 +23281,15 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             {urgentCustomerBookingRequestCount} urgent
           </span>
           <span className="inline-flex w-fit rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-emerald-900 ring-1 ring-emerald-200">
-            {customerBookingRequestDisplayItems.length} open
+            {customerBookingRequestDisplayItems.length} Ready for Admin Review
           </span>
         </div>
       </div>
-      <div className="mt-3 space-y-2">
-        {customerBookingRequestDisplayItems.map(({ bookingRecord: requestBooking, operationalCard }) => {
+      <div
+        className="mt-3 max-h-[28rem] space-y-2 overflow-y-auto pr-1"
+        data-codex-prepared-job-card-list="true"
+      >
+        {customerBookingRequestDisplayItems.length > 0 ? customerBookingRequestDisplayItems.map(({ bookingRecord: requestBooking, operationalCard }) => {
           const routePoints = getRoutePoints(requestBooking);
           const pickup = operationalCard.pickup_address || routePoints[0] || "Pickup";
           const dropoff =
@@ -23318,6 +23323,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               key={`customer-request-${bookingId}`}
             >
               <div className="min-w-0">
+                <span className="mb-1 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-900 ring-1 ring-emerald-200">
+                  Ready for Admin Review
+                </span>
                 <p className="truncate font-semibold text-slate-950">
                   {getLoadBookingsOperationalRequestDisplayTitle(operationalCard, requestBooking)}
                 </p>
@@ -23367,10 +23375,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               </div>
             </article>
           );
-        })}
+        }) : (
+          <p className="rounded-md border border-emerald-100 bg-white px-3 py-3 text-sm text-slate-600">
+            No Codex-prepared job cards waiting for admin review.
+          </p>
+        )}
       </div>
     </div>
-  ) : null;
+  );
 
   const bookingsFindToolbar = (
     <div className="mt-3 rounded-md border border-stone-200 bg-stone-50 p-3" data-bookings-find-toolbar="true">
@@ -43547,8 +43559,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             )}
           </section>
 
-          {customerBookingRequestsPanel}
-
           <section
             aria-label="Admin App Notifications"
             className="mb-4 rounded-md border border-sky-200 bg-sky-50/70 p-2"
@@ -43561,7 +43571,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           >
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
-                <h3 className="text-base font-semibold text-slate-950">Admin App Notifications</h3>
+                <h3 className="text-base font-semibold text-slate-950">Codex Review &amp; Admin App Notifications</h3>
                 <p className="hidden text-xs text-slate-600 sm:block sm:text-sm">
                   Internal admin inbox only. External messages are not sent from here.
                 </p>
@@ -43592,6 +43602,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 </button>
               </div>
             </div>
+
+            {codexPreparedJobCardsPanel}
 
             <div
               className="mt-2 rounded-md border border-sky-100 bg-white p-2"

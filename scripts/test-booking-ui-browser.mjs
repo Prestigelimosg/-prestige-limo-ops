@@ -7435,10 +7435,10 @@ async function runChromeTest() {
       };
     })()`);
 
-    await clickTab("Dashboard", "Refresh Loaded Bookings");
+    await clickTab("Dashboard", "Refresh Dashboard");
     const clickedTypedReadReadyFixtureRefresh = await evaluate(`(() => {
       const button = [...document.querySelectorAll("button")].find(
-        (candidate) => candidate.textContent.trim() === "Refresh Loaded Bookings",
+        (candidate) => candidate.textContent.trim() === "Refresh Dashboard",
       );
 
       if (!button || button.disabled) {
@@ -7907,7 +7907,7 @@ async function runChromeTest() {
     })()`);
     const refreshedCodexPreparedQueue = await evaluate(`(() => {
       const button = [...document.querySelectorAll("button")].find(
-        (candidate) => candidate.textContent.trim() === "Refresh Loaded Bookings",
+        (candidate) => candidate.textContent.trim() === "Refresh Dashboard",
       );
 
       if (!button || button.disabled) {
@@ -8316,7 +8316,7 @@ async function runChromeTest() {
         (booking) => !references.includes(String(booking.booking_reference || booking.id)),
       );
       const button = [...document.querySelectorAll("button")].find(
-        (candidate) => candidate.textContent.trim() === "Refresh Loaded Bookings",
+        (candidate) => candidate.textContent.trim() === "Refresh Dashboard",
       );
       button?.click();
     })()`);
@@ -10484,7 +10484,7 @@ async function runChromeTest() {
     })()`);
     const clickedMissingIdFixtureRefresh = await evaluate(`(() => {
       const button = [...document.querySelectorAll("button")].find(
-        (candidate) => candidate.textContent.trim() === "Refresh Loaded Bookings",
+        (candidate) => candidate.textContent.trim() === "Refresh Dashboard",
       );
 
       if (!button || button.disabled) {
@@ -10494,7 +10494,7 @@ async function runChromeTest() {
       button.click();
       return true;
     })()`);
-    assert.equal(clickedMissingIdFixtureRefresh, true, "Expected Refresh Loaded Bookings to be clickable for missing-id fixture injection");
+    assert.equal(clickedMissingIdFixtureRefresh, true, "Expected Refresh Dashboard to be clickable for missing-id fixture injection");
     await waitForCondition(
       () =>
         evaluate(`(() => {
@@ -10642,7 +10642,7 @@ async function runChromeTest() {
     })()`);
     const clickedMissingIdFixtureCleanup = await evaluate(`(() => {
       const button = [...document.querySelectorAll("button")].find(
-        (candidate) => candidate.textContent.trim() === "Refresh Loaded Bookings",
+        (candidate) => candidate.textContent.trim() === "Refresh Dashboard",
       );
 
       if (!button || button.disabled) {
@@ -10652,7 +10652,7 @@ async function runChromeTest() {
       button.click();
       return true;
     })()`);
-    assert.equal(clickedMissingIdFixtureCleanup, true, "Expected Refresh Loaded Bookings to be clickable for missing-id fixture cleanup");
+    assert.equal(clickedMissingIdFixtureCleanup, true, "Expected Refresh Dashboard to be clickable for missing-id fixture cleanup");
     await waitForCondition(
       () =>
         evaluate(`(() => {
@@ -13623,10 +13623,10 @@ async function runChromeTest() {
       window.__prestigeDriverDeleteConfirmMessages = [];
     })()`);
 
-    await clickTab("Dashboard", "Refresh Loaded Bookings");
+    await clickTab("Dashboard", "Refresh Dashboard");
     const clickedDashboardBookingRefreshForDriverDelete = await evaluate(`(() => {
       const refreshButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Refresh Loaded Bookings",
+        (button) => button.textContent.trim() === "Refresh Dashboard",
       );
 
       if (!refreshButton || refreshButton.disabled) {
@@ -21716,10 +21716,10 @@ async function runChromeTest() {
       };
     })()`);
 
-    await clickTab("Dashboard", "Refresh Loaded Bookings");
+    await clickTab("Dashboard", "Refresh Dashboard");
     const clickedEmptyStateDashboardRefresh = await evaluate(`(() => {
       const button = [...document.querySelectorAll("button")].find(
-        (candidate) => candidate.textContent.trim() === "Refresh Loaded Bookings",
+        (candidate) => candidate.textContent.trim() === "Refresh Dashboard",
       );
 
       if (!button || button.disabled) {
@@ -21828,10 +21828,10 @@ async function runChromeTest() {
       "Expected a closed typed-read gate not to repeat during silent three-second booking sync",
     );
 
-    await clickTab("Dashboard", "Refresh Loaded Bookings");
+    await clickTab("Dashboard", "Refresh Dashboard");
     const clickedTerminalTypedReadManualRetry = await evaluate(`(() => {
       const button = [...document.querySelectorAll("button")].find(
-        (candidate) => candidate.textContent.trim() === "Refresh Loaded Bookings",
+        (candidate) => candidate.textContent.trim() === "Refresh Dashboard",
       );
 
       if (!button || button.disabled) {
@@ -21844,7 +21844,7 @@ async function runChromeTest() {
     assert.equal(
       clickedTerminalTypedReadManualRetry,
       true,
-      "Expected manual Refresh Loaded Bookings to remain available after terminal typed-read suspension",
+      "Expected manual Refresh Dashboard to remain available after terminal typed-read suspension",
     );
     await waitForCondition(
       () =>

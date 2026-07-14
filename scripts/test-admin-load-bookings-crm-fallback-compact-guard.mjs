@@ -231,11 +231,7 @@ assertExcludes(
   'selectAppTab("bookings");',
   "Dashboard request handoff stale Bookings target",
 );
-assertIncludes(
-  appPage,
-  "onClick={() => openCustomerBookingRequestsReview()}",
-  "Dashboard review button calls request handoff helper",
-);
+assertIncludes(appPage, "newBookingRequestNotifications.map", "Dashboard renders new requests in combined queue");
 assertIncludes(
   appPage,
   'scrollToAdminAlertLocatorTarget("new-booking-requests")',
@@ -275,8 +271,13 @@ assertIncludes(appPage, 'data-bookings-new-request-badge="true"', "Dashboard act
 assertIncludes(appPage, "const customerBookingRequestCount = bookingTabCustomerBookingRequestBookings.length;", "Dashboard action badge count");
 assertIncludes(
   appPage,
-  "const newBookingRequestNotificationCount = adminAppNotificationReadState.notifications.filter(",
+  "const newBookingRequestNotifications = adminAppNotificationReadState.notifications.filter(",
   "Dashboard action badge queued new booking notification source",
+);
+assertIncludes(
+  appPage,
+  "const newBookingRequestNotificationCount = newBookingRequestNotifications.length;",
+  "Dashboard action badge queued new booking notification count",
 );
 assertIncludes(
   appPage,
@@ -321,13 +322,13 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  'markAdminAlertLocatorHighlight("admin-app-notification", changeRequestNotificationId);',
-  "Dashboard action badge highlights exact admin notification row",
+  'markAdminAlertLocatorHighlight("urgent-booking-requests");',
+  "Dashboard action badge highlights combined booking request sector",
 );
 assertIncludes(
   appPage,
-  'scrollToAdminAlertLocatorTarget("admin-app-notification", changeRequestNotificationId);',
-  "Dashboard action badge scrolls to exact admin notification row",
+  'scrollToAdminAlertLocatorTarget("urgent-booking-requests");',
+  "Dashboard action badge scrolls to combined booking request sector",
 );
 assertIncludes(
   appPage,
@@ -347,18 +348,13 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
+  "if (scrollToSelector('[data-dashboard-new-booking-requests-panel=\"true\"]'))",
+  "Dashboard request review scrolls combined request panel first",
+);
+assertIncludes(
+  appPage,
   "if (scrollToSelector('[data-new-customer-booking-requests-panel=\"true\"]'))",
-  "Dashboard request review scrolls exact request panel first",
-);
-assertIncludes(
-  appPage,
-  "if (scrollToSelector('[data-dashboard-admin-action-summary=\"true\"]'))",
-  "Dashboard request review falls back to Admin Action Center",
-);
-assertIncludes(
-  appPage,
-  'markAdminAlertLocatorHighlight("admin-action-summary");',
-  "Dashboard request review fallback highlights Admin Action Center",
+  "Dashboard request review retains prepared-card fallback",
 );
 assertIncludes(
   appPage,
@@ -390,23 +386,13 @@ assertExcludes(appPage, "Jump to request", "New booking notification row old jum
 assertExcludes(appPage, "Review request", "New booking notification row old review label");
 assertIncludes(
   appPage,
-  'openNewBookingRequestNotificationReview(\n                                newBookingRequestCanOpenExact ? newBookingRequestReference : "",',
+  'openNewBookingRequestNotificationReview(canOpenExact ? bookingReference : "")',
   "New booking notification review action opens matching booking when possible",
 );
 assertIncludes(
   appPage,
-  "newBookingRequestPickupDateLabel",
-  "New booking notification row derives booking date label",
-);
-assertIncludes(
-  appPage,
-  "? `${newBookingRequestPickupDateLabel} - Review in Dashboard.`",
-  "New booking notification row prefixes Dashboard review wording with booking date",
-);
-assertIncludes(
-  appPage,
-  ': "Review in Dashboard."',
-  "New booking notification row keeps Dashboard review fallback wording",
+  "displayRecord ? formatBookingPickupDateTimeSgt(displayRecord)",
+  "New booking notification row renders pickup in SGT",
 );
 assertExcludes(appPage, "Open Bookings to review.", "Admin notification row stale Bookings wording");
 assertIncludes(
@@ -415,7 +401,7 @@ assertIncludes(
   "Dashboard action badge locates urgent under-one-hour dashboard panel",
 );
 assertIncludes(appPage, "animate-pulse rounded-full", "Dashboard tab alert badge pulse");
-assertIncludes(appPage, 'data-dashboard-admin-action-summary="true"', "Dashboard action summary target");
+assertExcludes(appPage, 'data-dashboard-admin-action-summary="true"', "Repeated Dashboard action summary removed");
 assertExcludes(
   sliceBetween(appPage, '{activeTab === "bookings" ? (', '{activeTab === "completed" ? ('),
   "{customerBookingRequestsPanel}",
@@ -437,7 +423,6 @@ for (const customerRequestFragment of [
   "dashboardUrgentBookingRequestDisplayItems",
   "data-dashboard-urgent-booking-requests-panel",
   "data-dashboard-new-booking-requests-panel",
-  "data-dashboard-review-new-booking-requests",
   "data-dashboard-new-booking-request-row",
   "data-new-customer-booking-requests-panel",
   "data-new-customer-booking-request-row",
@@ -810,13 +795,13 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  'aria-label="Urgent and Customer Requests"',
+  'aria-label="Booking Requests"',
   "Dashboard urgent booking panel label",
 );
 assertIncludes(
   appPage,
-  "Open urgent bookings in Driver Job Link, or review customer change/cancel requests.",
-  "Dashboard urgent booking workflow copy points to Driver Job Link",
+  "New, urgent, Driver TBC, amendment, and cancellation work in one place.",
+  "Dashboard combined booking workflow explains its job types",
 );
 assertIncludes(
   appPage,

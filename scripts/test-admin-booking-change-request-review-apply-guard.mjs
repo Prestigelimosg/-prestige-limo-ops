@@ -132,7 +132,8 @@ for (const fragment of [
   "Boolean(activeNotificationAction)",
   "Boolean(activeChangeRequestAction)",
   "!changeRequestContext",
-  'data-admin-app-notification-action={action.status}',
+  'data-admin-app-notification-action="read"',
+  'activeNotificationAction === "read" ? "Saving..." : "Done"',
 ]) {
   assertIncludes(adminPage, fragment, `admin amendment local UI movement ${fragment}`);
 }

@@ -83,8 +83,8 @@ for (const fragment of [
 
 for (const fragment of [
   'data-admin-app-notification-feed-state="true"',
-  '"Inbox queued"',
-  '"Clear"',
+  '`${otherAdminAppNotifications.length} other`',
+  '"Ready"',
 ]) {
   assertIncludes(dashboardSource, fragment, `admin notification feed state fragment ${fragment}`);
 }

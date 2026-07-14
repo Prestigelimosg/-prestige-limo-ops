@@ -93,12 +93,12 @@ const dashboardCommandCentrePanel = sliceBetween(
 );
 const dashboardUrgentPanel = sliceBetween(
   appPage,
-  'aria-label="Urgent and Customer Requests"',
+  'aria-label="Booking Requests"',
   "{codexPreparedJobCardsPanel}",
 );
 const ledgerSection = sliceBetween(
   ledger,
-  "### Dashboard Urgent Requests And One-Window Active Monitor",
+  "### Dashboard Booking Requests And One-Window Active Monitor",
   "\n### ",
 );
 
@@ -184,19 +184,19 @@ for (const fragment of [
 }
 
 for (const fragment of [
-  "Urgent / Customer Requests",
+  "Booking Requests",
+  "newBookingRequestNotifications.map",
+  'data-dashboard-new-booking-request-notification-row={bookingReference || notificationId}',
+  'data-dashboard-new-booking-notification-count={String(newBookingRequestNotificationCount)}',
+  'data-admin-app-notification-review-new-booking-request="true"',
+  'openNewBookingRequestNotificationReview(canOpenExact ? bookingReference : "")',
+  'data-admin-app-notification-action="read"',
+  '"Done"',
   'data-dashboard-urgent-booking-requests-panel="true"',
   'data-dashboard-urgent-booking-requests-count={String(dashboardUrgentBookingRequestCount)}',
   'data-dashboard-change-cancel-requests-count={String(customerBookingChangeRequestCount)}',
-  "Open urgent bookings in Driver Job Link, or review customer change/cancel requests.",
-  'data-dashboard-open-urgent-driver-job-link="true"',
-  "disabled={dashboardUrgentBookingRequestCount === 0}",
-  "const firstBooking = dashboardUrgentBookingRequestDisplayItems[0]?.bookingRecord;",
-  "loadSelectedBooking(firstBooking, { focusDriverJobLink: true })",
-  'data-dashboard-review-new-booking-requests="true"',
-  "disabled={customerBookingRequestDisplayItems.length === 0}",
-  "onClick={() => openCustomerBookingRequestsReview()}",
-  "dashboardUrgentBookingRequestDisplayItems.map",
+  "New, urgent, Driver TBC, amendment, and cancellation work in one place.",
+  "standaloneUrgentBookingRequestDisplayItems.map",
   'data-dashboard-urgent-booking-request-kind=',
   '"customer-request"',
   '"driver-tbc"',
@@ -204,7 +204,8 @@ for (const fragment of [
   "const passengerText = getLoadBookingsOperationalPassengerDisplay(operationalCard, bookingRecord);",
   "{getLoadBookingsOperationalRequestDisplayTitle(operationalCard, bookingRecord)}",
   "Passenger: {passengerText}",
-  "Needs driver link |",
+  '"New / Urgent"',
+  '"Driver TBC"',
   "loadSelectedBooking(bookingRecord, { focusDriverJobLink: true })",
   "customerBookingChangeRequestNotifications.map",
   "adminAppNotificationChangeRequestContext(notification)",
@@ -215,7 +216,7 @@ for (const fragment of [
   'handleAdminBookingChangeRequestCloseDecision(notification, "reject")',
   'data-dashboard-change-cancel-request-action="dismiss"',
   'handleAdminBookingChangeRequestCloseDecision(notification, "dismiss")',
-  "No urgent or customer change/cancel requests.",
+  "No new, urgent, amendment, or cancellation requests.",
 ]) {
   assertIncludes(dashboardUrgentPanel, fragment, `dashboard urgent panel fragment ${fragment}`);
 }
@@ -225,8 +226,7 @@ for (const fragment of [
   'data-admin-app-notification-feed="true"',
   'data-dashboard-codex-system-notices="true"',
   'data-status-panel="global"',
-  'data-dashboard-admin-action-summary="true"',
-  'aria-label="Urgent and Customer Requests"',
+  'aria-label="Booking Requests"',
   "{codexPreparedJobCardsPanel}",
   'data-admin-device-push-panel="true"',
 ]) {
@@ -237,12 +237,16 @@ assertSourceOrder(
   [
     'data-admin-app-notification-feed="true"',
     'data-dashboard-codex-system-notices="true"',
-    'data-dashboard-admin-action-summary="true"',
-    'aria-label="Urgent and Customer Requests"',
+    'aria-label="Booking Requests"',
     "{codexPreparedJobCardsPanel}",
     'data-admin-device-push-panel="true"',
   ],
   "single Codex workbench order",
+);
+assertExcludes(
+  dashboardCommandCentrePanel,
+  'data-dashboard-admin-action-summary="true"',
+  "single Codex workbench removes repeated Admin Action summary",
 );
 assertExcludes(
   dashboardCommandCentrePanel,
@@ -302,7 +306,7 @@ assertSourceOrder(
   dashboardCommandCentrePanel,
   [
     'aria-label="Codex Review and Admin App Notifications"',
-    'aria-label="Urgent and Customer Requests"',
+    'aria-label="Booking Requests"',
   ],
   "dashboard command centre order",
 );
@@ -465,11 +469,13 @@ for (const forbiddenPattern of [
 }
 
 for (const phrase of [
-  "Dashboard request panel is `Urgent / Customer Requests` inside the single `Codex Review & Admin App Notifications` workbench and displays open customer requests, saved Driver TBC jobs inside the 1-hour pickup monitor window, and customer change/cancel requests using the existing guarded notification handlers.",
-  "Dashboard `Open Urgent` and urgent rows load the selected urgent booking into Dispatch with the existing Driver Job Link panel focused, a visible booking handoff notice, and keyboard focus on `Create Link` so admin can create and copy the driver link before a driver is assigned.",
+  "Dashboard has one `Booking Requests` sector inside the single `Codex Review & Admin App Notifications` workbench.",
+  "A booking represented by both a new-request notification and the urgent monitor is rendered once as `New / Urgent`; the generic notification list excludes new and change/cancel rows so the same work is not duplicated.",
+  "The repeated `Admin actions` summary and sector-level `Open Urgent`/`Review` buttons are removed.",
+  "The header has one `Refresh Dashboard` action that reuses the existing booking-load and saved-notification refresh triggers.",
+  "Generic admin notification cleanup uses one `Done` action (the existing safe `read` status update), and Device Push Alerts uses one ON/OFF switch backed by the existing enable/disable handlers.",
   "Clearing a loaded Dispatch booking now clears its Driver Job Link handoff reference, and a successful new `Save + CRM` replaces it with the newly saved booking reference before focusing the existing Driver Job Link panel; stale prior-booking notices must not survive the save.",
-  "Dashboard keeps one secondary `Review` action that remains on Dashboard and focuses the existing `Codex Prepared Job Cards` queue rendered inside `Codex Review & Admin App Notifications`. The shared alert-menu and notification fallbacks use the same helper, so they do not switch to Bookings or search for a retired panel; no duplicate request lane or helper is added, and the Driver Job Link urgent handoff remains unchanged.",
-  "Dashboard `Review` is enabled only when that existing request queue contains a real reviewable row; a stale notification without an exact saved request remains disabled as `Missing request` and cannot enable a dead review handoff.",
+  "New booking notification rows keep one exact `Open request` action.",
   "The Dashboard `Codex Prepared Job Cards` panel remains the queue for open customer requests outside the 1-hour dispatch window, with row badges separating under-24h-but-not-dispatch-window requests from new non-urgent requests; Bookings remains for saved booking search/load/list work.",
   "Unhandled customer requests are hidden from Current / Upcoming until admin loads them from the Dashboard Codex queue, preventing duplicate cards while preserving the existing post-review booking list.",
   "The isolated Preview preflight found this focused guard still slicing the retired `customerBookingRequestsPanel`; the guard now targets the single established `codexPreparedJobCardsPanel` and protects its current review handoff and privacy boundary instead of failing before those assertions.",

@@ -1,13 +1,13 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-5c0f6392 Automate monthly invoice draft preparation
+fb7d10ce Tolerate unsafe optional booking identity labels
 
 Latest pushed main/staging runtime checkpoint:
 5c0f6392 Automate monthly invoice draft preparation
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-4a318f14 Record combined automation Preview evidence
+e81d4b52 Repair ledger runtime checkpoint guards
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.

@@ -21587,22 +21587,22 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
       const updatedBooking = result.booking as AdminBookingPersistenceRecord;
       const updatedBookingReference = clean(updatedBooking.booking_reference) || targetBookingReference;
+      const updateReviewNotice =
+        updatedBooking.short_notice_review_status === "Admin Review Required"
+          ? " Admin Review Required."
+          : "";
       markAdminBookingAsActiveForUpdates(updatedBookingReference, updatedBooking);
       setAdminBookingPersistenceMessage({
         tone: "info",
-        text: `Operational booking updated: ${updatedBookingReference}${
-          updatedBooking.short_notice_review_status === "Admin Review Required"
-            ? ". Admin Review Required."
-            : "."
-        } Syncing Google Calendar...`,
+        text: `Operational booking updated: ${updatedBookingReference}.${updateReviewNotice} Syncing Google Calendar...`,
       });
       const calendarSyncResult = await autoSyncSavedBookingGoogleCalendar(updatedBooking);
 
       const updateMessage = {
         tone: calendarSyncResult.ok ? "success" : "error",
         text: calendarSyncResult.ok
-          ? `Operational booking updated: ${updatedBookingReference}. Google Calendar auto-synced; reminders included; no guest email sent.`
-          : `Operational booking updated: ${updatedBookingReference}. ${calendarSyncResult.message}`,
+          ? `Operational booking updated: ${updatedBookingReference}.${updateReviewNotice} Google Calendar auto-synced; reminders included; no guest email sent.`
+          : `Operational booking updated: ${updatedBookingReference}.${updateReviewNotice} ${calendarSyncResult.message}`,
       } satisfies Message;
 
       setAdminBookingPersistenceMessage(updateMessage);

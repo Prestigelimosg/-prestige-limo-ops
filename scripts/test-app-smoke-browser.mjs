@@ -1187,6 +1187,7 @@ async function runChromeTest() {
       );
       await evaluate(`(() => {
         window.__adminBookingPersistenceCalls = [];
+        window.__adminBookingCalendarSyncCalls = [];
         window.__adminBookingPersistenceMockMode = "success";
         window.__adminMonthlyBillingGroupingCalls = [];
         window.__adminMonthlyBillingGroupingGroups = [
@@ -1817,6 +1818,29 @@ async function runChromeTest() {
                 { headers: { "Content-Type": "application/json" }, status: 200 },
               );
             }
+          }
+
+          if (String(url).includes("/api/admin-booking-calendar-google-sync")) {
+            const body = options?.body ? JSON.parse(String(options.body)) : {};
+            window.__adminBookingCalendarSyncCalls.push({ body, method, url: String(url) });
+
+            return new Response(
+              JSON.stringify({
+                ok: true,
+                sync: {
+                  calendar_provider: "google_calendar",
+                  connection_mode: "live_provider_sync",
+                  event_count: body?.bookings?.length || 1,
+                  events_synced: body?.bookings?.length || 1,
+                  live_calendar_provider: "google_calendar",
+                  live_calendar_write_performed: true,
+                  notification_delivery: "calendar_native_reminders_only",
+                  provider_connection: "connected",
+                  send_updates: "none",
+                },
+              }),
+              { headers: { "Content-Type": "application/json" }, status: 200 },
+            );
           }
 
           if (String(url).includes("/api/admin-bookings")) {
@@ -3328,13 +3352,18 @@ async function runChromeTest() {
               .querySelector("[data-admin-booking-persistence-applied-reference]")
               ?.textContent.trim() || "";
             const calls = window.__adminBookingPersistenceCalls || [];
+            const calendarSyncCalls = window.__adminBookingCalendarSyncCalls || [];
             const matchingPatchCalls = calls.filter(
               (call) => call.method === "PATCH" && call.body?.booking?.pickup_location === "Updated Ops Pickup",
             );
             const patchCall = [...matchingPatchCalls].reverse()[0];
             const body = patchCall?.body;
 
-            if (!feedback.includes("Operational booking updated: LOADED-OPS-001") || !body) {
+            if (
+              !feedback.includes("Operational booking updated: LOADED-OPS-001") ||
+              !feedback.includes("Google Calendar auto-synced") ||
+              !body
+            ) {
               return false;
             }
 
@@ -3359,6 +3388,7 @@ async function runChromeTest() {
             return {
               appliedReference,
               body,
+              calendarSyncCalls,
               feedback,
               forbiddenKeys: keys.filter((key) => forbiddenKeyPattern.test(key)),
               matchingPatchCalls: matchingPatchCalls.length,
@@ -3386,6 +3416,11 @@ async function runChromeTest() {
       assert.equal(updateState.body.booking.admin_internal_status, "Admin Review Required");
       assert.equal(updateState.body.booking.request_review_status, "pending_review");
       assert.equal(updateState.body.booking.short_notice_review_status, "Admin Review Required");
+      assert.equal(
+        updateState.calendarSyncCalls.filter((call) => call.method === "POST").length,
+        2,
+        "Expected the save and update scenarios to use only the two in-memory Google Calendar sync mocks",
+      );
       assert.deepEqual(
         updateState.body.route_points.map((routePoint) => routePoint.location_text),
         ["Updated Ops Pickup", "Updated Ops Stop", "Updated Ops Dropoff"],

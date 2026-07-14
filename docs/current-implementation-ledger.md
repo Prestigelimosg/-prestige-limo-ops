@@ -44,6 +44,14 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This external configuration record does not approve a Git push, Vercel deploy, further Preview env edit/copy, Production deployment, provider-key rotation, domain reassignment, provider activation, DB write, calendar/invoice automation, or customer/driver send.
 - Focused lock: the existing `scripts/test-staging-deployment-approval-packet-guard.mjs` and updated `docs/staging-deployment-approval-packet.md`; no duplicate deployment lane or guard was added.
 
+### Admin Booking Review Warning Persistence Repair
+
+- The approved isolated Preview pre-deployment browser pass reproduced a visible admin feedback defect before any deployment: updating an applied customer-request snapshot correctly preserved `Admin Review Required` in the PATCH response, but the later Google Calendar result replaced the visible feedback without that warning.
+- The established update lane now carries the same review warning through its syncing, successful-calendar, and failed-calendar feedback. No booking field, review decision, calendar request, route, panel, button, or persistence write path was added or changed.
+- The existing broad browser guard now supplies an in-memory Google Calendar success response and waits for that terminal result before asserting the review warning. This removes the prior timing race, protects the operator-visible final state rather than the transient syncing state, and performs no provider call or calendar write.
+- This repair does not activate Automation, send a message or email, write live data, change an environment, add Preview credentials, push Git, or deploy Production.
+- Focused runtime lock: the updated `scripts/test-app-smoke-browser.mjs` applied-snapshot update scenario.
+
 ### Customer Folder Four-Sector Invoice Workflow
 
 - The established customer selection continues to open the existing `/customers/[customerId]` company profile. The top profile retains the existing admin-only invoice-prefix settings, followed by the existing stored invoice totals and invoice list.

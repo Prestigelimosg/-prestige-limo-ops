@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-565993b4 Add Codex saved-job conflict checks
+5c0f6392 Automate monthly invoice draft preparation
 
 Latest pushed main/staging runtime checkpoint:
 f7e253b3 Repair mobile automation regression coverage

@@ -46,7 +46,11 @@ assertIncludes("activate any live feature", "no-live-feature boundary");
 const checkpointsSection = sectionBetween("## Checkpoints");
 assertSectionIncludes(
   checkpointsSection,
-  "Latest repo commit deployed to isolated Preview: `4cf1dc60 Record verified repository Git identity`.",
+  "Latest repo commit deployed to isolated Preview: `b09b82f8 Update monthly invoice automation checkpoint`.",
+);
+assertSectionIncludes(
+  checkpointsSection,
+  "Latest verified runtime checkpoint in the ledger: `5c0f6392 Automate monthly invoice draft preparation`.",
 );
 assert.match(
   checkpointsSection,
@@ -86,6 +90,7 @@ for (const fragment of [
   "Calendar conflict Preview approval: Owner explicitly approved proceeding with the suggested next safe step on 2026-07-14",
   "Repository Git identity repair approval: Owner explicitly approved proceeding with the next safe step on 2026-07-14",
   "Verified-author source Preview approval: Owner explicitly approved proceeding with the next safe step on 2026-07-14",
+  "Combined automation Preview approval: Owner explicitly approved proceeding with the suggested next safe step on 2026-07-14",
 ]) {
   assertSectionIncludes(approvalSection, fragment, `Approval scope missing ${fragment}`);
 }
@@ -299,6 +304,15 @@ for (const fragment of [
   "The initial unsupported tab-open call, incorrect button-role selector, unavailable page `resizeTo`, unavailable page `fetch`, and unavailable tab-marking call",
   "A new deployed mobile/foldable pass is not claimed",
   "Production remained unchanged: `app.prestigelimo.sg` still resolves to READY Production deployment `dpl_7ksuhQENRPiWNACbEM4Y6dGf6ayR`",
+  "READY Preview deployment `dpl_Gu3ZYFz8og7R5ixzmMNQv9Dg3Xke`",
+  "exact page build marker `b09b82f8a538cd6570b51501467167860e825bdf`",
+  "`/api/cron/codex-monthly-invoice-drafts` returned HTTP 401",
+  "94 GET and 6 OPTIONS requests",
+  "zero POST/PATCH/PUT/DELETE requests",
+  "normal 1021 x 931 desktop viewport, iPhone 13 floor 390 x 844, modern Android 412 x 915, and unfolded foldable 841 x 701",
+  "The existing `/customers` invoice overview was also reviewed without clicking `Load Accounts`",
+  "final bypass-token count is zero",
+  "Production was re-read after Preview acceptance and still serves exact build marker `f7e253b3920252834dbef6a3143f6e744d2ab303`",
 ]) {
   assert.equal(
     ledger.includes(fragment),

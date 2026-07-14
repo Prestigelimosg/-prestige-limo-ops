@@ -9,7 +9,7 @@ const helperPath = "lib/admin-automation-runtime-control.ts";
 const routePath = "app/api/admin-automation-runtime/route.ts";
 const pagePath = "app/page.tsx";
 const migrationPath =
-  "supabase/migrations/20260714015946_admin_automation_runtime_settings.sql";
+  "supabase/migrations/20260714022319_admin_automation_runtime_settings.sql";
 const ledgerPath = "docs/current-implementation-ledger.md";
 const suitePath = "scripts/test-preactivation-verification-suite.mjs";
 const browserPath = "scripts/test-booking-ui-browser.mjs";
@@ -192,6 +192,8 @@ for (const phrase of [
   "The switch persists one singleton server-side setting in `admin_automation_runtime_settings`, defaults closed, and is readable/writable only through the existing verified same-origin admin/dispatcher boundary and service-role-only table access.",
   "Turning Automation OFF never blocks customer booking intake, deletes queued reviews, changes a booking/calendar, issues an invoice, sends customer/driver Email, or removes manual admin actions.",
   "This first pass is control-only: calendar conflict checks, job-card queueing, scheduled monthly invoice preparation, and automatic Driver Details Email remain disabled until their later separately guarded passes.",
+  "Remote migration `20260714022319_admin_automation_runtime_settings` is applied to the configured `prestige-limo-ops` Supabase project.",
+  "The singleton was tested as the `service_role` from ON back to OFF inside one database transaction, so no other session could observe the temporary ON state; the committed row remains exactly one `closed / false` record.",
 ]) {
   assertIncludes(ledger, phrase, `automation ledger ${phrase}`);
 }

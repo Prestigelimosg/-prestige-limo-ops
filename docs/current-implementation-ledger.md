@@ -4,10 +4,10 @@ Latest verified clean runtime checkpoint:
 5c0f6392 Automate monthly invoice draft preparation
 
 Latest pushed main/staging runtime checkpoint:
-f7e253b3 Repair mobile automation regression coverage
+5c0f6392 Automate monthly invoice draft preparation
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-f7e253b3 Repair mobile automation regression coverage
+4a318f14 Record combined automation Preview evidence
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -4063,8 +4063,9 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Checkpoint state must be recorded by commit hash and task name, not counters.
 - The top latest verified clean runtime checkpoint may be ahead of the latest pushed main/staging runtime checkpoint while tested application commits remain local; each line must record its own actual commit hash and task name.
 - The verified local checkpoint is checked against the newest `HEAD` commit touching the established application, server, database, or runtime-configuration paths, so a newer local runtime change cannot remain hidden behind an older checkpoint.
-- The latest pushed main/staging runtime checkpoint is checked against the local `origin/staging` tracking ref, and the guard fails instead of accepting one hard-coded historical checkpoint.
-- The top latest remote main/staging deployment checkpoint must remain recorded as the most recent verified deployed reference by commit hash and task name; it can differ from the runtime checkpoint when docs-only or non-deployed commits exist.
+- The latest pushed main/staging runtime checkpoint is checked against the newest runtime commit reachable from the local `origin/staging` tracking ref, and the guard fails instead of treating a later docs-only commit as a runtime checkpoint or accepting one hard-coded historical checkpoint.
+- The top latest remote main/staging deployment checkpoint must remain recorded as the most recent verified deployed reference by exact commit hash and task name; its newest reachable runtime commit must not be ahead of the pushed runtime checkpoint, and the exact deployed reference must be reachable from `origin/staging`.
+- The protected combined-automation Preview pushed docs-only evidence commit `4a318f14 Record combined automation Preview evidence` after runtime commit `5c0f6392 Automate monthly invoice draft preparation`; the guard now validates those separate facts without forcing either checkpoint to carry a false title or hash.
 - At this checkpoint repair, local verified application commit `dffad548 Keep request review on Dashboard` is ahead of pushed and deployed `f7e253b3 Repair mobile automation regression coverage`; no push or deployment is included in this docs/test-only pass.
 - No inconsistent checkpoint counters are approved.
 - This lock adds `scripts/test-ledger-checkpoint-source-of-truth-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
@@ -4100,7 +4101,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Current Implementation Ledger Alignment Suite Registration
 - The existing current implementation ledger alignment guard is repaired for the current ledger checkpoint markers and registered in `scripts/test-preactivation-verification-suite.mjs`.
 - This is docs/test-only guard hardening; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.
-- The guard verifies the top verified, pushed, and deployed checkpoints each use an exact commit hash plus task name, the verified line matches the newest local runtime-path commit, the pushed line matches the local `origin/staging` tracking ref, and the verified local checkpoint may be ahead only on the same Git history.
+- The guard verifies the top verified, pushed-runtime, and deployed checkpoints each use an exact commit hash plus task name; the verified line matches the newest local runtime-path commit, the pushed-runtime line matches the newest runtime commit reachable from `origin/staging`, and the exact deployed evidence commit remains reachable from `origin/staging` while its runtime cannot be ahead of the pushed runtime.
 - The obsolete `Latest known clean checkpoint:` marker is no longer required by this guard.
 
 ### Current Implementation Ledger Not-Live Suite Registration

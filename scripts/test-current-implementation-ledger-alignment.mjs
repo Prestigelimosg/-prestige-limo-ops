@@ -115,13 +115,21 @@ assert.ok(
 );
 
 const verifiedCommit = readLatestRuntimeCommit("HEAD", "Latest local runtime checkpoint");
-const trackedPushedCommit = readGitCommit(
+const trackedPushedRuntimeCommit = readLatestRuntimeCommit(
   "refs/remotes/origin/staging",
-  "Local origin/staging tracking ref",
+  "Latest runtime commit reachable from local origin/staging tracking ref",
+);
+const trackedStagingCommit = readGitCommit(
+  "refs/remotes/origin/staging",
+  "Exact local origin/staging tracking ref",
 );
 const deployedCommit = readGitCommit(
   remoteDeploymentCheckpoint.checkpointHash,
   "Remote deployment checkpoint",
+);
+const deployedRuntimeCommit = readLatestRuntimeCommit(
+  remoteDeploymentCheckpoint.checkpointHash,
+  "Latest runtime commit reachable from remote deployment checkpoint",
 );
 
 assertCheckpointMatchesCommit(
@@ -131,7 +139,7 @@ assertCheckpointMatchesCommit(
 );
 assertCheckpointMatchesCommit(
   pushedRuntimeCheckpoint,
-  trackedPushedCommit,
+  trackedPushedRuntimeCommit,
   "Latest pushed main/staging runtime checkpoint",
 );
 assertCheckpointMatchesCommit(
@@ -145,9 +153,14 @@ assertAncestor(
   "The pushed checkpoint must be an ancestor of the verified local checkpoint.",
 );
 assertAncestor(
-  remoteDeploymentCheckpoint.checkpointHash,
+  deployedRuntimeCommit.fullHash,
   pushedRuntimeCheckpoint.checkpointHash,
-  "The verified deployed checkpoint must not be ahead of or unrelated to the pushed checkpoint.",
+  "The runtime reachable from the verified deployed checkpoint must not be ahead of or unrelated to the pushed runtime checkpoint.",
+);
+assertAncestor(
+  remoteDeploymentCheckpoint.checkpointHash,
+  trackedStagingCommit.fullHash,
+  "The exact verified deployed checkpoint must be reachable from the local origin/staging tracking ref.",
 );
 
 console.log("current implementation ledger alignment guard passed");

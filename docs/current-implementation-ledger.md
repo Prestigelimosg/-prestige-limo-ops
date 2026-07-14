@@ -12,6 +12,16 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Admin Operational Pickup Time SGT Display Repair
+
+- The owner supplied Production evidence that the existing `Codex Prepared Job Cards` row displayed the raw server value `2026-07-18T03:00:00+00:00` instead of Singapore local time. Earlier acceptance verified queue presence, responsive containment, and Automation/conflict state but did not assert the rendered pickup-time format; that missing acceptance coverage is not represented as a completed fix.
+- A read-only database check found exactly one matching booking and confirmed the stored timestamp is correct: `2026-07-18 03:00:00+00`, equivalent to `2026-07-18 11:00` in `Asia/Singapore`. No booking or database timestamp was changed.
+- The established prepared-card, saved-booking list, and Dashboard urgent-request rows now reuse the existing `formatBookingPickupDateTimeSgt` helper instead of preferring the raw operational DTO timestamp. No second formatter, queue, list, route, API, or booking lane was added.
+- The booking browser fixture now supplies UTC timestamps and requires `01 Jan 2099, 1000hrs SGT` while rejecting the raw `2099-01-01T02:00:00+00:00` text. The focused compact-list guard also rejects any restored `operationalCard.pickup_datetime ||` render path across these admin rows.
+- Pre-change compact-list, automatic-preparation, and calendar-conflict guards all passed despite the raw timestamp, proving the prior coverage gap. Post-change focused guards, TypeScript, `git diff --check`, and the Next.js 16.2.6 production build passed.
+- The first booking-browser run stopped before app evaluation with `ERR_CONNECTION_REFUSED` because no local server was listening on port 3000; it is not counted as an application failure or pass. After the successful production build started locally, the exact browser suite passed in 25.7 seconds with zero test errors, zero console errors, zero blocked Supabase requests, and zero blocked Supabase mutation requests. The temporary unconfigured local server emitted its established `supabaseUrl is required` diagnostic when broad Dashboard reads touched unavailable backend paths; it made no live connection or mutation and was stopped after the browser pass.
+- This display-only repair does not change stored booking data, Automation state, calendar/conflict calculations, invoices, payments, payouts, customer/driver messages, provider sends, Google Maps, environment values, Supabase schema/policies, or customer/driver surfaces. Deployment remains a separate approval step.
+
 ### Production Typed-Read Optional Identity Tolerance
 
 - The exact combined-automation Production deployment exposed repeated read-only HTTP 422 responses from the established optional `GET /api/admin-load-bookings-typed-read?limit=25` bridge while the required saved-bookings lane continued returning the live booking list. No Automation, booking, calendar, invoice, email, driver, map, or other write request caused the responses.

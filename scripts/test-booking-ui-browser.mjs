@@ -176,8 +176,8 @@ const codexPreparedCustomerRequestFixture = {
   booking_reference: "CUST-CODEX-REVIEW-001",
   source_channel: "customer-booking-request",
   source_surface: "customer_booking_request",
-  pickup_at: "2099-01-01T10:00:00+08:00",
-  pickup_datetime: "2099-01-01T10:00:00+08:00",
+  pickup_at: "2099-01-01T02:00:00+00:00",
+  pickup_datetime: "2099-01-01T02:00:00+00:00",
   pickup_time: "1000",
   pickup_address: "Codex Review Pickup",
   dropoff_address: "Codex Review Drop-off",
@@ -210,8 +210,8 @@ const codexCalendarConflictExistingBookingFixture = {
   ...loadedSavedBookingFixture,
   id: "ui-codex-calendar-conflict-existing",
   booking_reference: "CODEX-CONFLICT-EXISTING-001",
-  pickup_at: "2099-01-01T10:30:00+08:00",
-  pickup_datetime: "2099-01-01T10:30:00+08:00",
+  pickup_at: "2099-01-01T02:30:00+00:00",
+  pickup_datetime: "2099-01-01T02:30:00+00:00",
   pickup_time: "1030",
   pickup_address: "Existing Conflict Pickup",
   dropoff_address: "Existing Conflict Drop-off",
@@ -7925,6 +7925,7 @@ async function runChromeTest() {
           const reference = "${codexPreparedCustomerRequestFixture.booking_reference}";
           const instruction = document.querySelector(\`[data-codex-job-card-instruction="\${reference}"]\`);
           const returnButton = document.querySelector(\`[data-codex-job-card-return="\${reference}"]\`);
+          const row = document.querySelector(\`[data-new-customer-booking-request-row="\${reference}"]\`);
           const conflictRuntime = document.querySelector("[data-codex-calendar-conflict-runtime]");
           const workflowRequests = window.__prestigeWorkflowStatusRequests || [];
 
@@ -7938,6 +7939,7 @@ async function runChromeTest() {
                 instructionMaxLength: instruction.maxLength,
                 instructionValue: instruction.value,
                 returnButtonDisabled: returnButton.disabled,
+                rowText: row?.textContent.replace(/\\s+/g, " ").trim() || "",
                 conflictRuntime: conflictRuntime?.getAttribute("data-codex-calendar-conflict-runtime") || "",
                 conflictStatusCount: document.querySelectorAll("[data-codex-calendar-conflict-status]").length,
               }
@@ -7950,6 +7952,8 @@ async function runChromeTest() {
     assert.equal(codexPreparedRequestState.instructionMaxLength, 500);
     assert.equal(codexPreparedRequestState.instructionValue, "");
     assert.equal(codexPreparedRequestState.returnButtonDisabled, true);
+    assert.match(codexPreparedRequestState.rowText, /01 Jan 2099, 1000hrs SGT/);
+    assert.doesNotMatch(codexPreparedRequestState.rowText, /2099-01-01T02:00:00\+00:00/);
     assert.equal(codexPreparedRequestState.conflictRuntime, "off");
     assert.equal(codexPreparedRequestState.conflictStatusCount, 0);
 

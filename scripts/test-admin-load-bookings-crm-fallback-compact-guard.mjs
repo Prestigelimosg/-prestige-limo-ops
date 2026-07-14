@@ -446,6 +446,9 @@ for (const customerRequestFragment of [
   "Codex Review &amp; Admin App Notifications",
   "Codex Prepared Job Cards",
   "Ready for Admin Review",
+  "formatBookingPickupDateTimeSgt(requestBooking)",
+  "formatBookingPickupDateTimeSgt(savedBooking)",
+  "formatBookingPickupDateTimeSgt(bookingRecord)",
   "No Codex-prepared job cards waiting for admin review.",
   'data-codex-prepared-job-cards="true"',
   'data-codex-prepared-job-card-list="true"',
@@ -477,6 +480,11 @@ for (const customerRequestFragment of [
 ]) {
   assertIncludes(appPage, customerRequestFragment, `Customer request auto-load fragment ${customerRequestFragment}`);
 }
+assertExcludes(
+  appPage,
+  /operationalCard\.pickup_datetime\s*\|\|/,
+  "Admin operational lists must not render raw server pickup timestamps",
+);
 assert.equal(
   appPage.match(/data-codex-prepared-job-cards="true"/g)?.length,
   1,

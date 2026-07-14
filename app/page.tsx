@@ -23572,8 +23572,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             getCustomerBookingRequestQueueKey(requestBooking),
           );
           const pickupMetaText = [
-            operationalCard.pickup_datetime ||
-              formatPickupDateTime(getBookingDateKey(requestBooking), requestBooking.pickup_time),
+            formatBookingPickupDateTimeSgt(requestBooking),
             operationalCard.job_card_display,
           ].filter(Boolean).join(" · ");
           const calendarConflictCandidate = codexCalendarConflictLoadedBookings.find(
@@ -24269,8 +24268,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 `Pax ${operationalCard.pax_display || "1"}`,
               ].join(" · ");
               const pickupMetaText = [
-                operationalCard.pickup_datetime ||
-                  formatPickupDateTime(getBookingDateKey(savedBooking), savedBooking.pickup_time),
+                formatBookingPickupDateTimeSgt(savedBooking),
                 operationalCard.job_card_display,
               ].filter(Boolean).join(" · ");
               const isCompletedStatus = bookingRecordIsCompletedStatus(savedBooking);
@@ -43926,8 +43924,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                           {getLoadBookingsOperationalRequestDisplayTitle(operationalCard, bookingRecord)}
                         </span>
                         <span className="block truncate text-xs text-slate-500">
-                          {operationalCard.pickup_datetime ||
-                            formatPickupDateTime(getBookingDateKey(bookingRecord), bookingRecord.pickup_time)}
+                          {formatBookingPickupDateTimeSgt(bookingRecord)}
                         </span>
                       </span>
                       <span className="truncate text-slate-800">

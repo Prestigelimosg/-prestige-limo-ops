@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const packetPath = "docs/staging-deployment-approval-packet.md";
-const packet = await readFile(packetPath, "utf8");
+const ledgerPath = "docs/current-implementation-ledger.md";
+const [packet, ledger] = await Promise.all([
+  readFile(packetPath, "utf8"),
+  readFile(ledgerPath, "utf8"),
+]);
 const normalized = packet.toLowerCase();
 
 function assertIncludes(fragment, label = fragment) {
@@ -42,7 +46,7 @@ assertIncludes("activate any live feature", "no-live-feature boundary");
 const checkpointsSection = sectionBetween("## Checkpoints");
 assert.match(
   checkpointsSection,
-  /Latest repo commit at packet creation:\s*`[0-9a-f]{7,}\s+[^`]+`/,
+  /Latest repo commit (?:at packet creation|before this configuration record):\s*`[0-9a-f]{7,}\s+[^`]+`/,
   "Packet must include latest repo commit field.",
 );
 assert.match(
@@ -60,6 +64,29 @@ for (const fragment of [
   "Approved staging target:",
 ]) {
   assertSectionIncludes(approvalSection, fragment, `Approval fields missing ${fragment}`);
+}
+
+for (const fragment of [
+  "Change only the Vercel Production Branch from `staging` to `main`, then verify without pushing or deploying",
+  "Approved production-branch safety separation; no deployment approval",
+  "Future `staging` Preview deployment only after separate Preview environment drift review; no production deploy",
+]) {
+  assertSectionIncludes(approvalSection, fragment, `Approval scope missing ${fragment}`);
+}
+
+const branchSeparationSection = sectionBetween("## Current Verified Branch Separation");
+for (const fragment of [
+  "Vercel Production Branch is `main`; `staging` is no longer the Production Branch.",
+  "Changing Branch Tracking created no deployment and made no domain, alias, environment-variable, or Git change.",
+  "`app.prestigelimo.sg` remains on READY deployment `f7e253b3 Repair mobile automation regression coverage` with the same `f7e253b3` page build marker.",
+  "Live Automation remains OFF; booking intake remains ON; calendar auto-write, invoice auto-issue, Driver Details Email auto-send, and external send remain OFF.",
+  "Production's names-only audit finds all 22 required environment names without reading values.",
+  "Preview is missing 13 required admin persistence/auth, typed-read, live-location, and map-gate names. This is configuration drift only; it does not approve copying values, editing Preview env, opening gates, pushing, or deploying.",
+  "Remote `main` is `adf37589`, six commits behind remote `staging` at `f7e253b3`; local `staging` is three commits ahead. No merge or push occurred.",
+  "Previous READY deployment `f91d0d1e Style customer invoice sectors in black and gold` remains the identified manual rollback target; no rollback is in progress or approved by this record.",
+  "The public Vercel project PATCH attempt returned HTTP 400 before mutation because `productionBranch` is not a supported top-level field. The signed-in Vercel Branch Tracking control was then used and independently verified; nothing is hidden as an API success.",
+]) {
+  assertSectionIncludes(branchSeparationSection, fragment, `Branch separation evidence missing ${fragment}`);
 }
 
 const requiredChecksSection = sectionBetween("## Required Checks Before Staging");
@@ -80,6 +107,8 @@ const deployStepsSection = sectionBetween("## Staging Deploy Steps");
 for (const fragment of [
   "target is staging only",
   "not production",
+  "Do not push `staging` until the 13-name Preview environment drift is separately reviewed",
+  "staging Preview only after that approval",
   "Do not add live credentials",
   "provider tokens",
   "payment keys",
@@ -89,6 +118,24 @@ for (const fragment of [
   "Record sanitized evidence only",
 ]) {
   assertSectionIncludes(deployStepsSection, fragment, `Staging deploy steps missing ${fragment}`);
+}
+
+for (const fragment of [
+  "### Vercel Production Branch Safety Separation",
+  "Owner explicitly approved changing only the linked Vercel project's Production Branch from `staging` to `main`.",
+  "future pushes to `main` create Production deployments, while `staging` is no longer the Production Branch.",
+  "The setting change created no deployment",
+  "Live Automation read-back remains safely closed",
+  "The Preview names-only audit reports 13 missing",
+  "No merge, push, preview deployment, production deployment, promotion, or rollback occurred.",
+  "This external configuration repair does not approve a Git push",
+  "Focused lock: the existing `scripts/test-staging-deployment-approval-packet-guard.mjs`",
+]) {
+  assert.equal(
+    ledger.includes(fragment),
+    true,
+    `Implementation ledger missing production-branch safety phrase ${fragment}.`,
+  );
 }
 
 const envSection = sectionBetween("## Env Values That Must Remain Unset Or Disabled");

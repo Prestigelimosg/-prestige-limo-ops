@@ -26,6 +26,18 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No calendar provider write, invoice/PDF creation, customer/driver provider send, scheduled task, booking write, environment change, deployment, or live-data mutation is included.
 - Focused lock: `scripts/test-admin-automation-runtime-control-guard.mjs`.
 
+### Vercel Production Branch Safety Separation
+
+- Owner explicitly approved changing only the linked Vercel project's Production Branch from `staging` to `main`. The setting was saved through the signed-in Vercel Environment `Branch Tracking` control after the public project PATCH API safely rejected the unsupported top-level field without changing state.
+- Refreshed Vercel UI and authenticated read-back both confirmed `main`; future pushes to `main` create Production deployments, while `staging` is no longer the Production Branch.
+- The setting change created no deployment and changed no domain, alias, environment variable, Git branch, or repository file. `app.prestigelimo.sg` remains on READY deployment `f7e253b3 Repair mobile automation regression coverage`, and the page build marker remains `f7e253b3`.
+- Live Automation read-back remains safely closed: Automation OFF, booking intake ON, calendar auto-write OFF, invoice auto-issue OFF, Driver Details Email auto-send OFF, and external send false.
+- The production names-only environment audit still finds all 22 required names without reading or printing values. The Preview names-only audit reports 13 missing admin persistence/auth, typed-read, live-location, and map-gate names, so pushing `staging` for Preview verification remains blocked until that drift is separately reviewed and approved; missing names do not approve copying values or opening gates.
+- Remote `main` remains `adf37589` and six commits behind remote `staging` at `f7e253b3`; local `staging` remains three commits ahead. No merge, push, preview deployment, production deployment, promotion, or rollback occurred.
+- Previous READY deployment `f91d0d1e Style customer invoice sectors in black and gold` remains an available manual rollback target, and no rollback is in progress. Any rollback remains a separate explicit action.
+- This external configuration repair does not approve a Git push, Vercel deploy, Preview env edit/copy, Production deployment, domain reassignment, provider activation, DB write, calendar/invoice automation, or customer/driver send.
+- Focused lock: the existing `scripts/test-staging-deployment-approval-packet-guard.mjs` and updated `docs/staging-deployment-approval-packet.md`; no duplicate deployment lane or guard was added.
+
 ### Customer Folder Four-Sector Invoice Workflow
 
 - The established customer selection continues to open the existing `/customers/[customerId]` company profile. The top profile retains the existing admin-only invoice-prefix settings, followed by the existing stored invoice totals and invoice list.

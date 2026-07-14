@@ -4,20 +4,32 @@ This packet is for approval planning only. It does not deploy the app, change en
 
 ## Checkpoints
 
-- Latest repo commit at packet creation: `097b1f1 Add production deployment planning inventory`.
-- Latest implementation checkpoint in the ledger: `4b7a1ab Stabilize booking UI browser test`.
+- Latest repo commit before this configuration record: `ebab0042 Guard ledger checkpoints against Git state`.
+- Latest implementation checkpoint in the ledger: `dffad548 Keep request review on Dashboard`.
 - Source of truth: `docs/current-implementation-ledger.md`.
 
 ## Approval Fields
 
 - Owner: William / Prestige Limo SG
-- Approval date: 2026-06-14
-- Approved scope: Staging deployment planning/rehearsal only
-- Decision: Approved for staging planning only
+- Approval date: 2026-07-14
+- Approved scope: Change only the Vercel Production Branch from `staging` to `main`, then verify without pushing or deploying
+- Decision: Approved production-branch safety separation; no deployment approval
 - Live activation approval: Not approved
-- Approved staging target: Staging only; no production deploy
+- Approved staging target: Future `staging` Preview deployment only after separate Preview environment drift review; no production deploy
 - Rollback owner: William / Prestige Limo SG
 - Notes: Keep all live DB/write, migrations, provider/env activation, external APIs, live sending, payment/PDF/payout, auth activation, live location, photo upload/storage, CRM/calendar amendment writes, and risky shim writes blocked.
+
+## Current Verified Branch Separation
+
+- Vercel Production Branch is `main`; `staging` is no longer the Production Branch.
+- Changing Branch Tracking created no deployment and made no domain, alias, environment-variable, or Git change.
+- `app.prestigelimo.sg` remains on READY deployment `f7e253b3 Repair mobile automation regression coverage` with the same `f7e253b3` page build marker.
+- Live Automation remains OFF; booking intake remains ON; calendar auto-write, invoice auto-issue, Driver Details Email auto-send, and external send remain OFF.
+- Production's names-only audit finds all 22 required environment names without reading values.
+- Preview is missing 13 required admin persistence/auth, typed-read, live-location, and map-gate names. This is configuration drift only; it does not approve copying values, editing Preview env, opening gates, pushing, or deploying.
+- Remote `main` is `adf37589`, six commits behind remote `staging` at `f7e253b3`; local `staging` is three commits ahead. No merge or push occurred.
+- Previous READY deployment `f91d0d1e Style customer invoice sectors in black and gold` remains the identified manual rollback target; no rollback is in progress or approved by this record.
+- The public Vercel project PATCH attempt returned HTTP 400 before mutation because `productionBranch` is not a supported top-level field. The signed-in Vercel Branch Tracking control was then used and independently verified; nothing is hidden as an API success.
 
 ## Required Checks Before Staging
 
@@ -36,10 +48,11 @@ Do not proceed if any check fails or if the worktree is dirty.
 1. Confirm the owner/date/scope fields above are filled.
 2. Confirm the target is staging only, not production.
 3. Confirm the rollback commit and previous deployment are known.
-4. Deploy the existing app build artifact or clean repo commit to staging only.
-5. Do not add live credentials, provider tokens, payment keys, auth activation, DB write flags, or migration commands.
-6. Run the post-deploy smoke checklist below against the staging URL.
-7. Record sanitized evidence only. Do not paste secrets, tokens, env values, database rows, stack traces, or provider responses.
+4. Do not push `staging` until the 13-name Preview environment drift is separately reviewed and the exact safe Preview behavior is approved.
+5. Deploy the existing app build artifact or clean repo commit to staging Preview only after that approval.
+6. Do not add live credentials, provider tokens, payment keys, auth activation, DB write flags, or migration commands.
+7. Run the post-deploy smoke checklist below against the staging Preview URL.
+8. Record sanitized evidence only. Do not paste secrets, tokens, env values, database rows, stack traces, or provider responses.
 
 ## Env Values That Must Remain Unset Or Disabled
 

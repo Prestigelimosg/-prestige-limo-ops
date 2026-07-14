@@ -211,6 +211,18 @@ for (const phrase of [
   "Both browser suites reported zero test errors and zero console errors; lint remains at 160 existing warnings and zero errors.",
   "The first app-smoke attempt stopped at `ERR_CONNECTION_REFUSED` because no local server was running",
   "one existing bundled `supabaseUrl is required` diagnostic",
+  "### Automatic Codex Job-Card Preparation Connected Chrome Runtime Evidence",
+  "Automation OFF and exactly two existing `Ready for Admin Review` cards",
+  "Two initial form submissions were stopped by client validation before the booking API",
+  "Chrome's native input setters plus bubbling `input`/`change` events were used only to commit the date and terms checkbox",
+  "Dashboard then changed from two to exactly three prepared cards",
+  "exactly one `admin_booking_review` row with status `ready`, source/role `system`, and actor `Codex job-card automation`",
+  "Calendar/Google Calendar, invoice, and payment identifiers remained null",
+  "one queued internal `admin_app` notification",
+  "zero remaining rows for every exact test artifact and zero active Automation settings",
+  "A final visible Chrome refresh returned to Automation OFF, exactly two original prepared cards, and no test passenger card",
+  "repeated HTTP 503 responses from `/api/admin-load-bookings-typed-read?limit=25`",
+  "the temporary local server was stopped",
 ]) {
   assertIncludes(ledger, phrase, `auto-preparation ledger ${phrase}`);
 }

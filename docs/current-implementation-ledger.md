@@ -12,6 +12,14 @@ f7e253b3 Repair mobile automation regression coverage
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Modern Phone And Foldable Support Floor
+
+- Owner set the supported admin/mobile usability floor to iPhone 13 size: 390 × 844 CSS pixels. The active general viewport matrix no longer runs the retired 320px, 360px, or 375px device cases and now begins with `iPhone 13 / modern phone 390px`.
+- Modern Android coverage includes the Chromium Pixel 7 profile at 412 × 915 CSS pixels and a larger 430px phone profile. Foldable coverage reuses the supported cover-screen phone widths and adds the Android unfolded foldable layout target at 841 × 701 logical pixels.
+- The same active matrix continues through tablets and 1280px/1440px desktops. Existing CSS breakpoints and narrower historical single-workflow regression fixtures remain unchanged; they are not the current supported-device policy.
+- This is test-policy and documentation only. No application UI, customer/driver surface, booking, calendar, invoice, payment, payout, provider send, environment, deployment, or live data changed.
+- Focused lock: the updated `scripts/test-admin-automation-runtime-control-guard.mjs`; runtime proof remains the existing `scripts/test-mobile-usability-browser.mjs` viewport suite.
+
 ### Admin Notification Terminal Polling Suspension
 
 - Owner-supplied mobile and desktop screenshots of isolated Preview, followed by sanitized deployment logs, confirmed the established Dashboard feed returned HTTP 503 every 10 seconds while admin app notification persistence was intentionally unavailable. The visible error was accurate, but repeating a terminal configuration failure added unnecessary server noise.
@@ -30,7 +38,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Migration `20260714022319_admin_automation_runtime_settings.sql` creates only the closed singleton setting with RLS enabled and explicit service-role access; public, anonymous, authenticated, customer, and driver access remain revoked.
 - Remote migration `20260714022319_admin_automation_runtime_settings` is applied to the configured `prestige-limo-ops` Supabase project. Live verification confirmed RLS, all four state constraints, zero public policies, no anonymous/authenticated CRUD privileges, service-role-only CRUD, and exactly one closed singleton row. The expected `rls_enabled_no_policy` INFO advisor remains intentional because this is a closed service-role table.
 - The singleton was tested as the `service_role` from ON back to OFF inside one database transaction, so no other session could observe the temporary ON state; the committed row remains exactly one `closed / false` record. The application commit remained local and unpushed during that database pass, so no deployed UI or background behavior changed during the database operation.
-- The established mobile browser guard now uses current stable admin/customer selectors and copy, and verifies the same compact Automation switch remains visible, contained, accessible, and OFF across the existing 320–1440 px viewport matrix without clicking it. This repairs the established guard in place; no second mobile test lane or production UI behavior was added.
+- The established mobile browser guard now uses current stable admin/customer selectors and copy, and verifies the same compact Automation switch remains visible, contained, accessible, and OFF across the supported 390–1440 px viewport matrix without clicking it. This repairs the established guard in place; no second mobile test lane or production UI behavior was added.
 - No calendar provider write, invoice/PDF creation, customer/driver provider send, scheduled task, booking write, environment change, deployment, or live-data mutation is included.
 - Focused lock: `scripts/test-admin-automation-runtime-control-guard.mjs`.
 

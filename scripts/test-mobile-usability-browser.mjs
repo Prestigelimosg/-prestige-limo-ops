@@ -27,14 +27,12 @@ const browserErrors = [];
 const browserConsoleErrors = [];
 
 const viewports = [
-  { height: 568, label: "small phone 320px", mobile: true, scale: 2, width: 320 },
-  { height: 740, label: "common Android/Samsung/China phone 360px", mobile: true, scale: 3, width: 360 },
-  { height: 667, label: "phone 375px", mobile: true, scale: 2, width: 375 },
-  { height: 844, label: "phone 390px", mobile: true, scale: 3, width: 390 },
-  { height: 915, label: "phone 412px", mobile: true, scale: 2.625, width: 412 },
-  { height: 932, label: "large phone 430px", mobile: true, scale: 3, width: 430 },
+  { height: 844, label: "iPhone 13 / modern phone 390px", mobile: true, scale: 3, width: 390 },
+  { height: 915, label: "Modern Android / Pixel 7 412px", mobile: true, scale: 2.625, width: 412 },
+  { height: 932, label: "Large modern Android 430px", mobile: true, scale: 3, width: 430 },
   { height: 1024, label: "tablet 768px", mobile: true, scale: 2, width: 768 },
   { height: 1180, label: "iPad portrait 820px", mobile: true, scale: 2, width: 820 },
+  { height: 701, label: "Android foldable unfolded target 841px", mobile: true, scale: 1, width: 841 },
   { height: 1366, label: "tablet landscape 1024px", mobile: false, scale: 1, width: 1024 },
   { height: 900, label: "desktop 1280px", mobile: false, scale: 1, width: 1280 },
   { height: 900, label: "desktop 1440px", mobile: false, scale: 1, width: 1440 },

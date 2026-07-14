@@ -195,7 +195,8 @@ for (const phrase of [
   "This first pass is control-only: calendar conflict checks, job-card queueing, scheduled monthly invoice preparation, and automatic Driver Details Email remain disabled until their later separately guarded passes.",
   "Remote migration `20260714022319_admin_automation_runtime_settings` is applied to the configured `prestige-limo-ops` Supabase project.",
   "The singleton was tested as the `service_role` from ON back to OFF inside one database transaction, so no other session could observe the temporary ON state; the committed row remains exactly one `closed / false` record.",
-  "The established mobile browser guard now uses current stable admin/customer selectors and copy, and verifies the same compact Automation switch remains visible, contained, accessible, and OFF across the existing 320–1440 px viewport matrix without clicking it.",
+  "The established mobile browser guard now uses current stable admin/customer selectors and copy, and verifies the same compact Automation switch remains visible, contained, accessible, and OFF across the supported 390–1440 px viewport matrix without clicking it.",
+  "Modern Android coverage includes the Chromium Pixel 7 profile at 412 × 915 CSS pixels and a larger 430px phone profile. Foldable coverage reuses the supported cover-screen phone widths and adds the Android unfolded foldable layout target at 841 × 701 logical pixels.",
 ]) {
   assertIncludes(ledger, phrase, `automation ledger ${phrase}`);
 }
@@ -203,6 +204,10 @@ for (const phrase of [
 assertIncludes(suite, guardPath, "preactivation suite automation guard registration");
 
 for (const fragment of [
+  '{ height: 844, label: "iPhone 13 / modern phone 390px", mobile: true, scale: 3, width: 390 }',
+  '{ height: 915, label: "Modern Android / Pixel 7 412px", mobile: true, scale: 2.625, width: 412 }',
+  '{ height: 932, label: "Large modern Android 430px", mobile: true, scale: 3, width: 430 }',
+  '{ height: 701, label: "Android foldable unfolded target 841px", mobile: true, scale: 1, width: 841 }',
   'Bookings: "Find saved jobs"',
   'url.includes("/api/admin-automation-runtime")',
   'const checkAdminAutomationRuntimeToggle = async (viewport)',
@@ -213,6 +218,13 @@ for (const fragment of [
   '"automatic saved-bookings load"',
 ]) {
   assertIncludes(mobileBrowser, fragment, `automation mobile runtime ${fragment}`);
+}
+for (const legacyViewport of [
+  '{ height: 568, label: "small phone 320px", mobile: true, scale: 2, width: 320 }',
+  '{ height: 740, label: "common Android/Samsung/China phone 360px", mobile: true, scale: 3, width: 360 }',
+  '{ height: 667, label: "phone 375px", mobile: true, scale: 2, width: 375 }',
+]) {
+  assertExcludes(mobileBrowser, legacyViewport, `retired legacy mobile viewport ${legacyViewport}`);
 }
 assertExcludes(
   mobileBrowser,

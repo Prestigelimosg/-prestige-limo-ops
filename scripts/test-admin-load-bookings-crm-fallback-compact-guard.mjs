@@ -64,6 +64,9 @@ for (const phrase of [
   "The established request panel now sits inside the single Dashboard `Codex Review & Admin Notifications` section as `Codex Prepared Job Cards`; it is not a second page, route, table, draft, database, or write path.",
   "The prepared-job-card queue is always visible, shows a clear empty state, and keeps more than three visible cards inside one bounded vertical scrolling box so admin can review the queue at one glance without pressing Load Bookings.",
   "Each prepared card is derived from the exact saved request, remains `Ready for Admin Review`, and keeps the existing `Review Job Card` handoff; calendar changes still require an explicit admin action in the established Dispatch workflow.",
+  "Each prepared card now has one bounded `Instruction to Codex (internal only)` field and `Return to Codex` action. The action reuses the established admin-only booking workflow status route with workflow area `admin_booking_review`; it does not add a booking field, table, route, draft, or customer/driver message.",
+  "Returning a card saves only the exact booking reference, `needs_review` status, safe instruction, and next internal action. It does not change booking/customer status, write a calendar, send externally, or claim that the correction worker is active.",
+  "Saved Codex instructions reload into the same card after Dashboard refresh. They remain limited to 500 characters and are never copied into customer or driver surfaces.",
   "Loading a customer request into Dispatch now records a bounded browser-local handled-request key so that request leaves the Dashboard urgent/new request queues and action badge on that admin browser, then becomes available in Current / Upcoming.",
   "Loading a saved booking into Dispatch refreshes the typed operational display once immediately and pauses one background sync tick, keeping the existing guarded read set stable while Customer Copy focuses for review.",
   "The Dashboard now uses the active day-of-trip monitor instead of duplicate Today/Upcoming booking summaries; single-booking driver assignment, status, copy, job-card, and completion work stays in Dispatch/Bookings so page purposes do not duplicate.",
@@ -443,6 +446,18 @@ for (const customerRequestFragment of [
   'data-codex-prepared-job-card-list="true"',
   "max-h-[28rem] space-y-2 overflow-y-auto",
   "Calendar changes still require admin action in Dispatch.",
+  'const adminCodexJobCardReviewWorkflowArea = "admin_booking_review";',
+  "Instruction to Codex (internal only)",
+  'data-codex-job-card-instruction=',
+  'data-codex-job-card-return=',
+  'data-codex-job-card-review-feedback=',
+  "maxLength={500}",
+  "Return to Codex",
+  'workflow_area: adminCodexJobCardReviewWorkflowArea',
+  'status_value: "needs_review"',
+  'status_label: "Returned to Codex"',
+  'next_action: "Prepare corrected job card for admin review"',
+  "Codex correction automation is not active yet",
   "onClick={() => loadSelectedBooking(requestBooking, { focusJobCard: true })}",
   "dispatchLoadFocusTarget",
   "scrollIntoView({ behavior: \"smooth\", block: \"start\" })",
@@ -456,6 +471,26 @@ assert.equal(
   1,
   "Expected one established Codex prepared-job-card queue",
 );
+const codexReturnHandler = sliceBetween(
+  appPage,
+  "async function returnPreparedJobCardToCodex",
+  "function getDispatchCopyText",
+);
+assertIncludes(codexReturnHandler, "fetch(adminWorkflowStatusApiPath", "Existing workflow status route reuse");
+assertIncludes(codexReturnHandler, 'method: "POST"', "Internal workflow status POST");
+for (const forbiddenCodexReturnPath of [
+  "/api/admin-bookings",
+  "/api/admin-app-notifications",
+  "/api/customer-driver-quick-replies",
+  "/api/admin-booking-calendar-google-sync",
+  "/api/admin-booking-calendar-events",
+]) {
+  assertExcludes(
+    codexReturnHandler,
+    forbiddenCodexReturnPath,
+    `Return to Codex must not call ${forbiddenCodexReturnPath}`,
+  );
+}
 assert.equal(
   appPage.indexOf("{codexPreparedJobCardsPanel}") > appPage.indexOf('aria-label="Admin App Notifications"'),
   true,

@@ -1,13 +1,13 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-fb7d10ce Tolerate unsafe optional booking identity labels
+2acaa3a5 Simplify dashboard booking request review
 
 Latest pushed main/staging runtime checkpoint:
-fb7d10ce Tolerate unsafe optional booking identity labels
+3bac3c3a Display admin pickup times in SGT
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-2800284a Update typed-read repair checkpoint
+3bac3c3a Display admin pickup times in SGT
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -288,6 +288,9 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Deployed Chrome verification confirmed exactly one `Booking Requests` sector, one `Refresh Dashboard`, one Push Alerts switch, no repeated Admin Actions summary, no retired sector-level buttons, and zero console errors.
 - Desktop, 390px modern-phone, and 344px folded-phone outer-screen checks all had no document, workbench, or request-sector horizontal overflow.
 - After those protected Preview checks were reported, the owner explicitly approved the displayed Booking Requests layout on 2026-07-14. This is visual acceptance of exact Preview build `2acaa3a5`; it is not approval to push Git or deploy Production.
+- The owner then separately approved pushing the local `staging` commits and deploying Production on 2026-07-14. Preflight stopped before either external action when both dynamic ledger checkpoint guards reproduced stale header records. Read-only Git and Production inspection proved the exact pre-action state: local runtime `2acaa3a5`, pushed runtime `3bac3c3a`, and READY Production deployment `dpl_HqiSmnf5i6yptfCwXougpujjuS2a` with exact build `3bac3c3a`. This checkpoint repair records those facts only; the approved push and Production deployment remain pending until the repaired guards and release checks pass.
+- Release verification passed the complete preactivation suite, Next.js 16.2.6 Production build, app smoke browser suite, and lint with the existing 160 warnings and zero errors. The suite retained the known module-type warnings for `lib/codex-job-card-correction.ts` and `lib/driver-job-calendar-event.ts`; they are not hidden as clean diagnostics.
+- The first fresh local server start stopped with `EADDRINUSE`. Inspection proved port 3000 held this workspace's earlier local Next server with build marker `3bac3c3a`; that local test process was stopped and the newly built server started normally. The first booking-browser release run then stopped on one stale assertion expecting the retired `Urgent / Customer Requests` empty state even though the exact approved `Booking Requests` UI rendered correctly. The established browser guard was repaired in place to require the consolidated heading and empty state and reject the retired heading. Its complete rerun passed with zero test errors, zero console errors, zero blocked Supabase requests, and zero blocked Supabase mutation requests.
 - Preview intentionally remains fail-closed, so it proves the exact artifact and responsive layout but not real queued booking rows. No booking decision, notification cleanup, Automation/Push toggle, calendar/map action, invoice action, customer/driver message, provider send, environment change, or live-data write occurred.
 - The deployment command used no Production flag, no Git push occurred, and no Production deployment, alias, environment, database, provider, or running Production state was changed.
 - Focused evidence lock remains `docs/staging-deployment-approval-packet.md` and `scripts/test-staging-deployment-approval-packet-guard.mjs`; no duplicate deployment lane was added.

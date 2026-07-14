@@ -50,7 +50,7 @@ assertSectionIncludes(
 );
 assertSectionIncludes(
   checkpointsSection,
-  "Latest verified runtime checkpoint in the ledger: `5c0f6392 Automate monthly invoice draft preparation`.",
+  "Latest verified runtime checkpoint in the ledger: `2acaa3a5 Simplify dashboard booking request review`.",
 );
 assert.match(
   checkpointsSection,
@@ -171,6 +171,14 @@ for (const fragment of [
   "390px modern-phone, and 344px folded-phone outer-screen checks",
   "The owner explicitly approved the displayed protected Preview layout on 2026-07-14",
   "does not authorize a Git push or Production deployment",
+  "The owner later gave separate approval to push the local `staging` commits and deploy Production.",
+  "Preflight stopped before either action because the dynamic ledger checkpoint guards reproduced stale header records",
+  "current READY Production deployment `dpl_HqiSmnf5i6yptfCwXougpujjuS2a` and exact build `3bac3c3a`",
+  "No push or Production deployment is claimed by this preflight repair.",
+  "Release checks passed the complete preactivation suite, Next.js 16.2.6 Production build, app smoke browser suite, and lint with the existing 160 warnings and zero errors.",
+  "The first booking-browser run stopped on one stale retired-panel assertion",
+  "rejects the retired heading, and passed completely with zero test errors, console errors, blocked Supabase requests, or blocked Supabase mutations.",
+  "No push or deploy occurred during these checks.",
   "Preview names-only review still shows only the inert `PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS` assignment",
   "No booking decision, notification cleanup, Automation toggle, Push toggle, calendar/map action, invoice action, customer/driver message, or external send was performed.",
   "The deployment command used no Production flag and no Git push occurred.",
@@ -331,6 +339,14 @@ for (const fragment of [
   "Desktop, 390px modern-phone, and 344px folded-phone outer-screen checks",
   "the owner explicitly approved the displayed Booking Requests layout on 2026-07-14",
   "it is not approval to push Git or deploy Production",
+  "The owner then separately approved pushing the local `staging` commits and deploying Production on 2026-07-14.",
+  "Preflight stopped before either external action when both dynamic ledger checkpoint guards reproduced stale header records.",
+  "READY Production deployment `dpl_HqiSmnf5i6yptfCwXougpujjuS2a` with exact build `3bac3c3a`",
+  "the approved push and Production deployment remain pending until the repaired guards and release checks pass",
+  "The first fresh local server start stopped with `EADDRINUSE`.",
+  "one stale assertion expecting the retired `Urgent / Customer Requests` empty state",
+  "require the consolidated heading and empty state and reject the retired heading",
+  "zero blocked Supabase mutation requests",
   "Preview intentionally remains fail-closed",
   "The deployment command used no Production flag, no Git push occurred",
 ]) {

@@ -7873,7 +7873,7 @@ async function runChromeTest() {
     assert.equal(dashboardCommandCentreState.urgentRequestsPanelInsideNotificationFeed, true);
     assert.match(
       dashboardCommandCentreState.urgentRequestsPanelText,
-      /No urgent or customer change\/cancel requests\./,
+      /No new, urgent, amendment, or cancellation requests\./,
     );
     assert.equal(dashboardCommandCentreState.codexPreparedJobCardsInsideNotificationFeed, true);
     assert.equal(dashboardCommandCentreState.codexPreparedJobCardListOverflowY, "auto");
@@ -7887,7 +7887,8 @@ async function runChromeTest() {
       0,
       "Expected Dashboard command centre not to duplicate detailed assignment/status controls",
     );
-    assert.match(dashboardCommandCentreState.visibleText, /Urgent \/ Customer Requests/);
+    assert.match(dashboardCommandCentreState.visibleText, /Booking Requests/);
+    assert.doesNotMatch(dashboardCommandCentreState.visibleText, /Urgent \/ Customer Requests/);
     assert.match(dashboardCommandCentreState.visibleText, /Today's Jobs/);
     assert.match(dashboardCommandCentreState.visibleText, /Codex Review & Admin App Notifications/);
 

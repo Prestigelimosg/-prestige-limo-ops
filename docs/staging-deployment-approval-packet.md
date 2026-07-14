@@ -5,7 +5,7 @@ This packet records the approved deployment-safety configuration work and the la
 ## Checkpoints
 
 - Latest repo commit deployed to isolated Preview: `2acaa3a5 Simplify dashboard booking request review`.
-- Latest verified runtime checkpoint in the ledger: `5c0f6392 Automate monthly invoice draft preparation`.
+- Latest verified runtime checkpoint in the ledger: `2acaa3a5 Simplify dashboard booking request review`.
 - Source of truth: `docs/current-implementation-ledger.md`.
 
 ## Approval Fields
@@ -122,6 +122,8 @@ This packet records the approved deployment-safety configuration work and the la
 - Signed-in visual/runtime acceptance confirmed exactly one `Booking Requests` sector, one `Refresh Dashboard`, one Push Alerts toggle, no repeated Admin Actions summary, no retired sector buttons, and zero browser console errors.
 - Desktop, 390px modern-phone, and 344px folded-phone outer-screen checks all had document, workbench, and request-sector scroll widths equal to their client widths; no horizontal overflow was reproduced.
 - The owner explicitly approved the displayed protected Preview layout on 2026-07-14 after these results were reported. That acceptance is limited to exact Preview build `2acaa3a5` and does not authorize a Git push or Production deployment.
+- The owner later gave separate approval to push the local `staging` commits and deploy Production. Preflight stopped before either action because the dynamic ledger checkpoint guards reproduced stale header records; read-only inspection confirmed current READY Production deployment `dpl_HqiSmnf5i6yptfCwXougpujjuS2a` and exact build `3bac3c3a`. No push or Production deployment is claimed by this preflight repair.
+- Release checks passed the complete preactivation suite, Next.js 16.2.6 Production build, app smoke browser suite, and lint with the existing 160 warnings and zero errors. The first booking-browser run stopped on one stale retired-panel assertion; its established guard now requires the approved consolidated `Booking Requests` heading and empty state, rejects the retired heading, and passed completely with zero test errors, console errors, blocked Supabase requests, or blocked Supabase mutations. No push or deploy occurred during these checks.
 - Preview names-only review still shows only the inert `PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS` assignment. No Supabase, admin-session, provider, payment, email, calendar, automation-write, or other live credential/gate was added.
 - Preview therefore remains intentionally fail-closed and cannot prove real booking queue rows. No booking decision, notification cleanup, Automation toggle, Push toggle, calendar/map action, invoice action, customer/driver message, or external send was performed.
 - The deployment command used no Production flag and no Git push occurred. No Production deployment, alias, environment, database, provider, or running Production state was changed.

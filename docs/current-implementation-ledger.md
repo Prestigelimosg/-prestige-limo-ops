@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-e40209d4 Suspend terminal typed read polling
+565993b4 Add Codex saved-job conflict checks
 
 Latest pushed main/staging runtime checkpoint:
 f7e253b3 Repair mobile automation regression coverage

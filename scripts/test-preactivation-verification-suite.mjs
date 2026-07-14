@@ -238,6 +238,10 @@ const guardChecks = [
     script: "scripts/test-admin-load-bookings-crm-fallback-compact-guard.mjs",
   },
   {
+    label: "Codex job-card correction preparer guard",
+    script: "scripts/test-codex-job-card-correction-preparer.mjs",
+  },
+  {
     label: "bookings earlier jobs completed history compact guard",
     script: "scripts/test-bookings-earlier-history-compact-guard.mjs",
   },

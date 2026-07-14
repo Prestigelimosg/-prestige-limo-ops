@@ -10,6 +10,7 @@ import {
   sanitizeAiParseResult,
   type AiParseResult,
 } from "../lib/ai-parser-schema";
+import { prepareCodexJobCardCorrection } from "../lib/codex-job-card-correction";
 import { mockCustomers } from "./customers/_data/mock-customers";
 import {
   calculateProfit,
@@ -19670,6 +19671,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   function loadSelectedBooking(
     bookingRecord: BookingRecord,
     options: {
+      bookingFormOverride?: BookingForm;
+      correctionSummary?: string;
       focusCustomerCopy?: boolean;
       focusDriverJobLink?: boolean;
       focusJobCard?: boolean;
@@ -19680,7 +19683,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       cleanReferenceText(bookingRecord.flight_no) ||
       getBookingDateKey(bookingRecord);
 
-    const loadedBookingForm = bookingRecordToForm(bookingRecord);
+    const loadedBookingForm = options.bookingFormOverride
+      ? { ...options.bookingFormOverride }
+      : bookingRecordToForm(bookingRecord);
     const loadedAdminBookingRecord = bookingRecordToAdminBookingPersistenceRecord(bookingRecord);
 
     rememberHandledCustomerBookingRequest(bookingRecord);
@@ -19760,7 +19765,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       text: options.focusDriverJobLink
         ? `Booking ${bookingReference || "selected booking"} loaded. Driver Job Link is ready for admin action.`
         : options.focusJobCard
-          ? `Booking ${bookingReference || "selected booking"} loaded. Job Card Preview is ready for admin review. No booking or external action was changed.`
+          ? options.correctionSummary
+            ? `Booking ${bookingReference || "selected booking"} loaded with review-only corrections (${options.correctionSummary}). Job Card Preview is ready for admin review. The saved booking, calendar, and external messages were not changed.`
+            : `Booking ${bookingReference || "selected booking"} loaded. Job Card Preview is ready for admin review. No booking or external action was changed.`
         : options.focusCustomerCopy
         ? `Booking ${bookingReference || "selected booking"} loaded. Customer Copy is ready for admin review.`
         : `Booking ${bookingReference || "selected booking"} loaded.`,
@@ -21878,7 +21885,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         [targetBookingReference]: {
           tone: "success",
           text:
-            "Returned to the internal Codex review queue. Codex correction automation is not active yet; the saved booking and calendar were not changed.",
+            "Returned to the internal Codex review queue. Exact pickup-time or flight-number corrections are prepared below for review; ambiguous instructions remain unchanged. The saved booking and calendar were not changed.",
         },
       }));
     } catch (error) {
@@ -23476,6 +23483,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             clean(codexReviewStatus?.status_value) === "needs_review" &&
             clean(codexReviewStatus?.status_label) === "Returned to Codex";
           const requestRecord = bookingRecordToAdminBookingPersistenceRecord(requestBooking);
+          const correctionPreparation = prepareCodexJobCardCorrection(
+            bookingRecordToForm(requestBooking),
+            returnedToCodex ? clean(codexReviewStatus?.safe_status_context?.safe_note) : "",
+          );
+          const correctionReady = correctionPreparation.status === "ready";
           const passengerText = getLoadBookingsOperationalPassengerDisplay(operationalCard, requestBooking);
           const isUrgentRequest = urgentCustomerBookingRequestKeySet.has(
             getCustomerBookingRequestQueueKey(requestBooking),
@@ -23505,7 +23517,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       : "bg-emerald-100 text-emerald-900 ring-emerald-200"
                   }`}
                 >
-                  {returnedToCodex ? "Returned to Codex" : "Ready for Admin Review"}
+                  {correctionReady
+                    ? "Corrected Preview Ready"
+                    : returnedToCodex
+                      ? "Exact Value Needed"
+                      : "Ready for Admin Review"}
                 </span>
                 <p className="truncate font-semibold text-slate-950">
                   {getLoadBookingsOperationalRequestDisplayTitle(operationalCard, requestBooking)}
@@ -23534,10 +23550,20 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 <button
                   className="min-h-9 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800"
                   data-new-customer-booking-request-load={bookingId}
-                  onClick={() => loadSelectedBooking(requestBooking, { focusJobCard: true })}
+                  onClick={() =>
+                    loadSelectedBooking(requestBooking, {
+                      bookingFormOverride: correctionReady
+                        ? correctionPreparation.correctedBooking
+                        : undefined,
+                      correctionSummary: correctionReady
+                        ? correctionPreparation.changedFields.join("; ")
+                        : undefined,
+                      focusJobCard: true,
+                    })
+                  }
                   type="button"
                 >
-                  Review Job Card
+                  {correctionReady ? "Review Corrected Job Card" : "Review Job Card"}
                 </button>
                 {requestRecord
                   ? adminCustomerRequestReviewDecisions.map((decision) => (
@@ -23568,7 +23594,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                         [bookingReference]: event.target.value,
                       }))
                     }
-                    placeholder="Example: wrong pickup time or missing flight number"
+                    placeholder="Exact format: Pickup time: 14:30 or Flight number: SQ123"
                     rows={2}
                     value={codexJobCardInstructions[bookingReference] || ""}
                   />
@@ -23608,6 +23634,37 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   >
                     {codexJobCardReviewMessages[bookingReference].text}
                   </p>
+                ) : null}
+                {returnedToCodex ? (
+                  <div
+                    className={`mt-2 rounded-md border p-2 ${
+                      correctionReady
+                        ? "border-emerald-300 bg-white text-emerald-950"
+                        : "border-amber-300 bg-amber-50 text-amber-950"
+                    }`}
+                    data-codex-job-card-correction-preparation={
+                      correctionReady ? "ready" : "needs-exact-value"
+                    }
+                  >
+                    <p className="text-xs font-semibold">
+                      {correctionReady ? "Corrected Preview Ready" : "Exact Value Needed"}
+                    </p>
+                    {correctionReady ? (
+                      <>
+                        <p className="mt-1 text-xs">
+                          {correctionPreparation.changedFields.join(" · ")}
+                        </p>
+                        <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded-md border border-emerald-100 bg-emerald-50/60 p-2 text-xs text-slate-800">
+                          {formatWhatsAppJobCard(correctionPreparation.correctedBooking)}
+                        </pre>
+                        <p className="mt-1 text-xs">
+                          Review-only preview. The saved booking and calendar remain unchanged until admin uses the established Dispatch actions.
+                        </p>
+                      </>
+                    ) : (
+                      <p className="mt-1 text-xs">{correctionPreparation.reason}</p>
+                    )}
+                  </div>
                 ) : null}
               </div>
             </article>

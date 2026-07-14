@@ -7865,7 +7865,7 @@ async function runChromeTest() {
     assert.equal(codexPreparedRequestState.instructionValue, "");
     assert.equal(codexPreparedRequestState.returnButtonDisabled, true);
 
-    const codexInstruction = "Pickup time should be 10:30; flight number is missing.";
+    const codexInstruction = "Pickup time: 14:30\nFlight number: SQ318";
     const enteredCodexInstruction = await evaluate(`(() => {
       const reference = "${codexPreparedCustomerRequestFixture.booking_reference}";
       const instruction = document.querySelector(\`[data-codex-job-card-instruction="\${reference}"]\`);
@@ -7875,7 +7875,7 @@ async function runChromeTest() {
       }
 
       const descriptor = Object.getOwnPropertyDescriptor(instruction.constructor.prototype, "value");
-      descriptor?.set?.call(instruction, ${JSON.stringify("Pickup time should be 10:30; flight number is missing.")});
+      descriptor?.set?.call(instruction, ${JSON.stringify("Pickup time: 14:30\nFlight number: SQ318")});
       instruction.dispatchEvent(new Event("input", { bubbles: true }));
       instruction.dispatchEvent(new Event("change", { bubbles: true }));
       window.__prestigeWorkflowStatusRequests = [];
@@ -7908,11 +7908,15 @@ async function runChromeTest() {
         evaluate(`(() => {
           const reference = "${codexPreparedCustomerRequestFixture.booking_reference}";
           const feedback = document.querySelector(\`[data-codex-job-card-review-feedback="\${reference}"]\`);
+          const preparation = document.querySelector('[data-codex-job-card-correction-preparation="ready"]');
           const postRequests = (window.__prestigeWorkflowStatusRequests || []).filter(
             (request) => request.method === "POST",
           );
 
-          return feedback?.textContent.includes("Codex correction automation is not active yet") &&
+          return feedback?.textContent.includes("Exact pickup-time or flight-number corrections are prepared below for review") &&
+            preparation?.textContent.includes("Corrected Preview Ready") &&
+            preparation?.textContent.includes("1430hrs") &&
+            preparation?.textContent.includes("SQ318") &&
             postRequests.length === 1
             ? {
                 feedback: feedback.textContent.replace(/\\s+/g, " ").trim(),
@@ -7961,10 +7965,14 @@ async function runChromeTest() {
           const reference = "${codexPreparedCustomerRequestFixture.booking_reference}";
           const instruction = document.querySelector(\`[data-codex-job-card-instruction="\${reference}"]\`);
           const row = document.querySelector(\`[data-new-customer-booking-request-row]\`);
+          const preparation = document.querySelector('[data-codex-job-card-correction-preparation="ready"]');
           const workflowRequests = window.__prestigeWorkflowStatusRequests || [];
 
-          return instruction?.value === ${JSON.stringify("Pickup time should be 10:30; flight number is missing.")} &&
-            row?.textContent.includes("Returned to Codex") &&
+          return instruction?.value === ${JSON.stringify("Pickup time: 14:30\nFlight number: SQ318")} &&
+            row?.textContent.includes("Corrected Preview Ready") &&
+            row?.textContent.includes("Review Corrected Job Card") &&
+            preparation?.textContent.includes("1430hrs") &&
+            preparation?.textContent.includes("SQ318") &&
             workflowRequests.some(
               (request) => request.method === "GET" &&
                 request.booking_reference === reference &&
@@ -7980,7 +7988,7 @@ async function runChromeTest() {
       "Saved Codex instruction reload",
     );
     assert.equal(reloadedCodexInstructionState.instructionValue, codexInstruction);
-    assert.match(reloadedCodexInstructionState.rowText, /Returned to Codex/);
+    assert.match(reloadedCodexInstructionState.rowText, /Corrected Preview Ready/);
 
     for (const viewport of [
       { height: 844, label: "iPhone 13", scale: 3, width: 390 },
@@ -8026,6 +8034,47 @@ async function runChromeTest() {
       );
     }
     await client.send("Emulation.clearDeviceMetricsOverride");
+
+    await evaluate(`window.__prestigeFetchCalls = []`);
+    const openedCorrectedJobCard = await evaluate(`(() => {
+      const button = [...document.querySelectorAll("button")].find(
+        (candidate) => candidate.textContent.trim() === "Review Corrected Job Card",
+      );
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(openedCorrectedJobCard, true, "Expected corrected preview to reuse the existing review handoff");
+    const correctedDispatchPreviewState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const preview = document.querySelector('[data-copy-preview="jobCard"]');
+          const pageText = document.body.innerText.replace(/\\s+/g, " ").trim();
+
+          return preview?.textContent.includes("1430hrs") &&
+            preview?.textContent.includes("SQ318") &&
+            pageText.includes("loaded with review-only corrections")
+            ? {
+                fetchCalls: window.__prestigeFetchCalls || [],
+                preview: preview.textContent,
+              }
+            : false;
+        })()`),
+      10000,
+      "corrected Dispatch job-card preview",
+    );
+    assert.equal(
+      correctedDispatchPreviewState.fetchCalls.some((call) =>
+        /\/api\/(?:admin-bookings|admin-booking-calendar|customer-driver-quick-replies)/.test(call),
+      ),
+      false,
+      `Expected corrected review handoff to avoid booking/calendar/message writes, got ${correctedDispatchPreviewState.fetchCalls.join(", ")}`,
+    );
+    await clickTab("Dashboard", "Operations Dashboard");
 
     await evaluate(`(() => {
       const reference = "${codexPreparedCustomerRequestFixture.booking_reference}";

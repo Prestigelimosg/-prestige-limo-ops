@@ -5,6 +5,7 @@ const ledgerPath = "docs/current-implementation-ledger.md";
 const appPagePath = "app/page.tsx";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
 const guardScript = "scripts/test-admin-load-bookings-crm-fallback-compact-guard.mjs";
+const correctionGuardScript = "scripts/test-codex-job-card-correction-preparer.mjs";
 
 function assertIncludes(source, fragment, label = fragment) {
   assert.equal(source.includes(fragment), true, `${label} must include ${fragment}.`);
@@ -65,8 +66,12 @@ for (const phrase of [
   "The prepared-job-card queue is always visible, shows a clear empty state, and keeps more than three visible cards inside one bounded vertical scrolling box so admin can review the queue at one glance without pressing Load Bookings.",
   "Each prepared card is derived from the exact saved request, remains `Ready for Admin Review`, and keeps the existing `Review Job Card` handoff; calendar changes still require an explicit admin action in the established Dispatch workflow.",
   "Each prepared card now has one bounded `Instruction to Codex (internal only)` field and `Return to Codex` action. The action reuses the established admin-only booking workflow status route with workflow area `admin_booking_review`; it does not add a booking field, table, route, draft, or customer/driver message.",
-  "Returning a card saves only the exact booking reference, `needs_review` status, safe instruction, and next internal action. It does not change booking/customer status, write a calendar, send externally, or claim that the correction worker is active.",
+  "Returning a card saves only the exact booking reference, `needs_review` status, safe instruction, and next internal action. It does not change booking/customer status, write a calendar, or send externally.",
   "Saved Codex instructions reload into the same card after Dashboard refresh. They remain limited to 500 characters and are never copied into customer or driver surfaces.",
+  "The first correction-preparation slice runs automatically in the existing Dashboard card after a returned status loads. It accepts only explicit `Pickup time: 14:30` and `Flight number: SQ123` instructions, applies them to a copied browser-only booking form, and shows the corrected job-card preview inside the same card.",
+  "Ambiguous instructions such as `wrong pickup time`, invalid values, repeated fields, unsupported fields, and no-op replacements fail closed as `Exact Value Needed`; no partial correction is prepared and the saved booking remains unchanged.",
+  "A ready correction reuses the existing `Review Job Card` handoff as `Review Corrected Job Card` and loads only the browser review form. It does not persist the corrected values, create another draft/table/route/write path, alter calendar data, or contact a customer or driver.",
+  "This is not an always-on server/background worker and does not run while the Dashboard is closed. Live AI parsing remains disabled and the mock `/api/ai-parse` route is not used. A durable off-device preparation worker remains a separate future activation step.",
   "Loading a customer request into Dispatch now records a bounded browser-local handled-request key so that request leaves the Dashboard urgent/new request queues and action badge on that admin browser, then becomes available in Current / Upcoming.",
   "Loading a saved booking into Dispatch refreshes the typed operational display once immediately and pauses one background sync tick, keeping the existing guarded read set stable while Customer Copy focuses for review.",
   "The Dashboard now uses the active day-of-trip monitor instead of duplicate Today/Upcoming booking summaries; single-booking driver assignment, status, copy, job-card, and completion work stays in Dispatch/Bookings so page purposes do not duplicate.",
@@ -457,8 +462,14 @@ for (const customerRequestFragment of [
   'status_value: "needs_review"',
   'status_label: "Returned to Codex"',
   'next_action: "Prepare corrected job card for admin review"',
-  "Codex correction automation is not active yet",
-  "onClick={() => loadSelectedBooking(requestBooking, { focusJobCard: true })}",
+  "Exact pickup-time or flight-number corrections are prepared below for review",
+  "prepareCodexJobCardCorrection",
+  "Corrected Preview Ready",
+  "Exact Value Needed",
+  'data-codex-job-card-correction-preparation=',
+  "Review Corrected Job Card",
+  "bookingFormOverride",
+  "The saved booking, calendar, and external messages were not changed.",
   "dispatchLoadFocusTarget",
   "scrollIntoView({ behavior: \"smooth\", block: \"start\" })",
   "Driver Job Link is ready for admin action.",
@@ -1026,5 +1037,6 @@ for (const compactFragment of [
 }
 
 assertIncludes(preactivationSuite, guardScript, "Preactivation suite registration");
+assertIncludes(preactivationSuite, correctionGuardScript, "Correction guard preactivation registration");
 
 console.log("Admin Load Bookings CRM fallback and compact list guard passed");

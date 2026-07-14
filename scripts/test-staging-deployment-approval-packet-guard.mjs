@@ -36,9 +36,9 @@ function sectionBetween(startHeading, nextHeadingPrefix = "\n## ") {
 }
 
 assertIncludes("Staging Deployment Approval Packet", "packet title");
-assertIncludes("approval planning only", "planning-only boundary");
+assertIncludes("records the approved deployment-safety configuration work", "configuration record boundary");
 assertIncludes("does not deploy the app", "no-deploy boundary");
-assertIncludes("change environment values", "no-env-change boundary");
+assertIncludes("without exposing values", "no-env-value exposure boundary");
 assertIncludes("enable writes", "no-write boundary");
 assertIncludes("enable providers", "no-provider boundary");
 assertIncludes("activate any live feature", "no-live-feature boundary");
@@ -67,9 +67,10 @@ for (const fragment of [
 }
 
 for (const fragment of [
-  "Change only the Vercel Production Branch from `staging` to `main`, then verify without pushing or deploying",
-  "Approved production-branch safety separation; no deployment approval",
+  "Change the Vercel Production Branch from `staging` to `main`, then isolate future Preview environment assignments from Production without pushing or deploying",
+  "Approved production-branch safety separation and Preview isolation only; no deployment approval",
   "Future `staging` Preview deployment only after separate Preview environment drift review; no production deploy",
+  "Preview isolation approval: Approved on 2026-07-14 for Preview environment targeting only",
 ]) {
   assertSectionIncludes(approvalSection, fragment, `Approval scope missing ${fragment}`);
 }
@@ -80,9 +81,13 @@ for (const fragment of [
   "Changing Branch Tracking created no deployment and made no domain, alias, environment-variable, or Git change.",
   "`app.prestigelimo.sg` remains on READY deployment `f7e253b3 Repair mobile automation regression coverage` with the same `f7e253b3` page build marker.",
   "Live Automation remains OFF; booking intake remains ON; calendar auto-write, invoice auto-issue, Driver Details Email auto-send, and external send remain OFF.",
-  "Production's names-only audit finds all 22 required environment names without reading values.",
-  "Preview is missing 13 required admin persistence/auth, typed-read, live-location, and map-gate names. This is configuration drift only; it does not approve copying values, editing Preview env, opening gates, pushing, or deploying.",
-  "Remote `main` is `adf37589`, six commits behind remote `staging` at `f7e253b3`; local `staging` is three commits ahead. No merge or push occurred.",
+  "The Vercel CLI was instructed to remove 17 shared names from Preview, but it deleted the multi-target records from both Preview and Production despite the documented environment-specific command.",
+  "Exact recovery restored 14 Production assignments without printing values",
+  "Production remains missing `PRESTIGE_GOOGLE_MAPS_API_KEY`, `RESEND_API_KEY`, and `PRESTIGE_COMPANY_TRAVELER_CRM_IDENTITY_CONTACT_WRITE_ENABLED`.",
+  "Production's names-only audit now finds 20 of 22 required names",
+  "Preview finds 0 of 22 required names",
+  "The existing protected Preview artifact still contains its old frozen environment and must not be treated as isolated",
+  "Remote `main` is `adf37589`, six commits behind remote `staging` at `f7e253b3`; local `staging` is four commits ahead before this record. No merge or push occurred.",
   "Previous READY deployment `f91d0d1e Style customer invoice sectors in black and gold` remains the identified manual rollback target; no rollback is in progress or approved by this record.",
   "The public Vercel project PATCH attempt returned HTTP 400 before mutation because `productionBranch` is not a supported top-level field. The signed-in Vercel Branch Tracking control was then used and independently verified; nothing is hidden as an API success.",
 ]) {
@@ -107,8 +112,9 @@ const deployStepsSection = sectionBetween("## Staging Deploy Steps");
 for (const fragment of [
   "target is staging only",
   "not production",
-  "Do not push `staging` until the 13-name Preview environment drift is separately reviewed",
-  "staging Preview only after that approval",
+  "Do not push `staging`, push `main`, or deploy while the three exact Production assignments listed above remain unresolved.",
+  "Recover provider keys only from the verified Google Cloud and Resend owner surfaces",
+  "staging Preview only with its isolated no-Supabase/no-provider configuration",
   "Do not add live credentials",
   "provider tokens",
   "payment keys",
@@ -126,9 +132,13 @@ for (const fragment of [
   "future pushes to `main` create Production deployments, while `staging` is no longer the Production Branch.",
   "The setting change created no deployment",
   "Live Automation read-back remains safely closed",
-  "The Preview names-only audit reports 13 missing",
+  "The environment-specific Vercel CLI removal unexpectedly deleted 17 multi-target variable records from both Preview and Production.",
+  "Exact bounded recovery restored 14 Production-only assignments without printing values",
+  "Production project configuration remains missing exactly `PRESTIGE_GOOGLE_MAPS_API_KEY`, `RESEND_API_KEY`, and `PRESTIGE_COMPANY_TRAVELER_CRM_IDENTITY_CONTACT_WRITE_ENABLED`.",
+  "The Preview audit finds 0 of 22 required names",
+  "The existing protected Preview artifact still contains its pre-isolation frozen environment",
   "No merge, push, preview deployment, production deployment, promotion, or rollback occurred.",
-  "This external configuration repair does not approve a Git push",
+  "This external configuration record does not approve a Git push",
   "Focused lock: the existing `scripts/test-staging-deployment-approval-packet-guard.mjs`",
 ]) {
   assert.equal(

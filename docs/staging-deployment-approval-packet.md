@@ -1,6 +1,6 @@
 # Staging Deployment Approval Packet
 
-This packet is for approval planning only. It does not deploy the app, change environment values, enable writes, enable providers, or activate any live feature.
+This packet records the approved deployment-safety configuration work. It does not deploy the app, enable writes, enable providers, or activate any live feature. The Preview isolation change and its bounded Production recovery are recorded below without exposing values.
 
 ## Checkpoints
 
@@ -12,10 +12,11 @@ This packet is for approval planning only. It does not deploy the app, change en
 
 - Owner: William / Prestige Limo SG
 - Approval date: 2026-07-14
-- Approved scope: Change only the Vercel Production Branch from `staging` to `main`, then verify without pushing or deploying
-- Decision: Approved production-branch safety separation; no deployment approval
+- Approved scope: Change the Vercel Production Branch from `staging` to `main`, then isolate future Preview environment assignments from Production without pushing or deploying
+- Decision: Approved production-branch safety separation and Preview isolation only; no deployment approval
 - Live activation approval: Not approved
 - Approved staging target: Future `staging` Preview deployment only after separate Preview environment drift review; no production deploy
+- Preview isolation approval: Approved on 2026-07-14 for Preview environment targeting only; no provider-key rotation, Production deployment, database write, or external send was approved
 - Rollback owner: William / Prestige Limo SG
 - Notes: Keep all live DB/write, migrations, provider/env activation, external APIs, live sending, payment/PDF/payout, auth activation, live location, photo upload/storage, CRM/calendar amendment writes, and risky shim writes blocked.
 
@@ -25,9 +26,12 @@ This packet is for approval planning only. It does not deploy the app, change en
 - Changing Branch Tracking created no deployment and made no domain, alias, environment-variable, or Git change.
 - `app.prestigelimo.sg` remains on READY deployment `f7e253b3 Repair mobile automation regression coverage` with the same `f7e253b3` page build marker.
 - Live Automation remains OFF; booking intake remains ON; calendar auto-write, invoice auto-issue, Driver Details Email auto-send, and external send remain OFF.
-- Production's names-only audit finds all 22 required environment names without reading values.
-- Preview is missing 13 required admin persistence/auth, typed-read, live-location, and map-gate names. This is configuration drift only; it does not approve copying values, editing Preview env, opening gates, pushing, or deploying.
-- Remote `main` is `adf37589`, six commits behind remote `staging` at `f7e253b3`; local `staging` is three commits ahead. No merge or push occurred.
+- Owner approved Preview isolation only. The Vercel CLI was instructed to remove 17 shared names from Preview, but it deleted the multi-target records from both Preview and Production despite the documented environment-specific command. This failure is recorded openly; no deployment was created, so the running Production artifact retained its frozen environment.
+- Exact recovery restored 14 Production assignments without printing values: the two linked-project Supabase entries from the ignored verified local source, 11 ledger-documented gate/provider settings, and the domain-restricted browser-map key from the current safe admin config response. None was restored to Preview.
+- Production remains missing `PRESTIGE_GOOGLE_MAPS_API_KEY`, `RESEND_API_KEY`, and `PRESTIGE_COMPANY_TRAVELER_CRM_IDENTITY_CONTACT_WRITE_ENABLED`. The first two are required provider keys and the third remains fail-closed; none may be guessed. All pushes and deployments remain blocked until exact verified recovery is separately approved and completed.
+- Production's names-only audit now finds 20 of 22 required names and reports only `PRESTIGE_GOOGLE_MAPS_API_KEY` and `RESEND_API_KEY` missing. Preview finds 0 of 22 required names; its only remaining project variable is the inert Preview-only browser allowed-origins entry. Values were not printed.
+- Vercel environment changes do not affect existing deployments. The existing protected Preview artifact still contains its old frozen environment and must not be treated as isolated; only a future Preview deployment would consume the isolated configuration.
+- Remote `main` is `adf37589`, six commits behind remote `staging` at `f7e253b3`; local `staging` is four commits ahead before this record. No merge or push occurred.
 - Previous READY deployment `f91d0d1e Style customer invoice sectors in black and gold` remains the identified manual rollback target; no rollback is in progress or approved by this record.
 - The public Vercel project PATCH attempt returned HTTP 400 before mutation because `productionBranch` is not a supported top-level field. The signed-in Vercel Branch Tracking control was then used and independently verified; nothing is hidden as an API success.
 
@@ -48,11 +52,12 @@ Do not proceed if any check fails or if the worktree is dirty.
 1. Confirm the owner/date/scope fields above are filled.
 2. Confirm the target is staging only, not production.
 3. Confirm the rollback commit and previous deployment are known.
-4. Do not push `staging` until the 13-name Preview environment drift is separately reviewed and the exact safe Preview behavior is approved.
-5. Deploy the existing app build artifact or clean repo commit to staging Preview only after that approval.
-6. Do not add live credentials, provider tokens, payment keys, auth activation, DB write flags, or migration commands.
-7. Run the post-deploy smoke checklist below against the staging Preview URL.
-8. Record sanitized evidence only. Do not paste secrets, tokens, env values, database rows, stack traces, or provider responses.
+4. Do not push `staging`, push `main`, or deploy while the three exact Production assignments listed above remain unresolved.
+5. Recover provider keys only from the verified Google Cloud and Resend owner surfaces; do not derive, rotate, or replace them without separate explicit approval. Restore the CRM gate only from exact prior evidence, otherwise leave it fail-closed.
+6. After exact Production recovery is verified, deploy the existing app build artifact or clean repo commit to staging Preview only with its isolated no-Supabase/no-provider configuration.
+7. Do not add live credentials, provider tokens, payment keys, auth activation, DB write flags, or migration commands to Preview.
+8. Run the post-deploy smoke checklist below against the new staging Preview URL; do not use the existing old Preview artifact as isolation evidence.
+9. Record sanitized evidence only. Do not paste secrets, tokens, env values, database rows, stack traces, or provider responses.
 
 ## Env Values That Must Remain Unset Or Disabled
 

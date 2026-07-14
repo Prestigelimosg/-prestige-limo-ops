@@ -4,10 +4,10 @@ Latest verified clean runtime checkpoint:
 fb7d10ce Tolerate unsafe optional booking identity labels
 
 Latest pushed main/staging runtime checkpoint:
-5c0f6392 Automate monthly invoice draft preparation
+fb7d10ce Tolerate unsafe optional booking identity labels
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-e81d4b52 Repair ledger runtime checkpoint guards
+2800284a Update typed-read repair checkpoint
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -20,6 +20,9 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Required unsafe operational fields still reject the typed record. No forbidden value is returned, inferred, renamed, or exposed, and customer/driver privacy boundaries remain unchanged.
 - No second route, mapper, booking lane, panel, button, table, poller, or write path was added. No environment, Supabase schema/data, Automation state, calendar, invoice, payment, payout, provider send, customer/driver message, map, or Google Maps configuration changed.
 - Focused regression coverage remains in the established `scripts/test-load-bookings-operational-record-mapper.mjs` and `scripts/test-load-bookings-typed-read-gated-api-contract.mjs` guards.
+- Exact protected Preview commit `2800284a Update typed-read repair checkpoint` reached READY deployment `dpl_2jUQH3MUGTTnZsFCs5oDLdCnoUgr`. Its bounded checks returned the exact build marker, HTTP 403 for isolated Automation and typed-read admin GETs, HTTP 401 for the cron route, four GET requests only, zero error logs, zero remaining protection-bypass tokens, and unauthenticated HTTP 302 with `noindex`.
+- The same exact commit reached READY Production deployment `dpl_A1jmgezr6BVbb2BVr8yokj6nmqp4` and became the `app.prestigelimo.sg` alias. A same-origin, purpose-bound, token-free admin GET used the established read boundary and returned HTTP 200, `ready`, 25 safe typed cards, zero rejected fields, and no raw single-booking payload. The first shell parse used zsh's reserved `status` variable and stopped after the successful GET without printing the body; the corrected parse produced the recorded sanitized result.
+- The master Automation row remained `closed` with `automation_enabled = false`; `CRON_SECRET` remained absent; protection-bypass count returned to zero; and both Preview and Production Google Maps allowed-origin targets remained present. No Automation activation, cron execution, external send, calendar/invoice action, environment edit, schema/data write, or map action occurred.
 
 ### Combined Automation Protected Preview Evidence
 

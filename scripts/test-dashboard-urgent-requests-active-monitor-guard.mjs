@@ -173,8 +173,8 @@ for (const fragment of [
   "Passenger: {passengerText}",
   "Urgent >1h",
   "New",
-  "onClick={() => loadSelectedBooking(requestBooking, { focusDriverJobLink: true })}",
-  "Open in Driver Job Link",
+  "Review Job Card",
+  "onClick={() => loadSelectedBooking(requestBooking, { focusJobCard: true })}",
 ]) {
   assertIncludes(bookingsRequestPanel, fragment, `bookings request panel fragment ${fragment}`);
 }
@@ -218,7 +218,7 @@ for (const fragment of [
 
 for (const fragment of [
   "const [dispatchLoadFocusTarget, setDispatchLoadFocusTarget] = useState<",
-  '"customerCopy" | "driverJobLink" | null',
+  '"customerCopy" | "driverJobLink" | "jobCard" | null',
   'const [driverJobLinkHandoffReference, setDriverJobLinkHandoffReference] = useState("");',
   'const driverJobLinkHandoffFocusAppliedRef = useRef("");',
   'dispatchLoadFocusTarget === "driverJobLink"',

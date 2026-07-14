@@ -13304,7 +13304,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const [dispatchReleaseWorkflowLoadRevision, setDispatchReleaseWorkflowLoadRevision] =
     useState(0);
   const [dispatchLoadFocusTarget, setDispatchLoadFocusTarget] = useState<
-    "customerCopy" | "driverJobLink" | null
+    "customerCopy" | "driverJobLink" | "jobCard" | null
   >(null);
   const [driverJobLinkHandoffReference, setDriverJobLinkHandoffReference] = useState("");
   const driverJobLinkHandoffFocusAppliedRef = useRef("");
@@ -13356,6 +13356,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       const focusStep =
         dispatchLoadFocusTarget === "driverJobLink"
           ? "driver-job-link"
+          : dispatchLoadFocusTarget === "jobCard"
+            ? "job-card-preview"
           : ["customer", "whatsapp", "copy"].join("-");
       const focusElement = Array.from(
         document.querySelectorAll<HTMLElement>("[data-dispatch-workflow-step]"),
@@ -19565,7 +19567,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
   function loadSelectedBooking(
     bookingRecord: BookingRecord,
-    options: { focusCustomerCopy?: boolean; focusDriverJobLink?: boolean } = {},
+    options: {
+      focusCustomerCopy?: boolean;
+      focusDriverJobLink?: boolean;
+      focusJobCard?: boolean;
+    } = {},
   ) {
     const bookingReference =
       bookingRecordPersistedReference(bookingRecord) ||
@@ -19639,6 +19645,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     setDispatchLoadFocusTarget(
       options.focusCustomerCopy
         ? "customerCopy"
+        : options.focusJobCard
+          ? "jobCard"
         : options.focusDriverJobLink
           ? "driverJobLink"
           : null,
@@ -19649,6 +19657,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       tone: "success",
       text: options.focusDriverJobLink
         ? `Booking ${bookingReference || "selected booking"} loaded. Driver Job Link is ready for admin action.`
+        : options.focusJobCard
+          ? `Booking ${bookingReference || "selected booking"} loaded. Job Card Preview is ready for admin review. No booking or external action was changed.`
         : options.focusCustomerCopy
         ? `Booking ${bookingReference || "selected booking"} loaded. Customer Copy is ready for admin review.`
         : `Booking ${bookingReference || "selected booking"} loaded.`,
@@ -23326,10 +23336,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 <button
                   className="min-h-9 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800"
                   data-new-customer-booking-request-load={bookingId}
-                  onClick={() => loadSelectedBooking(requestBooking, { focusDriverJobLink: true })}
+                  onClick={() => loadSelectedBooking(requestBooking, { focusJobCard: true })}
                   type="button"
                 >
-                  Open in Driver Job Link
+                  Review Job Card
                 </button>
                 {requestRecord
                   ? adminCustomerRequestReviewDecisions.map((decision) => (

@@ -58,7 +58,9 @@ for (const phrase of [
   "Customer request rows with past pickup times are excluded from the new-request badge, so stale pending test/demo requests do not keep a live mobile alert alive.",
   "Dispatch is the default admin landing tab; Dashboard shows a compact `Urgent Booking Requests` alert only for open customer requests and saved Driver TBC jobs inside the 1-hour pickup monitor window, and routes each row to the existing Dispatch Driver Job Link handoff.",
   "Dashboard initial Load Bookings completion only writes the global status message while the operator is still on Dashboard, so a delayed read cannot overwrite Rates or other tab feedback after navigation.",
-  "The Dashboard request row is the review handoff point for open customer requests outside the 1-hour dispatch window and can load the selected request into the existing Dispatch form only when the operator chooses `Open in Driver Job Link`; the handoff focuses the existing Driver Job Link section without adding a duplicate write path.",
+  "The Dashboard request row is the review handoff point for open customer requests outside the 1-hour dispatch window. `Review Job Card` loads the exact already-saved request into the existing Dispatch form and focuses the existing Job Card Preview; it does not create another page, table, draft row, booking write, or job-card storage lane.",
+  "The existing saved booking record remains the durable queue item, so more than three requests stay in the same guarded saved-bookings source while the compact review panel shows the first five and reports the full open count.",
+  "The job-card review handoff is manual and available while Automation is OFF.",
   "Loading a customer request into Dispatch now records a bounded browser-local handled-request key so that request leaves the Dashboard urgent/new request queues and action badge on that admin browser, then becomes available in Current / Upcoming.",
   "Loading a saved booking into Dispatch refreshes the typed operational display once immediately and pauses one background sync tick, keeping the existing guarded read set stable while Customer Copy focuses for review.",
   "The Dashboard now uses the active day-of-trip monitor instead of duplicate Today/Upcoming booking summaries; single-booking driver assignment, status, copy, job-card, and completion work stays in Dispatch/Bookings so page purposes do not duplicate.",
@@ -415,8 +417,8 @@ for (const customerRequestFragment of [
   "data-new-customer-booking-requests-panel",
   "data-new-customer-booking-request-row",
   "data-new-customer-booking-request-load",
-  "Open in Driver Job Link",
-  "onClick={() => loadSelectedBooking(requestBooking, { focusDriverJobLink: true })}",
+  "Review Job Card",
+  "onClick={() => loadSelectedBooking(requestBooking, { focusJobCard: true })}",
   "dispatchLoadFocusTarget",
   "scrollIntoView({ behavior: \"smooth\", block: \"start\" })",
   "Driver Job Link is ready for admin action.",
@@ -424,6 +426,31 @@ for (const customerRequestFragment of [
 ]) {
   assertIncludes(appPage, customerRequestFragment, `Customer request auto-load fragment ${customerRequestFragment}`);
 }
+assertIncludes(
+  appPage,
+  '"customerCopy" | "driverJobLink" | "jobCard" | null',
+  "Existing Dispatch focus target includes Job Card Preview",
+);
+assertIncludes(
+  appPage,
+  'dispatchLoadFocusTarget === "jobCard"',
+  "Job Card review handoff selects exact existing preview target",
+);
+assertIncludes(
+  appPage,
+  '? "job-card-preview"',
+  "Job Card review handoff scrolls the existing preview section",
+);
+assertIncludes(
+  appPage,
+  "Job Card Preview is ready for admin review. No booking or external action was changed.",
+  "Job Card review handoff reports its no-write boundary",
+);
+assertExcludes(
+  appPage,
+  "Open in Driver Job Link",
+  "Bookings request panel stale Driver Job Link action",
+);
 
 for (const dashboardCommandCentreFragment of [
   "{activeJobsMonitorPanel}",

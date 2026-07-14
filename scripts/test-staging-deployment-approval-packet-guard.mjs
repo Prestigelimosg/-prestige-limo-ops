@@ -46,7 +46,7 @@ assertIncludes("activate any live feature", "no-live-feature boundary");
 const checkpointsSection = sectionBetween("## Checkpoints");
 assertSectionIncludes(
   checkpointsSection,
-  "Latest repo commit deployed to isolated Preview: `b09b82f8 Update monthly invoice automation checkpoint`.",
+  "Latest repo commit deployed to isolated Preview: `2acaa3a5 Simplify dashboard booking request review`.",
 );
 assertSectionIncludes(
   checkpointsSection,
@@ -78,7 +78,7 @@ for (const fragment of [
   "Change the Vercel Production Branch from `staging` to `main`, isolate Preview environment assignments from Production, then create and verify one isolated `staging` Preview without pushing or deploying Production",
   "Approved production-branch safety separation and Preview isolation only; no deployment approval at that stage",
   "Preview deployment decision: Owner later explicitly approved proceeding with the suggested next step",
-  "Exact local commit `d292da05` to one refreshed isolated `staging` Preview deployment only; no Git push and no Production deploy",
+  "Exact local commit `2acaa3a5` to one refreshed isolated `staging` Preview deployment only; no Git push and no Production deploy",
   "Preview isolation approval: Approved on 2026-07-14 for Preview environment targeting only",
   "Production recovery approval: Approved on 2026-07-14 for exact existing credential recovery and safe prior-state verification only",
   "Resend replacement-key approval: Owner gave separate action-time approval on 2026-07-14",
@@ -91,6 +91,7 @@ for (const fragment of [
   "Repository Git identity repair approval: Owner explicitly approved proceeding with the next safe step on 2026-07-14",
   "Verified-author source Preview approval: Owner explicitly approved proceeding with the next safe step on 2026-07-14",
   "Combined automation Preview approval: Owner explicitly approved proceeding with the suggested next safe step on 2026-07-14",
+  "Booking Requests layout Preview approval: Owner explicitly approved proceeding with the suggested next safe step on 2026-07-14",
 ]) {
   assertSectionIncludes(approvalSection, fragment, `Approval scope missing ${fragment}`);
 }
@@ -164,6 +165,13 @@ for (const fragment of [
   "27 GET requests and one browser OPTIONS request",
   "final bypass count is zero",
   "No new deployed mobile/foldable pass is claimed",
+  "Exact clean local commit `2acaa3a5 Simplify dashboard booking request review` was deployed with `vercel deploy --target=preview --yes` as READY Preview deployment `dpl_85DP1MZc1oSKowUu4DEPi6Zr4Urm`",
+  "signed-in Chrome confirmed exact page build marker `2acaa3a5`",
+  "exactly one `Booking Requests` sector, one `Refresh Dashboard`, one Push Alerts toggle",
+  "390px modern-phone, and 344px folded-phone outer-screen checks",
+  "Preview names-only review still shows only the inert `PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS` assignment",
+  "No booking decision, notification cleanup, Automation toggle, Push toggle, calendar/map action, invoice action, customer/driver message, or external send was performed.",
+  "The deployment command used no Production flag and no Git push occurred.",
 ]) {
   assertSectionIncludes(branchSeparationSection, fragment, `Branch separation evidence missing ${fragment}`);
 }
@@ -313,6 +321,14 @@ for (const fragment of [
   "The existing `/customers` invoice overview was also reviewed without clicking `Load Accounts`",
   "final bypass-token count is zero",
   "Production was re-read after Preview acceptance and still serves exact build marker `f7e253b3920252834dbef6a3143f6e744d2ab303`",
+  "### Dashboard Booking Requests Isolated Preview Evidence",
+  "deploy exact clean commit `2acaa3a5 Simplify dashboard booking request review` to one isolated protected Preview",
+  "READY Preview deployment `dpl_85DP1MZc1oSKowUu4DEPi6Zr4Urm`",
+  "signed-in Chrome confirms exact build marker `2acaa3a5`",
+  "exactly one `Booking Requests` sector, one `Refresh Dashboard`, one Push Alerts switch",
+  "Desktop, 390px modern-phone, and 344px folded-phone outer-screen checks",
+  "Preview intentionally remains fail-closed",
+  "The deployment command used no Production flag, no Git push occurred",
 ]) {
   assert.equal(
     ledger.includes(fragment),

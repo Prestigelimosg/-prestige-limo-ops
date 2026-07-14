@@ -4,7 +4,7 @@ This packet records the approved deployment-safety configuration work and the la
 
 ## Checkpoints
 
-- Latest repo commit deployed to isolated Preview: `b09b82f8 Update monthly invoice automation checkpoint`.
+- Latest repo commit deployed to isolated Preview: `2acaa3a5 Simplify dashboard booking request review`.
 - Latest verified runtime checkpoint in the ledger: `5c0f6392 Automate monthly invoice draft preparation`.
 - Source of truth: `docs/current-implementation-ledger.md`.
 
@@ -16,7 +16,7 @@ This packet records the approved deployment-safety configuration work and the la
 - Original decision: Approved production-branch safety separation and Preview isolation only; no deployment approval at that stage
 - Preview deployment decision: Owner later explicitly approved proceeding with the suggested next step: one isolated Preview deployment and bounded verification
 - Live activation approval: Not approved
-- Approved staging target: Exact local commit `d292da05` to one refreshed isolated `staging` Preview deployment only; no Git push and no Production deploy
+- Approved staging target: Exact local commit `2acaa3a5` to one refreshed isolated `staging` Preview deployment only; no Git push and no Production deploy
 - Preview isolation approval: Approved on 2026-07-14 for Preview environment targeting only; no provider-key rotation, Production deployment, database write, or external send was approved
 - Production recovery approval: Approved on 2026-07-14 for exact existing credential recovery and safe prior-state verification only; no credential creation/rotation, write-gate activation, deployment, push, or external send was approved
 - Resend replacement-key approval: Owner gave separate action-time approval on 2026-07-14 to create one sending-access key and save it to Vercel Production only; deletion of the existing key, Preview assignment, deployment, push, send-gate activation, and external send remained unapproved
@@ -29,6 +29,7 @@ This packet records the approved deployment-safety configuration work and the la
 - Repository Git identity repair approval: Owner explicitly approved proceeding with the next safe step on 2026-07-14 after the exact source-deployment authorization defect was reported; scope was authenticated identity verification, repository-local Git configuration, focused evidence, and one local evidence commit only; no history rewrite, Git push, Preview deployment, Production deployment, environment change, Automation activation, live-data action, calendar action, invoice action, or external send was approved
 - Verified-author source Preview approval: Owner explicitly approved proceeding with the next safe step on 2026-07-14 after the repository identity repair; scope was exact clean commit `4cf1dc60`, one protected isolated Git-backed source Preview, bounded GET-only and signed-in desktop acceptance, bypass revocation, Production unchanged verification, and evidence recording only; no Git push, Production deployment, Automation activation, live data, calendar/invoice action, environment change, provider action, or external send was approved
 - Combined automation Preview approval: Owner explicitly approved proceeding with the suggested next safe step on 2026-07-14; scope was exact clean commit `b09b82f8`, one protected isolated Git-backed Preview, bounded GET-only API/log checks, signed-in desktop/modern-phone/foldable and invoice-overview acceptance, bypass revocation, Production unchanged verification, and evidence recording only; no Git push, Production deployment, Automation activation, live data, calendar/invoice action, environment change, provider action, or external send was approved
+- Booking Requests layout Preview approval: Owner explicitly approved proceeding with the suggested next safe step on 2026-07-14; scope was exact clean commit `2acaa3a5`, one isolated protected Preview, target/build/protection verification, signed-in desktop/390px/344px layout acceptance, and evidence recording only; no Git push, Production deployment, Automation or Push toggle, live-data action, calendar action, environment change, provider action, or external send was approved
 - Rollback owner: William / Prestige Limo SG
 - Notes: Keep all live DB/write, migrations, provider/env activation, external APIs, live sending, payment/PDF/payout, auth activation, live location, photo upload/storage, CRM/calendar amendment writes, and risky shim writes blocked.
 
@@ -115,6 +116,14 @@ This packet records the approved deployment-safety configuration work and the la
 - The established `/customers` invoice overview also retained one overview, unchanged `Load Accounts` and quick-search controls, all six customer columns, and no horizontal overflow on desktop and 390px mobile. `Load Accounts` was not clicked and no live customer or invoice data was read or changed.
 - The first shell route loop stopped after root because reserved zsh variable names were used; corrected checks produced the recorded results. An initial unsupported project PATCH for bypass revocation returned HTTP 400 before mutation; the correct protection-bypass endpoint then revoked the unprinted temporary token, final bypass count is zero, and unauthenticated Preview access again returns HTTP 302 with `x-robots-tag: noindex`.
 - Production remained unchanged and still served exact build marker `f7e253b3920252834dbef6a3143f6e744d2ab303`. No Git push, Production deployment, alias change, Automation activation, live-data write, environment edit, calendar/invoice action, provider action, or external send occurred; the Preview proves only the exact fail-closed combined artifact and responsive OFF state.
+
+- Exact clean local commit `2acaa3a5 Simplify dashboard booking request review` was deployed with `vercel deploy --target=preview --yes` as READY Preview deployment `dpl_85DP1MZc1oSKowUu4DEPi6Zr4Urm` at `https://prestige-limo-ops-staging-i6lfb2anu-prestigelimosgs-projects.vercel.app`.
+- Vercel inspection confirms target `preview`, status `Ready`, and Singapore creation time; signed-in Chrome confirmed exact page build marker `2acaa3a5`. Unauthenticated access returns HTTP 302 to Vercel SSO with `x-robots-tag: noindex`.
+- Signed-in visual/runtime acceptance confirmed exactly one `Booking Requests` sector, one `Refresh Dashboard`, one Push Alerts toggle, no repeated Admin Actions summary, no retired sector buttons, and zero browser console errors.
+- Desktop, 390px modern-phone, and 344px folded-phone outer-screen checks all had document, workbench, and request-sector scroll widths equal to their client widths; no horizontal overflow was reproduced.
+- Preview names-only review still shows only the inert `PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS` assignment. No Supabase, admin-session, provider, payment, email, calendar, automation-write, or other live credential/gate was added.
+- Preview therefore remains intentionally fail-closed and cannot prove real booking queue rows. No booking decision, notification cleanup, Automation toggle, Push toggle, calendar/map action, invoice action, customer/driver message, or external send was performed.
+- The deployment command used no Production flag and no Git push occurred. No Production deployment, alias, environment, database, provider, or running Production state was changed.
 
 ## Required Checks Before Staging
 

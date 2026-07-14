@@ -279,6 +279,18 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Production is unchanged: `app.prestigelimo.sg` remains READY deployment `dpl_7ksuhQENRPiWNACbEM4Y6dGf6ayR` with build marker `f7e253b3`. No Production alias, promotion, rollback, Git push, live-data write, provider send, Automation state, or environment setting changed.
 - Focused evidence lock: the updated `docs/staging-deployment-approval-packet.md` and `scripts/test-staging-deployment-approval-packet-guard.mjs`.
 
+### Dashboard Booking Requests Isolated Preview Evidence
+
+- Owner approved the suggested next safe step: deploy exact clean commit `2acaa3a5 Simplify dashboard booking request review` to one isolated protected Preview and verify the deployed layout without Git push, Production deployment, live-data action, Automation/Push change, calendar action, or external send.
+- The deployment guard and complete pre-activation suite completed before deployment. The suite emitted the existing module-type warning for `lib/codex-job-card-correction.ts`; no guard failure was reported, and the warning was not hidden as a clean diagnostic.
+- `vercel deploy --target=preview --yes` created READY Preview deployment `dpl_85DP1MZc1oSKowUu4DEPi6Zr4Urm` at `https://prestige-limo-ops-staging-i6lfb2anu-prestigelimosgs-projects.vercel.app`. Vercel inspection confirms target `preview`; signed-in Chrome confirms exact build marker `2acaa3a5`.
+- Unauthenticated Preview access returns HTTP 302 to Vercel SSO with `x-robots-tag: noindex`. Names-only Preview review still shows only the inert `PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS` assignment and no Supabase/admin-session/provider/live credential.
+- Deployed Chrome verification confirmed exactly one `Booking Requests` sector, one `Refresh Dashboard`, one Push Alerts switch, no repeated Admin Actions summary, no retired sector-level buttons, and zero console errors.
+- Desktop, 390px modern-phone, and 344px folded-phone outer-screen checks all had no document, workbench, or request-sector horizontal overflow.
+- Preview intentionally remains fail-closed, so it proves the exact artifact and responsive layout but not real queued booking rows. No booking decision, notification cleanup, Automation/Push toggle, calendar/map action, invoice action, customer/driver message, provider send, environment change, or live-data write occurred.
+- The deployment command used no Production flag, no Git push occurred, and no Production deployment, alias, environment, database, provider, or running Production state was changed.
+- Focused evidence lock remains `docs/staging-deployment-approval-packet.md` and `scripts/test-staging-deployment-approval-packet-guard.mjs`; no duplicate deployment lane was added.
+
 ### Customer Folder Four-Sector Invoice Workflow
 
 - The established customer selection continues to open the existing `/customers/[customerId]` company profile. The top profile retains the existing admin-only invoice-prefix settings, followed by the existing stored invoice totals and invoice list.

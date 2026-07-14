@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-17aa7117 Prepare explicit Codex job card corrections
+f2e327dc Consolidate Dashboard Codex review lane
 
 Latest pushed main/staging runtime checkpoint:
 f7e253b3 Repair mobile automation regression coverage

@@ -37,7 +37,7 @@ function sectionBetween(startHeading, nextHeadingPrefix = "\n## ") {
 
 assertIncludes("Staging Deployment Approval Packet", "packet title");
 assertIncludes("records the approved deployment-safety configuration work", "configuration record boundary");
-assertIncludes("does not deploy the app", "no-deploy boundary");
+assertIncludes("does not deploy Production", "no-Production-deploy boundary");
 assertIncludes("without exposing values", "no-env-value exposure boundary");
 assertIncludes("enable writes", "no-write boundary");
 assertIncludes("enable providers", "no-provider boundary");
@@ -46,7 +46,7 @@ assertIncludes("activate any live feature", "no-live-feature boundary");
 const checkpointsSection = sectionBetween("## Checkpoints");
 assert.match(
   checkpointsSection,
-  /Latest repo commit (?:at packet creation|before this configuration record):\s*`[0-9a-f]{7,}\s+[^`]+`/,
+  /Latest repo commit (?:at packet creation|before this configuration record|deployed to isolated Preview):\s*`[0-9a-f]{7,}\s+[^`]+`/,
   "Packet must include latest repo commit field.",
 );
 assert.match(
@@ -67,12 +67,14 @@ for (const fragment of [
 }
 
 for (const fragment of [
-  "Change the Vercel Production Branch from `staging` to `main`, then isolate future Preview environment assignments from Production without pushing or deploying",
-  "Approved production-branch safety separation and Preview isolation only; no deployment approval",
-  "Future `staging` Preview deployment only after separate Preview environment drift review; no production deploy",
+  "Change the Vercel Production Branch from `staging` to `main`, isolate Preview environment assignments from Production, then create and verify one isolated `staging` Preview without pushing or deploying Production",
+  "Approved production-branch safety separation and Preview isolation only; no deployment approval at that stage",
+  "Preview deployment decision: Owner later explicitly approved proceeding with the suggested next step",
+  "Exact local commit `294cd1d8` to one `staging` Preview deployment only; no Git push and no production deploy",
   "Preview isolation approval: Approved on 2026-07-14 for Preview environment targeting only",
   "Production recovery approval: Approved on 2026-07-14 for exact existing credential recovery and safe prior-state verification only",
   "Resend replacement-key approval: Owner gave separate action-time approval on 2026-07-14",
+  "Isolated Preview deployment approval: Approved on 2026-07-14",
 ]) {
   assertSectionIncludes(approvalSection, fragment, `Approval scope missing ${fragment}`);
 }
@@ -96,6 +98,17 @@ for (const fragment of [
   "Remote `main` is `adf37589`, six commits behind remote `staging` at `f7e253b3`; local `staging` is six commits ahead before this record. No merge or push occurred.",
   "Previous READY deployment `f91d0d1e Style customer invoice sectors in black and gold` remains the identified manual rollback target; no rollback is in progress or approved by this record.",
   "The public Vercel project PATCH attempt returned HTTP 400 before mutation because `productionBranch` is not a supported top-level field. The signed-in Vercel Branch Tracking control was then used and independently verified; nothing is hidden as an API success.",
+  "Pre-deployment browser testing found and stopped on a real operator-feedback defect before deployment.",
+  "deployment `dpl_3Y4sav9jUK4X7XiQhMuVi7PXpuzY`",
+  "target `preview`, status `Ready`, and page build marker `294cd1d8`.",
+  "Post-deploy names-only review still found 0 of 22 required live names",
+  "Final automation-bypass count is zero",
+  "unauthenticated `GET /api/admin-automation-runtime` returned safe HTTP 403",
+  "The raw `/driver-job-demo` keyword scan matched only the word `billing` inside two negative local-demo safety statements",
+  "Lint remained at 160 existing warnings and zero errors.",
+  "The local Next server terminal printed bundled `supabaseUrl is required` diagnostics",
+  "This is recorded as fail-closed server diagnostic noise, not as database-connectivity success.",
+  "Production remained unchanged throughout: `app.prestigelimo.sg` still resolves to READY Production deployment `dpl_7ksuhQENRPiWNACbEM4Y6dGf6ayR` with build marker `f7e253b3`.",
 ]) {
   assertSectionIncludes(branchSeparationSection, fragment, `Branch separation evidence missing ${fragment}`);
 }
@@ -156,6 +169,28 @@ for (const fragment of [
     ledger.includes(fragment),
     true,
     `Implementation ledger missing production-branch safety phrase ${fragment}.`,
+  );
+}
+
+for (const fragment of [
+  "### Isolated Vercel Preview Deployment Evidence",
+  "No Git push or Production deployment was approved.",
+  "committed as `294cd1d8 Preserve admin review warning after calendar sync` before deployment",
+  "READY Preview deployment `dpl_3Y4sav9jUK4X7XiQhMuVi7PXpuzY`",
+  "target `preview`",
+  "0 of 22 required live names in Preview",
+  "final automation-bypass count is zero",
+  "real token-scoped driver route did not expose driver-forbidden terms",
+  "Lint remains 160 existing warnings and zero errors.",
+  "The local Next server terminal printed bundled `supabaseUrl is required` diagnostics",
+  "this diagnostic noise is not hidden or presented as successful database connectivity.",
+  "Production is unchanged: `app.prestigelimo.sg` remains READY deployment `dpl_7ksuhQENRPiWNACbEM4Y6dGf6ayR` with build marker `f7e253b3`.",
+  "No Production deployment, alias move, promotion, rollback, Git push, live-data write, provider send, Automation activation, environment edit, or Preview credential addition occurred.",
+]) {
+  assert.equal(
+    ledger.includes(fragment),
+    true,
+    `Implementation ledger missing isolated Preview evidence phrase ${fragment}.`,
   );
 }
 

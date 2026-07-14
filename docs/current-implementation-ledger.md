@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-dffad548 Keep request review on Dashboard
+294cd1d8 Preserve admin review warning after calendar sync
 
 Latest pushed main/staging runtime checkpoint:
 f7e253b3 Repair mobile automation regression coverage
@@ -51,6 +51,19 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The existing broad browser guard now supplies an in-memory Google Calendar success response and waits for that terminal result before asserting the review warning. This removes the prior timing race, protects the operator-visible final state rather than the transient syncing state, and performs no provider call or calendar write.
 - This repair does not activate Automation, send a message or email, write live data, change an environment, add Preview credentials, push Git, or deploy Production.
 - Focused runtime lock: the updated `scripts/test-app-smoke-browser.mjs` applied-snapshot update scenario.
+
+### Isolated Vercel Preview Deployment Evidence
+
+- Owner explicitly approved the suggested next step after Preview isolation and Production recovery: create one isolated Preview deployment from the exact clean local commit, verify it without live writes/sends, and record the result. No Git push or Production deployment was approved.
+- Pre-deployment `test:app-smoke-browser` stopped the deployment on a real missing final-state `Admin Review Required` warning. The established lane was repaired, tested, reviewed, and committed as `294cd1d8 Preserve admin review warning after calendar sync` before deployment; nothing was deployed from the earlier failing commit.
+- `vercel deploy --target=preview --yes` created READY Preview deployment `dpl_3Y4sav9jUK4X7XiQhMuVi7PXpuzY` at `https://prestige-limo-ops-staging-3khww1978-prestigelimosgs-projects.vercel.app`. Vercel inspection confirms target `preview`, and the rendered page identifies exact build `294cd1d8`.
+- Post-deploy names-only review still finds 0 of 22 required live names in Preview; only the inert Preview browser allowed-origins variable remains. No Supabase, auth, provider, payment, email, calendar, automation-write, or other live credential/gate was added to Preview.
+- Preview access remains Vercel-SSO protected with HTTP 302 and `x-robots-tag: noindex`. The authenticated CLI generated one automation bypass secret for GET-only checks without printing it; the same secret was revoked immediately afterward, final automation-bypass count is zero, and unauthenticated access again redirects to SSO.
+- Sanitized GET-only checks confirmed the customer routes did not expose customer-forbidden terms, the real token-scoped driver route did not expose driver-forbidden terms, and unauthenticated Automation API access failed closed with safe HTTP 403. The public driver demo's raw keyword scan found only two negative safety sentences containing `billing`; no customer price, invoice/payment, payout comparison, PayNow payout, finance/internal notes, or mock archive data was exposed. That distinction is recorded rather than hidden.
+- Exact-commit local build, both browser suites, full pre-activation suite, deployment guards, staged-change guard, and diff review passed. Browser tests reported zero console errors and no blocked Supabase requests. Lint remains 160 existing warnings and zero errors.
+- The local Next server terminal printed bundled `supabaseUrl is required` diagnostics when broad tests deliberately probed disabled backend paths without Supabase configuration. Those requests failed closed, the safe-response guards passed, and Preview intentionally contains no Supabase names; this diagnostic noise is not hidden or presented as successful database connectivity.
+- Production is unchanged: `app.prestigelimo.sg` remains READY deployment `dpl_7ksuhQENRPiWNACbEM4Y6dGf6ayR` with build marker `f7e253b3`. No Production deployment, alias move, promotion, rollback, Git push, live-data write, provider send, Automation activation, environment edit, or Preview credential addition occurred.
+- Focused evidence lock: the updated `docs/staging-deployment-approval-packet.md` and `scripts/test-staging-deployment-approval-packet-guard.mjs`.
 
 ### Customer Folder Four-Sector Invoice Workflow
 

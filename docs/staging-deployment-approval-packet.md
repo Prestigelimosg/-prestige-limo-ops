@@ -1,24 +1,26 @@
 # Staging Deployment Approval Packet
 
-This packet records the approved deployment-safety configuration work. It does not deploy the app, enable writes, enable providers, or activate any live feature. The Preview isolation change and its bounded Production recovery are recorded below without exposing values.
+This packet records the approved deployment-safety configuration work and the later single isolated Preview deployment. It does not deploy Production, enable writes, enable providers, or activate any live feature. The Preview isolation change, bounded Production recovery, Preview deployment, and sanitized verification evidence are recorded below without exposing values.
 
 ## Checkpoints
 
-- Latest repo commit before this configuration record: `88ea2ce5 Record Production credential recovery checkpoint`.
-- Latest implementation checkpoint in the ledger: `dffad548 Keep request review on Dashboard`.
+- Latest repo commit deployed to isolated Preview: `294cd1d8 Preserve admin review warning after calendar sync`.
+- Latest implementation checkpoint in the ledger: `294cd1d8 Preserve admin review warning after calendar sync`.
 - Source of truth: `docs/current-implementation-ledger.md`.
 
 ## Approval Fields
 
 - Owner: William / Prestige Limo SG
 - Approval date: 2026-07-14
-- Approved scope: Change the Vercel Production Branch from `staging` to `main`, then isolate future Preview environment assignments from Production without pushing or deploying
-- Decision: Approved production-branch safety separation and Preview isolation only; no deployment approval
+- Approved scope: Change the Vercel Production Branch from `staging` to `main`, isolate Preview environment assignments from Production, then create and verify one isolated `staging` Preview without pushing or deploying Production
+- Original decision: Approved production-branch safety separation and Preview isolation only; no deployment approval at that stage
+- Preview deployment decision: Owner later explicitly approved proceeding with the suggested next step: one isolated Preview deployment and bounded verification
 - Live activation approval: Not approved
-- Approved staging target: Future `staging` Preview deployment only after separate Preview environment drift review; no production deploy
+- Approved staging target: Exact local commit `294cd1d8` to one `staging` Preview deployment only; no Git push and no production deploy
 - Preview isolation approval: Approved on 2026-07-14 for Preview environment targeting only; no provider-key rotation, Production deployment, database write, or external send was approved
 - Production recovery approval: Approved on 2026-07-14 for exact existing credential recovery and safe prior-state verification only; no credential creation/rotation, write-gate activation, deployment, push, or external send was approved
 - Resend replacement-key approval: Owner gave separate action-time approval on 2026-07-14 to create one sending-access key and save it to Vercel Production only; deletion of the existing key, Preview assignment, deployment, push, send-gate activation, and external send remained unapproved
+- Isolated Preview deployment approval: Approved on 2026-07-14 after Production recovery and Preview names-only review; scope was one Preview deployment, GET-only smoke/privacy checks, and evidence recording only
 - Rollback owner: William / Prestige Limo SG
 - Notes: Keep all live DB/write, migrations, provider/env activation, external APIs, live sending, payment/PDF/payout, auth activation, live location, photo upload/storage, CRM/calendar amendment writes, and risky shim writes blocked.
 
@@ -37,6 +39,15 @@ This packet records the approved deployment-safety configuration work. It does n
 - Remote `main` is `adf37589`, six commits behind remote `staging` at `f7e253b3`; local `staging` is six commits ahead before this record. No merge or push occurred.
 - Previous READY deployment `f91d0d1e Style customer invoice sectors in black and gold` remains the identified manual rollback target; no rollback is in progress or approved by this record.
 - The public Vercel project PATCH attempt returned HTTP 400 before mutation because `productionBranch` is not a supported top-level field. The signed-in Vercel Branch Tracking control was then used and independently verified; nothing is hidden as an API success.
+- Pre-deployment browser testing found and stopped on a real operator-feedback defect before deployment. The established applied-snapshot update lane and its existing browser guard were repaired and committed as `294cd1d8`; the final `Admin Review Required` warning now remains visible after the mocked Google Calendar terminal result.
+- One deployment was then created with `vercel deploy --target=preview --yes`: deployment `dpl_3Y4sav9jUK4X7XiQhMuVi7PXpuzY`, URL `https://prestige-limo-ops-staging-3khww1978-prestigelimosgs-projects.vercel.app`, target `preview`, status `Ready`, and page build marker `294cd1d8`.
+- The new Preview consumed the isolated configuration. Post-deploy names-only review still found 0 of 22 required live names and only the inert Preview `PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS` assignment. No Preview credential or live/write gate was added.
+- The Preview root remains behind Vercel SSO with HTTP 302 and `x-robots-tag: noindex`. Authenticated CLI GET-only verification required an automation bypass secret; the CLI generated one without printing it, every bounded GET check completed, then that exact CLI-created secret was revoked. Final automation-bypass count is zero and unauthenticated Preview access again returns the SSO redirect.
+- Sanitized GET-only checks confirmed `/book` and `/my-bookings` did not expose customer-forbidden terms, the exact token-scoped `/driver-job/[token]` failure surface did not expose driver-forbidden terms, and unauthenticated `GET /api/admin-automation-runtime` returned safe HTTP 403 without secret/internal leakage.
+- The raw `/driver-job-demo` keyword scan matched only the word `billing` inside two negative local-demo safety statements saying no billing behavior is created. It exposed no customer price, invoice/payment data, payout comparison, PayNow payout, finance/internal notes, or mock archive data; the real token-scoped driver surface passed separately. This match is recorded and not hidden as a clean raw-keyword result.
+- Exact-commit local verification passed `npm run build`, both browser suites with zero console errors, the complete pre-activation suite, deployment guards, staged-app-change guard, and `git diff --check`. Lint remained at 160 existing warnings and zero errors.
+- The local Next server terminal printed bundled `supabaseUrl is required` diagnostics when the broad tests deliberately touched disabled backend paths without Supabase configuration. Those requests did not succeed; browser console errors and blocked Supabase requests remained zero, safe API response guards passed, and Preview intentionally has no Supabase names. This is recorded as fail-closed server diagnostic noise, not as database-connectivity success.
+- Production remained unchanged throughout: `app.prestigelimo.sg` still resolves to READY Production deployment `dpl_7ksuhQENRPiWNACbEM4Y6dGf6ayR` with build marker `f7e253b3`. No Production deploy, alias move, promotion, rollback, or Git push occurred.
 
 ## Required Checks Before Staging
 
@@ -48,7 +59,7 @@ This packet records the approved deployment-safety configuration work. It does n
 - `git diff --check`
 - `git status --short`
 
-Do not proceed if any check fails or if the worktree is dirty.
+Do not proceed if any check fails or if the worktree is dirty. This gate stopped the first deployment attempt until the browser failure was repaired, reviewed, and committed.
 
 ## Staging Deploy Steps
 

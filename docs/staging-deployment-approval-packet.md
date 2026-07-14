@@ -4,7 +4,7 @@ This packet records the approved deployment-safety configuration work. It does n
 
 ## Checkpoints
 
-- Latest repo commit before this configuration record: `d19c010e Record Preview environment isolation incident`.
+- Latest repo commit before this configuration record: `88ea2ce5 Record Production credential recovery checkpoint`.
 - Latest implementation checkpoint in the ledger: `dffad548 Keep request review on Dashboard`.
 - Source of truth: `docs/current-implementation-ledger.md`.
 
@@ -18,6 +18,7 @@ This packet records the approved deployment-safety configuration work. It does n
 - Approved staging target: Future `staging` Preview deployment only after separate Preview environment drift review; no production deploy
 - Preview isolation approval: Approved on 2026-07-14 for Preview environment targeting only; no provider-key rotation, Production deployment, database write, or external send was approved
 - Production recovery approval: Approved on 2026-07-14 for exact existing credential recovery and safe prior-state verification only; no credential creation/rotation, write-gate activation, deployment, push, or external send was approved
+- Resend replacement-key approval: Owner gave separate action-time approval on 2026-07-14 to create one sending-access key and save it to Vercel Production only; deletion of the existing key, Preview assignment, deployment, push, send-gate activation, and external send remained unapproved
 - Rollback owner: William / Prestige Limo SG
 - Notes: Keep all live DB/write, migrations, provider/env activation, external APIs, live sending, payment/PDF/payout, auth activation, live location, photo upload/storage, CRM/calendar amendment writes, and risky shim writes blocked.
 
@@ -28,11 +29,12 @@ This packet records the approved deployment-safety configuration work. It does n
 - `app.prestigelimo.sg` remains on READY deployment `f7e253b3 Repair mobile automation regression coverage` with the same `f7e253b3` page build marker.
 - Live Automation remains OFF; booking intake remains ON; calendar auto-write, invoice auto-issue, Driver Details Email auto-send, and external send remain OFF.
 - Owner approved Preview isolation only. The Vercel CLI was instructed to remove 17 shared names from Preview, but it deleted the multi-target records from both Preview and Production despite the documented environment-specific command. This failure is recorded openly; no deployment was created, so the running Production artifact retained its frozen environment.
-- Exact recovery restored 15 Production assignments without printing values: the two linked-project Supabase entries from the ignored verified local source, 11 ledger-documented gate/provider settings, the domain-restricted browser-map key from the current safe admin config response, and the existing Google Maps server key revealed by the signed-in Google Cloud owner surface. The Google key was not created or rotated. None was restored to Preview.
-- Production's names-only audit now finds 21 of 22 required names and reports only `RESEND_API_KEY` missing. The signed-in Resend owner surface exposes only the existing key prefix and metadata; its full token cannot be recovered, and creating a replacement requires separate action-time approval. Preview finds 0 of 22 required names; its only remaining project variable is the inert Preview-only browser allowed-origins entry. Values were not printed.
+- Final bounded recovery established 16 Production assignments without printing values: the prior 15 exact assignments plus one newly approved Resend sending-access key stored as `RESEND_API_KEY`. The new key is named `prestige-limo-ops-production-recovery-20260714`, is restricted to the verified `prestigelimo.sg` domain, and showed no activity after creation. The existing Resend key remains intact. None was added to Preview.
+- Production's names-only audit now passes with all 22 required names and no missing names. Preview still finds 0 of 22 required names; its only remaining project variable is the inert Preview-only browser allowed-origins entry. Values were not printed.
 - `PRESTIGE_COMPANY_TRAVELER_CRM_IDENTITY_CONTACT_WRITE_ENABLED` remains intentionally absent and fail-closed. Vercel history confirms its prior target changes but does not expose the prior value; the existing readiness lock still requires separate owner approval before this write gate may be opened, so it was not guessed or restored.
+- `PRESTIGE_DRIVER_DETAILS_EMAIL_SEND_ENABLED` remains false. Creating and storing the replacement key did not send email, enable a provider action, create a deployment, or change the running Production artifact.
 - Vercel environment changes do not affect existing deployments. The existing protected Preview artifact still contains its old frozen environment and must not be treated as isolated; only a future Preview deployment would consume the isolated configuration.
-- Remote `main` is `adf37589`, six commits behind remote `staging` at `f7e253b3`; local `staging` is five commits ahead before this record. No merge or push occurred.
+- Remote `main` is `adf37589`, six commits behind remote `staging` at `f7e253b3`; local `staging` is six commits ahead before this record. No merge or push occurred.
 - Previous READY deployment `f91d0d1e Style customer invoice sectors in black and gold` remains the identified manual rollback target; no rollback is in progress or approved by this record.
 - The public Vercel project PATCH attempt returned HTTP 400 before mutation because `productionBranch` is not a supported top-level field. The signed-in Vercel Branch Tracking control was then used and independently verified; nothing is hidden as an API success.
 
@@ -53,8 +55,8 @@ Do not proceed if any check fails or if the worktree is dirty.
 1. Confirm the owner/date/scope fields above are filled.
 2. Confirm the target is staging only, not production.
 3. Confirm the rollback commit and previous deployment are known.
-4. Do not push `staging`, push `main`, or deploy while `RESEND_API_KEY` remains unresolved.
-5. The existing Resend token is not revealable from the verified owner surface. Do not create or rotate a replacement without separate action-time approval. Keep the CRM gate absent and fail-closed until its separately guarded activation is explicitly approved.
+4. Production's required names-only configuration recovery is complete, but do not push `staging`, push `main`, or deploy without a separate deployment approval.
+5. Keep the existing Resend key intact and the Driver Details Email send gate false. Do not delete or rotate either key, assign provider credentials to Preview, or send a message without separate action-time approval. Keep the CRM gate absent and fail-closed until its separately guarded activation is explicitly approved.
 6. After exact Production recovery is verified, deploy the existing app build artifact or clean repo commit to staging Preview only with its isolated no-Supabase/no-provider configuration.
 7. Do not add live credentials, provider tokens, payment keys, auth activation, DB write flags, or migration commands to Preview.
 8. Run the post-deploy smoke checklist below against the new staging Preview URL; do not use the existing old Preview artifact as isolation evidence.

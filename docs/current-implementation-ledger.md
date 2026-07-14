@@ -37,6 +37,20 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This is admin presentation and containment only. It does not activate Automation, connect Preview to Supabase, change a booking/calendar/invoice/payment/payout, send externally, change customer/driver surfaces, edit an environment, push Git, or deploy.
 - Focused lock: `scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs`; runtime lock: the existing Dashboard scenario in `scripts/test-booking-ui-browser.mjs`.
 
+### Dashboard Codex Consolidation Preview Evidence
+
+- Owner explicitly approved proceeding with the suggested next safe step after the bounded Dashboard consolidation: deploy exact clean local commit `d292da05 Update Dashboard runtime checkpoint` to one isolated Preview, perform GET-only verification, and record the evidence. No Git push, Production deployment, live-data write, external send, Automation activation, environment edit, or Preview credential addition was approved.
+- Exact runtime checkpoint `f2e327dc Consolidate Dashboard Codex review lane` had already passed the focused guards, complete pre-activation suite, build, app-smoke browser, booking-UI browser, mobile-usability browser, and diff review. Browser suites reported zero test errors and zero console errors; lint remained at 160 existing warnings and zero errors.
+- `vercel deploy --target=preview --yes` created READY Preview deployment `dpl_4vi4yrUxSVnrDxy5KVuFN5AchyFS` at `https://prestige-limo-ops-staging-hu6kl2yeu-prestigelimosgs-projects.vercel.app`. Vercel inspection confirms target `preview`, and authenticated GET-only root verification returned HTTP 200 with exact page build marker `d292da05`.
+- Names-only Preview review still finds only the inert `PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS` assignment. No Supabase, admin-session, auth, provider, payment, email, calendar, automation-write, or other live credential/gate was added.
+- Both fail-closed admin GETs returned HTTP 403: `/api/admin-automation-runtime` and `/api/admin-app-notifications?page=1&limit=5`. Sanitized deployment logs contain only the root HTTP 200 GET and those two HTTP 403 GETs; no POST, PATCH, PUT, or DELETE request reached the deployment.
+- Vercel CLI generated one automation-bypass token without printing it for exact-build and fail-closed GET checks. The exact token was immediately revoked; final automation-bypass count is zero. Unauthenticated Preview access again returns HTTP 302 with `x-robots-tag: noindex`.
+- Vercel's install/build output reported four dependency audit findings: one low and three moderate. The build completed successfully, but those findings remain recorded and were not changed in this Preview-only pass.
+- Local runtime verification used in-memory backend responses. Preview intentionally has no Supabase or admin-session configuration, so `Automation unavailable`, empty/non-live queues, and fail-closed admin reads are expected there rather than proof of live operations.
+- Signed-in visual acceptance of the consolidated deployed interface remains pending. No deployed visual pass is claimed until the owner opens the protected Preview and confirms the single Codex workbench, contained request panel, compact system notices, separate prepared-job-card queue, and supported phone/desktop containment.
+- Production is unchanged: `app.prestigelimo.sg` remains READY deployment `dpl_7ksuhQENRPiWNACbEM4Y6dGf6ayR` with rendered build marker `f7e253b3`. No Production alias, promotion, rollback, Git push, live-data write, provider send, Automation state, or environment setting changed.
+- Focused evidence lock: the updated `docs/staging-deployment-approval-packet.md` and `scripts/test-staging-deployment-approval-packet-guard.mjs`.
+
 ### Admin Automation Master Control Foundation
 
 - The existing Operations Dashboard header now contains one compact admin-only `Automation ON / OFF` switch; no new review page, route-level UI, booking panel, invoice panel, or duplicate workbench was added.

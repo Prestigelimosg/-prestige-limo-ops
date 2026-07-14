@@ -70,13 +70,14 @@ for (const fragment of [
   "Change the Vercel Production Branch from `staging` to `main`, isolate Preview environment assignments from Production, then create and verify one isolated `staging` Preview without pushing or deploying Production",
   "Approved production-branch safety separation and Preview isolation only; no deployment approval at that stage",
   "Preview deployment decision: Owner later explicitly approved proceeding with the suggested next step",
-  "Exact local commit `bdd91bec` to one refreshed isolated `staging` Preview deployment only; no Git push and no Production deploy",
+  "Exact local commit `d292da05` to one refreshed isolated `staging` Preview deployment only; no Git push and no Production deploy",
   "Preview isolation approval: Approved on 2026-07-14 for Preview environment targeting only",
   "Production recovery approval: Approved on 2026-07-14 for exact existing credential recovery and safe prior-state verification only",
   "Resend replacement-key approval: Owner gave separate action-time approval on 2026-07-14",
   "Isolated Preview deployment approval: Approved on 2026-07-14",
   "Isolated Preview refresh approval: Owner later explicitly approved the suggested next step on 2026-07-14",
   "Codex correction Preview approval: Owner then explicitly approved proceeding carefully with the next suggested step on 2026-07-14",
+  "Dashboard consolidation Preview approval: Owner explicitly approved proceeding with the suggested next step on 2026-07-14",
 ]) {
   assertSectionIncludes(approvalSection, fragment, `Approval scope missing ${fragment}`);
 }
@@ -123,6 +124,11 @@ for (const fragment of [
   "Final automation-bypass count is zero; unauthenticated Preview access again returns HTTP 302 with `x-robots-tag: noindex`.",
   "Vercel's build output reported four dependency audit findings: one low and three moderate.",
   "Signed-in visual acceptance of this latest protected URL is pending; no deployed visual pass is claimed.",
+  "Exact clean local commit `d292da05 Update Dashboard runtime checkpoint` was deployed with `vercel deploy --target=preview --yes` as READY Preview deployment `dpl_4vi4yrUxSVnrDxy5KVuFN5AchyFS`",
+  "authenticated GET-only root verification returned HTTP 200 and confirmed exact page build marker `d292da05`.",
+  "Sanitized deployment logs contain only the root HTTP 200 GET and those two HTTP 403 GETs; no POST, PATCH, PUT, or DELETE request reached the deployment.",
+  "Preview intentionally has no Supabase or admin-session configuration",
+  "Signed-in visual acceptance of the consolidated deployed interface is pending; no deployed visual pass is claimed.",
 ]) {
   assertSectionIncludes(branchSeparationSection, fragment, `Branch separation evidence missing ${fragment}`);
 }
@@ -216,6 +222,13 @@ for (const fragment of [
   "one low and three moderate",
   "no deployed visual pass is claimed",
   "Production is unchanged: `app.prestigelimo.sg` remains READY deployment `dpl_7ksuhQENRPiWNACbEM4Y6dGf6ayR` with build marker `f7e253b3`.",
+  "### Dashboard Codex Consolidation Preview Evidence",
+  "READY Preview deployment `dpl_4vi4yrUxSVnrDxy5KVuFN5AchyFS`",
+  "exact page build marker `d292da05`",
+  "Sanitized deployment logs contain only the root HTTP 200 GET and those two HTTP 403 GETs",
+  "final automation-bypass count is zero",
+  "Preview intentionally has no Supabase or admin-session configuration",
+  "Signed-in visual acceptance of the consolidated deployed interface remains pending.",
 ]) {
   assert.equal(
     ledger.includes(fragment),

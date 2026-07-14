@@ -79,6 +79,7 @@ for (const fragment of [
   "Codex correction Preview approval: Owner then explicitly approved proceeding carefully with the next suggested step on 2026-07-14",
   "Dashboard consolidation Preview approval: Owner explicitly approved proceeding with the suggested next step on 2026-07-14",
   "Automatic preparation Preview approval: Owner explicitly approved proceeding with the suggested next safe step on 2026-07-14",
+  "Calendar conflict Preview approval: Owner explicitly approved proceeding with the suggested next safe step on 2026-07-14",
 ]) {
   assertSectionIncludes(approvalSection, fragment, `Approval scope missing ${fragment}`);
 }
@@ -134,6 +135,15 @@ for (const fragment of [
   "confirmed exact page build marker `fd0eecd3`",
   "It proves the exact code artifact and fail-closed boundary, but it cannot prove a live automatic preparation write",
   "A current local dependency audit reports the same four known findings: one low and three moderate, with zero high or critical findings.",
+  "blocked non-runtime deployment `dpl_8PavU6nCj5LqpDKh86PQiPmHLjp4`",
+  "ended with Vercel's exact `Not authorized` result",
+  "The first prebuilt fallback was rejected before deployment because its artifact retained a dependency link to the main workspace.",
+  "READY deployment `dpl_6qM2y5SeirbBDRGhV5283MUnmZrB`",
+  "exact page build marker `565993b4`",
+  "28 GET requests and one browser OPTIONS request",
+  "final automation-bypass count is zero, and unauthenticated Preview access again returns HTTP 302 with `x-robots-tag: noindex`.",
+  "Signed-in Mac Chrome visual acceptance passed at the normal 1021px viewport, iPhone 13 floor 390 x 844, modern Android 412 x 915, and unfolded foldable 841 x 701.",
+  "Production remained unchanged and was re-read after the Preview pass",
 ]) {
   assertSectionIncludes(branchSeparationSection, fragment, `Branch separation evidence missing ${fragment}`);
 }
@@ -243,6 +253,19 @@ for (const fragment of [
   "it cannot prove a live automatic preparation write",
   "zero high or critical findings",
   "Production is unchanged: `app.prestigelimo.sg` remains READY deployment `dpl_7ksuhQENRPiWNACbEM4Y6dGf6ayR`",
+  "### Codex Calendar Conflict Protected Preview Evidence",
+  "exact runtime commit `565993b4 Add Codex saved-job conflict checks`",
+  "blocked non-runtime deployment `dpl_8PavU6nCj5LqpDKh86PQiPmHLjp4`",
+  "ended with Vercel's exact `Not authorized` result",
+  "first prebuilt fallback was rejected before deployment because its artifact retained a dependency link to the main workspace",
+  "READY deployment `dpl_6qM2y5SeirbBDRGhV5283MUnmZrB`",
+  "exact page build marker `565993b4`",
+  "28 GET requests and one browser OPTIONS request",
+  "zero POST, PATCH, PUT, or DELETE request",
+  "final automation-bypass count is zero",
+  "normal 1021px viewport, iPhone 13 floor 390 x 844, modern Android 412 x 915, and unfolded foldable 841 x 701",
+  "The in-memory local browser fixture remains the runtime proof for `Calendar conflict (1)` while Automation is ON",
+  "Production remained unchanged and was re-read after the Preview pass",
 ]) {
   assert.equal(
     ledger.includes(fragment),

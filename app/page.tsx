@@ -857,6 +857,11 @@ type LoadBookingsTypedOperationalDisplayResult = {
   orderedCardIds: string[];
 };
 
+type LoadBookingsTypedOperationalDisplayFetchResult = {
+  operationalDisplay: LoadBookingsTypedOperationalDisplayResult | null;
+  terminalUnavailable: boolean;
+};
+
 type AdminLoadBookingsTypedReadSafeBooking = {
   quarantined_field_count?: number;
   safe_card?: Partial<Record<LoadBookingsOperationalDisplayField, string | null>> | null;
@@ -8070,12 +8075,22 @@ async function fetchLoadBookingsTypedOperationalDisplayResult(searchParams: URLS
     method: "GET",
   });
   const responseBody = (await response.json().catch(() => null)) as AdminLoadBookingsTypedReadResponse | null;
+  const terminalUnavailable =
+    response.status === 503 &&
+    responseBody?.status === "blocked" &&
+    responseBody.read_gate_open === false;
 
   if (!response.ok || responseBody?.ok !== true || !Array.isArray(responseBody.bookings)) {
-    return null;
+    return {
+      operationalDisplay: null,
+      terminalUnavailable,
+    } satisfies LoadBookingsTypedOperationalDisplayFetchResult;
   }
 
-  return buildLoadBookingsTypedOperationalDisplayResult(responseBody.bookings);
+  return {
+    operationalDisplay: buildLoadBookingsTypedOperationalDisplayResult(responseBody.bookings),
+    terminalUnavailable: false,
+  } satisfies LoadBookingsTypedOperationalDisplayFetchResult;
 }
 
 function getLoadBookingsOperationalDisplayTitle(card: LoadBookingsOperationalDisplayCard) {
@@ -12889,6 +12904,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const dashboardBookingsInitialLoadAttemptedRef = useRef(false);
   const bookingAutoSyncInFlightRef = useRef(false);
   const bookingAutoSyncPausedUntilRef = useRef(0);
+  const loadBookingsTypedReadTerminalUnavailableRef = useRef(false);
   const driverJobLinkVehicleFallbackRefreshLastRequestedRef = useRef<Record<string, number>>({});
   const [handledCustomerBookingRequestKeys, setHandledCustomerBookingRequestKeys] = useState<
     string[]
@@ -19556,8 +19572,19 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
     try {
       const searchParams = new URLSearchParams({ limit: "25" });
-      const typedOperationalDisplay =
-        await fetchLoadBookingsTypedOperationalDisplayResult(searchParams).catch(() => null);
+      let typedOperationalDisplay: LoadBookingsTypedOperationalDisplayResult | null = null;
+
+      if (!silent || !loadBookingsTypedReadTerminalUnavailableRef.current) {
+        const typedOperationalDisplayFetch =
+          await fetchLoadBookingsTypedOperationalDisplayResult(searchParams).catch(() => null);
+
+        if (typedOperationalDisplayFetch?.terminalUnavailable) {
+          loadBookingsTypedReadTerminalUnavailableRef.current = true;
+        } else if (typedOperationalDisplayFetch?.operationalDisplay) {
+          loadBookingsTypedReadTerminalUnavailableRef.current = false;
+          typedOperationalDisplay = typedOperationalDisplayFetch.operationalDisplay;
+        }
+      }
       searchParams.set("limit", adminLoadBookingsListLimit);
 
       async function fetchAdminSavedBookingsList(): Promise<AdminBookingsListReadResult> {
@@ -19725,16 +19752,26 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     if (bookingReference) {
       bookingAutoSyncPausedUntilRef.current = Date.now() + 5_000;
       const typedDisplaySearchParams = new URLSearchParams({ limit: "25" });
-      void fetchLoadBookingsTypedOperationalDisplayResult(typedDisplaySearchParams)
-        .then((typedOperationalDisplay) => {
-          if (!typedOperationalDisplay) {
-            return;
-          }
+      if (!loadBookingsTypedReadTerminalUnavailableRef.current) {
+        void fetchLoadBookingsTypedOperationalDisplayResult(typedDisplaySearchParams)
+          .then((typedOperationalDisplayFetch) => {
+            if (typedOperationalDisplayFetch.terminalUnavailable) {
+              loadBookingsTypedReadTerminalUnavailableRef.current = true;
+              return;
+            }
 
-          setLoadBookingsTypedOperationalCardsById(typedOperationalDisplay.cardsById);
-          setLoadBookingsTypedOperationalCardOrder(typedOperationalDisplay.orderedCardIds);
-        })
-        .catch(() => null);
+            const typedOperationalDisplay = typedOperationalDisplayFetch.operationalDisplay;
+
+            if (!typedOperationalDisplay) {
+              return;
+            }
+
+            loadBookingsTypedReadTerminalUnavailableRef.current = false;
+            setLoadBookingsTypedOperationalCardsById(typedOperationalDisplay.cardsById);
+            setLoadBookingsTypedOperationalCardOrder(typedOperationalDisplay.orderedCardIds);
+          })
+          .catch(() => null);
+      }
       if (
         (clean(loadedBookingForm.driverName) ||
           clean(loadedBookingForm.driverContact) ||

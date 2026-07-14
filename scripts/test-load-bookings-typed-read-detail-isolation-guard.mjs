@@ -202,8 +202,8 @@ assertIncludes(
   "if (!response.ok || responseBody?.ok !== true || !Array.isArray(responseBody.bookings))",
   "typed bridge list-only response gate",
 );
-assertIncludes(typedDisplayBridge, "return buildLoadBookingsTypedOperationalDisplayResult(responseBody.bookings)", "typed bridge list builder");
-assertIncludes(typedDisplayBridge, "return null;", "typed bridge detail/null fallback");
+assertIncludes(typedDisplayBridge, "operationalDisplay: buildLoadBookingsTypedOperationalDisplayResult(responseBody.bookings)", "typed bridge list builder");
+assertIncludes(typedDisplayBridge, "operationalDisplay: null", "typed bridge detail/null fallback");
 assertExcludes(typedDisplayBridge, /responseBody\.booking(?!s)/, "typed bridge singular detail payload");
 assertExcludes(typedDisplayBridge, "responseBody.mode", "typed bridge detail mode branch");
 assertExcludes(typedDisplayBridge, "booking_id", "typed bridge detail query param");

@@ -306,10 +306,10 @@ assertIncludes(
 );
 assertIncludes(
   typedDisplayBridge,
-  "return buildLoadBookingsTypedOperationalDisplayResult(responseBody.bookings)",
+  "operationalDisplay: buildLoadBookingsTypedOperationalDisplayResult(responseBody.bookings)",
   "typed bridge list builder",
 );
-assertIncludes(typedDisplayBridge, "return null;", "typed bridge null fallback");
+assertIncludes(typedDisplayBridge, "operationalDisplay: null", "typed bridge null fallback");
 assertExcludes(typedDisplayBridge, /responseBody\.booking(?!s)/, "typed bridge singular detail payload");
 assertExcludes(typedDisplayBridge, "responseBody.mode", "typed bridge detail mode branch");
 assertExcludes(typedDisplayBridge, "booking_id", "typed bridge detail booking_id query");

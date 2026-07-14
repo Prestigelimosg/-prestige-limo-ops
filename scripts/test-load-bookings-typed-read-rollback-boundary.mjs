@@ -73,7 +73,7 @@ const rollbackSection = sectionBetween(
 for (const phrase of [
   "Typed Load Bookings read rollback boundary is guarded.",
   "Rollback path: close `PRESTIGE_LOAD_BOOKINGS_TYPED_READ_ENABLED`; Load Bookings continues to use `GET /api/admin-saved-bookings` as the booking/form/detail source and fallback.",
-  "Typed read failures, blocked responses, closed gates, or malformed responses must return `null` from the operational display bridge and must not block the legacy saved-bookings read.",
+  "Typed read failures, blocked responses, closed gates, or malformed responses must produce no typed operational display and must not block the legacy saved-bookings read.",
   "Typed safe-card state resets to empty before each load and falls back to empty maps/orders when typed read is unavailable.",
   "Typed read safe-card order is display-only and must not replace the legacy `BookingRecord` action/form/detail source.",
   "The typed endpoint remains GET-only and read-only.",
@@ -105,6 +105,21 @@ const legacyFetchFragment = "fetch(`${adminSavedBookingsApiPath}?${searchParams.
 assertIncludes(appPage, `const adminLoadBookingsTypedReadApiPath = "${typedReadPath}"`, "typed read path");
 assertIncludes(loadBookingsBlock, typedFetchFragment, "typed operational display bridge");
 assertIncludes(loadBookingsBlock, `${typedFetchFragment}.catch(() => null)`, "typed bridge safe failure fallback");
+assertIncludes(
+  loadBookingsBlock,
+  "if (!silent || !loadBookingsTypedReadTerminalUnavailableRef.current)",
+  "manual retry and silent terminal suspension boundary",
+);
+assertIncludes(
+  loadBookingsBlock,
+  "loadBookingsTypedReadTerminalUnavailableRef.current = true;",
+  "closed-gate terminal suspension",
+);
+assertIncludes(
+  loadBookingsBlock,
+  "loadBookingsTypedReadTerminalUnavailableRef.current = false;",
+  "successful typed-read suspension reset",
+);
 assertIncludes(loadBookingsBlock, legacyFetchFragment, "legacy saved-bookings fallback read");
 assertIncludes(loadBookingsBlock, "setLoadBookingsTypedOperationalCardsById({});", "typed card reset");
 assertIncludes(loadBookingsBlock, "setLoadBookingsTypedOperationalCardOrder([]);", "typed order reset");
@@ -141,8 +156,42 @@ assertIncludes(
   "if (!response.ok || responseBody?.ok !== true || !Array.isArray(responseBody.bookings))",
   "typed bridge rejects blocked/malformed responses",
 );
-assertIncludes(typedDisplayBridge, "return null;", "typed bridge null fallback");
+assertIncludes(typedDisplayBridge, "response.status === 503", "typed bridge terminal HTTP status");
+assertIncludes(typedDisplayBridge, 'responseBody?.status === "blocked"', "typed bridge terminal response status");
+assertIncludes(typedDisplayBridge, "responseBody.read_gate_open === false", "typed bridge closed-gate state");
+assertIncludes(typedDisplayBridge, "operationalDisplay: null", "typed bridge empty fallback");
+assertIncludes(typedDisplayBridge, "terminalUnavailable", "typed bridge terminal outcome");
 assertExcludes(typedDisplayBridge, legacySavedBookingsPath, "typed bridge must not call legacy route directly");
+
+const selectedBookingTypedRefreshBlock = sliceBetween(
+  appPage,
+  'const typedDisplaySearchParams = new URLSearchParams({ limit: "25" });',
+  "if (\n        (clean(loadedBookingForm.driverName)",
+);
+assertIncludes(
+  selectedBookingTypedRefreshBlock,
+  "if (!loadBookingsTypedReadTerminalUnavailableRef.current)",
+  "selected-booking terminal typed-read suspension",
+);
+assertIncludes(
+  selectedBookingTypedRefreshBlock,
+  "typedOperationalDisplayFetch.terminalUnavailable",
+  "selected-booking closed-gate recognition",
+);
+
+const currentBehaviorSection = sectionBetween(
+  ledger,
+  "### Load Bookings Terminal Typed-Read Polling Suspension",
+);
+for (const phrase of [
+  "skips only subsequent silent typed-read auto-sync attempts",
+  "The required saved-bookings read and its three-second sync continue unchanged.",
+  "Transient typed-read failures remain retryable.",
+  "The existing `Refresh Loaded Bookings` action always retries the typed read",
+  "No second read lane, route, panel, helper, button, booking/customer write, calendar action, invoice/payment/payout action, provider send, environment change, deployment, or Git push is included.",
+]) {
+  assertIncludes(currentBehaviorSection, phrase, `Current behavior ledger phrase: ${phrase}`);
+}
 
 assertIncludes(typedReadRoute, "export async function GET", "typed route GET");
 assertExcludes(typedReadRoute, "export async function POST", "typed route POST");

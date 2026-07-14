@@ -249,11 +249,11 @@ assertIncludes(
   "if (!response.ok || responseBody?.ok !== true || !Array.isArray(responseBody.bookings))",
   "typed bridge rejects non-ready payloads",
 );
-assertIncludes(typedDisplayBridge, "return null;", "typed bridge null rollback");
+assertIncludes(typedDisplayBridge, "operationalDisplay: null", "typed bridge null rollback");
+assertIncludes(typedDisplayBridge, 'responseBody?.status === "blocked"', "typed bridge closed-gate classification");
 assertExcludes(typedDisplayBridge, "setMessage", "typed bridge must not display typed failure payload");
 assertExcludes(typedDisplayBridge, "responseBody.error", "typed bridge must not surface typed failure error");
 for (const forbiddenBridgeFragment of [
-  "responseBody.status",
   /responseBody\.booking(?!s)/,
   "responseBody.data",
   "responseBody.records",

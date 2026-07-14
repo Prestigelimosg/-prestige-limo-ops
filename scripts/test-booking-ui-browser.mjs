@@ -6364,6 +6364,22 @@ async function runChromeTest() {
 
         window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
 
+        if (
+          method === "GET" &&
+          String(target).includes("/api/admin-load-bookings-typed-read")
+        ) {
+          return new Response(JSON.stringify({
+            bookings: [],
+            ok: true,
+            read_gate_open: true,
+            status: "ready",
+            version: "browser-admin-load-bookings-typed-read-mock",
+          }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+
         if (String(target).includes("/api/admin-automation-runtime")) {
           let parsedBody = null;
 
@@ -7402,6 +7418,35 @@ async function runChromeTest() {
         return window.__prestigeOriginalFetch(...args);
       };
     })()`);
+
+    await clickTab("Dashboard", "Refresh Loaded Bookings");
+    const clickedTypedReadReadyFixtureRefresh = await evaluate(`(() => {
+      const button = [...document.querySelectorAll("button")].find(
+        (candidate) => candidate.textContent.trim() === "Refresh Loaded Bookings",
+      );
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedTypedReadReadyFixtureRefresh,
+      true,
+      "Expected the typed-read ready fixture to reset any earlier closed-gate page state",
+    );
+    await waitForCondition(
+      () =>
+        evaluate(`(window.__prestigeFetchCalls || []).some(
+          (call) => call.startsWith("GET ") && call.includes("/api/admin-load-bookings-typed-read")
+        ) && (window.__prestigeAdminSavedBookingListRequests || []).some(
+          (request) => request.method === "GET" && request.limit === "100"
+        )`),
+      10000,
+      "typed-read ready fixture manual refresh",
+    );
 
     await clickTab("Bookings", "Find saved jobs");
     await waitForCondition(
@@ -16211,7 +16256,7 @@ async function runChromeTest() {
       "GET /api/admin-email-activation-preflight-setup",
       "GET /api/admin-driver-job-statuses?booking_reference=ui-cleanup-load-fixture&limit=4",
       "GET /api/admin-driver-ots-photo-proofs?booking_reference=ui-cleanup-load-fixture&limit=3",
-      "GET /api/admin-load-bookings-typed-read?limit=25",
+      "GET /api/admin-saved-bookings?limit=100",
       "GET /api/admin-monthly-billing-groups?limit=1&page=1&billing_month=2026-05",
       "GET /api/admin-monthly-billing-draft-plans?limit=1&page=1&billing_month=2026-05",
       "GET /api/admin-monthly-invoice-drafts?limit=1&page=1&billing_month=2026-05",
@@ -21427,6 +21472,25 @@ async function runChromeTest() {
         const method = args[1]?.method || args[0]?.method || "GET";
         const bodyText = typeof args[1]?.body === "string" ? args[1].body : "";
 
+        if (
+          method === "GET" &&
+          String(target).includes("/api/admin-load-bookings-typed-read")
+        ) {
+          window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
+
+          return new Response(JSON.stringify({
+            bookings: [],
+            ok: false,
+            read_gate_open: false,
+            reason: "gate_closed",
+            status: "blocked",
+            version: "browser-admin-load-bookings-typed-read-closed-gate-mock",
+          }), {
+            status: 503,
+            headers: { "content-type": "application/json" },
+          });
+        }
+
         window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
 
         if (
@@ -21621,6 +21685,60 @@ async function runChromeTest() {
       emptyStateLoadBookingsReadState.legacyBookingListReads,
       [],
       "Expected completed-only refresh not to read the booking list through the legacy admin data shim",
+    );
+
+    reporter.step("checking closed typed-read gate suspends only silent booking auto-sync");
+    const terminalTypedReadBaseline = {
+      savedReadCount: emptyStateLoadBookingsReadState.savedBookingListReads.length,
+      typedReadCount: emptyStateLoadBookingsReadState.typedOperationalDisplayReads.length,
+    };
+    const terminalTypedReadAutoSyncState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => ({
+          savedReadCount: (window.__prestigeAdminSavedBookingListRequests || []).length,
+          typedReadCount: (window.__prestigeFetchCalls || []).filter(
+            (call) => call.startsWith("GET ") && call.includes("/api/admin-load-bookings-typed-read")
+          ).length,
+        }))()`);
+
+        return candidateState?.savedReadCount >= terminalTypedReadBaseline.savedReadCount + 2
+          ? candidateState
+          : false;
+      },
+      10000,
+      "saved-bookings auto-sync continues after terminal typed-read response",
+    );
+    assert.equal(
+      terminalTypedReadAutoSyncState.typedReadCount,
+      terminalTypedReadBaseline.typedReadCount,
+      "Expected a closed typed-read gate not to repeat during silent three-second booking sync",
+    );
+
+    await clickTab("Dashboard", "Refresh Loaded Bookings");
+    const clickedTerminalTypedReadManualRetry = await evaluate(`(() => {
+      const button = [...document.querySelectorAll("button")].find(
+        (candidate) => candidate.textContent.trim() === "Refresh Loaded Bookings",
+      );
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedTerminalTypedReadManualRetry,
+      true,
+      "Expected manual Refresh Loaded Bookings to remain available after terminal typed-read suspension",
+    );
+    await waitForCondition(
+      () =>
+        evaluate(`(window.__prestigeFetchCalls || []).filter(
+          (call) => call.startsWith("GET ") && call.includes("/api/admin-load-bookings-typed-read")
+        ).length > ${terminalTypedReadBaseline.typedReadCount}`),
+      10000,
+      "manual typed-read retry after terminal suspension",
     );
 
     await clickTab("Completed", "Completed / History");

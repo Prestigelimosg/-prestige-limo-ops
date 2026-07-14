@@ -401,7 +401,8 @@ const typedDisplayBridge = sliceBetween(
 );
 assertIncludes(typedDisplayBridge, `fetch(\`\${adminLoadBookingsTypedReadApiPath}?`, "typed bridge fetch");
 assertIncludes(typedDisplayBridge, 'method: "GET"', "typed bridge GET");
-assertIncludes(typedDisplayBridge, "return null;", "typed bridge rollback fallback");
+assertIncludes(typedDisplayBridge, "operationalDisplay: null", "typed bridge rollback fallback");
+assertIncludes(typedDisplayBridge, "terminalUnavailable", "typed bridge terminal outcome");
 assertExcludes(typedDisplayBridge, legacySavedBookingsPath, "typed bridge direct legacy route coupling");
 
 const saveBookingBlock = sliceBetween(appPage, "async function saveBooking", "async function loadBookings");

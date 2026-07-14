@@ -169,7 +169,8 @@ for (const forbiddenLoadFragment of [
 
 assertIncludes(typedDisplayBridgeBlock, `fetch(\`\${adminLoadBookingsTypedReadApiPath}?`, "typed display bridge fetch");
 assertIncludes(typedDisplayBridgeBlock, 'method: "GET"', "typed display bridge GET-only");
-assertIncludes(typedDisplayBridgeBlock, "return null;", "typed display bridge null fallback");
+assertIncludes(typedDisplayBridgeBlock, "operationalDisplay: null", "typed display bridge null fallback");
+assertIncludes(typedDisplayBridgeBlock, "terminalUnavailable", "typed display bridge terminal outcome");
 assertIncludes(
   typedDisplayBridgeBlock,
   "if (!response.ok || responseBody?.ok !== true || !Array.isArray(responseBody.bookings))",

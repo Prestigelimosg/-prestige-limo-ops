@@ -185,7 +185,7 @@ const saveBookingBlock = sliceBetween(appPage, "async function saveBooking", "as
 
 assertIncludes(typedDisplayBridgeBlock, `fetch(\`\${adminLoadBookingsTypedReadApiPath}?`, "typed display fetch");
 assertIncludes(typedDisplayBridgeBlock, 'method: "GET"', "typed display fetch GET-only");
-assertIncludes(typedDisplayBridgeBlock, "return null;", "typed display safe fallback");
+assertIncludes(typedDisplayBridgeBlock, "operationalDisplay: null", "typed display safe fallback");
 assertIncludes(
   typedDisplayBridgeBlock,
   "if (!response.ok || responseBody?.ok !== true || !Array.isArray(responseBody.bookings))",

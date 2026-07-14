@@ -11,7 +11,7 @@ function between(start, end) {
 }
 
 const visibleRequestPanel = between(
-  "const customerBookingRequestsPanel",
+  "const codexPreparedJobCardsPanel",
   "const bookingsFindToolbar",
 );
 for (const fragment of [

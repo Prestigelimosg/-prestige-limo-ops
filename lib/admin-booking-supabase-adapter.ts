@@ -30,6 +30,7 @@ export type AdminBookingPersistenceAdapterActor = {
   boundary_mode:
     | AdminDispatcherBoundaryContext["mode"]
     | "codex-job-card-automation-surface"
+    | "codex-monthly-invoice-automation-surface"
     | "customer-booking-request-surface";
   source_surface: "admin_api" | "customer_booking_request" | "system";
 };
@@ -1572,6 +1573,13 @@ export const codexJobCardAutomationPersistenceAdapterActor: AdminBookingPersiste
   actor_label: "Codex job-card automation",
   actor_role: "system",
   boundary_mode: "codex-job-card-automation-surface",
+  source_surface: "system",
+};
+
+export const codexMonthlyInvoiceAutomationPersistenceAdapterActor: AdminBookingPersistenceAdapterActor = {
+  actor_label: "Codex monthly invoice automation",
+  actor_role: "system",
+  boundary_mode: "codex-monthly-invoice-automation-surface",
   source_surface: "system",
 };
 

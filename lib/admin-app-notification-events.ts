@@ -90,3 +90,57 @@ export async function createMonthlyBillingDraftPrepAppEvent(
     };
   }
 }
+
+export async function createMonthlyInvoiceDraftAutomationSummaryAppEvent(
+  {
+    billingMonth,
+    failedCount,
+    preparedCount,
+    skippedExistingCount,
+  }: {
+    billingMonth: string;
+    failedCount: number;
+    preparedCount: number;
+    skippedExistingCount: number;
+  },
+  actor: AdminBookingPersistenceAdapterActor,
+): Promise<AdminAppOutboxEventResult> {
+  const eventKey = `monthly-billing-auto-prep-${compactEventKeySegment(billingMonth)}`;
+  const payload: AdminAppNotificationInput = {
+    booking_reference: null,
+    event_key: eventKey,
+    notification_status: "queued",
+    notification_type: "monthly_billing",
+    priority: failedCount > 0 ? "high" : "normal",
+    safe_context: {
+      billing_month: billingMonth,
+      failed_count: failedCount,
+      prepared_count: preparedCount,
+      skipped_existing_count: skippedExistingCount,
+    },
+    safe_message:
+      failedCount > 0
+        ? "Monthly billing draft preparation completed with items needing admin review."
+        : "Monthly billing drafts are ready for admin review.",
+    safe_title: "Monthly billing drafts ready",
+    workflow_area: "monthly_billing_draft_prep",
+  };
+
+  try {
+    const result = await createAdminAppNotification(payload, actor);
+
+    return {
+      delivery_surface: "admin_app",
+      event_key: result.ok ? result.data.event_key || eventKey : eventKey,
+      external_send: false,
+      status: result.ok ? "created" : "failed_safely",
+    };
+  } catch {
+    return {
+      delivery_surface: "admin_app",
+      event_key: eventKey,
+      external_send: false,
+      status: "failed_safely",
+    };
+  }
+}

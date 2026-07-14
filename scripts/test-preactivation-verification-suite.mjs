@@ -30,6 +30,10 @@ const guardChecks = [
     script: "scripts/test-codex-calendar-conflict-detection-guard.mjs",
   },
   {
+    label: "Codex monthly invoice draft auto-preparation guard",
+    script: "scripts/test-codex-monthly-invoice-draft-auto-preparation-guard.mjs",
+  },
+  {
     label: "admin exact customer account delete API contract guard",
     script: "scripts/test-admin-customer-account-delete-api-contract.mjs",
   },

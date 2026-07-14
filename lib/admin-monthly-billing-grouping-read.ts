@@ -422,6 +422,12 @@ function isColumnMissingFailure(error: unknown) {
 }
 
 function validateActor(actor: AdminBookingPersistenceAdapterActor): AdminBookingResult<null> {
+  const isVerifiedCodexMonthlyInvoiceAutomationActor =
+    actor?.actor_label === "Codex monthly invoice automation" &&
+    actor.actor_role === "system" &&
+    actor.boundary_mode === "codex-monthly-invoice-automation-surface" &&
+    actor.source_surface === "system";
+
   if (
     !actor ||
     !allowedActorRoles.has(actor.actor_role) ||
@@ -437,6 +443,7 @@ function validateActor(actor: AdminBookingPersistenceAdapterActor): AdminBooking
 
   if (
     process.env.PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED === "true" &&
+    !isVerifiedCodexMonthlyInvoiceAutomationActor &&
     (actor.boundary_mode !== "server-session-role-surface" ||
       !["admin", "dispatcher"].includes(actor.actor_role) ||
       actor.source_surface !== "admin_api")

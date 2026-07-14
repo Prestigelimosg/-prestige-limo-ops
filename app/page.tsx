@@ -74,6 +74,7 @@ const adminMonthlyInvoiceNumberReservationsApiPath =
   "/api/admin-monthly-invoice-number-reservations";
 const adminCompanyProfileApiPath = "/api/admin-company-profile";
 const adminAppNotificationsApiPath = "/api/admin-app-notifications";
+const adminAutomationRuntimeApiPath = "/api/admin-automation-runtime";
 const adminDevicePushSubscriptionsApiPath = "/api/admin-device-push-subscriptions";
 const adminCustomerDriverDetailsEmailReviewItemApiPath =
   "/api/admin-customer-driver-details-email-review-item-setup";
@@ -1463,6 +1464,30 @@ type AdminAppNotificationAction = {
   notificationId: string;
   status: AdminAppNotificationUpdateStatus;
 } | null;
+
+type AdminAutomationRuntimeStatus =
+  | "idle"
+  | "loading"
+  | "active"
+  | "closed"
+  | "saving"
+  | "error";
+
+type AdminAutomationRuntimeState = {
+  automationEnabled: boolean;
+  message: Message | null;
+  status: AdminAutomationRuntimeStatus;
+};
+
+type AdminAutomationRuntimeResult = {
+  automation_enabled?: boolean;
+  booking_intake_enabled?: boolean;
+  customerVisible?: boolean;
+  external_send?: boolean;
+  ok?: boolean;
+  reason?: string | null;
+  runtime_status?: string | null;
+};
 
 type AdminAlertLocatorTarget =
   | "admin-app-notification"
@@ -9688,6 +9713,27 @@ function adminAppNotificationFailureMessage(rawError: unknown) {
   return "Saved admin app notifications could not be read. Reload the admin dashboard and try again.";
 }
 
+function adminAutomationRuntimeFailureMessage(rawError: unknown) {
+  const normalizedError =
+    rawError instanceof Error
+      ? clean(rawError.message).toLowerCase()
+      : clean(String(rawError || "")).toLowerCase();
+
+  if (/not ready|configuration|setting_missing|read_failed|write_failed/.test(normalizedError)) {
+    return "Automation control is not ready on this server. Bookings and manual actions stay available.";
+  }
+
+  if (/forbidden|internal admin|verified admin|dispatcher|boundary/.test(normalizedError)) {
+    return "Automation control requires the approved admin Dashboard.";
+  }
+
+  if (/invalid|required|malformed|unknown/.test(normalizedError)) {
+    return "Automation control needs review. No background action was changed.";
+  }
+
+  return "Automation control could not be updated. Bookings and manual actions stay available.";
+}
+
 function adminDevicePushFailureMessage(rawError: unknown) {
   const normalizedError =
     rawError instanceof Error ? clean(rawError.message).toLowerCase() : clean(String(rawError || "")).toLowerCase();
@@ -10269,6 +10315,54 @@ async function loadAdminDriverJobDspActualTimeRead(bookingReference: string) {
       null,
     summaries: matchingSummaries.slice(0, 3),
   };
+}
+
+async function loadAdminAutomationRuntimeControl() {
+  const response = await fetch(adminAutomationRuntimeApiPath, {
+    headers: {
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "GET",
+  });
+  const result = (await response.json().catch(() => null)) as
+    | (AdminAutomationRuntimeResult & { error?: string })
+    | null;
+
+  if (
+    !response.ok ||
+    result?.ok !== true ||
+    result.customerVisible !== false ||
+    result.external_send !== false
+  ) {
+    throw new Error(result?.reason || result?.error || "Automation control read failed.");
+  }
+
+  return result;
+}
+
+async function updateAdminAutomationRuntimeControl(enabled: boolean) {
+  const response = await fetch(adminAutomationRuntimeApiPath, {
+    body: JSON.stringify({ enabled }),
+    headers: {
+      "Content-Type": "application/json",
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "PATCH",
+  });
+  const result = (await response.json().catch(() => null)) as
+    | (AdminAutomationRuntimeResult & { error?: string })
+    | null;
+
+  if (
+    !response.ok ||
+    result?.ok !== true ||
+    result.customerVisible !== false ||
+    result.external_send !== false
+  ) {
+    throw new Error(result?.reason || result?.error || "Automation control update failed.");
+  }
+
+  return result;
 }
 
 async function loadAdminAppNotificationsRead() {
@@ -12988,6 +13082,12 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const [adminAppNotificationReadRevision, setAdminAppNotificationReadRevision] = useState(0);
   const [adminAppNotificationAction, setAdminAppNotificationAction] =
     useState<AdminAppNotificationAction>(null);
+  const [adminAutomationRuntimeState, setAdminAutomationRuntimeState] =
+    useState<AdminAutomationRuntimeState>({
+      automationEnabled: false,
+      message: null,
+      status: "idle",
+    });
   const [adminBookingChangeRequestReviewAction, setAdminBookingChangeRequestReviewAction] =
     useState<AdminBookingChangeRequestReviewAction>(null);
   const [adminDevicePushState, setAdminDevicePushState] = useState<AdminDevicePushState>({
@@ -13474,6 +13574,65 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       };
     }
 
+    setAdminAutomationRuntimeState((current) => ({
+      ...current,
+      message: {
+        tone: "info",
+        text: "Checking Automation control...",
+      },
+      status: "loading",
+    }));
+
+    void (async () => {
+      try {
+        const runtime = await loadAdminAutomationRuntimeControl();
+
+        if (cancelled) {
+          return;
+        }
+
+        const automationEnabled = runtime.automation_enabled === true;
+
+        setAdminAutomationRuntimeState({
+          automationEnabled,
+          message: {
+            tone: automationEnabled ? "success" : "info",
+            text: automationEnabled
+              ? "Automation control is ON. Bookings and manual actions stay available."
+              : "Automation control is OFF. Bookings and manual actions stay available.",
+          },
+          status: automationEnabled ? "active" : "closed",
+        });
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setAdminAutomationRuntimeState({
+          automationEnabled: false,
+          message: {
+            tone: "error",
+            text: adminAutomationRuntimeFailureMessage(error),
+          },
+          status: "error",
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (activeTab !== "dashboard") {
+      return () => {
+        cancelled = true;
+      };
+    }
+
     setAdminAppNotificationReadState((current) => {
       if (current.status === "loaded") {
         return current;
@@ -13649,6 +13808,52 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       cancelled = true;
     };
   }, [activeTab]);
+
+  const handleAdminAutomationRuntimeToggle = async () => {
+    if (
+      adminAutomationRuntimeState.status === "idle" ||
+      adminAutomationRuntimeState.status === "loading" ||
+      adminAutomationRuntimeState.status === "saving"
+    ) {
+      return;
+    }
+
+    const enabled = !adminAutomationRuntimeState.automationEnabled;
+
+    setAdminAutomationRuntimeState((current) => ({
+      ...current,
+      message: {
+        tone: "info",
+        text: enabled ? "Turning Automation ON..." : "Turning Automation OFF...",
+      },
+      status: "saving",
+    }));
+
+    try {
+      const runtime = await updateAdminAutomationRuntimeControl(enabled);
+      const automationEnabled = runtime.automation_enabled === true;
+
+      setAdminAutomationRuntimeState({
+        automationEnabled,
+        message: {
+          tone: "success",
+          text: automationEnabled
+            ? "Automation is ON. Bookings and manual actions stay available."
+            : "Automation is OFF. Bookings and manual actions stay available.",
+        },
+        status: automationEnabled ? "active" : "closed",
+      });
+    } catch (error) {
+      setAdminAutomationRuntimeState((current) => ({
+        ...current,
+        message: {
+          tone: "error",
+          text: adminAutomationRuntimeFailureMessage(error),
+        },
+        status: "error",
+      }));
+    }
+  };
 
   const handleAdminDevicePushEnable = async () => {
     if (!adminDevicePushState.supported || !adminDevicePushState.publicKey) {
@@ -30036,6 +30241,26 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const deployedBuildCommitShort = /^[a-f0-9]{7,40}$/.test(deployedBuildCommit)
     ? deployedBuildCommit.slice(0, 8)
     : "unavailable";
+  const adminAutomationRuntimeEnabled =
+    adminAutomationRuntimeState.automationEnabled &&
+    adminAutomationRuntimeState.status === "active";
+  const adminAutomationRuntimeBusy =
+    adminAutomationRuntimeState.status === "idle" ||
+    adminAutomationRuntimeState.status === "loading" ||
+    adminAutomationRuntimeState.status === "saving";
+  const adminAutomationRuntimeLabel =
+    adminAutomationRuntimeState.status === "saving"
+      ? adminAutomationRuntimeState.automationEnabled
+        ? "Turning OFF..."
+        : "Turning ON..."
+      : adminAutomationRuntimeState.status === "loading" ||
+          adminAutomationRuntimeState.status === "idle"
+        ? "Checking automation..."
+        : adminAutomationRuntimeEnabled
+          ? "Automation ON"
+          : adminAutomationRuntimeState.status === "error"
+            ? "Automation unavailable"
+            : "Automation OFF";
 
   return (
     <main className="admin-ops-shell min-h-screen bg-stone-50 text-slate-950">
@@ -42908,6 +43133,39 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row lg:min-w-[520px]">
+              <button
+                aria-checked={adminAutomationRuntimeEnabled}
+                aria-describedby="admin-automation-runtime-help"
+                className={`inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-full border px-3 text-xs font-semibold transition disabled:cursor-wait disabled:opacity-70 ${
+                  adminAutomationRuntimeState.status === "error"
+                    ? "border-rose-300 bg-rose-50 text-rose-800"
+                    : adminAutomationRuntimeEnabled
+                      ? "border-emerald-700 bg-emerald-700 text-white"
+                      : "border-stone-300 bg-white text-slate-700 hover:bg-stone-50"
+                }`}
+                data-admin-automation-runtime-enabled={adminAutomationRuntimeEnabled ? "true" : "false"}
+                data-admin-automation-runtime-state={adminAutomationRuntimeState.status}
+                data-admin-automation-runtime-toggle="true"
+                disabled={adminAutomationRuntimeBusy}
+                onClick={handleAdminAutomationRuntimeToggle}
+                role="switch"
+                title={
+                  adminAutomationRuntimeState.message?.text ||
+                  "Automation controls future background preparation. Bookings and manual actions stay available."
+                }
+                type="button"
+              >
+                <span
+                  aria-hidden="true"
+                  className={`h-2.5 w-2.5 rounded-full ${
+                    adminAutomationRuntimeEnabled ? "bg-white" : "bg-stone-400"
+                  }`}
+                />
+                <span>{adminAutomationRuntimeLabel}</span>
+              </button>
+              <span className="sr-only" id="admin-automation-runtime-help">
+                Bookings and manual actions stay available.
+              </span>
               <label className="flex-1">
                 <span className="sr-only">Search bookings</span>
                 <input

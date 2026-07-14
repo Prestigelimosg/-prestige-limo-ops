@@ -6248,6 +6248,8 @@ async function runChromeTest() {
       window.__prestigeDriverJobStatusRequests = [];
       window.__prestigeDriverJobStatuses = {};
       window.__prestigeAdminAppNotificationRequests = [];
+      window.__prestigeAdminAutomationRuntimeEnabled = false;
+      window.__prestigeAdminAutomationRuntimeRequests = [];
       window.__prestigeAdminBookingCalendarEventRequests = [];
       window.__prestigeAdminBookingCalendarSyncStatusRequests = [];
       window.__prestigeCalendarBlobTypes = [];
@@ -6325,6 +6327,55 @@ async function runChromeTest() {
         })();
 
         window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
+
+        if (String(target).includes("/api/admin-automation-runtime")) {
+          let parsedBody = null;
+
+          if (bodyText) {
+            try {
+              parsedBody = JSON.parse(bodyText);
+            } catch {
+              parsedBody = null;
+            }
+          }
+
+          window.__prestigeAdminAutomationRuntimeRequests.push({
+            body: parsedBody,
+            headers,
+            method,
+            url: String(target),
+          });
+
+          if (method === "PATCH" && typeof parsedBody?.enabled === "boolean") {
+            window.__prestigeAdminAutomationRuntimeEnabled = parsedBody.enabled;
+          } else if (method !== "GET") {
+            return new Response(
+              JSON.stringify({
+                error: "Admin automation runtime method not mocked.",
+                ok: false,
+              }),
+              { status: 405, headers: { "content-type": "application/json" } },
+            );
+          }
+
+          const enabled = window.__prestigeAdminAutomationRuntimeEnabled === true;
+
+          return new Response(
+            JSON.stringify({
+              automation_enabled: enabled,
+              booking_intake_enabled: true,
+              calendar_auto_write_enabled: false,
+              customer_driver_email_auto_send_enabled: false,
+              customerVisible: false,
+              external_send: false,
+              invoice_auto_issue_enabled: false,
+              ok: true,
+              runtime_status: enabled ? "active" : "closed",
+              version: "admin-automation-runtime-control:v1",
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
 
         if (String(target).includes("/api/admin-customer-driver-details-email-review-item-setup")) {
           const url = new URL(String(target), window.location.origin);
@@ -7657,6 +7708,7 @@ async function runChromeTest() {
           const rows = [...document.querySelectorAll("[data-dashboard-command-centre-row]")];
           const activeJobs = [...document.querySelectorAll("[data-admin-multi-driver-active-job]")];
           const notificationFeed = document.querySelector("[data-admin-app-notification-feed='true']");
+          const automationToggle = document.querySelector("[data-admin-automation-runtime-toggle='true']");
           const completedHistoryButton = [...document.querySelectorAll("button")].find(
             (button) => button.textContent.trim() === "Open Completed / History",
           );
@@ -7673,9 +7725,13 @@ async function runChromeTest() {
             ),
           ];
 
-          return dashboard && notificationFeed && completedHistoryButton
+          return dashboard && notificationFeed && completedHistoryButton && automationToggle?.textContent.trim() === "Automation OFF"
             ? {
                 activeJobCount: activeJobs.length,
+                automationAriaChecked: automationToggle.getAttribute("aria-checked"),
+                automationEnabled: automationToggle.getAttribute("data-admin-automation-runtime-enabled"),
+                automationRole: automationToggle.getAttribute("role"),
+                automationText: automationToggle.textContent.trim(),
                 completedHistoryButtonText: completedHistoryButton.textContent.trim(),
                 forbiddenDuplicateControlCount: forbiddenDuplicateControls.length,
                 rowCount: rows.length,
@@ -7693,6 +7749,10 @@ async function runChromeTest() {
       "Expected Dashboard to avoid duplicated active job cards when no job is inside the 1-hour window",
     );
     assert.equal(dashboardCommandCentreState.completedHistoryButtonText, "Open Completed / History");
+    assert.equal(dashboardCommandCentreState.automationAriaChecked, "false");
+    assert.equal(dashboardCommandCentreState.automationEnabled, "false");
+    assert.equal(dashboardCommandCentreState.automationRole, "switch");
+    assert.equal(dashboardCommandCentreState.automationText, "Automation OFF");
     assert.equal(
       dashboardCommandCentreState.forbiddenDuplicateControlCount,
       0,
@@ -7701,6 +7761,74 @@ async function runChromeTest() {
     assert.match(dashboardCommandCentreState.visibleText, /Urgent \/ Customer Requests/);
     assert.match(dashboardCommandCentreState.visibleText, /Today's Jobs/);
     assert.match(dashboardCommandCentreState.visibleText, /Admin App Notifications/);
+
+    const clickedAutomationOn = await evaluate(`(() => {
+      const automationToggle = document.querySelector("[data-admin-automation-runtime-toggle='true']");
+
+      if (!automationToggle || automationToggle.disabled) {
+        return false;
+      }
+
+      automationToggle.click();
+      return true;
+    })()`);
+    assert.equal(clickedAutomationOn, true, "Expected the compact Dashboard automation switch to be clickable");
+
+    const automationOnState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const automationToggle = document.querySelector("[data-admin-automation-runtime-toggle='true']");
+          const requests = window.__prestigeAdminAutomationRuntimeRequests || [];
+          const patchRequests = requests.filter((request) => request.method === "PATCH");
+
+          return automationToggle?.textContent.trim() === "Automation ON" && patchRequests.length >= 1
+            ? {
+                ariaChecked: automationToggle.getAttribute("aria-checked"),
+                enabled: automationToggle.getAttribute("data-admin-automation-runtime-enabled"),
+                patchBodies: patchRequests.map((request) => request.body),
+              }
+            : false;
+        })()`),
+      10000,
+      "Dashboard automation switch enabled",
+    );
+    assert.equal(automationOnState.ariaChecked, "true");
+    assert.equal(automationOnState.enabled, "true");
+    assert.deepEqual(automationOnState.patchBodies.at(-1), { enabled: true });
+
+    const clickedAutomationOff = await evaluate(`(() => {
+      const automationToggle = document.querySelector("[data-admin-automation-runtime-toggle='true']");
+
+      if (!automationToggle || automationToggle.disabled) {
+        return false;
+      }
+
+      automationToggle.click();
+      return true;
+    })()`);
+    assert.equal(clickedAutomationOff, true, "Expected the compact Dashboard automation switch to turn off");
+
+    const automationOffState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const automationToggle = document.querySelector("[data-admin-automation-runtime-toggle='true']");
+          const requests = window.__prestigeAdminAutomationRuntimeRequests || [];
+          const patchRequests = requests.filter((request) => request.method === "PATCH");
+
+          return automationToggle?.textContent.trim() === "Automation OFF" && patchRequests.length >= 2
+            ? {
+                ariaChecked: automationToggle.getAttribute("aria-checked"),
+                enabled: automationToggle.getAttribute("data-admin-automation-runtime-enabled"),
+                patchBodies: patchRequests.map((request) => request.body),
+              }
+            : false;
+        })()`),
+      10000,
+      "Dashboard automation switch disabled",
+    );
+    assert.equal(automationOffState.ariaChecked, "false");
+    assert.equal(automationOffState.enabled, "false");
+    assert.deepEqual(automationOffState.patchBodies.at(-1), { enabled: false });
 
     const clickedDashboardOpenCompletedHistory = await evaluate(`(() => {
       const openButton = [...document.querySelectorAll("button")].find(

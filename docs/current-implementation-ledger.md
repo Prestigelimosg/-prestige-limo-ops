@@ -12,6 +12,18 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Admin Automation Master Control Foundation
+
+- The existing Operations Dashboard header now contains one compact admin-only `Automation ON / OFF` switch; no new review page, route-level UI, booking panel, invoice panel, or duplicate workbench was added.
+- The switch persists one singleton server-side setting in `admin_automation_runtime_settings`, defaults closed, and is readable/writable only through the existing verified same-origin admin/dispatcher boundary and service-role-only table access.
+- Turning Automation OFF never blocks customer booking intake, deletes queued reviews, changes a booking/calendar, issues an invoice, sends customer/driver Email, or removes manual admin actions.
+- This first pass is control-only: calendar conflict checks, job-card queueing, scheduled monthly invoice preparation, and automatic Driver Details Email remain disabled until their later separately guarded passes.
+- The control response is admin-only and bounded to safe runtime state. It cannot expose customer/driver data, pricing, billing, invoice/payment, payout/PayNow, internal notes, parser/debug data, provider payloads, tokens/secrets, GPS/photo data, or mock/archive data.
+- Migration `20260714015946_admin_automation_runtime_settings.sql` creates only the closed singleton setting with RLS enabled and explicit service-role access; public, anonymous, authenticated, customer, and driver access remain revoked.
+- The migration is prepared in the repository and is not applied by this application-code pass. Until a separately verified apply, the Dashboard switch fails closed as unavailable while booking intake and every existing manual action continue unchanged.
+- No calendar provider write, invoice/PDF creation, customer/driver provider send, scheduled task, booking write, environment change, deployment, or live-data mutation is included.
+- Focused lock: `scripts/test-admin-automation-runtime-control-guard.mjs`.
+
 ### Customer Folder Four-Sector Invoice Workflow
 
 - The established customer selection continues to open the existing `/customers/[customerId]` company profile. The top profile retains the existing admin-only invoice-prefix settings, followed by the existing stored invoice totals and invoice list.

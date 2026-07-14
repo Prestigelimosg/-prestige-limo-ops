@@ -1,8 +1,18 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 
 const ledgerPath = "docs/current-implementation-ledger.md";
+const runtimePathspecs = [
+  "app",
+  "lib",
+  "public",
+  "supabase",
+  "next.config.ts",
+  "package.json",
+  "package-lock.json",
+  "tsconfig.json",
+];
 
 assert.equal(fs.existsSync(ledgerPath), true, "Current implementation ledger must exist.");
 
@@ -31,6 +41,53 @@ function parseCheckpointLine(checkpointLine, label) {
   return { checkpointHash, checkpointTitle };
 }
 
+function readGitCommit(ref, label) {
+  const output = execFileSync("git", ["show", "-s", "--format=%H%x00%s", ref], {
+    encoding: "utf8",
+  }).trim();
+  const [fullHash, title] = output.split("\0");
+
+  assert.match(fullHash || "", /^[0-9a-f]{40}$/i, `${label} must resolve to a Git commit.`);
+  assert.ok(title?.trim(), `${label} commit title must be present.`);
+
+  return { fullHash, title: title.trim() };
+}
+
+function readLatestRuntimeCommit(ref, label) {
+  const output = execFileSync(
+    "git",
+    ["log", "-1", "--format=%H%x00%s", ref, "--", ...runtimePathspecs],
+    { encoding: "utf8" },
+  ).trim();
+  const [fullHash, title] = output.split("\0");
+
+  assert.match(fullHash || "", /^[0-9a-f]{40}$/i, `${label} must resolve to a Git commit.`);
+  assert.ok(title?.trim(), `${label} commit title must be present.`);
+
+  return { fullHash, title: title.trim() };
+}
+
+function assertCheckpointMatchesCommit(checkpoint, commit, label) {
+  assert.equal(
+    commit.fullHash.startsWith(checkpoint.checkpointHash),
+    true,
+    `${label} hash must match its Git commit.`,
+  );
+  assert.equal(
+    checkpoint.checkpointTitle,
+    commit.title,
+    `${label} title must match its Git commit title.`,
+  );
+}
+
+function assertAncestor(ancestor, descendant, label) {
+  const result = spawnSync("git", ["merge-base", "--is-ancestor", ancestor, descendant], {
+    encoding: "utf8",
+  });
+
+  assert.equal(result.status, 0, label);
+}
+
 const verifiedLine = lines
   .map((line, index) => ({ line: line.trim(), index }))
   .find(({ line }) => line === "Latest verified clean runtime checkpoint:");
@@ -45,26 +102,52 @@ const pushedRuntimeCheckpoint = parseCheckpointLine(
   lineAfterMarker("Latest pushed main/staging runtime checkpoint:", "latest pushed main/staging runtime checkpoint"),
   "Latest pushed main/staging runtime checkpoint",
 );
-
-assert.equal(
-  `${verifiedCheckpoint.checkpointHash} ${verifiedCheckpoint.checkpointTitle}`,
-  `${pushedRuntimeCheckpoint.checkpointHash} ${pushedRuntimeCheckpoint.checkpointTitle}`,
-  "Latest verified clean runtime checkpoint and pushed main/staging runtime checkpoint must stay aligned.",
+const remoteDeploymentCheckpoint = parseCheckpointLine(
+  lineAfterMarker(
+    "Latest remote main/staging deployment checkpoint verified before this docs note:",
+    "latest remote main/staging deployment checkpoint",
+  ),
+  "Latest remote main/staging deployment checkpoint",
 );
 assert.ok(
   ledger.includes("This file is the repo source of truth for Codex and future work."),
   "Ledger must clearly remain the repo source of truth.",
 );
 
-const gitLog = execFileSync("git", ["log", "--oneline", "--all"], {
-  encoding: "utf8",
-});
+const verifiedCommit = readLatestRuntimeCommit("HEAD", "Latest local runtime checkpoint");
+const trackedPushedCommit = readGitCommit(
+  "refs/remotes/origin/staging",
+  "Local origin/staging tracking ref",
+);
+const deployedCommit = readGitCommit(
+  remoteDeploymentCheckpoint.checkpointHash,
+  "Remote deployment checkpoint",
+);
 
-assert.ok(
-  gitLog
-    .split(/\r?\n/)
-    .some((line) => line.startsWith(`${pushedRuntimeCheckpoint.checkpointHash} `)),
-  "Ledger pushed runtime checkpoint hash must exist in git log --oneline.",
+assertCheckpointMatchesCommit(
+  verifiedCheckpoint,
+  verifiedCommit,
+  "Latest verified clean runtime checkpoint",
+);
+assertCheckpointMatchesCommit(
+  pushedRuntimeCheckpoint,
+  trackedPushedCommit,
+  "Latest pushed main/staging runtime checkpoint",
+);
+assertCheckpointMatchesCommit(
+  remoteDeploymentCheckpoint,
+  deployedCommit,
+  "Latest remote main/staging deployment checkpoint",
+);
+assertAncestor(
+  pushedRuntimeCheckpoint.checkpointHash,
+  verifiedCheckpoint.checkpointHash,
+  "The pushed checkpoint must be an ancestor of the verified local checkpoint.",
+);
+assertAncestor(
+  remoteDeploymentCheckpoint.checkpointHash,
+  pushedRuntimeCheckpoint.checkpointHash,
+  "The verified deployed checkpoint must not be ahead of or unrelated to the pushed checkpoint.",
 );
 
 console.log("current implementation ledger alignment guard passed");

@@ -1,13 +1,13 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-8905b66b Clarify customer invoice folder sectors
+dffad548 Keep request review on Dashboard
 
 Latest pushed main/staging runtime checkpoint:
-8905b66b Clarify customer invoice folder sectors
+f7e253b3 Repair mobile automation regression coverage
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-8905b66b Clarify customer invoice folder sectors
+f7e253b3 Repair mobile automation regression coverage
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -3813,8 +3813,11 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Ledger checkpoint source-of-truth consistency is guarded.
 - This is a docs/test-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.
 - Checkpoint state must be recorded by commit hash and task name, not counters.
-- The top latest verified clean runtime checkpoint must match the latest pushed main/staging runtime checkpoint line.
+- The top latest verified clean runtime checkpoint may be ahead of the latest pushed main/staging runtime checkpoint while tested application commits remain local; each line must record its own actual commit hash and task name.
+- The verified local checkpoint is checked against the newest `HEAD` commit touching the established application, server, database, or runtime-configuration paths, so a newer local runtime change cannot remain hidden behind an older checkpoint.
+- The latest pushed main/staging runtime checkpoint is checked against the local `origin/staging` tracking ref, and the guard fails instead of accepting one hard-coded historical checkpoint.
 - The top latest remote main/staging deployment checkpoint must remain recorded as the most recent verified deployed reference by commit hash and task name; it can differ from the runtime checkpoint when docs-only or non-deployed commits exist.
+- At this checkpoint repair, local verified application commit `dffad548 Keep request review on Dashboard` is ahead of pushed and deployed `f7e253b3 Repair mobile automation regression coverage`; no push or deployment is included in this docs/test-only pass.
 - No inconsistent checkpoint counters are approved.
 - This lock adds `scripts/test-ledger-checkpoint-source-of-truth-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
@@ -3849,7 +3852,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Current Implementation Ledger Alignment Suite Registration
 - The existing current implementation ledger alignment guard is repaired for the current ledger checkpoint markers and registered in `scripts/test-preactivation-verification-suite.mjs`.
 - This is docs/test-only guard hardening; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.
-- The guard verifies the top latest verified clean checkpoint and latest staging-smoked app checkpoint both use commit hash plus task name, remain aligned, and point to a hash present in git history.
+- The guard verifies the top verified, pushed, and deployed checkpoints each use an exact commit hash plus task name, the verified line matches the newest local runtime-path commit, the pushed line matches the local `origin/staging` tracking ref, and the verified local checkpoint may be ahead only on the same Git history.
 - The obsolete `Latest known clean checkpoint:` marker is no longer required by this guard.
 
 ### Current Implementation Ledger Not-Live Suite Registration

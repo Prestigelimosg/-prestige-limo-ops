@@ -304,6 +304,18 @@ for (const phrase of [
   "250 customer groups and 250 trip candidates per customer group",
   "existing grouping reader examines at most 500 closeout rows",
   "No customer/invoice page layout, invoice issue, invoice number, PDF, payment, payout, calendar, customer/driver message, or external send changed",
+  "### Monthly Invoice Draft Production Scheduler Activation",
+  "fresh random 64-character secret",
+  "exact READY Production deployment `dpl_GEsHpMkUyhSqY8XaniytrgC54pfi` was rebuilt with `vercel redeploy`",
+  "READY replacement `dpl_FQjDABfqJW6nGjLK2G8akANiHetc`",
+  "exactly one project cron: `/api/cron/codex-monthly-invoice-drafts`",
+  "The next normal eligible run after this 15 July 2026 activation is 1 August 2026 at 08:00 SGT",
+  "Missing authorization returned HTTP 401",
+  "`reason: not_first_day`",
+  "master Automation row remains `active` with `automation_enabled = true`",
+  "created zero monthly invoice drafts and zero admin-app notifications",
+  "does not claim that the first eligible Production run has prepared a real draft",
+  "never auto-issued or auto-sent",
 ]) {
   assertIncludes(ledger, phrase, `monthly invoice automation ledger ${phrase}`);
 }

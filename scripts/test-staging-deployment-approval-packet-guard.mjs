@@ -169,6 +169,8 @@ for (const fragment of [
   "signed-in Chrome confirmed exact page build marker `2acaa3a5`",
   "exactly one `Booking Requests` sector, one `Refresh Dashboard`, one Push Alerts toggle",
   "390px modern-phone, and 344px folded-phone outer-screen checks",
+  "The owner explicitly approved the displayed protected Preview layout on 2026-07-14",
+  "does not authorize a Git push or Production deployment",
   "Preview names-only review still shows only the inert `PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS` assignment",
   "No booking decision, notification cleanup, Automation toggle, Push toggle, calendar/map action, invoice action, customer/driver message, or external send was performed.",
   "The deployment command used no Production flag and no Git push occurred.",
@@ -327,6 +329,8 @@ for (const fragment of [
   "signed-in Chrome confirms exact build marker `2acaa3a5`",
   "exactly one `Booking Requests` sector, one `Refresh Dashboard`, one Push Alerts switch",
   "Desktop, 390px modern-phone, and 344px folded-phone outer-screen checks",
+  "the owner explicitly approved the displayed Booking Requests layout on 2026-07-14",
+  "it is not approval to push Git or deploy Production",
   "Preview intentionally remains fail-closed",
   "The deployment command used no Production flag, no Git push occurred",
 ]) {

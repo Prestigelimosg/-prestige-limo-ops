@@ -4,8 +4,8 @@ This packet records the approved deployment-safety configuration work and the la
 
 ## Checkpoints
 
-- Latest repo commit deployed to isolated Preview: `d292da05 Update Dashboard runtime checkpoint`.
-- Latest verified runtime checkpoint in the ledger: `f2e327dc Consolidate Dashboard Codex review lane`.
+- Latest repo commit deployed to isolated Preview: `fd0eecd3 Update automatic preparation checkpoint`.
+- Latest verified runtime checkpoint in the ledger: `5a7ea651 Prepare Codex job cards when requests arrive`.
 - Source of truth: `docs/current-implementation-ledger.md`.
 
 ## Approval Fields
@@ -24,6 +24,7 @@ This packet records the approved deployment-safety configuration work and the la
 - Isolated Preview refresh approval: Owner later explicitly approved the suggested next step on 2026-07-14; scope was exact local commit `f62869b7`, one refreshed isolated Preview, GET-only checks, and evidence recording only
 - Codex correction Preview approval: Owner then explicitly approved proceeding carefully with the next suggested step on 2026-07-14; scope was exact local commit `bdd91bec`, one isolated Preview refresh, GET-only checks, and evidence recording only
 - Dashboard consolidation Preview approval: Owner explicitly approved proceeding with the suggested next step on 2026-07-14; scope was exact local commit `d292da05`, one isolated Preview refresh, GET-only checks, bypass revocation, and evidence recording only
+- Automatic preparation Preview approval: Owner explicitly approved proceeding with the suggested next safe step on 2026-07-14; scope was exact local commit `fd0eecd3`, containing runtime commit `5a7ea651`, one isolated protected Preview, GET-only checks, bypass revocation, and evidence recording only
 - Rollback owner: William / Prestige Limo SG
 - Notes: Keep all live DB/write, migrations, provider/env activation, external APIs, live sending, payment/PDF/payout, auth activation, live location, photo upload/storage, CRM/calendar amendment writes, and risky shim writes blocked.
 
@@ -78,6 +79,12 @@ This packet records the approved deployment-safety configuration work and the la
 - Preview intentionally has no Supabase or admin-session configuration, so `Automation unavailable`, empty/non-live queues, and fail-closed admin reads are expected rather than live-operations proof.
 - Vercel's build output again reported four dependency audit findings: one low and three moderate. They remain recorded and were not changed in this Preview-only pass.
 - Signed-in visual acceptance of the consolidated deployed interface is pending; no deployed visual pass is claimed. Production remains unchanged on READY deployment `dpl_7ksuhQENRPiWNACbEM4Y6dGf6ayR` with build marker `f7e253b3`, and no Git push occurred.
+- The later automatic Codex job-card preparation pass passed its focused guard and the exact committed pre-activation verification suite at runtime checkpoint `5a7ea651`; exact clean local commit `fd0eecd3 Update automatic preparation checkpoint` was then deployed with `vercel deploy --target=preview --yes` as READY Preview deployment `dpl_H6ELwkT3vww5uEvtgCmH73g3Pjyp` at `https://prestige-limo-ops-staging-1dkwj1vc8-prestigelimosgs-projects.vercel.app`.
+- Vercel inspection confirms target `preview`. Authenticated GET-only root verification returned HTTP 200 and confirmed exact page build marker `fd0eecd3`; both `/api/admin-automation-runtime` and `/api/admin-app-notifications?page=1&limit=5` returned safe HTTP 403.
+- Sanitized deployment logs contain only those three approved GETs and no POST, PATCH, PUT, or DELETE request. Names-only Preview review still shows only the inert `PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS` assignment; no Supabase, admin-session, auth, provider, payment, email, calendar, automation-write, or live credential/gate was added.
+- The Vercel CLI generated one automation-bypass token without printing it, and the exact token was immediately revoked. Final automation-bypass count is zero; unauthenticated Preview access returns HTTP 302 with `x-robots-tag: noindex`.
+- Preview intentionally has no Supabase or admin-session configuration. It proves the exact code artifact and fail-closed boundary, but it cannot prove a live automatic preparation write; `Automation unavailable`, an empty queue, and no prepared job card are expected. No live booking, amendment, runtime toggle, calendar action, invoice action, or external send occurred.
+- A current local dependency audit reports the same four known findings: one low and three moderate, with zero high or critical findings. Production remains unchanged on READY deployment `dpl_7ksuhQENRPiWNACbEM4Y6dGf6ayR`, returns HTTP 200, and serves build marker `f7e253b3`. No Production deploy, alias move, promotion, rollback, Git push, environment edit, live-data write, provider send, or Automation state change occurred.
 
 ## Required Checks Before Staging
 

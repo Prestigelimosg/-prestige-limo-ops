@@ -78,6 +78,7 @@ for (const fragment of [
   "Isolated Preview refresh approval: Owner later explicitly approved the suggested next step on 2026-07-14",
   "Codex correction Preview approval: Owner then explicitly approved proceeding carefully with the next suggested step on 2026-07-14",
   "Dashboard consolidation Preview approval: Owner explicitly approved proceeding with the suggested next step on 2026-07-14",
+  "Automatic preparation Preview approval: Owner explicitly approved proceeding with the suggested next safe step on 2026-07-14",
 ]) {
   assertSectionIncludes(approvalSection, fragment, `Approval scope missing ${fragment}`);
 }
@@ -129,6 +130,10 @@ for (const fragment of [
   "Sanitized deployment logs contain only the root HTTP 200 GET and those two HTTP 403 GETs; no POST, PATCH, PUT, or DELETE request reached the deployment.",
   "Preview intentionally has no Supabase or admin-session configuration",
   "Signed-in visual acceptance of the consolidated deployed interface is pending; no deployed visual pass is claimed.",
+  "exact clean local commit `fd0eecd3 Update automatic preparation checkpoint` was then deployed with `vercel deploy --target=preview --yes` as READY Preview deployment `dpl_H6ELwkT3vww5uEvtgCmH73g3Pjyp`",
+  "confirmed exact page build marker `fd0eecd3`",
+  "It proves the exact code artifact and fail-closed boundary, but it cannot prove a live automatic preparation write",
+  "A current local dependency audit reports the same four known findings: one low and three moderate, with zero high or critical findings.",
 ]) {
   assertSectionIncludes(branchSeparationSection, fragment, `Branch separation evidence missing ${fragment}`);
 }
@@ -229,6 +234,15 @@ for (const fragment of [
   "final automation-bypass count is zero",
   "Preview intentionally has no Supabase or admin-session configuration",
   "Signed-in visual acceptance of the consolidated deployed interface remains pending.",
+  "### Automatic Codex Job-Card Preparation Preview Evidence",
+  "runtime commit `5a7ea651 Prepare Codex job cards when requests arrive`",
+  "READY Preview deployment `dpl_H6ELwkT3vww5uEvtgCmH73g3Pjyp`",
+  "exact page build marker `fd0eecd3`",
+  "No POST, PATCH, PUT, or DELETE request reached the Preview.",
+  "final automation-bypass count is zero",
+  "it cannot prove a live automatic preparation write",
+  "zero high or critical findings",
+  "Production is unchanged: `app.prestigelimo.sg` remains READY deployment `dpl_7ksuhQENRPiWNACbEM4Y6dGf6ayR`",
 ]) {
   assert.equal(
     ledger.includes(fragment),

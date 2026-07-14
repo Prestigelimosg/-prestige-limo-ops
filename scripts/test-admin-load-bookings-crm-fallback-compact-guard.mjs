@@ -104,6 +104,11 @@ const dispatchBlock = sliceBetween(
   '{activeTab === "dispatch" ? (',
   '{activeTab === "bookings" ? (',
 );
+const customerBookingRequestsReviewHandler = sliceBetween(
+  appPage,
+  "function openCustomerBookingRequestsReview",
+  "function openNewBookingRequestNotificationReview",
+);
 
 assertIncludes(appPage, 'const adminBookingsApiPath = "/api/admin-bookings";', "Admin bookings fallback path");
 assertIncludes(appPage, 'const adminLoadBookingsListLimit = "100";', "Admin active booking list limit");
@@ -205,7 +210,16 @@ assertIncludes(
   "function openCustomerBookingRequestsReview(options: { highlight?: boolean } = {})",
   "Dashboard request review handoff helper",
 );
-assertIncludes(appPage, 'selectAppTab("dashboard");', "Dashboard request handoff stays on Dashboard");
+assertIncludes(
+  customerBookingRequestsReviewHandler,
+  'selectAppTab("dashboard");',
+  "Dashboard request handoff stays on Dashboard",
+);
+assertExcludes(
+  customerBookingRequestsReviewHandler,
+  'selectAppTab("bookings");',
+  "Dashboard request handoff stale Bookings target",
+);
 assertIncludes(
   appPage,
   "onClick={() => openCustomerBookingRequestsReview()}",

@@ -154,13 +154,13 @@ assertExcludes(
 );
 assertIncludes(
   customerBookingRequestsReviewHandler,
-  'selectAppTab("bookings")',
-  "dashboard Review handoff selects Bookings",
+  'selectAppTab("dashboard")',
+  "dashboard Review handoff stays on Dashboard",
 );
 assertExcludes(
   customerBookingRequestsReviewHandler,
-  'selectAppTab("dashboard")',
-  "dashboard Review handoff must not remain on Dashboard",
+  'selectAppTab("bookings")',
+  "dashboard Review handoff stale Bookings target",
 );
 
 for (const fragment of [
@@ -429,8 +429,8 @@ for (const phrase of [
   "Dashboard request panel is now `Urgent / Customer Requests` and displays open customer requests, saved Driver TBC jobs inside the 1-hour pickup monitor window, and customer change/cancel requests using the existing guarded notification handlers.",
   "Dashboard `Open Urgent` and urgent rows load the selected urgent booking into Dispatch with the existing Driver Job Link panel focused, a visible booking handoff notice, and keyboard focus on `Create Link` so admin can create and copy the driver link before a driver is assigned.",
   "Clearing a loaded Dispatch booking now clears its Driver Job Link handoff reference, and a successful new `Save + CRM` replaces it with the newly saved booking reference before focusing the existing Driver Job Link panel; stale prior-booking notices must not survive the save.",
-  "Dashboard keeps a secondary `Review` action that switches to Bookings and focuses the existing `Urgent & New Booking Requests` queue; it does not remain on Dashboard, create a duplicate request lane, or replace the Driver Job Link urgent handoff.",
-  "Dashboard `Review` is enabled only when that Bookings request queue contains a real reviewable row; a stale notification without an exact saved request remains disabled as `Missing request` and cannot enable a dead review handoff.",
+  "Dashboard keeps one secondary `Review` action that remains on Dashboard and focuses the existing `Urgent & New Booking Requests` queue rendered there. The shared alert-menu and notification fallbacks use the same helper, so they no longer switch to Bookings and search for a panel that is not rendered on that tab; no duplicate request lane or helper is added, and the Driver Job Link urgent handoff remains unchanged.",
+  "Dashboard `Review` is enabled only when that existing request queue contains a real reviewable row; a stale notification without an exact saved request remains disabled as `Missing request` and cannot enable a dead review handoff.",
   "The Dashboard request panel remains the queue for open customer requests outside the 1-hour dispatch window as `Urgent & New Booking Requests`, with row badges separating under-24h-but-not-dispatch-window requests from new non-urgent requests; Bookings remains for saved booking search/load/list work.",
   "Unhandled customer requests are hidden from Current / Upcoming until admin loads them from the Dashboard urgent lane or the Bookings request lane, preventing duplicate cards while preserving the existing post-review booking list.",
   "Day-of-trip jobs are shown as `Today's Jobs` on Dashboard, replacing the duplicate Today/Upcoming booking summaries while keeping Bookings as the saved-job finder.",
@@ -443,6 +443,11 @@ for (const phrase of [
 ]) {
   assertIncludes(ledgerSection, phrase, `ledger phrase ${phrase}`);
 }
+assertExcludes(
+  ledgerSection,
+  "switches to Bookings and focuses the existing `Urgent & New Booking Requests` queue",
+  "stale Dashboard review handoff ledger wording",
+);
 
 assertIncludes(
   preactivationSuite,

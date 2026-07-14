@@ -20143,7 +20143,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
   function openCustomerBookingRequestsReview(options: { highlight?: boolean } = {}) {
     setBookingsAlertMenuOpen(false);
-    selectAppTab("bookings");
+    selectAppTab("dashboard");
 
     if (options.highlight) {
       markAdminAlertLocatorHighlight("new-booking-requests");

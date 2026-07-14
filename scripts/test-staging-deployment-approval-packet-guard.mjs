@@ -70,11 +70,12 @@ for (const fragment of [
   "Change the Vercel Production Branch from `staging` to `main`, isolate Preview environment assignments from Production, then create and verify one isolated `staging` Preview without pushing or deploying Production",
   "Approved production-branch safety separation and Preview isolation only; no deployment approval at that stage",
   "Preview deployment decision: Owner later explicitly approved proceeding with the suggested next step",
-  "Exact local commit `294cd1d8` to one `staging` Preview deployment only; no Git push and no production deploy",
+  "Exact local commit `f62869b7` to one refreshed isolated `staging` Preview deployment only; no Git push and no Production deploy",
   "Preview isolation approval: Approved on 2026-07-14 for Preview environment targeting only",
   "Production recovery approval: Approved on 2026-07-14 for exact existing credential recovery and safe prior-state verification only",
   "Resend replacement-key approval: Owner gave separate action-time approval on 2026-07-14",
   "Isolated Preview deployment approval: Approved on 2026-07-14",
+  "Isolated Preview refresh approval: Owner later explicitly approved the suggested next step on 2026-07-14",
 ]) {
   assertSectionIncludes(approvalSection, fragment, `Approval scope missing ${fragment}`);
 }
@@ -94,7 +95,7 @@ for (const fragment of [
   "`PRESTIGE_COMPANY_TRAVELER_CRM_IDENTITY_CONTACT_WRITE_ENABLED` remains intentionally absent and fail-closed.",
   "`PRESTIGE_DRIVER_DETAILS_EMAIL_SEND_ENABLED` remains false.",
   "Preview still finds 0 of 22 required names",
-  "The existing protected Preview artifact still contains its old frozen environment and must not be treated as isolated",
+  "Before the first isolated deployment, the prior Preview artifact still contained its old frozen environment",
   "Remote `main` is `adf37589`, six commits behind remote `staging` at `f7e253b3`; local `staging` is six commits ahead before this record. No merge or push occurred.",
   "Previous READY deployment `f91d0d1e Style customer invoice sectors in black and gold` remains the identified manual rollback target; no rollback is in progress or approved by this record.",
   "The public Vercel project PATCH attempt returned HTTP 400 before mutation because `productionBranch` is not a supported top-level field. The signed-in Vercel Branch Tracking control was then used and independently verified; nothing is hidden as an API success.",
@@ -109,6 +110,12 @@ for (const fragment of [
   "The local Next server terminal printed bundled `supabaseUrl is required` diagnostics",
   "This is recorded as fail-closed server diagnostic noise, not as database-connectivity success.",
   "Production remained unchanged throughout: `app.prestigelimo.sg` still resolves to READY Production deployment `dpl_7ksuhQENRPiWNACbEM4Y6dGf6ayR` with build marker `f7e253b3`.",
+  "A second approved isolated Preview refresh deployed exact local commit `f62869b7` as READY deployment `dpl_BMEEqdSwWqx26eK4Sa3zipHTaGPg`.",
+  "The refreshed Preview still has 0 of 22 required live names",
+  "Both GET-only admin checks returned safe HTTP 403",
+  "Deployment logs show only three verification GETs",
+  "final automation-bypass count returned to zero",
+  "Signed-in visual acceptance remains incomplete because browser control failed before navigation with `Cannot redefine property: process`.",
 ]) {
   assertSectionIncludes(branchSeparationSection, fragment, `Branch separation evidence missing ${fragment}`);
 }
@@ -186,6 +193,13 @@ for (const fragment of [
   "this diagnostic noise is not hidden or presented as successful database connectivity.",
   "Production is unchanged: `app.prestigelimo.sg` remains READY deployment `dpl_7ksuhQENRPiWNACbEM4Y6dGf6ayR` with build marker `f7e253b3`.",
   "No Production deployment, alias move, promotion, rollback, Git push, live-data write, provider send, Automation activation, environment edit, or Preview credential addition occurred.",
+  "### Isolated Vercel Preview Refresh Evidence",
+  "READY Preview deployment `dpl_BMEEqdSwWqx26eK4Sa3zipHTaGPg`",
+  "exact page build marker `f62869b7`",
+  "Both GET-only admin checks returned safe HTTP 403",
+  "Deployment logs show only three verification GETs",
+  "final automation-bypass count returned to zero",
+  "Signed-in visual acceptance remains incomplete because browser control failed before navigation with `Cannot redefine property: process`.",
 ]) {
   assert.equal(
     ledger.includes(fragment),

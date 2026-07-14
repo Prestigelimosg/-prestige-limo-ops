@@ -1,11 +1,11 @@
 # Staging Deployment Approval Packet
 
-This packet records the approved deployment-safety configuration work and the later single isolated Preview deployment. It does not deploy Production, enable writes, enable providers, or activate any live feature. The Preview isolation change, bounded Production recovery, Preview deployment, and sanitized verification evidence are recorded below without exposing values.
+This packet records the approved deployment-safety configuration work and the later isolated Preview deployments. It does not deploy Production, enable writes, enable providers, or activate any live feature. The Preview isolation change, bounded Production recovery, Preview deployments, and sanitized verification evidence are recorded below without exposing values.
 
 ## Checkpoints
 
-- Latest repo commit deployed to isolated Preview: `294cd1d8 Preserve admin review warning after calendar sync`.
-- Latest implementation checkpoint in the ledger: `294cd1d8 Preserve admin review warning after calendar sync`.
+- Latest repo commit deployed to isolated Preview: `f62869b7 Set modern mobile and foldable test matrix`.
+- Latest implementation checkpoint in the ledger: `f62869b7 Set modern mobile and foldable test matrix`.
 - Source of truth: `docs/current-implementation-ledger.md`.
 
 ## Approval Fields
@@ -16,11 +16,12 @@ This packet records the approved deployment-safety configuration work and the la
 - Original decision: Approved production-branch safety separation and Preview isolation only; no deployment approval at that stage
 - Preview deployment decision: Owner later explicitly approved proceeding with the suggested next step: one isolated Preview deployment and bounded verification
 - Live activation approval: Not approved
-- Approved staging target: Exact local commit `294cd1d8` to one `staging` Preview deployment only; no Git push and no production deploy
+- Approved staging target: Exact local commit `f62869b7` to one refreshed isolated `staging` Preview deployment only; no Git push and no Production deploy
 - Preview isolation approval: Approved on 2026-07-14 for Preview environment targeting only; no provider-key rotation, Production deployment, database write, or external send was approved
 - Production recovery approval: Approved on 2026-07-14 for exact existing credential recovery and safe prior-state verification only; no credential creation/rotation, write-gate activation, deployment, push, or external send was approved
 - Resend replacement-key approval: Owner gave separate action-time approval on 2026-07-14 to create one sending-access key and save it to Vercel Production only; deletion of the existing key, Preview assignment, deployment, push, send-gate activation, and external send remained unapproved
 - Isolated Preview deployment approval: Approved on 2026-07-14 after Production recovery and Preview names-only review; scope was one Preview deployment, GET-only smoke/privacy checks, and evidence recording only
+- Isolated Preview refresh approval: Owner later explicitly approved the suggested next step on 2026-07-14; scope was exact local commit `f62869b7`, one refreshed isolated Preview, GET-only checks, and evidence recording only
 - Rollback owner: William / Prestige Limo SG
 - Notes: Keep all live DB/write, migrations, provider/env activation, external APIs, live sending, payment/PDF/payout, auth activation, live location, photo upload/storage, CRM/calendar amendment writes, and risky shim writes blocked.
 
@@ -35,7 +36,7 @@ This packet records the approved deployment-safety configuration work and the la
 - Production's names-only audit now passes with all 22 required names and no missing names. Preview still finds 0 of 22 required names; its only remaining project variable is the inert Preview-only browser allowed-origins entry. Values were not printed.
 - `PRESTIGE_COMPANY_TRAVELER_CRM_IDENTITY_CONTACT_WRITE_ENABLED` remains intentionally absent and fail-closed. Vercel history confirms its prior target changes but does not expose the prior value; the existing readiness lock still requires separate owner approval before this write gate may be opened, so it was not guessed or restored.
 - `PRESTIGE_DRIVER_DETAILS_EMAIL_SEND_ENABLED` remains false. Creating and storing the replacement key did not send email, enable a provider action, create a deployment, or change the running Production artifact.
-- Vercel environment changes do not affect existing deployments. The existing protected Preview artifact still contains its old frozen environment and must not be treated as isolated; only a future Preview deployment would consume the isolated configuration.
+- Vercel environment changes do not affect already-built deployments. Before the first isolated deployment, the prior Preview artifact still contained its old frozen environment; both later isolated Preview builds consumed the reviewed Preview configuration.
 - Remote `main` is `adf37589`, six commits behind remote `staging` at `f7e253b3`; local `staging` is six commits ahead before this record. No merge or push occurred.
 - Previous READY deployment `f91d0d1e Style customer invoice sectors in black and gold` remains the identified manual rollback target; no rollback is in progress or approved by this record.
 - The public Vercel project PATCH attempt returned HTTP 400 before mutation because `productionBranch` is not a supported top-level field. The signed-in Vercel Branch Tracking control was then used and independently verified; nothing is hidden as an API success.
@@ -48,6 +49,14 @@ This packet records the approved deployment-safety configuration work and the la
 - Exact-commit local verification passed `npm run build`, both browser suites with zero console errors, the complete pre-activation suite, deployment guards, staged-app-change guard, and `git diff --check`. Lint remained at 160 existing warnings and zero errors.
 - The local Next server terminal printed bundled `supabaseUrl is required` diagnostics when the broad tests deliberately touched disabled backend paths without Supabase configuration. Those requests did not succeed; browser console errors and blocked Supabase requests remained zero, safe API response guards passed, and Preview intentionally has no Supabase names. This is recorded as fail-closed server diagnostic noise, not as database-connectivity success.
 - Production remained unchanged throughout: `app.prestigelimo.sg` still resolves to READY Production deployment `dpl_7ksuhQENRPiWNACbEM4Y6dGf6ayR` with build marker `f7e253b3`. No Production deploy, alias move, promotion, rollback, or Git push occurred.
+- A second approved isolated Preview refresh deployed exact local commit `f62869b7` as READY deployment `dpl_BMEEqdSwWqx26eK4Sa3zipHTaGPg`.
+- The refreshed Preview URL is `https://prestige-limo-ops-staging-htd1bzj6m-prestigelimosgs-projects.vercel.app`, its Vercel target is `preview`, and its rendered page identifies exact build marker `f62869b7`.
+- The refreshed Preview still has 0 of 22 required live names and only the inert Preview `PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS` assignment. No credential, provider key, live database setting, write gate, or auth activation was added.
+- Both GET-only admin checks returned safe HTTP 403: `/api/admin-automation-runtime` and `/api/admin-app-notifications?page=1&limit=5`.
+- Deployment logs show only three verification GETs: root HTTP 200 and the two admin API HTTP 403 responses. No POST, PATCH, PUT, or DELETE request reached the refreshed Preview.
+- The authenticated CLI generated one automation-bypass token without printing it for exact-build and fail-closed GET checks. That exact token was revoked immediately; final automation-bypass count returned to zero, and unauthenticated Preview access again returns HTTP 302 with `x-robots-tag: noindex`.
+- Signed-in visual acceptance remains incomplete because browser control failed before navigation with `Cannot redefine property: process`. No Preview control was clicked and no visual pass is claimed.
+- Production remained unchanged after the refresh: `app.prestigelimo.sg` still resolves to READY Production deployment `dpl_7ksuhQENRPiWNACbEM4Y6dGf6ayR` and renders build marker `f7e253b3`. No Production deploy, alias move, promotion, rollback, Git push, live-data write, Automation activation, provider send, environment edit, or Preview credential addition occurred.
 
 ## Required Checks Before Staging
 

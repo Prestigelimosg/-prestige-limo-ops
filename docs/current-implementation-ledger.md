@@ -81,6 +81,18 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Production is unchanged: `app.prestigelimo.sg` remains READY deployment `dpl_7ksuhQENRPiWNACbEM4Y6dGf6ayR` with build marker `f7e253b3`. No Production deployment, alias move, promotion, rollback, Git push, live-data write, provider send, Automation activation, environment edit, or Preview credential addition occurred.
 - Focused evidence lock: the updated `docs/staging-deployment-approval-packet.md` and `scripts/test-staging-deployment-approval-packet-guard.mjs`.
 
+### Isolated Vercel Preview Refresh Evidence
+
+- Owner explicitly approved the suggested next step: refresh the isolated Preview from the exact clean local checkpoint, verify it with bounded GET-only checks, and record evidence. No Git push or Production deployment was approved.
+- Cached Vercel CLI `56.1.0` deployed exact local commit `f62869b7 Set modern mobile and foldable test matrix` as READY Preview deployment `dpl_BMEEqdSwWqx26eK4Sa3zipHTaGPg` at `https://prestige-limo-ops-staging-htd1bzj6m-prestigelimosgs-projects.vercel.app`. Vercel inspection confirms target `preview` and the rendered page confirms exact page build marker `f62869b7`.
+- The refreshed Preview still has 0 of 22 required live names and only the inert Preview browser allowed-origins assignment. No Supabase, admin session, auth, provider, payment, email, calendar, automation-write, or other live credential/gate was added.
+- Both GET-only admin checks returned safe HTTP 403: `/api/admin-automation-runtime` and `/api/admin-app-notifications?page=1&limit=5`. No booking, queue item, toggle, calendar event, invoice, customer/driver message, or provider action was created.
+- Deployment logs show only three verification GETs: root HTTP 200 and the two admin API HTTP 403 responses. No POST, PATCH, PUT, or DELETE request reached the refreshed Preview.
+- The authenticated CLI generated one automation-bypass token without printing it for these bounded checks. The exact token was immediately revoked, final automation-bypass count returned to zero, and unauthenticated access again returns HTTP 302 with `x-robots-tag: noindex`.
+- Signed-in visual acceptance remains incomplete because browser control failed before navigation with `Cannot redefine property: process`. No Preview control was clicked, no page interaction occurred, and no visual pass is claimed.
+- Production is unchanged: `app.prestigelimo.sg` remains READY deployment `dpl_7ksuhQENRPiWNACbEM4Y6dGf6ayR` with rendered build marker `f7e253b3`. No Production deployment, alias move, promotion, rollback, Git push, live-data write, provider send, Automation activation, environment edit, or Preview credential addition occurred.
+- Focused evidence lock: the updated `docs/staging-deployment-approval-packet.md` and `scripts/test-staging-deployment-approval-packet-guard.mjs`.
+
 ### Customer Folder Four-Sector Invoice Workflow
 
 - The established customer selection continues to open the existing `/customers/[customerId]` company profile. The top profile retains the existing admin-only invoice-prefix settings, followed by the existing stored invoice totals and invoice list.

@@ -344,6 +344,9 @@ function sourceToSafeFields(input: unknown): Record<(typeof safeOperationalField
     cleanText(source.customer_display_name) ||
     nestedText(source, "companies", "company_name") ||
     contactName;
+  const safePassengerName = optionalSafeDisplayText(passengerName, 220);
+  const safeContactName = optionalSafeDisplayText(contactName, 220);
+  const safeCustomerName = optionalSafeDisplayText(customerName, 220);
   const vehicleDisplay =
     cleanText(source.vehicle_type_or_category) ||
     cleanText(source.vehicle_type) ||
@@ -365,13 +368,13 @@ function sourceToSafeFields(input: unknown): Record<(typeof safeOperationalField
     booking_reference: bookingReference,
     booking_status: cleanText(source.status),
     booking_type: serviceType,
-    booker_display_name: contactName,
+    booker_display_name: safeContactName,
     booker_email: cleanText(source.contact_email) || nestedText(source, "bookers", "email"),
     booker_phone: cleanText(source.contact_phone) || nestedText(source, "bookers", "phone"),
     child_seat_display: childSeatDisplay(source),
-    company_display_name: customerName,
+    company_display_name: safeCustomerName,
     created_at: cleanText(source.created_at),
-    customer_display_name: customerName || passengerName,
+    customer_display_name: customerName ? safeCustomerName : safePassengerName,
     dropoff_address: dropoffAddress,
     dropoff_datetime: null,
     extra_stop_display: extraStopDisplay(source, points),
@@ -382,7 +385,7 @@ function sourceToSafeFields(input: unknown): Record<(typeof safeOperationalField
     route_points_summary: routePointsSummary || null,
     route_summary: cleanText(source.route_summary) || routePointsSummary || null,
     service_display: serviceType,
-    traveler_display_name: optionalSafeDisplayText(passengerName || customerName, 220),
+    traveler_display_name: passengerName ? safePassengerName : safeCustomerName,
     updated_at: cleanText(source.updated_at),
     vehicle_display: vehicleDisplay,
   };

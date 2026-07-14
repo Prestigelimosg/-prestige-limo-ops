@@ -190,6 +190,18 @@ function savedBookingRecordWithUnsafeOptionalTraveler(id = "BK-TYPED-UNSAFE-TRAV
   };
 }
 
+function savedBookingRecordWithUnsafeOptionalIdentity(id = "BK-TYPED-UNSAFE-IDENTITY") {
+  return {
+    ...safeSavedBookingRecord(id),
+    passenger_name: "Token traveler",
+    contact_display_name: "Payment team booker",
+    customer_display_name: "Invoice test account",
+    companies: null,
+    bookers: null,
+    travelers: null,
+  };
+}
+
 function transpileTypescript(source, filename) {
   return ts.transpileModule(source, {
     compilerOptions: {
@@ -543,6 +555,32 @@ try {
     JSON.stringify(unsafeOptionalTravelerListBody),
     /Payment team traveler/i,
     "Mocked typed read list with unsafe optional traveler response",
+  );
+
+  mock.listData = [savedBookingRecordWithUnsafeOptionalIdentity("BK-TYPED-LIST-UNSAFE-IDENTITY")];
+
+  const unsafeOptionalIdentityListResponse = await harness.route.GET(
+    new Request(routeUrl(routePathFragment, { limit: 2 }), { headers: adminHeaders() }),
+  );
+  const unsafeOptionalIdentityListBody = await unsafeOptionalIdentityListResponse.json();
+  assert.equal(
+    unsafeOptionalIdentityListResponse.status,
+    200,
+    "Mocked open typed read list must not reject unsafe optional identity display labels.",
+  );
+  assertOpenSafeRead(unsafeOptionalIdentityListBody, "Mocked typed read list with unsafe optional identity labels");
+  assert.equal(
+    unsafeOptionalIdentityListBody.bookings[0].safe_dto.booking_reference,
+    "BK-TYPED-LIST-UNSAFE-IDENTITY",
+  );
+  assert.equal(unsafeOptionalIdentityListBody.bookings[0].safe_dto.booker_display_name, null);
+  assert.equal(unsafeOptionalIdentityListBody.bookings[0].safe_dto.company_display_name, null);
+  assert.equal(unsafeOptionalIdentityListBody.bookings[0].safe_dto.customer_display_name, null);
+  assert.equal(unsafeOptionalIdentityListBody.bookings[0].safe_dto.traveler_display_name, null);
+  assertExcludes(
+    JSON.stringify(unsafeOptionalIdentityListBody),
+    /Token traveler|Payment team booker|Invoice test account/i,
+    "Mocked typed read list with unsafe optional identity response",
   );
 } finally {
   restoreEnv();

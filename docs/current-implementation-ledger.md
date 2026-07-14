@@ -12,6 +12,15 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Production Typed-Read Optional Identity Tolerance
+
+- The exact combined-automation Production deployment exposed repeated read-only HTTP 422 responses from the established optional `GET /api/admin-load-bookings-typed-read?limit=25` bridge while the required saved-bookings lane continued returning the live booking list. No Automation, booking, calendar, invoice, email, driver, map, or other write request caused the responses.
+- A read-only aggregate database check returned only rejected field names and counts, never record values. It confirmed one recent record made the optional `booker_display_name`, `company_display_name`, `customer_display_name`, and `traveler_display_name` fields unsafe for the typed card. The first aggregate query stopped safely on the absent legacy `vehicle_type` column; the corrected query used only verified schema fields and performed no write.
+- The established operational mapper now applies the same omit-if-unsafe rule to all four optional identity display labels. Unsafe optional label text is absent from the typed DTO/card instead of rejecting the entire booking list; the booking/form source and legacy fallback remain unchanged.
+- Required unsafe operational fields still reject the typed record. No forbidden value is returned, inferred, renamed, or exposed, and customer/driver privacy boundaries remain unchanged.
+- No second route, mapper, booking lane, panel, button, table, poller, or write path was added. No environment, Supabase schema/data, Automation state, calendar, invoice, payment, payout, provider send, customer/driver message, map, or Google Maps configuration changed.
+- Focused regression coverage remains in the established `scripts/test-load-bookings-operational-record-mapper.mjs` and `scripts/test-load-bookings-typed-read-gated-api-contract.mjs` guards.
+
 ### Combined Automation Protected Preview Evidence
 
 - The owner approved the next safe step only: deploy exact clean commit `b09b82f8 Update monthly invoice automation checkpoint` to one protected isolated Preview and perform bounded read-only acceptance. Git push, Production deployment, Automation activation, live data, calendar/invoice action, environment change, provider action, and external send remained outside scope.

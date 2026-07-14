@@ -376,11 +376,26 @@ try {
   assert.equal(optionalUnsafeTravelerResult.safe_dto.traveler_display_name, null);
   assertNoUnsafeSafeOutput(optionalUnsafeTravelerResult, "Unsafe optional traveler display mapper payload");
 
-  const rejectedResult = buildAdminLoadBookingsOperationalRecordMapper({
-    id: "BK-101",
-    companies: { company_name: "Admin finance account" },
+  const optionalUnsafeIdentityResult = buildAdminLoadBookingsOperationalRecordMapper({
+    id: "BK-100C",
+    booking_reference: "BK-REF-100C",
+    status: "assigned",
+    passenger_name: "Token traveler",
+    contact_display_name: "Payment team booker",
+    customer_display_name: "Invoice test account",
   });
-  assertRejectedNoLive(rejectedResult, ["company_display_name"], "Unsafe mapper value");
+  assertMappedNoLive(optionalUnsafeIdentityResult, "Unsafe optional identity display mapper payload");
+  assert.equal(optionalUnsafeIdentityResult.safe_dto.booking_reference, "BK-REF-100C");
+  assert.equal(optionalUnsafeIdentityResult.safe_dto.booker_display_name, null);
+  assert.equal(optionalUnsafeIdentityResult.safe_dto.company_display_name, null);
+  assert.equal(optionalUnsafeIdentityResult.safe_dto.customer_display_name, null);
+  assert.equal(optionalUnsafeIdentityResult.safe_dto.traveler_display_name, null);
+  assertNoUnsafeSafeOutput(optionalUnsafeIdentityResult, "Unsafe optional identity display mapper payload");
+
+  const rejectedResult = buildAdminLoadBookingsOperationalRecordMapper({
+    id: "Payment token booking id",
+  });
+  assertRejectedNoLive(rejectedResult, ["booking_id", "booking_reference"], "Unsafe required mapper value");
 
   const fallbackResult = fallbackAdminLoadBookingsOperationalRecordMapper();
   assertMappedNoLive(fallbackResult, "Fallback operational mapper payload");

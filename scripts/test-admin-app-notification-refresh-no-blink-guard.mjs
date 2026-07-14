@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const dashboardPath = "app/page.tsx";
+const mobileBrowserPath = "scripts/test-mobile-usability-browser.mjs";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
 const guardScript = "scripts/test-admin-app-notification-refresh-no-blink-guard.mjs";
 
@@ -27,8 +28,9 @@ function sectionBetween(source, startFragment, endFragment) {
   return source.slice(start, end);
 }
 
-const [dashboardSource, preactivationSuite] = await Promise.all([
+const [dashboardSource, mobileBrowserSource, preactivationSuite] = await Promise.all([
   readFile(dashboardPath, "utf8"),
+  readFile(mobileBrowserPath, "utf8"),
   readFile(preactivationSuitePath, "utf8"),
 ]);
 
@@ -39,8 +41,8 @@ const refreshEffect = sectionBetween(
 );
 const intervalEffect = sectionBetween(
   dashboardSource,
-  "setAdminAppNotificationReadRevision((revision) => revision + 1);",
-  "return () => window.clearInterval(intervalId);",
+  'if (activeTab !== "dashboard" || adminAppNotificationReadState.status === "unavailable") {',
+  "  useEffect(() => {\n    let cancelled = false;",
 );
 
 for (const fragment of [
@@ -60,8 +62,21 @@ assertBefore(
 );
 
 for (const fragment of [
+  'adminAppNotificationFailureIsTerminal(error)',
+  'status: terminalFailure ? "unavailable" : "error"',
+  'status: "idle" | "loading" | "loaded" | "error" | "unavailable"',
+  'data-admin-app-notification-auto-refresh=',
+  '? "suspended"',
+  ': "active"',
+]) {
+  assertIncludes(dashboardSource, fragment, `terminal admin notification refresh fragment ${fragment}`);
+}
+
+for (const fragment of [
+  'if (activeTab !== "dashboard" || adminAppNotificationReadState.status === "unavailable") {',
   "setAdminAppNotificationReadRevision((revision) => revision + 1)",
   "10 * 1000",
+  "[activeTab, adminAppNotificationReadState.status]",
 ]) {
   assertIncludes(intervalEffect, fragment, `admin notification auto-refresh fragment ${fragment}`);
 }
@@ -72,6 +87,26 @@ for (const fragment of [
   '"Clear"',
 ]) {
   assertIncludes(dashboardSource, fragment, `admin notification feed state fragment ${fragment}`);
+}
+
+const activeMobileViewportPath = sectionBetween(
+  mobileBrowserSource,
+  'await clickTab("Dashboard");',
+  "      return;",
+);
+
+for (const fragment of ["await checkAdminAppNotificationTerminalPolling(viewport);"]) {
+  assertIncludes(activeMobileViewportPath, fragment, `active mobile notification runtime fragment ${fragment}`);
+}
+
+for (const fragment of [
+  'window.__mobileAdminAppNotificationMode = "unavailable";',
+  "await new Promise((resolve) => setTimeout(resolve, 11000));",
+  "expected terminal notification configuration failure to stop 10-second polling",
+  'window.__mobileAdminAppNotificationMode = "ready";',
+  "expected manual notification retry to remain available",
+]) {
+  assertIncludes(mobileBrowserSource, fragment, `mobile terminal notification runtime fragment ${fragment}`);
 }
 
 assertIncludes(preactivationSuite, guardScript, "preactivation admin notification no-blink guard registration");

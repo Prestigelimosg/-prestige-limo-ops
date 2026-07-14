@@ -350,6 +350,7 @@ async function runChromeTest() {
         };
         const originalFetch = window.fetch.bind(window);
         const bookingsFixture = ${JSON.stringify([mobileLoadedBookingFixture])};
+        window.__mobileAdminAppNotificationMode = "ready";
         window.fetch = (...args) => {
           const target = args[0]?.url || args[0];
           const method = args[1]?.method || args[0]?.method || "GET";
@@ -398,6 +399,18 @@ async function runChromeTest() {
             window.__mobileUsabilityFetchCalls.push(\`\${method} \${url}\`);
 
             if (method === "GET") {
+              if (window.__mobileAdminAppNotificationMode === "unavailable") {
+                return Promise.resolve(
+                  new Response(JSON.stringify({
+                    error: "Admin app notification persistence is not enabled on this server.",
+                    ok: false,
+                  }), {
+                    status: 503,
+                    headers: { "content-type": "application/json" },
+                  }),
+                );
+              }
+
               return Promise.resolve(
                 new Response(JSON.stringify({
                   notifications: [
@@ -1290,6 +1303,96 @@ async function runChromeTest() {
           state.boundary.includes("driver auth"),
         true,
         `${viewport.label}: expected admin app notification feed safe boundary`,
+      );
+    };
+
+    const checkAdminAppNotificationTerminalPolling = async (viewport) => {
+      const terminalFailureStarted = await evaluate(`(() => {
+          window.__mobileAdminAppNotificationMode = "unavailable";
+          const refreshButton = document.querySelector("[data-admin-app-notification-feed-refresh='true']");
+
+          if (!refreshButton || refreshButton.disabled) {
+            return false;
+          }
+
+          refreshButton.click();
+          return true;
+        })()`);
+      assert.equal(
+        terminalFailureStarted,
+        true,
+        `${viewport.label}: expected terminal notification failure test to start through manual Refresh`,
+      );
+
+      const terminalFailureState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+              const section = document.querySelector("[data-admin-app-notification-feed='true']");
+              const feedback = section
+                ?.querySelector("[data-admin-app-notification-feed-feedback='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "";
+
+              if (
+                feedback !== "Saved admin app notifications are not enabled or configured on this server." ||
+                section?.getAttribute("data-admin-app-notification-auto-refresh") !== "suspended"
+              ) {
+                return false;
+              }
+
+              return {
+                autoRefresh: section.getAttribute("data-admin-app-notification-auto-refresh"),
+                feedback,
+                requestCount: (window.__mobileUsabilityFetchCalls || []).filter(
+                  (entry) => entry.includes("GET /api/admin-app-notifications"),
+                ).length,
+              };
+            })()`),
+        10000,
+        `${viewport.label} terminal admin app notification state`,
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 11000));
+
+      const requestCountAfterInterval = await evaluate(`
+          (window.__mobileUsabilityFetchCalls || []).filter(
+            (entry) => entry.includes("GET /api/admin-app-notifications"),
+          ).length
+        `);
+      assert.equal(
+        requestCountAfterInterval,
+        terminalFailureState.requestCount,
+        `${viewport.label}: expected terminal notification configuration failure to stop 10-second polling`,
+      );
+
+      const manualRecoveryStarted = await evaluate(`(() => {
+          window.__mobileAdminAppNotificationMode = "ready";
+          const refreshButton = document.querySelector("[data-admin-app-notification-feed-refresh='true']");
+
+          if (!refreshButton || refreshButton.disabled) {
+            return false;
+          }
+
+          refreshButton.click();
+          return true;
+        })()`);
+      assert.equal(
+        manualRecoveryStarted,
+        true,
+        `${viewport.label}: expected manual notification retry to remain available`,
+      );
+      await waitForCondition(
+        () =>
+          evaluate(`(() => {
+              const section = document.querySelector("[data-admin-app-notification-feed='true']");
+
+              return section?.getAttribute("data-admin-app-notification-auto-refresh") === "active" &&
+                section
+                  .querySelector("[data-admin-app-notification-feed-feedback='true']")
+                  ?.textContent.includes("Loaded 1 saved admin app notification");
+            })()`),
+        10000,
+        `${viewport.label} manual admin app notification recovery`,
       );
     };
 
@@ -4325,6 +4428,11 @@ async function runChromeTest() {
         true,
         `${viewport.label}: expected hidden archive not to create horizontal overflow`,
       );
+
+      await clickTab("Dashboard");
+      if (viewport.label === viewports[0].label) {
+        await checkAdminAppNotificationTerminalPolling(viewport);
+      }
 
       return;
 

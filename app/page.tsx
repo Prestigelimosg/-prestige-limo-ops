@@ -1457,7 +1457,7 @@ type AdminAppNotificationReadState = {
   message: Message | null;
   notifications: AdminAppNotificationRecord[];
   pagination: AdminAppNotificationPagination | null;
-  status: "idle" | "loading" | "loaded" | "error";
+  status: "idle" | "loading" | "loaded" | "error" | "unavailable";
 };
 
 type AdminAppNotificationAction = {
@@ -9713,6 +9713,13 @@ function adminAppNotificationFailureMessage(rawError: unknown) {
   return "Saved admin app notifications could not be read. Reload the admin dashboard and try again.";
 }
 
+function adminAppNotificationFailureIsTerminal(rawError: unknown) {
+  return (
+    adminAppNotificationFailureMessage(rawError) ===
+    "Saved admin app notifications are not enabled or configured on this server."
+  );
+}
+
 function adminAutomationRuntimeFailureMessage(rawError: unknown) {
   const normalizedError =
     rawError instanceof Error
@@ -13685,6 +13692,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           return;
         }
 
+        const terminalFailure = adminAppNotificationFailureIsTerminal(error);
+
         setAdminAppNotificationReadState({
           message: {
             tone: "error",
@@ -13692,7 +13701,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           },
           notifications: [],
           pagination: null,
-          status: "error",
+          status: terminalFailure ? "unavailable" : "error",
         });
       }
     })();
@@ -13703,7 +13712,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   }, [activeTab, adminAppNotificationReadRevision]);
 
   useEffect(() => {
-    if (activeTab !== "dashboard") {
+    if (activeTab !== "dashboard" || adminAppNotificationReadState.status === "unavailable") {
       return;
     }
 
@@ -13712,7 +13721,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     }, 10 * 1000);
 
     return () => window.clearInterval(intervalId);
-  }, [activeTab]);
+  }, [activeTab, adminAppNotificationReadState.status]);
 
   useEffect(() => {
     let cancelled = false;
@@ -43543,6 +43552,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           <section
             aria-label="Admin App Notifications"
             className="mb-4 rounded-md border border-sky-200 bg-sky-50/70 p-2"
+            data-admin-app-notification-auto-refresh={
+              adminAppNotificationReadState.status === "unavailable"
+                ? "suspended"
+                : "active"
+            }
             data-admin-app-notification-feed="true"
           >
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -43559,7 +43573,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 >
                   {adminAppNotificationReadState.status === "loading"
                     ? "Loading"
-                    : adminAppNotificationReadState.status === "error"
+                    : adminAppNotificationReadState.status === "unavailable"
+                      ? "Unavailable"
+                      : adminAppNotificationReadState.status === "error"
                       ? "Review needed"
                       : adminAppNotificationReadState.notifications.length > 0
                         ? "Inbox queued"

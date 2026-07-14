@@ -12,6 +12,14 @@ f7e253b3 Repair mobile automation regression coverage
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Admin Notification Terminal Polling Suspension
+
+- Owner-supplied mobile and desktop screenshots of isolated Preview, followed by sanitized deployment logs, confirmed the established Dashboard feed returned HTTP 503 every 10 seconds while admin app notification persistence was intentionally unavailable. The visible error was accurate, but repeating a terminal configuration failure added unnecessary server noise.
+- The existing feed now distinguishes only its established disabled/configuration failure as terminal `unavailable`. It keeps the exact visible failure message, clears no queued item, and suspends only the 10-second automatic refresh after that response.
+- Manual `Refresh` remains available and restarts the same guarded GET. A successful manual retry restores normal automatic refresh; non-terminal read errors retain the existing retry behavior.
+- No second feed, route, API, notification format, persistence path, or background worker was added. No environment, Supabase configuration, authentication, booking, calendar, invoice, payment, payout, provider send, customer/driver message, Preview deployment, Production deployment, or Git push is included.
+- Review found the mobile suite's prior broad notification-layout assertions were below its deliberate reduced-scope early return and therefore not executing; that dormant block was not accepted or represented as runtime proof. The new bounded terminal-polling scenario runs in the active Dashboard viewport path with an in-memory terminal 503 response, observes no further notification GET after the 10-second interval, then restores a successful read through manual Refresh. Focused source lock remains `scripts/test-admin-app-notification-refresh-no-blink-guard.mjs`.
+
 ### Admin Automation Master Control Foundation
 
 - The existing Operations Dashboard header now contains one compact admin-only `Automation ON / OFF` switch; no new review page, route-level UI, booking panel, invoice panel, or duplicate workbench was added.

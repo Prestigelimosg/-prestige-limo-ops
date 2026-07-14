@@ -56,10 +56,10 @@ const derivedRequestSection = sliceBetween(
   "const customerBookingRequestBookings = useMemo(",
   "function update(field: keyof BookingForm, value: string)",
 );
-const bookingsRequestPanel = sliceBetween(
+const codexPreparedJobCardsPanel = sliceBetween(
   appPage,
-  "const customerBookingRequestsPanel =",
-  "const recentBookingsPanel =",
+  "const codexPreparedJobCardsPanel = (",
+  "const bookingsFindToolbar = (",
 );
 const customerBookingRequestsReviewHandler = sliceBetween(
   appPage,
@@ -164,8 +164,9 @@ assertExcludes(
 );
 
 for (const fragment of [
-  "Urgent &amp; New Booking Requests",
-  "Requests outside the 1-hour dispatch window stay here until admin loads them.",
+  "Codex Prepared Job Cards",
+  "Prepared from exact saved requests. Admin reviews every card before calendar action.",
+  "Calendar changes still require admin action in Dispatch.",
   'data-new-customer-booking-requests-urgent-count={String(urgentCustomerBookingRequestCount)}',
   'data-new-customer-booking-request-urgency={isUrgentRequest ? "urgent" : "new"}',
   "const passengerText = getLoadBookingsOperationalPassengerDisplay(operationalCard, requestBooking);",
@@ -174,9 +175,12 @@ for (const fragment of [
   "Urgent >1h",
   "New",
   "Review Job Card",
-  "onClick={() => loadSelectedBooking(requestBooking, { focusJobCard: true })}",
+  "Review Corrected Job Card",
+  "loadSelectedBooking(requestBooking, {",
+  "bookingFormOverride: correctionReady",
+  "focusJobCard: true",
 ]) {
-  assertIncludes(bookingsRequestPanel, fragment, `bookings request panel fragment ${fragment}`);
+  assertIncludes(codexPreparedJobCardsPanel, fragment, `Codex prepared queue fragment ${fragment}`);
 }
 
 for (const fragment of [
@@ -295,7 +299,7 @@ for (const forbidden of [
   "operationalCard.traveler_display_name ||\n            operationalCard.customer_display_name",
   "operationalCard.traveler_display_name ||\n                          operationalCard.customer_display_name",
 ]) {
-  assertExcludes(bookingsRequestPanel, forbidden, `bookings request passenger boundary ${forbidden}`);
+  assertExcludes(codexPreparedJobCardsPanel, forbidden, `Codex prepared queue passenger boundary ${forbidden}`);
 }
 
 assertIncludes(
@@ -420,7 +424,7 @@ for (const forbiddenPattern of [
   /driver payout|PayNow payout|payout comparisons|customer price/i,
   /internal admin notes|internal finance notes|parser\/debug|mock QA|dev archive/i,
 ]) {
-  assertExcludes(bookingsRequestPanel, forbiddenPattern, "bookings request panel privacy boundary");
+  assertExcludes(codexPreparedJobCardsPanel, forbiddenPattern, "Codex prepared queue privacy boundary");
   assertExcludes(dashboardUrgentPanel, forbiddenPattern, "dashboard urgent panel privacy boundary");
   assertExcludes(activeMonitorPanel, forbiddenPattern, "active monitor privacy boundary");
 }
@@ -429,10 +433,11 @@ for (const phrase of [
   "Dashboard request panel is now `Urgent / Customer Requests` and displays open customer requests, saved Driver TBC jobs inside the 1-hour pickup monitor window, and customer change/cancel requests using the existing guarded notification handlers.",
   "Dashboard `Open Urgent` and urgent rows load the selected urgent booking into Dispatch with the existing Driver Job Link panel focused, a visible booking handoff notice, and keyboard focus on `Create Link` so admin can create and copy the driver link before a driver is assigned.",
   "Clearing a loaded Dispatch booking now clears its Driver Job Link handoff reference, and a successful new `Save + CRM` replaces it with the newly saved booking reference before focusing the existing Driver Job Link panel; stale prior-booking notices must not survive the save.",
-  "Dashboard keeps one secondary `Review` action that remains on Dashboard and focuses the existing `Urgent & New Booking Requests` queue rendered there. The shared alert-menu and notification fallbacks use the same helper, so they no longer switch to Bookings and search for a panel that is not rendered on that tab; no duplicate request lane or helper is added, and the Driver Job Link urgent handoff remains unchanged.",
+  "Dashboard keeps one secondary `Review` action that remains on Dashboard and focuses the existing `Codex Prepared Job Cards` queue rendered inside `Codex Review & Admin App Notifications`. The shared alert-menu and notification fallbacks use the same helper, so they do not switch to Bookings or search for a retired panel; no duplicate request lane or helper is added, and the Driver Job Link urgent handoff remains unchanged.",
   "Dashboard `Review` is enabled only when that existing request queue contains a real reviewable row; a stale notification without an exact saved request remains disabled as `Missing request` and cannot enable a dead review handoff.",
-  "The Dashboard request panel remains the queue for open customer requests outside the 1-hour dispatch window as `Urgent & New Booking Requests`, with row badges separating under-24h-but-not-dispatch-window requests from new non-urgent requests; Bookings remains for saved booking search/load/list work.",
-  "Unhandled customer requests are hidden from Current / Upcoming until admin loads them from the Dashboard urgent lane or the Bookings request lane, preventing duplicate cards while preserving the existing post-review booking list.",
+  "The Dashboard `Codex Prepared Job Cards` panel remains the queue for open customer requests outside the 1-hour dispatch window, with row badges separating under-24h-but-not-dispatch-window requests from new non-urgent requests; Bookings remains for saved booking search/load/list work.",
+  "Unhandled customer requests are hidden from Current / Upcoming until admin loads them from the Dashboard Codex queue, preventing duplicate cards while preserving the existing post-review booking list.",
+  "The isolated Preview preflight found this focused guard still slicing the retired `customerBookingRequestsPanel`; the guard now targets the single established `codexPreparedJobCardsPanel` and protects its current review handoff and privacy boundary instead of failing before those assertions.",
   "Day-of-trip jobs are shown as `Today's Jobs` on Dashboard, replacing the duplicate Today/Upcoming booking summaries while keeping Bookings as the saved-job finder.",
   "`Today's Jobs` driver report auto-refresh is on by default, still uses the guarded admin driver-status read path, and can be switched off by the operator.",
   "The `Today's Jobs` live map control opens the existing admin-only live-location runtime for assigned active jobs and refreshes shared markers every 10 seconds while the sector is open.",

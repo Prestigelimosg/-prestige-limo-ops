@@ -71,7 +71,7 @@ const responsiveRoutes = [
   { expectedText: "Customers", label: "/customers", path: "/customers" },
 ];
 const tabExpectedText = {
-  Bookings: "Load Bookings",
+  Bookings: "Find saved jobs",
   Completed: "No completed bookings loaded yet.",
   Dashboard: "Operations Dashboard",
   Dispatch: "Dispatcher Intake",
@@ -356,6 +356,43 @@ async function runChromeTest() {
           const url = String(target);
           const blockedAdminPersistenceApiPattern =
             /\\/api\\/(?:admin-bookings?|bookings\\/admin|persistence|save-booking|load-booking)(?:[/?#]|$)/i;
+
+          if (url.includes("/api/admin-automation-runtime")) {
+            window.__mobileUsabilityFetchCalls.push(\`\${method} \${url}\`);
+
+            if (method !== "GET") {
+              return Promise.resolve(
+                new Response(JSON.stringify({
+                  customerVisible: false,
+                  error: "Blocked admin automation mutation in mobile usability browser test.",
+                  external_send: false,
+                  ok: false,
+                }), {
+                  status: 500,
+                  headers: { "content-type": "application/json" },
+                }),
+              );
+            }
+
+            return Promise.resolve(
+              new Response(JSON.stringify({
+                automation_enabled: false,
+                booking_intake_enabled: true,
+                calendar_auto_write_enabled: false,
+                customer_driver_email_auto_send_enabled: false,
+                customerVisible: false,
+                external_send: false,
+                invoice_auto_issue_enabled: false,
+                ok: true,
+                reason: "runtime_closed",
+                runtime_status: "closed",
+                version: "admin-automation-runtime-control:v1",
+              }), {
+                status: 200,
+                headers: { "content-type": "application/json" },
+              }),
+            );
+          }
 
           if (url.includes("/api/admin-app-notifications")) {
             window.__mobileUsabilityFetchCalls.push(\`\${method} \${url}\`);
@@ -1253,6 +1290,59 @@ async function runChromeTest() {
           state.boundary.includes("driver auth"),
         true,
         `${viewport.label}: expected admin app notification feed safe boundary`,
+      );
+    };
+
+    const checkAdminAutomationRuntimeToggle = async (viewport) => {
+      const state = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const toggle = document.querySelector("[data-admin-automation-runtime-toggle='true']");
+            const rect = toggle?.getBoundingClientRect();
+
+            if (!toggle || toggle.textContent.trim() !== "Automation OFF") {
+              return false;
+            }
+
+            return {
+              ariaChecked: toggle.getAttribute("aria-checked"),
+              docClientWidth: document.documentElement.clientWidth,
+              docScrollWidth: document.documentElement.scrollWidth,
+              enabled: toggle.getAttribute("data-admin-automation-runtime-enabled"),
+              height: Math.round(rect?.height || 0),
+              left: Math.round(rect?.left || 0),
+              right: Math.round(rect?.right || 0),
+              role: toggle.getAttribute("role"),
+              runtimeState: toggle.getAttribute("data-admin-automation-runtime-state"),
+              text: toggle.textContent.trim(),
+              visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+              width: Math.round(rect?.width || 0),
+            };
+          })()`),
+        10000,
+        `${viewport.label} admin automation runtime toggle`,
+      );
+
+      assert.equal(state.visible, true, `${viewport.label}: expected compact Automation switch`);
+      assert.equal(state.text, "Automation OFF", `${viewport.label}: expected Automation to remain OFF`);
+      assert.equal(state.role, "switch", `${viewport.label}: expected accessible Automation switch role`);
+      assert.equal(state.ariaChecked, "false", `${viewport.label}: expected unchecked Automation switch`);
+      assert.equal(state.enabled, "false", `${viewport.label}: expected closed Automation data state`);
+      assert.equal(state.runtimeState, "closed", `${viewport.label}: expected closed Automation runtime state`);
+      assert.equal(
+        state.height >= 36 && state.width >= 100,
+        true,
+        `${viewport.label}: expected Automation switch to stay readable and touchable`,
+      );
+      assert.equal(
+        state.left >= -2 && state.right <= state.docClientWidth + 2,
+        true,
+        `${viewport.label}: expected Automation switch to stay inside the viewport`,
+      );
+      assert.equal(
+        state.docScrollWidth <= state.docClientWidth + 2,
+        true,
+        `${viewport.label}: expected Automation switch not to create horizontal overflow`,
       );
     };
 
@@ -3936,9 +4026,9 @@ async function runChromeTest() {
           text: document.body.innerText || "",
         }))()`);
         for (const expectedText of [
-          "Find Customer Folder",
-          "Monthly Billing Queue",
-          "Same company names stay separate by saved account ID and passenger scope.",
+          "Customer Billing Overview",
+          "Load Accounts",
+          "Advanced invoice workbench",
         ]) {
           assert.equal(
             currentCustomerState.text.includes(expectedText),
@@ -4185,19 +4275,8 @@ async function runChromeTest() {
                   (button) => button.textContent.trim() === label,
                 ),
               ) &&
-              (
-                (
-                  text.includes("Operations Dashboard") &&
-                  text.includes("Urgent Booking Requests") &&
-                  text.includes("Admin App Notifications")
-                ) ||
-                (
-                  text.includes("Dispatcher Intake") &&
-                  text.includes("Job Card Preview") &&
-                  text.includes("Driver Dispatch") &&
-                  text.includes("Today's Jobs")
-                )
-              );
+              text.includes("Dispatcher Intake") &&
+              Boolean(document.querySelector("[data-dispatch-workflow-step='job-card-preview']"));
 
             if (!productionVisible) {
               return false;
@@ -11816,6 +11895,7 @@ async function runChromeTest() {
           await checkMonthlyBillingMonthGroupingReview(viewport);
           await checkManualExtraChargesBookingFields(viewport);
         } else if (tabLabel === "Dashboard") {
+          await checkAdminAutomationRuntimeToggle(viewport);
           await checkAdminAppNotificationFeed(viewport);
         }
       }
@@ -12843,7 +12923,21 @@ async function runChromeTest() {
       await setViewport(viewport);
       await navigate(appUrl, "Prestige Limo Ops Dispatch");
       await clickTab("Bookings");
-      await clickButtonByText("Load Bookings");
+      await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const text = document.body.innerText || "";
+
+            return !text.includes("Loading bookings...") &&
+              (
+                text.includes("MOBILE USABILITY TRAVELER") ||
+                text.includes("No active bookings found") ||
+                text.includes("No bookings loaded.")
+              );
+          })()`),
+        10000,
+        "automatic saved-bookings load",
+      );
       const loadedMobileFixtureAvailable = await evaluate(
         `document.body.innerText.includes("MOBILE USABILITY TRAVELER")`,
       );
@@ -12852,7 +12946,8 @@ async function runChromeTest() {
           text: document.body.innerText || "",
         }))()`);
         assert.equal(
-          emptyBookingsState.text.includes("No current/upcoming bookings in this search."),
+          emptyBookingsState.text.includes("No active bookings found") ||
+            emptyBookingsState.text.includes("No bookings loaded."),
           true,
           `${viewport.label}: expected guarded saved-bookings empty state when mobile mock fixture is absent`,
         );
@@ -13153,9 +13248,9 @@ async function runChromeTest() {
           text: document.body.innerText || "",
         }))()`);
         assert.equal(
-          currentCustomerState.text.includes("Monthly Billing Queue"),
+          currentCustomerState.text.includes("Customer Billing Overview"),
           true,
-          `${viewport.label}: expected current monthly billing queue`,
+          `${viewport.label}: expected current customer billing overview`,
         );
         assert.equal(
           currentCustomerState.billingDetailPreviewVisible,

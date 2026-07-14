@@ -13,6 +13,7 @@ const migrationPath =
 const ledgerPath = "docs/current-implementation-ledger.md";
 const suitePath = "scripts/test-preactivation-verification-suite.mjs";
 const browserPath = "scripts/test-booking-ui-browser.mjs";
+const mobileBrowserPath = "scripts/test-mobile-usability-browser.mjs";
 const guardPath = "scripts/test-admin-automation-runtime-control-guard.mjs";
 
 function assertIncludes(source, fragment, label = fragment) {
@@ -101,8 +102,8 @@ function createRuntimeClient(initialRow = null) {
   };
 }
 
-const [helperSource, routeSource, pageSource, migration, ledger, suite, browser] = await Promise.all(
-  [helperPath, routePath, pagePath, migrationPath, ledgerPath, suitePath, browserPath].map((file) =>
+const [helperSource, routeSource, pageSource, migration, ledger, suite, browser, mobileBrowser] = await Promise.all(
+  [helperPath, routePath, pagePath, migrationPath, ledgerPath, suitePath, browserPath, mobileBrowserPath].map((file) =>
     readFile(path.join(process.cwd(), file), "utf8"),
   ),
 );
@@ -194,11 +195,35 @@ for (const phrase of [
   "This first pass is control-only: calendar conflict checks, job-card queueing, scheduled monthly invoice preparation, and automatic Driver Details Email remain disabled until their later separately guarded passes.",
   "Remote migration `20260714022319_admin_automation_runtime_settings` is applied to the configured `prestige-limo-ops` Supabase project.",
   "The singleton was tested as the `service_role` from ON back to OFF inside one database transaction, so no other session could observe the temporary ON state; the committed row remains exactly one `closed / false` record.",
+  "The established mobile browser guard now uses current stable admin/customer selectors and copy, and verifies the same compact Automation switch remains visible, contained, accessible, and OFF across the existing 320–1440 px viewport matrix without clicking it.",
 ]) {
   assertIncludes(ledger, phrase, `automation ledger ${phrase}`);
 }
 
 assertIncludes(suite, guardPath, "preactivation suite automation guard registration");
+
+for (const fragment of [
+  'Bookings: "Find saved jobs"',
+  'url.includes("/api/admin-automation-runtime")',
+  'const checkAdminAutomationRuntimeToggle = async (viewport)',
+  'state.text, "Automation OFF"',
+  'state.runtimeState, "closed"',
+  'document.querySelector("[data-dispatch-workflow-step=\'job-card-preview\']")',
+  '"Customer Billing Overview"',
+  '"automatic saved-bookings load"',
+]) {
+  assertIncludes(mobileBrowser, fragment, `automation mobile runtime ${fragment}`);
+}
+assertExcludes(
+  mobileBrowser,
+  'Bookings: "Load Bookings"',
+  "mobile browser retired Bookings tab copy",
+);
+assertExcludes(
+  mobileBrowser,
+  'clickButtonByText("Load Bookings")',
+  "mobile browser retired manual bookings load action",
+);
 
 for (const fragment of [
   'String(target).includes("/api/admin-automation-runtime")',

@@ -44,6 +44,10 @@ assertIncludes("enable providers", "no-provider boundary");
 assertIncludes("activate any live feature", "no-live-feature boundary");
 
 const checkpointsSection = sectionBetween("## Checkpoints");
+assertSectionIncludes(
+  checkpointsSection,
+  "Latest repo commit deployed to isolated Preview: `4cf1dc60 Record verified repository Git identity`.",
+);
 assert.match(
   checkpointsSection,
   /Latest repo commit (?:at packet creation|before this configuration record|deployed to isolated Preview):\s*`[0-9a-f]{7,}\s+[^`]+`/,
@@ -81,6 +85,7 @@ for (const fragment of [
   "Automatic preparation Preview approval: Owner explicitly approved proceeding with the suggested next safe step on 2026-07-14",
   "Calendar conflict Preview approval: Owner explicitly approved proceeding with the suggested next safe step on 2026-07-14",
   "Repository Git identity repair approval: Owner explicitly approved proceeding with the next safe step on 2026-07-14",
+  "Verified-author source Preview approval: Owner explicitly approved proceeding with the next safe step on 2026-07-14",
 ]) {
   assertSectionIncludes(approvalSection, fragment, `Approval scope missing ${fragment}`);
 }
@@ -149,6 +154,11 @@ for (const fragment of [
   "GitHub's documented ID-based private no-reply address `283606993+Prestigelimosg@users.noreply.github.com`",
   "Global Git configuration and all existing commit history remained unchanged.",
   "does not claim the earlier Vercel authorization failure is fixed end to end",
+  "READY deployment `dpl_Dk3ttLwAhsYFRjJ5Ut1RSJzZXkST`",
+  "without the former `Not authorized` result",
+  "27 GET requests and one browser OPTIONS request",
+  "final bypass count is zero",
+  "No new deployed mobile/foldable pass is claimed",
 ]) {
   assertSectionIncludes(branchSeparationSection, fragment, `Branch separation evidence missing ${fragment}`);
 }
@@ -279,6 +289,16 @@ for (const fragment of [
   "Global Git configuration was not changed.",
   "no source deployment was performed in this repair pass",
   "protected isolated source Preview remains required before claiming the earlier Vercel authorization failure is resolved end to end",
+  "### Verified-Author Protected Source Preview Evidence",
+  "exact clean commit `4cf1dc60 Record verified repository Git identity`",
+  "created READY deployment `dpl_Dk3ttLwAhsYFRjJ5Ut1RSJzZXkST`",
+  "This proves the future-commit author repair end to end without rewriting any existing commit.",
+  "exact page marker `4cf1dc60`",
+  "27 GET requests and one browser OPTIONS request",
+  "final protection-bypass count is zero",
+  "The initial unsupported tab-open call, incorrect button-role selector, unavailable page `resizeTo`, unavailable page `fetch`, and unavailable tab-marking call",
+  "A new deployed mobile/foldable pass is not claimed",
+  "Production remained unchanged: `app.prestigelimo.sg` still resolves to READY Production deployment `dpl_7ksuhQENRPiWNACbEM4Y6dGf6ayR`",
 ]) {
   assert.equal(
     ledger.includes(fragment),

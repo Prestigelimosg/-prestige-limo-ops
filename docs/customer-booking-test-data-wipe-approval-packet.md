@@ -12,7 +12,7 @@ The owner declared on 15 July 2026 that all current customer, booking, invoice, 
 
 The controlled Driver Details Email test is complete: one approved message reached the owner mailbox, Production returned to `Email gate off`, and no retry occurred. The safest wipe timing remains after the first real monthly scheduler proof due on 1 August 2026 at 08:00 SGT, then before real operations begin. That proof still needs exact, approved test fixtures. Deleting their fixtures now would weaken or prevent the remaining runtime evidence.
 
-If real operations begin before the scheduler proof finishes, this packet expires and the scope must be re-inventoried. Any genuine business or financial record found during revalidation must be excluded from the wipe and retained under the applicable record-keeping requirement. [IRAS states that companies must retain relevant business records for at least five years](https://www.iras.gov.sg/taxes/corporate-income-tax/basics-of-corporate-income-tax/record-keeping-requirements).
+If real operations begin before the scheduler proof finishes, this packet expires and the scope must be re-inventoried. Any genuine business or financial record found during revalidation must be excluded from this test-data wipe and reported for a separate owner decision.
 
 ## Read-Only Aggregate Inventory
 

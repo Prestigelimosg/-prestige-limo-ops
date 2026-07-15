@@ -5,6 +5,7 @@ import { buildAdminEmailProviderSelectionSetup } from "../../../lib/admin-email-
 import { buildAdminEmailRecipientSafetySetup } from "../../../lib/admin-email-recipient-safety-setup-foundation";
 import { buildAdminEmailSenderSelectionSetup } from "../../../lib/admin-email-sender-selection-setup-foundation";
 import { buildAdminEmailSendPolicySetup } from "../../../lib/admin-email-send-policy-setup-foundation";
+import { adminCustomerDriverDetailsEmailSendGateOpen } from "../../../lib/admin-customer-driver-details-email-send-action";
 import {
   adminBookingPersistencePurpose,
   type AdminDispatcherBoundaryContext,
@@ -30,6 +31,7 @@ function blockedPayload(error?: string) {
     activationReady: false,
     activationStatus: "blocked",
     blockers: blockerList(),
+    driverDetailsEmailSendGateOpen: false,
     external_send: false,
     liveSendingEnabled: false,
     missing_requirements: blockerList(),
@@ -97,6 +99,7 @@ function requireAdminDispatcherBoundary(request: Request): AdminDispatcherBounda
 }
 
 function buildActivationPreflight(selectedProvider: string | null) {
+  const driverDetailsEmailSendGateOpen = adminCustomerDriverDetailsEmailSendGateOpen();
   const selection = buildAdminEmailProviderSelectionSetup({ selectedProvider });
   const notification = buildAdminEmailNotificationSetupPayload({
     body_lines: ["Email activation preflight setup only.", "Live email sending remains disabled."],
@@ -153,6 +156,7 @@ function buildActivationPreflight(selectedProvider: string | null) {
       providerSelection: selection.selectedProviderStatus,
     },
     disabled_send_status: readiness.disabled_send_status,
+    driverDetailsEmailSendGateOpen,
     external_send: false,
     liveSendingEnabled: false,
     missing_requirements: blockerList(),

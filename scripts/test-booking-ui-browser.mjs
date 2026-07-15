@@ -1820,7 +1820,7 @@ function assertBookingUiState(state) {
   assert.deepEqual(
     state.customerCopyEmailReviewItem,
     {
-      action: "Email",
+      action: "Email gate off",
       actionDisabled: true,
       disabledSendActionState: "idle",
       disabledSendExternalSend: "false",
@@ -14735,6 +14735,8 @@ async function runChromeTest() {
       window.__prestigeWorkflowStatuses = window.__prestigeWorkflowStatuses || {};
       window.__prestigeCustomerDriverDetailsEmailReviewItemRequests = [];
       window.__prestigeCustomerDriverDetailsEmailDisabledSendRequests = [];
+      window.__prestigeCustomerDriverDetailsEmailSendGateOpen = false;
+      window.__prestigeCustomerDriverDetailsEmailSendSuccess = false;
       window.fetch = async (...args) => {
         const target = args[0]?.url || args[0];
         const method = args[1]?.method || args[0]?.method || "GET";
@@ -14746,6 +14748,28 @@ async function runChromeTest() {
             return {};
           }
         })();
+
+        if (String(target).includes("/api/admin-email-activation-preflight-setup")) {
+          window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
+
+          return new Response(
+            JSON.stringify({
+              activationReady: false,
+              blockers: ["provider", "env", "approval", "live_sending"],
+              driverDetailsEmailSendGateOpen:
+                window.__prestigeCustomerDriverDetailsEmailSendGateOpen === true,
+              external_send: false,
+              liveSendingEnabled: false,
+              ok: true,
+              providerConfigured: false,
+              providerSelected: false,
+              selectedProvider: null,
+              sendingEnabled: false,
+              status: "setup_only",
+            }),
+            { status: method === "GET" ? 200 : 405, headers: { "content-type": "application/json" } },
+          );
+        }
 
         if (String(target).includes("/api/admin-customer-driver-details-email-review-item-setup")) {
           const url = new URL(String(target), window.location.origin);
@@ -14798,6 +14822,8 @@ async function runChromeTest() {
         if (String(target).includes("/api/admin-customer-driver-details-email-send-action")) {
           const parsedBody = bodyText ? JSON.parse(bodyText) : {};
           const bookingDetails = parsedBody.customer_booking_details || {};
+          const sendSucceeded =
+            method === "POST" && window.__prestigeCustomerDriverDetailsEmailSendSuccess === true;
 
           window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
           window.__prestigeCustomerDriverDetailsEmailDisabledSendRequests.push({
@@ -14807,29 +14833,37 @@ async function runChromeTest() {
             },
             booking_reference: bookingDetails.booking_reference || "",
             customer_email: parsedBody.recipient_email || "",
-            external_send: false,
+            external_send: sendSucceeded,
             headers,
             method,
             search: "",
-            sendingEnabled: false,
-            status: "blocked",
+            sendingEnabled: sendSucceeded,
+            status: sendSucceeded ? "sent" : "blocked",
             url: String(target),
           });
 
           return new Response(
             JSON.stringify({
               delivery_surface: "admin_customer_driver_details_email_send_action",
-              email_send_enabled: false,
+              email_send_enabled: sendSucceeded,
               env_gate_name: "PRESTIGE_DRIVER_DETAILS_EMAIL_SEND_ENABLED",
-              external_send: false,
-              no_op: true,
-              ok: false,
-              provider_request_count: 0,
-              reason: method === "POST" ? "email_send_gate_closed" : "invalid_method",
-              status: "blocked",
+              external_send: sendSucceeded,
+              message_id: sendSucceeded ? "browser_email_test_123" : null,
+              no_op: !sendSucceeded,
+              ok: sendSucceeded,
+              provider_request_count: sendSucceeded ? 1 : 0,
+              reason: sendSucceeded
+                ? "send_succeeded"
+                : method === "POST"
+                  ? "email_send_gate_closed"
+                  : "invalid_method",
+              status: sendSucceeded ? "sent" : "blocked",
               version: "focused-browser-customer-driver-details-email-send-action-mock",
             }),
-            { status: method === "POST" ? 503 : 405, headers: { "content-type": "application/json" } },
+            {
+              status: sendSucceeded ? 200 : method === "POST" ? 503 : 405,
+              headers: { "content-type": "application/json" },
+            },
           );
         }
 
@@ -16441,71 +16475,129 @@ async function runChromeTest() {
     })()`);
     assert.equal(
       clickedCustomerCopyEmailDisabledSend,
-      true,
-      "Expected Customer Copy gated email send button to be clickable after saved booking load",
+      false,
+      "Expected Customer Copy Email button to stay disabled while the runtime send gate is closed",
+    );
+    const customerCopyEmailDisabledSendState = await evaluate(`(() => {
+      const item = document.querySelector("[data-dispatch-workflow-step='customer-whatsapp-copy'] [data-admin-customer-driver-details-email-review-item='true']");
+      const button = item?.querySelector("[data-admin-customer-driver-details-email-disabled-send-action='true']");
+
+      return {
+        buttonDisabled: button?.disabled ?? null,
+        buttonText: button?.textContent.replace(/\\s+/g, " ").trim() || "",
+        gateOpen: item?.getAttribute("data-admin-customer-driver-details-email-send-gate-open") || "",
+        requests: window.__prestigeCustomerDriverDetailsEmailDisabledSendRequests || [],
+      };
+    })()`);
+    assert.equal(customerCopyEmailDisabledSendState.buttonDisabled, true);
+    assert.equal(customerCopyEmailDisabledSendState.buttonText, "Email gate off");
+    assert.equal(customerCopyEmailDisabledSendState.gateOpen, "false");
+    assert.deepEqual(
+      customerCopyEmailDisabledSendState.requests,
+      [],
+      "Closed-gate Customer Copy UI must not POST the provider send action",
     );
 
-    const customerCopyEmailDisabledSendState = await waitForCondition(
+    const openedMockEmailGate = await evaluate(`(() => {
+      window.__prestigeCustomerDriverDetailsEmailSendGateOpen = true;
+      window.__prestigeCustomerDriverDetailsEmailSendSuccess = true;
+      const dashboardTab = document.querySelector("[data-app-tab='dashboard']");
+
+      if (!dashboardTab) {
+        return false;
+      }
+
+      dashboardTab.click();
+      return true;
+    })()`);
+    assert.equal(openedMockEmailGate, true, "Expected browser fixture to open only its mocked email gate.");
+    await waitForCondition(
+      () => evaluate(`document.querySelector("[data-app-tab='dashboard']")?.getAttribute("aria-selected") === "true"`),
+      10000,
+      "mock email gate dashboard transition",
+    );
+    await evaluate(`document.querySelector("[data-app-tab='dispatch']")?.click()`);
+    const gateOpenEmailButton = await waitForCondition(
       () =>
         evaluate(`(() => {
-          const item = document.querySelector("[data-dispatch-workflow-step='customer-whatsapp-copy'] [data-admin-customer-driver-details-email-review-item='true']");
-          const status = item
-            ?.querySelector("[data-admin-customer-driver-details-email-disabled-send-status='true']")
-            ?.textContent.replace(/\\s+/g, " ")
-            .trim() || "";
+          const button = document.querySelector("[data-admin-customer-driver-details-email-disabled-send-action='true']");
+          const item = document.querySelector("[data-admin-customer-driver-details-email-review-item='true']");
+
+          return button && !button.disabled && button.textContent.trim() === "Email" &&
+            item?.getAttribute("data-admin-customer-driver-details-email-send-gate-open") === "true"
+            ? true
+            : false;
+        })()`),
+      10000,
+      "mock gate-open Driver Details Email button",
+    );
+    assert.equal(gateOpenEmailButton, true);
+    const clickedGateOpenEmail = await evaluate(`(() => {
+      const button = document.querySelector("[data-admin-customer-driver-details-email-disabled-send-action='true']");
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(clickedGateOpenEmail, true, "Expected exactly one mocked gate-open Email click.");
+    const sentEmailButtonState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const button = document.querySelector("[data-admin-customer-driver-details-email-disabled-send-action='true']");
           const requests = window.__prestigeCustomerDriverDetailsEmailDisabledSendRequests || [];
 
-          return status.includes("SMS/WA off") && requests.length === 1
+          return button?.disabled && button.textContent.trim() === "Emailed" && requests.length === 1
             ? {
-                externalSend: item?.getAttribute("data-admin-customer-driver-details-email-disabled-send-external-send") || "",
-                loadedReference:
-                  item?.getAttribute("data-admin-customer-driver-details-email-disabled-send-loaded-reference") || "",
+                buttonDisabled: button.disabled,
+                buttonText: button.textContent.trim(),
                 requests,
-                sendingEnabled:
-                  item?.getAttribute("data-admin-customer-driver-details-email-disabled-send-sending-enabled") || "",
-                status,
               }
             : false;
         })()`),
       10000,
-      "Customer Copy gated email send closed-gate result",
+      "same-page Driver Details Email post-success lockout",
     );
-    assert.equal(
-      customerCopyEmailDisabledSendState.status,
-      "SMS/WA off",
-    );
-    assert.equal(customerCopyEmailDisabledSendState.externalSend, "false");
-    assert.equal(customerCopyEmailDisabledSendState.sendingEnabled, "false");
-    assert.equal(customerCopyEmailDisabledSendState.loadedReference, "ui-cleanup-load-fixture");
+    assert.equal(sentEmailButtonState.buttonDisabled, true);
+    assert.equal(sentEmailButtonState.buttonText, "Emailed");
     assert.deepEqual(
-      customerCopyEmailDisabledSendState.requests.map((request) => ({
-        body: request.body,
+      sentEmailButtonState.requests.map((request) => ({
         booking_reference: request.booking_reference,
         customer_email: request.customer_email,
         external_send: request.external_send,
-        hasSessionTokenHeader: Boolean(request.headers["x-prestige-admin-session-token"]),
         method: request.method,
-        purpose: request.headers["x-prestige-admin-purpose"] || "",
         sendingEnabled: request.sendingEnabled,
         status: request.status,
       })),
       [
         {
-          body: {
-            booking_reference: "ui-cleanup-load-fixture",
-            recipient_email: "booker@loadedsaved.example.com",
-          },
           booking_reference: "ui-cleanup-load-fixture",
           customer_email: "booker@loadedsaved.example.com",
-          external_send: false,
-          hasSessionTokenHeader: false,
+          external_send: true,
           method: "POST",
-          purpose: "admin-booking-persistence",
-          sendingEnabled: false,
-          status: "blocked",
+          sendingEnabled: true,
+          status: "sent",
         },
       ],
-      "Expected Customer Copy Email button to POST the gated send action and close safely when the gate is closed",
+      "Expected one mocked send followed by same-page button lockout.",
+    );
+    const repeatedEmailClickAccepted = await evaluate(`(() => {
+      const button = document.querySelector("[data-admin-customer-driver-details-email-disabled-send-action='true']");
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(repeatedEmailClickAccepted, false, "Emailed button must reject a repeated same-page click.");
+    assert.equal(
+      await evaluate(`window.__prestigeCustomerDriverDetailsEmailDisabledSendRequests.length`),
+      1,
+      "Repeated same-page click must not create a second send request.",
     );
     assert.deepEqual(
       loadedBookingState.workflowStatusRequests.map((request) => ({

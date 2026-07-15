@@ -17,6 +17,7 @@ const sourceFiles = [
   "lib/admin-email-recipient-safety-setup-foundation.ts",
   "lib/admin-email-sender-selection-setup-foundation.ts",
   "lib/admin-email-send-policy-setup-foundation.ts",
+  "lib/admin-customer-driver-details-email-send-action.ts",
 ];
 const activationBlockers = ["provider", "env", "approval", "live_sending"];
 const safeOutputLeakPattern =
@@ -27,6 +28,8 @@ const originalEnv = {
   PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE: process.env.PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE,
   PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE: process.env.PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE,
   PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN: process.env.PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN,
+  PRESTIGE_DRIVER_DETAILS_EMAIL_SEND_ENABLED:
+    process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_SEND_ENABLED,
 };
 
 function restoreEnv() {
@@ -44,6 +47,7 @@ function applyLocalAdminBoundary() {
   delete process.env.PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE;
   delete process.env.PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE;
   delete process.env.PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN;
+  delete process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_SEND_ENABLED;
 }
 
 function adminHeaders() {
@@ -122,6 +126,7 @@ for (const fragment of [
   "providerSelected",
   "selectedProvider",
   "live_sending",
+  "driverDetailsEmailSendGateOpen",
 ]) {
   assert.ok(routeSource.includes(fragment), `Missing email activation preflight route fragment: ${fragment}`);
 }
@@ -166,6 +171,7 @@ try {
 
   assert.equal(anonymousResponse.status, 403, "Email activation preflight API must stay anonymous-gated.");
   assert.equal(anonymous.activationReady, false);
+  assert.equal(anonymous.driverDetailsEmailSendGateOpen, false);
   assert.equal(anonymous.external_send, false);
   assert.equal(anonymous.liveSendingEnabled, false);
   assert.deepEqual(anonymous.blockers, activationBlockers);
@@ -188,6 +194,7 @@ try {
 
   assert.equal(crossOriginResponse.status, 403, "Email activation preflight API must stay cross-origin gated.");
   assert.equal(crossOrigin.activationReady, false);
+  assert.equal(crossOrigin.driverDetailsEmailSendGateOpen, false);
   assert.equal(crossOrigin.external_send, false);
   assert.equal(crossOrigin.liveSendingEnabled, false);
   assert.equal(crossOrigin.providerConfigured, false);
@@ -207,6 +214,7 @@ try {
   );
   assert.equal(setupOnlyDashboard.ok, true);
   assert.equal(setupOnlyDashboard.activationReady, false);
+  assert.equal(setupOnlyDashboard.driverDetailsEmailSendGateOpen, false);
   assert.equal(setupOnlyDashboard.activationStatus, "blocked");
   assert.deepEqual(setupOnlyDashboard.blockers, activationBlockers);
   assert.equal(setupOnlyDashboard.external_send, false);
@@ -223,6 +231,7 @@ try {
   assert.equal(defaultResponse.status, 200);
   assert.equal(preflight.ok, true);
   assert.equal(preflight.activationReady, false);
+  assert.equal(preflight.driverDetailsEmailSendGateOpen, false);
   assert.equal(preflight.activationStatus, "blocked");
   assert.deepEqual(preflight.blockers, activationBlockers);
   assert.equal(preflight.external_send, false);
@@ -269,6 +278,19 @@ try {
   assert.equal(selected.sendingEnabled, false);
   assert.deepEqual(selected.selection.missing_requirements, ["env", "approval"]);
   assert.equal(selected.componentStatuses.providerSelection, "disabled");
+
+  process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_SEND_ENABLED = "true";
+  const gateOpenResponse = await harness.route.GET(
+    new Request(apiUrl(), { headers: adminHeaders() }),
+  );
+  const gateOpen = await gateOpenResponse.json();
+
+  assert.equal(gateOpenResponse.status, 200);
+  assert.equal(gateOpen.ok, true);
+  assert.equal(gateOpen.driverDetailsEmailSendGateOpen, true);
+  assert.equal(gateOpen.external_send, false);
+  assert.equal(gateOpen.sendingEnabled, false);
+  delete process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_SEND_ENABLED;
 
   const camelCaseResponse = await harness.route.GET(
     new Request(apiUrl({ selectedProvider: "aws-ses" }), { headers: adminHeaders() }),

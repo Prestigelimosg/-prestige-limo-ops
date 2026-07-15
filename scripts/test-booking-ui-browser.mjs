@@ -699,6 +699,36 @@ const dashboardCompletionActionFixture = {
     traveler_name: "COMPLETION ACTION TEST TRAVELER",
   },
 };
+const bookingsCancelActionFixture = {
+  ...dashboardCompletionActionFixture,
+  id: 135,
+  booking_reference: "CODEX-ACCEPT-20260711212612",
+  pickup_at: "2099-01-02T02:00:00+00:00",
+  pickup_datetime: "2099-01-02T02:00:00+00:00",
+  pickup_time: "1000",
+  pickup_address: "CODEX CANCEL TEST PICKUP",
+  dropoff_address: "CODEX CANCEL TEST DROPOFF",
+  flight_no: null,
+  route: "CODEX CANCEL TEST PICKUP > CODEX CANCEL TEST DROPOFF",
+  job_card:
+    "AVF TRF\n2 Jan 2099, 1000hrs\nCODEX CANCEL TEST PICKUP > CODEX CANCEL TEST DROPOFF\nPassenger: CODEX CANCEL TEST PASSENGER\nPax: 1",
+  status: null,
+  admin_internal_status: "draft",
+  customer_facing_status: "pending_review",
+  request_review_status: "pending_review",
+  cancellation_review_status: null,
+  source_channel: null,
+  source_surface: "admin_dashboard",
+  companies: null,
+  bookers: {
+    booker_name: "CODEX CANCEL TEST BOOKER",
+    email: null,
+    phone: "+65 8111 2135",
+  },
+  travelers: {
+    traveler_name: "CODEX CANCEL TEST PASSENGER",
+  },
+};
 const missingIdCompletionActionFixture = {
   ...dashboardCompletionActionFixture,
   id: undefined,
@@ -6268,6 +6298,7 @@ async function runChromeTest() {
         ${JSON.stringify(completedSavedBookingFixture)},
         ${JSON.stringify(completedCustomerOnlyPriceFixture)},
         ${JSON.stringify(dashboardCompletionActionFixture)},
+        ${JSON.stringify(bookingsCancelActionFixture)},
         ${JSON.stringify(completedUndoAssignedFixture)},
         ${JSON.stringify(completedUndoConfirmedFixture)},
         ${JSON.stringify(dashboardStatusFlowFixture)},
@@ -7286,6 +7317,7 @@ async function runChromeTest() {
             )
               ? {
                   ...booking,
+                  admin_internal_status: parsedBody.status,
                   status: parsedBody.status,
                   updated_at: updatedAt,
                 }
@@ -7474,6 +7506,105 @@ async function runChromeTest() {
       await evaluate(`![...document.querySelectorAll("button")].some((button) => button.textContent.trim() === "Load Bookings")`),
       true,
       "Expected the retired manual Load Bookings button to stay absent",
+    );
+
+    await setInputValue(
+      "[data-bookings-search-input='true']",
+      bookingsCancelActionFixture.booking_reference,
+      "Bookings exact cancellation fixture search",
+    );
+    await evaluate(`(() => {
+      window.__prestigeFetchCalls = [];
+      window.__prestigeBookingCompletionRequests = [];
+      window.__prestigeUnhandledSupabaseCalls = [];
+    })()`);
+    const clickedBookingsCancel = await evaluate(`(() => {
+      const button = document.querySelector(
+        '[data-bookings-mark-cancelled="${bookingsCancelActionFixture.booking_reference}"]',
+      );
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(clickedBookingsCancel, true, "Expected Bookings Cancel button to be clickable");
+
+    const bookingsCancelState = await waitForCondition(
+      async () => {
+        const state = await evaluate(`(() => ({
+          completionRequests: window.__prestigeBookingCompletionRequests || [],
+          fetchCalls: window.__prestigeFetchCalls || [],
+          fixtureStillActive: Boolean(document.querySelector(
+            '[data-recent-operational-card="${bookingsCancelActionFixture.booking_reference}"]',
+          )),
+          unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
+        }))()`);
+
+        return state.completionRequests.length === 1 && state.fixtureStillActive === false
+          ? state
+          : false;
+      },
+      10000,
+      "Bookings cancellation request and active-row removal",
+    );
+    assert.deepEqual(bookingsCancelState.unhandledSupabaseCalls, []);
+    assert.equal(
+      bookingsCancelState.fetchCalls.filter(
+        (call) => call.startsWith("PATCH ") && call.includes("/api/admin-saved-booking-statuses"),
+      ).length,
+      1,
+      `Expected Bookings Cancel to PATCH the typed status API once, got ${bookingsCancelState.fetchCalls.join(", ")}`,
+    );
+    assert.equal(bookingsCancelState.completionRequests.length, 1);
+    assert.deepEqual(bookingsCancelState.completionRequests[0]?.body, {
+      booking_id: bookingsCancelActionFixture.booking_reference,
+      status: "cancelled",
+    });
+    assert.equal(
+      bookingsCancelState.fixtureStillActive,
+      false,
+      "Expected a cancelled booking to leave the active Bookings list",
+    );
+
+    await evaluate(`(() => {
+      window.__prestigeLoadedBookings = (window.__prestigeLoadedBookings || []).filter(
+        (booking) => booking.booking_reference !== "${bookingsCancelActionFixture.booking_reference}",
+      );
+    })()`);
+    await setInputValue(
+      "[data-bookings-search-input='true']",
+      "",
+      "Clear Bookings exact cancellation fixture search",
+    );
+    const savedBookingReadsBeforePostCancellationRefresh = await evaluate(
+      `(window.__prestigeAdminSavedBookingListRequests || []).length`,
+    );
+    await clickTab("Dashboard", "Refresh Dashboard");
+    const clickedPostCancellationRefresh = await evaluate(`(() => {
+      const button = [...document.querySelectorAll("button")].find(
+        (candidate) => candidate.textContent.trim() === "Refresh Dashboard",
+      );
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedPostCancellationRefresh,
+      true,
+      "Expected Dashboard refresh after removing the cancellation fixture",
+    );
+    await waitForCondition(
+      () =>
+        evaluate(`(window.__prestigeAdminSavedBookingListRequests || []).length > ${savedBookingReadsBeforePostCancellationRefresh}`),
+      10000,
+      "post-cancellation fixture refresh",
     );
 
     await clickTab("Completed", "Completed / History");

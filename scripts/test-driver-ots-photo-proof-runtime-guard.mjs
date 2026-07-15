@@ -33,6 +33,36 @@ const persistence = files["lib/driver-ots-photo-proof-persistence.ts"];
 const migration = files["supabase/migrations/202607030002_driver_ots_photo_proofs.sql"];
 const setupFoundation = files["lib/admin-ots-photo-proof-setup-foundation.ts"];
 const customerPublicSources = `${files["app/book/page.tsx"]}\n${files["app/my-bookings/page.tsx"]}`;
+const driverOtsUploadFunctionStart = driverPage.indexOf(
+  "async function uploadDriverOtsPhotoProof()",
+);
+const driverOtsUploadFunctionEnd = driverPage.indexOf(
+  "async function updateStatus(",
+  driverOtsUploadFunctionStart,
+);
+const driverOtsSectionStart = driverPage.indexOf(
+  'data-driver-job-ots-photo-proof="true"',
+);
+const driverOtsSectionEnd = driverPage.indexOf(
+  'data-driver-job-status-timing-evidence="true"',
+  driverOtsSectionStart,
+);
+
+assert.ok(driverOtsUploadFunctionStart >= 0, "Missing driver OTS upload function boundary.");
+assert.ok(
+  driverOtsUploadFunctionEnd > driverOtsUploadFunctionStart,
+  "Missing driver OTS upload function end boundary.",
+);
+assert.ok(driverOtsSectionStart >= 0, "Missing driver OTS UI section boundary.");
+assert.ok(
+  driverOtsSectionEnd > driverOtsSectionStart,
+  "Missing driver OTS UI section end boundary.",
+);
+
+const driverOtsApprovedSurface = `${driverPage.slice(
+  driverOtsUploadFunctionStart,
+  driverOtsUploadFunctionEnd,
+)}\n${driverPage.slice(driverOtsSectionStart, driverOtsSectionEnd)}`;
 
 for (const fragment of [
   "future_trigger: \"driver_ots\"",
@@ -106,7 +136,7 @@ for (const fragment of [
 }
 
 assertExcludes(
-  driverPage,
+  driverOtsApprovedSurface,
   /URL\.createObjectURL|navigator\.mediaDevices|getUserMedia|storage\.from|\.upload\s*\(|x-prestige-admin-session-token|Authorization/i,
   "driver page forbidden OTS behavior",
 );

@@ -12,6 +12,14 @@ f6806723 Harden driver details email sending
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Driver Assignment Guard Boundary Repair
+
+- The pre-operation check for the approved single test-booking repair stopped before any data write because `scripts/test-admin-draft-driver-assignment-button-guard.mjs` still used the removed Dispatch `Today's Jobs` render as the end marker for the established Assigned Driver section.
+- Commit `e9f31749 Move live jobs monitor to dashboard` intentionally moved the shared monitor to Dashboard and updated the active Dashboard/Dispatch layout guards, but did not update this older draft-assignment guard. The current `scripts/test-admin-load-bookings-crm-fallback-compact-guard.mjs` and `scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs` both passed before this repair, confirming the documented layout remained intact.
+- The draft-assignment guard now bounds the existing `data-dispatch-workflow-step="driver-assignment"` sector at its own first closing section tag instead of depending on an unrelated later monitor. Its existing Apply/Cancel state, no-fetch/no-calendar boundary, and driver-assignment assertions are unchanged.
+- Review then exposed a separate test-harness dependency gap in `scripts/test-admin-booking-persistence-api-gate.mjs`: its isolated customer-request route copy did not provide the already-established `prepareCodexJobCardForAdminReview` import. The harness now provides one inert mock for that internal preparation call, allowing the existing booking-persistence assertions to execute without performing preparation, notification, provider, or database work.
+- No application source, layout, UI, route, helper, booking/customer/driver record, Supabase data/configuration, Automation state, calendar/map wiring, customer/driver message, provider send, environment, Preview, Production deployment, or external system changed. The interrupted test-booking repair and Driver Details Email controlled test remain unexecuted.
+
 ### Customer, Booking, And Invoice Test-Data Wipe Approval Packet
 
 - The owner declared that all current customer, booking, and invoice records are testing-only. A read-only, count-only Supabase inventory read aggregate counts and metadata only; it did not read row values, personal data, object paths, or environment values.

@@ -4,10 +4,10 @@ Latest verified clean runtime checkpoint:
 750d72a3 Parse tonight as current booking date
 
 Latest pushed main/staging runtime checkpoint:
-3ffe5c30 Harden driver details email sending
+750d72a3 Parse tonight as current booking date
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-df12b545 Record controlled driver email production evidence
+8c9ffc5f Merge PR #1: Parse tonight as current booking date
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -28,6 +28,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - After explicit owner approval, exact tested source `a762ab6b` was built with the unchanged Production environment and deployed through the metadata-free prebuilt path as READY Production deployment `dpl_7FLNCAifcJyj81ryAzXWUwzzHpjG`; `https://app.prestigelimo.sg` was assigned to that deployment and returns HTTP 200. No staging-ahead commit was merged or included.
 - Signed-in Production acceptance showed build `a762ab6b` and `Automation ON`, then pasted the owner's exact message and clicked only `Create Job Card`. The established form populated pickup date `2026-07-15`, time `2130hrs`, flight `TR241`, Changi Airport to Orchard Residences, and passenger Dr Poh So Kok with zero browser error logs. The job card was not saved.
 - Sanitized post-deployment logs contain 35 GET requests, zero POST/PATCH/PUT/DELETE requests, zero error-level records, zero send-route requests, and zero calendar writes. No booking/customer/driver/invoice write, calendar/map action, payment/payout action, customer/driver message, Email, or external provider send occurred.
+- After the owner approved repository alignment, draft PR `#1` from `codex/tonight-parser-preview` to `main` passed its focused guards and Vercel checks, was confirmed conflict-free, and was merged without involving `staging` as `8c9ffc5f Merge PR #1: Parse tonight as current booking date`. The automatic Git-linked Production deployment `dpl_3GZiWT4nLHNackK6jWds3ca6utH5` reached READY, received the `https://app.prestigelimo.sg` alias, and returns HTTP 200.
+- Signed-in post-merge Production acceptance showed build `8c9ffc5f` and `Automation ON`, then repeated the exact no-save `Create Job Card` test with the same correct date, time, flight, route, and passenger and zero browser errors. Sanitized deployment logs contain 29 GET requests, zero mutations, zero error-level records, zero send-route requests, and zero calendar writes.
 - Automation and scheduler settings were not changed. No Supabase or Vercel environment assignment was changed, and `CRON_SECRET` was not displayed, downloaded, or replaced. Vercel's locally generated environment files were removed without reading their contents; the metadata-free Production build-output directory is removed after verification.
 
 ### Controlled Production Driver Details Email Test Approval

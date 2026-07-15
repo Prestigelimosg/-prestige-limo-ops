@@ -76,6 +76,18 @@ for (const phrase of [
   "Future Email may include an admin-selected secure tracking-link live-location email only after separate owner approval for that exact channel/action gate.",
   "Email must not auto-send live location, must not send native/streaming live location, and must not be the future automatic live-location channel.",
   "No provider activation or provider send is approved by this guard.",
+  "Current `f6806723` controlled-test packet status is prepared but execution-blocked; this record does not approve a deployment, Preview env assignment, send-gate change, provider request, or external Email.",
+  "The exact candidate runtime is `f6806723 Harden driver details email sending`; any later docs-only commit must prove that `f6806723` remains the latest runtime-path commit before a test deployment.",
+  "The only approved candidate recipient is the owner mailbox `info@prestigelimo.sg`; the sender remains `Prestige Limo Dispatch <info@prestigelimo.sg>` and Reply-To remains `info@prestigelimo.sg`.",
+  "The owner must name one exact existing non-operational test booking and its exact assigned-driver test record at action time; no booking, driver, or customer may be guessed, inferred, duplicated, or recorded in this packet.",
+  "The content review must use only CUSTOMER BOOKING DETAILS and DRIVER DETAILS fields already allowlisted by the established gated route, with `Passenger name:` as the customer-facing identity label.",
+  "The controlled test, if later approved, is exactly one explicit admin Email click, one route POST, one provider request, and one delivered message; no live duplicate request is required because deterministic idempotency remains guard-proven.",
+  "Required send evidence is one HTTP 200 `send_succeeded` response, `provider_request_count: 1`, one safe provider message id, one received owner-mailbox message, same-page `Emailed` disabled state, zero follow-up send-route request, and zero database or notification-table write.",
+  "A later test requires a fresh protected Preview because the verified `f6806723` Preview is credential-free and gate-closed; temporary Preview-only env assignments must never change or expose Production values.",
+  "Rollback must close `PRESTIGE_DRIVER_DETAILS_EMAIL_SEND_ENABLED`, remove every temporary Driver Details Email/Resend Preview assignment, redeploy the credential-free gate-closed artifact, verify exactly one disabled `Email gate off` control, verify no later send-route request, keep automation-bypass count at zero, and preserve the Vercel SSO redirect.",
+  "Do not use `vercel curl` for the protected application check because its automatic protection-bypass creation would change project configuration; use the signed-in Browser and sanitized deployment logs instead.",
+  "Execution remains blocked pending separate action-time owner approval of the exact booking/driver fixture, temporary Preview configuration, fresh protected Preview deployment, and exactly one external Email send.",
+  "Preparing this packet requires no deployment because it changes only the ledger and its existing focused guard.",
 ]) {
   assertIncludes(safetySection, phrase, `Email staging-send safety phrase: ${phrase}`);
 }

@@ -54,7 +54,7 @@ The invoice delivery states are database aggregates only; they neither prove nor
 - 1 admin automation runtime setting, 2 admin device push subscriptions, 1 driver live-location runtime setting, 1 rate setting, and 1 company profile setting.
 - 2 Storage objects in 1 bucket. Object paths and contents were not read. The single photo-proof database row does not justify assuming what either object contains.
 
-## Latest Read-Only Revalidation
+## Earlier Read-Only Revalidation And Completed OTS Cleanup
 
 After the controlled Driver Details Email proof completed, the latest fresh count-only Supabase inspection found 66 bookings: 23 `admin_review_required`, 5 `assigned`, 7 `cancelled`, 12 `completed`, 3 `confirmed`, 14 `draft`, and 2 `needs_review`. The database still contains 95 customers, 5 test-only drivers, 13 customer invoice records, 7 completed closeouts, zero monthly invoice drafts, 115 route points, 5 service items, 65 driver job links, 74 driver job status events, 82 customer/driver app-notification rows, 32 admin app-notification rows, 3,592 driver live-location audit events, zero latest-position rows, 130 audit-log rows, 2 DSP actual-time events, 1 DSP actual-time summary, 1 OTS proof row, and 2 Storage objects. Automation remains ON and was not changed.
 
@@ -84,7 +84,44 @@ The local verification copy then omitted only the two current Supabase-documente
 
 No destructive cleanup is authorized by this restore proof alone. Production, the encrypted source archive, Supabase/Vercel configuration, Automation, schedules, default rates, Storage, customer/driver messaging, calendar, Google Maps, invoice, payment, payout, and every external contact lane remain unchanged.
 
-The installed Google Calendar connector found zero matching `Prestige` events and zero matches for the approved Driver Details Email fixture in the authenticated primary calendar. The app's separately documented `Prestige Ops Calendar` remains unverified because that dedicated calendar was not exposed by the connector. Zero primary-calendar matches must not be represented as proof that the dedicated app calendar contains no test events.
+### Fresh Exact Dry-Run And Dedicated-Calendar Inventory (2026-07-15)
+
+At 17:26:43 SGT, a new read-only Supabase query counted every proposed candidate table, the preserved configuration rows, authentication state, booking status groups, Storage classification, foreign keys, and candidate-table triggers. It returned aggregates and schema metadata only; no customer, driver, booking, invoice, object path, event title, recipient, credential, secret, or environment value was recorded. No database row, Storage object, calendar event, Automation setting, Vercel/Supabase configuration, deployment, message, or external action changed.
+
+The exact current database scope is 35 candidate public tables:
+
+- Identity and master test data: 95 `customers`, 99 `customer_contacts`, 17 `customer_access_accounts`, 17 `companies`, 10 `bookers`, 18 `travelers`, 5 `saved_addresses`, 5 `drivers`, and 0 `driver_access_accounts`.
+- Booking test data: 66 `bookings`, 115 `booking_route_points`, 5 `booking_service_items`, 0 `booking_workflow_statuses`, 7 `completed_booking_closeouts`, and 130 `audit_logs`.
+- Driver-job and booking-scoped test data: 65 `driver_job_links`, 74 `driver_job_status_events`, 2 `driver_job_dsp_actual_time_events`, 0 `driver_job_bids`, 0 `driver_job_bid_offers`, 0 `customer_driver_access_audit_events`, 82 `customer_driver_app_notification_outbox`, 32 `admin_app_notification_outbox`, 3,592 `driver_live_location_audit_events`, 0 `driver_live_location_latest_positions`, and 0 `driver_ots_photo_proofs`.
+- Invoice test data: 13 `customer_invoice_records`, 1 `customer_invoice_sequences`, and zero rows in `monthly_billing_draft_plans`, `monthly_invoice_drafts`, `monthly_invoice_draft_trip_links`, `monthly_invoice_draft_item_reviews`, `monthly_invoice_billable_item_price_reviews`, `monthly_invoice_issue_reviews`, and `monthly_invoice_issue_records`.
+
+The effective operational booking status counts remain 23 `admin_review_required`, 5 `assigned`, 7 `cancelled`, 12 `completed`, 3 `confirmed`, 14 `draft`, and 2 `needs_review`. These counts use `admin_internal_status` when present and the established legacy `status` only as its fallback; the legacy column alone is null on 41 rows and must not be represented as the current operational status. The 13 invoice records remain 1 Paid and 12 Unpaid, with delivery aggregates of 7 sent, 5 not_sent, and 1 blocked. Authentication remains empty: 0 users, 0 identities, 0 sessions, and 0 refresh tokens.
+
+Storage remains normalized and outside the database-row wipe: 0 OTS image objects, 0 OTS proof rows, 2 empty-folder placeholders, and 0 unexpected bucket objects in the one preserved private bucket. The bucket, policies, file limits, MIME limits, and OTS application wiring remain preserved. Any later test upload invalidates this Storage count and requires another action-time inventory.
+
+The preserved database/system state is exactly 1 `rate_settings` row, 1 `company_profile_settings` row, 1 `admin_automation_runtime_settings` row, 1 `driver_live_location_runtime_settings` row, 2 `admin_device_push_subscriptions` rows, and 1 Storage bucket. Automation is ON and was not changed. The current deletion-guard Default-rate fingerprint, computed from the current Default row while excluding only its created/updated timestamps, is `6fb76942290057e63f7fecf850e718d2`. That fingerprint is a guard for the later bounded operation; it is not a disclosure of price or payout values.
+
+The fresh schema check again found 35 public foreign-key constraints and 0 non-internal candidate-table triggers. The constraints include `RESTRICT`, `NO ACTION`, `SET NULL`, and `CASCADE`, so a parent-only cascade is not a complete cleanup. Text booking references and other non-FK scopes still require explicit zero/orphan assertions.
+
+The signed-in Google Calendar month views verified the dedicated `Prestige Ops Calendar` rather than the unrelated primary calendar. The bounded database window is current booking creation from 11 May through 11 July and canonical pickup from 15 June through 18 July. Within the corresponding full May, June, and July calendar views, plus the adjacent visible August days, there are 31 dedicated-calendar test-booking events: 3 in June and 28 in July, with 0 in May and 0 in the adjacent visible August days. No event title, passenger, location, reference, or other event content is recorded here. No calendar event was deleted, edited, or created, and the Calendar UI was returned to its July view.
+
+#### Exact action-time maintenance and dependency plan
+
+This is the reviewed future operation shape, not current authorization:
+
+1. Obtain separate exact action-time approval for the database wipe, the Production maintenance window, temporarily turning Automation OFF, closing and later restoring the existing `PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED` kill switch with the required same-code Production redeployments, and any dedicated-calendar deletion. No environment value needs to be read or printed.
+2. Before any destructive action, verify the encrypted archive/HMAC again, require the above counts and Default-rate fingerprint to match, require no new Storage image/proof/unexpected object, and require the 31-event dedicated-calendar count to match. Stop on any drift or any possible genuine record.
+3. Turn Automation OFF, close the established persistence kill switch, redeploy the same approved Production code, and verify public/admin/customer/driver write paths fail closed while the site remains healthy. This is the write freeze; an operator promise alone is not sufficient.
+4. In one guarded database transaction, clear the 35 candidate tables deepest-child-first: monthly invoice price/issue/item/trip children before draft parents; invoice records/sequences and billing plans; OTS/location/DSP/status/bid/notification/access-audit children before driver-job links; booking route/service/workflow/closeout/audit children before bookings; customer access/contact/address children before travelers/bookers/companies/customers; and drivers only after every booking/driver child is gone. Any count, fingerprint, or preserved-row mismatch rolls the transaction back.
+5. Before restoring writes, require every approved candidate table and every text-reference orphan check to be zero. The 35 candidate tables must all finish at zero rows. Authentication must remain zero. Storage must remain 1 bucket, 2 placeholders, 0 images, and 0 unexpected objects. Preserved row counts must remain 1 rate setting, 1 company profile, 1 Automation setting, 1 live-location runtime setting, and 2 push subscriptions. The Default-rate fingerprint must remain `6fb76942290057e63f7fecf850e718d2`.
+6. Dedicated-calendar deletion is a separate external action. If separately approved, it must target only the 31 verified events in `Prestige Ops Calendar`, after the owner either accepts that the test events are not recoverable or approves a separate calendar recovery copy. Database backup does not restore Google Calendar events.
+7. Only after database, Storage, calendar, Production-health, and zero/orphan verification passes may the same persistence gate be restored through a same-code Production redeployment and Automation returned to ON. The owner then creates the replacement fixtures through the established app; no replacement record is created before this point.
+
+The database transaction is the first rollback boundary. After commit, the verified encrypted logical export is the database recovery source, but any Production restore would be a separate manual high-impact operation requiring downtime and fresh owner approval; the Free project has no assumed PITR. Calendar deletion has no database rollback. These are material recovery limits, not reasons to skip the cleanup safeguards.
+
+The exact next approval is therefore still a separate action-time approval. This dry run does not authorize a database write, Automation toggle, Production environment change, redeployment, calendar deletion, message, email, or other external action.
+
+The earlier installed Google Calendar connector found zero matching `Prestige` events and zero matches for the approved Driver Details Email fixture in the authenticated primary calendar, but it did not expose the dedicated app calendar. The signed-in dedicated-calendar UI inventory above resolves that count-only gap. The earlier zero primary-calendar matches remain irrelevant to the 31 dedicated-calendar events and must not be represented as proof that the app calendar was empty.
 
 ## Live Dependency And Recovery Readiness
 

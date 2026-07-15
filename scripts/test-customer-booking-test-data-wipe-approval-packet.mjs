@@ -73,7 +73,7 @@ for (const fragment of [
   "must not create replacement test bookings until the wipe and zero-count/orphan verification are complete",
   "One was tied to the then-current OTS proof row and a current test booking",
   "second was an orphaned OTS artifact with no proof row and no current booking",
-  "Prestige Ops Calendar` remains unverified",
+  "signed-in dedicated-calendar UI inventory above resolves that count-only gap",
   "The 5 test-only driver master rows",
   "No row values or personal data were read",
   "Storage objects are not included in database backups",
@@ -98,6 +98,19 @@ for (const fragment of [
   "All 40 restored public tables matched the dump's exact per-table row-count map",
   "66 bookings, 95 customers, 5 drivers, 13 invoice records, and 1 rate-setting row",
   "No destructive cleanup is authorized by this restore proof alone",
+  "### Fresh Exact Dry-Run And Dedicated-Calendar Inventory (2026-07-15)",
+  "35 candidate public tables",
+  "31 dedicated-calendar test-booking events",
+  "3 in June and 28 in July",
+  "0 in May and 0 in the adjacent visible August days",
+  "No calendar event was deleted",
+  "0 OTS image objects, 0 OTS proof rows, 2 empty-folder placeholders, and 0 unexpected bucket objects",
+  "35 public foreign-key constraints and 0 non-internal candidate-table triggers",
+  "Automation is ON and was not changed",
+  "`PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED`",
+  "separate exact action-time approval",
+  "The 35 candidate tables must all finish at zero rows",
+  "The Default-rate fingerprint must remain `6fb76942290057e63f7fecf850e718d2`",
 ]) {
   assertIncludes(packet, fragment);
 }
@@ -127,6 +140,11 @@ for (const fragment of [
   "All 40 public tables matched the dump's exact per-table row-count map",
   "restored protected counts were 66 bookings, 95 customers, 5 drivers, 13 invoice records, and 1 rate-setting row",
   "No Production row, schema, configuration, Automation state, deployment, or external lane changed",
+  "### Fresh Cleanup Dry-Run And Dedicated Calendar Inventory (2026-07-15)",
+  "31 dedicated `Prestige Ops Calendar` test-booking events",
+  "35 candidate public tables",
+  "The current deletion-guard Default-rate fingerprint is `6fb76942290057e63f7fecf850e718d2`",
+  "No database row, Storage object, calendar event, Automation setting, environment value, deployment, message, or external action changed",
 ]) {
   assertIncludes(ledger, fragment, `ledger phrase ${fragment}`);
 }

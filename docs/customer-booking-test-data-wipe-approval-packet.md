@@ -2,6 +2,8 @@
 
 Status: prepared for pre-1-August replacement-fixture planning; destructive execution not approved
 
+Recovery readiness: blocked pending an approved, verified logical export
+
 Prepared on 15 July 2026 SGT from a read-only, count-only inspection of the linked Prestige Limo Ops Supabase project and the established repository deletion lanes. No row values or personal data were read. Neither `CRON_SECRET` nor any other environment value was displayed, downloaded, or changed.
 
 No deletion occurred during this preparation pass. No destructive SQL, executor route, helper, runner, deployment, configuration change, Automation toggle, external send, or data write is authorized or included.
@@ -54,13 +56,23 @@ The invoice delivery states are database aggregates only; they neither prove nor
 
 ## Latest Read-Only Revalidation
 
-After the controlled Driver Details Email proof completed, the latest fresh count-only Supabase inspection found 66 bookings: 23 `admin_review_required`, 5 `assigned`, 7 `cancelled`, 12 `completed`, 3 `confirmed`, 14 `draft`, and 2 `needs_review`. The database still contains 95 customers, 5 test-only drivers, 13 customer invoice records, 7 completed closeouts, zero monthly invoice drafts, 115 route points, 5 service items, 65 driver job links, 74 driver job status events, 82 customer/driver app-notification rows, 32 admin app-notification rows, 3,592 driver live-location audit events, zero latest-position rows, 1 OTS proof row, and 2 Storage objects. Automation remains ON and was not changed.
+After the controlled Driver Details Email proof completed, the latest fresh count-only Supabase inspection found 66 bookings: 23 `admin_review_required`, 5 `assigned`, 7 `cancelled`, 12 `completed`, 3 `confirmed`, 14 `draft`, and 2 `needs_review`. The database still contains 95 customers, 5 test-only drivers, 13 customer invoice records, 7 completed closeouts, zero monthly invoice drafts, 115 route points, 5 service items, 65 driver job links, 74 driver job status events, 82 customer/driver app-notification rows, 32 admin app-notification rows, 3,592 driver live-location audit events, zero latest-position rows, 130 audit-log rows, 2 DSP actual-time events, 1 DSP actual-time summary, 1 OTS proof row, and 2 Storage objects. Automation remains ON and was not changed.
 
 The Supabase organization is on the Free plan. Supabase documents automatic daily backups for Pro, Team, and Enterprise projects and recommends that Free projects maintain their own logical exports. No recoverable restore point is assumed, and no backup, temporary branch, or data copy was created during this inspection.
 
 Both private Storage objects were classified without reading or recording their raw paths or contents. Both match the established OTS image path and MIME boundaries. One is tied to the current OTS proof row and a current test booking; the second is an orphaned OTS artifact with no proof row and no current booking. Both are candidate test artifacts, but neither was deleted.
 
 The installed Google Calendar connector found zero matching `Prestige` events and zero matches for the approved Driver Details Email fixture in the authenticated primary calendar. The app's separately documented `Prestige Ops Calendar` remains unverified because that dedicated calendar was not exposed by the connector. Zero primary-calendar matches must not be represented as proof that the dedicated app calendar contains no test events.
+
+## Live Dependency And Recovery Readiness
+
+A fresh schema-metadata inspection found 35 public foreign-key constraints across the candidate wipe relationships. Several use `RESTRICT`, `NO ACTION`, or `SET NULL`, and multiple operational tables retain booking scope only as text. A parent-table cascade is therefore not a complete wipe. No non-internal database trigger is configured on any candidate wipe table, so the inspected database has no target-table trigger that would send or enqueue an external action during deletion.
+
+Recovery remains blocked because no verified logical export exists. Neither the Supabase CLI nor `pg_dump` is installed, no local Supabase CLI access-token file is present, and no database credential was read, requested in chat, or displayed. Docker and linked-project metadata are present, but they are not a recoverable backup. The connected Supabase management/query tooling can verify metadata and counts but does not provide the approved logical-dump recovery artifact required by this packet.
+
+The proposed database recovery method is an owner-approved Supabase CLI logical export of roles, schema, and data to an encrypted location outside the repository, followed by a restore verification before any deletion. This creates no temporary Supabase branch and no Supabase branch/project charge. The database credential must be supplied through a secure non-chat method and must never appear in command output, shell history, repository files, documentation, or logs.
+
+The two Storage objects are not included in a database dump. Before deletion, the owner must separately choose either a secure Storage copy or explicitly accept that those two confirmed test artifacts will not be recoverable. Dedicated Google Calendar cleanup remains a separately inventoried and separately approved external action.
 
 ## Existing Lanes And Duplicate Check
 
@@ -98,6 +110,8 @@ Execution must stop unless every item below is satisfied:
 8. An exact dry-run report, ordered dependency plan, rollback point, expected final counts, and action-time approval are recorded immediately before execution.
 9. After zero-count and orphan verification, the owner creates clearly marked replacement test customers, drivers, and July bookings through the established app. At least two billing-ready completed July bookings must share one test customer and at least one must use a different test customer; all scheduler fixtures remain un-invoiced until the 1 August proof.
 
+The owner must not create replacement test bookings until the wipe and zero-count/orphan verification are complete. Anything created earlier would either enter the deletion scope or require a new exclusion review and invalidate the current dry-run counts.
+
 ## Reviewed Execution Shape For Action-Time Approval
 
 The bounded operation should first freeze writes and capture recovery evidence, then map external/Storage artifacts before their references are removed. It should clear the deepest finance and booking children before their parents, clear scoped orphan-prone reference rows explicitly, and remove customer/CRM identity parents only after all blockers are gone. No table, schema, policy, application lane, or preserved configuration row should be removed.
@@ -106,4 +120,4 @@ Zero-count verification must cover every approved table and artifact class, plus
 
 ## Exact Next Approval
 
-The next action-time approval must name the recovery method, exact maintenance window and Automation handling, final count-only deletion scope, exact preserved rows, Storage/calendar classification, rollback method, and zero-count/orphan assertions. Only after that review may the owner approve one bounded pre-1-August cleanup execution. The scheduler date, code, cron, layouts, and wired lanes remain unchanged; fresh replacement fixtures are created only after cleanup verification succeeds.
+The next approval is limited to creating and verifying the encrypted local logical export and choosing whether the two Storage test artifacts require a separate recovery copy. It must also define a secure non-chat database-credential path. After that recovery proof exists, a separate final action-time approval must name the exact maintenance window and Automation handling, refreshed count-only deletion scope, exact preserved rows, Storage/calendar classification, rollback method, and zero-count/orphan assertions. Only then may the owner approve one bounded pre-1-August cleanup execution. The scheduler date, code, cron, layouts, and wired lanes remain unchanged; the owner must not create the replacement bookings until cleanup verification passes.

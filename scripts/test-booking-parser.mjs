@@ -1669,6 +1669,29 @@ for (const { label, input, expected } of dispatcherDateTimeShorthandRegressionCa
   assert.notEqual(parsedDispatcherDateTimeShorthand.vehicle, 'ETD');
 }
 
+const tonightAirportArrivalShorthandSample = `A40 MNG
+
+Tonight, 2130hrs + 15
+
+TR241 > Orchard Residences.
+
+Dr. Poh So Kok.`;
+const parsedTonightAirportArrivalShorthand =
+  parseBookingMessage(tonightAirportArrivalShorthandSample, {
+    referenceDate: new Date(2026, 6, 15, 12, 0, 0),
+  }) ?? {};
+assert.equal(
+  parsedTonightAirportArrivalShorthand.date,
+  '2026-07-15',
+  'Tonight should resolve to the Singapore operational reference date',
+);
+assert.equal(parsedTonightAirportArrivalShorthand.bookingType, 'MNG');
+assert.equal(parsedTonightAirportArrivalShorthand.time, '2130hrs');
+assert.equal(parsedTonightAirportArrivalShorthand.flight, 'TR241');
+assert.equal(parsedTonightAirportArrivalShorthand.pickup, 'Changi Airport');
+assert.equal(parsedTonightAirportArrivalShorthand.dropoff, 'Orchard Residences');
+assert.equal(parsedTonightAirportArrivalShorthand.name, 'Dr Poh So Kok');
+
 const dispatcherRouteAddressShorthandRegressionCases = [
   {
     label: 'frm/to route shorthand',

@@ -1,16 +1,34 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-3ffe5c30 Harden driver details email sending
+750d72a3 Parse tonight as current booking date
 
 Latest pushed main/staging runtime checkpoint:
 3ffe5c30 Harden driver details email sending
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-e7c8c7e3 Record interrupted driver email production test
+df12b545 Record controlled driver email production evidence
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Dispatcher `Tonight` Relative-Date Parsing Repair (2026-07-15)
+
+- The owner supplied the exact Dispatch parser message `A40 MNG / Tonight, 2130hrs + 15 / TR241 > Orchard Residences / Dr. Poh So Kok` after observing that the app did not determine its date/day. Direct reproduction with a 15 July 2026 operational reference returned the correct service, time, flight, route, and passenger but left the pickup date blank.
+- The established relative-date parser now treats the exact word `Tonight` as the same calendar date as `Today`. Existing `Today`, `Tomorrow`, explicit-date, weekday, time, route, flight, passenger, pricing, booking-save, calendar, Google Maps, CRM identity, and customer/driver messaging behavior is unchanged; no second parser or booking lane was added.
+- Focused regression coverage in `scripts/test-booking-parser.mjs` uses the owner's exact message and requires pickup date `2026-07-15`, time `2130hrs`, flight `TR241`, Changi Airport to Orchard Residences, and passenger Dr Poh So Kok. The new assertion failed before the repair because the date was empty, then the complete focused parser suite passed after the repair.
+- The exact message also passed through the actual local Dispatch `Create Job Card` UI and populated pickup date `2026-07-15` together with the same protected fields. This local runtime test did not click `Save + CRM`, write a booking, call a calendar action, send a customer/driver message, or modify Production, Supabase, Vercel, Automation, CRON_SECRET, default prices, invoices, customers, or drivers.
+- The repair was isolated from the staging-only history as runtime commit `750d72a3 Parse tonight as current booking date` directly on remote-main baseline `df12b545`, followed only by docs-only checkpoint commit `a762ab6b Align tonight preview checkpoints`. The isolated diff contains the established parser, focused parser guard, and this ledger only; none of the other staging-ahead commits was included.
+- The isolated candidate passed the focused parser and deployment guards, TypeScript, Next.js 16.2.6 production build, complete pre-activation suite, lint with the existing 160 warnings and zero errors, app-smoke browser suite, and booking-UI browser suite. Both browser suites had zero test errors and zero console errors; the booking suite had zero blocked Supabase reads or mutations. Dependency audit remains the known one low and three moderate findings.
+- Two Vercel uploads from the Git worktree entered `UNKNOWN` without starting a build (`. [0ms]`): source deployment `dpl_5yE7UzWwud4Kny2NtEjYemY397D3` and worktree prebuilt deployment `dpl_EWoEXw9gbn9A1cnAZEecmQ6Jtd8X`. Both invalid non-runtime artifacts were stopped and removed. The same already-built standalone output was then copied without Git metadata and deployed through the established prebuilt path as READY protected Preview `dpl_7oM8xcFPtLwnRNhoEbo2CBspSb1C` at `https://prestige-limo-ops-staging-e9ow9ljrr-prestigelimosgs-projects.vercel.app`; Vercel inspection confirms target `preview` and the signed-in page shows exact build `a762ab6b`.
+- The bounded `UNKNOWN` diagnosis is an upload/ingestion compatibility edge between Vercel CLI 56.2.0 and the linked Git-worktree metadata, not a reproduced application or Next.js build failure. The worktree has a regular-file `.git` pointer into the primary repository, both direct worktree upload variants stopped before any build ran, the local Vercel standalone build passed, and the identical metadata-free output became READY immediately. Vercel documents `vercel build` plus `vercel deploy --prebuilt` as the supported local-build path but does not document Git-worktree handling or a specific `UNKNOWN` cause, so the precise Vercel backend defect remains unproven; use a normal checkout or metadata-free prebuilt artifact for manual deployments and retain deployment IDs if Vercel Support investigation is required.
+- Preview configuration remained credential-free except for the existing inert `PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS` assignment. Unauthenticated access returns HTTP 302 to Vercel SSO with `x-robots-tag: noindex`. No Supabase, email, cron, admin-session, provider, payment, or write credential/gate was added or changed. Vercel's locally generated OIDC/environment files and the metadata-free build-output directory were removed after deployment without displaying their contents.
+- Signed-in protected-Preview acceptance pasted the owner's exact message and clicked only `Create Job Card`. The form populated pickup date `2026-07-15`, time `2130hrs`, flight `TR241`, Changi Airport to Orchard Residences, and passenger Dr Poh So Kok on build `a762ab6b`, with zero browser error logs. Neither `Save Operational Snapshot` nor `Save + CRM` was clicked.
+- Sanitized Preview logs contain 20 GET and one OPTIONS request, zero POST/PATCH/PUT/DELETE requests, zero error-level records, and zero requests to the Driver Details Email send route. Two HTTP 503 responses are the expected fail-closed optional-backend reads in the credential-free Preview; no live database connection or mutation is claimed.
+- After explicit owner approval, exact tested source `a762ab6b` was built with the unchanged Production environment and deployed through the metadata-free prebuilt path as READY Production deployment `dpl_7FLNCAifcJyj81ryAzXWUwzzHpjG`; `https://app.prestigelimo.sg` was assigned to that deployment and returns HTTP 200. No staging-ahead commit was merged or included.
+- Signed-in Production acceptance showed build `a762ab6b` and `Automation ON`, then pasted the owner's exact message and clicked only `Create Job Card`. The established form populated pickup date `2026-07-15`, time `2130hrs`, flight `TR241`, Changi Airport to Orchard Residences, and passenger Dr Poh So Kok with zero browser error logs. The job card was not saved.
+- Sanitized post-deployment logs contain 35 GET requests, zero POST/PATCH/PUT/DELETE requests, zero error-level records, zero send-route requests, and zero calendar writes. No booking/customer/driver/invoice write, calendar/map action, payment/payout action, customer/driver message, Email, or external provider send occurred.
+- Automation and scheduler settings were not changed. No Supabase or Vercel environment assignment was changed, and `CRON_SECRET` was not displayed, downloaded, or replaced. Vercel's locally generated environment files were removed without reading their contents; the metadata-free Production build-output directory is removed after verification.
 
 ### Controlled Production Driver Details Email Test Approval
 

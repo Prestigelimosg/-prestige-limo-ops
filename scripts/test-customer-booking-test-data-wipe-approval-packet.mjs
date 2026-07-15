@@ -28,10 +28,10 @@ function assertIncludes(source, fragment, label = fragment) {
 
 for (const fragment of [
   "# Customer, Booking, And Invoice Test-Data Wipe Approval Packet",
-  "Status: prepared for pre-1-August replacement-fixture planning; destructive execution not approved",
-  "Recovery readiness: verified encrypted logical export and local restore proof complete; destructive execution still not approved",
+  "Status: completed Production test-data cleanup; replacement July fixture creation is now allowed",
+  "Recovery readiness: verified encrypted logical export and local restore proof remain available for a separately approved recovery",
   "all current customer, booking, invoice, and driver records are testing-only",
-  "No deletion occurred during this preparation pass.",
+  "The completed execution evidence appears in `Approved Production Test-Data Cleanup Evidence`",
   "old test data may be cleaned before the first real monthly scheduler proof",
   "The Production scheduler remains unchanged at 1 August 2026 at 08:00 SGT.",
   "two completed billing-ready July bookings for the same test customer",
@@ -85,7 +85,7 @@ for (const fragment of [
   "separate owner approval",
   "Preserve system and configuration rows",
   "Zero-count verification",
-  "No destructive SQL, executor route, helper, runner, deployment, configuration change, Automation toggle, external send, or data write is authorized or included.",
+  "no destructive executor route, helper, runner, or reusable wipe lane was added",
   "### OTS Test Artifact Cleanup Evidence (2026-07-15)",
   "0 OTS image objects, 0 OTS proof rows, and 2 dashboard-created empty-folder placeholders",
   "Both Storage API delete requests returned HTTP 200",
@@ -111,6 +111,15 @@ for (const fragment of [
   "separate exact action-time approval",
   "The 35 candidate tables must all finish at zero rows",
   "The Default-rate fingerprint must remain `6fb76942290057e63f7fecf850e718d2`",
+  "### Approved Production Test-Data Cleanup Evidence (2026-07-15)",
+  "all 35 approved candidate tables contain zero rows",
+  "actual dedicated-calendar scope was 34 events",
+  "Google Calendar's `3 more` overflow",
+  "zero `Prestige Ops Calendar` events",
+  "two unrelated holiday events",
+  "`dpl_Ejh8St1zomWmAPtbNNnfE5u5q6Uc`",
+  "Automation is ON with the singleton setting `active`",
+  "No Email, WhatsApp, SMS, Telegram, invoice issue, payment, payout, customer/driver contact, or other external provider send occurred",
 ]) {
   assertIncludes(packet, fragment);
 }
@@ -145,6 +154,14 @@ for (const fragment of [
   "35 candidate public tables",
   "The current deletion-guard Default-rate fingerprint is `6fb76942290057e63f7fecf850e718d2`",
   "No database row, Storage object, calendar event, Automation setting, environment value, deployment, message, or external action changed",
+  "### Approved Production Test-Data Cleanup Evidence (2026-07-15)",
+  "all 35 approved candidate tables are zero",
+  "actual dedicated-calendar scope was 34 events",
+  "three events hidden by Google Calendar's `3 more` overflow",
+  "zero `Prestige Ops Calendar` events",
+  "two unrelated holiday events remain untouched",
+  "Production deployment `dpl_Ejh8St1zomWmAPtbNNnfE5u5q6Uc`",
+  "Automation is ON and `active`",
 ]) {
   assertIncludes(ledger, fragment, `ledger phrase ${fragment}`);
 }
@@ -178,7 +195,7 @@ for (const forbiddenPath of [
   assert.equal(
     existsSync(forbiddenPath),
     false,
-    `Deferred packet must not add an executable wipe path: ${forbiddenPath}`,
+    `Cleanup evidence must not add an executable wipe path: ${forbiddenPath}`,
   );
 }
 

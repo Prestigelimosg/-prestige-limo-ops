@@ -1,12 +1,12 @@
 # Customer, Booking, And Invoice Test-Data Wipe Approval Packet
 
-Status: prepared for pre-1-August replacement-fixture planning; destructive execution not approved
+Status: completed Production test-data cleanup; replacement July fixture creation is now allowed
 
-Recovery readiness: verified encrypted logical export and local restore proof complete; destructive execution still not approved
+Recovery readiness: verified encrypted logical export and local restore proof remain available for a separately approved recovery
 
 Prepared on 15 July 2026 SGT from a read-only, count-only inspection of the linked Prestige Limo Ops Supabase project and the established repository deletion lanes. No row values or personal data were read. Neither `CRON_SECRET` nor any other environment value was displayed, downloaded, or changed.
 
-No deletion occurred during this preparation pass. No destructive SQL, executor route, helper, runner, deployment, configuration change, Automation toggle, external send, or data write is authorized or included.
+The historical preparation and dry-run evidence below is retained so later work can distinguish the completed cleanup from its earlier approval state. The completed execution evidence appears in `Approved Production Test-Data Cleanup Evidence`; no destructive executor route, helper, runner, or reusable wipe lane was added.
 
 ## Owner Classification And Timing
 
@@ -122,6 +122,22 @@ The database transaction is the first rollback boundary. After commit, the verif
 The exact next approval is therefore still a separate action-time approval. This dry run does not authorize a database write, Automation toggle, Production environment change, redeployment, calendar deletion, message, email, or other external action.
 
 The earlier installed Google Calendar connector found zero matching `Prestige` events and zero matches for the approved Driver Details Email fixture in the authenticated primary calendar, but it did not expose the dedicated app calendar. The signed-in dedicated-calendar UI inventory above resolves that count-only gap. The earlier zero primary-calendar matches remain irrelevant to the 31 dedicated-calendar events and must not be represented as proof that the app calendar was empty.
+
+### Approved Production Test-Data Cleanup Evidence (2026-07-15)
+
+After the owner gave exact action-time approval, the encrypted archive and its Base64 HMAC sidecar were reverified without displaying or changing the Keychain-held encryption key. Automation was turned OFF through the established Production dashboard. The existing Sensitive `PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED` gate was overridden closed without reading or downloading its former value, and the exact current Production build `df12b545` was redeployed as maintenance deployment `dpl_2GVp3UKL3J7q469wsLGYNpRpKeiZ`. Production remained HTTP 200.
+
+The first guarded SQL attempt stopped before deletion because a PL/pgSQL record name and rate-row alias were ambiguous; its transaction rolled back completely. The corrected transaction locked the approved candidate and preserved tables, required every action-time count, Automation OFF, empty Auth state, Storage classification, preserved-row count, and Default-rate fingerprint to match, deleted deepest-child-first, and verified its postconditions before commit. A fresh independent query confirms all 35 approved candidate tables contain zero rows, including zero bookings, customers, drivers, customer invoice records, notification rows, access rows, booking children, driver-job children, live-location audit rows, and invoice/draft children.
+
+Preserved state is unchanged: 1 rate setting, 1 company profile, 1 Automation setting, 1 driver live-location runtime setting, 2 admin push subscriptions, 1 private Storage bucket, 2 empty-folder placeholders, 0 Storage images, and 0 unexpected objects. Auth remains 0 users, 0 identities, 0 sessions, and 0 refresh tokens. The Default-rate fingerprint remains `6fb76942290057e63f7fecf850e718d2`; no price or payout value is recorded here.
+
+The signed-in Calendar cleanup exposed a material dry-run counting limitation. The original DOM inventory counted 31 rendered event chips but omitted three events hidden behind Google Calendar's `3 more` overflow. Work stopped when this discrepancy became visible. The owner separately approved the corrected remainder; the actual dedicated-calendar scope was 34 events. All 34 test events were removed from `Prestige Ops Calendar`; final signed-in verification shows zero `Prestige Ops Calendar` events, the dedicated calendar itself still present, and the two unrelated holiday events untouched. No primary-calendar event or calendar wiring was removed.
+
+The same Sensitive persistence gate was restored without displaying or downloading any secret or prior environment value. The same approved build was redeployed as Production deployment `dpl_Ejh8St1zomWmAPtbNNnfE5u5q6Uc`, which is Ready on `app.prestigelimo.sg` with HTTP 200. Automation is ON with the singleton setting `active`. The monthly scheduler remains unchanged at 1 August 2026 at 08:00 SGT.
+
+No Email, WhatsApp, SMS, Telegram, invoice issue, payment, payout, customer/driver contact, or other external provider send occurred. Default rates, schemas, policies, Storage wiring, OTS wiring, Google Maps wiring, calendar wiring, booking persistence code, CRM identity lanes, and completed customer/driver messaging lanes remain intact. No Supabase branch, paid resource, branch merge, staging-source promotion, CRON_SECRET change, or different application code was deployed.
+
+This cleanup evidence does not authorize any future bulk deletion. The owner may now create clearly marked replacement July test fixtures through the established app for the 1 August scheduler proof. Those new records and any new calendar or Storage artifacts require a fresh inventory and approval before any later cleanup.
 
 ## Live Dependency And Recovery Readiness
 

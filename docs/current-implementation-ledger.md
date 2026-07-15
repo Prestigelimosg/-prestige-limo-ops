@@ -38,6 +38,15 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Production remained HTTP 200 and the repo remained clean before this bounded docs/guard repair. No Supabase/Vercel configuration, JWT key state, Production deployment, data, default price, Automation, schedule, CRON_SECRET, customer/driver message, OTS object, Storage object, calendar, map, invoice, payment, payout, or external provider changed.
 - After this guard repair is committed, the next safe action is a separately owner-confirmed revocation of only the Supabase previous legacy HS256 key, followed by Production HTTP, authenticated `Load Accounts`, OTS viewer, customer portal, driver-link, and Automation-state verification. No JWT rotation or Vercel redeployment is expected.
 
+### Supabase Previous Legacy JWT Key Revocation Evidence (2026-07-15)
+
+- After the completed consumer inspection, the owner gave explicit action-time approval to revoke only Supabase's previous legacy HS256 signing key. The previous legacy HS256 signing key is revoked, the existing current ES256 ECC P-256 key remains Current, and no standby key or additional rotation was created.
+- Post-revocation public-key verification confirmed the public JWKS exposes exactly one ES256 EC key. Count-only database verification again returned zero Supabase Auth users, zero Auth sessions, and zero refresh tokens.
+- Production deployment `dpl_GTjk3tJdVofKKy36bVFwPmP6sG4Y` was not redeployed or replaced. The Production root and Customers page returned HTTP 200, the authenticated Production Load Accounts read succeeded and Automation remained ON.
+- The established admin-only OTS viewer loaded the one existing test proof and opened its image successfully after revocation. This was read-only verification through the existing OTS lane; no OTS row, Storage object, bucket, policy, upload, deletion, or customer-visible access changed.
+- No Vercel environment, Supabase API key, Supabase project configuration beyond the approved previous-key revocation, application source, deployment, branch, customer or driver record, booking, invoice, default price, schedule, Automation setting, CRON_SECRET, calendar, Google Maps, messaging, Email, provider send, payment, payout, or external contact changed. No secret, JWT, signed URL, token, cookie, or environment value is committed or recorded in this ledger.
+- Focused lock: `scripts/test-admin-booking-persistence-staging-config.mjs` requires this revocation and post-revocation Production-read evidence while continuing to reject committed modern Supabase secret keys and legacy JWT-shaped keys.
+
 ### Multi-Segment Saved Booking Reference Status Repair
 
 - The owner reported that the existing Bookings `Cancel` action produced no visible result for the Codex-created test booking `CODEX-ACCEPT-20260711212612`. Signed-in Production reproduction isolated exactly one row, and the owner confirmed it is test-only; no customer contact or external send was involved.

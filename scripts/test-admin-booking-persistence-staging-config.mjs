@@ -679,6 +679,26 @@ assert.match(
   /Default prices, customer and driver records, bookings, invoices, OTS objects, Automation, schedules, and CRON_SECRET were not changed/,
   "Expected the implementation ledger to preserve the bounded no-data/no-price-change boundary.",
 );
+assert.match(
+  implementationLedger,
+  /### Supabase Previous Legacy JWT Key Revocation Evidence \(2026-07-15\)/,
+  "Expected the implementation ledger to record the approved previous-key revocation.",
+);
+assert.match(
+  implementationLedger,
+  /previous legacy HS256 signing key is revoked/,
+  "Expected the implementation ledger to record the previous legacy HS256 key as revoked.",
+);
+assert.match(
+  implementationLedger,
+  /public JWKS exposes exactly one ES256 EC key/,
+  "Expected the implementation ledger to record the post-revocation public JWKS proof.",
+);
+assert.match(
+  implementationLedger,
+  /authenticated Production Load Accounts read succeeded and Automation remained ON/,
+  "Expected the implementation ledger to record the post-revocation Production read proof.",
+);
 assert.doesNotMatch(
   implementationLedger,
   /sb_secret_[A-Za-z0-9_-]{20,}/,

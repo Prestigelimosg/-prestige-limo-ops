@@ -108,6 +108,11 @@ for (const phrase of [
   "Success requires exactly one send-route POST, HTTP 200 `send_succeeded`, `provider_request_count: 1`, one safe provider message id, one disabled same-page `Emailed` state, and owner-mailbox receipt confirmation.",
   "Rollback must set the Production gate closed again, redeploy the same source, verify `Email gate off`, and prove no later send-route request.",
   "No Supabase branch, Supabase configuration/data change, Automation toggle, calendar/map action, invoice/payment/payout action, customer/driver in-app message, or second external Email is approved.",
+  "The saved fixture's `Booker email (optional)` field was blank when loaded from Completed / History.",
+  "The one browser click attempt ended with a Playwright selector deadline before any success state was observed; it was not retried.",
+  "Production logs contained zero requests to `/api/admin-customer-driver-details-email-send-action` during the bounded test window.",
+  "The controlled live-send acceptance therefore remains unproven: no provider request, provider message id, `Emailed` UI state, or mailbox receipt was produced.",
+  "Gate-closed rollback reached READY Production deployment `dpl_77KXer37vPym14tjc5yKAH3iDTka`",
 ]) {
   assertIncludes(productionTestSection, phrase, `Controlled Production Email test phrase: ${phrase}`);
 }

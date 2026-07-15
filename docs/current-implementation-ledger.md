@@ -4,10 +4,10 @@ Latest verified clean runtime checkpoint:
 3ffe5c30 Harden driver details email sending
 
 Latest pushed main/staging runtime checkpoint:
-5ba9432e Repair multi-segment booking status updates
+3ffe5c30 Harden driver details email sending
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-5ba9432e Repair multi-segment booking status updates
+b2d191de Approve controlled driver email production test
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -24,6 +24,13 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The customer-facing payload remains limited to the established CUSTOMER BOOKING DETAILS and DRIVER DETAILS allowlist. Customer price, billing/invoice/payment/PDF, driver payout/PayNow, internal finance/admin notes, parser/debug internals, mock/archive data, tokens/secrets, raw provider payload, calendar/GPS/photo/OTS data, and in-app notification content remain forbidden.
 - Rollback must set the Production gate closed again, redeploy the same source, verify `Email gate off`, and prove no later send-route request. If the first live request is rejected or fails, stop without a second send attempt, close the gate, and report the exact sanitized failure.
 - No Supabase branch, Supabase configuration/data change, Automation toggle, calendar/map action, invoice/payment/payout action, customer/driver in-app message, or second external Email is approved. `CRON_SECRET` must never be displayed, downloaded, or replaced.
+- Exact candidate `b2d191de4c1dc422649b1975756f73bac0400551` reached the closed-gate Production deployment first, then READY gate-open deployment `dpl_7ckfT9HqzSnRtU4oouqsX2f5EuCq`. Signed-in UI proof showed build `b2d191de`, one established Customer Copy Email button, and the open-gate preflight; no staging commit was merged or deployed.
+- Completed / History contained one exact matching fixture by passenger/title `CODEX FRESH DSP JC TEST 20260712`, 12 Jul 2026 at 1500hrs SGT, assigned driver `TEST DRIVER CRM 20260516`, and the established load action restored exact reference `ADM-20260712063110` into Dispatch. No booking status, saved record, customer, driver, invoice, or message was changed.
+- The saved fixture's `Booker email (optional)` field was blank when loaded from Completed / History. The already approved allowlisted recipient `info@prestigelimo.sg` was entered only in the unsaved loaded browser form; the established Email button then became uniquely enabled. Save / Update + Cal was never clicked, and the saved Production booking remained unchanged.
+- The first pre-click browser helper check stopped before a click because that browser locator did not expose `isDisabled`; it made no request. The one browser click attempt ended with a Playwright selector deadline before any success state was observed; it was not retried. The button remained enabled as `Email`, never changed to `Emailed`, and no success or provider response appeared in the UI.
+- Production logs contained zero requests to `/api/admin-customer-driver-details-email-send-action` during the bounded test window. Therefore no send-action POST reached the server, no provider call or external Email occurred, and no second send, retry, alternate channel, database write, notification write, calendar action, or Supabase action occurred.
+- The controlled live-send acceptance therefore remains unproven: no provider request, provider message id, `Emailed` UI state, or mailbox receipt was produced. A later attempt requires a fresh explicit action-time approval and must reuse the same one-click/no-retry boundary; this interrupted attempt must never be counted as a successful send test.
+- The sensitive Production gate assignment was reset to false without displaying its value. Gate-closed rollback reached READY Production deployment `dpl_77KXer37vPym14tjc5yKAH3iDTka`, restored the `app.prestigelimo.sg` alias, returned HTTP 200, retained build marker `b2d191de`, and showed one disabled `Email gate off` button with `driverDetailsEmailSendGateOpen false`. No provider, sender, Reply-To, recipient-allowlist, `RESEND_API_KEY`, or `CRON_SECRET` value was displayed, downloaded, copied, or replaced.
 
 ### Multi-Segment Saved Booking Reference Status Repair
 

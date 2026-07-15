@@ -16,6 +16,7 @@ export type CustomerBookingRequestSubmitInput = {
   returnFlightNumber?: string;
   returnPickupLocation?: string;
   returnDropoffLocation?: string;
+  returnExtraStops?: string;
   serviceType: string;
   vehicleType?: string;
   passengerCount?: string;
@@ -31,6 +32,7 @@ export type CustomerBookingRequestSubmitResult =
     }
   | {
       ok: false;
+      reason?: "portal_access_cleared";
     };
 
 type CustomerBookingRequestFetch = typeof fetch;
@@ -145,6 +147,7 @@ function toCustomerBookingRequestApiBody(input: CustomerBookingRequestSubmitInpu
     returnFlightNumber: input.returnFlightNumber,
     returnPickupLocation: input.returnPickupLocation,
     returnDropoffLocation: input.returnDropoffLocation,
+    returnExtraStops: input.returnExtraStops,
     serviceType: input.serviceType,
     vehicleType: input.vehicleType,
     passengerCount: input.passengerCount,
@@ -204,7 +207,9 @@ export async function submitCustomerBookingRequest(
     });
 
     if (!response.ok) {
-      return { ok: false };
+      return response.status === 409
+        ? { ok: false, reason: "portal_access_cleared" }
+        : { ok: false };
     }
 
     return mapCustomerBookingRequestSubmitPayload(await response.json());

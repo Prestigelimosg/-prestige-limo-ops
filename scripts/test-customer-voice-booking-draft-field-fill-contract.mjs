@@ -41,6 +41,7 @@ const safeSubmittedFieldFillTargets = [
   "returnFlightNumber",
   "returnPickupLocation",
   "returnDropoffLocation",
+  "returnExtraStops",
   "serviceType",
   "vehicleType",
   "passengerCount",

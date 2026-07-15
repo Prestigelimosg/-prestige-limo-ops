@@ -13,11 +13,14 @@ const [route, readHelper, adapter, persistenceAdapter, bookPage, appSmoke] = awa
 for (const fragment of [
   "resolveCustomerSavedBookingsBoundaryForPurpose",
   "resolveCustomerSavedBookingsVerifiedIdentity",
+  "expiredCustomerSavedBookingsSessionCookieHeaders",
   '"customer-booking-request"',
   '"/book"',
   "customer_id: verifiedIdentity.data.customer_account_reference",
   "company_id: verifiedIdentity.data.company_id",
   "booker_id: verifiedIdentity.data.booker_id",
+  "Saved customer portal access was cleared. Review the request and submit it again.",
+  "status: 409",
 ]) {
   assert.ok(route.includes(fragment), `PA booking request route must include ${fragment}`);
 }
@@ -53,6 +56,10 @@ assert.ok(
 assert.ok(
   readHelper.includes("hasCompanyIdentity !== hasBookerIdentity"),
   "Partial verified PA identity must fail closed.",
+);
+assert.ok(
+  readHelper.includes("Max-Age=0") && readHelper.includes("HttpOnly") && readHelper.includes("Secure"),
+  "Obsolete customer portal cookies must be expired only through a secure server response.",
 );
 
 for (const forbidden of ["company_id", "booker_id", "traveler_id", "customer_id"]) {

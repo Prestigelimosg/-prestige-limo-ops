@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import os from "node:os";
+import path from "node:path";
+import ts from "typescript";
 
 const bookPagePath = "app/book/page.tsx";
 const portalPagePath = "app/my-bookings/page.tsx";
@@ -29,34 +33,50 @@ function assertExcludes(source, pattern, label) {
   assert.equal(matched, false, `${label} must not include ${pattern}.`);
 }
 
-for (const source of [bookPage, portalPage]) {
-  for (const fragment of [
-    "returnTripRequested",
-    "returnPickupDate",
-    "returnPickupTime",
-    "returnFlightNumber",
-    "returnPickupLocation",
-    "returnDropoffLocation",
-  ]) {
-    assertIncludes(source, fragment, `customer return trip form field ${fragment}`);
-  }
+function transpileTypescript(source, filename) {
+  return ts.transpileModule(source, {
+    compilerOptions: {
+      esModuleInterop: true,
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+    fileName: filename,
+  }).outputText;
+}
+
+for (const fragment of [
+  "returnTripRequested",
+  "returnPickupDate",
+  "returnPickupTime",
+  "returnFlightNumber",
+  "returnPickupLocation",
+  "returnDropoffLocation",
+  "returnExtraStops",
+]) {
+  assertIncludes(bookPage, fragment, `customer return trip form field ${fragment}`);
 }
 
 for (const fragment of [
   'data-customer-booking-return-trip-checkbox="true"',
   'data-customer-booking-return-trip-fields="true"',
-  'data-customer-portal-return-trip-checkbox="true"',
-  'data-customer-portal-return-trip-fields="true"',
+  'data-customer-booking-field="returnExtraStops"',
 ]) {
-  assertIncludes(`${bookPage}\n${portalPage}`, fragment, `customer return trip UI marker ${fragment}`);
+  assertIncludes(bookPage, fragment, `customer return trip UI marker ${fragment}`);
+}
+
+for (const removedPortalFragment of [
+  "type BookingRequestForm =",
+  "data-customer-portal-return-trip-checkbox",
+  "data-customer-portal-return-trip-fields",
+]) {
+  assertExcludes(portalPage, removedPortalFragment, `retired duplicate portal form ${removedPortalFragment}`);
 }
 
 for (const fragment of [
   "returnTripRequiredFields",
-  "returnTripRequiredBookingRequestFields",
   "Please complete the outbound and return trip date, time, pickup, and drop-off details",
 ]) {
-  assertIncludes(`${bookPage}\n${portalPage}`, fragment, `conditional return validation ${fragment}`);
+  assertIncludes(bookPage, fragment, `conditional return validation ${fragment}`);
 }
 
 for (const fragment of [
@@ -66,6 +86,7 @@ for (const fragment of [
   "returnFlightNumber: input.returnFlightNumber",
   "returnPickupLocation: input.returnPickupLocation",
   "returnDropoffLocation: input.returnDropoffLocation",
+  "returnExtraStops: input.returnExtraStops",
   '"return_trip_requested"',
   '"return_booking_reference"',
 ]) {
@@ -89,6 +110,7 @@ for (const fragment of [
   "buildCustomerBookingRequestPayloadForLeg",
   'bookingReference: returnTripRequested ? `${groupReference}-OUT` : groupReference',
   'bookingReference: `${groupReference}-RET`',
+  'legLabel === "OUTBOUND" ? body.extraStops : body.returnExtraStops',
   "Missing required return trip request fields",
   "Linked return group",
 ]) {
@@ -100,5 +122,77 @@ assertExcludes(
   /admin_internal_status|driver_payout|paynow payout|internal admin note|parser_debug|mock_archive|mock_qa/i,
   "customer return trip public UI",
 );
+
+const tempDir = await mkdtemp(path.join(os.tmpdir(), "prestige-customer-return-trip-"));
+
+try {
+  const sourcePath = path.join(process.cwd(), persistencePath);
+  const outputPath = path.join(tempDir, "lib/admin-booking-persistence.js");
+  const adapterStubPath = path.join(tempDir, "lib/admin-booking-supabase-adapter.js");
+
+  await mkdir(path.dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, transpileTypescript(persistence, sourcePath));
+  await writeFile(
+    adapterStubPath,
+    [
+      "async function unavailable() { throw new Error('persistence adapter must not run in parser guard'); }",
+      "module.exports = {",
+      "  createAdminBookingThroughSupabaseAdapter: unavailable,",
+      "  loadAdminBookingByReferenceThroughSupabaseAdapter: unavailable,",
+      "  listAdminBookingsThroughSupabaseAdapter: unavailable,",
+      "  updateAdminBookingThroughSupabaseAdapter: unavailable,",
+      "};",
+    ].join("\n"),
+  );
+
+  const { parseCustomerBookingRequestPayloads } = createRequire(import.meta.url)(outputPath);
+  const parsed = parseCustomerBookingRequestPayloads({
+    contactNo: "+65 9000 1111",
+    passengerName: "Return Stop Test Passenger",
+    pickupDate: "2026-08-20",
+    pickupTime: "09:00",
+    pickupLocation: "Outbound Pickup",
+    dropoffLocation: "Outbound Dropoff",
+    extraStops: "Outbound Stop A; Outbound Stop B",
+    returnTripRequested: "yes",
+    returnPickupDate: "2026-08-21",
+    returnPickupTime: "18:00",
+    returnPickupLocation: "Return Pickup",
+    returnDropoffLocation: "Return Dropoff",
+    returnExtraStops: "Return Stop A; Return Stop B",
+  });
+
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.data.requests.length, 2);
+  assert.deepEqual(
+    parsed.data.requests[0].route_points.map((point) => [point.point_type, point.location_text]),
+    [
+      ["pickup", "Outbound Pickup"],
+      ["stop", "Outbound Stop A"],
+      ["stop", "Outbound Stop B"],
+      ["dropoff", "Outbound Dropoff"],
+    ],
+  );
+  assert.deepEqual(
+    parsed.data.requests[1].route_points.map((point) => [point.point_type, point.location_text]),
+    [
+      ["pickup", "Return Pickup"],
+      ["stop", "Return Stop A"],
+      ["stop", "Return Stop B"],
+      ["dropoff", "Return Dropoff"],
+    ],
+  );
+  assert.deepEqual(parsed.data.requests[1].service_items, [
+    {
+      blocks_count: null,
+      item_type: "extra_stop",
+      notes: null,
+      quantity: 2,
+      service_item_type: "extra_stop",
+    },
+  ]);
+} finally {
+  await rm(tempDir, { force: true, recursive: true });
+}
 
 console.log("Customer return trip request guard passed");

@@ -93,6 +93,7 @@ try {
     pickupLocation: "Customer Test Pickup",
     pickupTime: "09:30",
     returnDropoffLocation: "Customer Test Return Dropoff",
+    returnExtraStops: "Customer Test Return Stop",
     returnFlightNumber: "SQ889",
     returnPickupDate: "2026-06-06",
     returnPickupLocation: "Customer Test Return Pickup",
@@ -157,6 +158,7 @@ try {
       "pickupLocation",
       "pickupTime",
       "returnDropoffLocation",
+      "returnExtraStops",
       "returnFlightNumber",
       "returnPickupDate",
       "returnPickupLocation",
@@ -261,6 +263,21 @@ try {
 
   assert.deepEqual(blocked, { ok: false });
   assert.equal(blockedJsonWasRead, false, "Blocked responses should not parse unsafe error bodies.");
+
+  let stalePortalJsonWasRead = false;
+  const stalePortal = await submitCustomerBookingRequest(safeInput, {
+    fetcher: async () => ({
+      json: async () => {
+        stalePortalJsonWasRead = true;
+        return { error: "must not be parsed", ok: false };
+      },
+      ok: false,
+      status: 409,
+    }),
+  });
+
+  assert.deepEqual(stalePortal, { ok: false, reason: "portal_access_cleared" });
+  assert.equal(stalePortalJsonWasRead, false, "Stale portal responses should not parse body text.");
 
   const thrown = await submitCustomerBookingRequest(safeInput, {
     fetcher: async () => {

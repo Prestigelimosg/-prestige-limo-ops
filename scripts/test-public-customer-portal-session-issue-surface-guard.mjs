@@ -64,7 +64,7 @@ const contractChecks = [
     label: "public API session cookie/cache boundary guard",
     script: "scripts/test-public-api-session-cookie-cache-boundary-guard.mjs",
     requiredFragments: [
-      "Only the customer portal session issue route may set `Set-Cookie`",
+      "Only the customer portal session issue route may issue a live session cookie.",
       "Customer portal session cookies must stay HttpOnly, Secure, SameSite=Lax, Priority=High",
       "Public API session cookie/cache boundary guard passed",
     ],

@@ -10,7 +10,7 @@ const routeBlockedMessage =
 const readinessNotReadyError =
   "Admin booking persistence staging configuration is not ready.";
 const validServerUrl = "https://stage-readiness.supabase.co";
-const validServerCredential = "stage-readiness-server-credential-1234567890";
+const validServerCredential = "sb_secret_stage_readiness_server_credential_1234567890";
 const validAdminAccessCheck = "stage-readiness-admin-access-check-1234567890";
 const safeLeakPattern =
   /SUPABASE|NEXT_PUBLIC|PRESTIGE_ADMIN|stage-readiness\.supabase\.co|stage-readiness-server-credential|stage-readiness-admin-access|service_role|server-only|server_only|stack|sql|supabase internals|createClient|secret|key|token/i;
@@ -129,6 +129,13 @@ async function writeMockModules(tempDir, options = {}) {
       "  return { data: null, ok: true };",
       "}",
       "module.exports = { sendAdminNewBookingEmailAlert };",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(tempDir, "lib/codex-job-card-auto-preparation.js"),
+    [
+      "async function prepareCodexJobCardForAdminReview() {}",
+      "module.exports = { prepareCodexJobCardForAdminReview };",
     ].join("\n"),
   );
   await writeFile(

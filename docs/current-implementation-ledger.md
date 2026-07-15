@@ -12,6 +12,14 @@ f6806723 Harden driver details email sending
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Dispatcher `Tonight` Relative-Date Parsing Repair (2026-07-15)
+
+- The owner supplied the exact Dispatch parser message `A40 MNG / Tonight, 2130hrs + 15 / TR241 > Orchard Residences / Dr. Poh So Kok` after observing that the app did not determine its date/day. Direct reproduction with a 15 July 2026 operational reference returned the correct service, time, flight, route, and passenger but left the pickup date blank.
+- The established relative-date parser now treats the exact word `Tonight` as the same calendar date as `Today`. Existing `Today`, `Tomorrow`, explicit-date, weekday, time, route, flight, passenger, pricing, booking-save, calendar, Google Maps, CRM identity, and customer/driver messaging behavior is unchanged; no second parser or booking lane was added.
+- Focused regression coverage in `scripts/test-booking-parser.mjs` uses the owner's exact message and requires pickup date `2026-07-15`, time `2130hrs`, flight `TR241`, Changi Airport to Orchard Residences, and passenger Dr Poh So Kok. The new assertion failed before the repair because the date was empty, then the complete focused parser suite passed after the repair.
+- The exact message also passed through the actual local Dispatch `Create Job Card` UI and populated pickup date `2026-07-15` together with the same protected fields. This local runtime test did not click `Save + CRM`, write a booking, call a calendar action, send a customer/driver message, or modify Production, Supabase, Vercel, Automation, CRON_SECRET, default prices, invoices, customers, or drivers.
+- Production deployment remains a separate step; this repair is not live until an exact committed artifact is reviewed and separately deployed.
+
 ### Production Supabase Legacy API Key Cutoff Evidence (2026-07-15)
 
 - An existing legacy Supabase `service_role` credential was treated as compromised after accidental diagnostic disclosure. No credential value is committed or recorded in this ledger, and the exposed legacy credential was removed from the ignored local evidence environment file.

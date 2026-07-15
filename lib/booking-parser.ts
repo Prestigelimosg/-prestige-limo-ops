@@ -1760,7 +1760,7 @@ function parseDateFromText(text: string, referenceDate: Date = new Date()) {
   const lowerText = text.toLowerCase();
   const today = new Date(referenceDate);
 
-  if (/\btoday\b/.test(lowerText)) {
+  if (/\b(?:today|tonight)\b/.test(lowerText)) {
     return toDateKey(today);
   }
 

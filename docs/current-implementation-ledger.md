@@ -12,6 +12,16 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Dispatcher Shared-Passenger Dated Airport Transfer List Repair (2026-07-15)
+
+- The owner supplied an exact two-transfer Dispatch message with shared passenger wording `airport transfers for Deep:`, separate Markdown date headings `Wed, 15 Jul 26` and `Fri, 17 Jul 26`, one departure bullet, and one arrival bullet. Exact baseline reproduction returned two previews but left both passengers blank, reused 15 July for the 17 July arrival, and misread the arrival pickup as `Arriving via` instead of Changi Airport.
+- The established multi-booking parser now pairs each explicit date heading with its immediately following airport-transfer bullet, accepts the shared `for Name:` passenger wording, recognizes the two-digit textual year, and preserves the correct departure/arrival airport direction. This repairs the existing parser in place; no second parser, intake form, route, button, booking write, or persistence lane was added.
+- Per owner instruction, postal codes are not validated, corrected, inferred, or used as a regression pass/fail condition. The supplied River Valley / Yong An Park address identity remains visible for admin review.
+- Focused regression coverage in `scripts/test-booking-parser.mjs` uses the owner's exact message and requires exactly two extracted previews: Deep on 15 July 2026 at 0610hrs taking SQ422 from River Valley / Yong An Park to Changi Airport T3, and Deep on 17 July 2026 at 0740hrs arriving on SQ423 from Changi Airport to River Valley / Yong An Park. The new assertion failed before the repair because the shared passenger was blank.
+- The exact message passed through the actual isolated local Dispatch `Create Job Card` UI. Both preview rows displayed Deep with their correct dates, times, flights, and route direction; selecting each existing `Use this booking` action populated the matching established Booking Details fields with zero browser errors. Neither save action was clicked.
+- The focused parser suite, complete pre-activation suite, TypeScript, `git diff --check`, and Next.js 16.2.6 production build passed. Dependency audit remains the known one low and three moderate findings.
+- No booking/customer/driver/invoice row, CRM identity, calendar event, Google Maps wiring, price, payout, payment, OTS object, message, Email, external provider, Automation setting, schedule, Supabase/Vercel configuration, CRON_SECRET, Preview deployment, or Production deployment changed. Deployment remains a separate owner-approval step.
+
 ### Dispatcher `Tonight` Relative-Date Parsing Repair (2026-07-15)
 
 - The owner supplied the exact Dispatch parser message `A40 MNG / Tonight, 2130hrs + 15 / TR241 > Orchard Residences / Dr. Poh So Kok` after observing that the app did not determine its date/day. Direct reproduction with a 15 July 2026 operational reference returned the correct service, time, flight, route, and passenger but left the pickup date blank.

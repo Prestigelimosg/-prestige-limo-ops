@@ -1256,6 +1256,108 @@ function buildAirportReturnTransferPreview(text: string, referenceDate: Date) {
   ];
 }
 
+function splitDatedAirportTransferListSections(cleanedLines: string[], referenceDate: Date) {
+  const sections: Array<{ dateText: string; tripText: string }> = [];
+
+  for (let index = 0; index < cleanedLines.length - 1; index += 1) {
+    const dateText = clean(cleanedLines[index]).replace(/^\*+|\*+$/g, "");
+
+    if (
+      !/\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/i.test(dateText) ||
+      !parseDateFromText(dateText, referenceDate)
+    ) {
+      continue;
+    }
+
+    const rawTripLine = clean(cleanedLines[index + 1]);
+
+    if (!/^[-•]\s+/.test(rawTripLine)) {
+      continue;
+    }
+
+    const tripText = clean(rawTripLine.replace(/^[-•]\s+/, ""));
+
+    if (!detectFlight(tripText) || !tripText.includes(">")) {
+      continue;
+    }
+
+    sections.push({ dateText, tripText });
+  }
+
+  return sections.length > 1 ? sections : [];
+}
+
+function cleanDatedAirportTransferAddress(value: string) {
+  return clean(value)
+    .replace(/\u00a0/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/\s*,\s*/g, ", ")
+    .replace(/[.\s]+$/g, "");
+}
+
+function detectDatedAirportTransferRoute(tripText: string, flight: string) {
+  const routeMatch = tripText.match(/(.+?)\s*>\s*(.+)$/);
+
+  if (!routeMatch?.[1] || !routeMatch[2]) {
+    return detectRoute(tripText, flight);
+  }
+
+  const routeLeft = clean(routeMatch[1]);
+  const routeRight = clean(routeMatch[2]);
+  const isArrival = /\b(?:arriv(?:al|ing)|ETA)\b/i.test(routeLeft) ||
+    /^(?:changi\s+)?airport\b/i.test(routeLeft);
+
+  if (isArrival) {
+    return {
+      pickup: airportLocationFromText(routeLeft),
+      dropoff: cleanDatedAirportTransferAddress(routeRight),
+    };
+  }
+
+  const pickupAddress = firstMatch(routeLeft, [
+    /\bpick\s*up\s+at\s+\d{1,2}(?::\d{2})?\s*(?:am|pm|hrs?)?\s+from\s+(.+)$/i,
+    /\bpick\s*up\s+from\s+(.+)$/i,
+    /\bfrom\s+(.+)$/i,
+  ]);
+
+  return {
+    pickup: cleanDatedAirportTransferAddress(pickupAddress || routeLeft),
+    dropoff: airportLocationFromText(routeRight),
+  };
+}
+
+function buildDatedAirportTransferListPreview(
+  text: string,
+  cleanedLines: string[],
+  referenceDate: Date,
+) {
+  const sections = splitDatedAirportTransferListSections(cleanedLines, referenceDate);
+
+  if (sections.length < 2) {
+    return [];
+  }
+
+  const sharedContext = detectSharedTransferRequestContext(text);
+
+  return sections.map(({ dateText, tripText }) => {
+    const sectionText = normalizeIntentText(tripText);
+    const flight = detectFlight(sectionText);
+    const route = detectDatedAirportTransferRoute(sectionText, flight);
+    const rawTime = parseTimeFromText(sectionText);
+    const type = detectBookingType(sectionText, flight, route);
+
+    return {
+      passenger: detectName(sectionText, flight) || sharedContext.passenger,
+      date: parseDateFromText(dateText, referenceDate),
+      time: formatTimeForState(rawTime) || rawTime,
+      type,
+      flight,
+      pickup: route.pickup,
+      dropoff: route.dropoff,
+    };
+  });
+}
+
 function buildExtractedBookingsPreview(text: string, cleanedLines: string[], referenceDate: Date) {
   const hasExplicitList = cleanedLines.filter((line) => /^(?:\d+[.)]\s+|[-*•]\s+)/.test(line)).length > 1;
   const hasMultipleFlights = detectAllFlights(text).length > 1;
@@ -1265,6 +1367,11 @@ function buildExtractedBookingsPreview(text: string, cleanedLines: string[], ref
   const pickupAddressPreview = buildPickupAddressRequestPreview(text, cleanedLines, referenceDate);
   const separatedTransferPreview = buildSeparatedTransferRequestPreview(text, referenceDate);
   const airportReturnTransferPreview = buildAirportReturnTransferPreview(text, referenceDate);
+  const datedAirportTransferListPreview = buildDatedAirportTransferListPreview(
+    text,
+    cleanedLines,
+    referenceDate,
+  );
   const contextDate = parseDateFromText(text, referenceDate);
   const sharedArrivalDropoff = detectSharedArrivalDropoff(text);
 
@@ -1286,6 +1393,10 @@ function buildExtractedBookingsPreview(text: string, cleanedLines: string[], ref
 
   if (airportReturnTransferPreview.length > 0) {
     return airportReturnTransferPreview;
+  }
+
+  if (datedAirportTransferListPreview.length > 0) {
+    return datedAirportTransferListPreview;
   }
 
   if (airportStandbyPreview.length > 0) {
@@ -1738,11 +1849,13 @@ function parseDateFromText(text: string, referenceDate: Date = new Date()) {
   }
 
   const monthMatch = text.match(
-    /\b(\d{1,2})(?:st|nd|rd|th)?(?:\s+|-)(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)(?:\s+(20\d{2}))?\b/i,
+    /\b(\d{1,2})(?:st|nd|rd|th)?(?:\s+|-)(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)(?:\s+((?:20)?\d{2}))?\b/i,
   );
   if (monthMatch) {
     const month = monthLookup[monthMatch[2].toLowerCase()];
-    const year = monthMatch[3] || String(referenceDate.getFullYear());
+    const year = monthMatch[3]
+      ? monthMatch[3].length === 2 ? `20${monthMatch[3]}` : monthMatch[3]
+      : String(referenceDate.getFullYear());
 
     return `${year}-${month}-${monthMatch[1].padStart(2, "0")}`;
   }
@@ -2404,7 +2517,7 @@ function detectName(text: string, flight: string) {
       "i",
     ),
     /\b(?:pax|passenger|guest)\s+([A-Za-z][A-Za-z.' -]{1,60}?)(?=\s+\d|\s+on\b|\s+at\b|\s+from\b|\s+to\b|,|\.|$)/i,
-    /\b(?:for|under)\s+([A-Za-z][A-Za-z.' -]{1,60}?)(?=\s+\d|\s+on\b|\s+at\b|\s+from\b|\s+to\b|\s+date\b|\s+time\b|\s+flight\b|\s+pickup\b|\s+drop\b|\s+airport\b|,|\.|$)/i,
+    /\b(?:for|under)\s+([A-Za-z][A-Za-z.' -]{1,60}?)(?=\s+\d|\s+on\b|\s+at\b|\s+from\b|\s+to\b|\s+date\b|\s+time\b|\s+flight\b|\s+pickup\b|\s+drop\b|\s+airport\b|:|,|\.|$)/i,
     /^((?:mr|mrs|ms|mdm|miss|dr)\.?\s+[A-Za-z][A-Za-z.' -]{1,60}?)(?=\s+from\b)/i,
     /^((?:mr|mrs|ms|mdm|miss|dr)\.?\s+[A-Za-z][A-Za-z.' -]{1,60}?)(?=\s+[A-Z]{2}\s?\d{1,4}\b)/i,
     /^([A-Za-z][A-Za-z.' -]{1,60}?)(?=\s+\d{3,4}\s+[A-Z]{2}\s?\d{1,4}\b)/i,

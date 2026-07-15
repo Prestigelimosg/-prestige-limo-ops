@@ -166,6 +166,8 @@ for (const fragment of [
   "same bounded booking-status source outcome under different commit identities",
   "not authorization to merge or deploy either branch",
   "exactly one external Email to `info@prestigelimo.sg`",
+  "exact fixture `ADM-20260712063110` with assigned driver `TEST DRIVER CRM 20260516`",
+  "does not authorize a temporary Preview database, Supabase branch, Preview environment assignment, deployment, provider access, or external Email",
   "No Email, provider request, customer/driver contact, environment value read or display, Resend key action, Supabase read/write, Automation toggle, calendar/map action, invoice/payment/payout action, Production change, or external system change occurred",
 ]) {
   assertSectionIncludes(

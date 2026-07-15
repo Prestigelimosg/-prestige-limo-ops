@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 
 const ledgerPath = "docs/current-implementation-ledger.md";
@@ -76,8 +77,8 @@ for (const phrase of [
   "Future Email may include an admin-selected secure tracking-link live-location email only after separate owner approval for that exact channel/action gate.",
   "Email must not auto-send live location, must not send native/streaming live location, and must not be the future automatic live-location channel.",
   "No provider activation or provider send is approved by this guard.",
-  "Current `f6806723` controlled-test packet status is prepared but execution-blocked; this record does not approve a deployment, Preview env assignment, send-gate change, provider request, or external Email.",
-  "The exact candidate runtime is `f6806723 Harden driver details email sending`; any later docs-only commit must prove that `f6806723` remains the latest runtime-path commit before a test deployment.",
+  "Current `e8cfd8ea` controlled-test packet status is prepared but execution-blocked; this record does not approve a deployment, Preview env assignment, send-gate change, provider request, or external Email.",
+  "The exact candidate runtime is `e8cfd8ea Repair multi-segment booking status updates`, which retains the established `f6806723` Driver Details Email hardening; any later docs/test-only commit must prove that `e8cfd8ea` remains the latest runtime-path commit before a test deployment.",
   "The only approved candidate recipient is the owner mailbox `info@prestigelimo.sg`; the sender remains `Prestige Limo Dispatch <info@prestigelimo.sg>` and Reply-To remains `info@prestigelimo.sg`.",
   "The owner must name one exact existing non-operational test booking and its exact assigned-driver test record at action time; no booking, driver, or customer may be guessed, inferred, duplicated, or recorded in this packet.",
   "The content review must use only CUSTOMER BOOKING DETAILS and DRIVER DETAILS fields already allowlisted by the established gated route, with `Passenger name:` as the customer-facing identity label.",
@@ -91,6 +92,33 @@ for (const phrase of [
 ]) {
   assertIncludes(safetySection, phrase, `Email staging-send safety phrase: ${phrase}`);
 }
+
+const candidateRuntimeCommit = "e8cfd8ea351f1bd5b47a7c759a43f33ccea4bbb6";
+const resolvedCandidate = spawnSync(
+  "git",
+  ["rev-parse", `${candidateRuntimeCommit}^{commit}`],
+  { encoding: "utf8" },
+);
+
+assert.equal(resolvedCandidate.status, 0, "Driver Details Email candidate runtime commit must exist.");
+assert.equal(
+  resolvedCandidate.stdout.trim(),
+  candidateRuntimeCommit,
+  "Driver Details Email candidate runtime commit must resolve exactly.",
+);
+
+const laterRuntimePaths = spawnSync(
+  "git",
+  ["diff", "--name-only", `${candidateRuntimeCommit}..HEAD`, "--", "app", "lib"],
+  { encoding: "utf8" },
+);
+
+assert.equal(laterRuntimePaths.status, 0, "Driver Details Email later runtime-path check must complete.");
+assert.equal(
+  laterRuntimePaths.stdout.trim(),
+  "",
+  "No app/lib runtime path may change after the exact Driver Details Email controlled-test candidate.",
+);
 
 for (const forbidden of [
   "Email sending is approved now",

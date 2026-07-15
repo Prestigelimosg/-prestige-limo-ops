@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-f6806723 Harden driver details email sending
+e8cfd8ea Repair multi-segment booking status updates
 
 Latest pushed main/staging runtime checkpoint:
 f6806723 Harden driver details email sending
@@ -6424,8 +6424,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Future Email may include an admin-selected secure tracking-link live-location email only after separate owner approval for that exact channel/action gate.
 - Email must not auto-send live location, must not send native/streaming live location, and must not be the future automatic live-location channel.
 - No provider activation or provider send is approved by this guard.
-- Current `f6806723` controlled-test packet status is prepared but execution-blocked; this record does not approve a deployment, Preview env assignment, send-gate change, provider request, or external Email.
-- The exact candidate runtime is `f6806723 Harden driver details email sending`; any later docs-only commit must prove that `f6806723` remains the latest runtime-path commit before a test deployment. The earlier received evidence reference `DRIVER-DETAILS-EMAIL-STAGING-20260621185103` proves the pre-hardening provider/content lane only and is not represented as live proof of the new gate-visibility, same-page success lock, or deterministic idempotency changes.
+- Current `e8cfd8ea` controlled-test packet status is prepared but execution-blocked; this record does not approve a deployment, Preview env assignment, send-gate change, provider request, or external Email.
+- The exact candidate runtime is `e8cfd8ea Repair multi-segment booking status updates`, which retains the established `f6806723` Driver Details Email hardening; any later docs/test-only commit must prove that `e8cfd8ea` remains the latest runtime-path commit before a test deployment. The later runtime change is restricted to the existing saved-booking status target repair and its focused coverage; it does not alter the Email route, helper, UI, payload, gate, allowlist, provider, or idempotency behavior. The earlier received evidence reference `DRIVER-DETAILS-EMAIL-STAGING-20260621185103` proves the pre-hardening provider/content lane only and is not represented as live proof of the new gate-visibility, same-page success lock, or deterministic idempotency changes.
 - The only approved candidate recipient is the owner mailbox `info@prestigelimo.sg`; the sender remains `Prestige Limo Dispatch <info@prestigelimo.sg>` and Reply-To remains `info@prestigelimo.sg`.
 - The owner must name one exact existing non-operational test booking and its exact assigned-driver test record at action time; no booking, driver, or customer may be guessed, inferred, duplicated, or recorded in this packet.
 - The content review must use only CUSTOMER BOOKING DETAILS and DRIVER DETAILS fields already allowlisted by the established gated route, with `Passenger name:` as the customer-facing identity label. Pricing, billing/invoice/payment/PDF, payout/PayNow, internal finance/admin notes, parser/debug internals, mock/archive data, secrets/tokens, raw provider payloads, auth, location/photo/calendar/OTS, and in-app notification content remain forbidden.

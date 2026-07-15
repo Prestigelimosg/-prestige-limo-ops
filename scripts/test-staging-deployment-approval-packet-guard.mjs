@@ -50,11 +50,11 @@ assertSectionIncludes(
 );
 assertSectionIncludes(
   checkpointsSection,
-  "Latest verified runtime checkpoint in the ledger: `f6806723 Harden driver details email sending`.",
+  "Latest verified runtime checkpoint in the ledger: `e8cfd8ea Repair multi-segment booking status updates`.",
 );
 assertSectionIncludes(
   checkpointsSection,
-  "Latest Production deployment checkpoint: `d7f6aff9 Record local release diagnostics`.",
+  "Latest Production deployment checkpoint: `5ba9432e Repair multi-segment booking status updates`.",
 );
 assert.match(
   checkpointsSection,
@@ -149,6 +149,29 @@ for (const fragment of [
     ledger.includes(fragment),
     true,
     `Implementation ledger missing Driver Details Email Preview evidence phrase ${fragment}.`,
+  );
+}
+
+const driverDetailsEmailCandidateReconciliationSection = sectionBetween(
+  "## Driver Details Email Post-Hotfix Candidate Reconciliation",
+);
+for (const fragment of [
+  "remote `main` at Production hotfix `5ba9432e7f8dab3c63052c68a52a6bfecbc7ee17`",
+  "remote `staging` at the previously verified Driver Details Email runtime `f6806723166d19d4147f4e4f37fda64d4c4e0d6b`",
+  "one main-only and ten staging-only commits",
+  "common ancestor `d7f6aff9df27a0e8499d2a78e2926a5c37ebe338`",
+  "No merge, rebase, force push, branch push, deployment, or configuration action was performed",
+  "Local runtime candidate `e8cfd8ea351f1bd5b47a7c759a43f33ccea4bbb6`",
+  "subsequent local commits contain no `app` or `lib` runtime-path change",
+  "same bounded booking-status source outcome under different commit identities",
+  "not authorization to merge or deploy either branch",
+  "exactly one external Email to `info@prestigelimo.sg`",
+  "No Email, provider request, customer/driver contact, environment value read or display, Resend key action, Supabase read/write, Automation toggle, calendar/map action, invoice/payment/payout action, Production change, or external system change occurred",
+]) {
+  assertSectionIncludes(
+    driverDetailsEmailCandidateReconciliationSection,
+    fragment,
+    `Driver Details Email candidate reconciliation missing ${fragment}`,
   );
 }
 

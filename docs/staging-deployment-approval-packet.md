@@ -5,8 +5,8 @@ This packet records the approved deployment-safety configuration work, isolated 
 ## Checkpoints
 
 - Latest repo commit deployed to isolated Preview: `f6806723 Harden driver details email sending`.
-- Latest verified runtime checkpoint in the ledger: `f6806723 Harden driver details email sending`.
-- Latest Production deployment checkpoint: `d7f6aff9 Record local release diagnostics`.
+- Latest verified runtime checkpoint in the ledger: `e8cfd8ea Repair multi-segment booking status updates`.
+- Latest Production deployment checkpoint: `5ba9432e Repair multi-segment booking status updates`.
 - Source of truth: `docs/current-implementation-ledger.md`.
 
 ## Approval Fields
@@ -142,6 +142,13 @@ This packet records the approved deployment-safety configuration work, isolated 
 - `vercel curl` unexpectedly auto-generated one automation protection-bypass token through a project PATCH during a bounded GET. Its value was never printed or recorded; the GET returned `driverDetailsEmailSendGateOpen: false`. Inspection stopped, the exact token was revoked without displaying it, final automation-bypass count returned to zero, SSO protection remained `all_except_custom_domains`, and unauthenticated Preview access again returned HTTP 302 to Vercel SSO. The temporary configuration mutation and restoration are recorded explicitly.
 - Production remained unchanged on remote main `d7f6aff9df27a0e8499d2a78e2926a5c37ebe338`; `https://app.prestigelimo.sg` returned HTTP 200. No Production deployment, alias change, merge, Automation toggle, live-data write, environment/Supabase change, email/provider send, customer/driver contact, invoice/payment/payout action, or calendar/map action occurred.
 - The known dependency findings remain one low and three moderate, with no high or critical finding; no dependency change or fresh audit claim is made by this evidence-only record.
+
+## Driver Details Email Post-Hotfix Candidate Reconciliation
+
+- Read-only Git reconciliation on 2026-07-15 found remote `main` at Production hotfix `5ba9432e7f8dab3c63052c68a52a6bfecbc7ee17`, remote `staging` at the previously verified Driver Details Email runtime `f6806723166d19d4147f4e4f37fda64d4c4e0d6b`, and local `staging` with one main-only and ten staging-only commits from common ancestor `d7f6aff9df27a0e8499d2a78e2926a5c37ebe338`. No merge, rebase, force push, branch push, deployment, or configuration action was performed by this reconciliation.
+- Local runtime candidate `e8cfd8ea351f1bd5b47a7c759a43f33ccea4bbb6` retains the exact established `f6806723` Driver Details Email route, helper, UI, payload, gate, allowlist, and deterministic idempotency behavior. Its later runtime change repairs only the established saved-booking status target and focused booking coverage; subsequent local commits contain no `app` or `lib` runtime-path change.
+- The Production hotfix and local staging repair carry the same bounded booking-status source outcome under different commit identities. This is documented branch divergence, not authorization to merge or deploy either branch. The controlled Email test remains blocked pending separate action-time owner approval of the exact existing test booking and assigned test driver, temporary Preview-only configuration, a fresh protected Preview deployment, and exactly one external Email to `info@prestigelimo.sg`.
+- No Email, provider request, customer/driver contact, environment value read or display, Resend key action, Supabase read/write, Automation toggle, calendar/map action, invoice/payment/payout action, Production change, or external system change occurred during this candidate reconciliation.
 
 ## Dashboard Booking Requests Production Deployment Evidence
 

@@ -1,5 +1,7 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
+
 import type { AdminBookingPersistenceAdapterActor } from "./admin-booking-supabase-adapter";
 
 export const adminCustomerDriverDetailsEmailSendActionVersion =
@@ -341,6 +343,21 @@ function normalizePayload(input: CustomerDriverDetailsEmailSendInput) {
   return requiredValues.every(Boolean) ? payload : null;
 }
 
+function providerIdempotencyKey(payload: CustomerDriverDetailsEmailPayload) {
+  const safeBookingReference = payload.customer_booking_details.booking_reference.replace(
+    /[^A-Za-z0-9._:-]+/g,
+    "-",
+  );
+  const payloadHasher = createHash("sha256");
+
+  payloadHasher.write(JSON.stringify(payload));
+  payloadHasher.end();
+
+  const payloadVersion = payloadHasher.digest("hex");
+
+  return `driver-details/${safeBookingReference}/${payloadVersion}`;
+}
+
 function safeResult(
   overrides: Partial<
     Omit<
@@ -535,6 +552,7 @@ export async function executeAdminCustomerDriverDetailsEmailSendAction(
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
+        "Idempotency-Key": providerIdempotencyKey(payload),
       },
       method: "POST",
       signal,

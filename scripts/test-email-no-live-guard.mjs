@@ -28,7 +28,8 @@ const helperFiles = [
   "lib/driver-ack-customer-message-handoff-setup-foundation.ts",
 ];
 const boundaryFile = "lib/admin-dispatcher-auth-boundary.ts";
-const routeHarnessFiles = [...routeFiles, boundaryFile, ...helperFiles];
+const runtimeGateHelperFile = "lib/admin-customer-driver-details-email-send-action.ts";
+const routeHarnessFiles = [...routeFiles, boundaryFile, runtimeGateHelperFile, ...helperFiles];
 const providerPackageNames = new Set([
   "@aws-sdk/client-ses",
   "@sendgrid/mail",
@@ -57,6 +58,8 @@ const originalEnv = {
   PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE: process.env.PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE,
   PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE: process.env.PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE,
   PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN: process.env.PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN,
+  PRESTIGE_DRIVER_DETAILS_EMAIL_SEND_ENABLED:
+    process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_SEND_ENABLED,
 };
 
 function restoreEnv() {
@@ -74,6 +77,7 @@ function applyLocalAdminBoundary() {
   delete process.env.PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE;
   delete process.env.PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE;
   delete process.env.PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN;
+  delete process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_SEND_ENABLED;
 }
 
 function adminHeaders() {
@@ -363,6 +367,7 @@ try {
 
   assert.equal(preflightApiResponse.status, 200);
   assert.equal(preflightApi.activationReady, false);
+  assert.equal(preflightApi.driverDetailsEmailSendGateOpen, false);
   assertBlockedFlags(preflightApi, "Email activation preflight API", { requireLiveFlag: true });
   assert.equal(preflightApi.providerConfigured, false);
   assert.deepEqual(preflightApi.blockers, ["provider", "env", "approval", "live_sending"]);

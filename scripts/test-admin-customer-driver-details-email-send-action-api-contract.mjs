@@ -313,6 +313,8 @@ for (const fragment of [
   "DRIVER DETAILS",
   "provider_request_count: 0",
   "provider_request_count: 1",
+  '"Idempotency-Key"',
+  "createHash",
   "AbortSignal.timeout",
   "batch_send_enabled: false",
   "database_persistence_enabled: false",
@@ -553,6 +555,7 @@ try {
     source_surface: "admin_api",
   };
   let providerBody = null;
+  let providerIdempotencyKey = null;
   const success = await helper.executeAdminCustomerDriverDetailsEmailSendAction(
     validPayload(),
     actor,
@@ -564,6 +567,12 @@ try {
         assert.equal(init.method, "POST");
         assert.equal(init.headers.Authorization, "Bearer test-resend-secret-key");
         assert.equal(init.headers["Content-Type"], "application/json");
+        providerIdempotencyKey = init.headers["Idempotency-Key"];
+        assert.match(
+          providerIdempotencyKey,
+          /^driver-details\/PLO-EMAIL-001\/[a-f0-9]{64}$/,
+          "Driver Details Email must use a bounded payload-version idempotency key.",
+        );
         assert.deepEqual(providerBody.to, ["allowlisted@example.com"]);
         assert.equal(providerBody.from, selectedFrom);
         assert.equal(providerBody.reply_to, selectedReplyTo);
@@ -589,6 +598,54 @@ try {
   assertSuccess(success, "mocked success Driver Details Email helper");
   assert.equal(providerRequests, 1, "Success helper must make one provider request.");
   assert.ok(providerBody, "Success helper must build a provider body.");
+  assert.ok(providerIdempotencyKey, "Success helper must send an idempotency key.");
+
+  const repeatedIdempotencyKeys = [];
+  for (const payload of [
+    validPayload(),
+    validPayload(),
+    {
+      ...validPayload(),
+      driver_details: {
+        ...validPayload().driver_details,
+        car_plate: "SLA5678Y",
+      },
+    },
+  ]) {
+    const repeatedResult = await helper.executeAdminCustomerDriverDetailsEmailSendAction(
+      payload,
+      actor,
+      {
+        providerFetch: async (_url, init) => {
+          repeatedIdempotencyKeys.push(init.headers["Idempotency-Key"]);
+
+          return {
+            json: async () => ({ id: "email_test_123" }),
+            ok: true,
+            status: 200,
+          };
+        },
+      },
+    );
+
+    assertSuccess(repeatedResult, "repeated mocked Driver Details Email helper");
+  }
+
+  assert.equal(
+    repeatedIdempotencyKeys[0],
+    repeatedIdempotencyKeys[1],
+    "Identical Driver Details Email payloads must reuse one idempotency key.",
+  );
+  assert.notEqual(
+    repeatedIdempotencyKeys[1],
+    repeatedIdempotencyKeys[2],
+    "Changed driver details must create a new payload-version idempotency key.",
+  );
+  assert.equal(
+    repeatedIdempotencyKeys[0],
+    providerIdempotencyKey,
+    "The first successful request and later identical request must share one idempotency key.",
+  );
 
   const providerFailure = await helper.executeAdminCustomerDriverDetailsEmailSendAction(
     validPayload(),

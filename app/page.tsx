@@ -1037,6 +1037,7 @@ type AdminCustomerDriverDetailsEmailSendActionResponse = {
 type AdminEmailActivationPreflightResponse = {
   activationReady?: boolean;
   blockers?: string[];
+  driverDetailsEmailSendGateOpen?: boolean;
   external_send?: boolean;
   liveSendingEnabled?: boolean;
   missing_requirements?: string[];
@@ -1058,6 +1059,7 @@ type AdminCustomerDriverDetailsEmailReviewItemReadState = {
 type AdminEmailActivationPreflightReadState = {
   activationReady: boolean;
   blockers: string[];
+  driverDetailsEmailSendGateOpen: boolean;
   external_send: boolean;
   liveSendingEnabled: boolean;
   loadedReference: string;
@@ -1144,6 +1146,7 @@ function adminEmailActivationPreflightFallbackState(
   return {
     activationReady: false,
     blockers: ["provider", "env", "approval", "live_sending"],
+    driverDetailsEmailSendGateOpen: false,
     external_send: false,
     liveSendingEnabled: false,
     loadedReference: "",
@@ -24921,10 +24924,15 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         setAdminEmailActivationPreflightReadState({
           activationReady: result.activationReady === true,
           blockers,
+          driverDetailsEmailSendGateOpen:
+            result.driverDetailsEmailSendGateOpen === true,
           external_send: result.external_send === true,
           liveSendingEnabled: result.liveSendingEnabled === true,
           loadedReference: adminEmailActivationPreflightReference,
-          message: "Email activation preflight checked: provider/env/approval blocked.",
+          message:
+            result.driverDetailsEmailSendGateOpen === true
+              ? "Driver Details Email send gate is open; explicit admin review is still required."
+              : "Driver Details Email send gate is off.",
           providerConfigured: result.providerConfigured === true,
           providerSelected: result.providerSelected === true,
           selectedProvider: clean(result.selectedProvider),
@@ -25512,6 +25520,15 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     }
   }
 
+  const adminEmailActivationPreflightStateMatchesReference =
+    adminEmailActivationPreflightReadState.loadedReference === adminEmailActivationPreflightReference;
+  const adminEmailActivationPreflightDisplayState =
+    adminEmailActivationPreflightStateMatchesReference
+      ? adminEmailActivationPreflightReadState
+      : adminEmailActivationPreflightFallbackState();
+  const adminCustomerDriverDetailsEmailSendGateOpen =
+    adminEmailActivationPreflightDisplayState.status === "loaded" &&
+    adminEmailActivationPreflightDisplayState.driverDetailsEmailSendGateOpen;
   const adminCustomerDriverDetailsEmailDisabledSendStateMatchesReference =
     adminCustomerDriverDetailsEmailDisabledSendActionState.loadedReference ===
     adminCustomerDriverDetailsEmailReviewBookingReference;
@@ -25519,13 +25536,23 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     adminCustomerDriverDetailsEmailDisabledSendStateMatchesReference
       ? adminCustomerDriverDetailsEmailDisabledSendActionState
       : adminCustomerDriverDetailsEmailDisabledSendFallbackState();
+  const adminCustomerDriverDetailsEmailSent =
+    adminCustomerDriverDetailsEmailDisabledSendDisplayState.actionStatus === "loaded" &&
+    adminCustomerDriverDetailsEmailDisabledSendDisplayState.sendingEnabled &&
+    adminCustomerDriverDetailsEmailDisabledSendDisplayState.external_send;
   const adminCustomerDriverDetailsEmailDisabledSendCanCall =
     adminCustomerDriverDetailsEmailReviewCanReadApi &&
-    adminCustomerDriverDetailsEmailDisabledSendDisplayState.actionStatus !== "loading";
+    adminCustomerDriverDetailsEmailSendGateOpen &&
+    adminCustomerDriverDetailsEmailDisabledSendDisplayState.actionStatus !== "loading" &&
+    !adminCustomerDriverDetailsEmailSent;
   const adminCustomerDriverDetailsEmailDisabledSendActionLabel =
     adminCustomerDriverDetailsEmailDisabledSendDisplayState.actionStatus === "loading"
       ? "Sending Email"
-      : "Email customer";
+      : !adminCustomerDriverDetailsEmailSendGateOpen
+        ? "Email gate off"
+        : adminCustomerDriverDetailsEmailSent
+          ? "Driver Details Email already sent for this loaded booking version"
+          : "Email customer";
   const adminCustomerDriverDetailsEmailDisabledSendStatusText =
     adminCustomerDriverDetailsDisabledSendStatusText(
       adminCustomerDriverDetailsEmailDisabledSendDisplayState,
@@ -25634,12 +25661,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     `WhatsApp: ${adminCustomerDriverDetailsWhatsAppDisabledSendStatusText}`,
     `SMS: ${adminCustomerDriverDetailsSmsDisabledSendStatusText}`,
   ].join(" | ");
-  const adminEmailActivationPreflightStateMatchesReference =
-    adminEmailActivationPreflightReadState.loadedReference === adminEmailActivationPreflightReference;
-  const adminEmailActivationPreflightDisplayState =
-    adminEmailActivationPreflightStateMatchesReference
-      ? adminEmailActivationPreflightReadState
-      : adminEmailActivationPreflightFallbackState();
   const adminEmailActivationPreflightBlockedRequirements =
     adminEmailActivationPreflightDisplayState.blockers.filter((blocker) =>
       ["provider", "env", "approval"].includes(blocker),
@@ -25654,6 +25675,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       ? "Preflight checking"
       : `Preflight: activationReady ${
           adminEmailActivationPreflightDisplayState.activationReady ? "true" : "false"
+        }, driverDetailsEmailSendGateOpen ${
+          adminEmailActivationPreflightDisplayState.driverDetailsEmailSendGateOpen
+            ? "true"
+            : "false"
         }, liveSendingEnabled ${
           adminEmailActivationPreflightDisplayState.liveSendingEnabled ? "true" : "false"
         }, external_send ${
@@ -25662,9 +25687,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const adminEmailActivationPreflightStatusText =
     adminEmailActivationPreflightDisplayState.status === "loading"
       ? "Email checking"
-      : adminEmailActivationPreflightDisplayState.activationReady &&
-          adminEmailActivationPreflightDisplayState.liveSendingEnabled &&
-          adminEmailActivationPreflightDisplayState.external_send
+      : adminCustomerDriverDetailsEmailSendGateOpen
         ? "Email gate ready"
         : "Email gate off";
   const adminEmailActivationPreflightStatusTitle = [
@@ -30512,12 +30535,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     customerCopyFeedback?.tone === "success" && /edit saved/i.test(customerCopyFeedback.text);
   const driverDispatchEdited =
     driverDispatchFeedback?.tone === "success" && /edit saved/i.test(driverDispatchFeedback.text);
-  const adminCustomerDriverDetailsEmailLoaded =
-    adminCustomerDriverDetailsEmailDisabledSendDisplayState.actionStatus === "loaded";
-  const adminCustomerDriverDetailsEmailSent =
-    adminCustomerDriverDetailsEmailLoaded &&
-    adminCustomerDriverDetailsEmailDisabledSendDisplayState.sendingEnabled &&
-    adminCustomerDriverDetailsEmailDisabledSendDisplayState.external_send;
   const adminCustomerDriverDetailsEmailButtonTone: Message["tone"] | null =
     adminCustomerDriverDetailsEmailSent
       ? "success"
@@ -30527,12 +30544,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const adminCustomerDriverDetailsEmailButtonLabel =
     adminCustomerDriverDetailsEmailDisabledSendDisplayState.actionStatus === "loading"
       ? "Sending Email"
-      : adminCustomerDriverDetailsEmailSent
-        ? "Emailed"
-        : adminCustomerDriverDetailsEmailLoaded ||
-            adminCustomerDriverDetailsEmailDisabledSendDisplayState.actionStatus === "error"
-          ? "Email blocked"
-          : "Email";
+      : !adminCustomerDriverDetailsEmailSendGateOpen
+        ? "Email gate off"
+        : adminCustomerDriverDetailsEmailSent
+          ? "Emailed"
+          : adminCustomerDriverDetailsEmailDisabledSendDisplayState.actionStatus === "loaded" ||
+              adminCustomerDriverDetailsEmailDisabledSendDisplayState.actionStatus === "error"
+            ? "Email blocked"
+            : "Email";
   const adminCustomerDriverDetailsWhatsAppLoaded =
     adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState.actionStatus === "loaded";
   const adminCustomerDriverDetailsWhatsAppSent =
@@ -41854,6 +41873,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 }
                 data-admin-customer-driver-details-email-disabled-send-sending-enabled={
                   adminCustomerDriverDetailsEmailDisabledSendDisplayState.sendingEnabled ? "true" : "false"
+                }
+                data-admin-customer-driver-details-email-send-gate-open={
+                  adminCustomerDriverDetailsEmailSendGateOpen ? "true" : "false"
                 }
                 data-admin-email-activation-preflight-activation-ready={
                   adminEmailActivationPreflightDisplayState.activationReady ? "true" : "false"

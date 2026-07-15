@@ -36,6 +36,9 @@ Future work must reuse the existing compact Customer Copy multi-channel row and 
 Approved current lane:
 
 - Email may be triggered only by explicit admin click through `POST /api/admin-customer-driver-details-email-send-action`, using the gated Resend helper and allowlist safeguards.
+- The existing Email button stays disabled and visibly says `Email gate off` until the established same-origin admin preflight read reports the exact Driver Details Email send gate open. A closed gate produces no send-action POST from the browser.
+- Exact normalized Email payloads use one deterministic booking-reference plus SHA-256 payload-version `Idempotency-Key`. Resend retains that protection for 24 hours; changed customer booking or driver details produce a different key.
+- After one successful response, the existing Email button becomes disabled and says `Emailed` for that loaded page state. This same-page lock and the provider key are duplicate-click safeguards, not permanent send history.
 - Customer In-App and Driver In-App may be triggered only by explicit admin click through the existing in-app notification route.
 - Customer app link copy may be triggered only by explicit admin click through the existing `POST /api/admin-customer-portal-access-links` route, using the saved booking `customer_id`/customer account reference only; it must not fall back to passenger, booker, company, or display names as the account reference.
 - Telegram provider messages may be sent only through the existing internal-admin alert route.
@@ -48,6 +51,7 @@ Still blocked without separate explicit approval:
 - Adding duplicate Email, WhatsApp, SMS, Telegram, customer-message, driver-notification, provider-send, or customer driver-details workflow sectors, buttons, cards, routes, helpers, or shims.
 - Activating SMS or WhatsApp sends, customer/driver Telegram provider sends, automatic fallback, automatic multi-channel blast, batch send, scheduler, polling, retry automation, payment/PDF/pricing/payout/auth/location/photo/calendar behavior, parser-learning behavior, or broad DB writes.
 - Moving Customer Copy multi-channel controls into customer or driver surfaces.
+- Claiming permanent deduplication or a persisted Driver Details Email audit record. The existing send-audit payload foundation remains setup-only with `auditWriteEnabled: false`; persistent send history requires a separately approved existing persistence reuse or schema/write lane.
 - Exposing customer price, driver payout, PayNow payout details, payout comparisons, internal finance notes, internal admin notes, parser/debug internals, mock QA/dev archive, raw provider payloads, tokens, or secrets.
 
 Customers must never see driver payout, PayNow payout, internal admin notes, parser/debug internals, admin finance, or mock QA/dev archive data.

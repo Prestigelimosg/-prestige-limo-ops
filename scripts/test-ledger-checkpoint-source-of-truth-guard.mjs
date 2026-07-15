@@ -73,6 +73,34 @@ function assertAncestor(ancestor, descendant, label) {
   assert.equal(result.status, 0, label);
 }
 
+function trackedPushedRefForHead() {
+  const candidates = ["refs/remotes/origin/main", "refs/remotes/origin/staging"]
+    .map((ref) => {
+      const ancestor = spawnSync("git", ["merge-base", "--is-ancestor", ref, "HEAD"]);
+
+      if (ancestor.status !== 0) {
+        return null;
+      }
+
+      const distance = Number(
+        execFileSync("git", ["rev-list", "--count", `${ref}..HEAD`], {
+          encoding: "utf8",
+        }).trim(),
+      );
+
+      return { distance, ref };
+    })
+    .filter(Boolean)
+    .sort((left, right) => left.distance - right.distance || left.ref.localeCompare(right.ref));
+
+  assert.ok(
+    candidates.length > 0,
+    "HEAD must descend from the local origin/main or origin/staging tracking ref.",
+  );
+
+  return candidates[0].ref;
+}
+
 function checkpointFromMatch(match, label) {
   assert.ok(match, `${label} must be a short git hash plus task name.`);
   const [, hash, title] = match;
@@ -132,13 +160,14 @@ const topRemoteDeploymentCheckpoint = checkpointFromMatch(
 );
 
 const topRuntimeCommit = readLatestRuntimeCommit("HEAD", "Latest local runtime checkpoint");
+const trackedPushedRef = trackedPushedRefForHead();
 const trackedPushedRuntimeCommit = readLatestRuntimeCommit(
-  "refs/remotes/origin/staging",
-  "Latest runtime commit reachable from local origin/staging tracking ref",
+  trackedPushedRef,
+  "Latest runtime commit reachable from the current origin/main or origin/staging lineage",
 );
-const trackedStagingCommit = readGitCommit(
-  "refs/remotes/origin/staging",
-  "Exact local origin/staging tracking ref",
+const trackedPushedCommit = readGitCommit(
+  trackedPushedRef,
+  "Exact local origin/main or origin/staging tracking ref",
 );
 const topRemoteCommit = readGitCommit(
   topRemoteDeploymentCheckpoint.hash,
@@ -176,8 +205,8 @@ assertAncestor(
 );
 assertAncestor(
   topRemoteDeploymentCheckpoint.hash,
-  trackedStagingCommit.fullHash,
-  "The exact deployed checkpoint must be reachable from the local origin/staging tracking ref.",
+  trackedPushedCommit.fullHash,
+  "The exact deployed checkpoint must be reachable from the current pushed branch lineage.",
 );
 
 const nextGptLock = sectionBetween(
@@ -194,8 +223,8 @@ for (const phrase of [
   "Checkpoint state must be recorded by commit hash and task name, not counters.",
   "The top latest verified clean runtime checkpoint may be ahead of the latest pushed main/staging runtime checkpoint while tested application commits remain local; each line must record its own actual commit hash and task name.",
   "The verified local checkpoint is checked against the newest `HEAD` commit touching the established application, server, database, or runtime-configuration paths, so a newer local runtime change cannot remain hidden behind an older checkpoint.",
-  "The latest pushed main/staging runtime checkpoint is checked against the newest runtime commit reachable from the local `origin/staging` tracking ref, and the guard fails instead of treating a later docs-only commit as a runtime checkpoint or accepting one hard-coded historical checkpoint.",
-  "The top latest remote main/staging deployment checkpoint must remain recorded as the most recent verified deployed reference by exact commit hash and task name; its newest reachable runtime commit must not be ahead of the pushed runtime checkpoint, and the exact deployed reference must be reachable from `origin/staging`.",
+  "The latest pushed main/staging runtime checkpoint is checked against the newest runtime commit on the closest local `origin/main` or `origin/staging` tracking ref that is an ancestor of `HEAD`, and the guard fails instead of crossing unrelated branch lineages, treating a later docs-only commit as a runtime checkpoint, or accepting one hard-coded historical checkpoint.",
+  "The top latest remote main/staging deployment checkpoint must remain recorded as the most recent verified deployed reference on the current pushed branch lineage by exact commit hash and task name; its newest reachable runtime commit must not be ahead of the pushed runtime checkpoint.",
   "The protected combined-automation Preview pushed docs-only evidence commit `4a318f14 Record combined automation Preview evidence` after runtime commit `5c0f6392 Automate monthly invoice draft preparation`; the guard now validates those separate facts without forcing either checkpoint to carry a false title or hash.",
   "No inconsistent checkpoint counters are approved.",
   "This lock adds `scripts/test-ledger-checkpoint-source-of-truth-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.",

@@ -88,6 +88,34 @@ function assertAncestor(ancestor, descendant, label) {
   assert.equal(result.status, 0, label);
 }
 
+function trackedPushedRefForHead() {
+  const candidates = ["refs/remotes/origin/main", "refs/remotes/origin/staging"]
+    .map((ref) => {
+      const ancestor = spawnSync("git", ["merge-base", "--is-ancestor", ref, "HEAD"]);
+
+      if (ancestor.status !== 0) {
+        return null;
+      }
+
+      const distance = Number(
+        execFileSync("git", ["rev-list", "--count", `${ref}..HEAD`], {
+          encoding: "utf8",
+        }).trim(),
+      );
+
+      return { distance, ref };
+    })
+    .filter(Boolean)
+    .sort((left, right) => left.distance - right.distance || left.ref.localeCompare(right.ref));
+
+  assert.ok(
+    candidates.length > 0,
+    "HEAD must descend from the local origin/main or origin/staging tracking ref.",
+  );
+
+  return candidates[0].ref;
+}
+
 const verifiedLine = lines
   .map((line, index) => ({ line: line.trim(), index }))
   .find(({ line }) => line === "Latest verified clean runtime checkpoint:");
@@ -115,13 +143,14 @@ assert.ok(
 );
 
 const verifiedCommit = readLatestRuntimeCommit("HEAD", "Latest local runtime checkpoint");
+const trackedPushedRef = trackedPushedRefForHead();
 const trackedPushedRuntimeCommit = readLatestRuntimeCommit(
-  "refs/remotes/origin/staging",
-  "Latest runtime commit reachable from local origin/staging tracking ref",
+  trackedPushedRef,
+  "Latest runtime commit reachable from the current origin/main or origin/staging lineage",
 );
-const trackedStagingCommit = readGitCommit(
-  "refs/remotes/origin/staging",
-  "Exact local origin/staging tracking ref",
+const trackedPushedCommit = readGitCommit(
+  trackedPushedRef,
+  "Exact local origin/main or origin/staging tracking ref",
 );
 const deployedCommit = readGitCommit(
   remoteDeploymentCheckpoint.checkpointHash,
@@ -159,8 +188,8 @@ assertAncestor(
 );
 assertAncestor(
   remoteDeploymentCheckpoint.checkpointHash,
-  trackedStagingCommit.fullHash,
-  "The exact verified deployed checkpoint must be reachable from the local origin/staging tracking ref.",
+  trackedPushedCommit.fullHash,
+  "The exact verified deployed checkpoint must be reachable from the current pushed branch lineage.",
 );
 
 console.log("current implementation ledger alignment guard passed");

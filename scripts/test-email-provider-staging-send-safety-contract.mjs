@@ -62,6 +62,10 @@ const safetySection = sectionBetween(
   ledger,
   "### Email Provider Staging Send Safety Contract Lock",
 );
+const productionTestSection = sectionBetween(
+  ledger,
+  "### Controlled Production Driver Details Email Test Approval",
+);
 
 for (const phrase of [
   "This is a docs/test-only guard for a future separately approved one-message staging Email send evidence pass.",
@@ -91,6 +95,21 @@ for (const forbidden of [
   "env values may be printed",
 ]) {
   assertExcludes(safetySection, forbidden, `forbidden Email staging-send approval phrase`);
+}
+
+for (const phrase of [
+  "The owner approved exactly one controlled Production Driver Details Email test on 2026-07-15.",
+  "`ADM-20260712063110`",
+  "`TEST DRIVER CRM 20260516`",
+  "`info@prestigelimo.sg`",
+  "Only `PRESTIGE_DRIVER_DETAILS_EMAIL_SEND_ENABLED` may be temporarily changed for this test",
+  "The established route, helper, Customer Copy Email button, recipient allowlist, privacy allowlist, same-origin admin boundary, same-page success lock, and deterministic Resend idempotency key must be reused without duplication.",
+  "Production must first receive an isolated `origin/main`-based candidate containing only the existing booking-status repair and the reviewed Driver Details Email hardening; `staging` must not be deployed or merged.",
+  "Success requires exactly one send-route POST, HTTP 200 `send_succeeded`, `provider_request_count: 1`, one safe provider message id, one disabled same-page `Emailed` state, and owner-mailbox receipt confirmation.",
+  "Rollback must set the Production gate closed again, redeploy the same source, verify `Email gate off`, and prove no later send-route request.",
+  "No Supabase branch, Supabase configuration/data change, Automation toggle, calendar/map action, invoice/payment/payout action, customer/driver in-app message, or second external Email is approved.",
+]) {
+  assertIncludes(productionTestSection, phrase, `Controlled Production Email test phrase: ${phrase}`);
 }
 
 assertIncludes(

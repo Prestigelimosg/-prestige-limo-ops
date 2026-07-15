@@ -1,16 +1,29 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-2acaa3a5 Simplify dashboard booking request review
+3ffe5c30 Harden driver details email sending
 
 Latest pushed main/staging runtime checkpoint:
-2acaa3a5 Simplify dashboard booking request review
+5ba9432e Repair multi-segment booking status updates
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-b0a68cae Repair dashboard release checkpoint guards
+5ba9432e Repair multi-segment booking status updates
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Controlled Production Driver Details Email Test Approval
+
+- The owner approved exactly one controlled Production Driver Details Email test on 2026-07-15. This action-time approval is limited to exact existing non-operational test booking `ADM-20260712063110`, assigned test driver `TEST DRIVER CRM 20260516`, and the owner mailbox recipient `info@prestigelimo.sg`.
+- The owner previously confirmed that all current bookings, customers, invoices, and drivers are test-only. No new booking, customer, driver, invoice, temporary Supabase branch, or duplicate fixture may be created for this test.
+- Production names-only inspection found the six required Driver Details Email assignments present as encrypted Production variables; no value was displayed or downloaded. Only `PRESTIGE_DRIVER_DETAILS_EMAIL_SEND_ENABLED` may be temporarily changed for this test. Existing provider, sender, Reply-To, recipient-allowlist, and `RESEND_API_KEY` assignments must not be displayed, downloaded, replaced, or copied.
+- The established route, helper, Customer Copy Email button, recipient allowlist, privacy allowlist, same-origin admin boundary, same-page success lock, and deterministic Resend idempotency key must be reused without duplication.
+- Production must first receive an isolated `origin/main`-based candidate containing only the existing booking-status repair and the reviewed Driver Details Email hardening; `staging` must not be deployed or merged. The source must pass the established focused guards, staged application-change guard, full pre-activation suite, TypeScript, production build, and exact browser guard before live activation.
+- The gate must remain closed for the first deployment and signed-in UI check. After that proof, the existing sensitive Production gate assignment may be updated to true without printing its value, and the same exact source must be redeployed. No other environment or project setting may change.
+- The live action is one explicit admin click only. Success requires exactly one send-route POST, HTTP 200 `send_succeeded`, `provider_request_count: 1`, one safe provider message id, one disabled same-page `Emailed` state, and owner-mailbox receipt confirmation. There must be no second click, refresh-and-resend, retry, batch, fallback, scheduler, background send, or alternate channel action.
+- The customer-facing payload remains limited to the established CUSTOMER BOOKING DETAILS and DRIVER DETAILS allowlist. Customer price, billing/invoice/payment/PDF, driver payout/PayNow, internal finance/admin notes, parser/debug internals, mock/archive data, tokens/secrets, raw provider payload, calendar/GPS/photo/OTS data, and in-app notification content remain forbidden.
+- Rollback must set the Production gate closed again, redeploy the same source, verify `Email gate off`, and prove no later send-route request. If the first live request is rejected or fails, stop without a second send attempt, close the gate, and report the exact sanitized failure.
+- No Supabase branch, Supabase configuration/data change, Automation toggle, calendar/map action, invoice/payment/payout action, customer/driver in-app message, or second external Email is approved. `CRON_SECRET` must never be displayed, downloaded, or replaced.
 
 ### Multi-Segment Saved Booking Reference Status Repair
 
@@ -4138,8 +4151,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Checkpoint state must be recorded by commit hash and task name, not counters.
 - The top latest verified clean runtime checkpoint may be ahead of the latest pushed main/staging runtime checkpoint while tested application commits remain local; each line must record its own actual commit hash and task name.
 - The verified local checkpoint is checked against the newest `HEAD` commit touching the established application, server, database, or runtime-configuration paths, so a newer local runtime change cannot remain hidden behind an older checkpoint.
-- The latest pushed main/staging runtime checkpoint is checked against the newest runtime commit reachable from the local `origin/staging` tracking ref, and the guard fails instead of treating a later docs-only commit as a runtime checkpoint or accepting one hard-coded historical checkpoint.
-- The top latest remote main/staging deployment checkpoint must remain recorded as the most recent verified deployed reference by exact commit hash and task name; its newest reachable runtime commit must not be ahead of the pushed runtime checkpoint, and the exact deployed reference must be reachable from `origin/staging`.
+- The latest pushed main/staging runtime checkpoint is checked against the newest runtime commit on the closest local `origin/main` or `origin/staging` tracking ref that is an ancestor of `HEAD`, and the guard fails instead of crossing unrelated branch lineages, treating a later docs-only commit as a runtime checkpoint, or accepting one hard-coded historical checkpoint.
+- The top latest remote main/staging deployment checkpoint must remain recorded as the most recent verified deployed reference on the current pushed branch lineage by exact commit hash and task name; its newest reachable runtime commit must not be ahead of the pushed runtime checkpoint.
 - The protected combined-automation Preview pushed docs-only evidence commit `4a318f14 Record combined automation Preview evidence` after runtime commit `5c0f6392 Automate monthly invoice draft preparation`; the guard now validates those separate facts without forcing either checkpoint to carry a false title or hash.
 - At this checkpoint repair, local verified application commit `dffad548 Keep request review on Dashboard` is ahead of pushed and deployed `f7e253b3 Repair mobile automation regression coverage`; no push or deployment is included in this docs/test-only pass.
 - No inconsistent checkpoint counters are approved.

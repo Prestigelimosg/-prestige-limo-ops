@@ -42,6 +42,10 @@ const guardChecks = [
     script: "scripts/test-admin-customer-account-delete-runtime.mjs",
   },
   {
+    label: "customer and booking test-data wipe approval packet guard",
+    script: "scripts/test-customer-booking-test-data-wipe-approval-packet.mjs",
+  },
+  {
     label: "retired Ritz mock customer guard",
     script: "scripts/test-retired-ritz-mock-customer-guard.mjs",
   },

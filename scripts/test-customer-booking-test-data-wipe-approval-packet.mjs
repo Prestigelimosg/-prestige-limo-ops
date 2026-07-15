@@ -1,0 +1,108 @@
+import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+
+const packetPath = "docs/customer-booking-test-data-wipe-approval-packet.md";
+const ledgerPath = "docs/current-implementation-ledger.md";
+const suitePath = "scripts/test-preactivation-verification-suite.mjs";
+
+assert.equal(
+  existsSync(packetPath),
+  true,
+  "Missing customer/booking test-data wipe approval packet.",
+);
+
+const [packet, ledger, suite] = await Promise.all([
+  readFile(packetPath, "utf8"),
+  readFile(ledgerPath, "utf8"),
+  readFile(suitePath, "utf8"),
+]);
+
+function assertIncludes(source, fragment, label = fragment) {
+  assert.equal(
+    source.includes(fragment),
+    true,
+    `Customer/booking test-data wipe approval packet missing ${label}.`,
+  );
+}
+
+for (const fragment of [
+  "# Customer, Booking, And Invoice Test-Data Wipe Approval Packet",
+  "Status: prepared; execution deferred and not approved",
+  "all current customer, booking, and invoice records are testing-only",
+  "No deletion occurred during this preparation pass.",
+  "after the controlled Driver Details Email test and after the first real monthly scheduler proof due on 1 August 2026 at 08:00 SGT",
+  "before real operations begin",
+  "95 customers",
+  "68 bookings",
+  "24 `admin_review_required`",
+  "5 `assigned`",
+  "7 `cancelled`",
+  "11 `completed`",
+  "3 `confirmed`",
+  "16 `draft`",
+  "2 `needs_review`",
+  "13 customer invoice records",
+  "1 Paid, 12 Unpaid",
+  "7 sent, 5 not_sent, 1 blocked",
+  "43 customers currently eligible for the existing exact-customer UI deletion",
+  "18 completed/cancelled bookings",
+  "50 bookings outside that deletion boundary",
+  "0 authentication users",
+  "2 Storage objects in 1 bucket",
+  "No row values or personal data were read",
+  "Storage objects are not included in database backups",
+  "Any genuine business or financial record found during revalidation must be excluded",
+  "at least five years",
+  "Google Calendar",
+  "Sent email cannot be retracted",
+  "historical backups and logs",
+  "write freeze and maintenance window",
+  "separate owner approval",
+  "Preserve system and configuration rows",
+  "Zero-count verification",
+  "No destructive SQL, executor route, helper, runner, deployment, configuration change, Automation toggle, external send, or data write is authorized or included.",
+]) {
+  assertIncludes(packet, fragment);
+}
+
+for (const fragment of [
+  "### Customer, Booking, And Invoice Test-Data Wipe Approval Packet",
+  "The owner declared that all current customer, booking, and invoice records are testing-only.",
+  "Execution is deferred until after the controlled Driver Details Email test and the first real monthly scheduler proof due on 1 August 2026 at 08:00 SGT, and must occur before real operations begin.",
+  "No deletion, write, configuration change, deployment, Automation toggle, external send, or customer/driver contact occurred.",
+  "`docs/customer-booking-test-data-wipe-approval-packet.md`",
+  "`scripts/test-customer-booking-test-data-wipe-approval-packet.mjs`",
+]) {
+  assertIncludes(ledger, fragment, `ledger phrase ${fragment}`);
+}
+
+assertIncludes(
+  suite,
+  'script: "scripts/test-customer-booking-test-data-wipe-approval-packet.mjs"',
+  "pre-activation suite registration",
+);
+
+for (const forbidden of [
+  /\bdelete\s+from\b/i,
+  /\btruncate\b/i,
+  /\bdrop\s+table\b/i,
+  /Execution approved now/i,
+  /delete Production data now/i,
+  /real operations have started/i,
+]) {
+  assert.doesNotMatch(packet, forbidden, `Packet contains forbidden executable or approval text: ${forbidden}`);
+}
+
+for (const forbiddenPath of [
+  "scripts/run-customer-booking-test-data-wipe.mjs",
+  "app/api/admin-customer-booking-test-data-wipe/route.ts",
+]) {
+  assert.equal(
+    existsSync(forbiddenPath),
+    false,
+    `Deferred packet must not add an executable wipe path: ${forbiddenPath}`,
+  );
+}
+
+console.log("customer/booking test-data wipe approval packet guard passed");

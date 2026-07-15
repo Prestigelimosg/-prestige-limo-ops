@@ -12,6 +12,15 @@ f6806723 Harden driver details email sending
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Customer, Booking, And Invoice Test-Data Wipe Approval Packet
+
+- The owner declared that all current customer, booking, and invoice records are testing-only. A read-only, count-only Supabase inventory read aggregate counts and metadata only; it did not read row values, personal data, object paths, or environment values.
+- The established exact-customer and saved-booking deletion actions are intentionally narrow and cannot perform a complete operational cleanup. No duplicate bulk-delete lane exists, and no executor route, helper, runner, UI, SQL, or database function was added.
+- The prepared inventory covers 95 customers, 68 bookings, 13 customer invoice records, their wider operational dependencies, 0 authentication users, and 2 unmapped Storage objects in 1 bucket. Driver master data and system/configuration rows remain outside the scope unless separately classified and approved.
+- Execution is deferred until after the controlled Driver Details Email test and the first real monthly scheduler proof due on 1 August 2026 at 08:00 SGT, and must occur before real operations begin. A fresh inventory, genuine-record exclusion, verified restore point, Storage/calendar classification, write freeze, maintenance window, exact action-time approval, dependency-ordered cleanup, rollback evidence, and zero-count/orphan verification remain mandatory.
+- Database cleanup alone cannot retract sent email, remove separately stored Google Calendar events, or immediately erase historical backups/logs. Supabase Storage objects are not included in database backups and require a separate recovery and deletion decision.
+- No deletion, write, configuration change, deployment, Automation toggle, external send, or customer/driver contact occurred. The deferred packet and its focused lock are `docs/customer-booking-test-data-wipe-approval-packet.md` and `scripts/test-customer-booking-test-data-wipe-approval-packet.mjs`.
+
 ### Driver Details Email Hardened Protected Preview Evidence
 
 - The owner approved the stated next safe step on 2026-07-15: push exact clean runtime commit `f6806723 Harden driver details email sending` to `origin/staging`, use one protected credential-free Preview, and perform bounded read-only desktop/mobile and log verification. Production deployment, branch merge, Automation change, Email send, customer/driver contact, Supabase/Vercel environment change, and provider action remained outside scope.

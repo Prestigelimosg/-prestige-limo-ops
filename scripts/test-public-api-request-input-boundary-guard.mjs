@@ -168,6 +168,7 @@ const customerBookingRequestFields = [
   "returnFlightNumber",
   "returnPickupLocation",
   "returnDropoffLocation",
+  "returnExtraStops",
   "serviceType",
   "vehicleType",
   "passengerCount",

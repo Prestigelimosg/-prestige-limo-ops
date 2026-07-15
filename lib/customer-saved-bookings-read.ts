@@ -546,6 +546,21 @@ function customerSavedBookingsSessionCookieNames() {
   ];
 }
 
+export function expiredCustomerSavedBookingsSessionCookieHeaders() {
+  return customerSavedBookingsSessionCookieNames().map((name) =>
+    [
+      `${name}=`,
+      "Path=/",
+      "Max-Age=0",
+      "Expires=Thu, 01 Jan 1970 00:00:00 GMT",
+      "HttpOnly",
+      "Secure",
+      "SameSite=Lax",
+      "Priority=High",
+    ].join("; "),
+  );
+}
+
 function readCustomerSavedBookingsSessionToken(request: Request): {
   source: CustomerSavedBookingsSessionTokenSource;
   token: string;

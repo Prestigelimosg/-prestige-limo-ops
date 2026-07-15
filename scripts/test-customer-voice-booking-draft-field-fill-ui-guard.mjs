@@ -36,6 +36,7 @@ const approvedSubmittedFields = [
   "returnFlightNumber",
   "returnPickupLocation",
   "returnDropoffLocation",
+  "returnExtraStops",
   "serviceType",
   "vehicleType",
   "passengerCount",

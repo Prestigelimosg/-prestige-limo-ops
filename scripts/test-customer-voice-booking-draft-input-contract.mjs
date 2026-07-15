@@ -33,6 +33,7 @@ const safeCustomerBookingFields = [
   "returnFlightNumber",
   "returnPickupLocation",
   "returnDropoffLocation",
+  "returnExtraStops",
   "serviceType",
   "vehicleType",
   "passengerCount",

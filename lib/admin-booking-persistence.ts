@@ -89,6 +89,7 @@ export type CustomerBookingRequestInput = {
   returnFlightNumber?: string | null;
   returnPickupLocation?: string | null;
   returnDropoffLocation?: string | null;
+  returnExtraStops?: string | null;
   serviceType?: string | null;
   vehicleType?: string | null;
   passengerCount?: string | number | null;
@@ -181,6 +182,7 @@ const customerBookingRequestFields = new Set([
   "returnFlightNumber",
   "returnPickupLocation",
   "returnDropoffLocation",
+  "returnExtraStops",
   "serviceType",
   "vehicleType",
   "passengerCount",
@@ -885,8 +887,9 @@ function buildCustomerBookingRequestPayloadForLeg({
   const companyName = textOrNull(body.companyName);
   const contactNo = textOrNull(body.contactNo);
   const emailAddress = textOrNull(body.emailAddress);
-  const extraStopLocations =
-    legLabel === "OUTBOUND" ? splitCustomerExtraStops(textOrNull(body.extraStops)) : [];
+  const extraStopLocations = splitCustomerExtraStops(
+    textOrNull(legLabel === "OUTBOUND" ? body.extraStops : body.returnExtraStops),
+  );
   const routePoints: AdminBookingRoutePointInput[] = [
     {
       point_type: "pickup",

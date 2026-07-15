@@ -200,7 +200,7 @@ const ledgerSection = sectionBetween(ledger, "### Public API Session Cookie Cach
 for (const phrase of [
   "Public customer/driver API session, cookie, and cache boundaries are guarded across customer portal session issue, customer saved bookings, customer booking memory, customer booking status, customer booking request, customer app notifications, driver job, driver job notifications, driver issue-alert, driver flight ETA setup, and driver bidding routes.",
   "This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.",
-  "Only the customer portal session issue route may set `Set-Cookie`, and successful or blocked session-issue responses must stay `Cache-Control: no-store`.",
+  "Only the customer portal session issue route may issue a live session cookie. The customer booking request route may only expire obsolete customer portal cookies after verified identity resolution fails, returns no booking write, and responds `Cache-Control: no-store`; all other public routes remain forbidden from setting cookies.",
   "Customer portal session cookies must stay HttpOnly, Secure, SameSite=Lax, Priority=High, path-scoped, max-age limited, server-token backed, and fail closed for unsafe configured cookie names.",
   "Customer booking request, booking memory, and portal saved-bookings client adapters must use `credentials: \"same-origin\"`, `cache: \"no-store\"`, and purpose headers while never manually attaching Cookie, Authorization, or customer session-token headers.",
   "Customer saved-bookings and booking-memory reads may accept a server-validated same-origin session cookie; ambiguous, wrong, unsafe, placeholder, or duplicate cookie values fail closed.",
@@ -219,10 +219,18 @@ for (const phrase of [
 assertIncludes(preactivationSuite, guardScript, "preactivation public API session/cache guard registration");
 
 const routesWithSetCookie = publicApiRoutePaths.filter((path) => files[path].includes("Set-Cookie"));
-assert.deepEqual(routesWithSetCookie, ["app/api/customer-portal-sessions/route.ts"], "public API Set-Cookie routes");
+assert.deepEqual(
+  routesWithSetCookie,
+  ["app/api/customer-booking-requests/route.ts", "app/api/customer-portal-sessions/route.ts"],
+  "public API Set-Cookie routes",
+);
 
 const routesWithCacheControl = publicApiRoutePaths.filter((path) => files[path].includes("Cache-Control"));
-assert.deepEqual(routesWithCacheControl, ["app/api/customer-portal-sessions/route.ts"], "public API Cache-Control routes");
+assert.deepEqual(
+  routesWithCacheControl,
+  ["app/api/customer-booking-requests/route.ts", "app/api/customer-portal-sessions/route.ts"],
+  "public API Cache-Control routes",
+);
 
 for (const routePath of publicApiRoutePaths) {
   assertExcludes(files[routePath], /cookies\s*\(/, `${routePath} direct Next cookies API`);
@@ -242,6 +250,29 @@ for (const fragment of [
   "resolveCustomerPortalSessionIssue(request)",
 ]) {
   assertIncludes(portalSessionRoute, fragment, `customer portal session route ${fragment}`);
+}
+
+const customerBookingRequestRoute = files["app/api/customer-booking-requests/route.ts"];
+for (const fragment of [
+  "expiredCustomerSavedBookingsSessionCookieHeaders",
+  'headers.append("Set-Cookie", expiredCookieHeader)',
+  '"Cache-Control": "no-store"',
+  "status: 409",
+]) {
+  assertIncludes(customerBookingRequestRoute, fragment, `stale portal booking request cookie ${fragment}`);
+}
+
+const customerSavedBookingsRead = files["lib/customer-saved-bookings-read.ts"];
+for (const fragment of [
+  "export function expiredCustomerSavedBookingsSessionCookieHeaders()",
+  '"Max-Age=0"',
+  '"Expires=Thu, 01 Jan 1970 00:00:00 GMT"',
+  '"HttpOnly"',
+  '"Secure"',
+  '"SameSite=Lax"',
+  '"Priority=High"',
+]) {
+  assertIncludes(customerSavedBookingsRead, fragment, `stale portal cookie expiry ${fragment}`);
 }
 
 const portalSessionIssue = files["lib/customer-portal-session-issue.ts"];

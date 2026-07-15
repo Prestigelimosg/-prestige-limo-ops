@@ -8,6 +8,7 @@ import { customerBookingRequestPersistenceAdapterActor } from "../../../lib/admi
 import { sendAdminNewBookingDevicePushAlert } from "../../../lib/admin-device-push-notification";
 import { sendAdminNewBookingEmailAlert } from "../../../lib/admin-new-booking-email-alert";
 import {
+  expiredCustomerSavedBookingsSessionCookieHeaders,
   resolveCustomerSavedBookingsBoundaryForPurpose,
   resolveCustomerSavedBookingsVerifiedIdentity,
 } from "../../../lib/customer-saved-bookings-read";
@@ -69,6 +70,28 @@ function safeFailureResponse() {
       error: "Booking request failed safely.",
     },
     { status: 500 },
+  );
+}
+
+function stalePortalAccessResponse() {
+  const expiredCookieHeaders = expiredCustomerSavedBookingsSessionCookieHeaders();
+
+  if (expiredCookieHeaders.length === 0) {
+    return Response.json({ ok: false, error: "Verified PA booking identity is not ready." }, { status: 403 });
+  }
+
+  const headers = new Headers({ "Cache-Control": "no-store" });
+
+  for (const expiredCookieHeader of expiredCookieHeaders) {
+    headers.append("Set-Cookie", expiredCookieHeader);
+  }
+
+  return Response.json(
+    {
+      ok: false,
+      error: "Saved customer portal access was cleared. Review the request and submit it again.",
+    },
+    { headers, status: 409 },
   );
 }
 
@@ -195,7 +218,7 @@ export async function POST(request: Request) {
       : null;
 
     if (verifiedIdentity && !verifiedIdentity.ok) {
-      return Response.json({ ok: false, error: "Verified PA booking identity is not ready." }, { status: 403 });
+      return stalePortalAccessResponse();
     }
 
     const savedRequests: AdminBookingPersistenceRecord[] = [];

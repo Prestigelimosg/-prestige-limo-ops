@@ -137,7 +137,13 @@ async function loadRouteHarness() {
       "  const state = mock();",
       "  return state.verifiedIdentity || { ok: false, error: 'identity unavailable', status: 403 };",
       "}",
-      "module.exports = { resolveCustomerSavedBookingsBoundaryForPurpose, resolveCustomerSavedBookingsVerifiedIdentity };",
+      "function expiredCustomerSavedBookingsSessionCookieHeaders() {",
+      "  const state = mock();",
+      "  return state.expiredSessionCookieHeaders || [",
+      "    'prestige_customer_saved_bookings_session=; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Secure; SameSite=Lax; Priority=High',",
+      "  ];",
+      "}",
+      "module.exports = { expiredCustomerSavedBookingsSessionCookieHeaders, resolveCustomerSavedBookingsBoundaryForPurpose, resolveCustomerSavedBookingsVerifiedIdentity };",
     ].join("\n"),
   );
   await writeFile(
@@ -399,6 +405,49 @@ try {
     customer_id: "120",
   });
   assertSafeCustomerBody(verifiedPaSuccess.body, "verified PA success body");
+
+  const stalePortalMock = installMock({
+    portalBoundary: { data: { auth_user_id: "removed-portal-account" }, ok: true },
+    verifiedIdentity: {
+      error: "identity unavailable",
+      ok: false,
+      status: 403,
+    },
+  });
+  const stalePortalResponse = await harness.route.POST(
+    postRequest({ passengerName: "Safe Retry Passenger" }),
+  );
+  const stalePortal = await readJson(stalePortalResponse);
+
+  assert.equal(stalePortal.status, 409);
+  assert.deepEqual(stalePortal.body, {
+    error: "Saved customer portal access was cleared. Review the request and submit it again.",
+    ok: false,
+  });
+  assert.match(stalePortalResponse.headers.get("set-cookie") || "", /Max-Age=0/);
+  assert.match(stalePortalResponse.headers.get("set-cookie") || "", /HttpOnly/);
+  assert.match(stalePortalResponse.headers.get("set-cookie") || "", /Secure/);
+  assert.equal(stalePortalMock.createCalls.length, 0);
+  assertSafeCustomerBody(stalePortal.body, "stale portal retry body");
+
+  const unsafeCookieNameMock = installMock({
+    expiredSessionCookieHeaders: [],
+    portalBoundary: { data: { auth_user_id: "unsafe-cookie-config" }, ok: true },
+    verifiedIdentity: {
+      error: "identity unavailable",
+      ok: false,
+      status: 403,
+    },
+  });
+  const unsafeCookieNameResponse = await harness.route.POST(
+    postRequest({ passengerName: "Safe Fail Closed Passenger" }),
+  );
+  const unsafeCookieName = await readJson(unsafeCookieNameResponse);
+
+  assert.equal(unsafeCookieName.status, 403);
+  assert.equal(unsafeCookieNameResponse.headers.get("set-cookie"), null);
+  assert.equal(unsafeCookieNameMock.createCalls.length, 0);
+  assertSafeCustomerBody(unsafeCookieName.body, "unsafe cookie-name fail-closed body");
 
   installMock({
     createResults: [

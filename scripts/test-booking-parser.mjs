@@ -3516,6 +3516,74 @@ for (const sample of liveBugSamples) {
   }
 }
 
+const datedSharedPassengerAirportTransfersSample = `Good morning bro.  Please help me to arrange the following airport transfers for Deep:
+
+*Wed, 15 Jul 26*
+- Pickup at 6:10am from 327 River Valley Road, #16-01 Yong An Park, Singapore 238359 > T3.  Taking SQ422, ETD: 7:50am
+
+*Fri, 17 Jul 26*
+- Arriving via SQ423, ETA: 7:40am. Airport > 327 River Valley Road, #16-01 Yong An Park,\u00a0Singapore\u00a023835.`;
+const parsedDatedSharedPassengerAirportTransfers = parseJobCardBookingMessage(
+  datedSharedPassengerAirportTransfersSample,
+  { referenceDate: new Date(2026, 6, 15, 9, 0, 0) },
+) ?? {};
+assert.equal(parsedDatedSharedPassengerAirportTransfers.success, false);
+assert.equal(parsedDatedSharedPassengerAirportTransfers.multipleBookingsDetected, true);
+assert.equal(
+  parsedDatedSharedPassengerAirportTransfers.parserWarning,
+  'Multiple bookings detected. Please select one extracted booking.',
+);
+assert.equal(parsedDatedSharedPassengerAirportTransfers.name, 'Deep');
+assert.equal(parsedDatedSharedPassengerAirportTransfers.extractedBookingsPreview.length, 2);
+const [deepDepartureTransfer, deepArrivalTransfer] =
+  parsedDatedSharedPassengerAirportTransfers.extractedBookingsPreview;
+assert.deepEqual(
+  {
+    passenger: deepDepartureTransfer.passenger,
+    date: deepDepartureTransfer.date,
+    time: deepDepartureTransfer.time,
+    type: deepDepartureTransfer.type,
+    flight: deepDepartureTransfer.flight,
+    dropoff: deepDepartureTransfer.dropoff,
+  },
+  {
+    passenger: 'Deep',
+    date: '2026-07-15',
+    time: '0610hrs',
+    type: 'DEP',
+    flight: 'SQ422',
+    dropoff: 'Changi Airport T3',
+  },
+);
+assert.match(
+  deepDepartureTransfer.pickup,
+  /^327 River Valley Road, #16-01 Yong An Park\b/,
+  'departure pickup should retain the supplied River Valley / Yong An Park address',
+);
+assert.deepEqual(
+  {
+    passenger: deepArrivalTransfer.passenger,
+    date: deepArrivalTransfer.date,
+    time: deepArrivalTransfer.time,
+    type: deepArrivalTransfer.type,
+    flight: deepArrivalTransfer.flight,
+    pickup: deepArrivalTransfer.pickup,
+  },
+  {
+    passenger: 'Deep',
+    date: '2026-07-17',
+    time: '0740hrs',
+    type: 'MNG',
+    flight: 'SQ423',
+    pickup: 'Changi Airport',
+  },
+);
+assert.match(
+  deepArrivalTransfer.dropoff,
+  /^327 River Valley Road, #16-01 Yong An Park\b/,
+  'arrival drop-off should retain the supplied River Valley / Yong An Park address',
+);
+
 const multiCaseFormState = {
   company: '',
   bookingType: '',

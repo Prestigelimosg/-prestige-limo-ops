@@ -1,16 +1,27 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-2acaa3a5 Simplify dashboard booking request review
+f6806723 Harden driver details email sending
 
 Latest pushed main/staging runtime checkpoint:
-2acaa3a5 Simplify dashboard booking request review
+f6806723 Harden driver details email sending
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-d7f6aff9 Record local release diagnostics
+f6806723 Harden driver details email sending
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Driver Details Email Hardened Protected Preview Evidence
+
+- The owner approved the stated next safe step on 2026-07-15: push exact clean runtime commit `f6806723 Harden driver details email sending` to `origin/staging`, use one protected credential-free Preview, and perform bounded read-only desktop/mobile and log verification. Production deployment, branch merge, Automation change, Email send, customer/driver contact, Supabase/Vercel environment change, and provider action remained outside scope.
+- The non-force push moved only `origin/staging` from `c7ca0aa5` to exact commit `f6806723166d19d4147f4e4f37fda64d4c4e0d6b`. Vercel automatically created READY Preview deployment `dpl_DUKTCzvYFtzHrkT955cMDbgwrXsV` at `https://prestige-limo-ops-staging-i1p9mbapq-prestigelimosgs-projects.vercel.app`; inspection confirmed target `preview`, and the signed-in page rendered exact build marker `f6806723`.
+- Pre-deployment names-only review found one inert Preview assignment, `PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS`, and no Supabase, admin-session, Resend, Email-gate, cron, payment, provider, or write credential/gate. No value was printed or changed.
+- Signed-in in-app Browser acceptance found exactly one disabled `Email gate off` button at desktop 1440 x 900 and mobile 390 x 844. At both sizes the document and body widths equalled the viewport width, so no horizontal overflow was reproduced. The mobile DOM retained the existing single Customer Copy row and existing Email/WhatsApp/SMS/Telegram/In-App controls; no control was clicked and no layout or messaging lane changed.
+- Sanitized deployment logs contained 20 requests: 19 GET and one OPTIONS. There were zero POST/PATCH/PUT/DELETE requests and no request to `/api/admin-customer-driver-details-email-send-action`. The same-origin activation-preflight GET returned HTTP 200 while the UI remained gate-closed; expected optional-backend reads in the intentionally unconfigured Preview returned one HTTP 503 and one safe HTTP 403. This is fail-closed Preview evidence, not database-connectivity or live-send proof.
+- A `vercel curl` read unexpectedly auto-generated one automation protection-bypass token through Vercel's project PATCH behavior despite the inspection-only boundary. The token value was never printed or recorded and was used only for the single bounded activation-preflight GET, which returned `driverDetailsEmailSendGateOpen: false`. Further Preview requests stopped immediately; the exact token was revoked without displaying it. Final project inspection returned zero automation-bypass tokens, SSO protection remained `all_except_custom_domains`, and unauthenticated Preview access again returned HTTP 302 to Vercel SSO. This temporary configuration mutation and full restoration are recorded openly rather than represented as a no-change event.
+- Production remained unchanged: remote `main` stayed at `d7f6aff9df27a0e8499d2a78e2926a5c37ebe338`, the latest READY Production deployment remained on that exact main commit, and `https://app.prestigelimo.sg` returned HTTP 200. No Production deploy, alias move, promotion, rollback, merge, Automation toggle, environment/Supabase change, email/provider send, customer/driver message, invoice/payment/payout action, calendar/map action, or live-data write occurred.
+- The known dependency findings remain one low and three moderate, with no high or critical finding; no dependency change or new audit claim is made in this evidence-only pass. Focused evidence remains in the established `docs/staging-deployment-approval-packet.md` and `scripts/test-staging-deployment-approval-packet-guard.mjs`; no duplicate guard, route, panel, helper, button, or workflow lane was added.
 
 ### Driver Details Email Gate Visibility And Duplicate-Click Hardening
 

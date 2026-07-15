@@ -46,11 +46,11 @@ assertIncludes("activate any live feature", "no-live-feature boundary");
 const checkpointsSection = sectionBetween("## Checkpoints");
 assertSectionIncludes(
   checkpointsSection,
-  "Latest repo commit deployed to isolated Preview: `d7f6aff9 Record local release diagnostics`.",
+  "Latest repo commit deployed to isolated Preview: `f6806723 Harden driver details email sending`.",
 );
 assertSectionIncludes(
   checkpointsSection,
-  "Latest verified runtime checkpoint in the ledger: `2acaa3a5 Simplify dashboard booking request review`.",
+  "Latest verified runtime checkpoint in the ledger: `f6806723 Harden driver details email sending`.",
 );
 assertSectionIncludes(
   checkpointsSection,
@@ -98,8 +98,58 @@ for (const fragment of [
   "Booking Requests layout Preview approval: Owner explicitly approved proceeding with the suggested next safe step on 2026-07-14",
   "Dashboard Production deployment approval: After approving the protected Preview, the owner separately approved the next stated step on 2026-07-14",
   "Main branch alignment approval: After the exact branch drift and safest non-force sequence were reported, the owner explicitly approved proceeding on 2026-07-14",
+  "Driver Details Email hardened Preview approval: Owner explicitly approved proceeding with the stated next step on 2026-07-15",
 ]) {
   assertSectionIncludes(approvalSection, fragment, `Approval scope missing ${fragment}`);
+}
+
+const driverDetailsEmailPreviewSection = sectionBetween(
+  "## Driver Details Email Hardened Protected Preview Evidence",
+);
+for (const fragment of [
+  "`origin/staging` from `c7ca0aa5` to exact runtime commit `f6806723166d19d4147f4e4f37fda64d4c4e0d6b`",
+  "Remote `main` remained at `d7f6aff9df27a0e8499d2a78e2926a5c37ebe338`",
+  "READY Preview deployment `dpl_DUKTCzvYFtzHrkT955cMDbgwrXsV`",
+  "target `preview`",
+  "exact page build marker `f6806723`",
+  "only the inert `PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS` assignment",
+  "exactly one disabled `Email gate off` control",
+  "document/body width equal to viewport width",
+  "19 GET and one OPTIONS request",
+  "zero POST/PATCH/PUT/DELETE requests",
+  "no request to `/api/admin-customer-driver-details-email-send-action`",
+  "unexpectedly auto-generated one automation protection-bypass token",
+  "`driverDetailsEmailSendGateOpen: false`",
+  "final automation-bypass count returned to zero",
+  "SSO protection remained `all_except_custom_domains`",
+  "HTTP 302 to Vercel SSO",
+  "Production remained unchanged on remote main `d7f6aff9df27a0e8499d2a78e2926a5c37ebe338`",
+  "`https://app.prestigelimo.sg` returned HTTP 200",
+  "one low and three moderate, with no high or critical finding",
+]) {
+  assertSectionIncludes(
+    driverDetailsEmailPreviewSection,
+    fragment,
+    `Driver Details Email Preview evidence missing ${fragment}`,
+  );
+}
+
+for (const fragment of [
+  "### Driver Details Email Hardened Protected Preview Evidence",
+  "exact commit `f6806723166d19d4147f4e4f37fda64d4c4e0d6b`",
+  "READY Preview deployment `dpl_DUKTCzvYFtzHrkT955cMDbgwrXsV`",
+  "exactly one disabled `Email gate off` button",
+  "zero POST/PATCH/PUT/DELETE requests",
+  "no request to `/api/admin-customer-driver-details-email-send-action`",
+  "Final project inspection returned zero automation-bypass tokens",
+  "Production remained unchanged: remote `main` stayed at `d7f6aff9df27a0e8499d2a78e2926a5c37ebe338`",
+  "Focused evidence remains in the established `docs/staging-deployment-approval-packet.md` and `scripts/test-staging-deployment-approval-packet-guard.mjs`",
+]) {
+  assert.equal(
+    ledger.includes(fragment),
+    true,
+    `Implementation ledger missing Driver Details Email Preview evidence phrase ${fragment}.`,
+  );
 }
 
 const mainAlignmentSection = sectionBetween(

@@ -4,8 +4,8 @@ This packet records the approved deployment-safety configuration work, isolated 
 
 ## Checkpoints
 
-- Latest repo commit deployed to isolated Preview: `d7f6aff9 Record local release diagnostics`.
-- Latest verified runtime checkpoint in the ledger: `2acaa3a5 Simplify dashboard booking request review`.
+- Latest repo commit deployed to isolated Preview: `f6806723 Harden driver details email sending`.
+- Latest verified runtime checkpoint in the ledger: `f6806723 Harden driver details email sending`.
 - Latest Production deployment checkpoint: `d7f6aff9 Record local release diagnostics`.
 - Source of truth: `docs/current-implementation-ledger.md`.
 
@@ -33,6 +33,7 @@ This packet records the approved deployment-safety configuration work, isolated 
 - Booking Requests layout Preview approval: Owner explicitly approved proceeding with the suggested next safe step on 2026-07-14; scope was exact clean commit `2acaa3a5`, one isolated protected Preview, target/build/protection verification, signed-in desktop/390px/344px layout acceptance, and evidence recording only; no Git push, Production deployment, Automation or Push toggle, live-data action, calendar action, environment change, provider action, or external send was approved
 - Dashboard Production deployment approval: After approving the protected Preview, the owner separately approved the next stated step on 2026-07-14: push the local `staging` commits and deploy Production; this did not approve Automation/Push changes, booking decisions, notification cleanup, calendar/map action, invoice action, environment/database/provider changes, customer/driver messages, or external sends
 - Main branch alignment approval: After the exact branch drift and safest non-force sequence were reported, the owner explicitly approved proceeding on 2026-07-14; scope was a clean direct-ancestor fast-forward from reviewed `staging` to `main`, automatic Vercel Production deployment verification, and evidence recording only, with no Automation/Push change, live-data action, calendar/map action, invoice action, environment/database/provider change, customer/driver message, or external send
+- Driver Details Email hardened Preview approval: Owner explicitly approved proceeding with the stated next step on 2026-07-15; scope was a non-force push of exact clean runtime commit `f6806723` to `origin/staging`, one automatically created protected credential-free Preview, signed-in read-only desktop/mobile acceptance, sanitized log review, restored protection verification, and evidence recording only; no Production deployment, merge, Automation change, customer/driver contact, Email/provider send, live-data action, or environment/Supabase change was approved
 - Rollback owner: William / Prestige Limo SG
 - Notes: Keep all live DB/write, migrations, provider/env activation, external APIs, live sending, payment/PDF/payout, auth activation, live location, photo upload/storage, CRM/calendar amendment writes, and risky shim writes blocked.
 
@@ -130,6 +131,17 @@ This packet records the approved deployment-safety configuration work, isolated 
 - Preview names-only review still shows only the inert `PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS` assignment. No Supabase, admin-session, provider, payment, email, calendar, automation-write, or other live credential/gate was added.
 - Preview therefore remains intentionally fail-closed and cannot prove real booking queue rows. No booking decision, notification cleanup, Automation toggle, Push toggle, calendar/map action, invoice action, customer/driver message, or external send was performed.
 - The deployment command used no Production flag and no Git push occurred. No Production deployment, alias, environment, database, provider, or running Production state was changed.
+
+## Driver Details Email Hardened Protected Preview Evidence
+
+- The non-force push moved only `origin/staging` from `c7ca0aa5` to exact runtime commit `f6806723166d19d4147f4e4f37fda64d4c4e0d6b`. Remote `main` remained at `d7f6aff9df27a0e8499d2a78e2926a5c37ebe338`.
+- Vercel automatically created READY Preview deployment `dpl_DUKTCzvYFtzHrkT955cMDbgwrXsV` at `https://prestige-limo-ops-staging-i1p9mbapq-prestigelimosgs-projects.vercel.app`. Inspection confirmed target `preview`; signed-in Browser verification confirmed exact page build marker `f6806723`.
+- Preview's names-only configuration retained only the inert `PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS` assignment. No Supabase, admin-session, Resend, Email-gate, cron, payment, provider, or write credential/gate was added, printed, or changed.
+- Desktop 1440 x 900 and mobile 390 x 844 acceptance each found exactly one disabled `Email gate off` control and document/body width equal to viewport width. The single existing Customer Copy control row remained intact. No control was clicked.
+- Sanitized logs contained 19 GET and one OPTIONS request, zero POST/PATCH/PUT/DELETE requests, and no request to `/api/admin-customer-driver-details-email-send-action`. The same-origin activation-preflight GET returned HTTP 200 while the UI remained gate-closed; one optional unconfigured-backend read returned HTTP 503 and one returned safe HTTP 403.
+- `vercel curl` unexpectedly auto-generated one automation protection-bypass token through a project PATCH during a bounded GET. Its value was never printed or recorded; the GET returned `driverDetailsEmailSendGateOpen: false`. Inspection stopped, the exact token was revoked without displaying it, final automation-bypass count returned to zero, SSO protection remained `all_except_custom_domains`, and unauthenticated Preview access again returned HTTP 302 to Vercel SSO. The temporary configuration mutation and restoration are recorded explicitly.
+- Production remained unchanged on remote main `d7f6aff9df27a0e8499d2a78e2926a5c37ebe338`; `https://app.prestigelimo.sg` returned HTTP 200. No Production deployment, alias change, merge, Automation toggle, live-data write, environment/Supabase change, email/provider send, customer/driver contact, invoice/payment/payout action, or calendar/map action occurred.
+- The known dependency findings remain one low and three moderate, with no high or critical finding; no dependency change or fresh audit claim is made by this evidence-only record.
 
 ## Dashboard Booking Requests Production Deployment Evidence
 

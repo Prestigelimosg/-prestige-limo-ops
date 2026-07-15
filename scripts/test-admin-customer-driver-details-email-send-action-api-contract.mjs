@@ -392,6 +392,18 @@ assertIncludes(globalGuard, routePath, "Global no-live guard exact route excepti
 assertIncludes(globalGuard, guardScript, "Global no-live guard exact route contract script");
 assertIncludes(preactivationSuite, guardScript, "Preactivation suite Driver Details Email send guard");
 assertIncludes(ledger, "Resend Driver Details Email Gated Send Contract Lock", "Ledger Resend send contract lock");
+for (const evidenceFragment of [
+  "dpl_Aa5QVgCmTdgbvU9rmh6PjdFMz6JJ",
+  "9hwg5-1784091169050-9fdcc451cddf",
+  "exactly one `POST /api/admin-customer-driver-details-email-send-action`",
+  "same button changed to disabled `Emailed`",
+  "dpl_6BNaLqPrUcn7JNpiBUfDTK6dQeUX",
+  "zero later send-route requests",
+  "owner confirmed on 2026-07-15 that the single message was well received",
+  "no second Email is authorized merely to capture them",
+]) {
+  assertIncludes(ledger, evidenceFragment, `Ledger controlled Production evidence ${evidenceFragment}`);
+}
 assertIncludes(ledger, routePathFragment, "Ledger Resend send route");
 assertIncludes(ledger, gateEnvName, "Ledger Resend send gate");
 assertIncludes(

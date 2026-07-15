@@ -4,10 +4,10 @@ Latest verified clean runtime checkpoint:
 972eeee9 Parse shared passenger airport transfer lists
 
 Latest pushed main/staging runtime checkpoint:
-750d72a3 Parse tonight as current booking date
+972eeee9 Parse shared passenger airport transfer lists
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-8c9ffc5f Merge PR #1: Parse tonight as current booking date
+1b9dbfb3 Merge PR #3: Parse shared passenger airport transfer lists
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -20,7 +20,10 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Focused regression coverage in `scripts/test-booking-parser.mjs` uses the owner's exact message and requires exactly two extracted previews: Deep on 15 July 2026 at 0610hrs taking SQ422 from River Valley / Yong An Park to Changi Airport T3, and Deep on 17 July 2026 at 0740hrs arriving on SQ423 from Changi Airport to River Valley / Yong An Park. The new assertion failed before the repair because the shared passenger was blank.
 - The exact message passed through the actual isolated local Dispatch `Create Job Card` UI. Both preview rows displayed Deep with their correct dates, times, flights, and route direction; selecting each existing `Use this booking` action populated the matching established Booking Details fields with zero browser errors. Neither save action was clicked.
 - The focused parser suite, complete pre-activation suite, TypeScript, `git diff --check`, and Next.js 16.2.6 production build passed. Dependency audit remains the known one low and three moderate findings.
-- No booking/customer/driver/invoice row, CRM identity, calendar event, Google Maps wiring, price, payout, payment, OTS object, message, Email, external provider, Automation setting, schedule, Supabase/Vercel configuration, CRON_SECRET, Preview deployment, or Production deployment changed. Deployment remains a separate owner-approval step.
+- During the bounded source repair and protected Preview test, no booking/customer/driver/invoice row, CRM identity, calendar event, Google Maps wiring, price, payout, payment, OTS object, message, Email, external provider, Automation setting, schedule, Supabase/Vercel configuration, CRON_SECRET, or Production deployment changed. Production activation remained a separate owner-approved step.
+- After the owner confirmed the exact protected Preview result and approved proceeding, draft PR `#3` from `codex/deep-multi-airport-parser` to `main` was confirmed to contain only the established parser, focused regression guard, and this ledger; both Vercel checks passed, the PR was conflict-free, and it was merged without involving `staging` as `1b9dbfb3 Merge PR #3: Parse shared passenger airport transfer lists`.
+- The automatic Git-linked deployment `dpl_8YB1UupV6DTBhmEUmYqfhdxd75CL` reached READY Production, is current for `https://app.prestigelimo.sg`, returns HTTP 200, and identifies source `main` commit `1b9dbfb3`. Signed-in Production acceptance displayed build `1b9dbfb3` and clicked only the existing `Create Job Card` action for the owner's exact message: both previews showed Deep with the correct 15/17 July 2026 dates, SQ422/SQ423 flights, and departure/arrival route directions. Browser error logs were empty and no booking was saved.
+- The Production acceptance did not click either `Use this booking` action or any save, CRM, calendar, map, message, Email, payment, payout, invoice, customer, driver, or provider action. No Supabase/Vercel environment assignment or configuration changed, Automation was not toggled, and `CRON_SECRET` was not displayed, downloaded, or replaced.
 
 ### Dispatcher `Tonight` Relative-Date Parsing Repair (2026-07-15)
 

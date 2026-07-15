@@ -2,7 +2,7 @@
 
 Status: prepared for pre-1-August replacement-fixture planning; destructive execution not approved
 
-Recovery readiness: blocked pending an approved, verified logical export
+Recovery readiness: blocked pending successful restore verification of the encrypted logical export
 
 Prepared on 15 July 2026 SGT from a read-only, count-only inspection of the linked Prestige Limo Ops Supabase project and the established repository deletion lanes. No row values or personal data were read. Neither `CRON_SECRET` nor any other environment value was displayed, downloaded, or changed.
 
@@ -72,15 +72,25 @@ Production verification loaded the exact former proof booking through the establ
 
 This cleanup removes only the old OTS test artifacts. If later automated-system testing creates new OTS images or proof rows, those new artifacts require a fresh final inventory and cleanup after testing; this evidence must not be reused to assume future counts.
 
+### Encrypted Logical Export And Restore Blocker Evidence (2026-07-15)
+
+After owner approval, Supabase CLI `2.109.1` exported separate roles, schema, and data SQL files from the existing linked Production project. The files were packaged and encrypted outside the repository as `prestige-limo-ops-logical-20260715-165835.tar.enc` using AES-256-CBC with PBKDF2-SHA256 and 600,000 iterations. The encryption key is held in macOS Keychain under the established local secret boundary. The encrypted archive and HMAC integrity sidecar both remain outside the repository with owner-only file permissions.
+
+The encrypted archive is 3,806,240 bytes with SHA-256 `e247f411c9e0d3378d0cbe967e718cc2c0a02eba98d9dba31791b23069a80685`. HMAC verification, decrypt comparison, and the exact three-entry archive check passed. An offline schema-only check confirmed the expected `public.bookings` definition is present. Plaintext SQL working directories were permission-restricted and erased after each bounded attempt; all local restore containers and volumes were removed.
+
+Restore verification is not complete. The downloaded-cluster `db start --from-backup` path was rejected as incompatible with this manual logical SQL archive after its local database contained no restored application tables. The documented sequential `psql` roles/schema/data path then ran inside one local transaction and rolled back on one local permission error. The raw error and SQL data were not printed or committed, and no restored row counts were accepted.
+
+No destructive database cleanup is authorized while this blocker remains. The next safe action is limited to a sanitized inspection of the single local restore error and a repaired local-only restore verification. It must not alter the encrypted source archive, Production, Supabase/Vercel configuration, Automation, schedules, default rates, Storage, customer/driver messaging, calendar, Google Maps, invoice, payment, payout, or any external contact lane.
+
 The installed Google Calendar connector found zero matching `Prestige` events and zero matches for the approved Driver Details Email fixture in the authenticated primary calendar. The app's separately documented `Prestige Ops Calendar` remains unverified because that dedicated calendar was not exposed by the connector. Zero primary-calendar matches must not be represented as proof that the dedicated app calendar contains no test events.
 
 ## Live Dependency And Recovery Readiness
 
 A fresh schema-metadata inspection found 35 public foreign-key constraints across the candidate wipe relationships. Several use `RESTRICT`, `NO ACTION`, or `SET NULL`, and multiple operational tables retain booking scope only as text. A parent-table cascade is therefore not a complete wipe. No non-internal database trigger is configured on any candidate wipe table, so the inspected database has no target-table trigger that would send or enqueue an external action during deletion.
 
-Recovery remains blocked because no verified logical export exists. Neither the Supabase CLI nor `pg_dump` is installed, no local Supabase CLI access-token file is present, and no database credential was read, requested in chat, or displayed. Docker and linked-project metadata are present, but they are not a recoverable backup. The connected Supabase management/query tooling can verify metadata and counts but does not provide the approved logical-dump recovery artifact required by this packet.
+Recovery remains blocked because the encrypted logical export has not passed restore verification. The pinned Supabase CLI ran through `npx` without being added to the application dependencies, and Docker was used only for isolated local dump/restore tooling. The existing database password was retrieved from macOS Keychain without printing it; it was not placed in the repository, documentation, command output, or chat.
 
-The proposed database recovery method is an owner-approved Supabase CLI logical export of roles, schema, and data to an encrypted location outside the repository, followed by a restore verification before any deletion. This creates no temporary Supabase branch and no Supabase branch/project charge. The database credential must be supplied through a secure non-chat method and must never appear in command output, shell history, repository files, documentation, or logs.
+The approved database recovery method remains a Supabase CLI logical export of roles, schema, and data to an encrypted location outside the repository, followed by a successful restore verification before any deletion. The export now exists, but its restore proof is incomplete as recorded above. No temporary Supabase branch or paid Supabase resource was created.
 
 Storage objects are not included in a database dump. For the old two confirmed test artifacts, the owner explicitly accepted that no recovery copy was required and their completed bounded cleanup is recorded above. Any future Storage artifact requires a fresh recovery decision before deletion. Dedicated Google Calendar cleanup remains a separately inventoried and separately approved external action.
 
@@ -130,4 +140,4 @@ Zero-count verification must cover every approved table and artifact class, plus
 
 ## Exact Next Approval
 
-The next approval is limited to creating and verifying the encrypted local logical export for the remaining database test data and defining a secure non-chat database-credential path. The old two OTS test images and one proof row are already removed without a recovery copy under the owner's explicit approval; any newly created OTS artifacts require a fresh later decision. After database recovery proof exists, a separate final action-time approval must name the exact maintenance window and Automation handling, refreshed count-only deletion scope, exact preserved rows, Storage/calendar classification, rollback method, and zero-count/orphan assertions. Only then may the owner approve one bounded pre-1-August cleanup execution. The scheduler date, code, cron, layouts, and wired lanes remain unchanged; the owner must not create the replacement bookings until cleanup verification passes.
+The next approval is limited to sanitized inspection of the single local restore permission error and repaired local-only restore verification of the existing encrypted export. The archive must remain unchanged, and no further Production dump or destructive action is approved by this evidence. The old two OTS test images and one proof row are already removed without a recovery copy under the owner's explicit approval; any newly created OTS artifacts require a fresh later decision. After database recovery proof exists, a separate final action-time approval must name the exact maintenance window and Automation handling, refreshed count-only deletion scope, exact preserved rows, Storage/calendar classification, rollback method, and zero-count/orphan assertions. Only then may the owner approve one bounded pre-1-August cleanup execution. The scheduler date, code, cron, layouts, and wired lanes remain unchanged; the owner must not create the replacement bookings until cleanup verification passes.

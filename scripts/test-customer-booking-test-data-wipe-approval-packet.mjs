@@ -29,7 +29,7 @@ function assertIncludes(source, fragment, label = fragment) {
 for (const fragment of [
   "# Customer, Booking, And Invoice Test-Data Wipe Approval Packet",
   "Status: prepared for pre-1-August replacement-fixture planning; destructive execution not approved",
-  "Recovery readiness: blocked pending an approved, verified logical export",
+  "Recovery readiness: blocked pending successful restore verification of the encrypted logical export",
   "all current customer, booking, invoice, and driver records are testing-only",
   "No deletion occurred during this preparation pass.",
   "old test data may be cleaned before the first real monthly scheduler proof",
@@ -67,8 +67,8 @@ for (const fragment of [
   "Automation remains ON and was not changed",
   "Supabase organization is on the Free plan",
   "No recoverable restore point is assumed",
-  "Neither the Supabase CLI nor `pg_dump` is installed",
-  "no local Supabase CLI access-token file is present",
+  "The pinned Supabase CLI ran through `npx` without being added to the application dependencies",
+  "The existing database password was retrieved from macOS Keychain without printing it",
   "No non-internal database trigger is configured on any candidate wipe table",
   "must not create replacement test bookings until the wipe and zero-count/orphan verification are complete",
   "One was tied to the then-current OTS proof row and a current test booking",
@@ -90,6 +90,11 @@ for (const fragment of [
   "0 OTS image objects, 0 OTS proof rows, and 2 dashboard-created empty-folder placeholders",
   "Both Storage API delete requests returned HTTP 200",
   "Default-rate fingerprint remained unchanged and Automation remained ON",
+  "### Encrypted Logical Export And Restore Blocker Evidence (2026-07-15)",
+  "prestige-limo-ops-logical-20260715-165835.tar.enc",
+  "The encrypted archive and HMAC integrity sidecar both remain outside the repository",
+  "Restore verification is not complete",
+  "No destructive database cleanup is authorized while this blocker remains",
 ]) {
   assertIncludes(packet, fragment);
 }
@@ -99,7 +104,7 @@ for (const fragment of [
   "The owner declared that all current customer, booking, and invoice records are testing-only.",
   "The owner replaced the previous after-1-August cleanup timing with a pre-1-August old-test-data wipe followed by fresh controlled July fixtures.",
   "The Production scheduler remains unchanged at 1 August 2026 at 08:00 SGT",
-  "Recovery remains blocked because no verified logical export exists",
+  "Recovery remains blocked because the encrypted logical export has not passed restore verification",
   "no candidate wipe table has a non-internal database trigger",
   "must not create the replacement bookings until cleanup verification passes",
   "two billing-ready completed July bookings for one test customer and at least one for a different test customer",
@@ -114,6 +119,10 @@ for (const fragment of [
   "### OTS Test Artifact Cleanup Evidence (2026-07-15)",
   "0 OTS image objects and 0 OTS proof rows",
   "two dashboard-created empty-folder placeholders",
+  "### Encrypted Logical Export And Restore Blocker Evidence (2026-07-15)",
+  "encrypted roles/schema/data archive exists outside the repository",
+  "single-transaction logical restore rolled back on one local permission error",
+  "No Production row, schema, configuration, Automation state, deployment, or external lane changed",
 ]) {
   assertIncludes(ledger, fragment, `ledger phrase ${fragment}`);
 }

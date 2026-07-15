@@ -315,6 +315,13 @@ const seed = {
       status: "assigned",
       updated_at: "2026-05-29T02:30:00.000Z",
     },
+    {
+      admin_internal_status: "draft",
+      booking_reference: "CODEX-ACCEPT-20260711212612",
+      id: 135,
+      status: null,
+      updated_at: "2026-07-11T13:26:12.000Z",
+    },
   ],
 };
 
@@ -711,6 +718,43 @@ try {
   assert.equal(bookingReferenceMock.client.updateHistory[1].selectedColumns, "id, booking_reference, status, updated_at");
   assert.equal(bookingReferenceMock.client.updateHistory[1].payload.status, "completed");
   assertNoUnsafeResponse(bookingReferenceResult, "booking-reference response");
+
+  setEnv(enabledEnv());
+
+  const multiSegmentBookingReferenceMock = installMockClient(seed);
+  const multiSegmentBookingReferenceResult = await routeJson(
+    await route.PATCH(
+      jsonRequest("http://localhost/api/admin-saved-booking-statuses", {
+        booking_id: "CODEX-ACCEPT-20260711212612",
+        status: "cancelled",
+      }),
+    ),
+  );
+
+  assert.equal(multiSegmentBookingReferenceResult.status, 200);
+  assert.equal(multiSegmentBookingReferenceResult.body.ok, true);
+  assert.equal(
+    multiSegmentBookingReferenceResult.body.booking.id,
+    "CODEX-ACCEPT-20260711212612",
+  );
+  assert.equal(multiSegmentBookingReferenceResult.body.booking.status, "cancelled");
+  assert.equal(multiSegmentBookingReferenceMock.client.updateHistory.length, 2);
+  assert.deepEqual(multiSegmentBookingReferenceMock.client.updateHistory[0].filters, [
+    {
+      column: "booking_reference",
+      type: "eq",
+      value: "CODEX-ACCEPT-20260711212612",
+    },
+  ]);
+  assert.equal(
+    multiSegmentBookingReferenceMock.client.updateHistory[0].payload.admin_internal_status,
+    "cancelled",
+  );
+  assert.equal(multiSegmentBookingReferenceMock.client.updateHistory[1].payload.status, "cancelled");
+  assertNoUnsafeResponse(
+    multiSegmentBookingReferenceResult,
+    "multi-segment booking-reference response",
+  );
 
   setEnv(enabledEnv());
 

@@ -12,6 +12,16 @@ b0a68cae Repair dashboard release checkpoint guards
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Multi-Segment Saved Booking Reference Status Repair
+
+- The owner reported that the existing Bookings `Cancel` action produced no visible result for the Codex-created test booking `CODEX-ACCEPT-20260711212612`. Signed-in Production reproduction isolated exactly one row, and the owner confirmed it is test-only; no customer contact or external send was involved.
+- Production request logs proved the existing button reached the established `PATCH /api/admin-saved-booking-statuses` lane but received HTTP 500. A read-only Supabase check found exactly one matching row with numeric id `135`, legacy `status = null`, and `admin_internal_status = draft`; no data was changed.
+- The established persistence helper recognized only references with digits immediately after the first prefix segment, such as `CUST-<digits>`. It therefore misclassified the valid multi-segment `CODEX-ACCEPT-<digits>` reference as the bigint `id` target. PostgreSQL rejected that text value for the numeric id filter before any status write.
+- The existing target selector now accepts multi-segment reference prefixes before the required date/time digit segment and continues treating non-reference ids through the established id path. No second route, helper, button, status lane, booking write path, or layout was added.
+- The focused API contract now reproduces the exact Production-shaped numeric-id/multi-segment-reference row and requires both current `admin_internal_status` and legacy `status` mirrors to target `booking_reference`. The existing booking browser suite also requires the Bookings `Cancel` button to issue exactly one typed PATCH, remove the cancelled row from the active list, and avoid unhandled Supabase calls.
+- Before the source repair, one forced upload never entered a valid Vercel build state and was removed without receiving the Production alias. A subsequent native rebuild of the exact unchanged Production commit `d7f6aff9` reached READY deployment `dpl_4DqFZeznSGaERVT2iZp345fDtnuQ`, retained HTTP 200 and the same build marker, and correctly reproduced the HTTP 500; it did not change application code or configuration and did not resolve or hide the defect.
+- This source checkpoint does not itself deploy the repair or delete/cancel the test booking. At this point Production remains on unchanged code `d7f6aff9`, the exact test row remains `draft`, and Automation, Vercel/Supabase configuration, environment values, calendar/maps, invoices, payments, payouts, messaging, and provider state are unchanged. Deployment and the approved UI-only Cancel → Completed → Delete verification remain separate controlled actions.
+
 ### Admin Operational Pickup Time SGT Display Repair
 
 - The owner supplied Production evidence that the existing `Codex Prepared Job Cards` row displayed the raw server value `2026-07-18T03:00:00+00:00` instead of Singapore local time. Earlier acceptance verified queue presence, responsive containment, and Automation/conflict state but did not assert the rendered pickup-time format; that missing acceptance coverage is not represented as a completed fix.

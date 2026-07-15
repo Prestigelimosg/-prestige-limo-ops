@@ -307,7 +307,7 @@ function validBookingId(value: unknown) {
 }
 
 function bookingStatusTargetColumn(bookingId: string): "booking_reference" | "id" {
-  return /^[A-Z]{2,8}-\d{8,}[A-Z0-9-]*$/.test(bookingId)
+  return /^[A-Z][A-Z0-9-]*-\d{8,}[A-Z0-9-]*$/i.test(bookingId)
     ? "booking_reference"
     : "id";
 }

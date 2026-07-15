@@ -1,13 +1,13 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-3ffe5c30 Harden driver details email sending
+750d72a3 Parse tonight as current booking date
 
 Latest pushed main/staging runtime checkpoint:
 3ffe5c30 Harden driver details email sending
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-e7c8c7e3 Record interrupted driver email production test
+df12b545 Record controlled driver email production evidence
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.

@@ -1,6 +1,6 @@
 # Customer, Booking, And Invoice Test-Data Wipe Approval Packet
 
-Status: prepared; execution deferred and not approved
+Status: prepared for pre-1-August replacement-fixture planning; destructive execution not approved
 
 Prepared on 15 July 2026 SGT from a read-only, count-only inspection of the linked Prestige Limo Ops Supabase project and the established repository deletion lanes. No row values or personal data were read. Neither `CRON_SECRET` nor any other environment value was displayed, downloaded, or changed.
 
@@ -8,9 +8,11 @@ No deletion occurred during this preparation pass. No destructive SQL, executor 
 
 ## Owner Classification And Timing
 
-The owner declared on 15 July 2026 that all current customer, booking, invoice, and driver records are testing-only and may ultimately be cleaned before live operations. This is the owner's operational classification, not a legal conclusion and not an assumption about records outside those four domains.
+The owner declared on 15 July 2026 that all current customer, booking, invoice, and driver records are testing-only and may ultimately be cleaned before real operations begin. This is the owner's operational classification, not a legal conclusion and not an assumption about records outside those four domains.
 
-The controlled Driver Details Email test is complete: one approved message reached the owner mailbox, Production returned to `Email gate off`, and no retry occurred. The safest wipe timing remains after the first real monthly scheduler proof due on 1 August 2026 at 08:00 SGT, then before real operations begin. That proof still needs exact, approved test fixtures. Deleting their fixtures now would weaken or prevent the remaining runtime evidence.
+The controlled Driver Details Email test is complete: one approved message reached the owner mailbox, Production returned to `Email gate off`, and no retry occurred. The owner subsequently approved a replacement-fixture plan: old test data may be cleaned before the first real monthly scheduler proof, provided a fresh controlled July fixture set is created through the established app afterward and retained until the proof finishes. This replaces the earlier fixture-preservation timing recommendation; it does not approve destructive execution yet.
+
+The Production scheduler remains unchanged at 1 August 2026 at 08:00 SGT. The intended minimum eligible fixture set is two completed billing-ready July bookings for the same test customer plus at least one completed billing-ready July booking for a different test customer. The owner may create more clearly marked test bookings, but the exact eligible fixture set must be recorded before the run. If only those three bookings are eligible, the expected scheduler result is two internal `pending_admin_review` drafts: one two-trip customer group and one one-trip customer group. No invoice issue or customer email is expected.
 
 If real operations begin before the scheduler proof finishes, this packet expires and the scope must be re-inventoried. Any genuine business or financial record found during revalidation must be excluded from this test-data wipe and reported for a separate owner decision.
 
@@ -46,13 +48,13 @@ The invoice delivery states are database aggregates only; they neither prove nor
 
 ### System, Driver, And Storage Boundaries
 
-- 5 driver master rows. The owner has now classified all five as test-only, so they may enter the later candidate wipe only after the scheduler proof and fresh action-time approval.
+- 5 driver master rows. The owner has now classified all five as test-only, so they may enter the pre-1-August candidate wipe only after booking and driver-child dependencies are cleared and fresh action-time approval is recorded.
 - 1 admin automation runtime setting, 2 admin device push subscriptions, 1 driver live-location runtime setting, 1 rate setting, and 1 company profile setting.
 - 2 Storage objects in 1 bucket. Object paths and contents were not read. The single photo-proof database row does not justify assuming what either object contains.
 
-## Post-Email Read-Only Revalidation
+## Latest Read-Only Revalidation
 
-After the controlled Driver Details Email proof completed, a fresh count-only Supabase inspection found 66 bookings: 23 `admin_review_required`, 5 `assigned`, 7 `cancelled`, 12 `completed`, 3 `confirmed`, 14 `draft`, and 2 `needs_review`. The database still contains 95 customers, 5 test-only drivers, 13 customer invoice records, 7 completed closeouts, and zero monthly invoice drafts. Automation remains ON and was not changed.
+After the controlled Driver Details Email proof completed, the latest fresh count-only Supabase inspection found 66 bookings: 23 `admin_review_required`, 5 `assigned`, 7 `cancelled`, 12 `completed`, 3 `confirmed`, 14 `draft`, and 2 `needs_review`. The database still contains 95 customers, 5 test-only drivers, 13 customer invoice records, 7 completed closeouts, zero monthly invoice drafts, 115 route points, 5 service items, 65 driver job links, 74 driver job status events, 82 customer/driver app-notification rows, 32 admin app-notification rows, 3,592 driver live-location audit events, zero latest-position rows, 1 OTS proof row, and 2 Storage objects. Automation remains ON and was not changed.
 
 The Supabase organization is on the Free plan. Supabase documents automatic daily backups for Pro, Team, and Enterprise projects and recommends that Free projects maintain their own logical exports. No recoverable restore point is assumed, and no backup, temporary branch, or data copy was created during this inspection.
 
@@ -68,7 +70,7 @@ The prepared cleanup must reuse verified relationships and dependency knowledge 
 
 ## Candidate Test-Data Scope
 
-Subject to a fresh count-only revalidation and exact action-time approval, the later wipe may include:
+Subject to a fresh count-only revalidation and exact action-time approval, the pre-1-August wipe may include:
 
 - Customer and identity records: customer contacts and access accounts, saved addresses, travelers, bookers, companies, and customers.
 - Booking records and children: route points, service items, workflow statuses, completed closeouts, booking-scoped notifications and audit rows, bids and offers, driver job links/status/actual-time records, live-location rows, OTS proof metadata, and bookings.
@@ -76,7 +78,7 @@ Subject to a fresh count-only revalidation and exact action-time approval, the l
 - The 5 test-only driver master rows after booking and driver-child dependencies are cleared.
 - The 2 mapped OTS Storage objects only in the final separately approved execution window.
 
-String booking references and nullable relationships are not fully protected by database cascades. A later cleanup cannot rely on customer or booking deletion alone to remove audit, notification, live-location, invoice, or Storage artifacts.
+String booking references and nullable relationships are not fully protected by database cascades. The cleanup cannot rely on customer or booking deletion alone to remove audit, notification, live-location, invoice, or Storage artifacts.
 
 ## Rows Preserved By This Packet
 
@@ -86,7 +88,7 @@ Preserve system and configuration rows, including Automation/runtime settings, p
 
 Execution must stop unless every item below is satisfied:
 
-1. The first real monthly scheduler proof has finished and the owner reconfirms that real operations have not begun.
+1. The owner reconfirms that real operations have not begun and that the fresh replacement-fixture set can be created and completed before 1 August 2026 at 08:00 SGT.
 2. A fresh count-only inventory matches an exact proposed scope; any newly created or genuine record is excluded and reported.
 3. The owner separately approves an exact write freeze and maintenance window. Public booking intake, admin/customer writes, schedulers, and Automation must not race the cleanup; any state or configuration change requires separate owner approval.
 4. A recoverable database restore point is verified instead of assumed. [Supabase documents that Storage objects are not included in database backups](https://supabase.com/docs/guides/platform/backups), so any desired Storage recovery copy must be handled separately.
@@ -94,13 +96,14 @@ Execution must stop unless every item below is satisfied:
 6. A separate read-only Google Calendar inventory determines whether test-booking events exist. Removing test calendar events is a separate external action requiring exact approval; database cleanup alone is not a complete calendar cleanup.
 7. The owner accepts that historical backups and logs may retain pre-wipe data for their configured retention period and that previously sent external messages cannot be recalled by this operation.
 8. An exact dry-run report, ordered dependency plan, rollback point, expected final counts, and action-time approval are recorded immediately before execution.
+9. After zero-count and orphan verification, the owner creates clearly marked replacement test customers, drivers, and July bookings through the established app. At least two billing-ready completed July bookings must share one test customer and at least one must use a different test customer; all scheduler fixtures remain un-invoiced until the 1 August proof.
 
-## Reviewed Execution Shape For Later Approval
+## Reviewed Execution Shape For Action-Time Approval
 
-The later bounded operation should first freeze writes and capture recovery evidence, then map external/Storage artifacts before their references are removed. It should clear the deepest finance and booking children before their parents, clear scoped orphan-prone reference rows explicitly, and remove customer/CRM identity parents only after all blockers are gone. No table, schema, policy, application lane, or preserved configuration row should be removed.
+The bounded operation should first freeze writes and capture recovery evidence, then map external/Storage artifacts before their references are removed. It should clear the deepest finance and booking children before their parents, clear scoped orphan-prone reference rows explicitly, and remove customer/CRM identity parents only after all blockers are gone. No table, schema, policy, application lane, or preserved configuration row should be removed.
 
 Zero-count verification must cover every approved table and artifact class, plus orphan checks for booking references, customer references, invoice references, driver-job links, Storage objects, and separately approved calendar events. Automation/intake restoration, if any, requires an explicit post-cleanup decision and a clean verification report.
 
 ## Exact Next Approval
 
-No wipe approval should be requested now. After the 1 August scheduler proof passes, present the refreshed counts, exact retained fixtures (normally none), exact preserved rows, Storage/calendar classification, verified restore point, maintenance-window controls, rollback method, and zero-count assertions. The owner can then approve or reject one bounded cleanup execution without changing application layouts or wiring.
+The next action-time approval must name the recovery method, exact maintenance window and Automation handling, final count-only deletion scope, exact preserved rows, Storage/calendar classification, rollback method, and zero-count/orphan assertions. Only after that review may the owner approve one bounded pre-1-August cleanup execution. The scheduler date, code, cron, layouts, and wired lanes remain unchanged; fresh replacement fixtures are created only after cleanup verification succeeds.

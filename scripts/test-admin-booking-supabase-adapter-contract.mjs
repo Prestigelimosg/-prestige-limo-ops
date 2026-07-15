@@ -102,10 +102,15 @@ async function writeMockModules(tempDir) {
   const serverOnlyPath = path.join(tempDir, "node_modules/server-only/index.js");
   const supabasePath = path.join(tempDir, "node_modules/@supabase/supabase-js/index.js");
   const webPushPath = path.join(tempDir, "node_modules/web-push/index.js");
+  const jobCardPreparationPath = path.join(
+    tempDir,
+    "lib/codex-job-card-auto-preparation.js",
+  );
 
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await mkdir(path.dirname(supabasePath), { recursive: true });
   await mkdir(path.dirname(webPushPath), { recursive: true });
+  await mkdir(path.dirname(jobCardPreparationPath), { recursive: true });
   await writeFile(serverOnlyPath, "");
   await writeFile(
     supabasePath,
@@ -128,6 +133,13 @@ async function writeMockModules(tempDir) {
       "async function sendNotification() { return { statusCode: 201 }; }",
       "module.exports = { setVapidDetails, sendNotification };",
       "module.exports.default = module.exports;",
+    ].join("\n"),
+  );
+  await writeFile(
+    jobCardPreparationPath,
+    [
+      "async function prepareCodexJobCardForAdminReview() {}",
+      "module.exports = { prepareCodexJobCardForAdminReview };",
     ].join("\n"),
   );
 }

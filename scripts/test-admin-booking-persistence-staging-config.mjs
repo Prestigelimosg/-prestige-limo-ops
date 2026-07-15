@@ -21,6 +21,7 @@ const sourceFiles = [
   "app/api/admin-bookings/route.ts",
   "app/api/customer-booking-requests/route.ts",
 ];
+const implementationLedgerPath = "docs/current-implementation-ledger.md";
 const originalEnv = {
   NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
   PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED:
@@ -650,5 +651,43 @@ try {
   delete globalThis.__prestigeStagingConfigMock;
   await harness.cleanup();
 }
+
+const implementationLedger = await readFile(implementationLedgerPath, "utf8");
+
+assert.match(
+  implementationLedger,
+  /### Production Supabase Legacy API Key Cutoff Evidence \(2026-07-15\)/,
+  "Expected the implementation ledger to record the bounded Production legacy-key cutoff.",
+);
+assert.match(
+  implementationLedger,
+  /dpl_GTjk3tJdVofKKy36bVFwPmP6sG4Y/,
+  "Expected the implementation ledger to record the verified replacement-key Production deployment.",
+);
+assert.match(
+  implementationLedger,
+  /legacy `anon` and `service_role` keys are disabled/,
+  "Expected the implementation ledger to record both legacy API keys as disabled.",
+);
+assert.match(
+  implementationLedger,
+  /remain valid as JWTs until a separately approved project JWT-secret rotation/,
+  "Expected the implementation ledger to preserve the residual legacy-JWT risk and approval boundary.",
+);
+assert.match(
+  implementationLedger,
+  /Default prices, customer and driver records, bookings, invoices, OTS objects, Automation, schedules, and CRON_SECRET were not changed/,
+  "Expected the implementation ledger to preserve the bounded no-data/no-price-change boundary.",
+);
+assert.doesNotMatch(
+  implementationLedger,
+  /sb_secret_[A-Za-z0-9_-]{20,}/,
+  "The implementation ledger must never record a modern Supabase secret key.",
+);
+assert.doesNotMatch(
+  implementationLedger,
+  /eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/,
+  "The implementation ledger must never record a legacy JWT API key.",
+);
 
 console.log("Admin booking persistence staging config readiness tests passed.");

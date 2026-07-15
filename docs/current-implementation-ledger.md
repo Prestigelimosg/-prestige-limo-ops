@@ -12,6 +12,20 @@ f6806723 Harden driver details email sending
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Production Supabase Legacy API Key Cutoff Evidence (2026-07-15)
+
+- An existing legacy Supabase `service_role` credential was treated as compromised after accidental diagnostic disclosure. No credential value is committed or recorded in this ledger, and the exposed legacy credential was removed from the ignored local evidence environment file.
+- The existing default modern Supabase secret key was copied while masked; no new key, project, branch, database, table, policy, bucket, or Storage object was created.
+- Vercel Production variable `SUPABASE_SERVICE_ROLE_KEY` was updated in place as Sensitive with the modern secret. `CRON_SECRET` and every other Production variable were untouched.
+- Exact current Production deployment `dpl_12km9H1MWMEyydRY9XjqXnFrL1fs` was redeployed without staging source or code promotion. Replacement-key Production deployment `dpl_GTjk3tJdVofKKy36bVFwPmP6sG4Y` reached `READY` and retained the `app.prestigelimo.sg` alias.
+- Before legacy cutoff, the Production root and Customers page returned HTTP 200 and the authenticated established `Load Accounts` read completed against live Supabase data.
+- After owner action-time confirmation, the legacy `anon` and `service_role` keys are disabled. Supabase key inventory reports the legacy anon key disabled and the default modern publishable key active.
+- Supabase's disable dialog explicitly warned that disabling legacy keys rejects them in the `apikey` header, but the legacy tokens remain valid as JWTs until a separately approved project JWT-secret rotation. Full invalidation is therefore not yet proven. Stop before JWT-secret rotation: inspect every JWT/session consumer and rollback impact first, then obtain separate owner approval. No JWT secret, signing key, authentication session, or JWT configuration was changed in this pass.
+- After legacy cutoff, the Production root and Customers page again returned HTTP 200, and the authenticated established `Load Accounts` read completed with `Loaded 10 saved customer accounts. Showing 1-17 of 17 customers.` This was read-only verification; it did not issue an invoice, send a message, or write a row.
+- The ignored local browser-client variable now uses the default modern publishable key. No secret value was placed in source control, documentation, command arguments, or the ledger, and the clipboard was cleared after each bounded transfer.
+- Default prices, customer and driver records, bookings, invoices, OTS objects, Automation, schedules, and CRON_SECRET were not changed. No Email, WhatsApp, SMS, Telegram, calendar, Google Maps, payment, payout, invoice issue, customer/driver contact, data wipe, Storage deletion, schema change, branch merge, or staging-code deployment occurred.
+- Focused lock: `scripts/test-admin-booking-persistence-staging-config.mjs` accepts the modern `sb_secret_...` server credential shape, requires this bounded runtime evidence, and rejects committed modern-secret or legacy-JWT key values.
+
 ### Multi-Segment Saved Booking Reference Status Repair
 
 - The owner reported that the existing Bookings `Cancel` action produced no visible result for the Codex-created test booking `CODEX-ACCEPT-20260711212612`. Signed-in Production reproduction isolated exactly one row, and the owner confirmed it is test-only; no customer contact or external send was involved.

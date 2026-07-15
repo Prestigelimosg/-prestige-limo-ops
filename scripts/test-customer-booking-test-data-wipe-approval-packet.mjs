@@ -71,8 +71,8 @@ for (const fragment of [
   "no local Supabase CLI access-token file is present",
   "No non-internal database trigger is configured on any candidate wipe table",
   "must not create replacement test bookings until the wipe and zero-count/orphan verification are complete",
-  "One is tied to the current OTS proof row and a current test booking",
-  "second is an orphaned OTS artifact with no proof row and no current booking",
+  "One was tied to the then-current OTS proof row and a current test booking",
+  "second was an orphaned OTS artifact with no proof row and no current booking",
   "Prestige Ops Calendar` remains unverified",
   "The 5 test-only driver master rows",
   "No row values or personal data were read",
@@ -86,6 +86,10 @@ for (const fragment of [
   "Preserve system and configuration rows",
   "Zero-count verification",
   "No destructive SQL, executor route, helper, runner, deployment, configuration change, Automation toggle, external send, or data write is authorized or included.",
+  "### OTS Test Artifact Cleanup Evidence (2026-07-15)",
+  "0 OTS image objects, 0 OTS proof rows, and 2 dashboard-created empty-folder placeholders",
+  "Both Storage API delete requests returned HTTP 200",
+  "Default-rate fingerprint remained unchanged and Automation remained ON",
 ]) {
   assertIncludes(packet, fragment);
 }
@@ -107,6 +111,9 @@ for (const fragment of [
   "The owner requested removal of the external tax-retention wording.",
   "`docs/customer-booking-test-data-wipe-approval-packet.md`",
   "`scripts/test-customer-booking-test-data-wipe-approval-packet.mjs`",
+  "### OTS Test Artifact Cleanup Evidence (2026-07-15)",
+  "0 OTS image objects and 0 OTS proof rows",
+  "two dashboard-created empty-folder placeholders",
 ]) {
   assertIncludes(ledger, fragment, `ledger phrase ${fragment}`);
 }

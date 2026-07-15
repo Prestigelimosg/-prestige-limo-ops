@@ -47,6 +47,16 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No Vercel environment, Supabase API key, Supabase project configuration beyond the approved previous-key revocation, application source, deployment, branch, customer or driver record, booking, invoice, default price, schedule, Automation setting, CRON_SECRET, calendar, Google Maps, messaging, Email, provider send, payment, payout, or external contact changed. No secret, JWT, signed URL, token, cookie, or environment value is committed or recorded in this ledger.
 - Focused lock: `scripts/test-admin-booking-persistence-staging-config.mjs` requires this revocation and post-revocation Production-read evidence while continuing to reject committed modern Supabase secret keys and legacy JWT-shaped keys.
 
+### OTS Test Artifact Cleanup Evidence (2026-07-15)
+
+- The owner explicitly approved permanent removal of only the two confirmed test OTS image objects and their single proof row, accepted that the test images would not be recoverable, and required the bucket, policies, OTS wiring, default price, and all booking, customer, driver, and invoice records to remain intact.
+- Both exact image deletions used the signed-in Supabase Storage API surface. Both Storage API delete requests returned HTTP 200 and produced `ObjectRemoved:Delete` lifecycle events; no direct SQL object deletion was used.
+- The first guarded proof-row deletion stopped without changing metadata because the Storage inventory still counted two entries. Read-only diagnosis proved those entries were two dashboard-created empty-folder placeholders rather than OTS images or unexpected files.
+- A second guarded transaction deleted only the one stale proof row after requiring zero OTS images, zero unexpected bucket objects, exactly two placeholders, exactly one proof row, and no proof row backed by a live image. The final authoritative state is 0 OTS image objects and 0 OTS proof rows, with two dashboard-created empty-folder placeholders retained.
+- Signed-in Production verification of the exact former proof booking showed `No OTS photo proof` and no `View photo` link. Automation remained ON.
+- The cleanup preserved 66 bookings, 95 customers, 5 drivers, 13 invoice records, the single existing rate setting, and the unchanged default-rate fingerprint `b8f385ed540bdcf025286739b6ad2dc6`. It did not change or remove the Storage bucket, policies, schema, OTS UI/API wiring, default price, Vercel/Supabase configuration, deployment, Automation schedule, CRON_SECRET, customer/driver messaging, calendar, Google Maps, invoice issuance, payment, payout, or any external provider/contact lane.
+- Any new OTS artifacts created during later automated-system testing are outside this completed cleanup and require a fresh inventory and explicit action-time cleanup approval.
+
 ### Multi-Segment Saved Booking Reference Status Repair
 
 - The owner reported that the existing Bookings `Cancel` action produced no visible result for the Codex-created test booking `CODEX-ACCEPT-20260711212612`. Signed-in Production reproduction isolated exactly one row, and the owner confirmed it is test-only; no customer contact or external send was involved.

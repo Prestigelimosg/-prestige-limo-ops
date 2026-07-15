@@ -60,7 +60,17 @@ After the controlled Driver Details Email proof completed, the latest fresh coun
 
 The Supabase organization is on the Free plan. Supabase documents automatic daily backups for Pro, Team, and Enterprise projects and recommends that Free projects maintain their own logical exports. No recoverable restore point is assumed, and no backup, temporary branch, or data copy was created during this inspection.
 
-Both private Storage objects were classified without reading or recording their raw paths or contents. Both match the established OTS image path and MIME boundaries. One is tied to the current OTS proof row and a current test booking; the second is an orphaned OTS artifact with no proof row and no current booking. Both are candidate test artifacts, but neither was deleted.
+At the pre-cleanup inspection checkpoint, both private Storage objects were classified without reading or recording their raw paths or contents. Both matched the established OTS image path and MIME boundaries. One was tied to the then-current OTS proof row and a current test booking; the second was an orphaned OTS artifact with no proof row and no current booking. Neither had been deleted at that inspection checkpoint; the completed cleanup is recorded immediately below.
+
+### OTS Test Artifact Cleanup Evidence (2026-07-15)
+
+The owner explicitly accepted that the two confirmed test images were not recoverable and approved their bounded removal. Both Storage API delete requests returned HTTP 200, and Storage lifecycle logs recorded the matching object-removal events. No raw object path, image, secret, token, cookie, environment value, or customer/driver private data was recorded in this packet.
+
+The first post-delete database guard correctly aborted because it counted two objects still present in the private bucket. Read-only Storage logs and a normalized database classification then proved those two objects were new dashboard-created `.emptyFolderPlaceholder` markers, not photos: the verified state is 0 OTS image objects, 0 OTS proof rows, and 2 dashboard-created empty-folder placeholders. The single stale proof metadata row was deleted only after a guarded transaction required zero image objects, zero unexpected bucket objects, exactly two placeholders, exactly one proof row, and no proof row with a live Storage object.
+
+Production verification loaded the exact former proof booking through the established admin lane and displayed `No OTS photo proof` with no `View photo` link. The private bucket, file limits, MIME limits, tables, schema, policies, OTS upload/read wiring, and customer visibility boundaries remain intact. The 66 bookings, 95 customers, 5 drivers, 13 invoice records, and single rate-setting row were unchanged; the Default-rate fingerprint remained unchanged and Automation remained ON. No booking, customer, driver, invoice, rate, calendar, Google Maps, customer/driver messaging, environment, Vercel deployment, external send, or configuration was changed.
+
+This cleanup removes only the old OTS test artifacts. If later automated-system testing creates new OTS images or proof rows, those new artifacts require a fresh final inventory and cleanup after testing; this evidence must not be reused to assume future counts.
 
 The installed Google Calendar connector found zero matching `Prestige` events and zero matches for the approved Driver Details Email fixture in the authenticated primary calendar. The app's separately documented `Prestige Ops Calendar` remains unverified because that dedicated calendar was not exposed by the connector. Zero primary-calendar matches must not be represented as proof that the dedicated app calendar contains no test events.
 
@@ -72,7 +82,7 @@ Recovery remains blocked because no verified logical export exists. Neither the 
 
 The proposed database recovery method is an owner-approved Supabase CLI logical export of roles, schema, and data to an encrypted location outside the repository, followed by a restore verification before any deletion. This creates no temporary Supabase branch and no Supabase branch/project charge. The database credential must be supplied through a secure non-chat method and must never appear in command output, shell history, repository files, documentation, or logs.
 
-The two Storage objects are not included in a database dump. Before deletion, the owner must separately choose either a secure Storage copy or explicitly accept that those two confirmed test artifacts will not be recoverable. Dedicated Google Calendar cleanup remains a separately inventoried and separately approved external action.
+Storage objects are not included in a database dump. For the old two confirmed test artifacts, the owner explicitly accepted that no recovery copy was required and their completed bounded cleanup is recorded above. Any future Storage artifact requires a fresh recovery decision before deletion. Dedicated Google Calendar cleanup remains a separately inventoried and separately approved external action.
 
 ## Existing Lanes And Duplicate Check
 
@@ -88,7 +98,7 @@ Subject to a fresh count-only revalidation and exact action-time approval, the p
 - Booking records and children: route points, service items, workflow statuses, completed closeouts, booking-scoped notifications and audit rows, bids and offers, driver job links/status/actual-time records, live-location rows, OTS proof metadata, and bookings.
 - Finance test artifacts: customer invoice records and sequences, monthly billing draft plans, monthly invoice drafts, their trip/review children, and issue records.
 - The 5 test-only driver master rows after booking and driver-child dependencies are cleared.
-- The 2 mapped OTS Storage objects only in the final separately approved execution window.
+- Any new OTS image objects or proof rows created during later automated-system testing, but only after a fresh inventory and separate final cleanup approval. The old two test images and one proof row are already removed and must not be targeted again.
 
 String booking references and nullable relationships are not fully protected by database cascades. The cleanup cannot rely on customer or booking deletion alone to remove audit, notification, live-location, invoice, or Storage artifacts.
 
@@ -104,7 +114,7 @@ Execution must stop unless every item below is satisfied:
 2. A fresh count-only inventory matches an exact proposed scope; any newly created or genuine record is excluded and reported.
 3. The owner separately approves an exact write freeze and maintenance window. Public booking intake, admin/customer writes, schedulers, and Automation must not race the cleanup; any state or configuration change requires separate owner approval.
 4. A recoverable database restore point is verified instead of assumed. [Supabase documents that Storage objects are not included in database backups](https://supabase.com/docs/guides/platform/backups), so any desired Storage recovery copy must be handled separately.
-5. Both Storage objects are mapped while database references still exist and are either confirmed as test artifacts or excluded.
+5. Any newly created Storage objects are mapped while database references still exist and are either confirmed as test artifacts or excluded. The old OTS artifacts are already removed and must not be counted again.
 6. A separate read-only Google Calendar inventory determines whether test-booking events exist. Removing test calendar events is a separate external action requiring exact approval; database cleanup alone is not a complete calendar cleanup.
 7. The owner accepts that historical backups and logs may retain pre-wipe data for their configured retention period and that previously sent external messages cannot be recalled by this operation.
 8. An exact dry-run report, ordered dependency plan, rollback point, expected final counts, and action-time approval are recorded immediately before execution.
@@ -120,4 +130,4 @@ Zero-count verification must cover every approved table and artifact class, plus
 
 ## Exact Next Approval
 
-The next approval is limited to creating and verifying the encrypted local logical export and choosing whether the two Storage test artifacts require a separate recovery copy. It must also define a secure non-chat database-credential path. After that recovery proof exists, a separate final action-time approval must name the exact maintenance window and Automation handling, refreshed count-only deletion scope, exact preserved rows, Storage/calendar classification, rollback method, and zero-count/orphan assertions. Only then may the owner approve one bounded pre-1-August cleanup execution. The scheduler date, code, cron, layouts, and wired lanes remain unchanged; the owner must not create the replacement bookings until cleanup verification passes.
+The next approval is limited to creating and verifying the encrypted local logical export for the remaining database test data and defining a secure non-chat database-credential path. The old two OTS test images and one proof row are already removed without a recovery copy under the owner's explicit approval; any newly created OTS artifacts require a fresh later decision. After database recovery proof exists, a separate final action-time approval must name the exact maintenance window and Automation handling, refreshed count-only deletion scope, exact preserved rows, Storage/calendar classification, rollback method, and zero-count/orphan assertions. Only then may the owner approve one bounded pre-1-August cleanup execution. The scheduler date, code, cron, layouts, and wired lanes remain unchanged; the owner must not create the replacement bookings until cleanup verification passes.

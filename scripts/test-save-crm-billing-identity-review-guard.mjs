@@ -18,6 +18,16 @@ function assertExcludes(source, fragment, label) {
 assertIncludes(appSource, "type SaveCrmBillingIdentityReview", "billing identity review type");
 assertIncludes(appSource, "function buildSaveCrmBillingIdentityReview", "billing identity conflict detector");
 assertIncludes(appSource, "function formatTravelerBillingAccountLabel", "traveler billing account label");
+assertIncludes(
+  appSource,
+  'const safeCompany = billingIdentityBaseAccount(companyAccount) || "Customer Account";',
+  "traveler billing account formatter must unwrap an already passenger-scoped account before reformatting",
+);
+assertIncludes(
+  appSource,
+  "while (bracketMatch?.[1])",
+  "billing account base helper must remove repeated passenger suffixes from previously duplicated records",
+);
 assertIncludes(appSource, "function saveCrmExplicitCompanyAccount", "explicit company/account helper");
 assertIncludes(appSource, "function saveCrmDefaultCustomerAccount", "booker-free default customer account helper");
 assertIncludes(appSource, "function getBookingCustomerAccountDisplayName", "loaded booking booker-free account helper");
@@ -59,6 +69,11 @@ assertIncludes(
   appSource,
   "formatTravelerBillingAccountLabel(companyAccount, travelerName)",
   "Save + CRM persisted customer account must be scoped by passenger/traveler when company is present",
+);
+assertExcludes(
+  appSource,
+  'const safeCompany = clean(companyAccount) || "Customer Account";',
+  "Update + Cal must not append a passenger suffix to an already passenger-scoped account label",
 );
 assertIncludes(
   appSource,

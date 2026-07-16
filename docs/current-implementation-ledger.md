@@ -1,13 +1,13 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-11d783a0 Keep Calendar status green after updates
+9a132cb4 Keep refreshed Calendar payload consistent
 
 Latest pushed main/staging runtime checkpoint:
-95ef1925 Alternate active booking card colours
+3e9b6acc Guard Calendar company sync by CRM identity
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-b2f8caca Merge PR #9: Release alternating active booking card colours
+3ca51cbb Merge pull request #11 from Prestigelimosg/staging
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -8324,3 +8324,12 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - `/my-bookings` remains a link to the canonical `/book` form. The focused return-trip guard was corrected to reject the retired duplicate portal form and now executes the parser to prove independent outbound and return stop ordering and quantities.
 - Customer price, billing, invoice/payment/PDF, driver payout, PayNow, internal notes, parser/debug internals, admin finance, messaging, Google Maps, Google Calendar, CRM identity derivation, booking persistence wiring, environment gates, Supabase schema/configuration, provider sends, and Automation remain unchanged.
 - Focused locks: `scripts/test-customer-booking-request-adapter.mjs`, `scripts/test-customer-booking-request-api-contract.mjs`, `scripts/test-customer-return-trip-request-guard.mjs`, `scripts/test-customer-booking-request-pa-identity-guard.mjs`, `scripts/test-public-customer-form-surface-boundary-guard.mjs`, and `scripts/test-public-api-session-cookie-cache-boundary-guard.mjs`.
+
+### Update + Cal Refreshed Payload And Account-Label Consistency Repair
+
+- Read-only production inspection reproduced the owner-reported amber Calendar status after refresh on the exact saved booking. The established status request carried the correct booking reference, schedule, route, flight, passenger, and booker, but its refreshed saved-booking adapter sent blank service and vehicle values plus the raw `admin_review_required` status while the existing Google Calendar event contained `DEP`, `AVF`, and `Admin Review Required`.
+- The same inspection showed that the existing `Update + Cal` save formatter could wrap an already passenger-scoped company label again, changing `company [passenger]` to `company [passenger] [passenger]`. This was a display-label consistency fault; no verified company, booker, or traveler identity was inferred from that text.
+- The established `buildSavedBookingCalendarEventPayload` lane now falls back from `booking_type` to the saved `service_type` or `route_type`, falls back from `vehicle` to `vehicle_type_or_category` or `vehicle_type`, and maps the known saved admin workflow statuses to the same display values already used by the Calendar write adapter. Unknown status values remain unchanged.
+- The established traveler billing-account formatter now canonicalizes repeated trailing passenger brackets before applying the current passenger. This keeps repeated saves idempotent and allows the same company to be retained when the passenger changes without deriving verified identity IDs from names or labels.
+- No second Calendar route, status lane, save path, CRM panel, button, or provider write was added. Customer booking persistence, verified identity selection, notification delivery, reminders, pricing, billing, payout, parser, and public/driver surfaces remain unchanged.
+- Focused locks: `scripts/test-admin-booking-google-calendar-sync-api-contract.mjs` and `scripts/test-save-crm-billing-identity-review-guard.mjs`.

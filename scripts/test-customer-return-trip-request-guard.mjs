@@ -29,35 +29,37 @@ function assertExcludes(source, pattern, label) {
   assert.equal(matched, false, `${label} must not include ${pattern}.`);
 }
 
-for (const source of [bookPage, portalPage]) {
-  for (const fragment of [
-    "returnTripRequested",
-    "returnPickupDate",
-    "returnPickupTime",
-    "returnFlightNumber",
-    "returnPickupLocation",
-    "returnDropoffLocation",
-  ]) {
-    assertIncludes(source, fragment, `customer return trip form field ${fragment}`);
-  }
+for (const fragment of [
+  "returnTripRequested",
+  "returnPickupDate",
+  "returnPickupTime",
+  "returnFlightNumber",
+  "returnPickupLocation",
+  "returnDropoffLocation",
+]) {
+  assertIncludes(bookPage, fragment, `/book return trip form field ${fragment}`);
 }
 
 for (const fragment of [
   'data-customer-booking-return-trip-checkbox="true"',
   'data-customer-booking-return-trip-fields="true"',
-  'data-customer-portal-return-trip-checkbox="true"',
-  'data-customer-portal-return-trip-fields="true"',
 ]) {
-  assertIncludes(`${bookPage}\n${portalPage}`, fragment, `customer return trip UI marker ${fragment}`);
+  assertIncludes(bookPage, fragment, `/book return trip UI marker ${fragment}`);
 }
 
-for (const fragment of [
-  "returnTripRequiredFields",
-  "returnTripRequiredBookingRequestFields",
+assertIncludes(portalPage, 'href="/book"', "/my-bookings canonical booking-form link");
+assertExcludes(
+  portalPage,
+  /data-customer-portal-return-trip-(?:checkbox|fields)=/,
+  "/my-bookings duplicate return-trip form",
+);
+
+assertIncludes(bookPage, "returnTripRequiredFields", "/book conditional return validation fields");
+assertIncludes(
+  bookPage,
   "Please complete the outbound and return trip date, time, pickup, and drop-off details",
-]) {
-  assertIncludes(`${bookPage}\n${portalPage}`, fragment, `conditional return validation ${fragment}`);
-}
+  "/book conditional return validation message",
+);
 
 for (const fragment of [
   "returnTripRequested: input.returnTripRequested",

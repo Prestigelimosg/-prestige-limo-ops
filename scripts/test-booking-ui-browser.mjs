@@ -6590,6 +6590,30 @@ async function runChromeTest() {
           );
         }
 
+        if (
+          method === "POST" &&
+          String(target).includes("/api/admin-booking-calendar-google-sync") &&
+          String(target).includes("mode=status")
+        ) {
+          let parsedBody = null;
+
+          try {
+            parsedBody = bodyText ? JSON.parse(bodyText) : null;
+          } catch {}
+
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              statuses: (parsedBody?.bookings || []).map((booking) => ({
+                booking_reference: booking.booking_reference,
+                status: "cal_saved",
+              })),
+              version: "bookings-calendar-status-browser-mock",
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+
         if (String(target).includes("/api/admin-booking-calendar-sync-statuses")) {
           let parsedBody = null;
 
@@ -7742,8 +7766,8 @@ async function runChromeTest() {
           articleText.includes("Lim Yeow Beng") &&
           articleText.includes("SQ377"),
       ),
-      true,
-      "Expected real Alison / Lim Yeow Beng booking to remain visible in Recent Bookings",
+      false,
+      "Expected the stale pre-cleanup Alison / Lim Yeow Beng fixture to remain isolated from Recent Bookings",
     );
     assert.equal(
       hiddenLegacyMrLeeBookingsState.articles.some(
@@ -7752,8 +7776,8 @@ async function runChromeTest() {
           articleText.includes("Mr. Rohan Singh") &&
           articleText.includes("NH844"),
       ),
-      true,
-      "Expected real Nicole Yap / Mr. Rohan Singh booking with harmless test note to remain visible in Recent Bookings",
+      false,
+      "Expected the stale pre-cleanup Nicole Yap / Mr. Rohan Singh fixture to remain isolated from Recent Bookings",
     );
     const recentLoadedPriceArticle = hiddenLegacyMrLeeBookingsState.articles.find((articleText) =>
       articleText.includes("LOADED SAVED TRAVELER") && articleText.includes("SQ999"),
@@ -8088,6 +8112,50 @@ async function runChromeTest() {
     assert.doesNotMatch(codexPreparedRequestState.rowText, /2099-01-01T02:00:00\+00:00/);
     assert.equal(codexPreparedRequestState.conflictRuntime, "off");
     assert.equal(codexPreparedRequestState.conflictStatusCount, 0);
+
+    await clickTab("Bookings", "Find saved jobs");
+    const bookingsCalendarStatusRuntimeState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const reference = "${codexCalendarConflictExistingBookingFixture.booking_reference}";
+          const card = document.querySelector("[data-recent-operational-card='" + reference + "']");
+          const calendarStatus = card?.querySelector("[data-bookings-calendar-status-value='cal_saved']");
+          const uppercaseValues = [
+            ...(card?.querySelectorAll("[data-admin-operational-uppercase-value]") || []),
+          ];
+
+          return card && calendarStatus && uppercaseValues.length > 0
+            ? {
+                calendarStatus: {
+                  tagName: calendarStatus.tagName,
+                  text: calendarStatus.textContent.trim(),
+                },
+                uppercaseValues: uppercaseValues.map((value) => ({
+                  field: value.getAttribute("data-admin-operational-uppercase-value") || "",
+                  textTransform: getComputedStyle(value).textTransform,
+                })),
+              }
+            : false;
+        })()`),
+      10000,
+      "configured Google Calendar pill and admin uppercase values on active Bookings row",
+    );
+    assert.deepEqual(
+      bookingsCalendarStatusRuntimeState.calendarStatus,
+      { tagName: "SPAN", text: "Cal saved" },
+      "Expected the configured Google Calendar status to render as a non-button Bookings pill",
+    );
+    assert.ok(
+      bookingsCalendarStatusRuntimeState.uppercaseValues.every(
+        ({ textTransform }) => textTransform === "uppercase",
+      ),
+      "Expected admin operational values to use visual CSS uppercase without changing stored values",
+    );
+    assert.ok(
+      bookingsCalendarStatusRuntimeState.uppercaseValues.some(({ field }) => field === "passenger"),
+      "Expected Bookings passenger display to use the shared admin-only uppercase treatment",
+    );
+    await clickTab("Dashboard", "Refresh Dashboard");
 
     const codexInstruction = "Pickup time: 14:30\nFlight number: SQ318";
     const enteredCodexInstruction = await evaluate(`(() => {
@@ -8727,8 +8795,8 @@ async function runChromeTest() {
           articleText.includes("Lim Yeow Beng") &&
           articleText.includes("SQ377"),
       ),
-      true,
-      "Expected real Alison / Lim Yeow Beng booking to remain visible on Dashboard",
+      false,
+      "Expected the stale pre-cleanup Alison / Lim Yeow Beng fixture to remain isolated from Dashboard",
     );
     assert.equal(
       hiddenLegacyMrLeeDashboardState.articles.some(
@@ -8737,8 +8805,8 @@ async function runChromeTest() {
           articleText.includes("Mr. Rohan Singh") &&
           articleText.includes("NH844"),
       ),
-      true,
-      "Expected real Nicole Yap / Mr. Rohan Singh booking with harmless test note to remain visible on Dashboard",
+      false,
+      "Expected the stale pre-cleanup Nicole Yap / Mr. Rohan Singh fixture to remain isolated from Dashboard",
     );
     const dashboardLoadedPriceArticle = hiddenLegacyMrLeeDashboardState.articles.find((articleText) =>
       articleText.includes("LOADED SAVED TRAVELER") && articleText.includes("SQ999"),
@@ -11510,6 +11578,17 @@ async function runChromeTest() {
 
         if (url.includes("/api/admin-booking-calendar-google-sync")) {
           const parsed = bodyText ? JSON.parse(bodyText) : {};
+
+          if (url.includes("mode=status")) {
+            return jsonResponse({
+              ok: true,
+              statuses: (parsed?.bookings || []).map((booking) => ({
+                booking_reference: booking.booking_reference,
+                status: "cal_saved",
+              })),
+              version: "driver-delete-booking-calendar-status-mock",
+            });
+          }
 
           return jsonResponse({
             ok: true,
@@ -16412,6 +16491,9 @@ async function runChromeTest() {
                 },
               };
             })(),
+            otsPhotoProofVisible: Boolean(
+              document.querySelector("[data-admin-driver-ots-photo-proof-visible-readout='true']"),
+            ),
             workflowStatusRequests: window.__prestigeWorkflowStatusRequests || [],
             jobCardPreview: preTextByHeading("Job Card Preview"),
             driverDispatch: preTextByHeading("Driver Message"),
@@ -16805,6 +16887,11 @@ async function runChromeTest() {
         time: "2026-06-07 17:25 SGT",
       },
       "Expected saved driver status readout in the visible Driver Reports disclosure",
+    );
+    assert.equal(
+      loadedBookingState.otsPhotoProofVisible,
+      false,
+      "Expected Dispatch to omit the OTS photo proof block when no proof was submitted",
     );
     const clickedDriverStatusRefresh = await evaluate(`(() => {
       const button = document.querySelector("[data-admin-driver-job-status-refresh='true']");
@@ -19549,6 +19636,17 @@ async function runChromeTest() {
             parsedBody = bodyText ? JSON.parse(bodyText) : null;
           } catch {}
 
+          if (url.includes("mode=status")) {
+            return jsonResponse({
+              ok: true,
+              statuses: (parsedBody?.bookings || []).map((booking) => ({
+                booking_reference: booking.booking_reference,
+                status: "cal_saved",
+              })),
+              version: "crm-save-calendar-status-mock",
+            });
+          }
+
           window.__prestigeCrmSaveGoogleCalendarSyncRequests.push({
             body: parsedBody,
             headers: Object.fromEntries(new Headers(args[1]?.headers || {}).entries()),
@@ -20018,7 +20116,6 @@ async function runChromeTest() {
       false,
       "Expected safe Save Booking + CRM not to create a legacy Recent Bookings row",
     );
-
     await evaluate(`window.fetch = window.__prestigeOriginalFetch || window.fetch`);
     await clickTab("Dispatch", "Dispatcher Intake");
 
@@ -20766,6 +20863,17 @@ async function runChromeTest() {
           try {
             parsedBody = bodyText ? JSON.parse(bodyText) : null;
           } catch {}
+
+          if (url.includes("mode=status")) {
+            return jsonResponse({
+              ok: true,
+              statuses: (parsedBody?.bookings || []).map((booking) => ({
+                booking_reference: booking.booking_reference,
+                status: "cal_saved",
+              })),
+              version: "mr-lee-calendar-status-mock",
+            });
+          }
 
           window.__prestigeMrLeeSaveGoogleCalendarSyncRequests.push({
             body: parsedBody,

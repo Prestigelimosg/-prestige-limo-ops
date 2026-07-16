@@ -1822,6 +1822,20 @@ async function runChromeTest() {
 
           if (String(url).includes("/api/admin-booking-calendar-google-sync")) {
             const body = options?.body ? JSON.parse(String(options.body)) : {};
+
+            if (String(url).includes("mode=status")) {
+              return new Response(
+                JSON.stringify({
+                  ok: true,
+                  statuses: (body?.bookings || []).map((booking) => ({
+                    booking_reference: booking.booking_reference,
+                    status: "cal_saved",
+                  })),
+                }),
+                { headers: { "Content-Type": "application/json" }, status: 200 },
+              );
+            }
+
             window.__adminBookingCalendarSyncCalls.push({ body, method, url: String(url) });
 
             return new Response(

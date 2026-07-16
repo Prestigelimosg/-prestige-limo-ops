@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-e8cfd8ea Repair multi-segment booking status updates
+aaaf6570 Parse tonight as current booking date
 
 Latest pushed main/staging runtime checkpoint:
 f6806723 Harden driver details email sending
@@ -11,6 +11,38 @@ f6806723 Harden driver details email sending
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Bookings Configured Google Calendar Status Pills (2026-07-16)
+
+- Read-only inspection confirmed the established Google Calendar write lane is `POST /api/admin-booking-calendar-google-sync`, which already owns deterministic Prestige event IDs, payload construction, authorization, configuration checks, and provider upserts. The old ICS status helper describes downloaded files only and was not reused or presented as live provider state. No second calendar route, button, panel, event-ID scheme, write helper, or provider write was added.
+- The same established route now accepts only `mode=status` for a read-only configured-provider comparison. It reads each deterministic event from the configured Prestige Calendar and returns only `save_to_calendar`, `cal_saved`, or `update_calendar` for the exact submitted booking reference. Missing events are `save_to_calendar`; exact Prestige resource matches are `cal_saved`; mismatched existing events are `update_calendar`. Unsupported modes fail before a provider request.
+- Date/time comparison accepts Google's equivalent RFC3339 `+08:00` response for the same Singapore instant while still requiring the established `Asia/Singapore` timezone and all other Prestige resource fields to match. This prevents a correctly saved event from being marked outdated solely because Google normalized the timestamp representation.
+- The Bookings list shows the result as a non-clickable red `Save to Cal`, green `Cal saved`, or amber `Update Cal` pill. The status read is bounded to the active Bookings tab, chunks requests to the existing agenda limit, reruns only when calendar-relevant loaded-booking data changes, and fails closed with `Calendar status unavailable. No calendar status is assumed.` It never treats a failed read as saved.
+- Provider responses, OAuth tokens, configuration values, and raw event bodies are not returned to the client. The read path uses no request body, `sendUpdates`, calendar mutation, booking mutation, external notification, or customer/driver surface.
+- Focused protection is in `scripts/test-admin-booking-google-calendar-sync-api-contract.mjs`; existing browser fixtures mock the same route's read mode and require a non-button `Cal saved` pill. Live configured-Calendar verification and deployment remain separate steps; this local pass does not claim or perform a live provider read or write.
+
+### Dispatch Optional OTS Proof Visibility Cleanup (2026-07-16)
+
+- Inspection found the established OTS proof read and controls inside Dispatch Driver Reports. The no-proof placeholder occupied space even when the exact booking had no submitted proof.
+- Dispatch now omits that one proof block unless `adminDriverOtsPhotoProofLatest` exists. When proof exists, the established message, received time, Refresh action, and View photo action remain wired in the same block. Dashboard, upload, Storage, proof API, booking association, signed-view, driver, and customer behavior are unchanged.
+- Focused protection remains in the updated `scripts/test-driver-ots-photo-proof-runtime-guard.mjs`, with the existing optional-photo guard retained. The established booking browser fixture also requires the Dispatch proof block to be absent for its no-proof response.
+
+### Admin Operational Uppercase Display (2026-07-16)
+
+- The requested admin operational values now share one display-only CSS uppercase wrapper for passenger, company, pickup, drop-off, extra stops, flight, vehicle, and plate. It is applied to established admin parsed previews, current Bookings, Completed / Earlier history, assigned vehicle/plate summaries, and readable Job Card rows without changing their routes, controls, storage, form values, payloads, or source data.
+- The wrapper does not call `toUpperCase`, mutate state, write storage, or issue a request. Driver names, booker/contact details, customer-facing Customer Copy, `/book`, `/my-bookings`, invoice/payment/billing, payout/PayNow, internal notes, parser/debug internals, and mock/archive surfaces remain outside this treatment.
+- Review caught that newly visible internal Job Card rows could otherwise flow into the established Customer Copy derivation. Company, Flight, Extra stops, and Vehicle are explicitly filtered from Customer Copy, preserving its prior customer-safe layout and privacy boundary.
+- Focused protection is in `scripts/test-admin-operational-uppercase-display-guard.mjs`, registered in the established preactivation suite. The existing booking browser fixture checks computed `text-transform: uppercase` on the admin markers while the underlying form/storage values remain unchanged.
+
+### Linked Return Trip Guard Alignment (2026-07-16)
+
+- Startup verification reproduced one stale focused guard: it still expected the retired duplicate return-trip form in `/my-bookings`, while committed checkpoint `c9bdc995` intentionally made `/book` the single established form and retained only a My Bookings link into that lane.
+- The guard now protects the committed single-form architecture: all return-trip fields and validation remain in `/book`, `/my-bookings` links to `/book`, and duplicate portal form markers are rejected. No application route, form, state, booking write, customer record, or runtime behavior changed for this alignment.
+
+### Booking Browser Post-Cleanup Fixture Alignment (2026-07-16)
+
+- Local browser verification stopped on assertions that still required the injected pre-cleanup Alison / Lim Yeow Beng and Nicole Yap / Mr. Rohan Singh records to appear as operational cards. The approved 15 July cleanup made those old-record expectations obsolete; the browser fixture itself still injects them only to prove they remain isolated by the established archive boundary.
+- The existing browser suite now requires those two stale injected records to stay absent from Bookings and Dashboard. Its synthetic active/completed/current booking coverage, typed read boundaries, privacy assertions, Calendar mocks, and wired UI actions remain unchanged. No runtime application source, archive classifier, database record, customer/driver surface, or cleanup lane changed for this fixture alignment.
 
 ### Dispatcher `Tonight` Relative-Date Parsing Repair (2026-07-15)
 
@@ -780,7 +812,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Admin Dispatch now refreshes the existing active driver job link while a saved booking is loaded and merges the admin-only safe driver-link summary back into the current Dispatch view. Driver `Save & Acknowledge Job` edits for driver name, contact, plate, and vehicle can update the visible admin Driver Dispatch/Customer Copy details without exposing token data or customer/public/driver internals.
 - The admin driver job link read response now keeps contact and plate inside the existing guarded admin-only `safe_summary`; public driver token pages, customer pages, and public routes are not expanded, and no message, provider send, payment, payout, invoice, GPS/live-location, env, or DB schema behavior changed.
 
-- `/book` and the customer portal New Booking Request form now include a compact `Return trip` checkbox. When checked, the customer/admin-facing form shows return pickup date, return pickup time, return pickup location, return drop-off location, and optional return flight.
+- The canonical `/book` New Booking Request form includes a compact `Return trip` checkbox. When checked, it shows return pickup date, return pickup time, return pickup location, return drop-off location, and optional return flight. `/my-bookings` links to `/book` and must not restore the retired duplicate request form.
 - Public customer form validation requires the return date/time/pickup/drop-off only when the return checkbox is checked. The portal request remains local review-only and still does not call the customer booking request persistence API.
 - `/api/customer-booking-requests` now parses a customer request into one or two safe admin-review booking payloads through `parseCustomerBookingRequestPayloads`. Return requests are saved as two normal booking records with linked references such as `CUST-...-OUT` and `CUST-...-RET`; they are not stored as one mixed booking.
 - The customer booking request API response remains customer-safe: it returns the primary booking reference, optional return booking reference, return-trip requested flag, customer-facing status, and short-notice boolean only. It does not return admin/internal status, CRM details, calendar ids, prices, invoices, payments, payouts, parser/debug data, tokens, or secrets.
@@ -789,6 +821,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Admin return-trip `Save + CRM` uses the existing guarded `/api/admin-bookings` create path for each leg and then runs the existing Google Calendar sync once per saved leg. It creates two separate calendar events when both legs are complete; no guest email is sent.
 - `Update + Cal` remains a single-record update and does not create a return trip pair for an already-applied saved booking.
 - Focused guard coverage lives in `scripts/test-customer-return-trip-request-guard.mjs` and `scripts/test-admin-dispatch-return-trip-save-guard.mjs`.
+- The return-trip guard follows the established single-form boundary: it checks the return fields and validation on `/book`, requires the `/my-bookings` handoff link, and rejects the retired duplicate portal return-trip form.
 
 ### Admin And Customer Booking Form Slimming
 
@@ -6523,6 +6556,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No provider activation or provider send is approved by this guard.
 - Current `e8cfd8ea` controlled-test packet status is prepared but execution-blocked; this record does not approve a deployment, Preview env assignment, send-gate change, provider request, or external Email.
 - The exact candidate runtime is `e8cfd8ea Repair multi-segment booking status updates`, which retains the established `f6806723` Driver Details Email hardening; any later docs/test-only commit must prove that `e8cfd8ea` remains the latest runtime-path commit before a test deployment. The later runtime change is restricted to the existing saved-booking status target repair and its focused coverage; it does not alter the Email route, helper, UI, payload, gate, allowlist, provider, or idempotency behavior. The earlier received evidence reference `DRIVER-DETAILS-EMAIL-STAGING-20260621185103` proves the pre-hardening provider/content lane only and is not represented as live proof of the new gate-visibility, same-page success lock, or deterministic idempotency changes.
+- Any `app/` or `lib/` runtime change after `e8cfd8ea` invalidates that old controlled-test candidate for execution instead of blocking unrelated preactivation verification. A future Email test must first name and review a fresh exact runtime candidate under separate owner approval; this stale packet can never authorize deploying or sending from a later commit.
 - The only approved candidate recipient is the owner mailbox `info@prestigelimo.sg`; the sender remains `Prestige Limo Dispatch <info@prestigelimo.sg>` and Reply-To remains `info@prestigelimo.sg`.
 - The owner must name one exact existing non-operational test booking and its exact assigned-driver test record at action time; no booking, driver, or customer may be guessed, inferred, duplicated, or recorded in this packet.
 - On 2026-07-15 the owner confirmed that all current bookings, customers, invoices, and drivers are test-only, thereby confirming exact fixture `ADM-20260712063110` with assigned driver `TEST DRIVER CRM 20260516` as non-operational test data; this fixture confirmation does not approve Preview configuration, deployment, provider access, or an external Email.

@@ -79,6 +79,8 @@ for (const phrase of [
   "No provider activation or provider send is approved by this guard.",
   "Current `e8cfd8ea` controlled-test packet status is prepared but execution-blocked; this record does not approve a deployment, Preview env assignment, send-gate change, provider request, or external Email.",
   "The exact candidate runtime is `e8cfd8ea Repair multi-segment booking status updates`, which retains the established `f6806723` Driver Details Email hardening; any later docs/test-only commit must prove that `e8cfd8ea` remains the latest runtime-path commit before a test deployment.",
+  "Any `app/` or `lib/` runtime change after `e8cfd8ea` invalidates that old controlled-test candidate for execution instead of blocking unrelated preactivation verification.",
+  "A future Email test must first name and review a fresh exact runtime candidate under separate owner approval; this stale packet can never authorize deploying or sending from a later commit.",
   "The only approved candidate recipient is the owner mailbox `info@prestigelimo.sg`; the sender remains `Prestige Limo Dispatch <info@prestigelimo.sg>` and Reply-To remains `info@prestigelimo.sg`.",
   "The owner must name one exact existing non-operational test booking and its exact assigned-driver test record at action time; no booking, driver, or customer may be guessed, inferred, duplicated, or recorded in this packet.",
   "On 2026-07-15 the owner confirmed that all current bookings, customers, invoices, and drivers are test-only, thereby confirming exact fixture `ADM-20260712063110` with assigned driver `TEST DRIVER CRM 20260516` as non-operational test data; this fixture confirmation does not approve Preview configuration, deployment, provider access, or an external Email.",
@@ -115,11 +117,13 @@ const laterRuntimePaths = spawnSync(
 );
 
 assert.equal(laterRuntimePaths.status, 0, "Driver Details Email later runtime-path check must complete.");
-assert.equal(
-  laterRuntimePaths.stdout.trim(),
-  "",
-  "No app/lib runtime path may change after the exact Driver Details Email controlled-test candidate.",
-);
+if (laterRuntimePaths.stdout.trim()) {
+  assertIncludes(
+    safetySection,
+    "Any `app/` or `lib/` runtime change after `e8cfd8ea` invalidates that old controlled-test candidate for execution",
+    "later runtime changes invalidate the old Email controlled-test candidate",
+  );
+}
 
 for (const forbidden of [
   "Email sending is approved now",

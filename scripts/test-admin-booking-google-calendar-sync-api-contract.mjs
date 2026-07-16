@@ -226,8 +226,14 @@ function safePayload(overrides = {}) {
   };
 }
 
-function requestWithJson(payload, headers = validAdminHeaders()) {
-  return new Request("http://localhost/api/admin-booking-calendar-google-sync", {
+function requestWithJson(payload, headers = validAdminHeaders(), mode = "") {
+  const url = new URL("http://localhost/api/admin-booking-calendar-google-sync");
+
+  if (mode) {
+    url.searchParams.set("mode", mode);
+  }
+
+  return new Request(url, {
     body: JSON.stringify(payload),
     headers,
     method: "POST",
@@ -355,6 +361,24 @@ try {
   );
   assert.match(routeSource, /allowServerSessionRoleMethodsWithoutRequestToken:\s*\["POST"\]/);
   assert.match(appSource, /adminBookingCalendarGoogleSyncApiPath/);
+  assert.match(
+    appSource,
+    /fetch\(`\$\{adminBookingCalendarGoogleSyncApiPath\}\?mode=status`,/,
+    "Bookings calendar status must reuse the established Google Calendar route.",
+  );
+  assert.match(appSource, /data-bookings-calendar-status=\{bookingId\}/);
+  assert.match(appSource, /data-bookings-calendar-status-value=\{bookingGoogleCalendarStatus\}/);
+  assert.match(appSource, /"Save to Cal"/);
+  assert.match(appSource, /"Cal saved"/);
+  assert.match(appSource, /"Update Cal"/);
+  assert.match(appSource, /bg-red-100 text-red-800 ring-red-200/);
+  assert.match(appSource, /bg-emerald-100 text-emerald-800 ring-emerald-200/);
+  assert.match(appSource, /bg-amber-100 text-amber-800 ring-amber-200/);
+  assert.doesNotMatch(
+    appSource,
+    /data-bookings-calendar-status[^>]*onClick=/,
+    "Bookings calendar status must remain non-clickable.",
+  );
   assert.doesNotMatch(appSource, /data-operations-calendar-sync-google-loaded="true"/);
   assert.doesNotMatch(appSource, /data-operations-calendar-panel="true"/);
   assert.match(
@@ -452,6 +476,104 @@ try {
     assert.equal(firstEvent.extendedProperties.private.prestigeBookingReference, "PL-2026-0615-001");
     assert.equal(firstEvent.extendedProperties.private.prestigeSource, "prestige_limo_ops");
     assertNoLeaks(firstEvent, "Google Calendar event request must not include forbidden booking fields");
+  }
+
+  {
+    setEnv(validEnv());
+    const statusBookings = [
+      safeBooking({ booking_reference: "PL-CAL-STATUS-CURRENT" }),
+      safeBooking({
+        booking_reference: "PL-CAL-STATUS-OUTDATED",
+        pickup_time: "1800hrs",
+      }),
+      safeBooking({
+        booking_reference: "PL-CAL-STATUS-MISSING",
+        pickup_time: "2000hrs",
+      }),
+    ];
+    const preparationCalls = installFetchMock({ eventStatuses: [200, 200, 200] });
+    const preparationResponse = await route.POST(
+      requestWithJson({ bookings: statusBookings, date_label: "calendar-status-preparation" }),
+    );
+
+    assert.equal(preparationResponse.status, 200);
+    const expectedProviderEvents = calendarCalls(preparationCalls).map(parseJsonBody);
+    const providerEventsById = new Map(
+      expectedProviderEvents.slice(0, 2).map((event, index) => [
+        event.id,
+        index === 0
+          ? {
+              ...event,
+              end: { ...event.end, dateTime: `${event.end.dateTime}+08:00` },
+              start: { ...event.start, dateTime: `${event.start.dateTime}+08:00` },
+            }
+          : { ...event, summary: `${event.summary} OUTDATED` },
+      ]),
+    );
+    const calls = [];
+
+    globalThis.fetch = async (url, options = {}) => {
+      const requestUrl = new URL(String(url));
+      calls.push({
+        body: String(options.body || ""),
+        headers: Object.fromEntries(new Headers(options.headers || {}).entries()),
+        method: options.method || "GET",
+        searchParams: Object.fromEntries(requestUrl.searchParams.entries()),
+        url: requestUrl.origin + requestUrl.pathname,
+      });
+
+      if (requestUrl.pathname === "/token") {
+        return new Response(JSON.stringify({ access_token: googleAccessToken }), { status: 200 });
+      }
+
+      const eventId = requestUrl.pathname.split("/").pop();
+      const providerEvent = providerEventsById.get(eventId);
+
+      return new Response(JSON.stringify(providerEvent || {}), {
+        status: providerEvent ? 200 : 404,
+      });
+    };
+
+    const response = await route.POST(
+      requestWithJson(
+        { bookings: statusBookings, date_label: "calendar-status-read" },
+        validAdminHeaders(),
+        "status",
+      ),
+    );
+    const { body, status } = await readRouteResponse(response);
+
+    assert.equal(status, 200);
+    assert.equal(body.ok, true);
+    assert.deepEqual(body.statuses, [
+      { booking_reference: "PL-CAL-STATUS-CURRENT", status: "cal_saved" },
+      { booking_reference: "PL-CAL-STATUS-OUTDATED", status: "update_calendar" },
+      { booking_reference: "PL-CAL-STATUS-MISSING", status: "save_to_calendar" },
+    ]);
+    assertNoLeaks(body, "Google Calendar status response must not leak provider or unsafe fields");
+
+    const providerCalls = calendarCalls(calls);
+    assert.equal(providerCalls.length, 3);
+    for (const call of providerCalls) {
+      assert.equal(call.method, "GET");
+      assert.deepEqual(call.searchParams, {});
+      assert.equal(call.body, "");
+      assert.equal(call.headers.authorization, `Bearer ${googleAccessToken}`);
+    }
+  }
+
+  {
+    setEnv(validEnv());
+    const calls = installFetchMock();
+    const response = await route.POST(
+      requestWithJson(safePayload(), validAdminHeaders(), "unsupported"),
+    );
+    const { body, status } = await readRouteResponse(response);
+
+    assert.equal(status, 400);
+    assert.equal(body.ok, false);
+    assert.equal(calls.length, 0, "Unsupported route mode must not call Google.");
+    assertNoLeaks(body, "unsupported Google Calendar mode response");
   }
 
   for (const calendarCase of [

@@ -922,6 +922,20 @@ type AdminBookingGoogleCalendarSyncResponse = {
   } | null;
 };
 
+type AdminBookingGoogleCalendarStatusValue =
+  | "cal_saved"
+  | "save_to_calendar"
+  | "update_calendar";
+
+type AdminBookingGoogleCalendarStatusResponse = {
+  error?: string;
+  ok?: boolean;
+  statuses?: Array<{
+    booking_reference?: string | null;
+    status?: AdminBookingGoogleCalendarStatusValue | null;
+  }>;
+};
+
 type CopyFeedback = Message & {
   target: DispatchCopyTarget;
 };
@@ -2567,10 +2581,20 @@ function AssignedDriverSummaryBlock({
       data-assigned-driver-summary={bookingRecordStableKey(bookingRecord, operationalCard)}
     >
       <p className="font-semibold text-sky-950">Driver: {driverSummary.name}</p>
-      <p className="mt-0.5 truncate text-slate-600">
-        {[driverSummary.contact, driverSummary.vehicle, driverSummary.plate].filter(Boolean).join(" | ") ||
-          "No assigned driver details"}
-      </p>
+      {driverSummary.contact ? <p className="mt-0.5 truncate text-slate-600">Contact: {driverSummary.contact}</p> : null}
+      {driverSummary.vehicle ? (
+        <p className="truncate text-slate-600">
+          Vehicle: <AdminOperationalUppercaseValue field="vehicle">{driverSummary.vehicle}</AdminOperationalUppercaseValue>
+        </p>
+      ) : null}
+      {driverSummary.plate ? (
+        <p className="truncate text-slate-600">
+          Plate: <AdminOperationalUppercaseValue field="plate">{driverSummary.plate}</AdminOperationalUppercaseValue>
+        </p>
+      ) : null}
+      {!driverSummary.contact && !driverSummary.vehicle && !driverSummary.plate ? (
+        <p className="mt-0.5 truncate text-slate-600">No assigned driver details</p>
+      ) : null}
     </div>
   );
 }
@@ -2677,6 +2701,41 @@ function OperationalCardSection({
       <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs leading-5 text-slate-700">{children}</div>
     </section>
   );
+}
+
+type AdminOperationalUppercaseField =
+  | "company"
+  | "dropoff"
+  | "extra-stops"
+  | "flight"
+  | "passenger"
+  | "pickup"
+  | "plate"
+  | "vehicle";
+
+function AdminOperationalUppercaseValue({
+  children,
+  field,
+}: {
+  children: ReactNode;
+  field: AdminOperationalUppercaseField;
+}) {
+  return (
+    <span className="uppercase" data-admin-operational-uppercase-value={field}>
+      {children}
+    </span>
+  );
+}
+
+function dispatchSummaryUppercaseField(label: string): AdminOperationalUppercaseField | null {
+  if (label === "Passenger") return "passenger";
+  if (label === "Company") return "company";
+  if (label === "Flight") return "flight";
+  if (label === "From" || label === "Return from") return "pickup";
+  if (label === "To" || label === "Return to") return "dropoff";
+  if (label === "Extra stops") return "extra-stops";
+  if (label === "Vehicle") return "vehicle";
+  return null;
 }
 
 const initialRateOverrideDraft: RateOverrideDraft = {
@@ -12925,6 +12984,12 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const [aiAssistResponseNote, setAiAssistResponseNote] = useState("");
   const bookingMessageRef = useRef<HTMLTextAreaElement | null>(null);
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
+  const [bookingGoogleCalendarStatuses, setBookingGoogleCalendarStatuses] =
+    useState<Record<string, AdminBookingGoogleCalendarStatusValue>>({});
+  const [bookingGoogleCalendarStatusMessage, setBookingGoogleCalendarStatusMessage] =
+    useState<Message | null>(null);
+  const bookingGoogleCalendarStatusSourceRef = useRef<BookingRecord[]>([]);
+  const bookingGoogleCalendarStatusRequestRevisionRef = useRef(0);
   const dashboardBookingsInitialLoadAttemptedRef = useRef(false);
   const bookingAutoSyncInFlightRef = useRef(false);
   const bookingAutoSyncPausedUntilRef = useRef(0);
@@ -17173,6 +17238,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     customerBookingChangeRequestCount;
   const filteredRecentBookingDisplayItems =
     buildLoadBookingsOperationalDisplayItems(filteredRecentBookings, { useTypedOperationalOrder: true });
+  const bookingGoogleCalendarStatusPayloadSignature = JSON.stringify(
+    operationalBookings.map(buildSavedBookingCalendarEventPayload),
+  );
+  bookingGoogleCalendarStatusSourceRef.current = operationalBookings;
   const filteredCompletedBookingDisplayItems =
     buildLoadBookingsOperationalDisplayItems(visibleCompletedBookings, { useTypedOperationalOrder: true });
   const completedHistoryMonthGroups = useMemo(() => {
@@ -17261,6 +17330,95 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       [field]: value,
     }));
   }
+
+  useEffect(() => {
+    if (activeTab !== "bookings") {
+      return;
+    }
+
+    const sourceBookings = bookingGoogleCalendarStatusSourceRef.current;
+    const requestRevision = bookingGoogleCalendarStatusRequestRevisionRef.current + 1;
+    bookingGoogleCalendarStatusRequestRevisionRef.current = requestRevision;
+
+    if (sourceBookings.length === 0) {
+      setBookingGoogleCalendarStatuses({});
+      setBookingGoogleCalendarStatusMessage(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadConfiguredGoogleCalendarStatuses() {
+      const nextStatuses: Record<string, AdminBookingGoogleCalendarStatusValue> = {};
+
+      for (let index = 0; index < sourceBookings.length; index += 25) {
+        const bookingChunk = sourceBookings.slice(index, index + 25);
+        const response = await fetch(`${adminBookingCalendarGoogleSyncApiPath}?mode=status`, {
+          body: JSON.stringify({
+            bookings: bookingChunk.map(buildSavedBookingCalendarEventPayload),
+            date_label: "bookings-calendar-status",
+          }),
+          headers: {
+            "Content-Type": "application/json",
+            "x-prestige-admin-purpose": adminLegacyDataPurpose,
+          },
+          method: "POST",
+        });
+        const result = (await response.json().catch(() => null)) as
+          | AdminBookingGoogleCalendarStatusResponse
+          | null;
+
+        if (!response.ok || !result?.ok || !Array.isArray(result.statuses)) {
+          throw new Error(result?.error || "Configured Google Calendar status could not be loaded.");
+        }
+
+        for (const statusRecord of result.statuses) {
+          const bookingReference = cleanReferenceText(statusRecord.booking_reference).toLowerCase();
+          const status = statusRecord.status;
+
+          if (
+            bookingReference &&
+            status &&
+            ["cal_saved", "save_to_calendar", "update_calendar"].includes(status)
+          ) {
+            nextStatuses[bookingReference] = status;
+          }
+        }
+      }
+
+      if (
+        cancelled ||
+        bookingGoogleCalendarStatusRequestRevisionRef.current !== requestRevision
+      ) {
+        return;
+      }
+
+      setBookingGoogleCalendarStatuses(nextStatuses);
+      setBookingGoogleCalendarStatusMessage(null);
+    }
+
+    void loadConfiguredGoogleCalendarStatuses().catch((error) => {
+      if (
+        cancelled ||
+        bookingGoogleCalendarStatusRequestRevisionRef.current !== requestRevision
+      ) {
+        return;
+      }
+
+      setBookingGoogleCalendarStatuses({});
+      setBookingGoogleCalendarStatusMessage({
+        tone: "error",
+        text:
+          error instanceof Error
+            ? `Calendar status unavailable: ${error.message}`
+            : "Calendar status unavailable. No calendar status is assumed.",
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, bookingGoogleCalendarStatusPayloadSignature]);
 
   async function resolveAdminMapLocation(
     field: AdminMapRouteAssistLocationField,
@@ -22658,6 +22816,12 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         result.liveCalendarProvider === "google_calendar" &&
         result.liveCalendarWritePerformed &&
         result.sendUpdates === "none";
+      if (synced && bookingReference) {
+        setBookingGoogleCalendarStatuses((current) => ({
+          ...current,
+          [bookingReference.toLowerCase()]: "cal_saved",
+        }));
+      }
       const eventCount = result.eventsSynced || result.eventCount;
       const message = synced
         ? `Google Calendar auto-synced for ${bookingReference}. Google reminders included; no guest email sent.`
@@ -23916,6 +24080,16 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
   const recentBookingsPanel = operationalBookings.length > 0 ? (
     <div className="mt-3 rounded-md border border-stone-200 bg-stone-50 p-3">
+      {bookingGoogleCalendarStatusMessage ? (
+        <p
+          className={`rounded-md border px-3 py-2 text-sm ${statusClass(
+            bookingGoogleCalendarStatusMessage.tone,
+          )}`}
+          data-bookings-calendar-status-message="true"
+        >
+          {bookingGoogleCalendarStatusMessage.text}
+        </p>
+      ) : null}
       {hasBookingsSearch && filteredRecentBookings.length === 0 ? (
         <p
           className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
@@ -23953,14 +24127,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               hasBookingDriver(savedBooking),
           );
           const driverText = driverSummary.name === "—" ? "Driver TBC" : driverSummary.name;
-          const driverDetailText =
-            [driverSummary.contact, driverSummary.plate ? `Plate ${driverSummary.plate}` : ""]
-              .filter(Boolean)
-              .join(" | ") || "No driver contact / plate";
-          const vehiclePaxText = [
-            driverSummary.vehicle || operationalCard.vehicle_display || "Vehicle TBC",
-            `Pax ${operationalCard.pax_display || "1"}`,
-          ].join(" · ");
           const pickupMetaText = [
             formatBookingPickupDateTimeSgt(savedBooking),
             operationalCard.job_card_display,
@@ -23971,6 +24137,20 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             "ops_pending_ots",
             "pending_ots",
           ].includes(clean(savedBooking.status).toLowerCase());
+          const bookingGoogleCalendarStatus =
+            bookingGoogleCalendarStatuses[
+              cleanReferenceText(
+                operationalCard.booking_reference || savedBooking.booking_reference,
+              ).toLowerCase()
+            ];
+          const bookingGoogleCalendarStatusLabel =
+            bookingGoogleCalendarStatus === "cal_saved"
+              ? "Cal saved"
+              : bookingGoogleCalendarStatus === "update_calendar"
+                ? "Update Cal"
+                : bookingGoogleCalendarStatus === "save_to_calendar"
+                  ? "Save to Cal"
+                  : "";
 
           return (
             <article
@@ -23983,17 +24163,23 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   <summary className="grid cursor-pointer list-none gap-2 rounded-md px-2 py-1.5 outline-none transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900/20 md:grid-cols-[minmax(13rem,1.1fr)_minmax(10rem,0.8fr)_minmax(14rem,1.4fr)_minmax(9rem,0.7fr)_auto] md:items-center">
                     <span className="min-w-0">
                       <span className="block truncate font-semibold text-slate-950">
-                        {getLoadBookingsOperationalDisplayTitle(operationalCard)}
+                        <AdminOperationalUppercaseValue field="company">
+                          {getLoadBookingsOperationalDisplayTitle(operationalCard)}
+                        </AdminOperationalUppercaseValue>
                       </span>
                       <span className="block truncate text-xs text-slate-500">
                         {pickupMetaText}
                       </span>
                     </span>
                     <span className="min-w-0">
-                      <span className="block truncate text-slate-800">{passengerText}</span>
+                      <span className="block truncate text-slate-800">
+                        <AdminOperationalUppercaseValue field="passenger">{passengerText}</AdminOperationalUppercaseValue>
+                      </span>
                       <span className="block truncate text-xs text-slate-500">Booker: {bookerText}</span>
                     </span>
-                    <span className="min-w-0 truncate text-slate-700">{routeText}</span>
+                    <span className="min-w-0 truncate text-slate-700">
+                      <AdminOperationalUppercaseValue field="pickup">{routeText}</AdminOperationalUppercaseValue>
+                    </span>
                     <span
                       className={`min-w-0 rounded-md border px-2 py-1 ${
                         hasAssignedDriver
@@ -24011,10 +24197,38 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                         {hasAssignedDriver ? "Assigned" : "Need driver"}
                       </span>
                       <span className="block truncate font-semibold text-slate-950">{driverText}</span>
-                      <span className="block truncate text-xs text-slate-700">{driverDetailText}</span>
-                      <span className="block truncate text-xs text-slate-500">{vehiclePaxText}</span>
+                      <span className="block truncate text-xs text-slate-700">
+                        {driverSummary.contact || "No driver contact"}
+                      </span>
+                      <span className="block truncate text-xs text-slate-700">
+                        Plate:{" "}
+                        <AdminOperationalUppercaseValue field="plate">
+                          {driverSummary.plate || "Not set"}
+                        </AdminOperationalUppercaseValue>
+                      </span>
+                      <span className="block truncate text-xs text-slate-500">
+                        <AdminOperationalUppercaseValue field="vehicle">
+                          {driverSummary.vehicle || operationalCard.vehicle_display || "Vehicle TBC"}
+                        </AdminOperationalUppercaseValue>{" "}
+                        · Pax {operationalCard.pax_display || "1"}
+                      </span>
                     </span>
                     <span className="flex items-center gap-2 text-right">
+                      {bookingGoogleCalendarStatusLabel ? (
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ${
+                            bookingGoogleCalendarStatus === "cal_saved"
+                              ? "bg-emerald-100 text-emerald-800 ring-emerald-200"
+                              : bookingGoogleCalendarStatus === "update_calendar"
+                                ? "bg-amber-100 text-amber-800 ring-amber-200"
+                                : "bg-red-100 text-red-800 ring-red-200"
+                          }`}
+                          data-bookings-calendar-status={bookingId}
+                          data-bookings-calendar-status-value={bookingGoogleCalendarStatus}
+                        >
+                          {bookingGoogleCalendarStatusLabel}
+                        </span>
+                      ) : null}
                       {showBookingsListStatus ? (
                         <span
                           className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${bookingStatusClass(
@@ -24033,12 +24247,19 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                         {operationalCard.booking_reference ? (
                           <p>Ref: {operationalCard.booking_reference}</p>
                         ) : null}
-                        {operationalCard.job_card_display ? <p>{operationalCard.job_card_display}</p> : null}
+                        {operationalCard.job_card_display ? (
+                          <p>Flight: <AdminOperationalUppercaseValue field="flight">{operationalCard.job_card_display.replace(/^Flight\s*/i, "")}</AdminOperationalUppercaseValue></p>
+                        ) : null}
+                        {operationalCard.company_display_name ? (
+                          <p>Company: <AdminOperationalUppercaseValue field="company">{operationalCard.company_display_name}</AdminOperationalUppercaseValue></p>
+                        ) : null}
                         <p>Booker: {bookerText}</p>
-                        <p>Name: {passengerText}</p>
+                        <p>Name: <AdminOperationalUppercaseValue field="passenger">{passengerText}</AdminOperationalUppercaseValue></p>
                       </OperationalCardSection>
                       <OperationalCardSection section="route" title="Route">
-                        <p className="break-words">Route: {routeText}</p>
+                        <p>Pickup: <AdminOperationalUppercaseValue field="pickup">{pickup}</AdminOperationalUppercaseValue></p>
+                        <p>Drop-off: <AdminOperationalUppercaseValue field="dropoff">{dropoff}</AdminOperationalUppercaseValue></p>
+                        <p className="break-words">Route: <AdminOperationalUppercaseValue field="pickup">{routeText}</AdminOperationalUppercaseValue></p>
                       </OperationalCardSection>
                     </div>
                     <div className="grid gap-2" data-operational-card-summary-grid={bookingId}>
@@ -24049,12 +24270,12 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       />
                     </div>
                     <OperationalCardSection section="vehicle-pax-price" title="Vehicle / pax">
-                      <p>Vehicle: {operationalCard.vehicle_display || "Vehicle TBC"}</p>
+                      <p>Vehicle: <AdminOperationalUppercaseValue field="vehicle">{operationalCard.vehicle_display || "Vehicle TBC"}</AdminOperationalUppercaseValue></p>
                       <p>Pax: {operationalCard.pax_display || "1"}</p>
                       {operationalCard.child_seat_display ? (
                         <p>{operationalCard.child_seat_display}</p>
                       ) : null}
-                      {operationalCard.extra_stop_display ? <p>{operationalCard.extra_stop_display}</p> : null}
+                      {operationalCard.extra_stop_display ? <p>Extra stops: <AdminOperationalUppercaseValue field="extra-stops">{operationalCard.extra_stop_display.replace(/^Extra stops:\s*/i, "")}</AdminOperationalUppercaseValue></p> : null}
                       {createdAt ? <p className="text-xs text-slate-500">Created {createdAt}</p> : null}
                     </OperationalCardSection>
                   </div>
@@ -24286,10 +24507,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 operationalCard.assigned_driver_display_name ||
                 clean(savedBooking.driver_name) ||
                 "Driver TBC";
-              const vehiclePaxText = [
-                operationalCard.vehicle_display || "Vehicle TBC",
-                `Pax ${operationalCard.pax_display || "1"}`,
-              ].join(" · ");
               const pickupMetaText = [
                 formatBookingPickupDateTimeSgt(savedBooking),
                 operationalCard.job_card_display,
@@ -24329,20 +24546,31 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       <summary className="grid cursor-pointer list-none gap-2 rounded-md px-2 py-1.5 outline-none transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900/20 md:grid-cols-[minmax(13rem,1.1fr)_minmax(10rem,0.8fr)_minmax(14rem,1.4fr)_minmax(9rem,0.7fr)_minmax(8rem,auto)] md:items-center">
                         <span className="min-w-0">
                           <span className="block truncate font-semibold text-slate-950">
-                            {getLoadBookingsOperationalDisplayTitle(operationalCard)}
+                            <AdminOperationalUppercaseValue field="company">
+                              {getLoadBookingsOperationalDisplayTitle(operationalCard)}
+                            </AdminOperationalUppercaseValue>
                           </span>
                           <span className="block truncate text-xs text-slate-500">
                             {pickupMetaText}
                           </span>
                         </span>
                         <span className="min-w-0">
-                          <span className="block truncate text-slate-800">{passengerText}</span>
+                          <span className="block truncate text-slate-800">
+                            <AdminOperationalUppercaseValue field="passenger">{passengerText}</AdminOperationalUppercaseValue>
+                          </span>
                           <span className="block truncate text-xs text-slate-500">Booker: {bookerText}</span>
                         </span>
-                        <span className="min-w-0 truncate text-slate-700">{routeText}</span>
+                        <span className="min-w-0 truncate text-slate-700">
+                          <AdminOperationalUppercaseValue field="pickup">{routeText}</AdminOperationalUppercaseValue>
+                        </span>
                         <span className="min-w-0">
                           <span className="block truncate text-slate-800">{driverText}</span>
-                          <span className="block truncate text-xs text-slate-500">{vehiclePaxText}</span>
+                          <span className="block truncate text-xs text-slate-500">
+                            <AdminOperationalUppercaseValue field="vehicle">
+                              {operationalCard.vehicle_display || "Vehicle TBC"}
+                            </AdminOperationalUppercaseValue>{" "}
+                            · Pax {operationalCard.pax_display || "1"}
+                          </span>
                         </span>
                         <span className="flex min-w-0 flex-wrap items-center gap-1.5 md:justify-end md:text-right">
                           <span
@@ -24363,12 +24591,19 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       <div className="mt-1.5 grid gap-2 border-t border-stone-100 px-2 pt-2" data-completed-operational-body={bookingId}>
                         <div className="grid gap-2 md:grid-cols-2">
                           <OperationalCardSection section="booking" title="Booking">
-                            {operationalCard.job_card_display ? <p>{operationalCard.job_card_display}</p> : null}
+                            {operationalCard.job_card_display ? (
+                              <p>Flight: <AdminOperationalUppercaseValue field="flight">{operationalCard.job_card_display.replace(/^Flight\s*/i, "")}</AdminOperationalUppercaseValue></p>
+                            ) : null}
+                            {operationalCard.company_display_name ? (
+                              <p>Company: <AdminOperationalUppercaseValue field="company">{operationalCard.company_display_name}</AdminOperationalUppercaseValue></p>
+                            ) : null}
                             <p>Booker: {bookerText}</p>
-                            <p>Name: {passengerText}</p>
+                            <p>Name: <AdminOperationalUppercaseValue field="passenger">{passengerText}</AdminOperationalUppercaseValue></p>
                           </OperationalCardSection>
                           <OperationalCardSection section="route" title="Route">
-                            <p className="break-words">Route: {routeText}</p>
+                            <p>Pickup: <AdminOperationalUppercaseValue field="pickup">{pickup}</AdminOperationalUppercaseValue></p>
+                            <p>Drop-off: <AdminOperationalUppercaseValue field="dropoff">{dropoff}</AdminOperationalUppercaseValue></p>
+                            <p className="break-words">Route: <AdminOperationalUppercaseValue field="pickup">{routeText}</AdminOperationalUppercaseValue></p>
                           </OperationalCardSection>
                         </div>
                         <div className="grid gap-2 sm:grid-cols-3" data-operational-card-summary-grid={bookingId}>
@@ -24389,13 +24624,13 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                           />
                         </div>
                         <OperationalCardSection section="vehicle-pax-price" title="Vehicle / pax">
-                          <p>Vehicle: {operationalCard.vehicle_display || "Vehicle TBC"}</p>
+                          <p>Vehicle: <AdminOperationalUppercaseValue field="vehicle">{operationalCard.vehicle_display || "Vehicle TBC"}</AdminOperationalUppercaseValue></p>
                           <p>Pax: {operationalCard.pax_display || "1"}</p>
                           {operationalCard.child_seat_display ? (
                             <p>{operationalCard.child_seat_display}</p>
                           ) : null}
                           {operationalCard.extra_stop_display ? (
-                            <p>{operationalCard.extra_stop_display}</p>
+                            <p>Extra stops: <AdminOperationalUppercaseValue field="extra-stops">{operationalCard.extra_stop_display.replace(/^Extra stops:\s*/i, "")}</AdminOperationalUppercaseValue></p>
                           ) : null}
                           {createdAt ? <p className="text-xs text-slate-500">Created {createdAt}</p> : null}
                         </OperationalCardSection>
@@ -24525,6 +24760,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   ].filter(Boolean).join(" / ");
   const dispatchReadableSummaryItems = [
     { label: "Passenger", value: clean(booking.name) || "Passenger not set" },
+    { label: "Company", value: clean(booking.company) || "Company not set" },
     {
       label: "Reference",
       value: clean(dispatchReleaseWorkflowBookingReference) || "Not saved yet",
@@ -24536,6 +24772,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     { label: "Pickup", value: dispatchReadablePickupDateTime },
     { label: "From", value: clean(dispatchReadableFlightLocationParts.pickup) || "Pickup not set" },
     { label: "To", value: clean(dispatchReadableFlightLocationParts.dropoff) || "Drop-off not set" },
+    ...(clean(booking.flight) ? [{ label: "Flight", value: clean(booking.flight) }] : []),
+    ...(clean(booking.extraStopLocation)
+      ? [{ label: "Extra stops", value: clean(booking.extraStopLocation) }]
+      : []),
     { label: "Pax", value: String(Number(clean(booking.pax)) || 1) },
     { label: "Driver", value: dispatchReadableDriverValue },
     { label: "Vehicle", value: dispatchReadableVehicleValue },
@@ -24548,7 +24788,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       : []),
   ];
   const customerCopyReadableSummaryItems = [
-    ...dispatchReadableSummaryItems.filter((item) => item.label !== "Vehicle"),
+    ...dispatchReadableSummaryItems.filter(
+      (item) => !["Company", "Extra stops", "Flight", "Vehicle"].includes(item.label),
+    ),
     ...(dispatchReadableCustomerVehicleValue
       ? [{ label: "Car", value: dispatchReadableCustomerVehicleValue }]
       : []),
@@ -37494,21 +37736,32 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                               {draft.bookingType || "Needs review"}
                             </p>
                             <p>
-                              <strong>Vehicle:</strong> {draft.vehicle || "Not detected"}
+                              <strong>Vehicle:</strong>{" "}
+                              <AdminOperationalUppercaseValue field="vehicle">
+                                {draft.vehicle || "Not detected"}
+                              </AdminOperationalUppercaseValue>
                             </p>
                             <p>
                               <strong>Passenger:</strong>{" "}
-                              {draft.passengerName || "Not detected"}
+                              <AdminOperationalUppercaseValue field="passenger">
+                                {draft.passengerName || "Not detected"}
+                              </AdminOperationalUppercaseValue>
                             </p>
                             <p>
                               <strong>Confidence:</strong>{" "}
                               {Math.round(draft.confidence * 100)}%
                             </p>
                             <p className="sm:col-span-2">
-                              <strong>Pickup:</strong> {draft.pickup || "Not detected"}
+                              <strong>Pickup:</strong>{" "}
+                              <AdminOperationalUppercaseValue field="pickup">
+                                {draft.pickup || "Not detected"}
+                              </AdminOperationalUppercaseValue>
                             </p>
                             <p className="sm:col-span-2">
-                              <strong>Drop-off:</strong> {draft.dropoff || "Not detected"}
+                              <strong>Drop-off:</strong>{" "}
+                              <AdminOperationalUppercaseValue field="dropoff">
+                                {draft.dropoff || "Not detected"}
+                              </AdminOperationalUppercaseValue>
                             </p>
                             <div className="sm:col-span-2">
                               <strong>Needs review reasons:</strong>
@@ -37564,7 +37817,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                           >
                             <div className="grid gap-1 sm:grid-cols-2">
                               <p>
-                                <strong>Passenger:</strong> {clean(preview.passenger) || "Not detected"}
+                                <strong>Passenger:</strong>{" "}
+                                <AdminOperationalUppercaseValue field="passenger">
+                                  {clean(preview.passenger) || "Not detected"}
+                                </AdminOperationalUppercaseValue>
                               </p>
                               <p>
                                 <strong>Type:</strong> {clean(preview.type) || "Not detected"}
@@ -37574,15 +37830,23 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                                 {[preview.date, preview.time].filter(Boolean).join(" ") || "Not detected"}
                               </p>
                               <p>
-                                <strong>Flight:</strong> {clean(preview.flight) || "None"}
+                                <strong>Flight:</strong>{" "}
+                                <AdminOperationalUppercaseValue field="flight">
+                                  {clean(preview.flight) || "None"}
+                                </AdminOperationalUppercaseValue>
                               </p>
                               <p className="sm:col-span-2">
-                                <strong>Route:</strong> {routeText || "Not detected"}
+                                <strong>Route:</strong>{" "}
+                                <AdminOperationalUppercaseValue field="pickup">
+                                  {routeText || "Not detected"}
+                                </AdminOperationalUppercaseValue>
                               </p>
                               {clean(preview.extraStopLocation) ? (
                                 <p className="sm:col-span-2">
                                   <strong>Extra stop:</strong>{" "}
-                                  {[preview.extraStopCount, preview.extraStopLocation].filter(Boolean).join(" x ")}
+                                  <AdminOperationalUppercaseValue field="extra-stops">
+                                    {[preview.extraStopCount, preview.extraStopLocation].filter(Boolean).join(" x ")}
+                                  </AdminOperationalUppercaseValue>
                                 </p>
                               ) : null}
                               {clean(preview.childSeatRequired) === "yes" ? (
@@ -41670,7 +41934,15 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 {dispatchReadableSummaryItems.map((item) => (
                   <div className="min-w-0 rounded border border-white bg-white px-2 py-1.5" key={`job-${item.label}`}>
                     <p className="text-[10px] font-semibold uppercase text-slate-500">{item.label}</p>
-                    <p className="mt-0.5 break-words font-semibold text-slate-950">{item.value}</p>
+                    <p className="mt-0.5 break-words font-semibold text-slate-950">
+                      {dispatchSummaryUppercaseField(item.label) ? (
+                        <AdminOperationalUppercaseValue field={dispatchSummaryUppercaseField(item.label)!}>
+                          {item.value}
+                        </AdminOperationalUppercaseValue>
+                      ) : (
+                        item.value
+                      )}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -42499,14 +42771,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     </div>
                   </div>
                 </div>
+                {adminDriverOtsPhotoProofLatest ? (
                 <div
-                  className={`mb-2 rounded-md border px-3 py-2 text-xs ${
-                    adminDriverOtsPhotoProofLatest
-                      ? "border-sky-200 bg-sky-50 text-sky-950"
-                      : adminDriverOtsPhotoProofReadState.status === "error"
-                        ? "border-rose-200 bg-rose-50 text-rose-950"
-                        : "border-slate-200 bg-slate-50 text-slate-700"
-                  }`}
+                  className="mb-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-950"
                   data-admin-driver-ots-photo-proof-visible-readout="true"
                 >
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -42518,15 +42785,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       >
                         {adminDriverOtsPhotoProofReadoutMessage || adminDriverOtsPhotoProofLabel}
                       </p>
-                      {adminDriverOtsPhotoProofLatest ? (
-                        <p className="mt-0.5 break-words">
-                          Received {adminDriverOtsPhotoProofLatestTime}
-                        </p>
-                      ) : (
-                        <p className="mt-0.5 break-words">
-                          Photo will appear here after driver sends it from the job link.
-                        </p>
-                      )}
+                      <p className="mt-0.5 break-words">
+                        Received {adminDriverOtsPhotoProofLatestTime}
+                      </p>
                     </div>
                     <div className="flex shrink-0 flex-wrap gap-2">
                       <button
@@ -42543,7 +42804,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       >
                         {adminDriverOtsPhotoProofReadState.status === "loading" ? "Checking" : "Refresh"}
                       </button>
-                      {adminDriverOtsPhotoProofLatest?.admin_view_url ? (
+                      {adminDriverOtsPhotoProofLatest.admin_view_url ? (
                         <a
                           className="inline-flex min-h-8 items-center rounded-md border border-sky-300 bg-white px-2.5 py-1 text-xs font-semibold text-sky-950 transition hover:bg-sky-50"
                           data-admin-driver-ots-photo-proof-visible-view="true"
@@ -42557,6 +42818,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     </div>
                   </div>
                 </div>
+                ) : null}
                 </details>
                 <details
                   open

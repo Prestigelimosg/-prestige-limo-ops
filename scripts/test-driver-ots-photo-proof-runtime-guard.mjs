@@ -149,11 +149,17 @@ for (const fragment of [
   "data-admin-driver-ots-photo-proof-visible-readout=\"true\"",
   "data-admin-driver-ots-photo-proof-visible-refresh=\"true\"",
   "data-admin-driver-ots-photo-proof-visible-view=\"true\"",
-  "Photo will appear here after driver sends it from the job link.",
+  "{adminDriverOtsPhotoProofLatest ? (",
   "View photo",
 ]) {
   assertIncludes(adminPage, fragment, `admin Dispatch OTS proof fragment: ${fragment}`);
 }
+
+assertExcludes(
+  adminPage,
+  /Photo will appear here after driver sends it from the job link\./,
+  "Dispatch no-photo outstanding-task placeholder",
+);
 
 assertExcludes(customerPublicSources, /ots-photo|photo-proof|driver_ots_photo_proofs|ots-photo-proofs/i, "customer public pages");
 

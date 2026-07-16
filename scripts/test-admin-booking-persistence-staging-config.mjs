@@ -10,7 +10,7 @@ const routeBlockedMessage =
 const readinessNotReadyError =
   "Admin booking persistence staging configuration is not ready.";
 const validServerUrl = "https://stage-readiness.supabase.co";
-const validServerCredential = "stage-readiness-server-credential-1234567890";
+const validServerCredential = "sb_secret_stage_readiness_server_credential_1234567890";
 const validAdminAccessCheck = "stage-readiness-admin-access-check-1234567890";
 const safeLeakPattern =
   /SUPABASE|NEXT_PUBLIC|PRESTIGE_ADMIN|stage-readiness\.supabase\.co|stage-readiness-server-credential|stage-readiness-admin-access|service_role|server-only|server_only|stack|sql|supabase internals|createClient|secret|key|token/i;
@@ -21,6 +21,7 @@ const sourceFiles = [
   "app/api/admin-bookings/route.ts",
   "app/api/customer-booking-requests/route.ts",
 ];
+const implementationLedgerPath = "docs/current-implementation-ledger.md";
 const originalEnv = {
   NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
   PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED:
@@ -129,6 +130,13 @@ async function writeMockModules(tempDir, options = {}) {
       "  return { data: null, ok: true };",
       "}",
       "module.exports = { sendAdminNewBookingEmailAlert };",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(tempDir, "lib/codex-job-card-auto-preparation.js"),
+    [
+      "async function prepareCodexJobCardForAdminReview() {}",
+      "module.exports = { prepareCodexJobCardForAdminReview };",
     ].join("\n"),
   );
   await writeFile(
@@ -643,5 +651,63 @@ try {
   delete globalThis.__prestigeStagingConfigMock;
   await harness.cleanup();
 }
+
+const implementationLedger = await readFile(implementationLedgerPath, "utf8");
+
+assert.match(
+  implementationLedger,
+  /### Production Supabase Legacy API Key Cutoff Evidence \(2026-07-15\)/,
+  "Expected the implementation ledger to record the bounded Production legacy-key cutoff.",
+);
+assert.match(
+  implementationLedger,
+  /dpl_GTjk3tJdVofKKy36bVFwPmP6sG4Y/,
+  "Expected the implementation ledger to record the verified replacement-key Production deployment.",
+);
+assert.match(
+  implementationLedger,
+  /legacy `anon` and `service_role` keys are disabled/,
+  "Expected the implementation ledger to record both legacy API keys as disabled.",
+);
+assert.match(
+  implementationLedger,
+  /remain valid as JWTs until a separately approved project JWT-secret rotation/,
+  "Expected the implementation ledger to preserve the residual legacy-JWT risk and approval boundary.",
+);
+assert.match(
+  implementationLedger,
+  /Default prices, customer and driver records, bookings, invoices, OTS objects, Automation, schedules, and CRON_SECRET were not changed/,
+  "Expected the implementation ledger to preserve the bounded no-data/no-price-change boundary.",
+);
+assert.match(
+  implementationLedger,
+  /### Supabase Previous Legacy JWT Key Revocation Evidence \(2026-07-15\)/,
+  "Expected the implementation ledger to record the approved previous-key revocation.",
+);
+assert.match(
+  implementationLedger,
+  /previous legacy HS256 signing key is revoked/,
+  "Expected the implementation ledger to record the previous legacy HS256 key as revoked.",
+);
+assert.match(
+  implementationLedger,
+  /public JWKS exposes exactly one ES256 EC key/,
+  "Expected the implementation ledger to record the post-revocation public JWKS proof.",
+);
+assert.match(
+  implementationLedger,
+  /authenticated Production Load Accounts read succeeded and Automation remained ON/,
+  "Expected the implementation ledger to record the post-revocation Production read proof.",
+);
+assert.doesNotMatch(
+  implementationLedger,
+  /sb_secret_[A-Za-z0-9_-]{20,}/,
+  "The implementation ledger must never record a modern Supabase secret key.",
+);
+assert.doesNotMatch(
+  implementationLedger,
+  /eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/,
+  "The implementation ledger must never record a legacy JWT API key.",
+);
 
 console.log("Admin booking persistence staging config readiness tests passed.");

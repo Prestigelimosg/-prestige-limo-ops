@@ -144,6 +144,13 @@ async function writeMockModules(tempDir) {
     ].join("\n"),
   );
   await writeFile(
+    path.join(tempDir, "lib/codex-job-card-auto-preparation.js"),
+    [
+      "async function prepareCodexJobCardForAdminReview() {}",
+      "module.exports = { prepareCodexJobCardForAdminReview };",
+    ].join("\n"),
+  );
+  await writeFile(
     path.join(tempDir, "lib/customer-saved-bookings-read.js"),
     [
       "function resolveCustomerSavedBookingsBoundaryForPurpose() {",

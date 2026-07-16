@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 
 const ledgerPath = "docs/current-implementation-ledger.md";
@@ -80,8 +81,52 @@ for (const phrase of [
   "Future Email may include an admin-selected secure tracking-link live-location email only after separate owner approval for that exact channel/action gate.",
   "Email must not auto-send live location, must not send native/streaming live location, and must not be the future automatic live-location channel.",
   "No provider activation or provider send is approved by this guard.",
+  "Current `e8cfd8ea` controlled-test packet status is prepared but execution-blocked; this record does not approve a deployment, Preview env assignment, send-gate change, provider request, or external Email.",
+  "The exact candidate runtime is `e8cfd8ea Repair multi-segment booking status updates`, which retains the established `f6806723` Driver Details Email hardening; any later docs/test-only commit must prove that `e8cfd8ea` remains the latest runtime-path commit before a test deployment.",
+  "Any `app/` or `lib/` runtime change after `e8cfd8ea` invalidates that old controlled-test candidate for execution instead of blocking unrelated preactivation verification.",
+  "A future Email test must first name and review a fresh exact runtime candidate under separate owner approval; this stale packet can never authorize deploying or sending from a later commit.",
+  "The only approved candidate recipient is the owner mailbox `info@prestigelimo.sg`; the sender remains `Prestige Limo Dispatch <info@prestigelimo.sg>` and Reply-To remains `info@prestigelimo.sg`.",
+  "The owner must name one exact existing non-operational test booking and its exact assigned-driver test record at action time; no booking, driver, or customer may be guessed, inferred, duplicated, or recorded in this packet.",
+  "On 2026-07-15 the owner confirmed that all current bookings, customers, invoices, and drivers are test-only, thereby confirming exact fixture `ADM-20260712063110` with assigned driver `TEST DRIVER CRM 20260516` as non-operational test data; this fixture confirmation does not approve Preview configuration, deployment, provider access, or an external Email.",
+  "The content review must use only CUSTOMER BOOKING DETAILS and DRIVER DETAILS fields already allowlisted by the established gated route, with `Passenger name:` as the customer-facing identity label.",
+  "The controlled test, if later approved, is exactly one explicit admin Email click, one route POST, one provider request, and one delivered message; no live duplicate request is required because deterministic idempotency remains guard-proven.",
+  "Required send evidence is one HTTP 200 `send_succeeded` response, `provider_request_count: 1`, one safe provider message id, one received owner-mailbox message, same-page `Emailed` disabled state, zero follow-up send-route request, and zero database or notification-table write.",
+  "A later test requires a fresh protected Preview because the verified `f6806723` Preview is credential-free and gate-closed; temporary Preview-only env assignments must never change or expose Production values.",
+  "Rollback must close `PRESTIGE_DRIVER_DETAILS_EMAIL_SEND_ENABLED`, remove every temporary Driver Details Email/Resend Preview assignment, redeploy the credential-free gate-closed artifact, verify exactly one disabled `Email gate off` control, verify no later send-route request, keep automation-bypass count at zero, and preserve the Vercel SSO redirect.",
+  "Do not use `vercel curl` for the protected application check because its automatic protection-bypass creation would change project configuration; use the signed-in Browser and sanitized deployment logs instead.",
+  "Execution remains blocked pending separate action-time owner approval of the exact booking/driver fixture, temporary Preview configuration, fresh protected Preview deployment, and exactly one external Email send.",
+  "Preparing this packet requires no deployment because it changes only the ledger and its existing focused guard.",
 ]) {
   assertIncludes(safetySection, phrase, `Email staging-send safety phrase: ${phrase}`);
+}
+
+const candidateRuntimeCommit = "e8cfd8ea351f1bd5b47a7c759a43f33ccea4bbb6";
+const resolvedCandidate = spawnSync(
+  "git",
+  ["rev-parse", `${candidateRuntimeCommit}^{commit}`],
+  { encoding: "utf8" },
+);
+
+assert.equal(resolvedCandidate.status, 0, "Driver Details Email candidate runtime commit must exist.");
+assert.equal(
+  resolvedCandidate.stdout.trim(),
+  candidateRuntimeCommit,
+  "Driver Details Email candidate runtime commit must resolve exactly.",
+);
+
+const laterRuntimePaths = spawnSync(
+  "git",
+  ["diff", "--name-only", `${candidateRuntimeCommit}..HEAD`, "--", "app", "lib"],
+  { encoding: "utf8" },
+);
+
+assert.equal(laterRuntimePaths.status, 0, "Driver Details Email later runtime-path check must complete.");
+if (laterRuntimePaths.stdout.trim()) {
+  assertIncludes(
+    safetySection,
+    "Any `app/` or `lib/` runtime change after `e8cfd8ea` invalidates that old controlled-test candidate for execution",
+    "later runtime changes invalidate the old Email controlled-test candidate",
+  );
 }
 
 for (const forbidden of [

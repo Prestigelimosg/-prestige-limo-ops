@@ -4,9 +4,9 @@ This packet records the approved deployment-safety configuration work, isolated 
 
 ## Checkpoints
 
-- Latest repo commit deployed to isolated Preview: `b0a68cae Repair dashboard release checkpoint guards`.
-- Latest verified runtime checkpoint in the ledger: `2acaa3a5 Simplify dashboard booking request review`.
-- Latest Production deployment checkpoint: `b0a68cae Repair dashboard release checkpoint guards`.
+- Latest repo commit deployed to isolated Preview: `f6806723 Harden driver details email sending`.
+- Latest verified runtime checkpoint in the ledger: `e8cfd8ea Repair multi-segment booking status updates`.
+- Latest Production deployment checkpoint: `5ba9432e Repair multi-segment booking status updates`.
 - Source of truth: `docs/current-implementation-ledger.md`.
 
 ## Approval Fields
@@ -32,6 +32,8 @@ This packet records the approved deployment-safety configuration work, isolated 
 - Combined automation Preview approval: Owner explicitly approved proceeding with the suggested next safe step on 2026-07-14; scope was exact clean commit `b09b82f8`, one protected isolated Git-backed Preview, bounded GET-only API/log checks, signed-in desktop/modern-phone/foldable and invoice-overview acceptance, bypass revocation, Production unchanged verification, and evidence recording only; no Git push, Production deployment, Automation activation, live data, calendar/invoice action, environment change, provider action, or external send was approved
 - Booking Requests layout Preview approval: Owner explicitly approved proceeding with the suggested next safe step on 2026-07-14; scope was exact clean commit `2acaa3a5`, one isolated protected Preview, target/build/protection verification, signed-in desktop/390px/344px layout acceptance, and evidence recording only; no Git push, Production deployment, Automation or Push toggle, live-data action, calendar action, environment change, provider action, or external send was approved
 - Dashboard Production deployment approval: After approving the protected Preview, the owner separately approved the next stated step on 2026-07-14: push the local `staging` commits and deploy Production; this did not approve Automation/Push changes, booking decisions, notification cleanup, calendar/map action, invoice action, environment/database/provider changes, customer/driver messages, or external sends
+- Main branch alignment approval: After the exact branch drift and safest non-force sequence were reported, the owner explicitly approved proceeding on 2026-07-14; scope was a clean direct-ancestor fast-forward from reviewed `staging` to `main`, automatic Vercel Production deployment verification, and evidence recording only, with no Automation/Push change, live-data action, calendar/map action, invoice action, environment/database/provider change, customer/driver message, or external send
+- Driver Details Email hardened Preview approval: Owner explicitly approved proceeding with the stated next step on 2026-07-15; scope was a non-force push of exact clean runtime commit `f6806723` to `origin/staging`, one automatically created protected credential-free Preview, signed-in read-only desktop/mobile acceptance, sanitized log review, restored protection verification, and evidence recording only; no Production deployment, merge, Automation change, customer/driver contact, Email/provider send, live-data action, or environment/Supabase change was approved
 - Rollback owner: William / Prestige Limo SG
 - Notes: Keep all live DB/write, migrations, provider/env activation, external APIs, live sending, payment/PDF/payout, auth activation, live location, photo upload/storage, CRM/calendar amendment writes, and risky shim writes blocked.
 
@@ -130,6 +132,25 @@ This packet records the approved deployment-safety configuration work, isolated 
 - Preview therefore remains intentionally fail-closed and cannot prove real booking queue rows. No booking decision, notification cleanup, Automation toggle, Push toggle, calendar/map action, invoice action, customer/driver message, or external send was performed.
 - The deployment command used no Production flag and no Git push occurred. No Production deployment, alias, environment, database, provider, or running Production state was changed.
 
+## Driver Details Email Hardened Protected Preview Evidence
+
+- The non-force push moved only `origin/staging` from `c7ca0aa5` to exact runtime commit `f6806723166d19d4147f4e4f37fda64d4c4e0d6b`. Remote `main` remained at `d7f6aff9df27a0e8499d2a78e2926a5c37ebe338`.
+- Vercel automatically created READY Preview deployment `dpl_DUKTCzvYFtzHrkT955cMDbgwrXsV` at `https://prestige-limo-ops-staging-i1p9mbapq-prestigelimosgs-projects.vercel.app`. Inspection confirmed target `preview`; signed-in Browser verification confirmed exact page build marker `f6806723`.
+- Preview's names-only configuration retained only the inert `PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS` assignment. No Supabase, admin-session, Resend, Email-gate, cron, payment, provider, or write credential/gate was added, printed, or changed.
+- Desktop 1440 x 900 and mobile 390 x 844 acceptance each found exactly one disabled `Email gate off` control and document/body width equal to viewport width. The single existing Customer Copy control row remained intact. No control was clicked.
+- Sanitized logs contained 19 GET and one OPTIONS request, zero POST/PATCH/PUT/DELETE requests, and no request to `/api/admin-customer-driver-details-email-send-action`. The same-origin activation-preflight GET returned HTTP 200 while the UI remained gate-closed; one optional unconfigured-backend read returned HTTP 503 and one returned safe HTTP 403.
+- `vercel curl` unexpectedly auto-generated one automation protection-bypass token through a project PATCH during a bounded GET. Its value was never printed or recorded; the GET returned `driverDetailsEmailSendGateOpen: false`. Inspection stopped, the exact token was revoked without displaying it, final automation-bypass count returned to zero, SSO protection remained `all_except_custom_domains`, and unauthenticated Preview access again returned HTTP 302 to Vercel SSO. The temporary configuration mutation and restoration are recorded explicitly.
+- Production remained unchanged on remote main `d7f6aff9df27a0e8499d2a78e2926a5c37ebe338`; `https://app.prestigelimo.sg` returned HTTP 200. No Production deployment, alias change, merge, Automation toggle, live-data write, environment/Supabase change, email/provider send, customer/driver contact, invoice/payment/payout action, or calendar/map action occurred.
+- The known dependency findings remain one low and three moderate, with no high or critical finding; no dependency change or fresh audit claim is made by this evidence-only record.
+
+## Driver Details Email Post-Hotfix Candidate Reconciliation
+
+- Read-only Git reconciliation on 2026-07-15 found remote `main` at Production hotfix `5ba9432e7f8dab3c63052c68a52a6bfecbc7ee17`, remote `staging` at the previously verified Driver Details Email runtime `f6806723166d19d4147f4e4f37fda64d4c4e0d6b`, and local `staging` with one main-only and ten staging-only commits from common ancestor `d7f6aff9df27a0e8499d2a78e2926a5c37ebe338`. No merge, rebase, force push, branch push, deployment, or configuration action was performed by this reconciliation.
+- Local runtime candidate `e8cfd8ea351f1bd5b47a7c759a43f33ccea4bbb6` retains the exact established `f6806723` Driver Details Email route, helper, UI, payload, gate, allowlist, and deterministic idempotency behavior. Its later runtime change repairs only the established saved-booking status target and focused booking coverage; subsequent local commits contain no `app` or `lib` runtime-path change.
+- The Production hotfix and local staging repair carry the same bounded booking-status source outcome under different commit identities. This is documented branch divergence, not authorization to merge or deploy either branch. The controlled Email test remains blocked pending separate action-time owner approval of the exact existing test booking and assigned test driver, temporary Preview-only configuration, a fresh protected Preview deployment, and exactly one external Email to `info@prestigelimo.sg`.
+- The owner confirmed on 2026-07-15 that every current booking, customer, invoice, and driver record is test-only, which confirms exact fixture `ADM-20260712063110` with assigned driver `TEST DRIVER CRM 20260516` as non-operational test data. That classification does not authorize a temporary Preview database, Supabase branch, Preview environment assignment, deployment, provider access, or external Email; those actions retain separate approval boundaries.
+- No Email, provider request, customer/driver contact, environment value read or display, Resend key action, Supabase read/write, Automation toggle, calendar/map action, invoice/payment/payout action, Production change, or external system change occurred during this candidate reconciliation.
+
 ## Dashboard Booking Requests Production Deployment Evidence
 
 - Exact clean commit `b0a68cae Repair dashboard release checkpoint guards` and its three preceding local commits were pushed to `origin/staging`; `origin/main` remained at `3bac3c3a`. The push created automatic READY Preview deployment `dpl_92f1KeAxJohLsu57Wk2BQkfYLoR9` and did not change Production by itself.
@@ -140,6 +161,16 @@ This packet records the approved deployment-safety configuration work, isolated 
 - The first shell check stopped on zsh's reserved `status` variable after read-only inspection/fetch; its corrected run proved HTTP 200 and the build marker. Raw HTML text counts were not used as hydrated UI proof. The optional Chrome tab-deliverable marker was unsupported after verification and changed no page state. These setup errors are recorded, not hidden.
 - Stopping the temporary local Production server exposed the established fail-closed `supabaseUrl is required` diagnostics from intentionally unconfigured local backend reads. Both browser suites had zero console errors and zero blocked Supabase requests/mutations; no live Supabase connection or write occurred, and this is not represented as a Production error.
 - Runtime code remains exact application commit `2acaa3a5`; the later three commits contain only deployment evidence and guard repair.
+
+## Main Branch Fast-Forward Production Alignment Evidence
+
+- The approved preflight proved a clean `staging` worktree, remote `main` at `3bac3c3a`, remote `staging` at `d7f6aff9`, a `0 6` left/right count, and `main` as a direct ancestor of `staging`. The complete pre-activation suite and Next.js 16.2.6 Production build both exited zero before any push.
+- The suite retained the known module-type warnings for `lib/codex-job-card-correction.ts` and `lib/driver-job-calendar-event.ts`; they are recorded as non-blocking diagnostics rather than hidden.
+- The first `git push origin staging:main` was rejected before mutation by a stale saved HTTPS credential. GitHub CLI was still authenticated as `Prestigelimosg` with repository scope; `gh auth setup-git` connected Git to that existing authorized keyring account. A new remote-head read showed no branch had changed, and the same non-force push then fast-forwarded `main` from `3bac3c3a` to `d7f6aff9` without a merge commit, rebase, history rewrite, or force push.
+- Immediately after alignment, remote `main` and `staging` both resolved to `d7f6aff9df27a0e8499d2a78e2926a5c37ebe338`. Vercel's configured `main` Production Branch automatically created READY Production deployment `dpl_GEsHpMkUyhSqY8XaniytrgC54pfi` at `https://prestige-limo-ops-staging-qv8a6duf0-prestigelimosgs-projects.vercel.app`.
+- Read-only inspection proved target `production`, status `Ready`, alias `https://app.prestigelimo.sg`, alias HTTP 200, and exact build marker `d7f6aff9df27a0e8499d2a78e2926a5c37ebe338`.
+- Runtime code remains exact application commit `2acaa3a5`; the later five commits through `d7f6aff9` contain deployment approval/evidence, release-guard repair, or diagnostics only. The evidence-record commit is documentation/guard-only and is pushed to `staging` only, so it does not trigger another Production deployment from `main`.
+- No Automation or Push control, booking/customer/driver record, notification item, calendar or Google Maps state, invoice/payment/payout record, environment or Supabase configuration, provider setting, customer/driver message, or external send changed during this alignment and verification.
 
 ## Required Checks Before Staging
 

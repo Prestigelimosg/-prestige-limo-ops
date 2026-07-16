@@ -158,6 +158,32 @@ assert.match(browser, /Codex calendar conflict browser state/);
 assert.match(browser, /data-codex-calendar-conflict-state/);
 assert.match(browser, /Expected Automation OFF to remove every per-card conflict result/);
 assert.match(ledger, /Codex Prepared Job-Card Calendar Conflict Check/);
+assert.match(ledger, /Codex Calendar Conflict Production Runtime Evidence/);
+for (const fragment of [
+  "use controlled test data in the established Dashboard",
+  "make no Google Calendar write",
+  "Connected Chrome confirmed exact Production build `d7f6aff9`",
+  "Automation already ON, Push alerts OFF, `Conflict check ON`, and zero prepared cards",
+  "Automation was not toggled during the test",
+  "every original 11:00 assignment field plus its original `updated_at` timestamp was restored",
+  "one minimal database-only test booking `CODEX-CONFLICT-20260715-01`",
+  "no customer, company, PA/booker, traveler, phone, email, route child, notification, invoice, payment, calendar, or provider link",
+  "inside the established 90-minute window",
+  "exact result `Calendar conflict (1)`",
+  "1 overlapping loaded Prestige saved job uses the same driver or vehicle.",
+  "No review, approval, decline, Return to Codex, calendar, map, message, invoice, payment, payout, or provider action was pressed.",
+  "zero matching booking, workflow, route-point, and notification rows",
+  "Final visible refresh returned to 68 saved bookings, zero prepared cards, `Conflict check ON`, Automation ON, Push alerts OFF, and zero Chrome errors.",
+  "unverified Automation column `setting_key`",
+  "Neither query contained a write.",
+  "no duplicate lane or guard was added",
+]) {
+  assert.equal(
+    ledger.includes(fragment),
+    true,
+    `Calendar conflict Production evidence missing ${fragment}.`,
+  );
+}
 assert.equal(suite.includes(guardPath), true);
 
 console.log("Codex calendar conflict detection guard passed.");

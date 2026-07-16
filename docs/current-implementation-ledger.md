@@ -4,10 +4,10 @@ Latest verified clean runtime checkpoint:
 9a132cb4 Keep refreshed Calendar payload consistent
 
 Latest pushed main/staging runtime checkpoint:
-3e9b6acc Guard Calendar company sync by CRM identity
+9a132cb4 Keep refreshed Calendar payload consistent
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-3ca51cbb Merge pull request #11 from Prestigelimosg/staging
+2a3520c1 Merge pull request #13 from Prestigelimosg/staging
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -8333,3 +8333,12 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The established traveler billing-account formatter now canonicalizes repeated trailing passenger brackets before applying the current passenger. This keeps repeated saves idempotent and allows the same company to be retained when the passenger changes without deriving verified identity IDs from names or labels.
 - No second Calendar route, status lane, save path, CRM panel, button, or provider write was added. Customer booking persistence, verified identity selection, notification delivery, reminders, pricing, billing, payout, parser, and public/driver surfaces remain unchanged.
 - Focused locks: `scripts/test-admin-booking-google-calendar-sync-api-contract.mjs` and `scripts/test-save-crm-billing-identity-review-guard.mjs`.
+
+### Update + Cal Refresh Consistency Production Evidence
+
+- Production release PR `#13` promoted exact staging head `eb4c5b7a` to `main` as `2a3520c1 Merge pull request #13 from Prestigelimosg/staging`. The PR was cleanly mergeable and contained only the four reviewed repair files.
+- GitHub's Vercel status for exact merge commit `2a3520c1` changed from pending to success with `Deployment has completed`. No Vercel environment assignment, Supabase configuration, database schema, runtime gate, provider setting, or Automation state changed.
+- Signed-in Production Chrome displayed exact build `2a3520c1`. Opening the existing Bookings tab issued one existing read-only `mode=status` Calendar comparison request; the exact linked return booking carried `DEP`, `AVF`, and `Admin Review Required`, and the safe response was `cal_saved`.
+- The exact return-booking card displayed green `Cal saved`. After one normal Chrome reload and reopening Bookings, the same card again displayed green `Cal saved` automatically, with no amber `Update Cal` state and no browser logs.
+- `Update + Cal`, Save + CRM, booking edit, Calendar write, CRM write, provider send, payment, invoice, payout, map, messaging, customer, and driver actions were not clicked or performed during acceptance.
+- The saved company display label on this historical booking still contains the passenger suffix twice from the earlier Production save. The repair prevents a later save from appending another suffix but does not silently rewrite existing booking data; any historical label cleanup remains a separate explicit owner-approved data change.

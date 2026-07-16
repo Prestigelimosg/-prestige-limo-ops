@@ -8123,13 +8123,22 @@ async function runChromeTest() {
           const uppercaseValues = [
             ...(card?.querySelectorAll("[data-admin-operational-uppercase-value]") || []),
           ];
+          const visibleBookingCards = [
+            ...document.querySelectorAll(
+              "[data-current-upcoming-bookings-list='true'] [data-recent-operational-card]",
+            ),
+          ];
 
-          return card && calendarStatus && uppercaseValues.length > 0
+          return card && calendarStatus && uppercaseValues.length > 0 && visibleBookingCards.length >= 2
             ? {
                 calendarStatus: {
                   tagName: calendarStatus.tagName,
                   text: calendarStatus.textContent.trim(),
                 },
+                alternatingCards: visibleBookingCards.slice(0, 2).map((bookingCard) => ({
+                  colour: bookingCard.getAttribute("data-bookings-alternate-colour") || "",
+                  backgroundColor: getComputedStyle(bookingCard).backgroundColor,
+                })),
                 uppercaseValues: uppercaseValues.map((value) => ({
                   field: value.getAttribute("data-admin-operational-uppercase-value") || "",
                   textTransform: getComputedStyle(value).textTransform,
@@ -8144,6 +8153,16 @@ async function runChromeTest() {
       bookingsCalendarStatusRuntimeState.calendarStatus,
       { tagName: "SPAN", text: "Cal saved" },
       "Expected the configured Google Calendar status to render as a non-button Bookings pill",
+    );
+    assert.deepEqual(
+      bookingsCalendarStatusRuntimeState.alternatingCards.map(({ colour }) => colour),
+      ["sky", "violet"],
+      "Expected adjacent visible Bookings cards to alternate sky and violet",
+    );
+    assert.notEqual(
+      bookingsCalendarStatusRuntimeState.alternatingCards[0].backgroundColor,
+      bookingsCalendarStatusRuntimeState.alternatingCards[1].backgroundColor,
+      "Expected adjacent visible Bookings cards to have different computed backgrounds",
     );
     assert.ok(
       bookingsCalendarStatusRuntimeState.uppercaseValues.every(

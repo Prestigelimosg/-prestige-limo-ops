@@ -517,7 +517,7 @@ for (const [label, start, end, expectedDisplayItemMap, requiresVehiclePax] of [
     "recent operational cards",
     "const recentBookingsPanel",
     "const completedEmptyState",
-    "filteredRecentBookingDisplayItems.map(({ bookingRecord: savedBooking, operationalCard })",
+    "filteredRecentBookingDisplayItems.map(({ bookingRecord: savedBooking, operationalCard }, bookingIndex)",
     true,
   ],
   [

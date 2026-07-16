@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-9a132cb4 Keep refreshed Calendar payload consistent
+bdb71818 Repair driver Calendar sync response
 
 Latest pushed main/staging runtime checkpoint:
 9a132cb4 Keep refreshed Calendar payload consistent
@@ -19,6 +19,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The established admin-booking update adapter now restores only the normalized driver name/contact/plate values from the booking row that just updated successfully when a compatibility reload omits those fields. The same enriched safe record is returned and audited; no client-supplied value is trusted outside the already validated admin booking payload, and a failed booking update still returns before Calendar sync.
 - The existing `Update + Cal` success path now also publishes that exact returned record into the established loaded-bookings state before calling the existing Calendar upsert. This keeps the card payload, provider write, and automatic green-pill comparison aligned without adding a route, event, button, panel, helper lane, or provider write.
 - Focused regression coverage remains in `scripts/test-admin-booking-supabase-adapter-contract.mjs`, `scripts/test-admin-booking-google-calendar-sync-api-contract.mjs`, and `scripts/test-dispatch-action-feedback-compact-guard.mjs`. The adapter fixture forces both driver-bearing reload selectors to fail, verifies the driverless compatibility fallback, and requires the successful update response and audit to retain the exact normalized driver assignment.
+- Local verification passed the focused adapter/Calendar/Dispatch/draft-assignment guards, TypeScript, staged application-change guard, lint with zero errors and the existing warning backlog, Next.js 16.2.6 production build, and the full booking UI browser suite in 325.5 seconds with zero test errors, zero console errors, zero blocked Supabase requests, and zero blocked mutation requests. The broader preactivation suite passed all checks reached before its existing branch-lineage checkpoint rejected the current staging-tracked feature branch against a main-only deployment commit; deployment history was not rewritten or hidden.
 - The current stale Production event is not silently mutated by this source repair. A separately approved `Update + Cal` action after deployment is required to change that one live Calendar title to the established `[plate] > [traveler] - [service] - Prestige` format.
 
 ### Admin Bookings Alternating Card Colours (2026-07-16)

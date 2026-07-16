@@ -14,7 +14,7 @@ const appPage = await readFile("app/page.tsx", "utf8");
 const assignedDriverSection = sliceBetween(
   appPage,
   'data-dispatch-workflow-step="driver-assignment"',
-  '<div className="order-[61]">{activeJobsMonitorPanel}</div>',
+  "</section>",
 );
 const assignDraftDriverFunction = sliceBetween(
   appPage,

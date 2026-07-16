@@ -53,7 +53,7 @@ for (const fragment of [
   "returnDropoffLocation",
   "returnExtraStops",
 ]) {
-  assertIncludes(bookPage, fragment, `customer return trip form field ${fragment}`);
+  assertIncludes(bookPage, fragment, `/book return trip form field ${fragment}`);
 }
 
 for (const fragment of [
@@ -61,8 +61,14 @@ for (const fragment of [
   'data-customer-booking-return-trip-fields="true"',
   'data-customer-booking-field="returnExtraStops"',
 ]) {
-  assertIncludes(bookPage, fragment, `customer return trip UI marker ${fragment}`);
+  assertIncludes(bookPage, fragment, `/book return trip UI marker ${fragment}`);
 }
+
+assert.equal(
+  bookPage.match(/data-customer-booking-field="returnExtraStops"/g)?.length,
+  1,
+  "/book must render exactly one return extra stops field.",
+);
 
 for (const removedPortalFragment of [
   "type BookingRequestForm =",
@@ -78,6 +84,13 @@ for (const fragment of [
 ]) {
   assertIncludes(bookPage, fragment, `conditional return validation ${fragment}`);
 }
+
+assertIncludes(portalPage, 'href="/book"', "/my-bookings canonical booking-form link");
+assertExcludes(
+  portalPage,
+  /data-customer-portal-return-trip-(?:checkbox|fields)=/,
+  "/my-bookings duplicate return-trip form",
+);
 
 for (const fragment of [
   "returnTripRequested: input.returnTripRequested",

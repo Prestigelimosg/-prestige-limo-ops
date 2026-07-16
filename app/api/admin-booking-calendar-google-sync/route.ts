@@ -1,5 +1,6 @@
 import {
   adminBookingGoogleCalendarSyncVersion,
+  readAdminBookingCalendarStatusesFromGoogle,
   syncAdminBookingCalendarAgendaToGoogle,
 } from "../../../lib/admin-booking-google-calendar-sync";
 import {
@@ -86,10 +87,45 @@ export async function POST(request: Request) {
       return boundary.response;
     }
 
-    const result = await syncAdminBookingCalendarAgendaToGoogle(
-      await readJsonBody(request),
-      boundary.context,
-    );
+    const mode = new URL(request.url).searchParams.get("mode");
+    const payload = await readJsonBody(request);
+
+    if (mode === "status") {
+      const result = await readAdminBookingCalendarStatusesFromGoogle(
+        payload,
+        boundary.context,
+      );
+
+      if (!result.ok) {
+        return Response.json(
+          {
+            error: result.error,
+            ok: false,
+            version: adminBookingGoogleCalendarSyncVersion,
+          },
+          { status: result.status },
+        );
+      }
+
+      return Response.json({
+        ok: true,
+        statuses: result.data.statuses,
+        version: adminBookingGoogleCalendarSyncVersion,
+      });
+    }
+
+    if (mode) {
+      return Response.json(
+        {
+          error: "Admin Google Calendar request mode is not supported.",
+          ok: false,
+          version: adminBookingGoogleCalendarSyncVersion,
+        },
+        { status: 400 },
+      );
+    }
+
+    const result = await syncAdminBookingCalendarAgendaToGoogle(payload, boundary.context);
 
     if (!result.ok) {
       return Response.json(

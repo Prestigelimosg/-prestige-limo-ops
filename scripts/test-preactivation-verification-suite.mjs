@@ -42,6 +42,10 @@ const guardChecks = [
     script: "scripts/test-admin-customer-account-delete-runtime.mjs",
   },
   {
+    label: "customer and booking test-data wipe approval packet guard",
+    script: "scripts/test-customer-booking-test-data-wipe-approval-packet.mjs",
+  },
+  {
     label: "retired Ritz mock customer guard",
     script: "scripts/test-retired-ritz-mock-customer-guard.mjs",
   },
@@ -416,6 +420,10 @@ const guardChecks = [
   {
     label: "dispatch action feedback compact guard",
     script: "scripts/test-dispatch-action-feedback-compact-guard.mjs",
+  },
+  {
+    label: "admin operational uppercase display guard",
+    script: "scripts/test-admin-operational-uppercase-display-guard.mjs",
   },
   {
     label: "admin operational snapshot apply guard",

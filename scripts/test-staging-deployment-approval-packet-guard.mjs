@@ -46,15 +46,15 @@ assertIncludes("activate any live feature", "no-live-feature boundary");
 const checkpointsSection = sectionBetween("## Checkpoints");
 assertSectionIncludes(
   checkpointsSection,
-  "Latest repo commit deployed to isolated Preview: `b0a68cae Repair dashboard release checkpoint guards`.",
+  "Latest repo commit deployed to isolated Preview: `f6806723 Harden driver details email sending`.",
 );
 assertSectionIncludes(
   checkpointsSection,
-  "Latest verified runtime checkpoint in the ledger: `2acaa3a5 Simplify dashboard booking request review`.",
+  "Latest verified runtime checkpoint in the ledger: `e8cfd8ea Repair multi-segment booking status updates`.",
 );
 assertSectionIncludes(
   checkpointsSection,
-  "Latest Production deployment checkpoint: `b0a68cae Repair dashboard release checkpoint guards`.",
+  "Latest Production deployment checkpoint: `5ba9432e Repair multi-segment booking status updates`.",
 );
 assert.match(
   checkpointsSection,
@@ -97,8 +97,114 @@ for (const fragment of [
   "Combined automation Preview approval: Owner explicitly approved proceeding with the suggested next safe step on 2026-07-14",
   "Booking Requests layout Preview approval: Owner explicitly approved proceeding with the suggested next safe step on 2026-07-14",
   "Dashboard Production deployment approval: After approving the protected Preview, the owner separately approved the next stated step on 2026-07-14",
+  "Main branch alignment approval: After the exact branch drift and safest non-force sequence were reported, the owner explicitly approved proceeding on 2026-07-14",
+  "Driver Details Email hardened Preview approval: Owner explicitly approved proceeding with the stated next step on 2026-07-15",
 ]) {
   assertSectionIncludes(approvalSection, fragment, `Approval scope missing ${fragment}`);
+}
+
+const driverDetailsEmailPreviewSection = sectionBetween(
+  "## Driver Details Email Hardened Protected Preview Evidence",
+);
+for (const fragment of [
+  "`origin/staging` from `c7ca0aa5` to exact runtime commit `f6806723166d19d4147f4e4f37fda64d4c4e0d6b`",
+  "Remote `main` remained at `d7f6aff9df27a0e8499d2a78e2926a5c37ebe338`",
+  "READY Preview deployment `dpl_DUKTCzvYFtzHrkT955cMDbgwrXsV`",
+  "target `preview`",
+  "exact page build marker `f6806723`",
+  "only the inert `PRESTIGE_GOOGLE_MAPS_BROWSER_ALLOWED_ORIGINS` assignment",
+  "exactly one disabled `Email gate off` control",
+  "document/body width equal to viewport width",
+  "19 GET and one OPTIONS request",
+  "zero POST/PATCH/PUT/DELETE requests",
+  "no request to `/api/admin-customer-driver-details-email-send-action`",
+  "unexpectedly auto-generated one automation protection-bypass token",
+  "`driverDetailsEmailSendGateOpen: false`",
+  "final automation-bypass count returned to zero",
+  "SSO protection remained `all_except_custom_domains`",
+  "HTTP 302 to Vercel SSO",
+  "Production remained unchanged on remote main `d7f6aff9df27a0e8499d2a78e2926a5c37ebe338`",
+  "`https://app.prestigelimo.sg` returned HTTP 200",
+  "one low and three moderate, with no high or critical finding",
+]) {
+  assertSectionIncludes(
+    driverDetailsEmailPreviewSection,
+    fragment,
+    `Driver Details Email Preview evidence missing ${fragment}`,
+  );
+}
+
+for (const fragment of [
+  "### Driver Details Email Hardened Protected Preview Evidence",
+  "exact commit `f6806723166d19d4147f4e4f37fda64d4c4e0d6b`",
+  "READY Preview deployment `dpl_DUKTCzvYFtzHrkT955cMDbgwrXsV`",
+  "exactly one disabled `Email gate off` button",
+  "zero POST/PATCH/PUT/DELETE requests",
+  "no request to `/api/admin-customer-driver-details-email-send-action`",
+  "Final project inspection returned zero automation-bypass tokens",
+  "Production remained unchanged: remote `main` stayed at `d7f6aff9df27a0e8499d2a78e2926a5c37ebe338`",
+  "Focused evidence remains in the established `docs/staging-deployment-approval-packet.md` and `scripts/test-staging-deployment-approval-packet-guard.mjs`",
+]) {
+  assert.equal(
+    ledger.includes(fragment),
+    true,
+    `Implementation ledger missing Driver Details Email Preview evidence phrase ${fragment}.`,
+  );
+}
+
+const driverDetailsEmailCandidateReconciliationSection = sectionBetween(
+  "## Driver Details Email Post-Hotfix Candidate Reconciliation",
+);
+for (const fragment of [
+  "remote `main` at Production hotfix `5ba9432e7f8dab3c63052c68a52a6bfecbc7ee17`",
+  "remote `staging` at the previously verified Driver Details Email runtime `f6806723166d19d4147f4e4f37fda64d4c4e0d6b`",
+  "one main-only and ten staging-only commits",
+  "common ancestor `d7f6aff9df27a0e8499d2a78e2926a5c37ebe338`",
+  "No merge, rebase, force push, branch push, deployment, or configuration action was performed",
+  "Local runtime candidate `e8cfd8ea351f1bd5b47a7c759a43f33ccea4bbb6`",
+  "subsequent local commits contain no `app` or `lib` runtime-path change",
+  "same bounded booking-status source outcome under different commit identities",
+  "not authorization to merge or deploy either branch",
+  "exactly one external Email to `info@prestigelimo.sg`",
+  "exact fixture `ADM-20260712063110` with assigned driver `TEST DRIVER CRM 20260516`",
+  "does not authorize a temporary Preview database, Supabase branch, Preview environment assignment, deployment, provider access, or external Email",
+  "No Email, provider request, customer/driver contact, environment value read or display, Resend key action, Supabase read/write, Automation toggle, calendar/map action, invoice/payment/payout action, Production change, or external system change occurred",
+]) {
+  assertSectionIncludes(
+    driverDetailsEmailCandidateReconciliationSection,
+    fragment,
+    `Driver Details Email candidate reconciliation missing ${fragment}`,
+  );
+}
+
+const mainAlignmentSection = sectionBetween(
+  "## Main Branch Fast-Forward Production Alignment Evidence",
+);
+for (const fragment of [
+  "remote `main` at `3bac3c3a`",
+  "remote `staging` at `d7f6aff9`",
+  "a `0 6` left/right count",
+  "`main` as a direct ancestor of `staging`",
+  "complete pre-activation suite and Next.js 16.2.6 Production build both exited zero",
+  "known module-type warnings for `lib/codex-job-card-correction.ts` and `lib/driver-job-calendar-event.ts`",
+  "first `git push origin staging:main` was rejected before mutation",
+  "`gh auth setup-git` connected Git to that existing authorized keyring account",
+  "same non-force push then fast-forwarded `main` from `3bac3c3a` to `d7f6aff9`",
+  "without a merge commit, rebase, history rewrite, or force push",
+  "remote `main` and `staging` both resolved to `d7f6aff9df27a0e8499d2a78e2926a5c37ebe338`",
+  "READY Production deployment `dpl_GEsHpMkUyhSqY8XaniytrgC54pfi`",
+  "alias `https://app.prestigelimo.sg`",
+  "alias HTTP 200",
+  "exact build marker `d7f6aff9df27a0e8499d2a78e2926a5c37ebe338`",
+  "Runtime code remains exact application commit `2acaa3a5`",
+  "documentation/guard-only and is pushed to `staging` only",
+  "No Automation or Push control, booking/customer/driver record, notification item, calendar or Google Maps state, invoice/payment/payout record, environment or Supabase configuration, provider setting, customer/driver message, or external send changed",
+]) {
+  assertSectionIncludes(
+    mainAlignmentSection,
+    fragment,
+    `Main alignment evidence missing ${fragment}`,
+  );
 }
 
 const dashboardProductionSection = sectionBetween(

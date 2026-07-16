@@ -64,6 +64,12 @@ export type AdminBookingGoogleCalendarSyncReadiness = {
   version: typeof adminBookingGoogleCalendarSyncVersion;
 };
 
+type AdminBookingGoogleCalendarFailure = {
+  error: string;
+  ok: false;
+  status: 400 | 403 | 502 | 503;
+};
+
 export type AdminBookingGoogleCalendarSyncResult =
   | {
       data: {
@@ -71,11 +77,26 @@ export type AdminBookingGoogleCalendarSyncResult =
       };
       ok: true;
     }
+  | AdminBookingGoogleCalendarFailure;
+
+export type AdminBookingGoogleCalendarStatusValue =
+  | "cal_saved"
+  | "save_to_calendar"
+  | "update_calendar";
+
+export type AdminBookingGoogleCalendarStatus = {
+  booking_reference: string;
+  status: AdminBookingGoogleCalendarStatusValue;
+};
+
+export type AdminBookingGoogleCalendarStatusResult =
   | {
-      error: string;
-      ok: false;
-      status: 400 | 403 | 502 | 503;
-    };
+      data: {
+        statuses: AdminBookingGoogleCalendarStatus[];
+      };
+      ok: true;
+    }
+  | AdminBookingGoogleCalendarFailure;
 
 type GoogleCalendarEventResource = {
   description: string;
@@ -211,7 +232,7 @@ export function getAdminBookingGoogleCalendarSyncReadiness(
 
 function validateActor(
   actor: AdminDispatcherBoundaryContext,
-): AdminBookingGoogleCalendarSyncResult | null {
+): AdminBookingGoogleCalendarFailure | null {
   if (
     actor.mode !== "server-session-role-surface" ||
     !["admin", "dispatcher"].includes(actor.role)
@@ -226,7 +247,7 @@ function validateActor(
   return null;
 }
 
-function providerFailure(): AdminBookingGoogleCalendarSyncResult {
+function providerFailure(): AdminBookingGoogleCalendarFailure {
   return {
     error: safeProviderError,
     ok: false,
@@ -403,6 +424,143 @@ function calendarEventsUrl(
   return url;
 }
 
+function calendarEventReadUrl(config: GoogleCalendarSyncConfig, eventId: string) {
+  return new URL(
+    `${config.apiBaseUrl}/calendars/${encodeURIComponent(
+      config.calendarId,
+    )}/events/${eventId}`,
+  );
+}
+
+function calendarDateTimeMatches(
+  providerValue: unknown,
+  expectedValue: string,
+  expectedTimeZone: typeof adminBookingCalendarTimezone,
+) {
+  if (providerValue === expectedValue) {
+    return true;
+  }
+
+  if (typeof providerValue !== "string") {
+    return false;
+  }
+
+  const expectedRfc3339 = /(?:Z|[+-]\d{2}:\d{2})$/i.test(expectedValue)
+    ? expectedValue
+    : expectedTimeZone === "Asia/Singapore"
+      ? `${expectedValue}+08:00`
+      : expectedValue;
+  const providerInstant = Date.parse(providerValue);
+  const expectedInstant = Date.parse(expectedRfc3339);
+
+  return (
+    Number.isFinite(providerInstant) &&
+    Number.isFinite(expectedInstant) &&
+    providerInstant === expectedInstant
+  );
+}
+
+function providerEventMatchesExpected(
+  value: Record<string, unknown>,
+  expected: GoogleCalendarEventResource,
+) {
+  const start =
+    value.start && typeof value.start === "object"
+      ? (value.start as Record<string, unknown>)
+      : null;
+  const end =
+    value.end && typeof value.end === "object"
+      ? (value.end as Record<string, unknown>)
+      : null;
+  const extendedProperties =
+    value.extendedProperties && typeof value.extendedProperties === "object"
+      ? (value.extendedProperties as Record<string, unknown>)
+      : null;
+  const privateProperties =
+    extendedProperties?.private && typeof extendedProperties.private === "object"
+      ? (extendedProperties.private as Record<string, unknown>)
+      : null;
+  const reminders =
+    value.reminders && typeof value.reminders === "object"
+      ? (value.reminders as Record<string, unknown>)
+      : null;
+  const reminderOverrides = Array.isArray(reminders?.overrides)
+    ? reminders.overrides
+        .filter(
+          (item): item is Record<string, unknown> =>
+            Boolean(item) && typeof item === "object",
+        )
+        .map((item) => `${String(item.method || "")}:${Number(item.minutes)}`)
+        .sort()
+    : [];
+  const expectedReminderOverrides = expected.reminders.overrides
+    .map((item) => `${item.method}:${item.minutes}`)
+    .sort();
+
+  return (
+    value.id === expected.id &&
+    value.summary === expected.summary &&
+    value.description === expected.description &&
+    value.location === expected.location &&
+    calendarDateTimeMatches(
+      start?.dateTime,
+      expected.start.dateTime,
+      expected.start.timeZone,
+    ) &&
+    start?.timeZone === expected.start.timeZone &&
+    calendarDateTimeMatches(
+      end?.dateTime,
+      expected.end.dateTime,
+      expected.end.timeZone,
+    ) &&
+    end?.timeZone === expected.end.timeZone &&
+    privateProperties?.prestigeBookingReference ===
+      expected.extendedProperties.private.prestigeBookingReference &&
+    privateProperties?.prestigeSource === expected.extendedProperties.private.prestigeSource &&
+    reminders?.useDefault === false &&
+    JSON.stringify(reminderOverrides) === JSON.stringify(expectedReminderOverrides)
+  );
+}
+
+async function readGoogleCalendarEventStatus(
+  config: GoogleCalendarSyncConfig,
+  fetcher: Fetcher,
+  accessToken: string,
+  event: AdminBookingCalendarEventData,
+): Promise<AdminBookingGoogleCalendarStatus | null> {
+  const expected = buildGoogleCalendarEventResource(event);
+  const response = await fetcher(calendarEventReadUrl(config, expected.id), {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    method: "GET",
+  });
+
+  if (response.status === 404) {
+    return {
+      booking_reference: event.booking_reference,
+      status: "save_to_calendar",
+    };
+  }
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const providerEvent = await readProviderJson(response);
+
+  if (!providerEvent) {
+    return null;
+  }
+
+  return {
+    booking_reference: event.booking_reference,
+    status: providerEventMatchesExpected(providerEvent, expected)
+      ? "cal_saved"
+      : "update_calendar",
+  };
+}
+
 async function upsertGoogleCalendarEvent(
   config: GoogleCalendarSyncConfig,
   fetcher: Fetcher,
@@ -537,4 +695,81 @@ export async function syncAdminBookingCalendarAgendaToGoogle(
     },
     ok: true,
   };
+}
+
+export async function readAdminBookingCalendarStatusesFromGoogle(
+  input: unknown,
+  actor: AdminDispatcherBoundaryContext,
+  options: {
+    env?: EnvInput;
+    fetcher?: Fetcher;
+    now?: Date;
+  } = {},
+): Promise<AdminBookingGoogleCalendarStatusResult> {
+  const actorFailure = validateActor(actor);
+
+  if (actorFailure) {
+    return actorFailure;
+  }
+
+  const agendaResult = buildAdminBookingCalendarAgenda(input, {
+    now: options.now,
+  });
+
+  if (!agendaResult.ok) {
+    return agendaResult;
+  }
+
+  const env = options.env || process.env;
+  const readiness = getAdminBookingGoogleCalendarSyncReadiness(env);
+
+  if (!readiness.enabled) {
+    return {
+      error: safeDisabledError,
+      ok: false,
+      status: 503,
+    };
+  }
+
+  const config = readGoogleCalendarSyncConfig(env);
+
+  if (!readiness.ready || !config) {
+    return {
+      error: safeConfigError,
+      ok: false,
+      status: 503,
+    };
+  }
+
+  const fetcher = options.fetcher || fetch;
+  const accessToken = await requestGoogleAccessToken(
+    config,
+    fetcher,
+    options.now || new Date(),
+  );
+
+  if (!accessToken) {
+    return providerFailure();
+  }
+
+  try {
+    const statuses = await Promise.all(
+      agendaResult.data.agenda.calendar_events.map((event) =>
+        readGoogleCalendarEventStatus(config, fetcher, accessToken, event),
+      ),
+    );
+
+    if (statuses.some((status) => status === null)) {
+      return providerFailure();
+    }
+
+    return {
+      data: {
+        statuses: statuses as AdminBookingGoogleCalendarStatus[],
+      },
+      ok: true,
+    };
+  } catch {
+    return providerFailure();
+  }
 }

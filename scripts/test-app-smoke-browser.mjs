@@ -547,7 +547,7 @@ const requiredVisibleText = [
   "Pricing",
   "Route Extras & Child Seat",
   "Job Card Preview",
-  "Driver Message",
+  "Manual WhatsApp Copy — Optional",
   "Find saved jobs",
   "No completed bookings loaded yet.",
   "Operations Dashboard",
@@ -1076,7 +1076,7 @@ async function runChromeTest() {
             expectedTabLabels.every((label) => visibleTabLabels.includes(label)) &&
             text.includes("Dispatcher Intake") &&
             text.includes("Job Card Preview") &&
-            text.includes("Driver Message"),
+            text.includes("Manual WhatsApp Copy — Optional"),
           toggleHeight: Math.round(toggle?.getBoundingClientRect().height || 0),
         };
       })()`);

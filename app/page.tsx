@@ -1109,17 +1109,6 @@ type AdminCustomerDriverDetailsCustomerInAppActionState = {
   notificationType: "trip_update";
 };
 
-type AdminCustomerDriverDetailsDriverInAppActionState = {
-  actionStatus: "idle" | "loading" | "loaded" | "error";
-  deliverySurface: "driver_app";
-  external_send: false;
-  loadedReference: string;
-  message: string;
-  noProviderSend: true;
-  notificationStatus: "queued" | "blocked";
-  notificationType: "trip_update";
-};
-
 type AdminTodayJobDriverMessageState = {
   draft: string;
   message: string;
@@ -1202,21 +1191,6 @@ function adminCustomerDriverDetailsCustomerInAppFallbackState(
   return {
     actionStatus: "idle",
     deliverySurface: "customer_app",
-    external_send: false,
-    loadedReference: "",
-    message,
-    noProviderSend: true,
-    notificationStatus: "blocked",
-    notificationType: "trip_update",
-  };
-}
-
-function adminCustomerDriverDetailsDriverInAppFallbackState(
-  message = "Load a saved booking with an active driver job link before sending Driver In-App.",
-): AdminCustomerDriverDetailsDriverInAppActionState {
-  return {
-    actionStatus: "idle",
-    deliverySurface: "driver_app",
     external_send: false,
     loadedReference: "",
     message,
@@ -13419,12 +13393,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     setAdminCustomerDriverDetailsCustomerInAppActionState,
   ] = useState<AdminCustomerDriverDetailsCustomerInAppActionState>(() =>
     adminCustomerDriverDetailsCustomerInAppFallbackState(),
-  );
-  const [
-    adminCustomerDriverDetailsDriverInAppActionState,
-    setAdminCustomerDriverDetailsDriverInAppActionState,
-  ] = useState<AdminCustomerDriverDetailsDriverInAppActionState>(() =>
-    adminCustomerDriverDetailsDriverInAppFallbackState(),
   );
   const [adminTodayJobDriverMessageStates, setAdminTodayJobDriverMessageStates] = useState<
     Record<string, AdminTodayJobDriverMessageState>
@@ -25743,85 +25711,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     }
   }
 
-  async function sendAdminCustomerDriverDetailsDriverInAppNotification() {
-    const bookingReference = adminCustomerDriverDetailsEmailReviewBookingReference;
-    const driverJobLinkId = clean(activeAdminDriverJobLink?.id);
-
-    if (!bookingReference || !driverJobLinkId) {
-      setAdminCustomerDriverDetailsDriverInAppActionState({
-        ...adminCustomerDriverDetailsDriverInAppFallbackState(
-          "Load a saved booking with an active driver job link before sending Driver In-App.",
-        ),
-        actionStatus: "error",
-        loadedReference: bookingReference,
-      });
-      return;
-    }
-
-    setAdminCustomerDriverDetailsDriverInAppActionState({
-      ...adminCustomerDriverDetailsDriverInAppFallbackState(
-        `Sending one Driver In-App update for ${bookingReference}...`,
-      ),
-      actionStatus: "loading",
-      loadedReference: bookingReference,
-      notificationStatus: "queued",
-    });
-
-    try {
-      const response = await fetch(adminCustomerDriverAppNotificationsApiPath, {
-        body: JSON.stringify({
-          booking_reference: bookingReference,
-          delivery_surface: "driver_app",
-          driver_job_link_id: driverJobLinkId,
-          notification_status: "queued",
-          notification_type: "trip_update",
-          priority: "normal",
-          safe_context: {
-            action: "admin_selected",
-            message_template: "review_assigned_trip",
-            provider_send: false,
-            source: "customer_copy_compact_row",
-          },
-          safe_message: "Please review this assigned trip in your Driver Job page.",
-          safe_title: "Dispatch update",
-          workflow_area: "driver_app_updates",
-        }),
-        headers: {
-          "Content-Type": "application/json",
-          "x-prestige-admin-purpose": adminLegacyDataPurpose,
-        },
-        method: "POST",
-      });
-      const result = await response.json().catch(() => null);
-
-      if (!response.ok || result?.ok !== true) {
-        throw new Error(result?.error || "Driver In-App update could not be completed.");
-      }
-
-      setAdminCustomerDriverDetailsDriverInAppActionState({
-        actionStatus: "loaded",
-        deliverySurface: "driver_app",
-        external_send: false,
-        loadedReference: bookingReference,
-        message: `Driver In-App update queued for ${bookingReference}.`,
-        noProviderSend: true,
-        notificationStatus: "queued",
-        notificationType: "trip_update",
-      });
-    } catch (error) {
-      const errorText =
-        error instanceof Error
-          ? error.message
-          : "Driver In-App update could not be completed.";
-
-      setAdminCustomerDriverDetailsDriverInAppActionState({
-        ...adminCustomerDriverDetailsDriverInAppFallbackState(errorText),
-        actionStatus: "error",
-        loadedReference: bookingReference,
-      });
-    }
-  }
-
   const adminEmailActivationPreflightStateMatchesReference =
     adminEmailActivationPreflightReadState.loadedReference === adminEmailActivationPreflightReference;
   const adminEmailActivationPreflightDisplayState =
@@ -25929,31 +25818,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           : dispatchReleaseCustomerCopyReady
             ? "In-App ready"
             : "Needs copy";
-  const adminCustomerDriverDetailsDriverInAppStateMatchesReference =
-    adminCustomerDriverDetailsDriverInAppActionState.loadedReference ===
-    adminCustomerDriverDetailsEmailReviewBookingReference;
-  const adminCustomerDriverDetailsDriverInAppDisplayState =
-    adminCustomerDriverDetailsDriverInAppStateMatchesReference
-      ? adminCustomerDriverDetailsDriverInAppActionState
-      : adminCustomerDriverDetailsDriverInAppFallbackState();
-  const adminCustomerDriverDetailsDriverInAppCanSend =
-    Boolean(adminCustomerDriverDetailsEmailReviewBookingReference) &&
-    Boolean(activeAdminDriverJobLink?.id) &&
-    adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus !== "loading";
-  const adminCustomerDriverDetailsDriverInAppActionLabel =
-    adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus === "loading"
-      ? "Queuing Driver In-App"
-      : "Send Driver In-App";
-  const adminCustomerDriverDetailsDriverInAppStatusText =
-    adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus === "loading"
-      ? "Driver In-App sending"
-      : adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus === "loaded"
-        ? "Driver In-App queued"
-        : adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus === "error"
-          ? "Driver In-App blocked"
-          : activeAdminDriverJobLink
-            ? "Driver In-App ready"
-            : "Driver In-App needs link";
   const adminCustomerDriverDetailsMultiChannelDisabledStatusDetail =
     "Email uses the gated email route. WhatsApp and SMS are parked setup-only/no-live.";
   const adminCustomerDriverDetailsMultiChannelDisabledStatusText = "SMS/WA off";
@@ -26875,7 +26739,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         ...current,
         [bookingReference]: {
           draft: "",
-          message: "Message queued in the driver’s job page.",
+          message: `Queued to Driver Job page at ${adminDriverJobStatusTimeLabel(new Date().toISOString())}.`,
           status: "success",
         },
       }));
@@ -26894,7 +26758,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
   const activeJobsMonitorPanel = (
     <section
-      aria-label="Today's Jobs"
+      aria-label="Active Assigned Jobs"
       className="rounded-md border border-lime-200 bg-lime-50/70 p-2 sm:p-3"
       data-dashboard-day-of-trip-operations-monitor="true"
       data-dispatch-day-of-trip-operations-monitor="true"
@@ -26902,7 +26766,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     >
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h3 className="text-base font-semibold text-lime-950">Today&apos;s Jobs</h3>
+          <h3 className="text-base font-semibold text-lime-950">Active Assigned Jobs</h3>
           <p className="text-xs text-lime-900 sm:text-sm">
             All assigned active jobs, including advance and last-minute work. Driver reports refresh automatically.
           </p>
@@ -30908,20 +30772,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       : adminCustomerDriverDetailsCustomerInAppSent
         ? "In-App queued"
         : "Send In-App";
-  const adminCustomerDriverDetailsDriverInAppSent =
-    adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus === "loaded";
-  const adminCustomerDriverDetailsDriverInAppButtonTone: Message["tone"] | null =
-    adminCustomerDriverDetailsDriverInAppSent
-      ? "success"
-      : adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus === "error"
-        ? "error"
-        : null;
-  const adminCustomerDriverDetailsDriverInAppButtonLabel =
-    adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus === "loading"
-      ? "Queuing Driver In-App"
-      : adminCustomerDriverDetailsDriverInAppSent
-        ? "Driver In-App queued"
-        : "Send Driver In-App";
   const driverJobLinkCreated =
     adminDriverJobLinkState.message?.tone === "success" &&
     /created/i.test(adminDriverJobLinkState.message.text);
@@ -42492,8 +42342,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               data-driver-message-disclosure="true"
             >
               <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
-                <h2 className="text-lg font-semibold">Driver Message</h2>
-                <p className="text-xs text-slate-500">Short update or manual fallback for the assigned driver.</p>
+                <h2 className="text-lg font-semibold">Manual WhatsApp Copy — Optional</h2>
+                <p className="text-xs text-slate-500">Copy the assigned-driver update, then paste it into WhatsApp manually.</p>
               </summary>
               <div className="mt-3">
               <div className="mb-2 flex flex-col items-start gap-2 sm:items-end">
@@ -42550,36 +42400,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     >
                       {driverDispatchCopied ? "Copied" : "Copy"}
                     </button>
-                    <button
-                      aria-label="Send Driver In-App update to the assigned driver"
-                      className={`min-h-9 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-500 ${
-                        actionFeedbackButtonClass(
-                          adminCustomerDriverDetailsDriverInAppButtonTone,
-                          "border-sky-300 bg-white text-sky-900 hover:bg-sky-50",
-                        )
-                      }`}
-                      data-admin-customer-driver-details-driver-in-app-send-action="true"
-                      data-admin-customer-driver-details-driver-in-app-send-action-state={
-                        adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus
-                      }
-                      data-admin-customer-driver-details-driver-in-app-send-delivery-surface={
-                        adminCustomerDriverDetailsDriverInAppDisplayState.deliverySurface
-                      }
-                      data-admin-customer-driver-details-driver-in-app-send-external-send="false"
-                      data-admin-customer-driver-details-driver-in-app-send-loaded-reference={
-                        adminCustomerDriverDetailsDriverInAppDisplayState.loadedReference
-                      }
-                      data-admin-customer-driver-details-driver-in-app-send-no-provider-send="true"
-                      data-admin-customer-driver-details-driver-in-app-send-notification-status={
-                        adminCustomerDriverDetailsDriverInAppDisplayState.notificationStatus
-                      }
-                      disabled={!adminCustomerDriverDetailsDriverInAppCanSend}
-                      onClick={sendAdminCustomerDriverDetailsDriverInAppNotification}
-                      title={adminCustomerDriverDetailsDriverInAppActionLabel}
-                      type="button"
-                    >
-                      {adminCustomerDriverDetailsDriverInAppButtonLabel}
-                    </button>
                   </div>
                   {driverDispatchFeedback?.tone === "error" ? (
                     <div
@@ -42589,19 +42409,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       {driverDispatchFeedback.text}
                     </div>
                   ) : null}
-                  <details
-                    className="rounded-md border border-sky-100 bg-sky-50/70 px-2 py-1 text-xs font-medium text-sky-950"
-                    data-dispatch-compact-panel="driver-in-app-admin-checks"
-                    data-admin-customer-driver-details-driver-in-app-send-status="true"
-                  >
-                    <summary
-                      className="cursor-pointer list-none [&::-webkit-details-marker]:hidden"
-                      title={adminCustomerDriverDetailsDriverInAppDisplayState.message}
-                    >
-                      Driver In-App status
-                    </summary>
-                    <p className="mt-1">{adminCustomerDriverDetailsDriverInAppStatusText}</p>
-                  </details>
                 </div>
               </div>
               {driverDispatchCopyEditState.isEditing ? (

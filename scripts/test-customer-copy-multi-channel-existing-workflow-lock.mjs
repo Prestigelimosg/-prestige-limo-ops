@@ -129,7 +129,6 @@ for (const fragment of [
   "async function copyCustomerDriverDetailsWithCustomerAppLink()",
   "async function copyManualTelegramMessage(",
   "async function sendAdminCustomerDriverDetailsCustomerInAppNotification()",
-  "async function sendAdminCustomerDriverDetailsDriverInAppNotification()",
   "const adminCustomerDriverDetailsMultiChannelDisabledStatusText =",
   "Email uses the gated email route. WhatsApp and SMS are parked setup-only/no-live.",
   "driverDetailsEmailSendGateOpen",

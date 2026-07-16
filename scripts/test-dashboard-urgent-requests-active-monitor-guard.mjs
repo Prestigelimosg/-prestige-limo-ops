@@ -408,7 +408,7 @@ for (const fragment of [
 }
 
 for (const fragment of [
-  "Today's Jobs",
+  "Active Assigned Jobs",
   "All assigned active jobs, including advance and last-minute work. Driver reports refresh automatically.",
   "{dayOfTripActiveJobBookings.length} active",
   "No assigned active jobs to monitor.",

@@ -1715,7 +1715,7 @@ function assertBookingUiState(state) {
   assert.doesNotMatch(state.jobCardPreview, /Guest details hidden for privacy/);
   assert.doesNotMatch(state.jobCardPreview, /BROWSER UI TEST BOOKER/);
   assert.doesNotMatch(state.jobCardPreview, /BROWSER UI TEST TRAVELER/);
-  assert.match(state.visibleText, /Driver Message/);
+  assert.match(state.visibleText, /Manual WhatsApp Copy — Optional/);
   assert.match(state.driverDispatch, /DRIVER DISPATCH/);
   assert.match(state.visibleText, /Pricing/);
   assert.equal(state.dispatchReleaseChecklist.visible, true);
@@ -5992,7 +5992,7 @@ async function runChromeTest() {
 
         return null;
       };
-      const section = sectionForHeading("Driver Message");
+      const section = sectionForHeading("Manual WhatsApp Copy — Optional");
       const copyButton = [...(section?.querySelectorAll("button") || [])].find(
         (button) => button.textContent.trim() === "Copy",
       );
@@ -6025,7 +6025,7 @@ async function runChromeTest() {
 
             return null;
           };
-          const section = sectionForHeading("Driver Message");
+          const section = sectionForHeading("Manual WhatsApp Copy — Optional");
           const copyButton = section?.querySelector("[data-copy-copy-button='driverDispatch']");
 
           if (copyButton?.textContent.trim() !== "Copied") {
@@ -8044,7 +8044,7 @@ async function runChromeTest() {
     );
     assert.match(dashboardCommandCentreState.visibleText, /Booking Requests/);
     assert.doesNotMatch(dashboardCommandCentreState.visibleText, /Urgent \/ Customer Requests/);
-    assert.match(dashboardCommandCentreState.visibleText, /Today's Jobs/);
+    assert.match(dashboardCommandCentreState.visibleText, /Active Assigned Jobs/);
     assert.match(dashboardCommandCentreState.visibleText, /Codex Review & Admin App Notifications/);
 
     await evaluate(`(() => {
@@ -9650,7 +9650,7 @@ async function runChromeTest() {
 
         return null;
       };
-      const section = sectionForHeading("Driver Message");
+      const section = sectionForHeading("Manual WhatsApp Copy — Optional");
       const copyButton = [...(section?.querySelectorAll("button") || [])].find(
         (button) => button.textContent.trim() === "Copy",
       );
@@ -9690,7 +9690,7 @@ async function runChromeTest() {
 
             return null;
           };
-          const section = sectionForHeading("Driver Message");
+          const section = sectionForHeading("Manual WhatsApp Copy — Optional");
           const copyButton = [...(section?.querySelectorAll("button") || [])].find(
             (button) => button.textContent.trim() === "Copy",
           );
@@ -14465,12 +14465,12 @@ async function runChromeTest() {
     assert.equal(
       dashboardAfterDriverProfileSaveState.activeJobsMonitorCount,
       1,
-      "Expected Dashboard to contain exactly one protected Today's Jobs monitor",
+      "Expected Dashboard to contain exactly one protected Active Assigned Jobs monitor",
     );
     assert.equal(
       dashboardAfterDriverProfileSaveState.liveDispatchMapCount,
       1,
-      "Expected Dashboard Today's Jobs to contain exactly one compact Live Dispatch Map",
+      "Expected Dashboard Active Assigned Jobs to contain exactly one compact Live Dispatch Map",
     );
     assert.equal(
       dashboardAfterDriverProfileSaveState.hasDetailedAssignment,
@@ -16515,7 +16515,7 @@ async function runChromeTest() {
             ),
             workflowStatusRequests: window.__prestigeWorkflowStatusRequests || [],
             jobCardPreview: preTextByHeading("Job Card Preview"),
-            driverDispatch: preTextByHeading("Driver Message"),
+            driverDispatch: preTextByHeading("Manual WhatsApp Copy — Optional"),
             pastedMessage: document.querySelector("textarea")?.value || "",
             fields: {
               company: fieldValue("Company / Account"),
@@ -19296,7 +19296,7 @@ async function runChromeTest() {
             fetchCalls: window.__prestigeFetchCalls || [],
             workflowStatusRequests: window.__prestigeWorkflowStatusRequests || [],
             jobCardPreview: preTextByHeading("Job Card Preview"),
-            driverDispatch: preTextByHeading("Driver Message"),
+            driverDispatch: preTextByHeading("Manual WhatsApp Copy — Optional"),
             pastedMessage: document.querySelector("textarea")?.value || "",
             fields: {
               company: fieldValue("Company / Account"),

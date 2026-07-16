@@ -1,16 +1,25 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-bdb71818 Repair driver Calendar sync response
+19b0f8bd Simplify admin driver messaging
 
 Latest pushed main/staging runtime checkpoint:
-9a132cb4 Keep refreshed Calendar payload consistent
+93d7fe0b Repair dashboard driver message authorization
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-2a3520c1 Merge pull request #13 from Prestigelimosg/staging
+9f530bcb Merge pull request #16 from Prestigelimosg/codex/admin-driver-message-post-boundary
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Admin Driver Messaging Single-Lane Simplification (2026-07-16)
+
+- Admin inspection reproduced two controls that appeared to send an in-app driver message: the established Dashboard message composer with visible history and the fixed-template `Send Driver In-App` action inside Dispatch. Both used the same existing driver-app notification route, but their separate placement and status wording made the operator track two apparent lanes.
+- The Dashboard reporting center is now labelled `Active Assigned Jobs`, matching its established filter: it includes assigned active operational jobs in advance as well as last-minute work. The filter, refresh cycle, report reads, map controls, booking handoff, message route, notification persistence, active Driver Job Link requirement, and driver read remain unchanged.
+- `Active Assigned Jobs` is the single admin in-app driver messaging surface. Its existing free-text composer, unified booking-scoped history, and `Send to Driver` action remain in place; a successful queue now shows the exact safe SGT time in `Queued to Driver Job page at ...` so the operator has an immediate visible confirmation.
+- The Dispatch copy card is now labelled `Manual WhatsApp Copy — Optional`. Its existing template generator, Edit, Copy, and preview controls remain as a manual fallback; the redundant fixed-template in-app action and its local status disclosure were removed without adding a replacement route, panel, helper, notification format, provider, polling path, or write lane.
+- No customer or driver visibility scope changed. Admin-to-Driver rows remain `driver_app` only and private from customers; customer reads remain authenticated and `customer_app` only. No Email, WhatsApp, SMS, Telegram, payment, payout, PayNow, billing, invoice, calendar, GPS, booking, CRM, environment, Supabase configuration, or external-provider write is performed by this UI simplification.
+- Focused protection is in `scripts/test-driver-in-app-notification-admin-button-guard.mjs`, `scripts/test-driver-message-job-link-human-ui-guard.mjs`, `scripts/test-today-jobs-admin-driver-message-guard.mjs`, `scripts/test-today-jobs-message-history-guard.mjs`, `scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs`, and the established browser suites. Runtime acceptance must use the exact deployed build in the owner’s Chrome without sending a live message.
 
 ### Admin-to-Driver Dashboard POST Boundary Repair (2026-07-16)
 
@@ -707,7 +716,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Today’s Jobs Admin-to-Driver Messages
 
-- Every valid Today’s Jobs card has one always-visible `Messages · Driver` box directly below the report and optional OTS-photo readouts. Admin types one bounded message and explicitly selects `Send to Driver`; there is no extra disclosure or separate messaging page.
+- Every valid `Active Assigned Jobs` card has one always-visible `Messages` box directly below the report and optional OTS-photo readouts. Admin types one bounded message and explicitly selects `Send to Driver`; there is no extra disclosure, Dispatch in-app send action, or separate messaging page.
 - The action reuses the existing active Driver Job Link GET, existing `POST /api/admin-customer-driver-app-notifications`, existing `customer_driver_app_notification_outbox`, and existing token-scoped driver notification GET. No duplicate route, table, message format, provider, or driver read path was added.
 - The server write stays `delivery_surface: driver_app`, exact booking-reference and active driver-link scoped, with audience `admin_driver`. The established create persistence independently verifies the supplied driver-link ID, booking reference, active status, and expiry before insert. Customer reads remain authenticated and `customer_app` only, so customers cannot read Admin-to-Driver messages.
 - When no active Driver Job Link exists, no notification row is written. The typed message remains and the card shows one human `Open Driver Link Setup` action that reuses the established Dispatch link handoff.
@@ -736,7 +745,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Today’s Jobs Unified Message History
 
-- The existing Today’s Jobs `Messages` card now reads the established booking-scoped notification lane and shows human labels for `Customer → Driver`, `Driver → Customer`, and private `Admin → Driver` messages in one place. Admin no longer needs to inspect codes or leave the job card.
+- The existing `Active Assigned Jobs` `Messages` card reads the established booking-scoped notification lane and shows human labels for `Customer → Driver`, `Driver → Customer`, and private `Admin → Driver` messages in one place. Admin no longer needs to inspect codes or leave the job card.
 - The existing report refresh and 10-second reporting cycle request the same message history, and the card keeps one explicit `Refresh messages` fallback. A successful Admin-to-Driver send also reloads the history.
 - Only the two approved workflow areas are rendered: fixed customer/driver quick replies and private admin/driver job messages. Customer reads remain `customer_app` only, so Admin-to-Driver history cannot appear in My Bookings.
 - Focused lock: `scripts/test-today-jobs-message-history-guard.mjs`.
@@ -745,7 +754,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Today’s Jobs Assigned-Work Reporting Center
 
-- Dashboard `Today’s Jobs` is the single human-readable reporting center for all assigned active operational jobs, including advance and last-minute work. It no longer hides assigned jobs until the one-hour-before-pickup window.
+- Dashboard `Active Assigned Jobs` is the single human-readable reporting center for all assigned active operational jobs, including advance and last-minute work. It does not imply that future assigned jobs are limited to today or hide assigned jobs until the one-hour-before-pickup window.
 - A reportable row must have an explicit saved booking reference, valid pickup date/time, real pickup and drop-off, and an assigned driver; jobs more than 24 hours overdue are excluded while future advance jobs remain eligible. This prevents incomplete legacy numeric-ID residue from appearing or triggering status/OTS reads.
 - Each existing job card shows booking reference, pickup date/time, passenger, assigned driver, route, latest OTW/OTS/POB/Job Completed report, report time, recent report history, and optional OTS Photo to Admin. The existing live-map control remains on the same page.
 - The existing guarded driver-status and OTS-photo reads, 10-second auto-refresh toggle, manual refresh, live-location runtime, booking open action, and admin completion action are reused unchanged. No duplicate API, status write, GPS write, job-link lane, message lane, booking write, provider send, or schema was added.
@@ -756,8 +765,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Human Driver Message and Job-Link Layout
 
-- The established Driver Dispatch copy lane is now labelled `Driver Message` and is collapsed by default. Its existing Edit, Copy, and Driver In-App controls and write paths are unchanged; it remains a short-update/manual-fallback lane rather than a second dispatch requirement.
-- The broad booking UI browser suite locates this lane by its visible `Driver Message` heading while continuing to require the established `DRIVER DISPATCH` copy-template content and internal `driverDispatch` control identifiers; the rename does not create or rewire a second message lane.
+- The established Driver Dispatch copy lane is now labelled `Manual WhatsApp Copy — Optional` and is collapsed by default. Its existing template generator, Edit, Copy, and preview controls remain unchanged; the redundant Driver In-App control and status display are removed so this is clearly a manual fallback rather than a second in-app messaging lane.
+- The broad booking UI browser suite locates this lane by its visible `Manual WhatsApp Copy — Optional` heading while continuing to require the established `DRIVER DISPATCH` copy-template content and internal `driverDispatch` control identifiers; the label and control removal do not create or rewire another message lane.
 - The existing Driver Job Link copy preview is open by default, so the one-time link message is visible immediately after creation without another disclosure click.
 - The reference-only handoff instruction is replaced by human-readable booking details for the exact loaded booking: passenger, pickup, route, and assigned driver. The detail card uses the established loaded saved-booking reference, so it appears whether the booking was opened from Today’s Jobs, an urgent handoff, Bookings, or another existing admin entry point.
 - Saved driver status and optional OTS Photo to Admin remain the existing guarded exact-booking reads, but are visually separated inside a collapsed `Driver Reports` disclosure so the link actions and booking information stay primary.

@@ -790,8 +790,8 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  "aria-label=\"Today's Jobs\"",
-  "Dispatch active jobs monitor named Today's Jobs",
+  "aria-label=\"Active Assigned Jobs\"",
+  "Dashboard active jobs monitor named Active Assigned Jobs",
 );
 assertIncludes(
   appPage,

@@ -16,12 +16,16 @@ const linkPanel = app.slice(linkStart, panelEnd);
 for (const fragment of [
   'data-driver-message-disclosure="true"',
   "<summary",
-  "Driver Message",
-  "Short update or manual fallback for the assigned driver.",
+  "Manual WhatsApp Copy — Optional",
+  "Copy the assigned-driver update, then paste it into WhatsApp manually.",
+  'data-copy-edit-button="driverDispatch"',
+  'data-copy-copy-button="driverDispatch"',
 ]) {
-  assert.ok(messagePanel.includes(fragment), `Missing collapsed Driver Message fragment: ${fragment}`);
+  assert.ok(messagePanel.includes(fragment), `Missing manual WhatsApp copy fragment: ${fragment}`);
 }
 assert.ok(!messagePanel.includes(">Driver Dispatch<"), "Visible Driver Dispatch title must be renamed.");
+assert.ok(!messagePanel.includes("Send Driver In-App"), "Dispatch must not retain a second in-app driver send action.");
+assert.ok(!messagePanel.includes("Driver In-App status"), "Dispatch must not retain a second in-app driver status panel.");
 
 for (const fragment of [
   'data-driver-job-link-booking-details="true"',
@@ -44,4 +48,4 @@ assert.ok(
   "Reference-only machine instruction must be replaced with booking details.",
 );
 
-console.log("Driver Message + human Driver Job Link UI guard passed");
+console.log("Manual WhatsApp Copy + human Driver Job Link UI guard passed");

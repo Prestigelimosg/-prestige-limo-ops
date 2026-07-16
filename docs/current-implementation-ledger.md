@@ -1,16 +1,26 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-19b0f8bd Simplify admin driver messaging
+cef622ce Show driver acknowledgement indicators
 
 Latest pushed main/staging runtime checkpoint:
-19b0f8bd Simplify admin driver messaging
+9edc88a3 Merge PR #20: Show driver acknowledgement indicators
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-5715aa5e Merge PR #17: Simplify admin driver messaging
+9edc88a3 Merge PR #20: Show driver acknowledgement indicators
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Owner Clarification — Driver Acknowledgement Indicator Scope (2026-07-16)
+
+- The owner confirmed the intended completed scope is the existing compact indicator on every existing `Active Assigned Jobs` card plus the section-level waiting count. No global queue for unassigned bookings, new panel, expanded checklist, or giant-card layout is requested.
+- Each assigned active job card identifies its exact booking and shows one compact amber `Waiting for driver` or green `Acknowledged` with safe SGT time. Multiple assigned jobs can wait simultaneously and the existing section header reports their combined waiting count.
+- Jobs without assigned driver details remain intentionally outside `Active Assigned Jobs`. Their exact active Driver Job Link status remains available by loading the booking in Dispatch; this exclusion is expected behavior, not an unfinished acknowledgement task.
+- Production read-only evidence confirmed the paired Stanley test bookings are separate records: `CUST-20260716035942-O7Z73G-OUT` is the assigned 18 July 2026 1100hrs job with an acknowledged active link, while `CUST-20260716035942-O7Z73G-RET` is the unassigned 21 July 2026 1820hrs job with a distinct active link and no acknowledgement.
+- Production Chrome displayed the exact return booking as amber `Waiting for driver`. Its one-time raw URL disappeared after refresh by design; the saved link was not deleted, cancelled, revoked, replaced, resent, or acknowledged during diagnosis.
+- The driver acknowledgement indicator task is complete and Production-deployed at merge build `9edc88a3`. Do not add a global acknowledgement queue or broaden `Active Assigned Jobs` to unassigned bookings unless the owner explicitly requests a new scope later.
+- No booking, Driver Job Link, acknowledgement, message, notification, driver, customer, Calendar event, invoice, payment, payout, PayNow record, environment, provider, or Supabase configuration was changed during this clarification or handoff documentation.
 
 ### Driver Job Acknowledgement Indicators (2026-07-16)
 

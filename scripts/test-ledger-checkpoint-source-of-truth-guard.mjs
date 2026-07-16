@@ -216,6 +216,25 @@ const nextGptLock = sectionBetween(
 );
 
 const ledgerSection = sectionBetween(ledger, "### Ledger Checkpoint Source-of-Truth Guard Lock");
+const reconciliationSection = sectionBetween(
+  ledger,
+  "### Main And Staging Reconciliation Production Evidence (2026-07-16)",
+);
+
+for (const phrase of [
+  "eaac2558 Merge PR #6: Reconcile staging with main",
+  "passed both Vercel checks",
+  "Deployment has completed",
+  "displayed exact build `eaac2558`",
+  "exactly one checkbox and one visible `Return extra stops` control",
+  "requires a separately verified no-force fast-forward before branch equality can be claimed",
+]) {
+  assertIncludes(
+    reconciliationSection,
+    phrase,
+    `Main/staging reconciliation evidence phrase: ${phrase}`,
+  );
+}
 
 for (const phrase of [
   "Ledger checkpoint source-of-truth consistency is guarded.",

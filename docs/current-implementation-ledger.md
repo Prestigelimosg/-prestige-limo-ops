@@ -12,6 +12,12 @@ eaac2558 Merge PR #6: Reconcile staging with main
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Admin Bookings Alternating Card Colours (2026-07-16)
+
+- The existing active Bookings list alternates soft sky and violet card backgrounds by the current visible display order so adjacent jobs and linked legs are easier to distinguish. Filtering, date scope, search, and sorting recompute only the visible stripe order; booking data and identity remain unchanged.
+- The treatment is confined to the established `data-current-upcoming-bookings-list` cards. Existing driver assignment colours, Calendar status pills, details/actions, Completed history, Dashboard, Dispatch, customer `/book`, customer portal, driver pages, invoice/payment/billing, payout/PayNow, internal notes, and mock/archive surfaces remain unchanged.
+- The change is display-only: it adds no route, panel, booking lane, helper, API request, storage write, provider action, or customer/driver exposure. Focused protection is registered in `scripts/test-admin-bookings-alternating-card-colours-guard.mjs`; the established `scripts/test-booking-ui-browser.mjs` runtime suite verifies adjacent rendered cards have sky/violet markers and different computed backgrounds. Signed-in production Chrome acceptance remains a separate post-deployment step.
+
 ### Main And Staging Reconciliation Production Evidence (2026-07-16)
 
 - The bounded reconciliation branch starts from current `main` at `7b2c7b15` and merges the complete current `staging` lineage through `449ce887`. It preserves main's newer public stale-session recovery, linked-return intake, `Tonight` parser repair, and shared-passenger airport-list parser repair while retaining staging's later Calendar status pills, admin display-only uppercase treatment, optional OTS proof visibility cleanup, test-evidence records, and return-trip extra-stop coverage.

@@ -24100,7 +24100,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       ) : null}
       {filteredRecentBookings.length > 0 ? (
       <div className="mt-3 max-h-[34rem] space-y-2 overflow-auto" data-current-upcoming-bookings-list="true">
-        {filteredRecentBookingDisplayItems.map(({ bookingRecord: savedBooking, operationalCard }) => {
+        {filteredRecentBookingDisplayItems.map(({ bookingRecord: savedBooking, operationalCard }, bookingIndex) => {
           const routePoints = getRoutePoints(savedBooking);
           const pickup = operationalCard.pickup_address || routePoints[0] || "Pickup";
           const dropoff =
@@ -24151,16 +24151,22 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 : bookingGoogleCalendarStatus === "save_to_calendar"
                   ? "Save to Cal"
                   : "";
+          const bookingAlternateColour = bookingIndex % 2 === 0 ? "sky" : "violet";
 
           return (
             <article
-              className="rounded-md border border-stone-200 bg-white p-2 text-sm shadow-sm"
+              className={`rounded-md border p-2 text-sm shadow-sm ${
+                bookingAlternateColour === "sky"
+                  ? "border-sky-200 bg-sky-50/80"
+                  : "border-violet-200 bg-violet-50/80"
+              }`}
+              data-bookings-alternate-colour={bookingAlternateColour}
               data-recent-operational-card={bookingId}
               key={`recent-${bookingId}`}
             >
               <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
-                <details className="min-w-0 rounded-md bg-white" data-recent-operational-details={bookingId}>
-                  <summary className="grid cursor-pointer list-none gap-2 rounded-md px-2 py-1.5 outline-none transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900/20 md:grid-cols-[minmax(13rem,1.1fr)_minmax(10rem,0.8fr)_minmax(14rem,1.4fr)_minmax(9rem,0.7fr)_auto] md:items-center">
+                <details className="min-w-0 rounded-md bg-transparent" data-recent-operational-details={bookingId}>
+                  <summary className="grid cursor-pointer list-none gap-2 rounded-md px-2 py-1.5 outline-none transition hover:bg-white/70 focus-visible:ring-2 focus-visible:ring-slate-900/20 md:grid-cols-[minmax(13rem,1.1fr)_minmax(10rem,0.8fr)_minmax(14rem,1.4fr)_minmax(9rem,0.7fr)_auto] md:items-center">
                     <span className="min-w-0">
                       <span className="block truncate font-semibold text-slate-950">
                         <AdminOperationalUppercaseValue field="company">

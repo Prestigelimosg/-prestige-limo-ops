@@ -413,8 +413,13 @@ try {
   );
   assert.match(
     calendarPersistenceMapperSource,
-    /customer_display_name: customerDisplayName \|\| null,[\s\S]*?companies: customerDisplayName[\s\S]*?company_name: customerDisplayName,[\s\S]*?domain: null/,
-    "Update + Cal must carry the same saved company into the relation used by Calendar payloads and refreshed status reads.",
+    /const verifiedCompanyId = adminDispatchVerifiedIdentityId\(record\.company_id\);/,
+    "Calendar mapping must distinguish a verified CRM company from a passenger/customer display fallback.",
+  );
+  assert.match(
+    calendarPersistenceMapperSource,
+    /company_id: verifiedCompanyId,[\s\S]*?customer_display_name: customerDisplayName \|\| null,[\s\S]*?companies:[\s\S]*?verifiedCompanyId && customerDisplayName[\s\S]*?company_name: customerDisplayName,[\s\S]*?domain: null/,
+    "Save + CRM and Update + Cal must carry the saved company into Calendar payloads only when its CRM company ID is verified.",
   );
   assert.match(appSource, /await autoSyncSavedBookingGoogleCalendar\(savedBooking\);/);
   assert.match(appSource, /await autoSyncSavedBookingGoogleCalendar\(updatedBooking\);/);

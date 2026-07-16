@@ -9345,23 +9345,25 @@ function adminBookingPersistenceRecordToCalendarBookingRecord(
   const paxCount = safeAdminBookingPersistenceCount(record.pax_count) || 1;
   const bookingReference = clean(record.booking_reference);
   const customerDisplayName = adminBookingPersistenceCustomerDisplayName(record);
+  const verifiedCompanyId = adminDispatchVerifiedIdentityId(record.company_id);
 
   return {
     booking_reference: bookingReference,
     booking_type: adminBookingPersistenceServiceType(record) || null,
     booker_id: adminDispatchVerifiedIdentityId(record.booker_id),
-    company_id: adminDispatchVerifiedIdentityId(record.company_id),
+    company_id: verifiedCompanyId,
     contact_display_name: clean(record.contact_display_name) || null,
     contact_email: clean(record.contact_email) || null,
     contact_phone: clean(record.contact_phone) || null,
     created_at: clean(record.created_at) || null,
     customer_display_name: customerDisplayName || null,
-    companies: customerDisplayName
-      ? {
-          company_name: customerDisplayName,
-          domain: null,
-        }
-      : null,
+    companies:
+      verifiedCompanyId && customerDisplayName
+        ? {
+            company_name: customerDisplayName,
+            domain: null,
+          }
+        : null,
     dropoff_address: dropoffLocation,
     dropoff_location: dropoffLocation,
     driver_contact: clean(record.driver_contact) || null,

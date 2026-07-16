@@ -130,6 +130,14 @@ function validAdminHeaders(extra = {}) {
   };
 }
 
+function validDashboardHeaders(extra = {}) {
+  return {
+    referer: "http://localhost/",
+    "x-prestige-admin-purpose": "admin-booking-persistence",
+    ...extra,
+  };
+}
+
 function routeContext(token) {
   return {
     params: Promise.resolve({ token }),
@@ -672,6 +680,59 @@ try {
       unsafeNotificationLeakPattern.test(JSON.stringify(postResult.body.notification)),
       false,
       "Expected admin POST response to omit link internals, actors, finance, auth, parser, and send fields",
+    );
+
+    setEnv(validEnv());
+    const dashboardPostMock = installMockClient({
+      driver_job_links: [
+        {
+          booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
+          expires_at: "2099-12-31T23:59:59.000Z",
+          id: "11111111-1111-4111-8111-111111111111",
+          link_status: "active",
+        },
+      ],
+    });
+    const dashboardPostResult = await responseJson(
+      await adminRoute.POST(
+        new Request("http://localhost/api/admin-customer-driver-app-notifications", {
+          body: JSON.stringify(
+            safeNotificationPayload({
+              delivery_surface: "driver_app",
+              driver_job_link_id: "11111111-1111-4111-8111-111111111111",
+              event_key: "BOOK-CUST-DRIVER-NOTIFY-001:admin-driver-message:dashboard",
+              notification_type: "trip_update",
+              safe_context: {
+                audience: "admin_driver",
+                external_send: false,
+                provider_send: false,
+                recipient_role: "driver",
+                sender_role: "admin",
+                source: "today_jobs",
+              },
+              safe_message: "Please review the amended pickup time in your Driver Job page.",
+              safe_title: "Message from dispatch",
+              workflow_area: "admin_driver_job_messages",
+            }),
+          ),
+          headers: validDashboardHeaders({
+            "content-type": "application/json",
+          }),
+          method: "POST",
+        }),
+      ),
+    );
+
+    assert.equal(
+      dashboardPostResult.status,
+      200,
+      "Expected the same-origin dashboard POST to use the verified server-session role without exposing the private request token.",
+    );
+    assert.equal(dashboardPostResult.body.notification.delivery_surface, "driver_app");
+    assert.equal(
+      dashboardPostMock.client.insertHistory.length,
+      1,
+      "Expected exactly one dashboard-scoped driver-app notification insert.",
     );
 
     setEnv({

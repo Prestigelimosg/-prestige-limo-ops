@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [app, persistence, customerRoute, driverRoute, ledger] = await Promise.all([
+const [app, persistence, adminRoute, customerRoute, driverRoute, ledger] = await Promise.all([
   readFile("app/page.tsx", "utf8"),
   readFile("lib/customer-driver-app-notification-persistence.ts", "utf8"),
+  readFile("app/api/admin-customer-driver-app-notifications/route.ts", "utf8"),
   readFile("app/api/customer-app-notifications/route.ts", "utf8"),
   readFile("app/api/driver-job/[token]/notifications/route.ts", "utf8"),
   readFile("docs/current-implementation-ledger.md", "utf8"),
@@ -53,6 +54,10 @@ for (const fragment of [
 assert.ok(
   persistence.includes('.eq("delivery_surface", "driver_app")'),
   "Driver token read must remain driver-app scoped.",
+);
+assert.ok(
+  adminRoute.includes('allowServerSessionRoleMethodsWithoutRequestToken: ["POST"]'),
+  "Today’s Jobs Send to Driver must allow only the same-origin dashboard POST through the verified server-session role.",
 );
 assert.ok(
   driverRoute.includes("loadDriverAppNotificationsForToken"),

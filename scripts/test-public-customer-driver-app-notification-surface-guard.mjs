@@ -389,7 +389,8 @@ assertSameList(
   "admin customer/driver app notifications route exported methods",
 );
 for (const fragment of [
-  "resolveAdminDispatcherBoundary(request, adminBookingPersistencePurpose)",
+  "resolveAdminDispatcherBoundary(request, adminBookingPersistencePurpose, {",
+  'allowServerSessionRoleMethodsWithoutRequestToken: ["POST"]',
   "adminDispatcherBoundaryToPersistenceAdapterActor(boundary.context)",
   "loadCustomerDriverAppNotifications(new URL(request.url).searchParams, actor)",
   "parseCustomerDriverAppNotificationCreatePayload(await readJsonBody(request))",
@@ -400,6 +401,11 @@ for (const fragment of [
 ]) {
   assertIncludes(adminNotificationsRoute, fragment, `admin notifications route boundary ${fragment}`);
 }
+assertExcludes(
+  adminNotificationsRoute,
+  /allowServerSessionRoleMethodsWithoutRequestToken:\s*\[[^\]]*(?:PATCH|PUT|DELETE)/,
+  "admin notifications same-origin dashboard write boundary broader than POST",
+);
 for (const [label, methodBlock] of [
   [
     "admin notifications POST boundary before body parse",

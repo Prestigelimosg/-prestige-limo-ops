@@ -12,6 +12,15 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Admin-to-Driver Dashboard POST Boundary Repair (2026-07-16)
+
+- Signed-in Production Chrome reproduced `Send to Driver` failing inside the existing Dashboard `Today’s Jobs` message card with `Admin booking persistence is available only from the internal admin dashboard.` The typed message remained visible, `No messages yet` remained unchanged, and the request was blocked before notification persistence, so the driver did not receive that attempted message.
+- Inspection found the established `POST /api/admin-customer-driver-app-notifications` route still required the private admin session token on POST even though the browser intentionally exposes only the same-origin admin purpose header. GET already used the verified server-session role, and other established browser write routes explicitly allow their bounded method through that same role.
+- The existing notification route now allows only `POST` through the verified same-origin admin/dispatcher server-session role without a browser-visible private token. The shared boundary still requires the exact admin purpose, same-origin internal dashboard referer, configured server session token presence, and admin/dispatcher role; public, cross-origin, wrong-purpose, wrong-referer, missing-role, and unsafe payload requests remain blocked. PATCH is not broadened.
+- No duplicate route, message panel, notification format, driver link, table, provider, retry, polling, batch, or external channel was added. Persistence still verifies the exact active Driver Job Link, booking reference, active status, expiry, `driver_app` delivery surface, and safe admin-to-driver payload before inserting into the existing outbox. Customer reads remain `customer_app` only.
+- Existing focused guards were strengthened in place: `scripts/test-customer-driver-app-notification-api-contract.mjs` now executes a tokenless same-origin Dashboard POST and requires exactly one driver-app insert; `scripts/test-today-jobs-admin-driver-message-guard.mjs` locks the POST-only server-session allowance; and `scripts/test-public-customer-driver-app-notification-surface-guard.mjs` rejects any broader PATCH/PUT/DELETE allowance.
+- No live message was resent, no notification row was created, and no customer/driver contact, booking, calendar, map, invoice/payment/payout, environment, Supabase configuration, or Production deployment changed during diagnosis and implementation. Preview and Production runtime evidence remain separate approval steps.
+
 ### Driver Assignment Calendar Title Response Repair (2026-07-16)
 
 - Production inspection of exact DSP booking `CUST-20260716085417-S3JE43` proved the booking row retained assigned driver Simon and plate `SNP9124S`, while the configured Prestige Ops Calendar event still had the pre-assignment title `Prestige - DSP - Jimmy Moon`; the Bookings status correctly showed amber `Update Cal`.

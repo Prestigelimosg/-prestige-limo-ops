@@ -4,21 +4,25 @@ Latest verified clean runtime checkpoint:
 e9904014 Reconcile staging with main
 
 Latest pushed main/staging runtime checkpoint:
-449ce887 Add return trip extra stops
+e9904014 Reconcile staging with main
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-449ce887 Add return trip extra stops
+eaac2558 Merge PR #6: Reconcile staging with main
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
-### Main And Staging Reconciliation Candidate (2026-07-16)
+### Main And Staging Reconciliation Production Evidence (2026-07-16)
 
 - The bounded reconciliation branch starts from current `main` at `7b2c7b15` and merges the complete current `staging` lineage through `449ce887`. It preserves main's newer public stale-session recovery, linked-return intake, `Tonight` parser repair, and shared-passenger airport-list parser repair while retaining staging's later Calendar status pills, admin display-only uppercase treatment, optional OTS proof visibility cleanup, test-evidence records, and return-trip extra-stop coverage.
 - The merge repairs only the two overlapping source-of-truth files in place: this ledger and `scripts/test-customer-return-trip-request-guard.mjs`. No second route, form, booking write, parser, calendar lane, customer/driver message lane, or persistence helper is introduced by conflict resolution.
 - Visible Chrome inspection caught that the automatic merge had composed main's and staging's independently added `Return extra stops` controls into two identical fields. The reconciliation removes the earlier duplicate, keeps the established field after the optional return flight field, and strengthens the focused guard to require exactly one rendered `returnExtraStops` control.
 - Focused parser, return-trip, adapter, Calendar, uppercase-display, OTS-proof, ledger, and privacy checks passed, followed by the complete preactivation suite, staged application-change guard, lint with zero errors and the existing warning backlog, and the Next.js production build. Visible Chrome acceptance against the production build confirmed one return checkbox, one visible return-extra-stop field, no customer-surface private-field leak, and zero browser errors; no booking was submitted.
-- Local server logging still reports the established `/api/company-profile` configuration failure because protected Supabase credentials are intentionally absent from the local environment. Reconciliation did not change Supabase/Vercel environment assignments or broaden configuration access. This verified local reconciliation candidate does not claim a deployment, database write, provider send, environment change, or production activation.
+- Local server logging during the pre-merge test reported the established `/api/company-profile` configuration failure because protected Supabase credentials were intentionally absent from the local environment. Reconciliation did not change Supabase/Vercel environment assignments or broaden configuration access.
+- Draft PR `#6` contained exact verified head `5a32e37e`, targeted `main` at `7b2c7b15`, was cleanly mergeable, and passed both Vercel checks. After explicit owner approval it was marked ready and merged with history-preserving method `merge` as `eaac2558 Merge PR #6: Reconcile staging with main`; no squash, rebase, force push, or manual deployment was used.
+- GitHub's Vercel status for exact merge commit `eaac2558` changed from pending to success with `Deployment has completed`. The automatic Git-linked deployment serves `https://app.prestigelimo.sg`; no environment assignment, provider setting, database configuration, or manual Vercel action changed.
+- Signed-in Production Chrome acceptance displayed exact build `eaac2558` on the admin root. The public `/book` return expansion displayed exactly one checkbox and one visible `Return extra stops` control, its six expected return input names, no public private-field leak, and zero browser errors. The submit action remained untouched; no booking, CRM, Calendar, map, message, Email, payment, payout, invoice, customer, driver, or provider action was performed.
+- Read-only Git ancestry confirmed both `449ce887` staging and exact reconciliation head `5a32e37e` are ancestors of Production `main` at `eaac2558`. The `staging` ref itself remained at `449ce887` during Production acceptance and requires a separately verified no-force fast-forward before branch equality can be claimed.
 
 ### Dispatcher Shared-Passenger Dated Airport Transfer List Repair (2026-07-15)
 

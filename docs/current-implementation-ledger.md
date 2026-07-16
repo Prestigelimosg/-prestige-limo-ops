@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-e9904014 Reconcile staging with main
+95ef1925 Alternate active booking card colours
 
 Latest pushed main/staging runtime checkpoint:
 e9904014 Reconcile staging with main

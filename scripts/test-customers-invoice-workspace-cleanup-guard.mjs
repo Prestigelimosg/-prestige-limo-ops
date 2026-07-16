@@ -39,7 +39,48 @@ const invoiceWorkspace = sectionBetween(
   'data-customer-invoice-workspace="true"',
   "</main>",
 );
+const invoiceLoadEffect = sectionBetween(
+  customersPage,
+  "async function loadIssuedCustomerInvoices()",
+  "void loadIssuedCustomerInvoices();",
+);
 const ledgerSection = sectionBetween(ledger, "### Customers Invoice Workspace Cleanup", "\n### ");
+const serverAuthorityLedgerSection = sectionBetween(
+  ledger,
+  "### Server-Authoritative Customer Invoice Display",
+  "\n### ",
+);
+
+assertIncludes(
+  customersPage,
+  "useState<CustomerDisplayedInvoiceRecord[]>([])",
+  "Customers invoice list must start empty while the guarded server read resolves",
+);
+assertIncludes(
+  invoiceLoadEffect,
+  "setIssuedCustomerInvoices(serverIssuedRecords);",
+  "successful server invoice read must replace browser-local fallback records",
+);
+assertIncludes(
+  invoiceLoadEffect,
+  "setIssuedCustomerInvoices(localInvoices);",
+  "browser-local invoices must remain a read-failure fallback only",
+);
+assertExcludes(
+  invoiceLoadEffect,
+  "mergeDisplayedInvoices(serverIssuedRecords, localInvoices)",
+  "successful server invoice read must not merge browser-local fallback records",
+);
+
+for (const phrase of [
+  "Production diagnosis found zero rows in every Supabase invoice table while the Customers page still displayed 14 pending invoices from the legacy Chrome-local fallback.",
+  "A successful guarded admin invoice read is authoritative and replaces browser-local fallback rows instead of merging them into the live billing overview.",
+  "The invoice list starts empty while the guarded read resolves, preventing stale local invoices from flashing before the server response.",
+  "Browser-local invoices remain available only when the guarded admin invoice read fails; no local record is deleted by this display repair.",
+  "The current 1 August automation fixtures in Supabase bookings and customer records remain untouched.",
+]) {
+  assertIncludes(serverAuthorityLedgerSection, phrase, `server-authority ledger phrase: ${phrase}`);
+}
 
 for (const fragment of [
   'const customerInvoiceWorkspaceTabs: Array<{ label: string; value: CustomerInvoiceWorkspaceTab }> = [];',

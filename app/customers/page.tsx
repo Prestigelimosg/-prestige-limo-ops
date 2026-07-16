@@ -2448,9 +2448,8 @@ export default function MockCustomerDashboardPage() {
   const [archivedCustomerTestInvoiceReferences, setArchivedCustomerTestInvoiceReferences] = useState<
     string[]
   >([]);
-  const [issuedCustomerInvoices, setIssuedCustomerInvoices] = useState<CustomerDisplayedInvoiceRecord[]>(() =>
-    readCustomerLocalInvoices().map(displayLocalInvoice),
-  );
+  const [issuedCustomerInvoices, setIssuedCustomerInvoices] =
+    useState<CustomerDisplayedInvoiceRecord[]>([]);
   const [customerBillingDocumentPage, setCustomerBillingDocumentPage] = useState(1);
   const [customerInvoiceWorkspaceTab, setCustomerInvoiceWorkspaceTab] =
     useState<CustomerInvoiceWorkspaceTab>("create-invoice");
@@ -3446,9 +3445,7 @@ export default function MockCustomerDashboardPage() {
 
           setArchivedCustomerTestInvoiceReferences(archivedReferences);
           setCustomerInvoiceDrafts(serverDraftRecords.map(invoiceDraftRecordFromDisplayedInvoice));
-          setIssuedCustomerInvoices(
-            mergeDisplayedInvoices(serverIssuedRecords, localInvoices),
-          );
+          setIssuedCustomerInvoices(serverIssuedRecords);
           return;
         }
       } catch {

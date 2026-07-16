@@ -12,6 +12,16 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Server-Authoritative Customer Invoice Display (2026-07-16)
+
+- Production diagnosis found zero rows in every Supabase invoice table while the Customers page still displayed 14 pending invoices from the legacy Chrome-local fallback.
+- The established Customers invoice load effect was merging browser-local fallback records into a successful guarded server response, so a completed database cleanup could not make the live billing overview authoritative.
+- A successful guarded admin invoice read is authoritative and replaces browser-local fallback rows instead of merging them into the live billing overview.
+- The invoice list starts empty while the guarded read resolves, preventing stale local invoices from flashing before the server response.
+- Browser-local invoices remain available only when the guarded admin invoice read fails; no local record is deleted by this display repair.
+- The current 1 August automation fixtures in Supabase bookings and customer records remain untouched. No booking, customer, invoice, Calendar event, Storage object, Automation setting, schedule, environment, provider, message, payment, payout, PayNow, or Supabase configuration is changed.
+- No duplicate invoice lane, route, panel, helper, storage key, API, or write path is added. The existing Customers invoice loader and existing focused `scripts/test-customers-invoice-workspace-cleanup-guard.mjs` are repaired and strengthened in place.
+
 ### Admin Driver Messaging Single-Lane Simplification (2026-07-16)
 
 - Admin inspection reproduced two controls that appeared to send an in-app driver message: the established Dashboard message composer with visible history and the fixed-template `Send Driver In-App` action inside Dispatch. Both used the same existing driver-app notification route, but their separate placement and status wording made the operator track two apparent lanes.

@@ -66,6 +66,14 @@ const privateKey = generateKeyPairSync("rsa", {
   type: "pkcs8",
 });
 
+function sourceBetween(source, startFragment, endFragment) {
+  const start = source.indexOf(startFragment);
+  assert.notEqual(start, -1, `Missing source start: ${startFragment}`);
+  const end = source.indexOf(endFragment, start + startFragment.length);
+  assert.notEqual(end, -1, `Missing source end: ${endFragment}`);
+  return source.slice(start, end);
+}
+
 function restoreEnv() {
   for (const [key, value] of Object.entries(originalEnv)) {
     if (value === undefined) {
@@ -392,6 +400,26 @@ try {
   assert.match(
     appSource,
     /const calendarBooking = adminBookingPersistenceRecordToCalendarBookingRecord\(savedBooking\);/,
+  );
+  const calendarPersistenceMapperSource = sourceBetween(
+    appSource,
+    "function adminBookingPersistenceRecordToCalendarBookingRecord(",
+    "function adminBookingPersistenceSourceLabel(",
+  );
+  assert.match(
+    calendarPersistenceMapperSource,
+    /const customerDisplayName = adminBookingPersistenceCustomerDisplayName\(record\);/,
+    "Update + Cal must resolve the saved company once for the Calendar mapper.",
+  );
+  assert.match(
+    calendarPersistenceMapperSource,
+    /const verifiedCompanyId = adminDispatchVerifiedIdentityId\(record\.company_id\);/,
+    "Calendar mapping must distinguish a verified CRM company from a passenger/customer display fallback.",
+  );
+  assert.match(
+    calendarPersistenceMapperSource,
+    /company_id: verifiedCompanyId,[\s\S]*?customer_display_name: customerDisplayName \|\| null,[\s\S]*?companies:[\s\S]*?verifiedCompanyId && customerDisplayName[\s\S]*?company_name: customerDisplayName,[\s\S]*?domain: null/,
+    "Save + CRM and Update + Cal must carry the saved company into Calendar payloads only when its CRM company ID is verified.",
   );
   assert.match(appSource, /await autoSyncSavedBookingGoogleCalendar\(savedBooking\);/);
   assert.match(appSource, /await autoSyncSavedBookingGoogleCalendar\(updatedBooking\);/);

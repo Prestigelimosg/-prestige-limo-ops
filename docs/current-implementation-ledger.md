@@ -1,13 +1,13 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-28933fd5 Repair public return booking intake
+e9904014 Reconcile staging with main
 
 Latest pushed main/staging runtime checkpoint:
-28933fd5 Repair public return booking intake
+449ce887 Add return trip extra stops
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-7b2c7b15 Merge pull request #5 from Prestigelimosg/codex/booking-stale-session-return-stop
+449ce887 Add return trip extra stops
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.

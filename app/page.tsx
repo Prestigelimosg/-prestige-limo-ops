@@ -9344,6 +9344,7 @@ function adminBookingPersistenceRecordToCalendarBookingRecord(
   const vehicle = clean(record.vehicle_type_or_category);
   const paxCount = safeAdminBookingPersistenceCount(record.pax_count) || 1;
   const bookingReference = clean(record.booking_reference);
+  const customerDisplayName = adminBookingPersistenceCustomerDisplayName(record);
 
   return {
     booking_reference: bookingReference,
@@ -9354,7 +9355,13 @@ function adminBookingPersistenceRecordToCalendarBookingRecord(
     contact_email: clean(record.contact_email) || null,
     contact_phone: clean(record.contact_phone) || null,
     created_at: clean(record.created_at) || null,
-    customer_display_name: adminBookingPersistenceCustomerDisplayName(record) || null,
+    customer_display_name: customerDisplayName || null,
+    companies: customerDisplayName
+      ? {
+          company_name: customerDisplayName,
+          domain: null,
+        }
+      : null,
     dropoff_address: dropoffLocation,
     dropoff_location: dropoffLocation,
     driver_contact: clean(record.driver_contact) || null,

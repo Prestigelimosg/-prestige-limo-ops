@@ -4,10 +4,10 @@ Latest verified clean runtime checkpoint:
 95ef1925 Alternate active booking card colours
 
 Latest pushed main/staging runtime checkpoint:
-e9904014 Reconcile staging with main
+95ef1925 Alternate active booking card colours
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-eaac2558 Merge PR #6: Reconcile staging with main
+b2f8caca Merge PR #9: Release alternating active booking card colours
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -59,6 +59,13 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The Bookings list shows the result as a non-clickable red `Save to Cal`, green `Cal saved`, or amber `Update Cal` pill. The status read is bounded to the active Bookings tab, chunks requests to the existing agenda limit, reruns only when calendar-relevant loaded-booking data changes, and fails closed with `Calendar status unavailable. No calendar status is assumed.` It never treats a failed read as saved.
 - Provider responses, OAuth tokens, configuration values, and raw event bodies are not returned to the client. The read path uses no request body, `sendUpdates`, calendar mutation, booking mutation, external notification, or customer/driver surface.
 - Focused protection is in `scripts/test-admin-booking-google-calendar-sync-api-contract.mjs`; existing browser fixtures mock the same route's read mode and require a non-button `Cal saved` pill. Live configured-Calendar verification and deployment remain separate steps; this local pass does not claim or perform a live provider read or write.
+
+### Update + Cal Company Status Consistency Repair (2026-07-16)
+
+- Production Chrome reproduced a successful `Update + Cal` write that turned green immediately but returned to amber after refresh. Read-only comparison of the exact saved booking and its Google Calendar event confirmed the provider event had the updated date, time, route, flight, vehicle, passenger, and booker, but omitted the company/customer description line expected by the refreshed Bookings record.
+- The existing update-response Calendar mapper carried `customer_display_name` but did not populate the established `companies.company_name` relation consumed by `buildSavedBookingCalendarEventPayload`. The refreshed typed booking did contain that verified company relation, so the same provider event was falsely classified as `update_calendar` after refresh.
+- The mapper now resolves the saved company once and carries the same value into both `customer_display_name` and the Calendar-safe company relation. No second Calendar route, event, button, write helper, status lane, or provider operation is added, and exact provider comparison remains strict rather than hiding a genuine mismatch.
+- Focused protection remains in `scripts/test-admin-booking-google-calendar-sync-api-contract.mjs`, which now requires both mapper fields to share the same resolved company. Current amber events require a separately approved post-deployment re-sync because this code repair does not mutate existing Google Calendar events by itself.
 
 ### Dispatch Optional OTS Proof Visibility Cleanup (2026-07-16)
 

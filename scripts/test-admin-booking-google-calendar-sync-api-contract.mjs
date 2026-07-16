@@ -66,6 +66,14 @@ const privateKey = generateKeyPairSync("rsa", {
   type: "pkcs8",
 });
 
+function sourceBetween(source, startFragment, endFragment) {
+  const start = source.indexOf(startFragment);
+  assert.notEqual(start, -1, `Missing source start: ${startFragment}`);
+  const end = source.indexOf(endFragment, start + startFragment.length);
+  assert.notEqual(end, -1, `Missing source end: ${endFragment}`);
+  return source.slice(start, end);
+}
+
 function restoreEnv() {
   for (const [key, value] of Object.entries(originalEnv)) {
     if (value === undefined) {
@@ -392,6 +400,21 @@ try {
   assert.match(
     appSource,
     /const calendarBooking = adminBookingPersistenceRecordToCalendarBookingRecord\(savedBooking\);/,
+  );
+  const calendarPersistenceMapperSource = sourceBetween(
+    appSource,
+    "function adminBookingPersistenceRecordToCalendarBookingRecord(",
+    "function adminBookingPersistenceSourceLabel(",
+  );
+  assert.match(
+    calendarPersistenceMapperSource,
+    /const customerDisplayName = adminBookingPersistenceCustomerDisplayName\(record\);/,
+    "Update + Cal must resolve the saved company once for the Calendar mapper.",
+  );
+  assert.match(
+    calendarPersistenceMapperSource,
+    /customer_display_name: customerDisplayName \|\| null,[\s\S]*?companies: customerDisplayName[\s\S]*?company_name: customerDisplayName,[\s\S]*?domain: null/,
+    "Update + Cal must carry the same saved company into the relation used by Calendar payloads and refreshed status reads.",
   );
   assert.match(appSource, /await autoSyncSavedBookingGoogleCalendar\(savedBooking\);/);
   assert.match(appSource, /await autoSyncSavedBookingGoogleCalendar\(updatedBooking\);/);

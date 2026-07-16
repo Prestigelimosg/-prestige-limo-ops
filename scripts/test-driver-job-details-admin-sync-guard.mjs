@@ -66,6 +66,20 @@ const [
 ]);
 
 const ledgerSection = sectionBetween(ledger, "### Driver Save And Acknowledge Details Admin Sync");
+const indicatorLedgerSection = sectionBetween(ledger, "### Driver Job Acknowledgement Indicators");
+
+for (const phrase of [
+  "The driver’s established `Save & Acknowledge Job` action remains the only acknowledgement write.",
+  "prefilled or merely visible driver details never count as acknowledgement.",
+  "The existing admin Driver Job Link read projects only an admin-safe acknowledgement boolean and timestamp inside its existing `safe_summary`.",
+  "Dispatch keeps one compact booking-specific acknowledgement pill in the existing Create/Copy/Telegram/Revoke control row.",
+  "The existing Active Assigned Jobs header shows one compact waiting count, including a settled green `0 waiting` empty state, and each existing job card shows one compact exact-booking acknowledgement pill.",
+  "Each refresh batches up to 100 active links per page, stops when every visible job is matched or the established result set ends, and never starts a per-job acknowledgement read.",
+  "No second polling timer, route, panel, table, status writer, notification, provider send, schema, or acknowledgement workflow is added.",
+  "Late or stale reads are request-revision guarded and filtered to the exact visible booking references.",
+]) {
+  assertIncludes(indicatorLedgerSection, phrase, `Driver acknowledgement indicator ledger phrase ${phrase}`);
+}
 
 for (const phrase of [
   "Driver job link `Save & Acknowledge Job` now persists safe driver name/contact/plate/vehicle details through the verified driver job token path.",
@@ -209,6 +223,20 @@ for (const fragment of [
   "safeDriverVehicleModelDisplay(booking.driverVehicleModel)",
   "safeDriverVehicleModelDisplay(assignedDriverRecord?.vehicle_type)",
   "Vehicle: ${driverVehicleModel}",
+  "acknowledged: boolean;",
+  "acknowledged_at: string | null;",
+  "dashboardDriverJobLinksReadState",
+  "dashboardDriverJobLinksReadRequestRevisionRef",
+  "refreshDashboardDriverJobLinksRead",
+  "while (hasNextPage && Object.keys(linksByReference).length < requestedReferenceSet.size)",
+  "result.pagination?.has_next_page === true",
+  "driverJobLinkAcknowledgementStatus",
+  'data-admin-driver-job-link-acknowledgement="true"',
+  'data-admin-driver-job-link-acknowledgement-state=',
+  "activeJobDriverAcknowledgementState",
+  'data-admin-multi-driver-active-job-acknowledgement="true"',
+  'data-admin-multi-driver-active-jobs-waiting-count=',
+  "void refreshDashboardDriverJobLinksRead(bookingReferences);",
 ]) {
   assertIncludes(appPage, fragment, `Admin booking details auto-sync fragment ${fragment}`);
 }

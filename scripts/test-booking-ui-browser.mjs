@@ -6985,6 +6985,8 @@ async function runChromeTest() {
               link_status: "active",
               revoked_at: null,
               safe_summary: {
+                acknowledged: false,
+                acknowledged_at: null,
                 assigned_driver: payload.assigned_driver_name || null,
                 pickup_datetime: payload.pickup_datetime || null,
                 route: payload.route || null,
@@ -9815,6 +9817,9 @@ async function runChromeTest() {
           const feedback = section?.querySelector("[data-driver-job-link-api-feedback='true']");
           const preview = section?.querySelector("[data-copy-preview='driverJobLink']");
           const status = section?.querySelector("[data-driver-job-link-status='true']");
+          const acknowledgement = section?.querySelector(
+            "[data-admin-driver-job-link-acknowledgement='true']",
+          );
           const copyButton = [...(section?.querySelectorAll("button") || [])].find(
             (button) => button.textContent.trim() === "Copy Link",
           );
@@ -9825,6 +9830,10 @@ async function runChromeTest() {
                 feedbackText: feedback.textContent.trim(),
                 previewText: preview?.innerText || "",
                 requests: window.__prestigeAdminDriverJobLinkRequests || [],
+                acknowledgementState:
+                  acknowledgement?.getAttribute("data-admin-driver-job-link-acknowledgement-state") || "",
+                acknowledgementText: acknowledgement?.textContent.replace(/\s+/g, " ").trim() || "",
+                acknowledgementHeight: acknowledgement?.getBoundingClientRect().height || 0,
                 statusText: status?.textContent.trim() || "",
               }
             : false;
@@ -9835,6 +9844,13 @@ async function runChromeTest() {
     assert.equal(driverJobLinkCreateState.copyButtonDisabled, false);
     assert.match(driverJobLinkCreateState.feedbackText, /Driver job link created/);
     assert.match(driverJobLinkCreateState.statusText, /Active saved link for ui-dashboard-driver-assignment-fixture/);
+    assert.equal(driverJobLinkCreateState.acknowledgementState, "waiting");
+    assert.match(driverJobLinkCreateState.acknowledgementText, /Waiting for driver/);
+    assert.ok(
+      driverJobLinkCreateState.acknowledgementHeight > 0 &&
+        driverJobLinkCreateState.acknowledgementHeight <= 28,
+      `Expected compact Dispatch acknowledgement pill, got ${driverJobLinkCreateState.acknowledgementHeight}px`,
+    );
     assert.match(driverJobLinkCreateState.previewText, /https?:\/\/\S+\/driver-job\/browser-created-driver-token/);
     assert.equal(driverJobLinkCreateState.requests.length, 1);
     assert.deepEqual(
@@ -9881,6 +9897,45 @@ async function runChromeTest() {
       ),
       false,
       "Expected Driver Job Link create request not to include finance, payout, parser, token, notification, or internal fields",
+    );
+
+    await evaluate(`(() => {
+      window.__prestigeAdminDriverJobLinks = (window.__prestigeAdminDriverJobLinks || []).map((link) =>
+        link.booking_reference === "ui-dashboard-driver-assignment-fixture"
+          ? {
+              ...link,
+              safe_summary: {
+                ...link.safe_summary,
+                acknowledged: true,
+                acknowledged_at: "2026-05-29T03:20:00.000Z",
+              },
+            }
+          : link,
+      );
+    })()`);
+
+    const dispatchDriverJobAcknowledgedState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const acknowledgement = document.querySelector(
+            "[data-admin-driver-job-link-acknowledgement='true']",
+          );
+
+          return acknowledgement?.getAttribute("data-admin-driver-job-link-acknowledgement-state") ===
+            "acknowledged"
+            ? {
+                height: acknowledgement.getBoundingClientRect().height,
+                text: acknowledgement.textContent.replace(/\s+/g, " ").trim(),
+              }
+            : false;
+        })()`),
+      10000,
+      "automatic Dispatch Driver Job Link acknowledgement refresh",
+    );
+    assert.match(dispatchDriverJobAcknowledgedState.text, /Acknowledged 11:20/);
+    assert.ok(
+      dispatchDriverJobAcknowledgedState.height <= 28,
+      `Expected compact acknowledged Dispatch pill, got ${dispatchDriverJobAcknowledgedState.height}px`,
     );
 
     const clickedDriverJobLinkCopy = await evaluate(`(() => {
@@ -9996,6 +10051,42 @@ async function runChromeTest() {
     );
 
     await clickTab("Dashboard", "Operations Dashboard");
+
+    const dashboardDriverJobAcknowledgedState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const article = [...document.querySelectorAll("[data-admin-multi-driver-active-job]")].find(
+            (candidate) => candidate.innerText.includes("DASHBOARD DRIVER TEST TRAVELER"),
+          );
+          const acknowledgement = article?.querySelector(
+            "[data-admin-multi-driver-active-job-acknowledgement='true']",
+          );
+          const waitingCount = document.querySelector(
+            "[data-admin-multi-driver-active-jobs-waiting-count]",
+          );
+
+          return acknowledgement?.getAttribute(
+            "data-admin-multi-driver-active-job-acknowledgement-state",
+          ) === "acknowledged" && waitingCount?.getAttribute(
+            "data-admin-multi-driver-active-jobs-waiting-count",
+          ) !== "unknown"
+            ? {
+                acknowledgementHeight: acknowledgement.getBoundingClientRect().height,
+                acknowledgementText: acknowledgement.textContent.replace(/\s+/g, " ").trim(),
+                articleText: article.innerText,
+                waitingCountText: waitingCount.textContent.replace(/\s+/g, " ").trim(),
+              }
+            : false;
+        })()`),
+      10000,
+      "automatic Dashboard exact-job acknowledgement indicator",
+    );
+    assert.match(dashboardDriverJobAcknowledgedState.acknowledgementText, /Acknowledged 11:20/);
+    assert.match(dashboardDriverJobAcknowledgedState.articleText, /DASHBOARD DRIVER TEST TRAVELER/);
+    assert.ok(
+      dashboardDriverJobAcknowledgedState.acknowledgementHeight <= 24,
+      `Expected compact Dashboard acknowledgement pill, got ${dashboardDriverJobAcknowledgedState.acknowledgementHeight}px`,
+    );
 
     const clickedDashboardCopyJobCard = await evaluate(`(() => {
       const article = [...document.querySelectorAll("article")].find(

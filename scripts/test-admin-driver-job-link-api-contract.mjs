@@ -771,9 +771,36 @@ try {
   assert.equal(listed.body.ok, true);
   assert.equal(listed.body.links.length, 1);
   assert.equal(listed.body.links[0].booking_reference, "JOB-LINK-CONTRACT-001");
+  assert.equal(listed.body.links[0].safe_summary.acknowledged, false);
+  assert.equal(listed.body.links[0].safe_summary.acknowledged_at, null);
   assertNoApiLeak(listed, "listed response");
   assertNoUnsafeDriverJobLinkLeak(listed, "listed response");
   assert.doesNotMatch(JSON.stringify(listed.body), /driver_job_url/i);
+
+  client.tables.driver_job_links[0].safe_link_context.driver_acknowledged_at =
+    "2026-07-16T12:45:00.000Z";
+  const acknowledgedListed = await readResponse(
+    await harness.route.GET(
+      new Request("http://localhost/api/admin-driver-job-links?booking_reference=JOB-LINK-CONTRACT-001&link_status=active&limit=10&page=1", {
+        headers: adminHeaders(),
+      }),
+    ),
+  );
+
+  assert.equal(acknowledgedListed.status, 200);
+  assert.equal(acknowledgedListed.body.ok, true);
+  assert.equal(acknowledgedListed.body.links.length, 1);
+  assert.equal(acknowledgedListed.body.links[0].booking_reference, "JOB-LINK-CONTRACT-001");
+  assert.equal(acknowledgedListed.body.links[0].safe_summary.acknowledged, true);
+  assert.equal(
+    acknowledgedListed.body.links[0].safe_summary.acknowledged_at,
+    "2026-07-16T12:45:00.000Z",
+  );
+  assertNoApiLeak(acknowledgedListed, "acknowledged listed response");
+  assertNoUnsafeDriverJobLinkLeak(
+    acknowledgedListed,
+    "acknowledged listed response",
+  );
 
   client.tables.driver_job_links.push({
     actor_label: "Dashboard test admin",

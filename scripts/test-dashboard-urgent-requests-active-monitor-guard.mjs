@@ -403,6 +403,7 @@ for (const fragment of [
   "const liveDispatchSlotSummaryLabel =",
   "const activeJobsMapAllowedReferenceKey = adminActiveJobsMapReadState.allowedBookingReferences.join(\"|\");",
   'const todayJobsMonitorIsActive = activeTab === "dashboard";',
+  "refreshDashboardDriverJobLinksRead(bookingReferences)",
 ]) {
   assertIncludes(activeMonitorSource, fragment, `active monitor source fragment ${fragment}`);
 }
@@ -419,6 +420,13 @@ for (const fragment of [
   "Latest report: {activeJobDriverStatusLabel}",
   'data-admin-multi-driver-active-job-driver-report-history="true"',
   "History:</span> {activeJobDriverStatusHistory}",
+  "{activeJobDriverAcknowledgementState.label}",
+  'data-admin-multi-driver-active-job-acknowledgement="true"',
+  'data-admin-multi-driver-active-job-acknowledgement-state=',
+  'data-admin-multi-driver-active-jobs-waiting-count=',
+  'activeJobDriverStatusReferenceList.length === 0',
+  '? "0 waiting"',
+  "{activeJobDriverAcknowledgementWaitingCount} waiting",
   "(isSelectedActiveJob ? clean(booking.driverName) : \"\")",
   'data-dispatch-live-driver-map="true"',
   "Open Live Dispatch Map",

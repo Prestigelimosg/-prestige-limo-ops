@@ -948,6 +948,8 @@ type AdminDriverJobLinkRecord = {
   link_status: "active" | "expired" | "revoked";
   revoked_at: string | null;
   safe_summary: {
+    acknowledged: boolean;
+    acknowledged_at: string | null;
     assigned_driver: string | null;
     assigned_driver_contact: string | null;
     assigned_driver_plate: string | null;
@@ -965,6 +967,11 @@ type AdminDriverJobLinkState = {
   loadedReference: string;
   message: Message | null;
   oneTimeUrl: string;
+};
+
+type AdminDashboardDriverJobLinksReadState = {
+  linksByReference: Record<string, AdminDriverJobLinkRecord>;
+  status: "error" | "idle" | "loaded" | "loading";
 };
 
 type AdminManualTelegramCopyTarget = "customerDriverDetails" | "driverJobLink";
@@ -9814,6 +9821,13 @@ function adminDriverJobStatusTimeLabel(value: string | null | undefined) {
   ).padStart(2, "0")} SGT`;
 }
 
+function adminDriverJobAcknowledgementCompactTimeLabel(value: string | null | undefined) {
+  const fullLabel = adminDriverJobStatusTimeLabel(value);
+  const timeMatch = fullLabel.match(/(\d{2}:\d{2}) SGT$/);
+
+  return timeMatch?.[1] || "";
+}
+
 function adminAppNotificationFailureMessage(rawError: unknown) {
   const normalizedError =
     rawError instanceof Error ? clean(rawError.message).toLowerCase() : clean(String(rawError || "")).toLowerCase();
@@ -13084,6 +13098,12 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     useState<Record<string, AdminDriverJobStatusReadState>>({});
   const [dashboardDriverOtsPhotoProofReadStates, setDashboardDriverOtsPhotoProofReadStates] =
     useState<Record<string, AdminDriverOtsPhotoProofReadState>>({});
+  const [dashboardDriverJobLinksReadState, setDashboardDriverJobLinksReadState] =
+    useState<AdminDashboardDriverJobLinksReadState>({
+      linksByReference: {},
+      status: "idle",
+    });
+  const dashboardDriverJobLinksReadRequestRevisionRef = useRef(0);
   const dashboardDriverJobStatusAutoRequestedRef = useRef<Set<string>>(new Set());
   const driverCompletedBookingStatusSyncRequestedRef = useRef<Set<string>>(new Set());
   const [bookingsSearchTerm, setBookingsSearchTerm] = useState("");
@@ -16488,7 +16508,38 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     [booking, currentTimeMs],
   );
   const activeAdminDriverJobLink =
-    adminDriverJobLinkState.link?.link_status === "active" ? adminDriverJobLinkState.link : null;
+    adminDriverJobLinkState.link?.link_status === "active" &&
+    cleanReferenceText(adminDriverJobLinkState.link.booking_reference) ===
+      cleanReferenceText(dispatchReleaseWorkflowBookingReference)
+      ? adminDriverJobLinkState.link
+      : null;
+  const driverJobLinkAcknowledgementStatus = !activeAdminDriverJobLink
+    ? {
+        label: "No active link",
+        state: "no-link" as const,
+        title: "Create or load the exact booking’s active Driver Job Link.",
+      }
+    : activeAdminDriverJobLink.safe_summary.acknowledged
+      ? {
+          label: `Acknowledged${
+            adminDriverJobAcknowledgementCompactTimeLabel(
+              activeAdminDriverJobLink.safe_summary.acknowledged_at,
+            )
+              ? ` ${adminDriverJobAcknowledgementCompactTimeLabel(
+                  activeAdminDriverJobLink.safe_summary.acknowledged_at,
+                )}`
+              : ""
+          }`,
+          state: "acknowledged" as const,
+          title: `Driver acknowledged ${adminDriverJobStatusTimeLabel(
+            activeAdminDriverJobLink.safe_summary.acknowledged_at,
+          )}.`,
+        }
+      : {
+          label: "Waiting for driver",
+          state: "waiting" as const,
+          title: "The exact active Driver Job Link has not been acknowledged yet.",
+        };
 
   const customerCopyCard = useMemo(() => {
     const serviceType = customerBookingTypeLabel(booking.bookingType);
@@ -21515,6 +21566,93 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     }
   }
 
+  async function refreshDashboardDriverJobLinksRead(bookingReferenceValues: string[]) {
+    const bookingReferences = Array.from(
+      new Set(bookingReferenceValues.map(cleanReferenceText).filter(Boolean)),
+    );
+    const requestRevision = dashboardDriverJobLinksReadRequestRevisionRef.current + 1;
+    dashboardDriverJobLinksReadRequestRevisionRef.current = requestRevision;
+
+    if (bookingReferences.length === 0) {
+      setDashboardDriverJobLinksReadState({
+        linksByReference: {},
+        status: "idle",
+      });
+      return;
+    }
+
+    setDashboardDriverJobLinksReadState((current) => ({
+      ...current,
+      status: "loading",
+    }));
+
+    try {
+      const requestedReferenceSet = new Set(bookingReferences);
+      const linksByReference: Record<string, AdminDriverJobLinkRecord> = {};
+      let page = 1;
+      let hasNextPage = true;
+
+      while (hasNextPage && Object.keys(linksByReference).length < requestedReferenceSet.size) {
+        const params = new URLSearchParams({
+          limit: "100",
+          link_status: "active",
+          page: String(page),
+        });
+        const response = await fetch(`${adminDriverJobLinksApiPath}?${params.toString()}`, {
+          headers: {
+            "x-prestige-admin-purpose": adminLegacyDataPurpose,
+          },
+          method: "GET",
+        });
+        const result = await response.json().catch(() => null);
+
+        if (!response.ok || !result?.ok) {
+          throw new Error(result?.error || "Driver job link acknowledgement read failed.");
+        }
+
+        if (dashboardDriverJobLinksReadRequestRevisionRef.current !== requestRevision) {
+          return;
+        }
+
+        const links = Array.isArray(result.links)
+          ? (result.links as AdminDriverJobLinkRecord[])
+          : [];
+
+        for (const link of links) {
+          const linkReference = cleanReferenceText(link.booking_reference);
+
+          if (
+            !linkReference ||
+            !requestedReferenceSet.has(linkReference) ||
+            link.link_status !== "active" ||
+            linksByReference[linkReference]
+          ) {
+            continue;
+          }
+
+          linksByReference[linkReference] = link;
+        }
+
+        hasNextPage = result.pagination?.has_next_page === true;
+        page += 1;
+      }
+
+      setDashboardDriverJobLinksReadState({
+        linksByReference,
+        status: "loaded",
+      });
+    } catch {
+      if (dashboardDriverJobLinksReadRequestRevisionRef.current !== requestRevision) {
+        return;
+      }
+
+      setDashboardDriverJobLinksReadState({
+        linksByReference: {},
+        status: "error",
+      });
+    }
+  }
+
   async function refreshDashboardDriverOtsPhotoProofRead(bookingReferenceValue: string) {
     const bookingReference = cleanReferenceText(bookingReferenceValue);
 
@@ -26179,6 +26317,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         } ready across assigned DEP/MNG/TRF/DSP jobs.`
       : "No active assigned jobs are ready for live map watching.";
   const activeJobDriverStatusReferenceKey = activeJobDriverStatusReferenceList.join("|");
+  const activeJobDriverAcknowledgementWaitingCount =
+    dashboardDriverJobLinksReadState.status === "loaded"
+      ? activeJobDriverStatusReferenceList.filter((bookingReference) => {
+          const activeLink = dashboardDriverJobLinksReadState.linksByReference[bookingReference];
+
+          return activeLink?.link_status === "active" && !activeLink.safe_summary.acknowledged;
+        }).length
+      : 0;
   const liveDispatchMapReferenceKey = liveDispatchMapReferenceList.join("|");
   const activeJobsMapAllowedReferenceKey = adminActiveJobsMapReadState.allowedBookingReferences.join("|");
   const todayJobsMonitorIsActive = activeTab === "dashboard";
@@ -26503,6 +26649,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       void refreshDashboardDriverJobStatusRead(bookingReference);
       void refreshDashboardDriverOtsPhotoProofRead(bookingReference);
     }
+    void refreshDashboardDriverJobLinksRead(bookingReferences);
     // The booking reference key is the trigger; the read callback intentionally uses the latest page state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [todayJobsMonitorIsActive, activeJobDriverStatusReferenceKey]);
@@ -26523,6 +26670,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         void refreshDashboardDriverJobStatusRead(bookingReference);
         void refreshDashboardDriverOtsPhotoProofRead(bookingReference);
       }
+      void refreshDashboardDriverJobLinksRead(bookingReferences);
     }, 10 * 1000);
 
     return () => window.clearInterval(intervalId);
@@ -26584,6 +26732,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       void refreshDashboardDriverOtsPhotoProofRead(bookingReference);
       void refreshAdminTodayJobMessageHistory(bookingReference);
     }
+    void refreshDashboardDriverJobLinksRead(activeJobDriverStatusReferenceList);
   }
 
   async function refreshAdminTodayJobMessageHistory(bookingReferenceValue: string) {
@@ -26815,6 +26964,35 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             Pickup risk {adminPickupRiskMonitorEnabled ? "On" : "Off"}
           </button>
           <span
+            className={`w-fit rounded-full px-2.5 py-1 text-xs font-semibold uppercase ring-1 ${
+              dashboardDriverJobLinksReadState.status === "error"
+                ? "bg-rose-100 text-rose-900 ring-rose-200"
+                : activeJobDriverStatusReferenceList.length === 0
+                  ? "bg-emerald-100 text-emerald-900 ring-emerald-200"
+                : dashboardDriverJobLinksReadState.status !== "loaded"
+                  ? "bg-slate-100 text-slate-700 ring-slate-200"
+                  : activeJobDriverAcknowledgementWaitingCount > 0
+                    ? "bg-amber-100 text-amber-950 ring-amber-200"
+                    : "bg-emerald-100 text-emerald-900 ring-emerald-200"
+            }`}
+            data-admin-multi-driver-active-jobs-waiting-count={
+              activeJobDriverStatusReferenceList.length === 0
+                ? "0"
+                : dashboardDriverJobLinksReadState.status === "loaded"
+                ? String(activeJobDriverAcknowledgementWaitingCount)
+                : "unknown"
+            }
+          >
+            {activeJobDriverStatusReferenceList.length === 0
+              ? "0 waiting"
+              : dashboardDriverJobLinksReadState.status === "idle" ||
+                  dashboardDriverJobLinksReadState.status === "loading"
+              ? "Checking acknowledgements"
+              : dashboardDriverJobLinksReadState.status === "error"
+                ? "Acknowledgement read error"
+                : <>{activeJobDriverAcknowledgementWaitingCount} waiting</>}
+          </span>
+          <span
             className="w-fit rounded-full bg-lime-100 px-2.5 py-1 text-xs font-semibold uppercase text-lime-900 ring-1 ring-lime-200"
             data-admin-multi-driver-active-jobs-count={String(dayOfTripActiveJobBookings.length)}
           >
@@ -26873,6 +27051,48 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   )
                   .join(" → ")
               : "No driver reports yet";
+            const activeJobDriverLink =
+              dashboardDriverJobLinksReadState.linksByReference[activeJobBookingReference] || null;
+            const activeJobDriverAcknowledgementState =
+              dashboardDriverJobLinksReadState.status === "error"
+                ? {
+                    label: "Acknowledgement read error",
+                    state: "error" as const,
+                    title: "The active Driver Job Link acknowledgement could not be read safely.",
+                  }
+                : dashboardDriverJobLinksReadState.status !== "loaded" && !activeJobDriverLink
+                  ? {
+                      label: "Checking acknowledgement",
+                      state: "checking" as const,
+                      title: "Checking the exact active Driver Job Link.",
+                    }
+                  : !activeJobDriverLink
+                    ? {
+                        label: "No active link",
+                        state: "no-link" as const,
+                        title: "This booking has no active Driver Job Link.",
+                      }
+                    : activeJobDriverLink.safe_summary.acknowledged
+                      ? {
+                          label: `Acknowledged${
+                            adminDriverJobAcknowledgementCompactTimeLabel(
+                              activeJobDriverLink.safe_summary.acknowledged_at,
+                            )
+                              ? ` ${adminDriverJobAcknowledgementCompactTimeLabel(
+                                  activeJobDriverLink.safe_summary.acknowledged_at,
+                                )}`
+                              : ""
+                          }`,
+                          state: "acknowledged" as const,
+                          title: `Driver acknowledged ${adminDriverJobStatusTimeLabel(
+                            activeJobDriverLink.safe_summary.acknowledged_at,
+                          )}.`,
+                        }
+                      : {
+                          label: "Waiting for driver",
+                          state: "waiting" as const,
+                          title: "The exact active Driver Job Link has not been acknowledged yet.",
+                        };
             const activeJobDriverOtsPhotoProofReadState =
               activeJobDriverOtsPhotoProofReadStateForBooking(
                 activeJobBookingReference,
@@ -26964,6 +27184,26 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       }`}
                     >
                       {isSelectedActiveJob ? "Open" : activeJobStatus}
+                    </span>
+                    <span
+                      className={`max-w-[10rem] truncate rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                        activeJobDriverAcknowledgementState.state === "acknowledged"
+                          ? "border-emerald-300 bg-emerald-100 text-emerald-900"
+                          : activeJobDriverAcknowledgementState.state === "waiting"
+                            ? "border-amber-300 bg-amber-100 text-amber-950"
+                            : activeJobDriverAcknowledgementState.state === "error"
+                              ? "border-rose-300 bg-rose-100 text-rose-900"
+                              : "border-slate-300 bg-slate-100 text-slate-700"
+                      }`}
+                      data-admin-multi-driver-active-job-acknowledgement="true"
+                      data-admin-multi-driver-active-job-acknowledgement-state={
+                        activeJobDriverAcknowledgementState.state
+                      }
+                      title={`${activeJobBookingReference || "Booking"}: ${
+                        activeJobDriverAcknowledgementState.title
+                      }`}
+                    >
+                      {activeJobDriverAcknowledgementState.label}
                     </span>
                     {adminPickupRiskMonitorEnabled ? (
                       <span
@@ -42515,6 +42755,26 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       >
                         {driverJobLinkRevokeButtonLabel}
                       </button>
+                      <span
+                        className={`inline-flex min-h-9 max-w-full items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                          driverJobLinkAcknowledgementStatus.state === "acknowledged"
+                            ? "border-emerald-300 bg-emerald-100 text-emerald-900"
+                            : driverJobLinkAcknowledgementStatus.state === "waiting"
+                              ? "border-amber-300 bg-amber-100 text-amber-950"
+                              : "border-slate-300 bg-slate-100 text-slate-700"
+                        }`}
+                        data-admin-driver-job-link-acknowledgement="true"
+                        data-admin-driver-job-link-acknowledgement-state={
+                          driverJobLinkAcknowledgementStatus.state
+                        }
+                        title={driverJobLinkAcknowledgementStatus.title}
+                      >
+                        <span className="max-w-[8rem] truncate">
+                          {compactBookingReference(dispatchReleaseWorkflowBookingReference)}
+                        </span>
+                        <span className="mx-1" aria-hidden="true">·</span>
+                        <span>{driverJobLinkAcknowledgementStatus.label}</span>
+                      </span>
                     </div>
                     {driverJobLinkCopyMessage?.tone === "error" ? (
                       <div

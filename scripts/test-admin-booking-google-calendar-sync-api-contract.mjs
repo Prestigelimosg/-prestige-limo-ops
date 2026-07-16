@@ -427,6 +427,26 @@ try {
   assert.match(calendarPayloadSource, /const pickupDateTime = clean\(bookingRecord\.pickup_at\) \|\| clean\(bookingRecord\.pickup_datetime\);/);
   assert.match(calendarPayloadSource, /const pickupTime = formatPickupTimeFromRecord\(bookingRecord\);/);
   assert.match(calendarPayloadSource, /const bookingReference = getBookingCalendarReference\(bookingRecord\);/);
+  assert.match(
+    calendarPayloadSource,
+    /booking_type:\s*clean\(bookingRecord\.booking_type\)\s*\|\|\s*clean\(bookingRecord\.service_type\)\s*\|\|\s*clean\(bookingRecord\.route_type\)/,
+    "refreshed Calendar status payload must keep the saved service type fallback used by Update + Cal",
+  );
+  assert.match(
+    calendarPayloadSource,
+    /status: adminBookingCalendarStatusDisplay\(bookingRecord\.status\)/,
+    "refreshed Calendar status payload must normalize persisted workflow status to the Update + Cal display value",
+  );
+  assert.match(
+    calendarPayloadSource,
+    /vehicle:\s*clean\(bookingRecord\.vehicle\)\s*\|\|\s*clean\(bookingRecord\.vehicle_type_or_category\)\s*\|\|\s*clean\(bookingRecord\.vehicle_type\)/,
+    "refreshed Calendar status payload must keep the saved vehicle fallback used by Update + Cal",
+  );
+  assert.match(
+    appSource,
+    /function adminBookingCalendarStatusDisplay\([\s\S]*?admin_review_required[\s\S]*?Admin Review Required/,
+    "Calendar status normalization must preserve the persisted admin review display value",
+  );
   assert.match(calendarPayloadSource, /booking_reference: bookingReference/);
   assert.match(calendarPayloadSource, /id: cleanReferenceText\(bookingRecord\.id\) \|\| bookingReference/);
   assert.match(calendarPayloadSource, /pickup_at: pickupDateTime/);

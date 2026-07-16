@@ -4944,18 +4944,25 @@ function billingCompanyIdentityMatches(
 }
 
 function formatTravelerBillingAccountLabel(companyAccount: string, travelerName: string) {
-  const safeCompany = clean(companyAccount) || "Customer Account";
+  const safeCompany = billingIdentityBaseAccount(companyAccount) || "Customer Account";
   const safeTraveler = clean(travelerName) || "Traveler To Confirm";
 
   return `${safeCompany} [${safeTraveler}]`.slice(0, 220);
 }
 
 function billingIdentityBaseAccount(value: string | null | undefined) {
-  const account = clean(value);
-  const bracketMatch = account.match(/^(.+?)\s+\[[^\]]+\]$/);
+  let account = clean(value);
+  let bracketMatch = account.match(/^(.+?)\s+\[[^\]]+\]$/);
 
-  if (bracketMatch?.[1]) {
-    return clean(bracketMatch[1]);
+  while (bracketMatch?.[1]) {
+    const baseAccount = clean(bracketMatch[1]);
+
+    if (!baseAccount || baseAccount === account) {
+      break;
+    }
+
+    account = baseAccount;
+    bracketMatch = account.match(/^(.+?)\s+\[[^\]]+\]$/);
   }
 
   const slashMatch = account.match(/^(.+?)\s+\/\s+.+$/);
@@ -7776,6 +7783,37 @@ function formatDashboardRoute(bookingRecord: BookingRecord) {
   return `${pickup} → ${dropoff}`;
 }
 
+function adminBookingCalendarStatusDisplay(value: string | null | undefined) {
+  const status = clean(value);
+  const normalizedStatus = status
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (normalizedStatus === "admin review required") {
+    return "Admin Review Required";
+  }
+
+  if (normalizedStatus === "needs review") {
+    return "Needs Review";
+  }
+
+  if (normalizedStatus === "approved internal" || normalizedStatus === "ready for confirmation") {
+    return "Ready for Confirmation";
+  }
+
+  if (normalizedStatus === "declined internal" || normalizedStatus === "declined internally") {
+    return "Declined Internally";
+  }
+
+  if (normalizedStatus === "draft") {
+    return "Draft";
+  }
+
+  return status;
+}
+
 function buildSavedBookingCalendarEventPayload(bookingRecord: BookingRecord) {
   const routePoints = getRoutePoints(bookingRecord);
   const pickup = clean(bookingRecord.pickup_address) || routePoints[0] || "";
@@ -7788,7 +7826,10 @@ function buildSavedBookingCalendarEventPayload(bookingRecord: BookingRecord) {
 
   return {
     booking_reference: bookingReference,
-    booking_type: clean(bookingRecord.booking_type),
+    booking_type:
+      clean(bookingRecord.booking_type) ||
+      clean(bookingRecord.service_type) ||
+      clean(bookingRecord.route_type),
     booker_name: getBookerName(bookingRecord),
     company_name: getBookingCompanyName(bookingRecord),
     date: getBookingDateKey(bookingRecord),
@@ -7804,9 +7845,12 @@ function buildSavedBookingCalendarEventPayload(bookingRecord: BookingRecord) {
     pickup_datetime: pickupDateTime,
     pickup_time: pickupTime,
     route,
-    status: clean(bookingRecord.status),
+    status: adminBookingCalendarStatusDisplay(bookingRecord.status),
     traveler_name: getBookingName(bookingRecord),
-    vehicle: clean(bookingRecord.vehicle),
+    vehicle:
+      clean(bookingRecord.vehicle) ||
+      clean(bookingRecord.vehicle_type_or_category) ||
+      clean(bookingRecord.vehicle_type),
   };
 }
 

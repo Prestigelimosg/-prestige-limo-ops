@@ -426,6 +426,10 @@ const guardChecks = [
     script: "scripts/test-admin-operational-uppercase-display-guard.mjs",
   },
   {
+    label: "admin Bookings alternating card colours guard",
+    script: "scripts/test-admin-bookings-alternating-card-colours-guard.mjs",
+  },
+  {
     label: "admin operational snapshot apply guard",
     script: "scripts/test-admin-operational-snapshot-apply-guard.mjs",
   },

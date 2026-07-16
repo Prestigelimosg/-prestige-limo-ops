@@ -123,7 +123,6 @@ for (const fragment of [
   '"WhatsApp checked"',
   '"SMS checked"',
   '"In-App queued"',
-  '"Driver In-App queued"',
   '"Created"',
   '"Revoked"',
 ]) {
@@ -134,7 +133,6 @@ for (const fragment of [
   'data-dispatch-compact-panel="manual-extra-charges"',
   'data-dispatch-compact-panel="job-card-copy-preview"',
   'data-dispatch-compact-panel="customer-driver-admin-checks"',
-  'data-dispatch-compact-panel="driver-in-app-admin-checks"',
   'data-dispatch-compact-panel="driver-dispatch-copy-preview"',
   'data-dispatch-compact-panel="driver-job-link-preview"',
   'data-driver-job-link-preview-disclosure="true"',

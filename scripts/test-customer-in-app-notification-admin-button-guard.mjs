@@ -59,7 +59,7 @@ const driverDispatchUi = sectionBetween(
 const customerInAppAction = blockBetween(
   appPage,
   "async function sendAdminCustomerDriverDetailsCustomerInAppNotification()",
-  "async function sendAdminCustomerDriverDetailsDriverInAppNotification()",
+  "const adminCustomerDriverDetailsEmailDisabledSendStateMatchesReference",
 );
 
 for (const phrase of [

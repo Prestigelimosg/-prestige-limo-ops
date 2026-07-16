@@ -10,12 +10,12 @@ const [app, persistence, adminRoute, customerRoute, driverRoute, ledger] = await
   readFile("docs/current-implementation-ledger.md", "utf8"),
 ]);
 
-const monitorStart = app.indexOf('aria-label="Today\'s Jobs"');
+const monitorStart = app.indexOf('aria-label="Active Assigned Jobs"');
 const monitorEnd = app.indexOf('data-dispatch-live-driver-map="true"', monitorStart);
 const monitor = app.slice(monitorStart, monitorEnd);
 
-assert.notEqual(monitorStart, -1, "Missing Today’s Jobs reporting center.");
-assert.notEqual(monitorEnd, -1, "Missing Today’s Jobs map boundary.");
+assert.notEqual(monitorStart, -1, "Missing Active Assigned Jobs reporting center.");
+assert.notEqual(monitorEnd, -1, "Missing Active Assigned Jobs map boundary.");
 
 for (const fragment of [
   'data-admin-active-job-driver-message="true"',
@@ -24,6 +24,7 @@ for (const fragment of [
   'data-admin-active-job-driver-message-open-link-setup="true"',
   ">Messages</div>",
   "Send to Driver",
+  "Queued to Driver Job page at ${adminDriverJobStatusTimeLabel(new Date().toISOString())}.",
   "Open Driver Link Setup",
   "Visible to admin and this driver only. Customers cannot see this message.",
   "sendAdminTodayJobDriverMessage",
@@ -36,7 +37,7 @@ for (const fragment of [
   "activeLink.id",
   'method: "POST"',
 ]) {
-  assert.ok(monitor.includes(fragment) || app.includes(fragment), `Missing Today’s Jobs message fragment: ${fragment}`);
+  assert.ok(monitor.includes(fragment) || app.includes(fragment), `Missing Active Assigned Jobs message fragment: ${fragment}`);
 }
 
 for (const fragment of [
@@ -57,7 +58,7 @@ assert.ok(
 );
 assert.ok(
   adminRoute.includes('allowServerSessionRoleMethodsWithoutRequestToken: ["POST"]'),
-  "Today’s Jobs Send to Driver must allow only the same-origin dashboard POST through the verified server-session role.",
+  "Active Assigned Jobs Send to Driver must allow only the same-origin dashboard POST through the verified server-session role.",
 );
 assert.ok(
   driverRoute.includes("loadDriverAppNotificationsForToken"),
@@ -91,4 +92,4 @@ assert.ok(
   "Missing messaging implementation ledger section.",
 );
 
-console.log("Today’s Jobs admin-to-driver message guard passed");
+console.log("Active Assigned Jobs admin-to-driver message guard passed");

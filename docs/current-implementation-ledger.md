@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-3e9b6acc Guard Calendar company sync by CRM identity
+9a132cb4 Keep refreshed Calendar payload consistent
 
 Latest pushed main/staging runtime checkpoint:
 3e9b6acc Guard Calendar company sync by CRM identity

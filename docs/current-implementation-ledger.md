@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-93d7fe0b Repair dashboard driver message authorization
+19b0f8bd Simplify admin driver messaging
 
 Latest pushed main/staging runtime checkpoint:
 93d7fe0b Repair dashboard driver message authorization

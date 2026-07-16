@@ -12,6 +12,15 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Driver Assignment Calendar Title Response Repair (2026-07-16)
+
+- Production inspection of exact DSP booking `CUST-20260716085417-S3JE43` proved the booking row retained assigned driver Simon and plate `SNP9124S`, while the configured Prestige Ops Calendar event still had the pre-assignment title `Prestige - DSP - Jimmy Moon`; the Bookings status correctly showed amber `Update Cal`.
+- The exact `booking_updated` audit record proved the operational update wrote the driver assignment to the booking row but its safely reloaded API response carried null driver name and plate. `Update + Cal` builds the existing Calendar upsert from that response, so the provider received an incomplete no-driver event even though persistence succeeded.
+- The established admin-booking update adapter now restores only the normalized driver name/contact/plate values from the booking row that just updated successfully when a compatibility reload omits those fields. The same enriched safe record is returned and audited; no client-supplied value is trusted outside the already validated admin booking payload, and a failed booking update still returns before Calendar sync.
+- The existing `Update + Cal` success path now also publishes that exact returned record into the established loaded-bookings state before calling the existing Calendar upsert. This keeps the card payload, provider write, and automatic green-pill comparison aligned without adding a route, event, button, panel, helper lane, or provider write.
+- Focused regression coverage remains in `scripts/test-admin-booking-supabase-adapter-contract.mjs`, `scripts/test-admin-booking-google-calendar-sync-api-contract.mjs`, and `scripts/test-dispatch-action-feedback-compact-guard.mjs`. The adapter fixture forces both driver-bearing reload selectors to fail, verifies the driverless compatibility fallback, and requires the successful update response and audit to retain the exact normalized driver assignment.
+- The current stale Production event is not silently mutated by this source repair. A separately approved `Update + Cal` action after deployment is required to change that one live Calendar title to the established `[plate] > [traveler] - [service] - Prestige` format.
+
 ### Admin Bookings Alternating Card Colours (2026-07-16)
 
 - The existing active Bookings list alternates soft sky and violet card backgrounds by the current visible display order so adjacent jobs and linked legs are easier to distinguish. Filtering, date scope, search, and sorting recompute only the visible stripe order; booking data and identity remain unchanged.

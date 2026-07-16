@@ -958,6 +958,18 @@ function bookingToDbRow(
   };
 }
 
+function mergeSuccessfullyUpdatedDriverFields(
+  record: AdminBookingPersistenceRecord,
+  bookingRow: ReturnType<typeof bookingToDbRow>,
+): AdminBookingPersistenceRecord {
+  return {
+    ...record,
+    driver_contact: record.driver_contact ?? bookingRow.driver_contact,
+    driver_name: record.driver_name ?? bookingRow.driver_name,
+    driver_plate_number: record.driver_plate_number ?? bookingRow.driver_plate_number,
+  };
+}
+
 function bookingToFoundationDbRow(
   booking: AdminBookingRecordInput,
   customerId: DbIdentifier | null,
@@ -1773,6 +1785,11 @@ export async function updateAdminBookingThroughSupabaseAdapter(
     return reloadedResult;
   }
 
+  const updatedBooking = mergeSuccessfullyUpdatedDriverFields(
+    reloadedResult.data,
+    bookingRow,
+  );
+
   const auditResult = await createAuditLog(
     client,
     existing.id,
@@ -1781,14 +1798,17 @@ export async function updateAdminBookingThroughSupabaseAdapter(
     auditInput,
     actor,
     existing,
-    reloadedResult.data,
+    updatedBooking,
   );
 
   if (!auditResult.ok) {
     return auditResult;
   }
 
-  return reloadedResult;
+  return {
+    ...reloadedResult,
+    data: updatedBooking,
+  };
 }
 
 export async function listAdminBookingsThroughSupabaseAdapter(

@@ -297,6 +297,7 @@ for (const fragment of [
 
 for (const fragment of [
   "markAdminBookingAsActiveForUpdates(updatedBookingReference, updatedBooking);",
+  "upsertLoadedBookingFromAdminRecord(updatedBooking);",
   "setBookingSaveMessage(updateMessage);",
   "key: getBookingSaveGuardKey(updatedBookingReference)",
 ]) {

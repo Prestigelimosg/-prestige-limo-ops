@@ -566,8 +566,20 @@ class MockSupabaseClient {
   }
 
   projectRow(row, selectedColumns) {
-    if (!row || selectedColumns !== "id") {
-      return row ? clone(row) : row;
+    if (!row) {
+      return row;
+    }
+
+    if (selectedColumns !== "id") {
+      const projectedRow = clone(row);
+
+      for (const driverField of ["driver_contact", "driver_name", "driver_plate_number"]) {
+        if (!String(selectedColumns || "").includes(driverField)) {
+          delete projectedRow[driverField];
+        }
+      }
+
+      return projectedRow;
     }
 
     return {
@@ -1011,6 +1023,75 @@ try {
   assert.equal(auditUpdates.at(-1).payload.safe_before.booking_reference, "SAFE-ADM-001");
   assert.equal(auditUpdates.at(-1).payload.safe_after.pickup_location, "Updated Safe Pickup");
   assertNoUnsafeKeys(updateOperation, "mocked update operation");
+
+  const driverReloadFallbackPayload = canonicalAdminPayload({
+    booking: {
+      booking_reference: "SAFE-DRIVER-CALENDAR-UPDATE-001",
+      driver_contact: "+65 9000 0104",
+      driver_name: "Safe Calendar Driver",
+      driver_plate_number: "SCD104A",
+    },
+  });
+  const parsedDriverReloadFallbackUpdate = persistence.parseAdminBookingUpdatePayload({
+    ...driverReloadFallbackPayload,
+    target_booking_reference: "SAFE-DRIVER-CALENDAR-UPDATE-001",
+  });
+
+  assert.equal(parsedDriverReloadFallbackUpdate.ok, true);
+
+  const driverReloadFallbackMock = installMockClient(
+    {
+      bookings: [
+        {
+          ...canonicalAdminPayload().booking,
+          booking_reference: "SAFE-DRIVER-CALENDAR-UPDATE-001",
+          customer_id: 104,
+          id: 104,
+          source_surface: "admin_dashboard",
+        },
+      ],
+    },
+    {
+      selectFailures: [
+        {
+          column: "driver_name",
+          error: {
+            code: "PGRST204",
+            message: "Sanitized mock driver reload schema-cache source.",
+          },
+          table: "bookings",
+        },
+      ],
+    },
+  );
+  const driverReloadFallbackResult = await adapter.updateAdminBookingThroughSupabaseAdapter(
+    parsedDriverReloadFallbackUpdate.data,
+    adminAudit("admin_booking_update"),
+    adminActor(),
+  );
+
+  assert.equal(driverReloadFallbackResult.ok, true);
+  assert.equal(driverReloadFallbackResult.data.driver_contact, "+65 9000 0104");
+  assert.equal(driverReloadFallbackResult.data.driver_name, "Safe Calendar Driver");
+  assert.equal(driverReloadFallbackResult.data.driver_plate_number, "SCD104A");
+  const driverReloadFallbackAudit = insertedOperations(
+    driverReloadFallbackMock.client,
+    "audit_logs",
+  ).at(-1);
+  assert.equal(driverReloadFallbackAudit.payload.safe_before.driver_name, null);
+  assert.equal(driverReloadFallbackAudit.payload.safe_after.driver_name, "Safe Calendar Driver");
+  assert.equal(driverReloadFallbackAudit.payload.safe_after.driver_plate_number, "SCD104A");
+  assert.ok(
+    driverReloadFallbackMock.client.selectFailures[0].calls >= 2,
+    "Expected both the current and foundation driver-bearing reloads to fail before the safe driverless fallback.",
+  );
+  assert.doesNotMatch(
+    driverReloadFallbackMock.client.selectHistory.at(-1).selectedColumns,
+    /driver_name|driver_contact|driver_plate_number/,
+    "Expected the successful compatibility reload to omit driver fields before the update result restores the values that were just written.",
+  );
+  assertNoUnsafeKeys(driverReloadFallbackResult, "driver reload fallback update result");
+  globalThis.__prestigeSupabaseAdapterMock = createMock;
 
   const customerRequestDecisionPayload = canonicalAdminPayload({
     booking: {

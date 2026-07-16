@@ -51,6 +51,8 @@ export type AdminDriverJobLinkRecord = {
   link_status: AdminDriverJobLinkStatus;
   revoked_at: string | null;
   safe_summary: {
+    acknowledged: boolean;
+    acknowledged_at: string | null;
     assigned_driver: string | null;
     assigned_driver_contact: string | null;
     assigned_driver_plate: string | null;
@@ -753,8 +755,11 @@ function getServerOnlyAdminDriverJobLinkSupabaseClient(
 
 function safeSummaryFromContext(context: UnknownRecord): AdminDriverJobLinkRecord["safe_summary"] {
   const payload = asRecord(context.driver_job_payload);
+  const acknowledgedAt = validDateText(context.driver_acknowledged_at);
 
   return {
+    acknowledged: Boolean(acknowledgedAt),
+    acknowledged_at: acknowledgedAt,
     assigned_driver: safeText(payload.assigned_driver_name) || null,
     assigned_driver_contact: safeText(payload.assigned_driver_contact) || null,
     assigned_driver_plate: safeText(payload.assigned_driver_plate) || null,

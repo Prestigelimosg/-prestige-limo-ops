@@ -12,6 +12,16 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Driver Job Acknowledgement Indicators (2026-07-16)
+
+- The driver’s established `Save & Acknowledge Job` action remains the only acknowledgement write. Admin indicators read the existing server-saved `driver_acknowledged_at` value from the exact active Driver Job Link; prefilled or merely visible driver details never count as acknowledgement.
+- The existing admin Driver Job Link read projects only an admin-safe acknowledgement boolean and timestamp inside its existing `safe_summary`. It still excludes link tokens, raw safe-link context, customer price, billing, invoice/payment/PDF, payout/PayNow, finance/internal notes, parser/debug data, secrets, provider payloads, and mock QA/dev archive data.
+- Dispatch keeps one compact booking-specific acknowledgement pill in the existing Create/Copy/Telegram/Revoke control row. It identifies the currently loaded booking reference and shows `No active link`, `Waiting for driver`, or green `Acknowledged` with safe SGT time; it does not block loading another booking or creating another job’s link.
+- The existing Active Assigned Jobs header shows one compact waiting count, including a settled green `0 waiting` empty state, and each existing job card shows one compact exact-booking acknowledgement pill. Jobs with no active link and acknowledgement read failures remain explicit instead of being guessed as waiting or acknowledged.
+- Dashboard acknowledgement reads reuse the existing paginated `GET /api/admin-driver-job-links` lane inside the established 10-second driver-report refresh cycle and its existing manual Refresh reports action. Each refresh batches up to 100 active links per page, stops when every visible job is matched or the established result set ends, and never starts a per-job acknowledgement read. Dispatch reuses the established throttled active-link refresh already driven by the 3-second booking sync. No second polling timer, route, panel, table, status writer, notification, provider send, schema, or acknowledgement workflow is added.
+- Late or stale reads are request-revision guarded and filtered to the exact visible booking references. Revoked or expired links cannot turn an active job green, and a later response for a previous job set cannot replace the current acknowledgement map.
+- Focused protection remains in `scripts/test-admin-driver-job-link-api-contract.mjs`, `scripts/test-driver-job-details-admin-sync-guard.mjs`, `scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs`, and `scripts/test-booking-ui-browser.mjs`. The browser suite now verifies compact waiting/acknowledged pills and automatic Dispatch/Dashboard refresh using mock link state with zero real writes.
+
 ### Server-Authoritative Customer Invoice Display (2026-07-16)
 
 - Production diagnosis found zero rows in every Supabase invoice table while the Customers page still displayed 14 pending invoices from the legacy Chrome-local fallback.

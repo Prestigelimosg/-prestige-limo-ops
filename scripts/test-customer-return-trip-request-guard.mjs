@@ -36,6 +36,7 @@ for (const fragment of [
   "returnFlightNumber",
   "returnPickupLocation",
   "returnDropoffLocation",
+  "returnExtraStops",
 ]) {
   assertIncludes(bookPage, fragment, `/book return trip form field ${fragment}`);
 }
@@ -68,6 +69,7 @@ for (const fragment of [
   "returnFlightNumber: input.returnFlightNumber",
   "returnPickupLocation: input.returnPickupLocation",
   "returnDropoffLocation: input.returnDropoffLocation",
+  "returnExtraStops: input.returnExtraStops",
   '"return_trip_requested"',
   '"return_booking_reference"',
 ]) {
@@ -93,6 +95,7 @@ for (const fragment of [
   'bookingReference: `${groupReference}-RET`',
   "Missing required return trip request fields",
   "Linked return group",
+  'legLabel === "OUTBOUND" ? body.extraStops : body.returnExtraStops',
 ]) {
   assertIncludes(persistence, fragment, `customer persistence return trip fragment ${fragment}`);
 }

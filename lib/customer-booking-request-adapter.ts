@@ -16,6 +16,7 @@ export type CustomerBookingRequestSubmitInput = {
   returnFlightNumber?: string;
   returnPickupLocation?: string;
   returnDropoffLocation?: string;
+  returnExtraStops?: string;
   serviceType: string;
   vehicleType?: string;
   passengerCount?: string;
@@ -145,6 +146,7 @@ function toCustomerBookingRequestApiBody(input: CustomerBookingRequestSubmitInpu
     returnFlightNumber: input.returnFlightNumber,
     returnPickupLocation: input.returnPickupLocation,
     returnDropoffLocation: input.returnDropoffLocation,
+    returnExtraStops: input.returnExtraStops,
     serviceType: input.serviceType,
     vehicleType: input.vehicleType,
     passengerCount: input.passengerCount,

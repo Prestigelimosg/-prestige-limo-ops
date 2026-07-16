@@ -65,6 +65,7 @@ type BookingRequestForm = {
   returnFlightNumber: string;
   returnPickupLocation: string;
   returnDropoffLocation: string;
+  returnExtraStops: string;
   serviceType: string;
   vehicleType: string;
   passengerCount: string;
@@ -99,6 +100,7 @@ const initialForm: BookingRequestForm = {
   returnFlightNumber: "",
   returnPickupLocation: "",
   returnDropoffLocation: "",
+  returnExtraStops: "",
   serviceType: "",
   vehicleType: "",
   passengerCount: "",
@@ -123,6 +125,7 @@ const requiredFieldLabels: Record<keyof BookingRequestForm, string> = {
   returnFlightNumber: "Return flight number if any",
   returnPickupLocation: "Return pickup location",
   returnDropoffLocation: "Return drop-off location",
+  returnExtraStops: "Return extra stops",
   serviceType: "Type of service",
   vehicleType: "Vehicle type",
   passengerCount: "Number of passengers",
@@ -1001,6 +1004,19 @@ export default function CustomerBookingPage() {
                         required
                         type="text"
                         value={form.returnDropoffLocation}
+                      />
+                    </label>
+
+                    <label className="text-xs font-semibold text-slate-800 md:col-span-2 xl:col-span-4">
+                      Return extra stops
+                      <input
+                        className={fieldClass()}
+                        data-customer-booking-field="returnExtraStops"
+                        name="returnExtraStops"
+                        onChange={(event) => updateField("returnExtraStops", event.target.value)}
+                        placeholder="Return extra stop name or address if needed"
+                        type="text"
+                        value={form.returnExtraStops}
                       />
                     </label>
 

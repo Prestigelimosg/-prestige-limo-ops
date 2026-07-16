@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-aaaf6570 Parse tonight as current booking date
+Add return trip extra stops (this bounded commit)
 
 Latest pushed main/staging runtime checkpoint:
 f6806723 Harden driver details email sending
@@ -11,6 +11,14 @@ f6806723 Harden driver details email sending
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Customer Return-Trip Extra Stops (2026-07-16)
+
+- The canonical `/book` return-trip expansion now includes one optional `Return extra stops` field inside the existing return details block. No second form, route, booking lane, panel, or write path was added.
+- The established customer booking adapter forwards only the new `returnExtraStops` field alongside the existing allowlisted return fields. The server parser applies outbound `extraStops` only to the outbound leg and `returnExtraStops` only to the linked return leg.
+- The existing local voice-draft submitted-field allowlist recognizes the new safe form key so it preserves the form shape, but voice parsing does not populate or infer return extra stops.
+- Return extra stops reuse the established safe route-point and `extra_stop` service-item mapping. They remain itinerary context only: no customer price, driver payout, PayNow, invoice, payment, billing, provider send, internal note, parser/debug data, or customer/driver private field is added or exposed.
+- Focused regression protection remains in `scripts/test-customer-return-trip-request-guard.mjs` and `scripts/test-customer-booking-request-adapter.mjs`. Runtime Preview verification and any temporary booking-write configuration are separate, explicitly approved operations and must be closed after the bounded test window.
 
 ### Bookings Configured Google Calendar Status Pills (2026-07-16)
 
@@ -3364,7 +3372,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer must manually review/edit fields and manually press Submit Booking Request / BOOK.
 - Admin review remains required after submission.
 - Existing `/book` submit path remains `submitCustomerBookingRequest(form)` to `POST /api/customer-booking-requests`.
-- Future field-fill may target only existing submitted customer request fields: `companyName`, `contactNo`, `emailAddress`, `passengerName`, `pickupDate`, `pickupTime`, `flightNumber`, `pickupLocation`, `dropoffLocation`, `returnTripRequested`, `returnPickupDate`, `returnPickupTime`, `returnFlightNumber`, `returnPickupLocation`, `returnDropoffLocation`, `serviceType`, `vehicleType`, `passengerCount`, `luggage`, and `extraStops`.
+- Future field-fill may target only existing submitted customer request fields: `companyName`, `contactNo`, `emailAddress`, `passengerName`, `pickupDate`, `pickupTime`, `flightNumber`, `pickupLocation`, `dropoffLocation`, `returnTripRequested`, `returnPickupDate`, `returnPickupTime`, `returnFlightNumber`, `returnPickupLocation`, `returnDropoffLocation`, `returnExtraStops`, `serviceType`, `vehicleType`, `passengerCount`, `luggage`, and `extraStops`.
 - `specialRequest` exists in `/book` UI state but is not forwarded by the adapter, is not allowed in customer booking request persistence, and remains local-only and excluded from submitted field-fill scope until separately approved.
 - Transcript/audio must not be submitted or stored unless separately approved.
 - `/api/ai-parse` cannot be used for customer voice field-fill without separate owner approval.
@@ -3406,7 +3414,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Local field-fill runs only from the existing browser `SpeechRecognition` transcript after local capture ends.
 - Field-fill only fills empty approved fields and does not overwrite customer-entered values.
 - Approved local field-fill targets are `passengerName`, `pickupDate`, `pickupTime`, `flightNumber`, `pickupLocation`, and `dropoffLocation`.
-- The broader customer request submit allowlist remains `companyName`, `contactNo`, `emailAddress`, `passengerName`, `pickupDate`, `pickupTime`, `flightNumber`, `pickupLocation`, `dropoffLocation`, `returnTripRequested`, `returnPickupDate`, `returnPickupTime`, `returnFlightNumber`, `returnPickupLocation`, `returnDropoffLocation`, `serviceType`, `vehicleType`, `passengerCount`, `luggage`, and `extraStops`.
+- The broader customer request submit allowlist remains `companyName`, `contactNo`, `emailAddress`, `passengerName`, `pickupDate`, `pickupTime`, `flightNumber`, `pickupLocation`, `dropoffLocation`, `returnTripRequested`, `returnPickupDate`, `returnPickupTime`, `returnFlightNumber`, `returnPickupLocation`, `returnDropoffLocation`, `returnExtraStops`, `serviceType`, `vehicleType`, `passengerCount`, `luggage`, and `extraStops`.
 - `specialRequest` remains local-only/excluded from submitted field-fill scope and remains excluded from customer booking request persistence.
 - Date field-fill is conservative: explicit year dates may fill `pickupDate`; no-year phrases such as `2 June` remain unchanged for manual review.
 - Example local mapping: "Stanley needs a pickup on 2 June 1000hrs from home to airport SQ123. He stays at 123 Orchard Road." may fill `passengerName` Stanley, `pickupTime` 10:00, `pickupLocation` 123 Orchard Road, `dropoffLocation` airport, and `flightNumber` SQ123, while leaving `pickupDate` unchanged because no year is present.

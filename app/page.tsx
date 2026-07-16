@@ -22003,6 +22003,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           ? " Admin Review Required."
           : "";
       markAdminBookingAsActiveForUpdates(updatedBookingReference, updatedBooking);
+      upsertLoadedBookingFromAdminRecord(updatedBooking);
       setAdminBookingPersistenceMessage({
         tone: "info",
         text: `Operational booking updated: ${updatedBookingReference}.${updateReviewNotice} Syncing Google Calendar...`,

@@ -4,10 +4,10 @@ Latest verified clean runtime checkpoint:
 19b0f8bd Simplify admin driver messaging
 
 Latest pushed main/staging runtime checkpoint:
-93d7fe0b Repair dashboard driver message authorization
+19b0f8bd Simplify admin driver messaging
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-9f530bcb Merge pull request #16 from Prestigelimosg/codex/admin-driver-message-post-boundary
+5715aa5e Merge PR #17: Simplify admin driver messaging
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -20,6 +20,9 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The Dispatch copy card is now labelled `Manual WhatsApp Copy — Optional`. Its existing template generator, Edit, Copy, and preview controls remain as a manual fallback; the redundant fixed-template in-app action and its local status disclosure were removed without adding a replacement route, panel, helper, notification format, provider, polling path, or write lane.
 - No customer or driver visibility scope changed. Admin-to-Driver rows remain `driver_app` only and private from customers; customer reads remain authenticated and `customer_app` only. No Email, WhatsApp, SMS, Telegram, payment, payout, PayNow, billing, invoice, calendar, GPS, booking, CRM, environment, Supabase configuration, or external-provider write is performed by this UI simplification.
 - Focused protection is in `scripts/test-driver-in-app-notification-admin-button-guard.mjs`, `scripts/test-driver-message-job-link-human-ui-guard.mjs`, `scripts/test-today-jobs-admin-driver-message-guard.mjs`, `scripts/test-today-jobs-message-history-guard.mjs`, `scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs`, and the established browser suites. Runtime acceptance must use the exact deployed build in the owner’s Chrome without sending a live message.
+- Draft PR `#17` targeted Production `main` from exact reviewed head `b353b3b3`, contained only the 12 approved application, ledger, and regression-guard files, was cleanly mergeable, and passed both Vercel checks. After explicit owner approval it was marked ready and merged with history-preserving method `merge` as `5715aa5e Merge PR #17: Simplify admin driver messaging`; the expected-head lock prevented an unreviewed head from being merged.
+- GitHub’s Vercel status for exact merge commit `5715aa5e` reached `Deployment has completed`. Signed-in Production Chrome displayed build `5715aa5e`, `Active Assigned Jobs` as the single Dashboard in-app send/history surface, and `Manual WhatsApp Copy — Optional` in Dispatch with Edit/Copy present and the redundant in-app send/status controls absent. The existing saved-booking `Driver Job Link` section remained wired and visible after loading booking `CUST-20260716085417-S3JE43`; no link was created, copied, revoked, or sent.
+- Production Chrome reported no browser errors. Acceptance performed read-only navigation only: no message, notification, booking, CRM, Calendar, map, status, customer, driver, invoice, payment, payout, PayNow, environment, Supabase configuration, external provider, or other data write occurred.
 
 ### Admin-to-Driver Dashboard POST Boundary Repair (2026-07-16)
 

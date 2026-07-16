@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-95ef1925 Alternate active booking card colours
+11d783a0 Keep Calendar status green after updates
 
 Latest pushed main/staging runtime checkpoint:
 95ef1925 Alternate active booking card colours

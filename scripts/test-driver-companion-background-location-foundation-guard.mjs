@@ -42,6 +42,7 @@ for (const fragment of [
   '"expo-location": "~57.0.4"',
   '"expo-secure-store": "~57.0.1"',
   '"expo-task-manager": "~57.0.4"',
+  '"react-native-safe-area-context": "~5.7.0"',
   '"typecheck": "tsc --noEmit"',
 ]) {
   includes("package", fragment);
@@ -55,6 +56,7 @@ for (const fragment of [
   '"isIosBackgroundLocationEnabled": true',
   '"isAndroidBackgroundLocationEnabled": true',
   '"isAndroidForegroundServiceEnabled": true',
+  '"android.permission.RECEIVE_BOOT_COMPLETED"',
 ]) {
   includes("config", fragment);
 }
@@ -77,8 +79,11 @@ includes("tracking", "showsBackgroundLocationIndicator: true");
 includes("tracking", "waiting for the first server update");
 includes("app", "Start trip tracking");
 includes("app", "Stop trip tracking");
+includes("app", 'from "react-native-safe-area-context"');
+includes("app", "<SafeAreaProvider initialMetrics={initialWindowMetrics}>");
+includes("app", 'edges={["top", "right", "bottom", "left"]}');
 includes("app", "Tracking does not start automatically");
-includes("app", "Force-quitting the app, switching off Location Services, or revoking permission can stop updates.");
+includes("app", "Force-quitting the app,");
 includes("readme", "Expo Go cannot test this background-location workflow.");
 includes("preactivation", "scripts/test-driver-companion-background-location-foundation-guard.mjs");
 
@@ -104,6 +109,11 @@ for (const pattern of [
   assert.equal(pattern.test(combinedNativeSource), false, `native companion must exclude ${pattern}`);
 }
 
+excludes(
+  "app",
+  /import\s*\{[^}]*\bSafeAreaView\b[^}]*\}\s*from\s*"react-native"/,
+);
+
 for (const pattern of [
   /Start trip tracking[\s\S]{0,120}onPress=\{startTripTracking\}/,
   /Stop trip tracking[\s\S]{0,120}onPress=\{stopTripTracking\}/,
@@ -128,6 +138,11 @@ for (const phrase of [
   "The APK was not installed or run, no location permission was granted, no job token was entered, no live GPS or booking record was touched",
   "successful cloud build proves only that Android native compilation/signing completed",
   "No iOS build, Apple credential, certificate, provisioning profile, device registration, or App Store change was started",
+  "The first approved Start attempt reproduced two real defects and was halted",
+  "Requested job cannot be persisted without holding android.permission.RECEIVE_BOOT_COMPLETED permission",
+  "replaces React Native's deprecated `SafeAreaView` with Expo-compatible `react-native-safe-area-context`",
+  "declares `android.permission.RECEIVE_BOOT_COMPLETED` alongside the existing precise/background/foreground-service permissions",
+  "replacement APK must be built, installed on the Pixel 6, and rerun through Start, visible notification, background/lock, admin-marker, and Stop cleanup evidence",
 ]) {
   assert.equal(ledgerSection.includes(phrase), true, `ledger section must include ${phrase}`);
 }

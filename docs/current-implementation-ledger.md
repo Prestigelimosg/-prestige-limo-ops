@@ -12,6 +12,15 @@ Latest remote Production deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Driver Live Location Assigned-Active Eligibility Repair (2026-07-17)
+
+- The owner-approved Pixel test reproduced one real server eligibility gap: an active private Driver Job link for an unassigned `Driver TBC` booking could pass live-location readiness and make the phone report tracking active even though that booking was intentionally absent from the existing `Active Assigned Jobs` admin map.
+- Inspection confirmed that `admin_review_required` is not independently disqualifying because it is an internal booking workflow status that can coexist with a genuinely assigned active job. The established admin monitor determines assignment from the current saved booking's verified `driver_id` or non-placeholder `driver_name`, and separately excludes completed/cancelled bookings.
+- The existing token-scoped `/api/driver-job/[token]/live-location` runtime now reads only the current saved booking reference, assignment fields, and bounded status fields after the existing token, gate, and allowlist checks. Readiness and Share fail closed with `driver_live_location_job_not_assigned_active` when the booking is missing, unassigned, completed, or cancelled.
+- `admin_review_required` remains eligible when the current saved booking has a real assigned driver and is not terminal. The existing DELETE Stop path intentionally bypasses the new eligibility read so an unassigned or later-terminal job can still clear its exact previously saved marker.
+- This repairs the established server runtime helper only. It adds no route, API, table, writer, panel, button, map, polling timer, provider send, customer lane, driver messaging lane, schema, migration, environment setting, Supabase configuration, or live-data action. The abandoned Driver Companion rollout remains unused; the browser Driver Job consumer continues using the same route.
+- Focused protection is `scripts/test-driver-live-location-assigned-active-eligibility-guard.mjs`, registered in `scripts/test-preactivation-verification-suite.mjs`. It proves unassigned and terminal Share/Readiness are rejected without position or audit writes, an assigned non-terminal job with `admin_review_required` remains accepted, and Stop cleanup remains available.
+
 ### Active Jobs Embedded Map Scroll-Position Repair (2026-07-17)
 
 - During the owner-approved Pixel 6 background-location test for exact assigned booking `CUST-20260716035942-O7Z73G-OUT`, Production build `237b3212` received current movement while the phone was locked: the admin row advanced from 17:58 to 18:03 SGT and its coordinates changed. Stop cleanup removed the exact marker, and the temporary Live Dispatch Map runtime was closed with zero drivers displayed.

@@ -13,7 +13,7 @@ import {
 } from "./driver-live-location-scaffold";
 
 export const driverLiveLocationRuntimeVersion =
-  "driver-live-location-runtime:v1";
+  "driver-live-location-runtime:v2";
 
 type DriverLiveLocationEnv = Record<string, string | undefined>;
 type UnknownRecord = Record<string, unknown>;
@@ -25,6 +25,7 @@ type DriverLiveLocationBlockedReason =
   | "driver_live_location_capture_gate_closed"
   | "driver_live_location_config_not_ready"
   | "driver_live_location_invalid_position"
+  | "driver_live_location_job_not_assigned_active"
   | "driver_live_location_job_not_allowlisted"
   | "driver_live_location_runtime_mode_closed"
   | "driver_live_location_token_expired"
@@ -54,6 +55,7 @@ type DriverLiveLocationPosition = {
 
 const latestPositionsTable = "driver_live_location_latest_positions";
 const auditEventsTable = "driver_live_location_audit_events";
+const bookingsTable = "bookings";
 const driverJobLinkTable = "driver_job_links";
 const runtimeSettingsTable = "driver_live_location_runtime_settings";
 const runtimeSettingName = "driver_live_location_runtime";
@@ -69,6 +71,22 @@ const allowedPositionFields = new Set([
 const maxSafeLabelLength = 160;
 const maxRuntimeAllowedReferences = 50;
 const safeReferencePattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/;
+const unassignedDriverLabels = new Set([
+  "driver tbc",
+  "driver to be confirmed",
+  "pending driver",
+  "tbc",
+  "to be confirmed",
+  "unassigned",
+]);
+const terminalBookingStatuses = new Set([
+  "cancelled",
+  "canceled",
+  "completed",
+  "complete",
+  "job completed",
+  "job_completed",
+]);
 
 let driverLiveLocationClientForTests: DriverLiveLocationClient | null = null;
 
@@ -515,6 +533,60 @@ async function resolveDriverJobLink({
   } as const;
 }
 
+function bookingHasAssignedDriver(booking: UnknownRecord) {
+  const driverId = asFiniteNumber(booking.driver_id);
+  const driverName = cleanText(booking.driver_name).toLowerCase();
+
+  return Boolean(
+    (driverId !== null && Number.isInteger(driverId) && driverId > 0) ||
+      (driverName && !unassignedDriverLabels.has(driverName)),
+  );
+}
+
+function bookingHasTerminalStatus(booking: UnknownRecord) {
+  return [
+    booking.status,
+    booking.admin_internal_status,
+    booking.customer_facing_status,
+    booking.cancellation_review_status,
+  ]
+    .map((value) => cleanText(value, 80).toLowerCase())
+    .filter(Boolean)
+    .some((status) => terminalBookingStatuses.has(status));
+}
+
+async function readDriverAssignedActiveEligibility({
+  client,
+  link,
+}: {
+  client: DriverLiveLocationClient;
+  link: DriverJobLinkRow;
+}) {
+  const { data, error } = await client
+    .from(bookingsTable)
+    .select(
+      "booking_reference, driver_id, driver_name, status, admin_internal_status, customer_facing_status, cancellation_review_status",
+    )
+    .eq("booking_reference", link.booking_reference)
+    .maybeSingle();
+
+  if (error) {
+    return blockedResult("driver_live_location_config_not_ready", 503);
+  }
+
+  const booking = asRecord(data);
+
+  if (
+    safeIdentifier(booking.booking_reference) !== link.booking_reference ||
+    !bookingHasAssignedDriver(booking) ||
+    bookingHasTerminalStatus(booking)
+  ) {
+    return blockedResult("driver_live_location_job_not_assigned_active", 403);
+  }
+
+  return { ok: true } as const;
+}
+
 async function safeJsonBody(request: Request) {
   try {
     return asRecord(await request.json());
@@ -683,6 +755,17 @@ export async function handleDriverLiveLocationRuntimeRequest({
     return blockedResult("driver_live_location_job_not_allowlisted", 403);
   }
 
+  if (action !== "stop") {
+    const eligibility = await readDriverAssignedActiveEligibility({
+      client: clientResult.client,
+      link: resolved.link,
+    });
+
+    if ("status" in eligibility) {
+      return eligibility;
+    }
+  }
+
   if (action === "stop") {
     const { error: deleteError } = await clientResult.client
       .from(latestPositionsTable)
@@ -829,6 +912,15 @@ export async function handleDriverLiveLocationReadinessRuntimeRequest({
     )
   ) {
     return blockedResult("driver_live_location_job_not_allowlisted", 403);
+  }
+
+  const eligibility = await readDriverAssignedActiveEligibility({
+    client: clientResult.client,
+    link: resolved.link,
+  });
+
+  if ("status" in eligibility) {
+    return eligibility;
   }
 
   const { data, error } = await clientResult.client

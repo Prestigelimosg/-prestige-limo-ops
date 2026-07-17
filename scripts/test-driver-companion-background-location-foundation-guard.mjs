@@ -48,6 +48,8 @@ for (const fragment of [
 }
 
 for (const fragment of [
+  '"owner": "prestige-limo-ops"',
+  '"projectId": "2a797181-d09d-4384-8d01-583456e83c3e"',
   '"bundleIdentifier": "sg.prestigelimo.drivercompanion"',
   '"package": "sg.prestigelimo.drivercompanion"',
   '"isIosBackgroundLocationEnabled": true',

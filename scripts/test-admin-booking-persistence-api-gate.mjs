@@ -144,6 +144,15 @@ async function writeMockModules(tempDir) {
     ].join("\n"),
   );
   await writeFile(
+    path.join(tempDir, "lib/customer-booking-receipt-email.js"),
+    [
+      "async function sendCustomerBookingReceiptEmail() {",
+      "  return { ok: false, reason: 'gate_closed', status: 'blocked' };",
+      "}",
+      "module.exports = { sendCustomerBookingReceiptEmail };",
+    ].join("\n"),
+  );
+  await writeFile(
     path.join(tempDir, "lib/codex-job-card-auto-preparation.js"),
     [
       "async function prepareCodexJobCardForAdminReview() {}",
@@ -945,10 +954,12 @@ try {
   assert.equal(customerResult.body.request.customer_facing_status, "Request Received");
   assert.equal(customerResult.body.request.return_booking_reference, null);
   assert.equal(customerResult.body.request.return_trip_requested, false);
+  assert.equal(customerResult.body.request.receipt_status, "blocked");
   assert.equal(customerResult.body.request.short_notice_review_required, false);
   assert.deepEqual(Object.keys(customerResult.body.request).sort(), [
     "booking_reference",
     "customer_facing_status",
+    "receipt_status",
     "return_booking_reference",
     "return_trip_requested",
     "short_notice_review_required",

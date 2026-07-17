@@ -1022,6 +1022,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The receipt never creates or includes an app link for an unverified first-time customer. Admin still verifies CRM company/booker identity before manually copying the permanent link. Existing customer saved-booking, in-app messaging, driver-job, calendar, monthly grouping, invoice issue/PDF/email, and booker-scoped invoice-read lanes remain in place and were not duplicated.
 - No live customer record, booking, portal account, provider configuration, calendar event, invoice, payment, payout, GPS record, or Supabase schema was changed during implementation. The approved address `william@prestigelimo.sg` is reserved for one bounded receipt-email evidence send only; mock guard coverage does not claim a live send.
 - Focused guards: `scripts/test-customer-rebooking-permanent-link-receipt-guard.mjs`, `scripts/test-customer-portal-link-revision-runtime-guard.mjs`, and `scripts/test-customer-booking-receipt-email-guard.mjs`.
+- The existing admin-booking persistence API-gate harness now supplies the receipt helper's closed-gate result and requires the safe `receipt_status: blocked` response. This is isolated test wiring only; it does not send email, enable a provider, change a booking, or alter the Preview/Production boundary.
 
 ### Completed Undo Local Status Fix
 

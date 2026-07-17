@@ -915,6 +915,10 @@ const guardChecks = [
     script: "scripts/test-driver-live-location-gated-runtime-path-guard.mjs",
   },
   {
+    label: "Driver Live Location assigned-active eligibility guard",
+    script: "scripts/test-driver-live-location-assigned-active-eligibility-guard.mjs",
+  },
+  {
     label: "Driver Live Location admin-controlled runtime gate readiness guard",
     script: "scripts/test-driver-live-location-admin-runtime-gate-readiness-guard.mjs",
   },

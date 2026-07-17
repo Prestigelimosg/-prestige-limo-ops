@@ -8441,9 +8441,11 @@ async function runChromeTest() {
         return selectRect && buttonRect
           ? {
               buttonInsideViewport: buttonRect.left >= 0 && buttonRect.right <= window.innerWidth + 1,
+              buttonWidth: Math.round(buttonRect.width),
               documentFitsViewport: document.documentElement.scrollWidth <= window.innerWidth + 1,
               selectInsideViewport:
                 selectRect.left >= 0 && selectRect.right <= window.innerWidth + 1,
+              selectWidth: Math.round(selectRect.width),
             }
           : null;
       })()`);
@@ -8462,6 +8464,18 @@ async function runChromeTest() {
         true,
         `Expected ${viewport.label} prepared-job action button inside viewport`,
       );
+      if (viewport.width >= 768) {
+        assert.equal(
+          (codexMobileLayoutState?.selectWidth || 0) <= 190,
+          true,
+          `Expected ${viewport.label} prepared-job dropdown no wider than 190px`,
+        );
+        assert.equal(
+          (codexMobileLayoutState?.buttonWidth || 0) <= 140,
+          true,
+          `Expected ${viewport.label} prepared-job action button no wider than 140px`,
+        );
+      }
     }
     await client.send("Emulation.clearDeviceMetricsOverride");
 

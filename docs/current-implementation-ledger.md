@@ -1,13 +1,13 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-f0575c0a Merge PR #22: Add customer driver details acknowledgement
+fa8f6a77 Merge PR #23: Simplify prepared job card actions
 
 Latest pushed main/staging runtime checkpoint:
-f0575c0a Merge PR #22: Add customer driver details acknowledgement
+fa8f6a77 Merge PR #23: Simplify prepared job card actions
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-f0575c0a Merge PR #22: Add customer driver details acknowledgement
+fa8f6a77 Merge PR #23: Simplify prepared job card actions
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -21,6 +21,9 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Previously saved `Returned to Codex` workflow statuses remain read-only compatible: an exact older safe instruction can still prepare and display its corrected preview, and `Edit booking` can open that preview through the same established Dispatch handoff. The existing workflow-status route and stored rows are not removed or rewritten.
 - No second queue, panel, route, API, table, writer, notification type, customer/driver message lane, polling timer, Calendar action, provider send, or persistence helper is added. Focused protection is in `scripts/test-admin-load-bookings-crm-fallback-compact-guard.mjs`, `scripts/test-customer-request-decision-identity-preservation-guard.mjs`, and `scripts/test-booking-ui-browser.mjs`.
 - Owner-Chrome local acceptance used one temporary in-memory pending-review booking with every mutation method blocked before the fixture was loaded. The exact prepared card displayed one dropdown with the three approved choices; selecting `Edit booking` changed the single button to `Open booking` and showed `Opens Dispatch. Nothing is saved or sent.` Selection produced zero blocked-write attempts and zero console errors. The action button was not pressed, no live record changed, and the exact tested Dashboard remains visible in the owner's Chrome with the temporary fixture and mutation block installed in that tab.
+- Draft PR `#23` was verified at exact head `4a331fcf`, passed both Vercel checks, and after explicit owner approval was marked ready and merged with the expected-head lock and history-preserving merge method as `fa8f6a77 Merge PR #23: Simplify prepared job card actions`.
+- GitHub reported the exact `fa8f6a77` deployment completed. Signed-in owner Chrome displayed `Build fa8f6a77` at `https://app.prestigelimo.sg`; the real `TEST RETURN EXTRA STOP` prepared card showed one `Choose action` dropdown containing `Edit booking`, `Approve — notify customer`, and `Decline — notify customer`, a disabled `Continue` button, and `Choose one action. Nothing happens until you press Continue.` No option or action button was used, no live record or message was changed, browser console warnings/errors were zero, and the exact tested Production Dashboard remains visible in the owner's Chrome.
+- The owner then approved compacting only this established action control on desktop: the dropdown is capped at `190px` and the confirmation button at `140px`, with normal flex shrinking inside narrower desktop-grid columns, while both remain full-width below the existing medium-screen breakpoint. No label, choice, helper text, action, route, writer, notification, polling, or responsive overflow behavior changes.
 
 ### Customer Driver Details Explicit Acknowledgement (2026-07-17)
 

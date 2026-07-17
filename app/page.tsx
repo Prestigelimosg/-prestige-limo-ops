@@ -24029,7 +24029,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   Choose action
                 </label>
                 <select
-                  className="min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-slate-700 focus:ring-2 focus:ring-slate-700/10 md:w-64"
+                  className="min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-slate-700 focus:ring-2 focus:ring-slate-700/10 md:w-[190px]"
                   data-admin-prepared-job-card-action-select={bookingId}
                   id={`prepared-job-action-${bookingId}`}
                   onChange={(event) =>
@@ -24050,7 +24050,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   </option>
                 </select>
                 <button
-                  className="min-h-10 w-full rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 md:w-64"
+                  className="min-h-10 w-full rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 md:w-[140px]"
                   data-admin-prepared-job-card-action-submit={bookingId}
                   data-new-customer-booking-request-load={bookingId}
                   disabled={

@@ -435,6 +435,8 @@ for (const customerRequestFragment of [
   'data-admin-prepared-job-card-action-select=',
   'data-admin-prepared-job-card-action-submit=',
   'data-admin-prepared-job-card-action-help=',
+  "md:w-[190px]",
+  "md:w-[140px]",
   "Codex Review &amp; Admin App Notifications",
   "Codex Prepared Job Cards",
   "Ready for Admin Review",

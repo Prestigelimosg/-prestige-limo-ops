@@ -143,6 +143,10 @@ for (const phrase of [
   "replaces React Native's deprecated `SafeAreaView` with Expo-compatible `react-native-safe-area-context`",
   "declares `android.permission.RECEIVE_BOOT_COMPLETED` alongside the existing precise/background/foreground-service permissions",
   "replacement APK must be built, installed on the Pixel 6, and rerun through Start, visible notification, background/lock, admin-marker, and Stop cleanup evidence",
+  "EAS replacement internal-development build `bcbf3c15-e377-41a2-822c-f5f132f1c3c1`",
+  "using the existing remotely stored Android keystore; no new signing credential was created",
+  "replacement APK has not yet been installed or rerun on the Pixel 6",
+  "old crashed installation's persisted task/token state must be cleared before retesting",
 ]) {
   assert.equal(ledgerSection.includes(phrase), true, `ledger section must include ${phrase}`);
 }

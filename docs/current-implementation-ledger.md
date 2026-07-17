@@ -1,16 +1,45 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-19b0f8bd Simplify admin driver messaging
+cef622ce Show driver acknowledgement indicators
 
 Latest pushed main/staging runtime checkpoint:
-19b0f8bd Simplify admin driver messaging
+9edc88a3 Merge PR #20: Show driver acknowledgement indicators
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-5715aa5e Merge PR #17: Simplify admin driver messaging
+9edc88a3 Merge PR #20: Show driver acknowledgement indicators
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Active Assigned Jobs Customer Message Queue Indicator (2026-07-17)
+
+- The owner approved replacing the truncated raw internal booking-status pill such as `admin_review...` in each existing `Active Assigned Jobs` card. The underlying booking workflow status remains unchanged and available to its established internal consumers; only that unhelpful card pill is removed.
+- After an exact-booking `Admin → Customer` message exists in the already loaded booking-scoped message history, the same card shows one compact `Customer msg queued [SGT time]` pill. Before such a message exists, no customer-message pill is shown, so the UI does not make a negative claim from a bounded history page.
+- `Queued` means the existing admin message was saved to the established `customer_app` notification outbox. It does not claim that the customer received, opened, read, dismissed, or acknowledged the message; the current customer notification route exposes no customer read-receipt write.
+- The indicator derives only from the existing `admin_customer_job_messages` plus `customer_app` history already refreshed for every visible Active Assigned Job. It adds no route, API call, table, writer, message format, provider send, panel, composer, timer, or polling path. The acknowledgement pill, waiting count, driver report, OTS proof, message composer/history, and Dispatch fixed-template Customer Copy action remain unchanged.
+- Focused protection is in the existing `scripts/test-today-jobs-message-history-guard.mjs` alongside the established Dashboard/message/API guards. Runtime acceptance must use the exact deployed preview build in the owner’s Chrome with message POST blocked; no live message or record mutation is authorized for verification.
+
+### Active Assigned Jobs Admin-to-Customer Messages (2026-07-17)
+
+- The owner approved ordinary job-related admin messages to customers from the existing `Active Assigned Jobs` `Messages` card. The card keeps one composer and one send button; a compact `Driver` / `Customer` audience switch changes the recipient for that exact booking instead of adding another panel, composer, route, table, writer, polling timer, or messaging lane.
+- Driver remains the default audience. Driver sends preserve the established active Driver Job Link check, `driver_app` surface, `admin_driver_job_messages` workflow, and token-scoped driver read. Customer sends use the same existing `POST /api/admin-customer-driver-app-notifications` and outbox with `customer_app`, exact booking reference, no driver-link ID, and the allowlisted `admin_customer_job_messages` workflow.
+- Customer-targeted free text is bounded to 500 characters and server-accepted only with the exact admin/customer audience context, normal queued trip-update shape, no external/provider send, controlled customer-app runtime gate, and the saved booking’s allowlisted customer account. A missing or non-allowlisted customer app target fails closed without an insert.
+- Public visibility remains surface-isolated: the existing Driver Job notification read filters to `driver_app`, so the driver cannot see `Admin → Customer`; the authenticated customer notification read filters to `customer_app`, so the customer cannot see `Admin → Driver`. Admin history remains booking-scoped and now labels both directions explicitly.
+- The existing Dispatch `Customer Copy` section is unchanged. Its compact fixed-template `Send In-App` action continues to send only `Driver details ready`; this new ordinary-message approval neither replaces nor broadens that driver-details action.
+- Customer-facing payload privacy remains enforced server-side. Customer price, billing, invoice/payment/PDF, driver payout/PayNow, internal finance/admin notes, parser/debug internals, tokens/secrets, provider payloads, and mock QA/dev archive content remain rejected.
+- Focused protection is in `scripts/test-today-jobs-admin-driver-message-guard.mjs`, `scripts/test-today-jobs-message-history-guard.mjs`, `scripts/test-customer-driver-app-notification-api-contract.mjs`, `scripts/test-public-customer-driver-app-notification-surface-guard.mjs`, and `scripts/test-customer-in-app-notification-admin-button-guard.mjs`.
+- Owner-Chrome local runtime verification used one read-only in-memory fixture and a send-blocking mock. The exact Active Assigned Jobs card retained one textarea and one send button; selecting `Customer` changed the button to `Send to Customer`, changed the privacy helper to `Driver cannot see this message`, and displayed `Admin → Customer` separately from `Admin → Driver` in the booking-scoped history. No notification, message, booking, link, customer, driver, Calendar, provider, environment, or Supabase write occurred. The exact tested localhost Dashboard was left visible; deployed-build acceptance remains required after an approved deployment.
+
+### Owner Clarification — Driver Acknowledgement Indicator Scope (2026-07-16)
+
+- The owner confirmed the intended completed scope is the existing compact indicator on every existing `Active Assigned Jobs` card plus the section-level waiting count. No global queue for unassigned bookings, new panel, expanded checklist, or giant-card layout is requested.
+- Each assigned active job card identifies its exact booking and shows one compact amber `Waiting for driver` or green `Acknowledged` with safe SGT time. Multiple assigned jobs can wait simultaneously and the existing section header reports their combined waiting count.
+- Jobs without assigned driver details remain intentionally outside `Active Assigned Jobs`. Their exact active Driver Job Link status remains available by loading the booking in Dispatch; this exclusion is expected behavior, not an unfinished acknowledgement task.
+- Production read-only evidence confirmed the paired Stanley test bookings are separate records: `CUST-20260716035942-O7Z73G-OUT` is the assigned 18 July 2026 1100hrs job with an acknowledged active link, while `CUST-20260716035942-O7Z73G-RET` is the unassigned 21 July 2026 1820hrs job with a distinct active link and no acknowledgement.
+- Production Chrome displayed the exact return booking as amber `Waiting for driver`. Its one-time raw URL disappeared after refresh by design; the saved link was not deleted, cancelled, revoked, replaced, resent, or acknowledged during diagnosis.
+- The driver acknowledgement indicator task is complete and Production-deployed at merge build `9edc88a3`. Do not add a global acknowledgement queue or broaden `Active Assigned Jobs` to unassigned bookings unless the owner explicitly requests a new scope later.
+- No booking, Driver Job Link, acknowledgement, message, notification, driver, customer, Calendar event, invoice, payment, payout, PayNow record, environment, provider, or Supabase configuration was changed during this clarification or handoff documentation.
 
 ### Driver Job Acknowledgement Indicators (2026-07-16)
 
@@ -768,9 +797,9 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Today’s Jobs Unified Message History
 
-- The existing `Active Assigned Jobs` `Messages` card reads the established booking-scoped notification lane and shows human labels for `Customer → Driver`, `Driver → Customer`, and private `Admin → Driver` messages in one place. Admin no longer needs to inspect codes or leave the job card.
+- The existing `Active Assigned Jobs` `Messages` card reads the established booking-scoped notification lane and shows human labels for `Customer → Driver`, `Driver → Customer`, private `Admin → Driver`, and private `Admin → Customer` messages in one place. Admin no longer needs to inspect codes or leave the job card.
 - The existing report refresh and 10-second reporting cycle request the same message history, and the card keeps one explicit `Refresh messages` fallback. A successful Admin-to-Driver send also reloads the history.
-- Only the two approved workflow areas are rendered: fixed customer/driver quick replies and private admin/driver job messages. Customer reads remain `customer_app` only, so Admin-to-Driver history cannot appear in My Bookings.
+- Only the three approved workflow areas are rendered: fixed customer/driver quick replies, private admin/driver job messages, and private admin/customer job messages. Customer reads remain `customer_app` only, so Admin-to-Driver history cannot appear in My Bookings; driver reads remain `driver_app` only, so Admin-to-Customer history cannot appear on the Driver Job page.
 - Focused lock: `scripts/test-today-jobs-message-history-guard.mjs`.
 - Live two-direction proof found the admin notification DTO omitted `actor_role`, causing correct customer/driver rows to display as `Admin → Driver`. The authenticated admin history DTO includes the bounded actor role for those direction labels while continuing to strip actor label, event key, driver-link ID, and source surface.
 - Customer and driver public response DTOs omit `actor_role`; the role remains persisted for routing and authenticated admin history only. Customer notification reads also remain `customer_app` only and never receive private Admin-to-Driver rows.
@@ -7066,7 +7095,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The created notification uses `delivery_surface: "customer_app"`, `notification_type: "trip_update"`, `notification_status: "queued"`, `priority: "normal"`, and `workflow_area: "customer_app_updates"`.
 - The click action uses the existing `POST /api/admin-customer-driver-app-notifications` route and existing `lib/customer-driver-app-notification-persistence.ts` boundary.
 - The route remains behind the existing admin/dispatcher boundary and admin persistence gate.
-- No free-text message body, template menu, batch send, retry, polling, scheduler, fallback, or blast is introduced.
+- This remains a fixed-template Customer Copy driver-details action. No free-text message body, template menu, batch send, retry, polling, scheduler, fallback, or blast is introduced. The separately owner-approved free-text `Admin → Customer` workflow lives only in the existing Active Assigned Jobs `Messages` composer and does not alter this fixed-template action.
 - No Telegram, WhatsApp, SMS, Google Maps, OneMap, FlightAware, live-location, provider-send, or external-call path is introduced by the In-App button; Email remains separate through the gated Resend route.
 - Customer read remains gated by `/api/customer-app-notifications`; this button only queues the approved safe customer_app notification row.
 - Customer-visible in-app content remains forbidden from exposing pricing, billing, invoice/payment/PDF, payout, PayNow, payout preferences/comparisons, `driver_payout_rules`, `customer_rates`, internal/admin/finance notes, parser/debug fields, secrets/tokens, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, auth/session/cookie/JWT values, live location, and OTS/photo/storage unless separately approved.

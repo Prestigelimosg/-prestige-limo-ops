@@ -254,7 +254,7 @@ const customerInAppRuntimeDisabledError =
 const customerInAppRuntimeConfigError =
   "Controlled customer in-app notification runtime configuration is not ready.";
 const customerInAppRuntimeWriteTemplateError =
-  "Customer app notification write is limited to the approved driver details ready template.";
+  "Customer app notification write is limited to approved customer app workflows.";
 const quickReplyDisabledError =
   "Customer/driver quick replies are not enabled on this server.";
 const quickReplyConfigError =
@@ -1755,8 +1755,25 @@ function customerAppNotificationUsesApprovedRuntimeTemplate(
     input.safe_title === "Booking request confirmed" &&
     input.safe_message === "Your booking request has been confirmed by Prestige Limo." &&
     input.workflow_area === "customer_request_review";
+  const adminCustomerJobMessage =
+    input.delivery_surface === "customer_app" &&
+    input.driver_job_link_id === null &&
+    input.notification_type === "trip_update" &&
+    input.notification_status === "queued" &&
+    input.priority === "normal" &&
+    input.safe_title === "Message from dispatch" &&
+    input.safe_message.length > 0 &&
+    input.safe_message.length <= 500 &&
+    input.workflow_area === "admin_customer_job_messages" &&
+    input.safe_context.audience === "admin_customer" &&
+    input.safe_context.external_send === false &&
+    input.safe_context.provider_send === false &&
+    input.safe_context.recipient_role === "customer" &&
+    input.safe_context.sender_role === "admin" &&
+    input.safe_context.source === "today_jobs" &&
+    Object.keys(input.safe_context).length === 6;
 
-  return driverDetailsReadyTemplate || bookingRequestConfirmedTemplate;
+  return driverDetailsReadyTemplate || bookingRequestConfirmedTemplate || adminCustomerJobMessage;
 }
 
 async function assertAdminDriverAppNotificationWriteScope(

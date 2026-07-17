@@ -1116,7 +1116,10 @@ type AdminCustomerDriverDetailsCustomerInAppActionState = {
   notificationType: "trip_update";
 };
 
+type AdminTodayJobMessageAudience = "driver" | "customer";
+
 type AdminTodayJobDriverMessageState = {
+  audience: AdminTodayJobMessageAudience;
   draft: string;
   message: string;
   status: "idle" | "loading" | "success" | "error";
@@ -1125,6 +1128,7 @@ type AdminTodayJobDriverMessageState = {
 type AdminTodayJobMessageRecord = {
   actor_role?: string | null;
   created_at?: string | null;
+  delivery_surface?: string | null;
   id?: string | null;
   safe_message?: string | null;
   workflow_area?: string | null;
@@ -26760,7 +26764,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       const messages = (result.notifications as AdminTodayJobMessageRecord[]).filter(
         (message) =>
           message.workflow_area === "customer_driver_quick_replies" ||
-          message.workflow_area === "admin_driver_job_messages",
+          message.workflow_area === "admin_driver_job_messages" ||
+          message.workflow_area === "admin_customer_job_messages",
       );
       setAdminTodayJobMessageHistories((current) => ({
         ...current,
@@ -26784,6 +26789,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     setAdminTodayJobDriverMessageStates((current) => ({
       ...current,
       [bookingReference]: {
+        audience: current[bookingReference]?.audience || "driver",
         draft,
         message: "",
         status: "idle",
@@ -26791,17 +26797,40 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     }));
   }
 
-  async function sendAdminTodayJobDriverMessage(bookingReferenceValue: string) {
+  function updateAdminTodayJobMessageAudience(
+    bookingReferenceValue: string,
+    audience: AdminTodayJobMessageAudience,
+  ) {
+    const bookingReference = cleanReferenceText(bookingReferenceValue);
+
+    if (!bookingReference) {
+      return;
+    }
+
+    setAdminTodayJobDriverMessageStates((current) => ({
+      ...current,
+      [bookingReference]: {
+        audience,
+        draft: current[bookingReference]?.draft || "",
+        message: "",
+        status: "idle",
+      },
+    }));
+  }
+
+  async function sendAdminTodayJobMessage(bookingReferenceValue: string) {
     const bookingReference = cleanReferenceText(bookingReferenceValue);
     const currentState = adminTodayJobDriverMessageStates[bookingReference];
+    const audience = currentState?.audience || "driver";
     const safeMessage = clean(currentState?.draft).slice(0, 500);
 
     if (!bookingReference || !safeMessage) {
       setAdminTodayJobDriverMessageStates((current) => ({
         ...current,
         [bookingReference]: {
+          audience,
           draft: current[bookingReference]?.draft || "",
-          message: "Type a message for the driver first.",
+          message: `Type a message for the ${audience} first.`,
           status: "error",
         },
       }));
@@ -26811,62 +26840,92 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     setAdminTodayJobDriverMessageStates((current) => ({
       ...current,
       [bookingReference]: {
+        audience,
         draft: current[bookingReference]?.draft || safeMessage,
-        message: "Checking the driver link...",
+        message: audience === "driver" ? "Checking the driver link..." : "Checking customer app access...",
         status: "loading",
       },
     }));
 
     try {
-      const linkParams = new URLSearchParams({
-        booking_reference: bookingReference,
-        limit: "1",
-        link_status: "active",
-        page: "1",
-      });
-      const linkResponse = await fetch(`${adminDriverJobLinksApiPath}?${linkParams.toString()}`, {
-        cache: "no-store",
-        headers: { "x-prestige-admin-purpose": adminLegacyDataPurpose },
-        method: "GET",
-      });
-      const linkResult = await linkResponse.json().catch(() => null);
-      const activeLink = Array.isArray(linkResult?.links)
-        ? (linkResult.links as AdminDriverJobLinkRecord[]).find(
-            (link) =>
-              link.link_status === "active" &&
-              cleanReferenceText(link.booking_reference) === bookingReference,
-          ) || null
-        : null;
+      let activeDriverJobLinkId: string | null = null;
 
-      if (!linkResponse.ok || !linkResult?.ok) {
-        throw new Error(linkResult?.error || "Driver link could not be checked.");
-      }
-
-      if (!activeLink?.id) {
-        throw new Error("Driver link required. Open Driver Link Setup, create the link, and send it to the driver first.");
-      }
-
-      const response = await fetch(adminCustomerDriverAppNotificationsApiPath, {
-        body: JSON.stringify({
+      if (audience === "driver") {
+        const linkParams = new URLSearchParams({
           booking_reference: bookingReference,
-          delivery_surface: "driver_app",
-          driver_job_link_id: activeLink.id,
-          event_key: `${bookingReference}:admin-driver-message:${Date.now()}`,
-          notification_status: "queued",
-          notification_type: "trip_update",
-          priority: "normal",
-          safe_context: {
-            audience: "admin_driver",
-            external_send: false,
-            provider_send: false,
-            recipient_role: "driver",
-            sender_role: "admin",
-            source: "today_jobs",
-          },
-          safe_message: safeMessage,
-          safe_title: "Message from dispatch",
-          workflow_area: "admin_driver_job_messages",
-        }),
+          limit: "1",
+          link_status: "active",
+          page: "1",
+        });
+        const linkResponse = await fetch(`${adminDriverJobLinksApiPath}?${linkParams.toString()}`, {
+          cache: "no-store",
+          headers: { "x-prestige-admin-purpose": adminLegacyDataPurpose },
+          method: "GET",
+        });
+        const linkResult = await linkResponse.json().catch(() => null);
+        const activeLink = Array.isArray(linkResult?.links)
+          ? (linkResult.links as AdminDriverJobLinkRecord[]).find(
+              (link) =>
+                link.link_status === "active" &&
+                cleanReferenceText(link.booking_reference) === bookingReference,
+            ) || null
+          : null;
+
+        if (!linkResponse.ok || !linkResult?.ok) {
+          throw new Error(linkResult?.error || "Driver link could not be checked.");
+        }
+
+        if (!activeLink?.id) {
+          throw new Error("Driver link required. Open Driver Link Setup, create the link, and send it to the driver first.");
+        }
+
+        activeDriverJobLinkId = activeLink.id;
+      }
+
+      const notificationPayload =
+        audience === "customer"
+          ? {
+              booking_reference: bookingReference,
+              delivery_surface: "customer_app",
+              driver_job_link_id: null,
+              event_key: `${bookingReference}:admin-customer-message:${Date.now()}`,
+              notification_status: "queued",
+              notification_type: "trip_update",
+              priority: "normal",
+              safe_context: {
+                audience: "admin_customer",
+                external_send: false,
+                provider_send: false,
+                recipient_role: "customer",
+                sender_role: "admin",
+                source: "today_jobs",
+              },
+              safe_message: safeMessage,
+              safe_title: "Message from dispatch",
+              workflow_area: "admin_customer_job_messages",
+            }
+          : {
+              booking_reference: bookingReference,
+              delivery_surface: "driver_app",
+              driver_job_link_id: activeDriverJobLinkId,
+              event_key: `${bookingReference}:admin-driver-message:${Date.now()}`,
+              notification_status: "queued",
+              notification_type: "trip_update",
+              priority: "normal",
+              safe_context: {
+                audience: "admin_driver",
+                external_send: false,
+                provider_send: false,
+                recipient_role: "driver",
+                sender_role: "admin",
+                source: "today_jobs",
+              },
+              safe_message: safeMessage,
+              safe_title: "Message from dispatch",
+              workflow_area: "admin_driver_job_messages",
+            };
+      const response = await fetch(adminCustomerDriverAppNotificationsApiPath, {
+        body: JSON.stringify(notificationPayload),
         headers: {
           "Content-Type": "application/json",
           "x-prestige-admin-purpose": adminLegacyDataPurpose,
@@ -26878,17 +26937,21 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       if (
         !response.ok ||
         !result?.ok ||
-        result?.notification?.delivery_surface !== "driver_app" ||
+        result?.notification?.delivery_surface !== notificationPayload.delivery_surface ||
         cleanReferenceText(result?.notification?.booking_reference) !== bookingReference
       ) {
-        throw new Error(result?.error || "Message could not be queued for this driver.");
+        throw new Error(result?.error || `Message could not be queued for this ${audience}.`);
       }
 
       setAdminTodayJobDriverMessageStates((current) => ({
         ...current,
         [bookingReference]: {
+          audience,
           draft: "",
-          message: `Queued to Driver Job page at ${adminDriverJobStatusTimeLabel(new Date().toISOString())}.`,
+          message:
+            audience === "driver"
+              ? `Queued to Driver Job page at ${adminDriverJobStatusTimeLabel(new Date().toISOString())}.`
+              : `Queued to Customer App at ${adminDriverJobStatusTimeLabel(new Date().toISOString())}.`,
           status: "success",
         },
       }));
@@ -26897,8 +26960,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       setAdminTodayJobDriverMessageStates((current) => ({
         ...current,
         [bookingReference]: {
+          audience,
           draft: current[bookingReference]?.draft || safeMessage,
-          message: error instanceof Error ? error.message : "Message could not be queued for this driver.",
+          message: error instanceof Error ? error.message : `Message could not be queued for this ${audience}.`,
           status: "error",
         },
       }));
@@ -27116,13 +27180,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             const activeJobDriverOtsPhotoProofTime = activeJobDriverOtsPhotoProofLatest
               ? adminDriverJobStatusTimeLabel(activeJobDriverOtsPhotoProofLatest.uploaded_at)
               : "";
-            const activeJobStatus =
-              activeJobDriverStatusLatest
-                ? activeJobDriverStatusLabel
-                : bookingStatusLabel(activeJobBooking.status);
             const activeJobKey = bookingRecordStableKey(activeJobBooking);
             const activeJobDriverMessageState =
               adminTodayJobDriverMessageStates[activeJobBookingReference] || {
+                audience: "driver" as const,
                 draft: "",
                 message: "",
                 status: "idle" as const,
@@ -27131,6 +27192,15 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               messages: [],
               status: "idle" as const,
             };
+            const activeJobLatestAdminCustomerMessage = activeJobMessageHistory.messages.find(
+              (message) =>
+                message.workflow_area === "admin_customer_job_messages" &&
+                message.delivery_surface === "customer_app",
+            );
+            const activeJobCustomerMessageQueuedTime =
+              adminDriverJobAcknowledgementCompactTimeLabel(
+                activeJobLatestAdminCustomerMessage?.created_at,
+              );
             const activeJobCompletionMessage =
               bookingCompletionMessages[activeJobKey] ?? null;
             const activeJobPickupRiskState = pickupRiskStateForActiveJob(
@@ -27178,13 +27248,21 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     </p>
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1">
-                    <span
-                      className={`max-w-[7rem] truncate rounded-full px-2 py-0.5 text-xs font-semibold ${
-                        isSelectedActiveJob ? "bg-lime-700 text-white" : "bg-slate-100 text-slate-700"
-                      }`}
-                    >
-                      {isSelectedActiveJob ? "Open" : activeJobStatus}
-                    </span>
+                    {activeJobLatestAdminCustomerMessage ? (
+                      <span
+                        className="max-w-[12rem] truncate rounded-full border border-sky-300 bg-sky-100 px-2 py-0.5 text-[10px] font-semibold text-sky-950"
+                        data-admin-active-job-customer-message-queued="true"
+                        title={`${activeJobBookingReference || "Booking"}: Admin message queued to the customer app${
+                          activeJobCustomerMessageQueuedTime
+                            ? ` at ${activeJobCustomerMessageQueuedTime} SGT`
+                            : ""
+                        }. Customer receipt or read is not claimed.`}
+                      >
+                        Customer msg queued{activeJobCustomerMessageQueuedTime
+                          ? ` ${activeJobCustomerMessageQueuedTime}`
+                          : ""}
+                      </span>
+                    ) : null}
                     <span
                       className={`max-w-[10rem] truncate rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
                         activeJobDriverAcknowledgementState.state === "acknowledged"
@@ -27349,7 +27427,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                                 ? "Customer → Driver"
                                 : message.actor_role === "driver"
                                   ? "Driver → Customer"
-                                  : "Admin → Driver"}
+                                  : message.delivery_surface === "customer_app"
+                                    ? "Admin → Customer"
+                                    : "Admin → Driver"}
                             </p>
                             <p className="mt-0.5 break-words text-slate-800">{message.safe_message || "Message unavailable"}</p>
                             {message.created_at ? <p className="mt-0.5 text-[10px] text-slate-500">{adminDriverJobStatusTimeLabel(message.created_at)}</p> : null}
@@ -27363,10 +27443,44 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     )}
                   </div>
                   <div className="mt-2 grid gap-2">
+                    <fieldset
+                      className="grid gap-1"
+                      data-admin-active-job-message-audience="true"
+                    >
+                      <legend className="font-semibold">Send message to</legend>
+                      <div className="grid grid-cols-2 gap-1 rounded-md border border-sky-200 bg-white p-1">
+                        {(["driver", "customer"] as const).map((audience) => {
+                          const isSelectedAudience = activeJobDriverMessageState.audience === audience;
+                          const audienceLabel = audience === "driver" ? "Driver" : "Customer";
+
+                          return (
+                            <button
+                              aria-pressed={isSelectedAudience}
+                              className={`h-7 rounded px-2 font-semibold transition ${
+                                isSelectedAudience
+                                  ? "bg-sky-700 text-white"
+                                  : "bg-white text-sky-900 hover:bg-sky-50"
+                              }`}
+                              data-admin-active-job-message-audience-option={audience}
+                              key={audience}
+                              onClick={() =>
+                                updateAdminTodayJobMessageAudience(
+                                  activeJobBookingReference,
+                                  audience,
+                                )
+                              }
+                              type="button"
+                            >
+                              {audienceLabel}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </fieldset>
                     <label className="grid gap-1 font-semibold">
                       Message
                       <textarea
-                        aria-label={`Message driver for ${activeJobBookingReference}`}
+                        aria-label={`Message ${activeJobDriverMessageState.audience} for ${activeJobBookingReference}`}
                         className="min-h-20 w-full rounded-md border border-sky-300 bg-white p-2 text-sm font-normal text-slate-950 outline-none focus:border-sky-700"
                         data-admin-active-job-driver-message-input="true"
                         maxLength={500}
@@ -27376,7 +27490,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                             event.target.value,
                           )
                         }
-                        placeholder="Type a short instruction for this driver"
+                        placeholder={`Type a short job message for this ${activeJobDriverMessageState.audience}`}
                         value={activeJobDriverMessageState.draft}
                       />
                     </label>
@@ -27388,12 +27502,19 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                           activeJobDriverMessageState.status === "loading" ||
                           !clean(activeJobDriverMessageState.draft)
                         }
-                        onClick={() => void sendAdminTodayJobDriverMessage(activeJobBookingReference)}
+                        onClick={() => void sendAdminTodayJobMessage(activeJobBookingReference)}
                         type="button"
                       >
-                        {activeJobDriverMessageState.status === "loading" ? "Checking link" : "Send to Driver"}
+                        {activeJobDriverMessageState.status === "loading"
+                          ? activeJobDriverMessageState.audience === "driver"
+                            ? "Checking link"
+                            : "Checking access"
+                          : activeJobDriverMessageState.audience === "driver"
+                            ? "Send to Driver"
+                            : "Send to Customer"}
                       </button>
                       {activeJobDriverMessageState.status === "error" &&
+                      activeJobDriverMessageState.audience === "driver" &&
                       activeJobDriverMessageState.message.startsWith("Driver link required") ? (
                         <button
                           className="h-8 flex-1 rounded-md border border-indigo-300 bg-white px-2 font-semibold text-indigo-900 hover:bg-indigo-50"
@@ -27420,7 +27541,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       </p>
                     ) : null}
                     <p className="text-[11px] text-sky-800">
-                      Visible to admin and this driver only. Customers cannot see this message.
+                      {activeJobDriverMessageState.audience === "driver"
+                        ? "Visible to admin and this driver only. Customers cannot see this message."
+                        : "Visible to admin and this customer only. Driver cannot see this message."}
                     </p>
                   </div>
                 </div>

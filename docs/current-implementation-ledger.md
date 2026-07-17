@@ -12,6 +12,16 @@ f0575c0a Merge PR #22: Add customer driver details acknowledgement
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Human Admin Prepared-Booking Action Dropdown (2026-07-17)
+
+- The owner approved simplifying every existing Dashboard `Codex Prepared Job Cards` card to one native `Choose action` dropdown and one confirmation button. The only choices are `Edit booking`, `Approve — notify customer`, and `Decline — notify customer`; selecting a choice alone performs no action.
+- The confirmation button stays disabled as `Continue` until an action is selected, then becomes `Open booking`, `Approve booking`, or `Decline booking`. One short helper line states the selected effect in plain language before the admin confirms it.
+- `Edit booking` reuses the established `loadSelectedBooking` Dispatch handoff and changes no saved booking, Calendar record, customer/driver message, or external provider. `Approve` and `Decline` reuse the established `updateAdminCustomerRequestReviewDecision` and `/api/admin-bookings` PATCH lane, including its existing customer-app notification result and failure disclosure.
+- The confusing `Needs Review`, `Approve Internally`, `Decline Internally`, `Instruction to Codex`, and `Return to Codex` controls are removed from the normal prepared-card UI. The record is already waiting for review, so another `Needs Review` choice is redundant; no new internal instruction can be created from this card.
+- Previously saved `Returned to Codex` workflow statuses remain read-only compatible: an exact older safe instruction can still prepare and display its corrected preview, and `Edit booking` can open that preview through the same established Dispatch handoff. The existing workflow-status route and stored rows are not removed or rewritten.
+- No second queue, panel, route, API, table, writer, notification type, customer/driver message lane, polling timer, Calendar action, provider send, or persistence helper is added. Focused protection is in `scripts/test-admin-load-bookings-crm-fallback-compact-guard.mjs`, `scripts/test-customer-request-decision-identity-preservation-guard.mjs`, and `scripts/test-booking-ui-browser.mjs`.
+- Owner-Chrome local acceptance used one temporary in-memory pending-review booking with every mutation method blocked before the fixture was loaded. The exact prepared card displayed one dropdown with the three approved choices; selecting `Edit booking` changed the single button to `Open booking` and showed `Opens Dispatch. Nothing is saved or sent.` Selection produced zero blocked-write attempts and zero console errors. The action button was not pressed, no live record changed, and the exact tested Dashboard remains visible in the owner's Chrome with the temporary fixture and mutation block installed in that tab.
+
 ### Customer Driver Details Explicit Acknowledgement (2026-07-17)
 
 - The owner approved one explicit customer acknowledgement for the existing fixed-template Dispatch `Customer Copy` → `Send In-App` driver-details workflow. Merely opening My Bookings, expanding a booking, or viewing driver details never counts as acknowledgement and performs no write.

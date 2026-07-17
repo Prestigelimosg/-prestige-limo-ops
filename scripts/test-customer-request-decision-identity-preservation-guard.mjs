@@ -16,9 +16,10 @@ const visibleRequestPanel = between(
 );
 for (const fragment of [
   "bookingRecordToAdminBookingPersistenceRecord(requestBooking)",
-  "adminCustomerRequestReviewDecisions.map",
-  "updateAdminCustomerRequestReviewDecision(requestRecord, decision.key)",
-  "data-new-customer-booking-request-decision-button",
+  "data-admin-prepared-job-card-action-select",
+  "data-admin-prepared-job-card-action-submit",
+  'updateAdminCustomerRequestReviewDecision(requestRecord, "approve-internally")',
+  'updateAdminCustomerRequestReviewDecision(requestRecord, "decline-internally")',
 ]) {
   assert.ok(visibleRequestPanel.includes(fragment), `Visible request decision must include ${fragment}`);
 }

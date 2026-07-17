@@ -426,37 +426,17 @@ for (const customerRequestFragment of [
   "data-dashboard-new-booking-request-row",
   "data-new-customer-booking-requests-panel",
   "data-new-customer-booking-request-row",
-  "data-new-customer-booking-request-load",
-  "Choose action",
-  "Edit booking",
-  "Approve booking",
-  "Decline booking",
-  "Nothing happens until you press Continue.",
-  'data-admin-prepared-job-card-action-select=',
-  'data-admin-prepared-job-card-action-submit=',
-  'data-admin-prepared-job-card-action-help=',
-  "md:w-[190px]",
-  "md:w-[140px]",
+  'data-admin-prepared-job-card-close=',
+  "rememberHandledCustomerBookingRequest(requestBooking)",
   "Codex Review &amp; Admin App Notifications",
   "Codex Prepared Job Cards",
-  "Ready for Admin Review",
+  "Prepared from exact saved requests. Admin reviews every card before calendar action.",
   "formatBookingPickupDateTimeSgt(requestBooking)",
   "formatBookingPickupDateTimeSgt(savedBooking)",
   "formatBookingPickupDateTimeSgt(bookingRecord)",
-  "No Codex-prepared job cards waiting for admin review.",
   'data-codex-prepared-job-cards="true"',
   'data-codex-prepared-job-card-list="true"',
   "max-h-[28rem] space-y-2 overflow-y-auto",
-  "Calendar changes still require admin action in Dispatch.",
-  'const adminCodexJobCardReviewWorkflowArea = "admin_booking_review";',
-  "prepareCodexJobCardCorrection",
-  "Corrected Preview Ready",
-  "Exact Value Needed",
-  'data-codex-job-card-correction-preparation=',
-  "bookingFormOverride",
-  "dispatchLoadFocusTarget",
-  "scrollIntoView({ behavior: \"smooth\", block: \"start\" })",
-  "Driver Job Link is ready for admin action.",
   "{codexPreparedJobCardsPanel}",
 ]) {
   assertIncludes(appPage, customerRequestFragment, `Customer request auto-load fragment ${customerRequestFragment}`);
@@ -476,22 +456,31 @@ const preparedJobCardPanel = sliceBetween(
   "const codexPreparedJobCardsPanel = (",
   "const bookingsFindToolbar = (",
 );
-assertExcludes(
-  preparedJobCardPanel,
-  "notify customer",
-  "Prepared job card action labels must not promise customer notification delivery",
-);
-for (const accurateDecisionHelpText of [
-  "Confirms this booking, then attempts a customer in-app update.",
-  "Declines this booking, then attempts a customer in-app update.",
-]) {
-  assertIncludes(
-    preparedJobCardPanel,
-    accurateDecisionHelpText,
-    `Prepared job card accurately discloses decision and notification ordering ${accurateDecisionHelpText}`,
-  );
-}
 for (const removedPreparedJobCardControl of [
+  "Choose action",
+  "Edit booking",
+  "Approve booking",
+  "Decline booking",
+  "notify customer",
+  "Calendar changes still require admin action in Dispatch.",
+  "Loaded Prestige saved jobs only for conflict checks; no calendar write.",
+  "Ready for Admin Review",
+  "Corrected Preview Ready",
+  "Exact Value Needed",
+  "Urgent >1h",
+  "Conflict check",
+  "Assignment incomplete",
+  "No Codex-prepared job cards waiting for admin review.",
+  "loadSelectedBooking(requestBooking",
+  'updateAdminCustomerRequestReviewDecision(requestRecord, "approve-internally")',
+  'updateAdminCustomerRequestReviewDecision(requestRecord, "decline-internally")',
+  'data-admin-prepared-job-card-action-select=',
+  'data-admin-prepared-job-card-action-submit=',
+  'data-admin-prepared-job-card-action-help=',
+  'data-new-customer-booking-requests-urgent-count=',
+  'data-codex-calendar-conflict-runtime=',
+  'data-codex-calendar-conflict-status=',
+  'data-codex-job-card-correction-preparation=',
   "Instruction to Codex (internal only)",
   'data-codex-job-card-instruction=',
   'data-codex-job-card-return=',
@@ -506,17 +495,11 @@ for (const removedPreparedJobCardControl of [
     `Prepared job card removes confusing control ${removedPreparedJobCardControl}`,
   );
 }
-for (const establishedPreparedJobCardAction of [
-  "loadSelectedBooking(requestBooking",
-  'updateAdminCustomerRequestReviewDecision(requestRecord, "approve-internally")',
-  'updateAdminCustomerRequestReviewDecision(requestRecord, "decline-internally")',
-]) {
-  assertIncludes(
-    preparedJobCardPanel,
-    establishedPreparedJobCardAction,
-    `Prepared job card reuses established action ${establishedPreparedJobCardAction}`,
-  );
-}
+assert.equal(
+  preparedJobCardPanel.match(/data-admin-prepared-job-card-close=/g)?.length,
+  1,
+  "Prepared job card must expose one Close control only",
+);
 assertExcludes(preparedJobCardPanel, "fetch(", "Prepared job card must not add a direct write lane");
 assert.equal(
   appPage.indexOf("{codexPreparedJobCardsPanel}") > appPage.indexOf('aria-label="Admin App Notifications"'),

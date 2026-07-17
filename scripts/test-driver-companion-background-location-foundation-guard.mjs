@@ -123,6 +123,11 @@ for (const phrase of [
   "starts only after the driver pastes the exact private Driver Job URL and taps `Start trip tracking`",
   "iOS background indicator and Android persistent foreground-service notification",
   "Real screen-off evidence still requires a development/native build installed on one physical iPhone and one physical Android phone",
+  "EAS generated and remotely stored one new Android keystore without exposing or downloading its values",
+  "Internal development build `6cb117cf-a67f-4223-b6b2-5fe975d0c56b`",
+  "The APK was not installed or run, no location permission was granted, no job token was entered, no live GPS or booking record was touched",
+  "successful cloud build proves only that Android native compilation/signing completed",
+  "No iOS build, Apple credential, certificate, provisioning profile, device registration, or App Store change was started",
 ]) {
   assert.equal(ledgerSection.includes(phrase), true, `ledger section must include ${phrase}`);
 }

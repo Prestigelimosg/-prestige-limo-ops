@@ -8059,6 +8059,19 @@ async function runChromeTest() {
                   notificationFeedHeaderActions?.contains(devicePushToggle),
                 ),
                 devicePushToggleLabel: devicePushToggle?.getAttribute("aria-label") || "",
+                devicePushToggleSameRowAsFeedState: (() => {
+                  const stateRect = notificationFeedState?.getBoundingClientRect();
+                  const pushRect = devicePushToggle?.getBoundingClientRect();
+
+                  return Boolean(
+                    stateRect &&
+                    pushRect &&
+                    Math.abs(
+                      stateRect.top + stateRect.height / 2 -
+                        (pushRect.top + pushRect.height / 2),
+                    ) <= 2,
+                  );
+                })(),
                 devicePushToggleText: devicePushToggle?.textContent.trim() || "",
                 feedStateInsideHeaderActions: Boolean(
                   notificationFeedHeaderActions?.contains(notificationFeedState),
@@ -8092,6 +8105,7 @@ async function runChromeTest() {
     assert.equal(dashboardCommandCentreState.notificationFeedCount, 1);
     assert.equal(dashboardCommandCentreState.devicePushToggleCount, 1);
     assert.equal(dashboardCommandCentreState.devicePushToggleInsideHeaderActions, true);
+    assert.equal(dashboardCommandCentreState.devicePushToggleSameRowAsFeedState, true);
     assert.equal(dashboardCommandCentreState.feedStateInsideHeaderActions, true);
     assert.equal(dashboardCommandCentreState.devicePushToggleLabel, "Push alerts OFF");
     assert.equal(dashboardCommandCentreState.devicePushToggleText, "Push OFF");

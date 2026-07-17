@@ -14,10 +14,19 @@ for (const expected of [
   '"Driver → Customer"',
   '"Admin → Driver"',
   '"Admin → Customer"',
+  'message.workflow_area === "admin_customer_job_messages" &&',
+  'message.delivery_surface === "customer_app"',
+  'data-admin-active-job-customer-message-queued="true"',
+  'Customer msg queued',
   "void refreshAdminTodayJobMessageHistory(bookingReference);",
 ]) {
   assert.ok(source.includes(expected), `Today’s Jobs message history must retain ${expected}`);
 }
+
+assert.ok(
+  !source.includes('{isSelectedActiveJob ? "Open" : activeJobStatus}'),
+  "Active Assigned Jobs must not retain the raw internal booking-status pill after the approved customer-message indicator replacement",
+);
 
 assert.ok(
   persistence.includes("function toAdminSafeRecord(") &&

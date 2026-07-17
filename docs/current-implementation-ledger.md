@@ -12,6 +12,14 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Active Assigned Jobs Customer Message Queue Indicator (2026-07-17)
+
+- The owner approved replacing the truncated raw internal booking-status pill such as `admin_review...` in each existing `Active Assigned Jobs` card. The underlying booking workflow status remains unchanged and available to its established internal consumers; only that unhelpful card pill is removed.
+- After an exact-booking `Admin → Customer` message exists in the already loaded booking-scoped message history, the same card shows one compact `Customer msg queued [SGT time]` pill. Before such a message exists, no customer-message pill is shown, so the UI does not make a negative claim from a bounded history page.
+- `Queued` means the existing admin message was saved to the established `customer_app` notification outbox. It does not claim that the customer received, opened, read, dismissed, or acknowledged the message; the current customer notification route exposes no customer read-receipt write.
+- The indicator derives only from the existing `admin_customer_job_messages` plus `customer_app` history already refreshed for every visible Active Assigned Job. It adds no route, API call, table, writer, message format, provider send, panel, composer, timer, or polling path. The acknowledgement pill, waiting count, driver report, OTS proof, message composer/history, and Dispatch fixed-template Customer Copy action remain unchanged.
+- Focused protection is in the existing `scripts/test-today-jobs-message-history-guard.mjs` alongside the established Dashboard/message/API guards. Runtime acceptance must use the exact deployed preview build in the owner’s Chrome with message POST blocked; no live message or record mutation is authorized for verification.
+
 ### Active Assigned Jobs Admin-to-Customer Messages (2026-07-17)
 
 - The owner approved ordinary job-related admin messages to customers from the existing `Active Assigned Jobs` `Messages` card. The card keeps one composer and one send button; a compact `Driver` / `Customer` audience switch changes the recipient for that exact booking instead of adding another panel, composer, route, table, writer, polling timer, or messaging lane.

@@ -27180,10 +27180,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             const activeJobDriverOtsPhotoProofTime = activeJobDriverOtsPhotoProofLatest
               ? adminDriverJobStatusTimeLabel(activeJobDriverOtsPhotoProofLatest.uploaded_at)
               : "";
-            const activeJobStatus =
-              activeJobDriverStatusLatest
-                ? activeJobDriverStatusLabel
-                : bookingStatusLabel(activeJobBooking.status);
             const activeJobKey = bookingRecordStableKey(activeJobBooking);
             const activeJobDriverMessageState =
               adminTodayJobDriverMessageStates[activeJobBookingReference] || {
@@ -27196,6 +27192,15 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               messages: [],
               status: "idle" as const,
             };
+            const activeJobLatestAdminCustomerMessage = activeJobMessageHistory.messages.find(
+              (message) =>
+                message.workflow_area === "admin_customer_job_messages" &&
+                message.delivery_surface === "customer_app",
+            );
+            const activeJobCustomerMessageQueuedTime =
+              adminDriverJobAcknowledgementCompactTimeLabel(
+                activeJobLatestAdminCustomerMessage?.created_at,
+              );
             const activeJobCompletionMessage =
               bookingCompletionMessages[activeJobKey] ?? null;
             const activeJobPickupRiskState = pickupRiskStateForActiveJob(
@@ -27243,13 +27248,21 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     </p>
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1">
-                    <span
-                      className={`max-w-[7rem] truncate rounded-full px-2 py-0.5 text-xs font-semibold ${
-                        isSelectedActiveJob ? "bg-lime-700 text-white" : "bg-slate-100 text-slate-700"
-                      }`}
-                    >
-                      {isSelectedActiveJob ? "Open" : activeJobStatus}
-                    </span>
+                    {activeJobLatestAdminCustomerMessage ? (
+                      <span
+                        className="max-w-[12rem] truncate rounded-full border border-sky-300 bg-sky-100 px-2 py-0.5 text-[10px] font-semibold text-sky-950"
+                        data-admin-active-job-customer-message-queued="true"
+                        title={`${activeJobBookingReference || "Booking"}: Admin message queued to the customer app${
+                          activeJobCustomerMessageQueuedTime
+                            ? ` at ${activeJobCustomerMessageQueuedTime} SGT`
+                            : ""
+                        }. Customer receipt or read is not claimed.`}
+                      >
+                        Customer msg queued{activeJobCustomerMessageQueuedTime
+                          ? ` ${activeJobCustomerMessageQueuedTime}`
+                          : ""}
+                      </span>
+                    ) : null}
                     <span
                       className={`max-w-[10rem] truncate rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
                         activeJobDriverAcknowledgementState.state === "acknowledged"

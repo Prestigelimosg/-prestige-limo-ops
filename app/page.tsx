@@ -10,11 +10,6 @@ import {
   sanitizeAiParseResult,
   type AiParseResult,
 } from "../lib/ai-parser-schema";
-import { prepareCodexJobCardCorrection } from "../lib/codex-job-card-correction";
-import {
-  evaluateCodexCalendarConflict,
-  type CodexCalendarConflictBooking,
-} from "../lib/codex-calendar-conflict";
 import { mockCustomers } from "./customers/_data/mock-customers";
 import {
   calculateProfit,
@@ -54,7 +49,6 @@ import { formatWhatsAppJobCard } from "../lib/whatsapp-job-card";
 
 const adminLegacyDataPurpose = "admin-booking-persistence";
 const adminWorkflowStatusApiPath = "/api/admin-booking-workflow-statuses";
-const adminCodexJobCardReviewWorkflowArea = "admin_booking_review";
 const adminDriverJobLinksApiPath = "/api/admin-driver-job-links";
 const adminCompletedBookingCloseoutApiPath = "/api/admin-completed-booking-closeouts";
 const adminDriverJobStatusesApiPath = "/api/admin-driver-job-statuses";
@@ -2343,11 +2337,6 @@ type ServiceChangePriceReviewResolution =
     };
 
 type AdminBookingPersistenceAction = "save" | "load" | "update";
-type AdminCustomerRequestReviewDecisionKey =
-  | "needs-review"
-  | "approve-internally"
-  | "decline-internally";
-type AdminPreparedJobCardAction = "" | "edit" | "approve" | "decline";
 type AdminCustomerRequestStatusFilter =
   | "all"
   | "needs-review"
@@ -2356,39 +2345,6 @@ type AdminCustomerRequestStatusFilter =
   | "short-notice-review-required";
 const adminBookingPersistenceAllStatusFilter = "all";
 const adminCustomerRequestAllStatusFilter: AdminCustomerRequestStatusFilter = "all";
-const adminCustomerRequestReviewDecisions: Array<{
-  adminInternalStatus: string;
-  customerFacingStatus: string;
-  key: AdminCustomerRequestReviewDecisionKey;
-  label: string;
-  requestReviewStatus: string;
-  successLabel: string;
-}> = [
-  {
-    adminInternalStatus: "Admin Review Required",
-    customerFacingStatus: "pending_review",
-    key: "needs-review",
-    label: "Needs Review",
-    requestReviewStatus: "needs_review",
-    successLabel: "Needs Review",
-  },
-  {
-    adminInternalStatus: "Ready for Confirmation",
-    customerFacingStatus: "confirmed",
-    key: "approve-internally",
-    label: "Approve Internally",
-    requestReviewStatus: "approved",
-    successLabel: "Approved Internally",
-  },
-  {
-    adminInternalStatus: "Declined Internally",
-    customerFacingStatus: "declined",
-    key: "decline-internally",
-    label: "Decline Internally",
-    requestReviewStatus: "declined",
-    successLabel: "Declined Internally",
-  },
-];
 const adminCustomerRequestStatusFilterOptions: Array<{
   key: AdminCustomerRequestStatusFilter;
   label: string;
@@ -7244,16 +7200,6 @@ function bookingRecordPickupDateTimeMs(bookingRecord: BookingRecord) {
   );
 }
 
-function bookingRecordCalendarConflictPickupDateTimeMs(bookingRecord: BookingRecord) {
-  const canonicalPickupParts = singaporePickupDateTimePartsFromTimestamp(
-    clean(bookingRecord.pickup_at) || clean(bookingRecord.pickup_datetime),
-  );
-
-  return canonicalPickupParts
-    ? parsePickupDateTimeMs(canonicalPickupParts.date, canonicalPickupParts.time)
-    : null;
-}
-
 function bookingRecordIsPickupWithinNextHours(
   bookingRecord: BookingRecord,
   currentTimeMs: number,
@@ -8865,140 +8811,6 @@ function adminBookingPersistenceRecordIsShortNotice(
     clean(record.short_notice_review_status) === "Admin Review Required" ||
     (Number.isFinite(pickupMs) && pickupMs - currentTimeMs < 24 * 60 * 60 * 1000)
   );
-}
-
-function adminCustomerRequestDecisionStatuses(
-  record: AdminBookingPersistenceRecord,
-  decision: (typeof adminCustomerRequestReviewDecisions)[number],
-  currentTimeMs: number,
-) {
-  const shortNoticeReviewRequired = adminBookingPersistenceRecordIsShortNotice(record, currentTimeMs);
-
-  return {
-    admin_internal_status: decision.adminInternalStatus,
-    customer_facing_status: decision.customerFacingStatus,
-    request_review_status: decision.requestReviewStatus,
-    short_notice_review_status:
-      shortNoticeReviewRequired && decision.key === "needs-review"
-        ? "Admin Review Required"
-        : shortNoticeReviewRequired
-          ? "reviewed"
-          : "Not Required",
-    shortNoticeReviewRequired,
-  };
-}
-
-function buildAdminCustomerRequestDecisionPayload(
-  record: AdminBookingPersistenceRecord,
-  decision: (typeof adminCustomerRequestReviewDecisions)[number],
-  currentTimeMs: number,
-): AdminBookingPersistenceRequestBody | null {
-  const bookingReference = clean(record.booking_reference);
-  const pickupDateTime = adminBookingPersistencePickupDateTime(record);
-  const pickupLocation = clean(record.pickup_location);
-  const dropoffLocation = clean(record.dropoff_location);
-  const routeType = adminBookingPersistenceServiceType(record);
-  const customerDisplayName = adminBookingPersistenceCustomerDisplayName(record);
-  const contactPhone = clean(record.contact_phone);
-  const routePoints: AdminBookingPersistenceRequestBody["route_points"] = [];
-
-  for (const [index, routePoint] of (record.route_points || []).entries()) {
-    const locationText = adminBookingPersistenceRoutePointLocation(routePoint);
-
-    if (!routePoint.point_type || !locationText) {
-      continue;
-    }
-
-    routePoints.push({
-      point_type: routePoint.point_type,
-      sequence_number: adminBookingPersistenceRoutePointSequence(routePoint) || index + 1,
-      location_text: locationText,
-      timing_note: adminBookingPersistenceRoutePointNote(routePoint) || null,
-    });
-  }
-
-  const hasPickupRoutePoint = routePoints.some((routePoint) => routePoint.point_type === "pickup");
-  const hasDropoffRoutePoint = routePoints.some((routePoint) => routePoint.point_type === "dropoff");
-  const resolvedPickupLocation =
-    pickupLocation || routePoints.find((routePoint) => routePoint.point_type === "pickup")?.location_text || "";
-  const resolvedDropoffLocation =
-    dropoffLocation || routePoints.find((routePoint) => routePoint.point_type === "dropoff")?.location_text || "";
-
-  if (
-    !bookingReference ||
-    !pickupDateTime ||
-    !resolvedPickupLocation ||
-    !resolvedDropoffLocation ||
-    !routeType ||
-    !customerDisplayName ||
-    !contactPhone ||
-    !hasPickupRoutePoint ||
-    !hasDropoffRoutePoint
-  ) {
-    return null;
-  }
-
-  const serviceItems: AdminBookingPersistenceRequestBody["service_items"] = [];
-
-  for (const serviceItem of record.service_items || []) {
-    const serviceItemType = adminBookingPersistenceServiceItemType(serviceItem);
-    const quantity = safeAdminBookingPersistenceCount(serviceItem.quantity);
-    const blocksCount = safeAdminBookingPersistenceCount(serviceItem.blocks_count);
-
-    if (!serviceItemType || ((quantity ?? 0) < 1 && (blocksCount ?? 0) < 1)) {
-      continue;
-    }
-
-    serviceItems.push({
-      service_item_type: serviceItemType,
-      quantity,
-      blocks_count: blocksCount,
-    });
-  }
-
-  const statuses = adminCustomerRequestDecisionStatuses(record, decision, currentTimeMs);
-  const routeSummary =
-    routePoints
-      .map((routePoint) => clean(routePoint.location_text))
-      .filter(Boolean)
-      .join(" > ") || null;
-
-  return {
-    booking: {
-      booking_reference: bookingReference,
-      source_channel: "customer-booking-request",
-      customer_id: safeAdminBookingPersistenceIdentifier(record.customer_id),
-      company_id: adminDispatchVerifiedIdentityId(record.company_id),
-      booker_id: adminDispatchVerifiedIdentityId(record.booker_id),
-      traveler_id: adminDispatchVerifiedIdentityId(record.traveler_id),
-      pickup_datetime: pickupDateTime,
-      pickup_location: resolvedPickupLocation,
-      dropoff_location: resolvedDropoffLocation,
-      route_type: routeType,
-      service_type: routeType,
-      route_summary: routeSummary,
-      customer_display_name: customerDisplayName,
-      contact_display_name: clean(record.contact_display_name) || null,
-      contact_phone: contactPhone,
-      contact_email: clean(record.contact_email) || null,
-      passenger_name: clean(record.passenger_name) || null,
-      passenger_phone: clean(record.passenger_phone) || null,
-      flight_no: clean(record.flight_no) || null,
-      driver_contact: null,
-      driver_name: null,
-      driver_plate_number: null,
-      pax_count: safeAdminBookingPersistenceCount(record.pax_count),
-      luggage_count: safeAdminBookingPersistenceCount(record.luggage_count),
-      vehicle_type_or_category: clean(record.vehicle_type_or_category) || null,
-      customer_facing_status: statuses.customer_facing_status,
-      admin_internal_status: statuses.admin_internal_status,
-      short_notice_review_status: statuses.short_notice_review_status,
-      request_review_status: statuses.request_review_status,
-      parser_source_reference: clean(record.parser_source_reference) || null,
-    },
-    route_points: routePoints,
-    service_items: serviceItems,
-  };
 }
 
 function buildAdminBookingCancellationRequestApplyPayload(
@@ -13165,10 +12977,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     useState<AdminBookingWorkflowStatusRecord | null>(null);
   const [adminBookingWorkflowStatusAction, setAdminBookingWorkflowStatusAction] =
     useState<AdminBookingWorkflowStatusAction | null>(null);
-  const [codexJobCardReviewStatuses, setCodexJobCardReviewStatuses] =
-    useState<Record<string, AdminBookingWorkflowStatusRecord | null>>({});
-  const [adminPreparedJobCardActions, setAdminPreparedJobCardActions] =
-    useState<Record<string, AdminPreparedJobCardAction>>({});
   const [completedBookingCloseoutRecord, setCompletedBookingCloseoutRecord] =
     useState<AdminCompletedBookingCloseoutRecord | null>(null);
   const [completedBookingCloseoutAction, setCompletedBookingCloseoutAction] =
@@ -16368,23 +16176,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   }, [driverSearchTerm, driverProfileDisplayDrivers]);
   const driverDatabaseSearchQuery = clean(driverSearchTerm);
   const operationalBookings = useMemo(() => bookings.filter(isOperationalBooking), [bookings]);
-  const codexCalendarConflictLoadedBookings = useMemo<CodexCalendarConflictBooking[]>(
-    () =>
-      operationalBookings.map((bookingRecord) => ({
-        active:
-          !bookingRecordIsCancelledStatus(bookingRecord) &&
-          !bookingRecordIsCompletedStatus(bookingRecord),
-        driverId: bookingRecord.driver_id,
-        driverName: bookingRecord.driver_name,
-        identity: bookingRecordStableKey(bookingRecord),
-        pickupTimeMs: bookingRecordCalendarConflictPickupDateTimeMs(bookingRecord),
-        vehiclePlate: bookingRecord.driver_plate_number,
-      })),
-    [operationalBookings],
-  );
-  const codexCalendarConflictAutomationEnabled =
-    adminAutomationRuntimeState.automationEnabled &&
-    adminAutomationRuntimeState.status === "active";
   const completedHistorySourceBookings = useMemo(() => {
     if (!completedCancelHandoffBooking) {
       return operationalBookings;
@@ -17161,53 +16952,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     buildLoadBookingsOperationalDisplayItems(visibleCustomerBookingRequestBookings, {
       useTypedOperationalOrder: true,
     });
-  const codexPreparedJobCardBookingReferenceKey = visibleCustomerBookingRequestBookings
-    .map(bookingRecordPersistedReference)
-    .map(cleanReferenceText)
-    .filter(Boolean)
-    .join("\n");
-
-  useEffect(() => {
-    if (activeTab !== "dashboard" || !codexPreparedJobCardBookingReferenceKey) {
-      return;
-    }
-
-    const bookingReferences = codexPreparedJobCardBookingReferenceKey.split("\n").filter(Boolean);
-    let cancelled = false;
-
-    void Promise.all(
-      bookingReferences.map(async (bookingReference) => {
-        try {
-          const loadedStatus = await loadAdminBookingWorkflowStatusRecord(
-            bookingReference,
-            adminCodexJobCardReviewWorkflowArea,
-          );
-
-          if (cancelled) {
-            return;
-          }
-
-          setCodexJobCardReviewStatuses((current) => ({
-            ...current,
-            [bookingReference]: loadedStatus,
-          }));
-        } catch {
-          if (cancelled) {
-            return;
-          }
-
-          setCodexJobCardReviewStatuses((current) => ({
-            ...current,
-            [bookingReference]: null,
-          }));
-        }
-      }),
-    );
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeTab, codexPreparedJobCardBookingReferenceKey]);
 
   const customerBookingRequestCount = bookingTabCustomerBookingRequestBookings.length;
   const newBookingRequestNotifications = adminAppNotificationReadState.notifications.filter(
@@ -17241,7 +16985,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     dashboardNewBookingRequestAttentionCount,
     bookingsTabUrgentUnderOneHourCount,
   ].filter((count) => count > 0).length;
-  const urgentCustomerBookingRequestCount = urgentCustomerBookingRequestBookings.length;
   const dashboardUrgentBookingRequestDisplayItems =
     buildLoadBookingsOperationalDisplayItems(visibleDashboardUrgentBookingRequestBookings, {
       useTypedOperationalOrder: true,
@@ -22205,98 +21948,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     }
   }
 
-  async function updateAdminCustomerRequestReviewDecision(
-    record: AdminBookingPersistenceRecord,
-    decisionKey: AdminCustomerRequestReviewDecisionKey,
-  ) {
-    const decision = adminCustomerRequestReviewDecisions.find((candidate) => candidate.key === decisionKey);
-    const targetBookingReference = clean(record.booking_reference);
-
-    if (!decision || !targetBookingReference || !adminBookingPersistenceRecordIsCustomerRequest(record)) {
-      setAdminBookingPersistenceMessage({
-        tone: "error",
-        text: "Customer request review decision could not be saved: loaded request details need review.",
-      });
-      return;
-    }
-
-    const payload = buildAdminCustomerRequestDecisionPayload(record, decision, currentTimeMs);
-
-    if (!payload) {
-      setAdminBookingPersistenceMessage({
-        tone: "error",
-        text: "Customer request review decision could not be saved: required operational details are missing.",
-      });
-      return;
-    }
-
-    const statuses = adminCustomerRequestDecisionStatuses(record, decision, currentTimeMs);
-
-    setAdminBookingPersistenceAction("update");
-    setAdminBookingPersistenceMessage({
-      tone: "info",
-      text: "Saving internal customer request review decision...",
-    });
-
-    try {
-      const response = await fetch("/api/admin-bookings", {
-        body: JSON.stringify({
-          target_booking_reference: targetBookingReference,
-          ...payload,
-        }),
-        headers: {
-          "Content-Type": "application/json",
-          "x-prestige-admin-purpose": "admin-booking-persistence",
-        },
-        method: "PATCH",
-      });
-      const result = await response.json();
-
-      if (!response.ok || !result?.ok) {
-        throw new Error(adminBookingPersistenceFailureDetail(result, "Admin review decision update failed."));
-      }
-
-      const updatedBooking = result.booking as AdminBookingPersistenceRecord;
-      const customerNotificationResult = result.customer_notification as
-        | { ok?: boolean; error?: string }
-        | null
-        | undefined;
-      const updatedBookingReference = clean(updatedBooking.booking_reference) || targetBookingReference;
-      setAdminBookingPersistenceRecords((current) => [
-        updatedBooking,
-        ...current.filter(
-          (currentRecord) => clean(currentRecord.booking_reference) !== updatedBookingReference,
-        ),
-      ]);
-
-      if (clean(appliedAdminBookingSnapshotReference) === targetBookingReference) {
-        setAppliedAdminBookingSnapshotReference(updatedBookingReference);
-      }
-
-      setAdminBookingPersistenceMessage({
-        tone: "success",
-        text: `Internal review decision saved for ${updatedBookingReference}: ${decision.successLabel}.${
-          customerNotificationResult?.ok
-            ? " Customer in-app notification queued."
-            : customerNotificationResult
-              ? " Customer in-app notification could not be queued."
-              : " Customer notification not queued for this update."
-        }${
-          statuses.shortNoticeReviewRequired
-            ? " Short-notice review was handled by this decision."
-            : ""
-        }`,
-      });
-    } catch (error) {
-      setAdminBookingPersistenceMessage({
-        tone: "error",
-        text: adminBookingPersistenceFailureMessage("update", error),
-      });
-    } finally {
-      setAdminBookingPersistenceAction(null);
-    }
-  }
-
   function getDispatchCopyText(target: DispatchCopyTarget) {
     const copyEditState = copyEditStates[target];
     const generatedText = generatedDispatchCopyMessages[target];
@@ -23841,42 +23492,17 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       data-codex-prepared-job-cards="true"
       data-new-customer-booking-requests-panel="true"
     >
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h4 className="text-sm font-semibold text-emerald-950">Codex Prepared Job Cards</h4>
-          <p className="text-xs text-emerald-800">
-            Prepared from exact saved requests. Admin reviews every card before calendar action.
-          </p>
-          <p className="text-xs text-emerald-800">Calendar changes still require admin action in Dispatch.</p>
-          <p className="text-xs text-emerald-800">
-            Loaded Prestige saved jobs only for conflict checks; no calendar write.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          <span
-            className="inline-flex w-fit rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900 ring-1 ring-amber-200"
-            data-new-customer-booking-requests-urgent-count={String(urgentCustomerBookingRequestCount)}
-          >
-            {urgentCustomerBookingRequestCount} urgent
-          </span>
-          <span className="inline-flex w-fit rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-emerald-900 ring-1 ring-emerald-200">
-            {customerBookingRequestDisplayItems.length} Ready for Admin Review
-          </span>
-          <span
-            className="inline-flex w-fit rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-emerald-900 ring-1 ring-emerald-200"
-            data-codex-calendar-conflict-runtime={
-              codexCalendarConflictAutomationEnabled ? "active" : "off"
-            }
-          >
-            Conflict check {codexCalendarConflictAutomationEnabled ? "ON" : "OFF"}
-          </span>
-        </div>
+      <div>
+        <h4 className="text-sm font-semibold text-emerald-950">Codex Prepared Job Cards</h4>
+        <p className="text-xs text-emerald-800">
+          Prepared from exact saved requests. Admin reviews every card before calendar action.
+        </p>
       </div>
       <div
         className="mt-3 max-h-[28rem] space-y-2 overflow-y-auto pr-1"
         data-codex-prepared-job-card-list="true"
       >
-        {customerBookingRequestDisplayItems.length > 0 ? customerBookingRequestDisplayItems.map(({ bookingRecord: requestBooking, operationalCard }) => {
+        {customerBookingRequestDisplayItems.map(({ bookingRecord: requestBooking, operationalCard }) => {
           const routePoints = getRoutePoints(requestBooking);
           const pickup = operationalCard.pickup_address || routePoints[0] || "Pickup";
           const dropoff =
@@ -23887,55 +23513,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             operationalCard.route_points_summary ||
             (routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`);
           const bookingId = bookingRecordStableKey(requestBooking, operationalCard);
-          const bookingReference = cleanReferenceText(
-            bookingRecordPersistedReference(requestBooking),
-          );
-          const codexReviewStatus = codexJobCardReviewStatuses[bookingReference] || null;
-          const returnedToCodex =
-            clean(codexReviewStatus?.workflow_area) === adminCodexJobCardReviewWorkflowArea &&
-            clean(codexReviewStatus?.status_value) === "needs_review" &&
-            clean(codexReviewStatus?.status_label) === "Returned to Codex";
-          const requestRecord = bookingRecordToAdminBookingPersistenceRecord(requestBooking);
-          const correctionPreparation = prepareCodexJobCardCorrection(
-            bookingRecordToForm(requestBooking),
-            returnedToCodex ? clean(codexReviewStatus?.safe_status_context?.safe_note) : "",
-          );
-          const correctionReady = correctionPreparation.status === "ready";
           const passengerText = getLoadBookingsOperationalPassengerDisplay(operationalCard, requestBooking);
-          const isUrgentRequest = urgentCustomerBookingRequestKeySet.has(
-            getCustomerBookingRequestQueueKey(requestBooking),
-          );
           const pickupMetaText = [
             formatBookingPickupDateTimeSgt(requestBooking),
             operationalCard.job_card_display,
           ].filter(Boolean).join(" · ");
-          const calendarConflictCandidate = codexCalendarConflictLoadedBookings.find(
-            (loadedBooking) => loadedBooking.identity === bookingId,
-          );
-          const calendarConflictResult =
-            codexCalendarConflictAutomationEnabled && calendarConflictCandidate
-              ? evaluateCodexCalendarConflict(
-                  calendarConflictCandidate,
-                  codexCalendarConflictLoadedBookings,
-                )
-              : null;
-          const selectedAction = adminPreparedJobCardActions[bookingId] || "";
-          const selectedActionHelp =
-            selectedAction === "edit"
-              ? "Opens Dispatch. Nothing is saved or sent."
-              : selectedAction === "approve"
-                ? "Confirms this booking and queues a customer in-app update."
-                : selectedAction === "decline"
-                  ? "Declines this booking and queues a customer in-app update."
-                  : "Choose one action. Nothing happens until you press Continue.";
-          const selectedActionButtonLabel =
-            selectedAction === "edit"
-              ? "Open booking"
-              : selectedAction === "approve"
-                ? "Approve booking"
-                : selectedAction === "decline"
-                  ? "Decline booking"
-                  : "Continue";
 
           return (
             <article
@@ -23945,23 +23527,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   : ""
               }`}
               data-new-customer-booking-request-row={bookingId}
-              data-new-customer-booking-request-urgency={isUrgentRequest ? "urgent" : "new"}
               key={`customer-request-${bookingId}`}
             >
               <div className="min-w-0">
-                <span
-                  className={`mb-1 inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${
-                    returnedToCodex
-                      ? "bg-amber-100 text-amber-900 ring-amber-200"
-                      : "bg-emerald-100 text-emerald-900 ring-emerald-200"
-                  }`}
-                >
-                  {correctionReady
-                    ? "Corrected Preview Ready"
-                    : returnedToCodex
-                      ? "Exact Value Needed"
-                      : "Ready for Admin Review"}
-                </span>
                 <p className="truncate font-semibold text-slate-950">
                   {getLoadBookingsOperationalRequestDisplayTitle(operationalCard, requestBooking)}
                 </p>
@@ -23969,143 +23537,19 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               </div>
               <div className="min-w-0">
                 <p className="truncate text-slate-800">Passenger: {passengerText}</p>
-                <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                      isUrgentRequest
-                        ? "bg-amber-100 text-amber-900 ring-1 ring-amber-200"
-                        : "bg-emerald-50 text-emerald-900 ring-1 ring-emerald-100"
-                    }`}
-                  >
-                    {isUrgentRequest ? "Urgent >1h" : "New"}
-                  </span>
-                  <span className="truncate text-xs text-slate-500">
-                    {bookingStatusLabel(requestBooking.status)}
-                  </span>
-                </div>
               </div>
               <p className="min-w-0 truncate text-slate-700">{routeText}</p>
-              <div className="flex min-w-0 flex-col gap-1.5 md:items-end">
-                <label className="sr-only" htmlFor={`prepared-job-action-${bookingId}`}>
-                  Choose action
-                </label>
-                <select
-                  className="min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-slate-700 focus:ring-2 focus:ring-slate-700/10 md:w-[190px]"
-                  data-admin-prepared-job-card-action-select={bookingId}
-                  id={`prepared-job-action-${bookingId}`}
-                  onChange={(event) =>
-                    setAdminPreparedJobCardActions((current) => ({
-                      ...current,
-                      [bookingId]: event.target.value as AdminPreparedJobCardAction,
-                    }))
-                  }
-                  value={selectedAction}
-                >
-                  <option value="">Choose action</option>
-                  <option value="edit">Edit booking</option>
-                  <option disabled={!requestRecord} value="approve">
-                    Approve — notify customer
-                  </option>
-                  <option disabled={!requestRecord} value="decline">
-                    Decline — notify customer
-                  </option>
-                </select>
-                <button
-                  className="min-h-10 w-full rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 md:w-[140px]"
-                  data-admin-prepared-job-card-action-submit={bookingId}
-                  data-new-customer-booking-request-load={bookingId}
-                  disabled={
-                    !selectedAction ||
-                    adminBookingPersistenceAction !== null ||
-                    ((selectedAction === "approve" || selectedAction === "decline") && !requestRecord)
-                  }
-                  onClick={() => {
-                    if (selectedAction === "edit") {
-                      loadSelectedBooking(requestBooking, {
-                        bookingFormOverride: correctionReady
-                          ? correctionPreparation.correctedBooking
-                          : undefined,
-                        correctionSummary: correctionReady
-                          ? correctionPreparation.changedFields.join("; ")
-                          : undefined,
-                        focusJobCard: true,
-                      });
-                      return;
-                    }
-
-                    if (selectedAction === "approve" && requestRecord) {
-                      void updateAdminCustomerRequestReviewDecision(requestRecord, "approve-internally");
-                    } else if (selectedAction === "decline" && requestRecord) {
-                      void updateAdminCustomerRequestReviewDecision(requestRecord, "decline-internally");
-                    }
-                  }}
-                  type="button"
-                >
-                  {selectedActionButtonLabel}
-                </button>
-              </div>
-              <p
-                className="text-xs text-slate-600 md:col-span-4 md:text-right"
-                data-admin-prepared-job-card-action-help={bookingId}
+              <button
+                className="min-h-10 rounded-md bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
+                data-admin-prepared-job-card-close={bookingId}
+                onClick={() => rememberHandledCustomerBookingRequest(requestBooking)}
+                type="button"
               >
-                {selectedActionHelp}
-              </p>
-              {calendarConflictResult ? (
-                <div
-                  className={`flex flex-col gap-0.5 rounded-md border px-2 py-1.5 text-xs sm:flex-row sm:items-center sm:justify-between md:col-span-4 ${
-                    calendarConflictResult.status === "conflict"
-                      ? "border-rose-200 bg-rose-50 text-rose-900"
-                      : calendarConflictResult.status === "no-conflict"
-                        ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-                        : "border-amber-200 bg-amber-50 text-amber-900"
-                  }`}
-                  data-codex-calendar-conflict-status={bookingId}
-                  data-codex-calendar-conflict-state={calendarConflictResult.status}
-                >
-                  <span className="font-semibold">{calendarConflictResult.label}</span>
-                  <span>{calendarConflictResult.detail}</span>
-                </div>
-              ) : null}
-              {returnedToCodex ? (
-                <div className="rounded-md border border-emerald-100 bg-emerald-50/70 p-2 md:col-span-4">
-                  <div
-                    className={`rounded-md border p-2 ${
-                      correctionReady
-                        ? "border-emerald-300 bg-white text-emerald-950"
-                        : "border-amber-300 bg-amber-50 text-amber-950"
-                    }`}
-                    data-codex-job-card-correction-preparation={
-                      correctionReady ? "ready" : "needs-exact-value"
-                    }
-                  >
-                    <p className="text-xs font-semibold">
-                      {correctionReady ? "Corrected Preview Ready" : "Exact Value Needed"}
-                    </p>
-                    {correctionReady ? (
-                      <>
-                        <p className="mt-1 text-xs">
-                          {correctionPreparation.changedFields.join(" · ")}
-                        </p>
-                        <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded-md border border-emerald-100 bg-emerald-50/60 p-2 text-xs text-slate-800">
-                          {formatWhatsAppJobCard(correctionPreparation.correctedBooking)}
-                        </pre>
-                        <p className="mt-1 text-xs">
-                          Review-only preview. The saved booking and calendar remain unchanged until admin uses the established Dispatch actions.
-                        </p>
-                      </>
-                    ) : (
-                      <p className="mt-1 text-xs">{correctionPreparation.reason}</p>
-                    )}
-                  </div>
-                </div>
-              ) : null}
+                Close
+              </button>
             </article>
           );
-        }) : (
-          <p className="rounded-md border border-emerald-100 bg-white px-3 py-3 text-sm text-slate-600">
-            No Codex-prepared job cards waiting for admin review.
-          </p>
-        )}
+        })}
       </div>
     </div>
   );

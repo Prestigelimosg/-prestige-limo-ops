@@ -21,6 +21,13 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This repairs the established server runtime helper only. It adds no route, API, table, writer, panel, button, map, polling timer, provider send, customer lane, driver messaging lane, schema, migration, environment setting, Supabase configuration, or live-data action. The abandoned Driver Companion rollout remains unused; the browser Driver Job consumer continues using the same route.
 - Focused protection is `scripts/test-driver-live-location-assigned-active-eligibility-guard.mjs`, registered in `scripts/test-preactivation-verification-suite.mjs`. It proves unassigned and terminal Share/Readiness are rejected without position or audit writes, an assigned non-terminal job with `admin_review_required` remains accepted, and Stop cleanup remains available.
 
+### Prepared Job Card Close-Only Simplification (2026-07-17)
+
+- The owner reduced each existing `Codex Prepared Job Cards` card to one `Close` button. The earlier action dropdown, Edit/Approve/Decline choices, confirmation button, notification wording, helper wording, readiness/urgency/internal-status pills, count badges, conflict-check badge/result, assignment warning, correction/status wording, and empty-state wording are removed from this section.
+- The section retains only its `Codex Prepared Job Cards` title, one short description, and the exact saved job details: request title, Singapore pickup date/time and job-card display, passenger, and route.
+- `Close` reuses the established browser-local handled-customer-request memory. It removes only that card from the Codex section on that admin browser and performs no API call, booking/customer status change, admin/customer/driver notification, Calendar action, driver/vehicle assignment, provider send, or live-record write.
+- No new route, API, table, writer, panel, button lane, timer, or polling path is added. Focused protection remains `scripts/test-admin-load-bookings-crm-fallback-compact-guard.mjs`, with visible single-button, removed-wording, responsive-layout, and zero-write Close coverage in `scripts/test-booking-ui-browser.mjs`.
+
 ### Active Jobs Embedded Map Scroll-Position Repair (2026-07-17)
 
 - During the owner-approved Pixel 6 background-location test for exact assigned booking `CUST-20260716035942-O7Z73G-OUT`, Production build `237b3212` received current movement while the phone was locked: the admin row advanced from 17:58 to 18:03 SGT and its coordinates changed. Stop cleanup removed the exact marker, and the temporary Live Dispatch Map runtime was closed with zero drivers displayed.
@@ -34,6 +41,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The owner stopped Driver Companion tracking after proof. The exact `CUST-3G-OUT` marker disappeared automatically, the admin map showed zero drivers, the temporary Live Dispatch Map runtime was closed, and the map was returned to its compact `Off` state. No stale test marker, message, acknowledgement, booking status, booking details, Calendar record, customer/driver notification, provider send, or unrelated driver pin was created or modified; the exact closed Production Dashboard remains visible in owner Chrome.
 
 ### Human Admin Prepared-Booking Action Dropdown (2026-07-17)
+
+> Superseded by `Prepared Job Card Close-Only Simplification (2026-07-17)` above. The dropdown, confirmation action, related wording, and write-capable prepared-card controls described in this historical deployment record are no longer present in the current prepared-card UI.
 
 - The owner approved simplifying every existing Dashboard `Codex Prepared Job Cards` card to one native `Choose action` dropdown and one confirmation button. The only choices are `Edit booking`, `Approve — notify customer`, and `Decline — notify customer`; selecting a choice alone performs no action.
 - The confirmation button stays disabled as `Continue` until an action is selected, then becomes `Open booking`, `Approve booking`, or `Decline booking`. One short helper line states the selected effect in plain language before the admin confirms it.

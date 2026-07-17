@@ -1,13 +1,13 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-88db6c82 Show customer message queue indicator
+f0575c0a Merge PR #22: Add customer driver details acknowledgement
 
 Latest pushed main/staging runtime checkpoint:
-88db6c82 Show customer message queue indicator
+f0575c0a Merge PR #22: Add customer driver details acknowledgement
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-8f0090be Merge PR #21: Add active job customer messaging
+f0575c0a Merge PR #22: Add customer driver details acknowledgement
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -20,7 +20,11 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The server independently requires the prior exact-booking admin/dispatcher `Driver details ready` record before accepting acknowledgement. The first tap stores one `customer_app` / `customer_driver_details_acknowledgements` record with fixed safe text; repeated taps return the existing acknowledgement and do not create duplicates.
 - The acknowledgement is `customer_to_admin` and `customer_app` only. It is never written to `driver_app`, so the driver cannot see it. It contains no free text, driver-link token, provider send, Email, WhatsApp, SMS, Telegram, price, billing, invoice/payment, payout/PayNow, internal note, parser/debug content, secret, or other-booking data.
 - Bookings reuses the existing paginated admin notification GET when the Bookings surface opens or its loaded booking-reference set changes. It adds no route, API writer, table, panel, composer, provider send, polling timer, background retry, or read-receipt assumption. A failed read is shown explicitly and produces no guessed sent/acknowledged pill.
-- Focused protection: `scripts/test-customer-driver-details-acknowledgement-guard.mjs` plus the existing customer quick-reply, customer notification API, public surface, Customer Copy, and booking browser guards. Runtime acceptance remains required on an exact deployed build in the owner's Chrome with all live mutation methods blocked; no customer acknowledgement or notification write is authorized merely for verification.
+- Focused protection: `scripts/test-customer-driver-details-acknowledgement-guard.mjs` plus the existing customer quick-reply, customer notification API, public surface, Customer Copy, and booking browser guards.
+- Draft PR `#22` was verified at exact head `80a91cd4`, passed both Vercel checks, and after explicit owner approval was marked ready and merged with the expected-head lock and history-preserving merge method as `f0575c0a Merge PR #22: Add customer driver details acknowledgement`.
+- GitHub reported the exact `f0575c0a` deployment completed. Signed-in owner Chrome displayed `Build f0575c0a` at `https://app.prestigelimo.sg`; the existing Bookings surface showed one exact card with `Detail sent 09:01` and another with `Acknowledged 09:02`, each directly beside `Cal saved` and still identified by booking, passenger, pickup date/time, route, and driver.
+- Production customer acceptance used one in-memory authenticated booking/read fixture. Viewing and expanding Driver Details produced zero acknowledgement calls; one explicit `Acknowledge driver details` click produced exactly one in-memory POST containing only `booking_reference` and the fixed acknowledgement `template_key`, changed the button to disabled `Acknowledged 09:02`, and retained the four separate customer-to-driver quick replies.
+- The Production acceptance harness blocked real mutation methods before the fixture was loaded. Real mutation count and browser console error count were zero. No live booking, message, notification, customer, driver, link, acknowledgement, Calendar, map, invoice, payment, payout, PayNow, provider, environment, or Supabase record/configuration was changed. The exact tested Production Bookings page remains visible in owner Chrome with the temporary in-memory fixture and mutation block installed in that tab.
 
 ### Active Assigned Jobs Customer Message Queue Indicator (2026-07-17)
 

@@ -1009,7 +1009,7 @@ export default function DriverJobPage() {
       downloadDriverCalendarBlob(await response.blob(), filename);
       setCalendarDownloadFeedback({
         tone: "success",
-        text: "Calendar file downloaded. Open it to add or update this job.",
+        text: "Calendar file downloaded with a private Open Driver Job shortcut. Do not share the calendar event.",
       });
     } catch {
       setCalendarDownloadFeedback({
@@ -1999,8 +1999,9 @@ export default function DriverJobPage() {
                       {downloadingCalendar ? "Downloading Calendar..." : "Add / Update Calendar"}
                     </button>
                     <p className="text-xs font-medium leading-5 text-sky-900">
-                      Saves the current Driver Job schedule with a one-hour reminder. After an amendment,
-                      open this page again and use this same action. The Driver Job page remains the source of truth.
+                      Saves this job with a one-hour reminder and a private Open Driver Job shortcut. Later, use
+                      the calendar shortcut or the original link to report status. After an amendment, return here
+                      and update the calendar. Do not share the calendar event.
                     </p>
                     {calendarDownloadFeedback ? (
                       <p

@@ -30,6 +30,10 @@ for (const fragment of [
   "SEQUENCE:",
   "BEGIN:VCALENDAR",
   "BEGIN:VALARM",
+  "driverJobUrl",
+  "Open Driver Job:",
+  "Private driver link - do not share this calendar event.",
+  "URL:",
 ]) {
   assert.equal(helper.includes(fragment), true, `Driver calendar helper must include ${fragment}.`);
 }
@@ -42,7 +46,7 @@ assert.doesNotMatch(
 assert.doesNotMatch(
   helper,
   /customer_price|billing|invoice|payment|paynow|payout|finance|internal_admin_note|parser_debug|mock_archive|raw_token|token_hash/i,
-  "Driver calendar helper must not include forbidden driver fields or token material.",
+  "Driver calendar helper must not include forbidden driver fields or internal token fields.",
 );
 
 for (const fragment of [
@@ -63,6 +67,8 @@ for (const fragment of [
   '"content-disposition"',
   "payloadResult.payload.acknowledged",
   "Acknowledge this Driver Job before adding it to a calendar.",
+  "request.url",
+  "encodeURIComponent(token)",
 ]) {
   assert.equal(route.includes(fragment), true, `Driver calendar route must include ${fragment}.`);
 }
@@ -83,6 +89,8 @@ for (const fragment of [
   "onClick={downloadDriverJobCalendar}",
   'type="button"',
   "Add / Update Calendar",
+  "private Open Driver Job shortcut",
+  "Do not share the calendar event",
   "/calendar",
 ]) {
   assert.equal(page.includes(fragment), true, `Driver Job page must include ${fragment}.`);
@@ -115,6 +123,7 @@ assert.equal(suite.includes(guardPath), true, "Preactivation suite must register
 
 const { buildDriverJobCalendarDownload } = await import("../lib/driver-job-calendar-event.ts");
 
+const calendarJobUrl = "https://ops.example/driver-job/safe-calendar-token";
 const initial = buildDriverJobCalendarDownload({
   acknowledged: true,
   assignedDriver: { contact: "", name: "Safe Driver", plate: "SLV1234X", vehicleModel: "V Class" },
@@ -134,7 +143,7 @@ const initial = buildDriverJobCalendarDownload({
   statusHistory: [],
   statusLabel: "Assigned",
   waypoints: [],
-});
+}, calendarJobUrl);
 
 assert.equal(initial.ok, true);
 assert.match(initial.ics, /DTSTART;TZID=Asia\/Singapore:20260715T003000/);
@@ -142,7 +151,19 @@ assert.match(initial.ics, /DTEND;TZID=Asia\/Singapore:20260715T020000/);
 assert.match(initial.ics, /TRIGGER:-PT1H/);
 assert.match(initial.ics, /UID:driver-job-ADM-20260715003000@prestige-limo-ops/);
 assert.match(initial.ics, /SEQUENCE:[1-9][0-9]*/);
-assert.doesNotMatch(initial.ics, /23:30|PRIVATE|token|customer_price|billing|invoice|payment|paynow|payout/i);
+const unfoldedInitialIcs = initial.ics.replace(/\r\n /g, "");
+assert.match(unfoldedInitialIcs, new RegExp(`URL:${calendarJobUrl}`));
+assert.match(unfoldedInitialIcs, new RegExp(`Open Driver Job: ${calendarJobUrl}`));
+assert.match(unfoldedInitialIcs, /Private driver link - do not share this calendar event\./);
+assert.equal(
+  initial.ics.split("\r\n").find((line) => line.startsWith("SUMMARY:"))?.includes("safe-calendar-token"),
+  false,
+  "Driver Job token must not appear in the calendar title.",
+);
+assert.doesNotMatch(initial.ics, /23:30|customer_price|billing|invoice|payment|paynow|payout/i);
+
+const unsafeShortcut = buildDriverJobCalendarDownload(initial.payload, "javascript:alert(1)");
+assert.equal(unsafeShortcut.ok, false, "Calendar helper must reject an unsafe Driver Job URL.");
 
 const amended = buildDriverJobCalendarDownload({
   ...initial.payload,
@@ -150,7 +171,7 @@ const amended = buildDriverJobCalendarDownload({
   pickupDateTime: "15 Jul 2026, 01:00",
   pickupTime: "0100hrs",
   scheduleUpdatedAt: "2026-07-13T02:56:44.000Z",
-});
+}, calendarJobUrl);
 
 assert.equal(amended.ok, true);
 assert.match(amended.ics, /DTSTART;TZID=Asia\/Singapore:20260715T010000/);
@@ -201,13 +222,29 @@ try {
   assert.match(response.headers.get("content-disposition") || "", /attachment; filename=/);
   assert.match(routeIcs, /BEGIN:VCALENDAR/);
   assert.match(routeIcs, /TRIGGER:-PT1H/);
-  assert.equal(routeIcs.includes(mockDriverJobTokens.validA), false);
+  const unfoldedRouteIcs = routeIcs.replace(/\r\n /g, "");
+  const expectedJobUrl = `http://localhost/driver-job/${mockDriverJobTokens.validA}`;
+  assert.equal(unfoldedRouteIcs.includes(`URL:${expectedJobUrl}`), true);
+  assert.equal(unfoldedRouteIcs.includes(`Open Driver Job: ${expectedJobUrl}`), true);
+  assert.match(unfoldedRouteIcs, /Private driver link - do not share this calendar event\./);
 
   const unauthorized = await GET(
     new Request("http://localhost/api/driver-job/not-a-valid-token/calendar"),
     context("not-a-valid-token"),
   );
   assert.equal(unauthorized.status, 401);
+
+  const revoked = await GET(
+    new Request(`http://localhost/api/driver-job/${mockDriverJobTokens.revoked}/calendar`),
+    context(mockDriverJobTokens.revoked),
+  );
+  assert.equal(revoked.status, 403);
+
+  const expired = await GET(
+    new Request(`http://localhost/api/driver-job/${mockDriverJobTokens.expired}/calendar`),
+    context(mockDriverJobTokens.expired),
+  );
+  assert.equal(expired.status, 410);
 } finally {
   if (originalMode === undefined) delete process.env.DRIVER_JOB_LINK_MODE;
   else process.env.DRIVER_JOB_LINK_MODE = originalMode;

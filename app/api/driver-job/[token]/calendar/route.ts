@@ -22,7 +22,7 @@ const blockedStatusByReason = {
   unauthorized: 401,
 } as const;
 
-export async function GET(_request: Request, context: DriverJobCalendarRouteContext) {
+export async function GET(request: Request, context: DriverJobCalendarRouteContext) {
   const { token } = await context.params;
   const payloadResult = isProductionDriverJobLinkMode()
     ? await getProductionDriverJobPayloadForToken(token)
@@ -52,7 +52,8 @@ export async function GET(_request: Request, context: DriverJobCalendarRouteCont
     );
   }
 
-  const calendar = buildDriverJobCalendarDownload(payloadResult.payload);
+  const driverJobUrl = new URL(`/driver-job/${encodeURIComponent(token)}`, request.url).toString();
+  const calendar = buildDriverJobCalendarDownload(payloadResult.payload, driverJobUrl);
 
   if (!calendar.ok) {
     return Response.json(

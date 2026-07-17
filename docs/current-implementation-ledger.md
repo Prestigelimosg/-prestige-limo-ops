@@ -1,13 +1,13 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-fa8f6a77 Merge PR #23: Simplify prepared job card actions
+a65fec27 Merge PR #24: Compact prepared job actions
 
 Latest pushed main/staging runtime checkpoint:
-fa8f6a77 Merge PR #23: Simplify prepared job card actions
+a65fec27 Merge PR #24: Compact prepared job actions
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-fa8f6a77 Merge PR #23: Simplify prepared job card actions
+a65fec27 Merge PR #24: Compact prepared job actions
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -24,6 +24,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Draft PR `#23` was verified at exact head `4a331fcf`, passed both Vercel checks, and after explicit owner approval was marked ready and merged with the expected-head lock and history-preserving merge method as `fa8f6a77 Merge PR #23: Simplify prepared job card actions`.
 - GitHub reported the exact `fa8f6a77` deployment completed. Signed-in owner Chrome displayed `Build fa8f6a77` at `https://app.prestigelimo.sg`; the real `TEST RETURN EXTRA STOP` prepared card showed one `Choose action` dropdown containing `Edit booking`, `Approve — notify customer`, and `Decline — notify customer`, a disabled `Continue` button, and `Choose one action. Nothing happens until you press Continue.` No option or action button was used, no live record or message was changed, browser console warnings/errors were zero, and the exact tested Production Dashboard remains visible in the owner's Chrome.
 - The owner then approved compacting only this established action control on desktop: the dropdown is capped at `190px` and the confirmation button at `140px`, with normal flex shrinking inside narrower desktop-grid columns, while both remain full-width below the existing medium-screen breakpoint. No label, choice, helper text, action, route, writer, notification, polling, or responsive overflow behavior changes.
+- Draft PR `#24` was verified at exact head `9cef8466`, passed both Vercel checks, and after explicit owner approval was marked ready and merged with the expected-head lock and history-preserving merge method as `a65fec27 Merge PR #24: Compact prepared job actions`.
+- GitHub reported the exact `a65fec27` deployment completed. Signed-in owner Chrome displayed `Build a65fec27` at `https://app.prestigelimo.sg`; the real `TEST RETURN EXTRA STOP` prepared card measured `190px` for the unchanged `Choose action` dropdown and `140px` for the disabled `Continue` button at a `1044px` viewport. The dropdown remained unselected, no option or action button was used, no live record or message was changed, browser console warnings/errors were zero, and the exact measured Production Dashboard remains visible in the owner's Chrome.
 
 ### Customer Driver Details Explicit Acknowledgement (2026-07-17)
 
@@ -8408,9 +8410,10 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The event UID is stable by booking reference and the sequence changes with pickup schedule/route changes. Calendar clients vary in how imported `.ics` updates are handled, so the Driver Job page remains the source of truth and instructs the driver to use the same `Add / Update Calendar` action after an amendment.
 - Visible staging evidence found that a schedule hash could decrease between imports, causing Mac Calendar to treat the amended file as older and ignore it. Calendar `SEQUENCE` now derives monotonically from the exact saved booking's safe `updated_at` revision; missing/legacy revision evidence falls back to zero without exposing internal fields.
 - The verified production Driver Job read now prefers the current saved booking's safe operational schedule for the exact link booking reference, with the link's existing safe snapshot retained as a fail-closed fallback when the current safe read is unavailable. Driver-entered acknowledgement and vehicle details plus driver status history remain on their established persistence lanes.
-- The raw Driver Job token is used only in the token-scoped request URL and is never embedded in the calendar file. Customer price, billing, invoice/payment, payout comparisons, PayNow, finance/internal/admin notes, parser/debug internals, secrets, raw provider data, and mock QA/dev archive content remain excluded.
+- Owner-approved driver workflow requires the original Driver Job Link for the first open, `Save & Acknowledge Job`, and `Add / Update Calendar`. The downloaded event then includes one standard calendar URL plus one visible `Open Driver Job` fallback link to the exact same token-scoped Driver Job page. Calendar clients that support event URLs may open it from the event/title; other clients can use the visible fallback link. Both entry points reuse the same status page, existing token validation, and existing status writer.
+- Embedding the existing revocable/expiring Driver Job token in the downloaded event is an explicit owner-approved security tradeoff. The page and calendar event label the shortcut private and tell the driver not to share the event. Revoked, expired, invalid, or mismatched links continue to fail closed when opened. The token is not placed in the event title or booking text, and no second token, route, writer, reporting lane, or direct calendar status action is added. Customer price, billing, invoice/payment, payout comparisons, PayNow, finance/internal/admin notes, parser/debug internals, secrets, raw provider data, and mock QA/dev archive content remain excluded.
 - The acknowledged calendar action uses the established public-page button plus same-origin fetch/blob download pattern instead of a raw anchor. The temporary blob URL is released on the next browser animation frame so Chrome can start the attachment first, without adding a timer, polling loop, scheduler, or background navigation. This keeps `/driver-job/[token]` inside the public client navigation boundary while preserving the same token-scoped calendar route, attachment filename, repeat amendment download, and visible success/failure feedback.
-- Visible staging inspection confirmed Chrome created the expected `.ics` attachment even though the extension-level download-event observer timed out. The established Driver Job browser guard now executes the acknowledged calendar action against the mock token route and verifies the single GET, attachment filename, calendar MIME type, blob URL creation/revocation, stable UID, exact Singapore schedule, one-hour alarm, visible success feedback, and raw-token/privacy exclusions.
+- Visible staging inspection confirmed Chrome created the expected `.ics` attachment even though the extension-level download-event observer timed out. The established Driver Job browser guard now executes the acknowledged calendar action against the mock token route and verifies the single GET, attachment filename, calendar MIME type, blob URL creation/revocation, stable UID, exact Singapore schedule, one-hour alarm, exact same-job URL and visible fallback shortcut, private-event warning, visible success feedback, and privacy exclusions.
 - No Google Calendar provider write, customer calendar, external send, Email, WhatsApp, SMS, Telegram, push notification, scheduler, migration, environment change, payment, invoice, payout, GPS/live-location write, OTS/photo change, CRM write, parser change, or deployment is introduced.
 - Focused lock: `scripts/test-driver-job-calendar-download-guard.mjs`, alongside the existing Driver Job page, status-persistence, public-route privacy, and admin calendar guards.
 

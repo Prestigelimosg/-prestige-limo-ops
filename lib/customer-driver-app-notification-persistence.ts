@@ -123,6 +123,7 @@ export type CustomerDriverQuickReplyTemplateKey =
   | "customer_running_late"
   | "customer_wait_pickup"
   | "customer_cannot_find_car"
+  | "customer_driver_details_acknowledged"
   | "driver_on_the_way"
   | "driver_arrived"
   | "driver_meet_pickup"
@@ -327,6 +328,10 @@ const customerToDriverQuickReplyTemplates = {
   customer_running_late: "I am running 5 minutes late.",
   customer_wait_pickup: "Please wait at pickup point.",
 } as const;
+const customerDriverDetailsAcknowledgementTemplate = {
+  key: "customer_driver_details_acknowledged",
+  message: "Driver details acknowledged.",
+} as const;
 const driverToCustomerQuickReplyTemplates = {
   driver_arrived: "I have arrived.",
   driver_meet_pickup: "Please meet me at pickup point.",
@@ -336,6 +341,10 @@ const driverToCustomerQuickReplyTemplates = {
 const customerToDriverQuickReplyTemplateKeys = new Set<string>(
   Object.keys(customerToDriverQuickReplyTemplates),
 );
+const customerQuickReplyTemplateKeys = new Set<string>([
+  ...customerToDriverQuickReplyTemplateKeys,
+  customerDriverDetailsAcknowledgementTemplate.key,
+]);
 const driverToCustomerQuickReplyTemplateKeys = new Set<string>(
   Object.keys(driverToCustomerQuickReplyTemplates),
 );
@@ -2099,7 +2108,7 @@ function parseCustomerDriverQuickReplyPayload(
 
   if (
     direction === "customer_to_driver" &&
-    (!bookingReference || !customerToDriverQuickReplyTemplateKeys.has(templateKey))
+    (!bookingReference || !customerQuickReplyTemplateKeys.has(templateKey))
   ) {
     return {
       error: quickReplyMalformedError,
@@ -2121,9 +2130,11 @@ function parseCustomerDriverQuickReplyPayload(
 
   const safeMessage =
     direction === "customer_to_driver"
-      ? customerToDriverQuickReplyTemplates[
-          templateKey as keyof typeof customerToDriverQuickReplyTemplates
-        ]
+      ? templateKey === customerDriverDetailsAcknowledgementTemplate.key
+        ? customerDriverDetailsAcknowledgementTemplate.message
+        : customerToDriverQuickReplyTemplates[
+            templateKey as keyof typeof customerToDriverQuickReplyTemplates
+          ]
       : driverToCustomerQuickReplyTemplates[
           templateKey as keyof typeof driverToCustomerQuickReplyTemplates
         ];
@@ -2479,6 +2490,95 @@ function quickReplyInput(
   };
 }
 
+function customerDriverDetailsAcknowledgementInput(
+  bookingReference: string,
+): CustomerDriverAppNotificationInput {
+  return {
+    booking_reference: bookingReference,
+    delivery_surface: "customer_app",
+    driver_job_link_id: null,
+    event_key: `${bookingReference}:customer-in-app:driver-details-acknowledged`,
+    notification_status: "queued",
+    notification_type: "trip_update",
+    priority: "normal",
+    safe_context: {
+      direction: "customer_to_admin",
+      template_key: customerDriverDetailsAcknowledgementTemplate.key,
+    },
+    safe_message: "Driver details acknowledged.",
+    safe_title: "Driver details acknowledged",
+    workflow_area: "customer_driver_details_acknowledgements",
+  };
+}
+
+function existingCustomerDriverDetailsAcknowledgement(
+  records: CustomerDriverAppNotificationRecord[],
+) {
+  return (
+    records.find(
+      (record) =>
+        record.actor_role === "customer" &&
+        record.delivery_surface === "customer_app" &&
+        record.safe_title === "Driver details acknowledged" &&
+        record.safe_message === "Driver details acknowledged." &&
+        record.workflow_area === "customer_driver_details_acknowledgements",
+    ) || null
+  );
+}
+
+async function assertCustomerDriverDetailsReadyForAcknowledgement(
+  client: NotificationClient,
+  bookingReference: string,
+): Promise<
+  AdminBookingResult<{
+    existing_acknowledgement: CustomerDriverAppNotificationSafeRecord | null;
+  }>
+> {
+  const { data, error } = await client
+    .from(notificationTable)
+    .select(notificationSelect)
+    .eq("delivery_surface", "customer_app")
+    .eq("booking_reference", bookingReference)
+    .order("created_at", { ascending: false })
+    .limit(maxReadRows);
+
+  if (error) {
+    return safeAdapterFailure(quickReplyCreateError, 500, error);
+  }
+
+  const records = asArray(data)
+    .map(normalizeRecord)
+    .filter((record) => record.booking_reference === bookingReference);
+  const ready = records.some(
+    (record) =>
+      (record.actor_role === "admin" || record.actor_role === "dispatcher") &&
+      record.delivery_surface === "customer_app" &&
+      record.safe_title === "Driver details ready" &&
+      record.safe_message ===
+        "Your Prestige Limo driver details are ready in your customer app." &&
+      record.workflow_area === "customer_app_updates",
+  );
+
+  if (!ready) {
+    return {
+      error: "Driver details are not ready for acknowledgement.",
+      ok: false,
+      status: 409,
+    };
+  }
+
+  const existingAcknowledgement = existingCustomerDriverDetailsAcknowledgement(records);
+
+  return {
+    data: {
+      existing_acknowledgement: existingAcknowledgement
+        ? toSafeRecord(existingAcknowledgement)
+        : null,
+    },
+    ok: true,
+  };
+}
+
 function driverStatusCustomerInAppInput(
   status: DriverStatusCustomerInAppStatus,
   bookingReference: string,
@@ -2624,15 +2724,46 @@ export async function sendCustomerQuickReplyToDriver(
     return customerDriverQuickReplyError(statusGate.error, statusGate.status);
   }
 
+  const isDriverDetailsAcknowledgement =
+    parsed.data.template_key === customerDriverDetailsAcknowledgementTemplate.key;
+  const acknowledgementGate = isDriverDetailsAcknowledgement
+    ? await assertCustomerDriverDetailsReadyForAcknowledgement(
+        clientResult.data,
+        boundary.data.booking_reference,
+      )
+    : null;
+
+  if (acknowledgementGate && !acknowledgementGate.ok) {
+    return customerDriverQuickReplyError(
+      acknowledgementGate.error,
+      acknowledgementGate.status,
+    );
+  }
+
+  if (acknowledgementGate?.ok && acknowledgementGate.data.existing_acknowledgement) {
+    return customerDriverQuickReplyResult(200, {
+      delivery_surface: "customer_app",
+      direction: "customer_to_admin",
+      external_send: false,
+      no_provider_send: true,
+      notification: acknowledgementGate.data.existing_acknowledgement,
+      ok: true,
+      provider_send: false,
+      version: customerDriverQuickRepliesRuntimeVersion,
+    });
+  }
+
   const created = await insertQuickReplyNotification(
     clientResult.data,
-    quickReplyInput(
-      "customer_to_driver",
-      parsed.data.template_key,
-      parsed.data.safe_message,
-      boundary.data.booking_reference,
-      null,
-    ),
+    isDriverDetailsAcknowledgement
+      ? customerDriverDetailsAcknowledgementInput(boundary.data.booking_reference)
+      : quickReplyInput(
+          "customer_to_driver",
+          parsed.data.template_key,
+          parsed.data.safe_message,
+          boundary.data.booking_reference,
+          null,
+        ),
     {
       actor_label: "verified_customer_account",
       actor_role: "customer",
@@ -2645,8 +2776,8 @@ export async function sendCustomerQuickReplyToDriver(
   }
 
   return customerDriverQuickReplyResult(200, {
-    delivery_surface: "driver_app",
-    direction: "customer_to_driver",
+    delivery_surface: isDriverDetailsAcknowledgement ? "customer_app" : "driver_app",
+    direction: isDriverDetailsAcknowledgement ? "customer_to_admin" : "customer_to_driver",
     external_send: false,
     no_provider_send: true,
     notification: created.data,

@@ -1,16 +1,26 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-cef622ce Show driver acknowledgement indicators
+88db6c82 Show customer message queue indicator
 
 Latest pushed main/staging runtime checkpoint:
-9edc88a3 Merge PR #20: Show driver acknowledgement indicators
+88db6c82 Show customer message queue indicator
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-9edc88a3 Merge PR #20: Show driver acknowledgement indicators
+8f0090be Merge PR #21: Add active job customer messaging
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Customer Driver Details Explicit Acknowledgement (2026-07-17)
+
+- The owner approved one explicit customer acknowledgement for the existing fixed-template Dispatch `Customer Copy` → `Send In-App` driver-details workflow. Merely opening My Bookings, expanding a booking, or viewing driver details never counts as acknowledgement and performs no write.
+- The existing admin send continues creating the exact booking-scoped `customer_app_updates` / `Driver details ready` outbox record. The existing Bookings card now shows a compact blue `Detail sent [SGT time]` pill beside `Cal saved`; after an explicit customer acknowledgement it shows a compact green `Acknowledged [SGT time]` pill in the same position.
+- My Bookings shows `Acknowledge driver details` inside the existing Driver Details card only when the exact booking's authenticated customer read contains the prior `Driver details ready` record. The existing bounded trip-update read uses its established safe maximum of 10 rows so this operational update is less likely to be displaced by newer messages. The action reuses the existing `POST /api/customer-driver-quick-replies` route, customer session/account/booking scope, controlled runtime gates, fixed-template validation, and existing notification outbox.
+- The server independently requires the prior exact-booking admin/dispatcher `Driver details ready` record before accepting acknowledgement. The first tap stores one `customer_app` / `customer_driver_details_acknowledgements` record with fixed safe text; repeated taps return the existing acknowledgement and do not create duplicates.
+- The acknowledgement is `customer_to_admin` and `customer_app` only. It is never written to `driver_app`, so the driver cannot see it. It contains no free text, driver-link token, provider send, Email, WhatsApp, SMS, Telegram, price, billing, invoice/payment, payout/PayNow, internal note, parser/debug content, secret, or other-booking data.
+- Bookings reuses the existing paginated admin notification GET when the Bookings surface opens or its loaded booking-reference set changes. It adds no route, API writer, table, panel, composer, provider send, polling timer, background retry, or read-receipt assumption. A failed read is shown explicitly and produces no guessed sent/acknowledged pill.
+- Focused protection: `scripts/test-customer-driver-details-acknowledgement-guard.mjs` plus the existing customer quick-reply, customer notification API, public surface, Customer Copy, and booking browser guards. Runtime acceptance remains required on an exact deployed build in the owner's Chrome with all live mutation methods blocked; no customer acknowledgement or notification write is authorized merely for verification.
 
 ### Active Assigned Jobs Customer Message Queue Indicator (2026-07-17)
 
@@ -19,6 +29,9 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - `Queued` means the existing admin message was saved to the established `customer_app` notification outbox. It does not claim that the customer received, opened, read, dismissed, or acknowledged the message; the current customer notification route exposes no customer read-receipt write.
 - The indicator derives only from the existing `admin_customer_job_messages` plus `customer_app` history already refreshed for every visible Active Assigned Job. It adds no route, API call, table, writer, message format, provider send, panel, composer, timer, or polling path. The acknowledgement pill, waiting count, driver report, OTS proof, message composer/history, and Dispatch fixed-template Customer Copy action remain unchanged.
 - Focused protection is in the existing `scripts/test-today-jobs-message-history-guard.mjs` alongside the established Dashboard/message/API guards. Runtime acceptance must use the exact deployed preview build in the owner’s Chrome with message POST blocked; no live message or record mutation is authorized for verification.
+- Draft PR `#21` was verified at exact head `88db6c82`, passed both Vercel checks, and after explicit owner approval was marked ready and merged with the expected-head lock and history-preserving merge method as `8f0090be Merge PR #21: Add active job customer messaging`.
+- GitHub reported the exact `8f0090be` deployment completed in the Production environment. Signed-in owner Chrome displayed `Build 8f0090be` at `https://app.prestigelimo.sg`; one in-memory assigned-booking read fixture showed `Customer msg queued 09:41`, no raw `admin_review...` pill, the unchanged `Waiting for driver` acknowledgement pill, separate `Admin → Customer` and `Admin → Driver` history, one textarea, one send button, `Send to Customer`, and `Driver cannot see this message`.
+- The Production acceptance harness blocked every mutation method before the fixture was loaded. Blocked mutation count, customer-message POST count, and browser console error count were all zero. The real Production booking-request queue was visible but untouched; no live booking, message, notification, customer, driver, link, acknowledgement, Calendar, map, invoice, payment, payout, PayNow, provider, environment, or Supabase record/configuration was changed. The exact tested Production Dashboard remains visible in owner Chrome with the temporary in-memory fixture and mutation block installed in that tab.
 
 ### Active Assigned Jobs Admin-to-Customer Messages (2026-07-17)
 

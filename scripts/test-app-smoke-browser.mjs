@@ -162,15 +162,23 @@ const customerPortalSavedBookingsSmokePayload = {
     page_size: 25,
   },
   saved_bookings: [
-    customerPortalSmokeSavedBooking({
-      bookingReference: "booking-001",
-      day: 13,
-      dropoffLocation: "Raffles Singapore",
-      passengerName: "Alicia Tan",
-      pickupLocation: "Changi Airport T3",
-      serviceType: "Airport Arrival",
-      status: "confirmed",
-    }),
+    {
+      ...customerPortalSmokeSavedBooking({
+        bookingReference: "booking-001",
+        day: 13,
+        dropoffLocation: "Raffles Singapore",
+        passengerName: "Alicia Tan",
+        pickupLocation: "Changi Airport T3",
+        serviceType: "Airport Arrival",
+        status: "confirmed",
+      }),
+      customer_driver_details: {
+        car_plate: "SMA1234A",
+        car_type: "Mercedes V-Class",
+        driver_contact: "90000001",
+        driver_name: "Simon",
+      },
+    },
     customerPortalSmokeSavedBooking({
       bookingReference: "booking-002",
       day: 14,
@@ -927,10 +935,14 @@ async function runChromeTest() {
         const savedBookingsPayload = ${JSON.stringify(customerPortalSavedBookingsSmokePayload)};
         const savedBookingsPattern = /\\/api\\/customer-saved-bookings(?:[/?#]|$)/i;
         const changeRequestPattern = /\\/api\\/customer-booking-change-requests(?:[/?#]|$)/i;
+        const tripUpdatesPattern = /\\/api\\/customer-app-notifications(?:[/?#]|$)/i;
+        const quickRepliesPattern = /\\/api\\/customer-driver-quick-replies(?:[/?#]|$)/i;
         const isCustomerPortalPage = () => window.location.pathname === "/my-bookings";
         const originalFetch = window.fetch.bind(window);
 
         window.__customerPortalChangeRequestCalls = [];
+        window.__customerPortalDriverDetailsAcknowledged = false;
+        window.__customerPortalDriverDetailsAcknowledgementCalls = [];
 
         window.fetch = async (input, init = {}) => {
           const target = input?.url || input;
@@ -979,6 +991,122 @@ async function runChromeTest() {
                   status: 200,
                 },
               ),
+            );
+          }
+
+          if (isCustomerPortalPage() && tripUpdatesPattern.test(url)) {
+            const notifications = [
+              ...(window.__customerPortalDriverDetailsAcknowledged
+                ? [
+                    {
+                      booking_reference: "booking-001",
+                      created_at: "2026-07-17T01:02:00.000Z",
+                      delivery_surface: "customer_app",
+                      notification_status: "queued",
+                      notification_type: "trip_update",
+                      priority: "normal",
+                      safe_context: {
+                        direction: "customer_to_admin",
+                        template_key: "customer_driver_details_acknowledged",
+                      },
+                      safe_message: "Driver details acknowledged.",
+                      safe_title: "Driver details acknowledged",
+                      updated_at: "2026-07-17T01:02:00.000Z",
+                      workflow_area: "customer_driver_details_acknowledgements",
+                    },
+                  ]
+                : []),
+              {
+                booking_reference: "booking-001",
+                created_at: "2026-07-17T01:01:00.000Z",
+                delivery_surface: "customer_app",
+                notification_status: "queued",
+                notification_type: "trip_update",
+                priority: "normal",
+                safe_context: {
+                  action: "admin_selected",
+                  message_template: "driver_details_ready",
+                  provider_send: false,
+                  source: "customer_copy_compact_row",
+                },
+                safe_message: "Your Prestige Limo driver details are ready in your customer app.",
+                safe_title: "Driver details ready",
+                updated_at: "2026-07-17T01:01:00.000Z",
+                workflow_area: "customer_app_updates",
+              },
+            ];
+
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  delivery_surface: "customer_app",
+                  external_send: false,
+                  notification_count: notifications.length,
+                  notifications,
+                  ok: true,
+                  provider_send: false,
+                  version: "browser-customer-driver-details-acknowledgement-read-mock",
+                }),
+                { headers: { "Content-Type": "application/json" }, status: 200 },
+              ),
+            );
+          }
+
+          if (isCustomerPortalPage() && quickRepliesPattern.test(url)) {
+            let body = {};
+
+            try {
+              body = JSON.parse(init?.body || input?.body || "{}");
+            } catch {
+              body = {};
+            }
+
+            window.__customerPortalDriverDetailsAcknowledgementCalls.push({ body, method, url });
+
+            if (
+              method === "POST" &&
+              body.booking_reference === "booking-001" &&
+              body.template_key === "customer_driver_details_acknowledged"
+            ) {
+              window.__customerPortalDriverDetailsAcknowledged = true;
+
+              return Promise.resolve(
+                new Response(
+                  JSON.stringify({
+                    delivery_surface: "customer_app",
+                    direction: "customer_to_admin",
+                    external_send: false,
+                    no_provider_send: true,
+                    notification: {
+                      booking_reference: "booking-001",
+                      created_at: "2026-07-17T01:02:00.000Z",
+                      delivery_surface: "customer_app",
+                      notification_status: "queued",
+                      notification_type: "trip_update",
+                      priority: "normal",
+                      safe_context: {
+                        direction: "customer_to_admin",
+                        template_key: "customer_driver_details_acknowledged",
+                      },
+                      safe_message: "Driver details acknowledged.",
+                      safe_title: "Driver details acknowledged",
+                      updated_at: "2026-07-17T01:02:00.000Z",
+                      workflow_area: "customer_driver_details_acknowledgements",
+                    },
+                    ok: true,
+                    provider_send: false,
+                    version: "browser-customer-driver-details-acknowledgement-write-mock",
+                  }),
+                  { headers: { "Content-Type": "application/json" }, status: 200 },
+                ),
+              );
+            }
+
+            return Promise.resolve(
+              new Response(JSON.stringify({ error: "Quick reply blocked by browser guard.", ok: false }), {
+                headers: { "Content-Type": "application/json" },
+                status: 400,
+              }),
             );
           }
 
@@ -35554,6 +35682,81 @@ async function runChromeTest() {
       ]) {
         assert.equal(detailState.detailText.includes(expectedDetail), true, `Expected /my-bookings detail: ${expectedDetail}`);
       }
+
+      const driverDetailsAcknowledgementReadyState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const card = document.querySelector(
+              '[data-customer-portal-driver-details-card="saved-booking-001"]',
+            );
+            const button = document.querySelector(
+              '[data-customer-driver-details-acknowledgement="saved-booking-001"]',
+            );
+
+            return card && button?.textContent.trim() === "Acknowledge driver details"
+              ? {
+                  buttonText: button.textContent.trim(),
+                  acknowledgementCallCount: (
+                    window.__customerPortalDriverDetailsAcknowledgementCalls || []
+                  ).length,
+                  cardText: card.textContent.replace(/\s+/g, " ").trim(),
+                  driverReplyCount: document.querySelectorAll(
+                    '[data-customer-driver-quick-reply]',
+                  ).length,
+                }
+              : false;
+          })()`),
+        10000,
+        "customer driver-details acknowledgement button",
+      );
+      assert.match(driverDetailsAcknowledgementReadyState.cardText, /Simon/);
+      assert.equal(driverDetailsAcknowledgementReadyState.buttonText, "Acknowledge driver details");
+      assert.equal(
+        driverDetailsAcknowledgementReadyState.acknowledgementCallCount,
+        0,
+        "Expected loading and viewing driver details not to acknowledge them",
+      );
+      assert.equal(
+        driverDetailsAcknowledgementReadyState.driverReplyCount,
+        4,
+        "Expected the separate customer-to-driver quick replies to remain unchanged",
+      );
+
+      const acknowledgementClicked = await evaluate(`(() => {
+        const button = document.querySelector(
+          '[data-customer-driver-details-acknowledgement="saved-booking-001"]',
+        );
+        if (!button || button.disabled) return false;
+        button.click();
+        return true;
+      })()`);
+      assert.equal(acknowledgementClicked, true, "Expected explicit customer acknowledgement click");
+
+      const driverDetailsAcknowledgedState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const button = document.querySelector(
+              '[data-customer-driver-details-acknowledgement="saved-booking-001"]',
+            );
+            const calls = window.__customerPortalDriverDetailsAcknowledgementCalls || [];
+            return button?.textContent.trim() === "Acknowledged 09:02" && calls.length === 1
+              ? {
+                  buttonDisabled: button.disabled,
+                  buttonText: button.textContent.trim(),
+                  calls,
+                }
+              : false;
+          })()`),
+        10000,
+        "customer driver-details acknowledged state",
+      );
+      assert.equal(driverDetailsAcknowledgedState.buttonDisabled, true);
+      assert.deepEqual(driverDetailsAcknowledgedState.calls[0].body, {
+        booking_reference: "booking-001",
+        template_key: "customer_driver_details_acknowledged",
+      });
+      assert.equal(driverDetailsAcknowledgedState.calls[0].method, "POST");
+      await evaluate(`window.__customerPortalIntegrationCalls = []`);
 
       await clickCustomerPortalRequestEdit("saved-booking-001");
       const changeState = await waitForCondition(

@@ -6331,6 +6331,8 @@ async function runChromeTest() {
       window.__prestigeDriverJobStatusRequests = [];
       window.__prestigeDriverJobStatuses = {};
       window.__prestigeAdminAppNotificationRequests = [];
+      window.__prestigeCustomerDriverAppNotificationRequests = [];
+      window.__prestigeCustomerDriverAppNotifications = [];
       window.__prestigeAdminAutomationRuntimeEnabled = false;
       window.__prestigeAdminAutomationRuntimeRequests = [];
       window.__prestigeAdminBookingCalendarEventRequests = [];
@@ -6708,6 +6710,57 @@ async function runChromeTest() {
             status: 405,
             headers: { "content-type": "application/json" },
           });
+        }
+
+        if (String(target).includes("/api/admin-customer-driver-app-notifications")) {
+          const url = new URL(String(target), window.location.origin);
+          window.__prestigeCustomerDriverAppNotificationRequests.push({
+            headers,
+            method,
+            search: url.search,
+            url: String(target),
+          });
+
+          if (method === "GET") {
+            const deliverySurface = url.searchParams.get("delivery_surface") || "";
+            const limit = Math.max(1, Number(url.searchParams.get("limit") || 25));
+            const page = Math.max(1, Number(url.searchParams.get("page") || 1));
+            const filteredNotifications = (
+              window.__prestigeCustomerDriverAppNotifications || []
+            ).filter(
+              (notification) =>
+                !deliverySurface || notification.delivery_surface === deliverySurface,
+            );
+            const pageCount = filteredNotifications.length
+              ? Math.ceil(filteredNotifications.length / limit)
+              : 0;
+            const notifications = filteredNotifications.slice(
+              (page - 1) * limit,
+              page * limit,
+            );
+
+            return new Response(
+              JSON.stringify({
+                notifications,
+                ok: true,
+                pagination: {
+                  has_next_page: pageCount > 0 && page < pageCount,
+                  has_previous_page: pageCount > 0 && page > 1,
+                  page,
+                  page_count: pageCount,
+                  page_size: limit,
+                  total_notification_count: filteredNotifications.length,
+                },
+                version: "browser-customer-driver-app-notification-read-mock",
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+
+          return new Response(
+            JSON.stringify({ ok: false, error: "Customer/driver notification write blocked by browser guard." }),
+            { status: 405, headers: { "content-type": "application/json" } },
+          );
         }
 
         if (String(target).includes("/api/admin-app-notifications")) {
@@ -8061,6 +8114,26 @@ async function runChromeTest() {
           ),
         ),
       ];
+      window.__prestigeCustomerDriverAppNotifications = [
+        {
+          actor_role: "customer",
+          booking_reference: fixture.booking_reference,
+          created_at: "2026-07-17T01:02:00.000Z",
+          delivery_surface: "customer_app",
+          id: "browser-driver-details-acknowledged",
+          safe_message: "Driver details acknowledged.",
+          workflow_area: "customer_driver_details_acknowledgements",
+        },
+        {
+          actor_role: "admin",
+          booking_reference: conflictFixture.booking_reference,
+          created_at: "2026-07-17T01:01:00.000Z",
+          delivery_surface: "customer_app",
+          id: "browser-driver-details-sent",
+          safe_message: "Your Prestige Limo driver details are ready in your customer app.",
+          workflow_area: "customer_app_updates",
+        },
+      ];
       window.__prestigeWorkflowStatusRequests = [];
     })()`);
     const refreshedCodexPreparedQueue = await evaluate(`(() => {
@@ -8120,8 +8193,16 @@ async function runChromeTest() {
       () =>
         evaluate(`(() => {
           const reference = "${codexCalendarConflictExistingBookingFixture.booking_reference}";
+          const acknowledgedReference = "${codexPreparedCustomerRequestFixture.booking_reference}";
           const card = document.querySelector("[data-recent-operational-card='" + reference + "']");
           const calendarStatus = card?.querySelector("[data-bookings-calendar-status-value='cal_saved']");
+          const detailSentStatus = card?.querySelector("[data-bookings-driver-details-status-value='sent']");
+          const acknowledgedCard = document.querySelector(
+            "[data-recent-operational-card='" + acknowledgedReference + "']",
+          );
+          const acknowledgedStatus = acknowledgedCard?.querySelector(
+            "[data-bookings-driver-details-status-value='acknowledged']",
+          );
           const uppercaseValues = [
             ...(card?.querySelectorAll("[data-admin-operational-uppercase-value]") || []),
           ];
@@ -8131,12 +8212,17 @@ async function runChromeTest() {
             ),
           ];
 
-          return card && calendarStatus && uppercaseValues.length > 0 && visibleBookingCards.length >= 2
+          return card && calendarStatus && detailSentStatus && acknowledgedStatus &&
+            uppercaseValues.length > 0 && visibleBookingCards.length >= 2
             ? {
                 calendarStatus: {
                   tagName: calendarStatus.tagName,
                   text: calendarStatus.textContent.trim(),
                 },
+                detailSentStatus: detailSentStatus.textContent.trim(),
+                acknowledgedStatus: acknowledgedStatus.textContent.trim(),
+                customerDriverNotificationRequests:
+                  window.__prestigeCustomerDriverAppNotificationRequests || [],
                 alternatingCards: visibleBookingCards.slice(0, 2).map((bookingCard) => ({
                   colour: bookingCard.getAttribute("data-bookings-alternate-colour") || "",
                   backgroundColor: getComputedStyle(bookingCard).backgroundColor,
@@ -8155,6 +8241,23 @@ async function runChromeTest() {
       bookingsCalendarStatusRuntimeState.calendarStatus,
       { tagName: "SPAN", text: "Cal saved" },
       "Expected the configured Google Calendar status to render as a non-button Bookings pill",
+    );
+    assert.equal(
+      bookingsCalendarStatusRuntimeState.detailSentStatus,
+      "Detail sent 09:01",
+      "Expected the exact sent booking to show its compact SGT driver-details status",
+    );
+    assert.equal(
+      bookingsCalendarStatusRuntimeState.acknowledgedStatus,
+      "Acknowledged 09:02",
+      "Expected the exact acknowledged booking to replace sent status with its compact SGT acknowledgement",
+    );
+    assert.equal(
+      bookingsCalendarStatusRuntimeState.customerDriverNotificationRequests.some(
+        (request) => request.method !== "GET",
+      ),
+      false,
+      "Expected Bookings status verification to perform no customer/driver notification write",
     );
     assert.deepEqual(
       bookingsCalendarStatusRuntimeState.alternatingCards.map(({ colour }) => colour),

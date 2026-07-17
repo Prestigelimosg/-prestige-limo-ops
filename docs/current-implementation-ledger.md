@@ -1,13 +1,13 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-a65fec27 Merge PR #24: Compact prepared job actions
+52b3cc08 Merge PR #26: Add Driver Companion and repair active jobs map
 
-Latest pushed main/staging runtime checkpoint:
-a65fec27 Merge PR #24: Compact prepared job actions
+Latest pushed Production main runtime checkpoint:
+52b3cc08 Merge PR #26: Add Driver Companion and repair active jobs map
 
-Latest remote main/staging deployment checkpoint verified before this docs note:
-a65fec27 Merge PR #24: Compact prepared job actions
+Latest remote Production deployment checkpoint verified before this docs note:
+52b3cc08 Merge PR #26: Add Driver Companion and repair active jobs map
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -19,7 +19,10 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The established `AdminActiveJobsBrowserMap` now mounts its single Google map host directly inside the existing relative map slot with absolute full-slot positioning. Collapsed, expanded, and scrolled layouts therefore inherit the slot's actual size and position instead of copying viewport coordinates into a body-level fixed layer. The previous scroll/resize portal-position synchronisation is removed.
 - The existing Google Maps JavaScript renderer, same-window road-tile fallback, guarded browser-config route, marker rows, per-driver `Open Map` fallback, driver GPS writer, admin runtime controls, and polling cadence remain unchanged. No second map, route, API, table, writer, timer, provider call, customer lane, driver lane, or message lane is added.
 - The root Next.js TypeScript project now excludes the separate `driver-companion/` Expo workspace, which retains its own Expo TypeScript configuration and `typecheck` command. This prevents React Native global types from changing the existing web app's `FormData` contract during `next build`; it does not change the OTS route, Companion runtime, web runtime, or either project's source inclusion boundary.
-- The focused browser-map guard first failed on the old body-level fixed host, then passed after requiring slot ownership and rejecting the fixed portal/scroll-position path. Web and Companion TypeScript checks, the full Next.js production build, lint with existing warnings only, the 326-second booking UI browser guard with zero errors, and focused active-jobs, runtime-control, share/stop, compact-dashboard, dashboard-follow-up, and Companion guards passed. Deployed owner-Chrome visual acceptance remains required before this repair can be described as Production-verified.
+- The focused browser-map guard first failed on the old body-level fixed host, then passed after requiring slot ownership and rejecting the fixed portal/scroll-position path. Web and Companion TypeScript checks, the full Next.js production build, lint with existing warnings only, the 326-second booking UI browser guard with zero errors, and focused active-jobs, runtime-control, share/stop, compact-dashboard, dashboard-follow-up, and Companion guards passed. Deployed owner-Chrome visual acceptance was still required at that code checkpoint and is recorded below.
+- Draft PR `#26` was verified mergeable at exact head `64de6a70`, passed both Vercel checks, and after explicit owner approval was marked ready and merged into Production `main` with the expected-head lock and history-preserving merge method as `52b3cc08 Merge PR #26: Add Driver Companion and repair active jobs map`. GitHub then reported the exact merge deployment completed successfully.
+- Signed-in owner Chrome displayed exact Production build `52b3cc08`. During the separately approved GPS test for assigned booking `CUST-20260716035942-O7Z73G-OUT`, the compact embedded Google road map visibly painted inside its existing slot with the red `Me · CUST-3G-OUT` current marker at 18:35 SGT. Expanding and scrolling preserved the visible map and marker, reproducing the formerly blank layout in its repaired state. Chrome reported zero page errors and only Google's existing legacy Marker deprecation warning.
+- The owner stopped Driver Companion tracking after proof. The exact `CUST-3G-OUT` marker disappeared automatically, the admin map showed zero drivers, the temporary Live Dispatch Map runtime was closed, and the map was returned to its compact `Off` state. No stale test marker, message, acknowledgement, booking status, booking details, Calendar record, customer/driver notification, provider send, or unrelated driver pin was created or modified; the exact closed Production Dashboard remains visible in owner Chrome.
 
 ### Human Admin Prepared-Booking Action Dropdown (2026-07-17)
 

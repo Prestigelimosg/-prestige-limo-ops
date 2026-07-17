@@ -2347,6 +2347,7 @@ type AdminCustomerRequestReviewDecisionKey =
   | "needs-review"
   | "approve-internally"
   | "decline-internally";
+type AdminPreparedJobCardAction = "" | "edit" | "approve" | "decline";
 type AdminCustomerRequestStatusFilter =
   | "all"
   | "needs-review"
@@ -13203,13 +13204,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     useState<AdminBookingWorkflowStatusRecord | null>(null);
   const [adminBookingWorkflowStatusAction, setAdminBookingWorkflowStatusAction] =
     useState<AdminBookingWorkflowStatusAction | null>(null);
-  const [codexJobCardInstructions, setCodexJobCardInstructions] =
-    useState<Record<string, string>>({});
   const [codexJobCardReviewStatuses, setCodexJobCardReviewStatuses] =
     useState<Record<string, AdminBookingWorkflowStatusRecord | null>>({});
-  const [codexJobCardReviewMessages, setCodexJobCardReviewMessages] =
-    useState<Record<string, Message>>({});
-  const [codexJobCardReviewAction, setCodexJobCardReviewAction] = useState<string | null>(null);
+  const [adminPreparedJobCardActions, setAdminPreparedJobCardActions] =
+    useState<Record<string, AdminPreparedJobCardAction>>({});
   const [completedBookingCloseoutRecord, setCompletedBookingCloseoutRecord] =
     useState<AdminCompletedBookingCloseoutRecord | null>(null);
   const [completedBookingCloseoutAction, setCompletedBookingCloseoutAction] =
@@ -17218,14 +17216,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
     void Promise.all(
       bookingReferences.map(async (bookingReference) => {
-        setCodexJobCardReviewMessages((current) => ({
-          ...current,
-          [bookingReference]: {
-            tone: "info",
-            text: "Loading saved Codex instruction...",
-          },
-        }));
-
         try {
           const loadedStatus = await loadAdminBookingWorkflowStatusRecord(
             bookingReference,
@@ -17236,33 +17226,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             return;
           }
 
-          const savedInstruction = clean(loadedStatus?.safe_status_context?.safe_note);
           setCodexJobCardReviewStatuses((current) => ({
             ...current,
             [bookingReference]: loadedStatus,
           }));
-          if (savedInstruction) {
-            setCodexJobCardInstructions((current) =>
-              clean(current[bookingReference])
-                ? current
-                : {
-                    ...current,
-                    [bookingReference]: savedInstruction,
-                  },
-            );
-          }
-          setCodexJobCardReviewMessages((current) => ({
-            ...current,
-            [bookingReference]: {
-              tone: loadedStatus ? "success" : "info",
-              text: loadedStatus
-                ? `Saved internal Codex instruction loaded: ${adminBookingWorkflowStatusDisplayLabel(
-                    loadedStatus,
-                  )}.`
-                : "No instruction has been returned to Codex for this card.",
-            },
-          }));
-        } catch (error) {
+        } catch {
           if (cancelled) {
             return;
           }
@@ -17270,13 +17238,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           setCodexJobCardReviewStatuses((current) => ({
             ...current,
             [bookingReference]: null,
-          }));
-          setCodexJobCardReviewMessages((current) => ({
-            ...current,
-            [bookingReference]: {
-              tone: "error",
-              text: adminBookingWorkflowStatusFailureMessage(error, "Codex job-card review"),
-            },
           }));
         }
       }),
@@ -22375,80 +22336,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     }
   }
 
-  async function returnPreparedJobCardToCodex(bookingReference: string) {
-    const targetBookingReference = cleanReferenceText(bookingReference);
-    const instruction = clean(codexJobCardInstructions[targetBookingReference]);
-
-    if (!targetBookingReference || !instruction) {
-      setCodexJobCardReviewMessages((current) => ({
-        ...current,
-        [targetBookingReference || bookingReference]: {
-          tone: "error",
-          text: "Enter a short internal instruction before returning this card to Codex.",
-        },
-      }));
-      return;
-    }
-
-    setCodexJobCardReviewAction(targetBookingReference);
-    setCodexJobCardReviewMessages((current) => ({
-      ...current,
-      [targetBookingReference]: {
-        tone: "info",
-        text: "Saving internal Codex instruction...",
-      },
-    }));
-
-    try {
-      const response = await fetch(adminWorkflowStatusApiPath, {
-        body: JSON.stringify({
-          booking_reference: targetBookingReference,
-          safe_status_context: {
-            next_action: "Prepare corrected job card for admin review",
-            safe_note: instruction,
-          },
-          status_label: "Returned to Codex",
-          status_value: "needs_review",
-          workflow_area: adminCodexJobCardReviewWorkflowArea,
-        }),
-        headers: {
-          "Content-Type": "application/json",
-          "x-prestige-admin-purpose": adminLegacyDataPurpose,
-        },
-        method: "POST",
-      });
-      const result = await response.json().catch(() => null);
-
-      if (!response.ok || !result?.ok || !result.status) {
-        throw new Error(result?.error || "Codex job-card review instruction save failed.");
-      }
-
-      const savedStatus = result.status as AdminBookingWorkflowStatusRecord;
-      setCodexJobCardReviewStatuses((current) => ({
-        ...current,
-        [targetBookingReference]: savedStatus,
-      }));
-      setCodexJobCardReviewMessages((current) => ({
-        ...current,
-        [targetBookingReference]: {
-          tone: "success",
-          text:
-            "Returned to the internal Codex review queue. Exact pickup-time or flight-number corrections are prepared below for review; ambiguous instructions remain unchanged. The saved booking and calendar were not changed.",
-        },
-      }));
-    } catch (error) {
-      setCodexJobCardReviewMessages((current) => ({
-        ...current,
-        [targetBookingReference]: {
-          tone: "error",
-          text: adminBookingWorkflowStatusFailureMessage(error, "Codex job-card review"),
-        },
-      }));
-    } finally {
-      setCodexJobCardReviewAction(null);
-    }
-  }
-
   function getDispatchCopyText(target: DispatchCopyTarget) {
     const copyEditState = copyEditStates[target];
     const generatedText = generatedDispatchCopyMessages[target];
@@ -24071,6 +23958,23 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   codexCalendarConflictLoadedBookings,
                 )
               : null;
+          const selectedAction = adminPreparedJobCardActions[bookingId] || "";
+          const selectedActionHelp =
+            selectedAction === "edit"
+              ? "Opens Dispatch. Nothing is saved or sent."
+              : selectedAction === "approve"
+                ? "Confirms this booking and queues a customer in-app update."
+                : selectedAction === "decline"
+                  ? "Declines this booking and queues a customer in-app update."
+                  : "Choose one action. Nothing happens until you press Continue.";
+          const selectedActionButtonLabel =
+            selectedAction === "edit"
+              ? "Open booking"
+              : selectedAction === "approve"
+                ? "Approve booking"
+                : selectedAction === "decline"
+                  ? "Decline booking"
+                  : "Continue";
 
           return (
             <article
@@ -24120,40 +24024,71 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 </div>
               </div>
               <p className="min-w-0 truncate text-slate-700">{routeText}</p>
-              <div className="flex flex-wrap gap-1.5 md:justify-end">
-                <button
-                  className="min-h-9 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-                  data-new-customer-booking-request-load={bookingId}
-                  onClick={() =>
-                    loadSelectedBooking(requestBooking, {
-                      bookingFormOverride: correctionReady
-                        ? correctionPreparation.correctedBooking
-                        : undefined,
-                      correctionSummary: correctionReady
-                        ? correctionPreparation.changedFields.join("; ")
-                        : undefined,
-                      focusJobCard: true,
-                    })
+              <div className="flex min-w-0 flex-col gap-1.5 md:items-end">
+                <label className="sr-only" htmlFor={`prepared-job-action-${bookingId}`}>
+                  Choose action
+                </label>
+                <select
+                  className="min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-slate-700 focus:ring-2 focus:ring-slate-700/10 md:w-64"
+                  data-admin-prepared-job-card-action-select={bookingId}
+                  id={`prepared-job-action-${bookingId}`}
+                  onChange={(event) =>
+                    setAdminPreparedJobCardActions((current) => ({
+                      ...current,
+                      [bookingId]: event.target.value as AdminPreparedJobCardAction,
+                    }))
                   }
+                  value={selectedAction}
+                >
+                  <option value="">Choose action</option>
+                  <option value="edit">Edit booking</option>
+                  <option disabled={!requestRecord} value="approve">
+                    Approve — notify customer
+                  </option>
+                  <option disabled={!requestRecord} value="decline">
+                    Decline — notify customer
+                  </option>
+                </select>
+                <button
+                  className="min-h-10 w-full rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 md:w-64"
+                  data-admin-prepared-job-card-action-submit={bookingId}
+                  data-new-customer-booking-request-load={bookingId}
+                  disabled={
+                    !selectedAction ||
+                    adminBookingPersistenceAction !== null ||
+                    ((selectedAction === "approve" || selectedAction === "decline") && !requestRecord)
+                  }
+                  onClick={() => {
+                    if (selectedAction === "edit") {
+                      loadSelectedBooking(requestBooking, {
+                        bookingFormOverride: correctionReady
+                          ? correctionPreparation.correctedBooking
+                          : undefined,
+                        correctionSummary: correctionReady
+                          ? correctionPreparation.changedFields.join("; ")
+                          : undefined,
+                        focusJobCard: true,
+                      });
+                      return;
+                    }
+
+                    if (selectedAction === "approve" && requestRecord) {
+                      void updateAdminCustomerRequestReviewDecision(requestRecord, "approve-internally");
+                    } else if (selectedAction === "decline" && requestRecord) {
+                      void updateAdminCustomerRequestReviewDecision(requestRecord, "decline-internally");
+                    }
+                  }}
                   type="button"
                 >
-                  {correctionReady ? "Review Corrected Job Card" : "Review Job Card"}
+                  {selectedActionButtonLabel}
                 </button>
-                {requestRecord
-                  ? adminCustomerRequestReviewDecisions.map((decision) => (
-                      <button
-                        className="min-h-9 rounded-md border border-amber-300 bg-white px-2 text-xs font-semibold text-amber-950 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                        data-new-customer-booking-request-decision-button={`${bookingId}:${decision.key}`}
-                        disabled={adminBookingPersistenceAction !== null}
-                        key={decision.key}
-                        onClick={() => updateAdminCustomerRequestReviewDecision(requestRecord, decision.key)}
-                        type="button"
-                      >
-                        {decision.label}
-                      </button>
-                    ))
-                  : null}
               </div>
+              <p
+                className="text-xs text-slate-600 md:col-span-4 md:text-right"
+                data-admin-prepared-job-card-action-help={bookingId}
+              >
+                {selectedActionHelp}
+              </p>
               {calendarConflictResult ? (
                 <div
                   className={`flex flex-col gap-0.5 rounded-md border px-2 py-1.5 text-xs sm:flex-row sm:items-center sm:justify-between md:col-span-4 ${
@@ -24170,64 +24105,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   <span>{calendarConflictResult.detail}</span>
                 </div>
               ) : null}
-              <div className="rounded-md border border-emerald-100 bg-emerald-50/70 p-2 md:col-span-4">
-                <label className="block text-xs font-semibold text-emerald-950">
-                  Instruction to Codex (internal only)
-                  <textarea
-                    className="mt-1 min-h-16 w-full resize-y rounded-md border border-emerald-200 bg-white px-2 py-1.5 text-sm font-normal text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/10"
-                    data-codex-job-card-instruction={bookingReference}
-                    disabled={!bookingReference || codexJobCardReviewAction === bookingReference}
-                    maxLength={500}
-                    onChange={(event) =>
-                      setCodexJobCardInstructions((current) => ({
-                        ...current,
-                        [bookingReference]: event.target.value,
-                      }))
-                    }
-                    placeholder="Exact format: Pickup time: 14:30 or Flight number: SQ123"
-                    rows={2}
-                    value={codexJobCardInstructions[bookingReference] || ""}
-                  />
-                </label>
-                <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0 text-xs text-slate-600">
-                    {codexJobCardReviewStatuses[bookingReference] ? (
-                      <span className="font-semibold text-emerald-900">
-                        {adminBookingWorkflowStatusDisplayLabel(
-                          codexJobCardReviewStatuses[bookingReference],
-                        )}
-                      </span>
-                    ) : (
-                      "Internal queue instruction only; never shown to customers or drivers."
-                    )}
-                  </div>
-                  <button
-                    className="min-h-9 shrink-0 rounded-md border border-emerald-700 bg-white px-3 text-sm font-semibold text-emerald-900 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
-                    data-codex-job-card-return={bookingReference}
-                    disabled={
-                      !bookingReference ||
-                      !clean(codexJobCardInstructions[bookingReference]) ||
-                      codexJobCardReviewAction !== null
-                    }
-                    onClick={() => returnPreparedJobCardToCodex(bookingReference)}
-                    type="button"
-                  >
-                    {codexJobCardReviewAction === bookingReference ? "Returning..." : "Return to Codex"}
-                  </button>
-                </div>
-                {codexJobCardReviewMessages[bookingReference] ? (
-                  <p
-                    className={`mt-2 rounded-md border px-2 py-1.5 text-xs ${statusClass(
-                      codexJobCardReviewMessages[bookingReference].tone,
-                    )}`}
-                    data-codex-job-card-review-feedback={bookingReference}
-                  >
-                    {codexJobCardReviewMessages[bookingReference].text}
-                  </p>
-                ) : null}
-                {returnedToCodex ? (
+              {returnedToCodex ? (
+                <div className="rounded-md border border-emerald-100 bg-emerald-50/70 p-2 md:col-span-4">
                   <div
-                    className={`mt-2 rounded-md border p-2 ${
+                    className={`rounded-md border p-2 ${
                       correctionReady
                         ? "border-emerald-300 bg-white text-emerald-950"
                         : "border-amber-300 bg-amber-50 text-amber-950"
@@ -24255,8 +24136,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       <p className="mt-1 text-xs">{correctionPreparation.reason}</p>
                     )}
                   </div>
-                ) : null}
-              </div>
+                </div>
+              ) : null}
             </article>
           );
         }) : (

@@ -427,7 +427,14 @@ for (const customerRequestFragment of [
   "data-new-customer-booking-requests-panel",
   "data-new-customer-booking-request-row",
   "data-new-customer-booking-request-load",
-  "Review Job Card",
+  "Choose action",
+  "Edit booking",
+  "Approve — notify customer",
+  "Decline — notify customer",
+  "Nothing happens until you press Continue.",
+  'data-admin-prepared-job-card-action-select=',
+  'data-admin-prepared-job-card-action-submit=',
+  'data-admin-prepared-job-card-action-help=',
   "Codex Review &amp; Admin App Notifications",
   "Codex Prepared Job Cards",
   "Ready for Admin Review",
@@ -440,24 +447,11 @@ for (const customerRequestFragment of [
   "max-h-[28rem] space-y-2 overflow-y-auto",
   "Calendar changes still require admin action in Dispatch.",
   'const adminCodexJobCardReviewWorkflowArea = "admin_booking_review";',
-  "Instruction to Codex (internal only)",
-  'data-codex-job-card-instruction=',
-  'data-codex-job-card-return=',
-  'data-codex-job-card-review-feedback=',
-  "maxLength={500}",
-  "Return to Codex",
-  'workflow_area: adminCodexJobCardReviewWorkflowArea',
-  'status_value: "needs_review"',
-  'status_label: "Returned to Codex"',
-  'next_action: "Prepare corrected job card for admin review"',
-  "Exact pickup-time or flight-number corrections are prepared below for review",
   "prepareCodexJobCardCorrection",
   "Corrected Preview Ready",
   "Exact Value Needed",
   'data-codex-job-card-correction-preparation=',
-  "Review Corrected Job Card",
   "bookingFormOverride",
-  "The saved booking, calendar, and external messages were not changed.",
   "dispatchLoadFocusTarget",
   "scrollIntoView({ behavior: \"smooth\", block: \"start\" })",
   "Driver Job Link is ready for admin action.",
@@ -475,26 +469,38 @@ assert.equal(
   1,
   "Expected one established Codex prepared-job-card queue",
 );
-const codexReturnHandler = sliceBetween(
+const preparedJobCardPanel = sliceBetween(
   appPage,
-  "async function returnPreparedJobCardToCodex",
-  "function getDispatchCopyText",
+  "const codexPreparedJobCardsPanel = (",
+  "const bookingsFindToolbar = (",
 );
-assertIncludes(codexReturnHandler, "fetch(adminWorkflowStatusApiPath", "Existing workflow status route reuse");
-assertIncludes(codexReturnHandler, 'method: "POST"', "Internal workflow status POST");
-for (const forbiddenCodexReturnPath of [
-  "/api/admin-bookings",
-  "/api/admin-app-notifications",
-  "/api/customer-driver-quick-replies",
-  "/api/admin-booking-calendar-google-sync",
-  "/api/admin-booking-calendar-events",
+for (const removedPreparedJobCardControl of [
+  "Instruction to Codex (internal only)",
+  'data-codex-job-card-instruction=',
+  'data-codex-job-card-return=',
+  'data-codex-job-card-review-feedback=',
+  "Return to Codex",
+  "Approve Internally",
+  "Decline Internally",
 ]) {
   assertExcludes(
-    codexReturnHandler,
-    forbiddenCodexReturnPath,
-    `Return to Codex must not call ${forbiddenCodexReturnPath}`,
+    preparedJobCardPanel,
+    removedPreparedJobCardControl,
+    `Prepared job card removes confusing control ${removedPreparedJobCardControl}`,
   );
 }
+for (const establishedPreparedJobCardAction of [
+  "loadSelectedBooking(requestBooking",
+  'updateAdminCustomerRequestReviewDecision(requestRecord, "approve-internally")',
+  'updateAdminCustomerRequestReviewDecision(requestRecord, "decline-internally")',
+]) {
+  assertIncludes(
+    preparedJobCardPanel,
+    establishedPreparedJobCardAction,
+    `Prepared job card reuses established action ${establishedPreparedJobCardAction}`,
+  );
+}
+assertExcludes(preparedJobCardPanel, "fetch(", "Prepared job card must not add a direct write lane");
 assert.equal(
   appPage.indexOf("{codexPreparedJobCardsPanel}") > appPage.indexOf('aria-label="Admin App Notifications"'),
   true,
@@ -936,8 +942,8 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  "window.setInterval(() => {\n      for (const bookingReference of bookingReferences) {\n        void refreshDashboardDriverJobStatusRead(bookingReference);\n        void refreshDashboardDriverOtsPhotoProofRead(bookingReference);\n      }\n    }, 10 * 1000);",
-  "Dispatch driver report and OTS photo proof read-only auto-refresh interval",
+  "window.setInterval(() => {\n      for (const bookingReference of bookingReferences) {\n        void refreshDashboardDriverJobStatusRead(bookingReference);\n        void refreshDashboardDriverOtsPhotoProofRead(bookingReference);\n      }\n      void refreshDashboardDriverJobLinksRead(bookingReferences);\n    }, 10 * 1000);",
+  "Dispatch driver report, OTS photo proof, and acknowledgement read-only auto-refresh interval",
 );
 assertIncludes(
   appPage,

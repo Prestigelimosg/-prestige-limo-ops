@@ -9,9 +9,11 @@ for (const expected of [
   'data-admin-active-job-message-history="true"',
   'message.workflow_area === "customer_driver_quick_replies"',
   'message.workflow_area === "admin_driver_job_messages"',
+  'message.workflow_area === "admin_customer_job_messages"',
   '"Customer → Driver"',
   '"Driver → Customer"',
   '"Admin → Driver"',
+  '"Admin → Customer"',
   "void refreshAdminTodayJobMessageHistory(bookingReference);",
 ]) {
   assert.ok(source.includes(expected), `Today’s Jobs message history must retain ${expected}`);

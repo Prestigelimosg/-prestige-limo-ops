@@ -735,6 +735,108 @@ try {
       "Expected exactly one dashboard-scoped driver-app notification insert.",
     );
 
+    setEnv(validEnv());
+    const dashboardCustomerPostMock = installMockClient({
+      bookings: [
+        {
+          booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
+          customer_id: "customer-runtime-account-001",
+        },
+      ],
+    });
+    const dashboardCustomerPostResult = await responseJson(
+      await adminRoute.POST(
+        new Request("http://localhost/api/admin-customer-driver-app-notifications", {
+          body: JSON.stringify(
+            safeNotificationPayload({
+              delivery_surface: "customer_app",
+              driver_job_link_id: null,
+              event_key: "BOOK-CUST-DRIVER-NOTIFY-001:admin-customer-message:dashboard",
+              safe_context: {
+                audience: "admin_customer",
+                external_send: false,
+                provider_send: false,
+                recipient_role: "customer",
+                sender_role: "admin",
+                source: "today_jobs",
+              },
+              safe_message: "Please meet your driver at the hotel lobby for this booking.",
+              safe_title: "Message from dispatch",
+              workflow_area: "admin_customer_job_messages",
+            }),
+          ),
+          headers: validDashboardHeaders({
+            "content-type": "application/json",
+          }),
+          method: "POST",
+        }),
+      ),
+    );
+
+    assert.equal(
+      dashboardCustomerPostResult.status,
+      200,
+      "Expected the same-origin dashboard POST to queue the approved exact-booking customer message.",
+    );
+    assert.equal(dashboardCustomerPostResult.body.notification.delivery_surface, "customer_app");
+    assert.equal(dashboardCustomerPostResult.body.notification.workflow_area, "admin_customer_job_messages");
+    assert.equal(
+      dashboardCustomerPostMock.client.insertHistory.length,
+      1,
+      "Expected exactly one dashboard-scoped customer-app notification insert.",
+    );
+    assert.equal(
+      dashboardCustomerPostMock.client.selectHistory.some(
+        (entry) => entry.table === "driver_job_links",
+      ),
+      false,
+      "Admin-to-customer messages must not depend on or write through the driver-link lane.",
+    );
+
+    setEnv(validEnv());
+    const wrongCustomerAudienceMock = installMockClient({
+      bookings: [
+        {
+          booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
+          customer_id: "customer-runtime-account-001",
+        },
+      ],
+    });
+    const wrongCustomerAudienceResult = await responseJson(
+      await adminRoute.POST(
+        new Request("http://localhost/api/admin-customer-driver-app-notifications", {
+          body: JSON.stringify(
+            safeNotificationPayload({
+              delivery_surface: "customer_app",
+              driver_job_link_id: null,
+              event_key: "BOOK-CUST-DRIVER-NOTIFY-001:admin-customer-message:wrong-audience",
+              safe_context: {
+                audience: "admin_driver",
+                external_send: false,
+                provider_send: false,
+                recipient_role: "driver",
+                sender_role: "admin",
+                source: "today_jobs",
+              },
+              safe_message: "Please meet at the hotel lobby for this booking.",
+              safe_title: "Message from dispatch",
+              workflow_area: "admin_customer_job_messages",
+            }),
+          ),
+          headers: validDashboardHeaders({
+            "content-type": "application/json",
+          }),
+          method: "POST",
+        }),
+      ),
+    );
+    assert.equal(wrongCustomerAudienceResult.status, 400);
+    assert.equal(
+      wrongCustomerAudienceMock.client.insertHistory.length,
+      0,
+      "A customer-app message carrying driver audience context must fail closed.",
+    );
+
     setEnv({
       ...validEnv(),
       PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_ACCOUNT_ALLOWLIST: undefined,
@@ -1013,6 +1115,27 @@ try {
           workflow_area: "driver_status_customer_in_app",
         }),
         seededNotification({
+          actor_role: "admin",
+          booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
+          created_at: "2026-06-08T02:00:00.000Z",
+          delivery_surface: "customer_app",
+          id: "notification-admin-customer-message",
+          notification_type: "trip_update",
+          safe_message: "Please meet your driver at the hotel lobby for this booking.",
+          safe_title: "Message from dispatch",
+          workflow_area: "admin_customer_job_messages",
+        }),
+        seededNotification({
+          actor_role: "admin",
+          booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
+          delivery_surface: "driver_app",
+          id: "notification-admin-driver-hidden-from-customer",
+          notification_type: "trip_update",
+          safe_message: "Private instruction for the driver.",
+          safe_title: "Message from dispatch",
+          workflow_area: "admin_driver_job_messages",
+        }),
+        seededNotification({
           booking_reference: "BOOK-CUST-DRIVER-NOTIFY-OTHER",
           delivery_surface: "customer_app",
           id: "notification-other-customer-hidden",
@@ -1065,6 +1188,13 @@ try {
           notification_type: "driver_status",
           safe_message: "Your Prestige Limo driver is on the way to pickup.",
           safe_title: "Driver on the way",
+        },
+        {
+          booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
+          delivery_surface: "customer_app",
+          notification_type: "trip_update",
+          safe_message: "Please meet your driver at the hotel lobby for this booking.",
+          safe_title: "Message from dispatch",
         },
       ],
       "Expected customer portal access cookie to read only its booking-scoped driver status update",
@@ -1337,6 +1467,10 @@ try {
           booking_reference: "BOOK-DRIVER-NOTIFY-001",
           delivery_surface: "customer_app",
           id: "notification-customer-hidden",
+          notification_type: "trip_update",
+          safe_message: "Please meet your driver at the hotel lobby for this booking.",
+          safe_title: "Message from dispatch",
+          workflow_area: "admin_customer_job_messages",
         }),
         seededNotification({
           booking_reference: "BOOK-OTHER-NOTIFY-001",

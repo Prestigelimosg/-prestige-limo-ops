@@ -166,21 +166,28 @@ assertExcludes(
 for (const fragment of [
   "Codex Prepared Job Cards",
   "Prepared from exact saved requests. Admin reviews every card before calendar action.",
-  "Calendar changes still require admin action in Dispatch.",
-  'data-new-customer-booking-requests-urgent-count={String(urgentCustomerBookingRequestCount)}',
-  'data-new-customer-booking-request-urgency={isUrgentRequest ? "urgent" : "new"}',
   "const passengerText = getLoadBookingsOperationalPassengerDisplay(operationalCard, requestBooking);",
   "{getLoadBookingsOperationalRequestDisplayTitle(operationalCard, requestBooking)}",
   "Passenger: {passengerText}",
-  "Urgent >1h",
-  "New",
-  "Review Job Card",
-  "Review Corrected Job Card",
-  "loadSelectedBooking(requestBooking, {",
-  "bookingFormOverride: correctionReady",
-  "focusJobCard: true",
+  "formatBookingPickupDateTimeSgt(requestBooking)",
+  'data-admin-prepared-job-card-close={bookingId}',
+  "rememberHandledCustomerBookingRequest(requestBooking)",
+  "Close",
 ]) {
   assertIncludes(codexPreparedJobCardsPanel, fragment, `Codex prepared queue fragment ${fragment}`);
+}
+for (const removedFragment of [
+  "Calendar changes still require admin action in Dispatch.",
+  "Urgent >1h",
+  "Ready for Admin Review",
+  "Review Job Card",
+  "Review Corrected Job Card",
+  "Choose action",
+  "Approve booking",
+  "Decline booking",
+  "Edit booking",
+]) {
+  assertExcludes(codexPreparedJobCardsPanel, removedFragment, `close-only prepared queue fragment ${removedFragment}`);
 }
 
 for (const fragment of [
@@ -228,7 +235,8 @@ for (const fragment of [
   'data-status-panel="global"',
   'aria-label="Booking Requests"',
   "{codexPreparedJobCardsPanel}",
-  'data-admin-device-push-panel="true"',
+  'data-admin-app-notification-feed-header-actions="true"',
+  'data-admin-device-push-toggle="true"',
 ]) {
   assertIncludes(dashboardCommandCentrePanel, fragment, `single Codex workbench fragment ${fragment}`);
 }
@@ -236,10 +244,11 @@ assertSourceOrder(
   dashboardCommandCentrePanel,
   [
     'data-admin-app-notification-feed="true"',
+    'data-admin-app-notification-feed-state="true"',
+    'data-admin-device-push-toggle="true"',
     'data-dashboard-codex-system-notices="true"',
     'aria-label="Booking Requests"',
     "{codexPreparedJobCardsPanel}",
-    'data-admin-device-push-panel="true"',
   ],
   "single Codex workbench order",
 );

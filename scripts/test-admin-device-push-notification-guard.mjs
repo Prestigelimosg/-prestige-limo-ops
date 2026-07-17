@@ -154,15 +154,26 @@ assertIncludes(
     "Notification.requestPermission",
     "data-admin-device-push-panel",
     "data-admin-device-push-toggle",
+    "data-admin-app-notification-feed-header-actions",
     'role="switch"',
-    "Device Push Alerts",
-    "Optional phone/Mac browser alert for new booking requests.",
-    "Push alerts ON",
-    "Push alerts OFF",
+    'aria-label={adminDevicePushState.status === "enabled" ? "Push alerts ON" : "Push alerts OFF"}',
+    'title={adminDevicePushState.message?.text || "Optional browser alert for new booking requests."}',
+    '"Push ON"',
+    '"Push OFF"',
     "handleAdminDevicePushEnable",
     "handleAdminDevicePushDisable",
   ],
   "dashboard device push UI",
+);
+assert.equal(
+  dashboardSource.match(/data-admin-device-push-toggle="true"/g)?.length,
+  1,
+  "Dashboard must keep exactly one established device-push switch.",
+);
+assert.equal(
+  dashboardSource.includes(">Device Push Alerts<"),
+  false,
+  "Dashboard must remove the standalone Device Push Alerts panel heading.",
 );
 
 assertIncludes(
@@ -203,6 +214,7 @@ assertIncludes(
   ledgerSource,
   [
     "Admin Device Push Notification Runtime Gate",
+    "Compact Device Push Header Control",
     "PRESTIGE_ADMIN_DEVICE_PUSH_ENABLED",
     "New booking request received. Open Dashboard to review.",
     "No WhatsApp, Telegram, SMS, provider fallback, billing, payment, payout, PDF, GPS, live location, or customer data is exposed",

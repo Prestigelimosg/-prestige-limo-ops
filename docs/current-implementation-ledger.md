@@ -28,6 +28,13 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - `Close` reuses the established browser-local handled-customer-request memory. It removes only that card from the Codex section on that admin browser and performs no API call, booking/customer status change, admin/customer/driver notification, Calendar action, driver/vehicle assignment, provider send, or live-record write.
 - No new route, API, table, writer, panel, button lane, timer, or polling path is added. Focused protection remains `scripts/test-admin-load-bookings-crm-fallback-compact-guard.mjs`, with visible single-button, removed-wording, responsive-layout, and zero-write Close coverage in `scripts/test-booking-ui-browser.mjs`.
 
+### Compact Device Push Header Control (2026-07-17)
+
+- The owner moved the one established admin-device push ON/OFF switch out of its large standalone `Device Push Alerts` panel and directly beside the existing `Ready` feed-state pill in the `Codex Review & Admin App Notifications` header.
+- The compact visible labels are `Push ON` and `Push OFF`; the full `Push alerts ON/OFF` accessible label and current readiness message remain available on the same switch. Activation or readiness failures remain visible as compact error feedback beneath the header, while routine ready/enabled explanatory text no longer occupies a separate panel.
+- The switch keeps the established `handleAdminDevicePushEnable` / `handleAdminDevicePushDisable`, notification-permission, service-worker, subscription route, runtime gate, and safe new-booking alert payload. No second control, route, API, subscription, provider send, polling timer, booking/customer/driver write, or notification lane is added.
+- Focused protection is `scripts/test-admin-device-push-notification-guard.mjs`, `scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs`, and the existing Dashboard acceptance in `scripts/test-booking-ui-browser.mjs`.
+
 ### Active Jobs Embedded Map Scroll-Position Repair (2026-07-17)
 
 - During the owner-approved Pixel 6 background-location test for exact assigned booking `CUST-20260716035942-O7Z73G-OUT`, Production build `237b3212` received current movement while the phone was locked: the admin row advanced from 17:58 to 18:03 SGT and its coordinates changed. Stop cleanup removed the exact marker, and the temporary Live Dispatch Map runtime was closed with zero drivers displayed.

@@ -156,6 +156,7 @@ const customerBookingRequestFields = [
   "companyName",
   "contactNo",
   "emailAddress",
+  "travelerId",
   "passengerName",
   "pickupDate",
   "pickupTime",
@@ -288,7 +289,8 @@ const customerBookingRequestRoute = files["app/api/customer-booking-requests/rou
 for (const fragment of [
   "const customerBookingPurposeHeader = \"customer-booking-request\";",
   "refererUrl.pathname === \"/book\"",
-  "const parsed = parseCustomerBookingRequestPayloads(await readJsonBody(request));",
+  "const body = await readJsonBody(request);",
+  "const parsed = parseCustomerBookingRequestPayloads(body);",
   "customerSafeError(parsed.error)",
   "customerSafeError(result.error)",
 ]) {
@@ -297,7 +299,7 @@ for (const fragment of [
 assertBefore(
   customerBookingRequestRoute,
   "if (!isCustomerBookingRequest(request))",
-  "parseCustomerBookingRequestPayloads(await readJsonBody(request))",
+  "parseCustomerBookingRequestPayloads(body)",
   "customer booking request route",
 );
 

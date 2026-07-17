@@ -4,8 +4,10 @@ import Link from "next/link";
 import type { FormEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import {
+  loadCustomerBookingMemoryProfile,
   loadCustomerBookingMemorySuggestions,
   type CustomerBookingMemorySuggestion,
+  type CustomerBookingMemoryTraveler,
 } from "../../lib/customer-booking-memory-adapter";
 import {
   applyCustomerBookingMemoryToRequestForm,
@@ -54,6 +56,7 @@ type BookingRequestForm = {
   contactNo: string;
   emailAddress: string;
   passengerName: string;
+  travelerId: string;
   pickupDate: string;
   pickupTime: string;
   flightNumber: string;
@@ -89,6 +92,7 @@ const initialForm: BookingRequestForm = {
   contactNo: "",
   emailAddress: "",
   passengerName: "",
+  travelerId: "",
   pickupDate: "",
   pickupTime: "",
   flightNumber: "",
@@ -114,6 +118,7 @@ const requiredFieldLabels: Record<keyof BookingRequestForm, string> = {
   contactNo: "Contact no.",
   emailAddress: "Email address",
   passengerName: "Passenger name",
+  travelerId: "Registered traveller",
   pickupDate: "Pickup date",
   pickupTime: "Pickup time",
   flightNumber: "Flight number if any",
@@ -136,6 +141,7 @@ const requiredFieldLabels: Record<keyof BookingRequestForm, string> = {
 
 const requiredFields: Array<keyof BookingRequestForm> = [
   "contactNo",
+  "emailAddress",
   "passengerName",
   "pickupDate",
   "pickupTime",
@@ -211,6 +217,7 @@ export default function CustomerBookingPage() {
   );
   const [missingFields, setMissingFields] = useState<Array<keyof BookingRequestForm>>([]);
   const [bookingMemorySuggestions, setBookingMemorySuggestions] = useState<CustomerBookingMemorySuggestion[]>([]);
+  const [registeredTravelers, setRegisteredTravelers] = useState<CustomerBookingMemoryTraveler[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const bookingMemoryLoadStarted = useRef(false);
@@ -249,6 +256,31 @@ export default function CustomerBookingPage() {
     }
 
     void loadCompanyProfile();
+
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadReturningCustomerProfile() {
+      const profile = await loadCustomerBookingMemoryProfile({ signal: controller.signal });
+
+      if (!profile) {
+        return;
+      }
+
+      bookingMemoryLoadStarted.current = true;
+      setBookingMemorySuggestions(profile.memories);
+      setRegisteredTravelers(profile.travelers);
+      updateForm((current) => ({
+        ...current,
+        contactNo: current.contactNo || profile.bookerProfile?.phone || "",
+        emailAddress: current.emailAddress || profile.bookerProfile?.email || "",
+      }));
+    }
+
+    void loadReturningCustomerProfile();
 
     return () => controller.abort();
   }, []);
@@ -330,6 +362,7 @@ export default function CustomerBookingPage() {
       const nextForm = {
         ...current,
         passengerName: value,
+        travelerId: "",
       };
 
       return suggestion ? applyBookingMemoryToForm(nextForm, suggestion) : nextForm;
@@ -344,6 +377,24 @@ export default function CustomerBookingPage() {
           ),
       ),
     );
+    setConfirmationStatus(null);
+  }
+
+  function selectRegisteredTraveler(value: string) {
+    const traveler = registeredTravelers.find((item) => String(item.id) === value) || null;
+
+    updateForm((current) => ({
+      ...current,
+      dropoffLocation: traveler?.defaultDropoffAddress || current.dropoffLocation,
+      passengerName: traveler?.travelerName || "",
+      pickupLocation: traveler?.defaultPickupAddress || current.pickupLocation,
+      travelerId: traveler ? String(traveler.id) : "",
+      vehicleType:
+        traveler?.preferredVehicle && vehicleOptions.includes(traveler.preferredVehicle)
+          ? traveler.preferredVehicle
+          : current.vehicleType,
+    }));
+    setMissingFields((current) => current.filter((item) => item !== "passengerName"));
     setConfirmationStatus(null);
   }
 
@@ -448,7 +499,7 @@ export default function CustomerBookingPage() {
         text:
           form.returnTripRequested === "yes"
             ? "Please complete the outbound and return trip date, time, pickup, and drop-off details before submitting your request."
-            : "Please complete contact no., passenger name, pickup date, pickup time, pickup location, and drop-off location before submitting your request.",
+            : "Please complete contact no., email address, passenger name, pickup date, pickup time, pickup location, and drop-off location before submitting your request.",
       });
       return;
     }
@@ -478,7 +529,7 @@ export default function CustomerBookingPage() {
         if (result.reason === "portal_access_cleared") {
           setFeedback({
             tone: "error",
-            text: "Your old saved portal access was cleared. Review the details, then press Submit Booking Request again.",
+            text: "This portal link is no longer active. Use your current portal link or ask Prestige Limo for a new one.",
           });
           return;
         }
@@ -488,17 +539,19 @@ export default function CustomerBookingPage() {
 
       const shortNoticeReviewRequired = result.shortNoticeReviewRequired;
       setFeedback({
-        tone: "success",
+        tone: result.receiptStatus === "sent" ? "success" : "error",
         text:
-          shortNoticeReviewRequired
-            ? "This booking is within 24 hours, so our team will review and confirm availability."
-            : "Booking request received. Our team will review and confirm availability.",
+          result.receiptStatus === "sent"
+            ? `Booking request ${result.bookingReference} received. Receipt email sent to ${form.emailAddress}.`
+            : `Booking request ${result.bookingReference} was saved, but the receipt email was not sent. Please contact ${companyName}.`,
       });
       setConfirmationStatus({
         title: "Request received - pending review",
-        detail: shortNoticeReviewRequired
-          ? "This booking is within 24 hours, so our team will review and confirm availability."
-          : "This is not confirmed yet. We will contact you after review.",
+        detail: `${result.bookingReference}${result.returnBookingReference ? ` / ${result.returnBookingReference}` : ""}. ${
+          shortNoticeReviewRequired
+            ? "This booking is within 24 hours and needs availability review."
+            : "This is not confirmed yet. We will contact you after review."
+        }`,
       });
     } catch {
       setConfirmationStatus(null);
@@ -662,11 +715,13 @@ export default function CustomerBookingPage() {
                 <label className="text-xs font-semibold text-slate-800 md:col-span-2">
                   Email address
                   <input
-                    className={fieldClass()}
+                    aria-invalid={isMissing("emailAddress")}
+                    className={fieldClass(isMissing("emailAddress"))}
                     data-customer-booking-field="emailAddress"
                     name="emailAddress"
                     onChange={(event) => updateField("emailAddress", event.target.value)}
                     placeholder="name@example.com"
+                    required
                     type="email"
                     value={form.emailAddress}
                   />
@@ -681,22 +736,42 @@ export default function CustomerBookingPage() {
               <div className="mt-3 grid gap-2.5 md:grid-cols-2 xl:grid-cols-4">
                 <label className="text-xs font-semibold text-slate-800">
                   Passenger name
-                  <input
-                    aria-invalid={isMissing("passengerName")}
-                    autoComplete="off"
-                    className={fieldClass(isMissing("passengerName"))}
-                    data-customer-booking-field="passengerName"
-                    data-customer-booking-memory-passenger-input="true"
-                    list={bookingMemorySuggestions.length > 0 ? bookingMemoryPassengerListId : undefined}
-                    name="passengerName"
-                    onChange={(event) => updatePassengerName(event.target.value)}
-                    onFocus={ensureBookingMemorySuggestions}
-                    onPointerDown={ensureBookingMemorySuggestions}
-                    placeholder="Passenger name"
-                    required
-                    type="text"
-                    value={form.passengerName}
-                  />
+                  {registeredTravelers.length > 0 ? (
+                    <select
+                      aria-invalid={isMissing("passengerName")}
+                      className={fieldClass(isMissing("passengerName"))}
+                      data-customer-booking-field="travelerId"
+                      data-customer-booking-traveler-select="true"
+                      name="travelerId"
+                      onChange={(event) => selectRegisteredTraveler(event.target.value)}
+                      required
+                      value={form.travelerId}
+                    >
+                      <option value="">Choose registered traveller</option>
+                      {registeredTravelers.map((traveler) => (
+                        <option key={traveler.id} value={traveler.id}>
+                          {traveler.travelerName}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      aria-invalid={isMissing("passengerName")}
+                      autoComplete="off"
+                      className={fieldClass(isMissing("passengerName"))}
+                      data-customer-booking-field="passengerName"
+                      data-customer-booking-memory-passenger-input="true"
+                      list={bookingMemorySuggestions.length > 0 ? bookingMemoryPassengerListId : undefined}
+                      name="passengerName"
+                      onChange={(event) => updatePassengerName(event.target.value)}
+                      onFocus={ensureBookingMemorySuggestions}
+                      onPointerDown={ensureBookingMemorySuggestions}
+                      placeholder="Passenger name"
+                      required
+                      type="text"
+                      value={form.passengerName}
+                    />
+                  )}
                   {bookingMemorySuggestions.length > 0 ? (
                     <datalist
                       data-customer-booking-memory-passenger-list="true"

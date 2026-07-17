@@ -41,8 +41,10 @@ export async function GET(request: Request) {
     }
 
     return Response.json({
+      booker_profile: result.data.booker_profile,
       memories: result.data.memories,
       ok: true,
+      travelers: result.data.travelers,
       version: result.data.version,
     });
   } catch {

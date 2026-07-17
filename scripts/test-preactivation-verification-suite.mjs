@@ -506,6 +506,18 @@ const guardChecks = [
     script: "scripts/test-customer-portal-access-link-guard.mjs",
   },
   {
+    label: "customer permanent-link rebooking and receipt guard",
+    script: "scripts/test-customer-rebooking-permanent-link-receipt-guard.mjs",
+  },
+  {
+    label: "customer permanent-link revision runtime guard",
+    script: "scripts/test-customer-portal-link-revision-runtime-guard.mjs",
+  },
+  {
+    label: "customer booking receipt email guard",
+    script: "scripts/test-customer-booking-receipt-email-guard.mjs",
+  },
+  {
     label: "public customer booking memory surface guard",
     script: "scripts/test-public-customer-booking-memory-surface-guard.mjs",
   },

@@ -101,6 +101,7 @@ try {
     returnTripRequested: "yes",
     serviceType: "Airport Arrival",
     specialRequest: "must not be sent",
+    travelerId: "901",
     vehicleType: "Alphard / Vellfire",
   };
   const success = await submitCustomerBookingRequest(safeInput, {
@@ -119,6 +120,7 @@ try {
             customer_facing_status: "Request Received",
             return_booking_reference: "CUST-SAFE-001-RET",
             return_trip_requested: true,
+            receipt_status: "sent",
             short_notice_review_required: true,
           },
         }),
@@ -129,7 +131,10 @@ try {
 
   assert.equal(customerBookingRequestApiPath, "/api/customer-booking-requests");
   assert.deepEqual(success, {
+    bookingReference: "CUST-SAFE-001",
     ok: true,
+    receiptStatus: "sent",
+    returnBookingReference: "CUST-SAFE-001-RET",
     returnTripRequested: true,
     shortNoticeReviewRequired: true,
   });
@@ -165,6 +170,7 @@ try {
       "returnPickupTime",
       "returnTripRequested",
       "serviceType",
+      "travelerId",
       "vehicleType",
     ],
     "Adapter should submit only approved customer booking request fields.",
@@ -191,11 +197,15 @@ try {
         customer_facing_status: "Request Received",
         return_booking_reference: null,
         return_trip_requested: false,
+        receipt_status: "blocked",
         short_notice_review_required: false,
       },
     }),
     {
+      bookingReference: "CUST-SAFE-002",
       ok: true,
+      receiptStatus: "blocked",
+      returnBookingReference: null,
       returnTripRequested: false,
       shortNoticeReviewRequired: false,
     },

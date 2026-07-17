@@ -60,6 +60,7 @@ export type CustomerPortalAccessRuntimeGate = {
 
 type CustomerPortalAccessTokenPayload = {
   account: string;
+  rev?: string;
   scope?: "portal_account" | "stored_document";
   exp?: number;
   iat: number;
@@ -83,6 +84,8 @@ export type CustomerPortalAccessSessionResult = {
   access_scope: "allowlisted" | "portal_account" | "stored_document";
   auth_user_id: string;
   customer_account_reference: string;
+  issued_at: number;
+  link_revision: string | null;
   version: typeof customerPortalAccessLinkVersion;
 };
 
@@ -268,6 +271,7 @@ function isPortalAccessPayload(value: unknown): value is CustomerPortalAccessTok
   const exp = Number(record.exp);
   const iat = Number(record.iat);
   const scope = portalAccessScope(record.scope);
+  const revision = safeLinkRevision(record.rev);
   const hasExpiry = record.exp !== undefined && record.exp !== null;
 
   if (record.type !== customerPortalAccessLinkVersion || !account || !Number.isInteger(iat)) {
@@ -275,7 +279,10 @@ function isPortalAccessPayload(value: unknown): value is CustomerPortalAccessTok
   }
 
   if (scope === "portal_account") {
-    return !hasExpiry || (Number.isInteger(exp) && exp > iat);
+    return (
+      (!hasExpiry || (Number.isInteger(exp) && exp > iat)) &&
+      (record.rev === undefined || revision !== null)
+    );
   }
 
   return (
@@ -283,6 +290,18 @@ function isPortalAccessPayload(value: unknown): value is CustomerPortalAccessTok
     exp > iat &&
     exp - iat <= maxCustomerPortalAccessLinkAgeSeconds
   );
+}
+
+function safeLinkRevision(value: unknown) {
+  const cleaned = textOrNull(value);
+
+  if (!cleaned || cleaned.length > 80) {
+    return null;
+  }
+
+  const timestamp = Date.parse(cleaned);
+
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
 }
 
 function tokenParts(value: string) {
@@ -337,7 +356,10 @@ export function serializeCustomerPortalAccessCookie(name: string, value: string)
 
 export function createCustomerPortalAccessLinkToken(
   customerAccountReference: unknown,
-  options: { scope?: "portal_account" | "stored_document" } = {},
+  options: {
+    linkRevision?: unknown;
+    scope?: "portal_account" | "stored_document";
+  } = {},
 ): AdminBookingResult<CustomerPortalAccessLinkResult> {
   const account = safeCustomerPortalAccessAccountReference(customerAccountReference);
 
@@ -371,11 +393,22 @@ export function createCustomerPortalAccessLinkToken(
   }
 
   const issuedAtSeconds = Math.floor(Date.now() / 1000);
+  const linkRevision = safeLinkRevision(options.linkRevision);
+
+  if (scope === "portal_account" && !linkRevision) {
+    return {
+      error: customerPortalAccessDisabledError,
+      ok: false,
+      status: 403,
+    };
+  }
+
   const expiresAtSeconds = issuedAtSeconds + maxCustomerPortalAccessLinkAgeSeconds;
   const payloadSegment = encodeJsonSegment({
     account,
     ...(scope === "portal_account" ? {} : { exp: expiresAtSeconds }),
     iat: issuedAtSeconds,
+    ...(linkRevision ? { rev: linkRevision } : {}),
     ...(scope === "allowlisted" ? {} : { scope }),
     type: customerPortalAccessLinkVersion,
   } satisfies CustomerPortalAccessTokenPayload);
@@ -466,6 +499,8 @@ export function resolveCustomerPortalAccessSession(
       access_scope: scope,
       auth_user_id: portalAccessAuthUserId,
       customer_account_reference: payload.account,
+      issued_at: payload.iat,
+      link_revision: safeLinkRevision(payload.rev),
       version: customerPortalAccessLinkVersion,
     },
     ok: true,

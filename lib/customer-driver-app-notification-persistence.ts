@@ -1224,6 +1224,8 @@ function resolveCustomerInAppNotificationRuntimeBoundary(
   booking_reference: string;
   customer_account_reference?: string | null;
   mode: "server-session-cookie" | "server-session-token";
+  portal_link_issued_at?: number | null;
+  portal_link_revision?: string | null;
   runtime_gate: ControlledCustomerRuntimeGate;
 }> {
   const requestUrl = new URL(request.url);
@@ -1311,6 +1313,8 @@ function resolveCustomerInAppNotificationRuntimeBoundary(
         booking_reference: bookingReference,
         customer_account_reference: portalAccessSession.data.customer_account_reference,
         mode: "server-session-cookie",
+        portal_link_issued_at: portalAccessSession.data.issued_at,
+        portal_link_revision: portalAccessSession.data.link_revision,
         runtime_gate: effectiveRuntimeGate,
       },
       ok: true,
@@ -1389,6 +1393,8 @@ function resolveCustomerInAppNotificationPortalAccessBoundary(
   booking_reference: string;
   customer_account_reference: string;
   mode: "server-session-cookie";
+  portal_link_issued_at: number;
+  portal_link_revision: string | null;
   runtime_gate: ControlledCustomerRuntimeGate;
 }> {
   const requestUrl = new URL(request.url);
@@ -1468,6 +1474,8 @@ function resolveCustomerInAppNotificationPortalAccessBoundary(
       booking_reference: bookingReference,
       customer_account_reference: customerAccountReference,
       mode: "server-session-cookie",
+      portal_link_issued_at: portalAccessSession.data.issued_at,
+      portal_link_revision: portalAccessSession.data.link_revision,
       runtime_gate: {
         account_allowlist: new Set([customerAccountReference]),
         mode: "one-customer",
@@ -1893,6 +1901,8 @@ async function loadCustomerAppNotificationsForControlledRuntime(
     auth_user_id: string;
     booking_reference: string;
     customer_account_reference?: string | null;
+    portal_link_issued_at?: number | null;
+    portal_link_revision?: string | null;
     runtime_gate: ControlledCustomerRuntimeGate;
   },
 ): Promise<AdminBookingResult<{
@@ -1932,6 +1942,12 @@ async function loadCustomerAppNotificationsForControlledRuntime(
   const activeAccessAccount = await assertActiveCustomerPortalAccessAccount(
     accountReference.data,
     clientResult.data,
+    boundary.portal_link_revision || boundary.portal_link_issued_at
+      ? {
+          issuedAt: boundary.portal_link_issued_at,
+          linkRevision: boundary.portal_link_revision,
+        }
+      : undefined,
   );
 
   if (!activeAccessAccount.ok) {
@@ -2158,6 +2174,8 @@ function resolveCustomerQuickReplyRuntimeBoundary(
   booking_reference: string;
   customer_account_reference?: string | null;
   mode: "server-session-cookie" | "server-session-token";
+  portal_link_issued_at?: number | null;
+  portal_link_revision?: string | null;
   runtime_gate: ControlledCustomerRuntimeGate;
 }> {
   const requestUrl = new URL(request.url);
@@ -2219,6 +2237,8 @@ function resolveCustomerQuickReplyRuntimeBoundary(
         booking_reference: bookingReference,
         customer_account_reference: portalAccessSession.data.customer_account_reference,
         mode: "server-session-cookie",
+        portal_link_issued_at: portalAccessSession.data.issued_at,
+        portal_link_revision: portalAccessSession.data.link_revision,
         runtime_gate: runtimeGate,
       },
       ok: true,
@@ -2330,6 +2350,8 @@ async function assertQuickReplyCustomerBookingScope(
     auth_user_id: string;
     booking_reference: string;
     customer_account_reference?: string | null;
+    portal_link_issued_at?: number | null;
+    portal_link_revision?: string | null;
     runtime_gate: ControlledCustomerRuntimeGate;
   },
 ): Promise<AdminBookingResult<string>> {
@@ -2355,6 +2377,21 @@ async function assertQuickReplyCustomerBookingScope(
     !accountReference.data ||
     !customerAccountAllowedByControlledRuntime(accountReference.data, boundary.runtime_gate)
   ) {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  const activeAccessAccount = await assertActiveCustomerPortalAccessAccount(
+    accountReference.data,
+    client,
+    boundary.portal_link_revision || boundary.portal_link_issued_at
+      ? {
+          issuedAt: boundary.portal_link_issued_at,
+          linkRevision: boundary.portal_link_revision,
+        }
+      : undefined,
+  );
+
+  if (!activeAccessAccount.ok) {
     return customerAppNotificationsRequireAuthResult();
   }
 

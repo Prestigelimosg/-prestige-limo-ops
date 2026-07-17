@@ -6,13 +6,20 @@ import type {
   AdminBookingPersistenceSafeErrorCategory,
   AdminBookingResult,
 } from "./admin-booking-persistence";
+import { resolveCustomerSavedBookingsBoundaryForPurpose } from "./customer-saved-bookings-read";
+import { assertActiveCustomerPortalAccessAccount } from "./customer-portal-access-account";
 
 export const customerBookingMemoryReadVersion =
   "customer-booking-memory-read-v1";
 
 export type CustomerBookingMemoryBoundaryContext = {
   auth_user_id: string;
+  booker_id?: number | null;
+  company_id?: number | null;
+  customer_account_reference?: string | null;
   mode: "server-session-cookie" | "server-session-token";
+  portal_link_issued_at?: number | null;
+  portal_link_revision?: string | null;
   source_surface: "customer_api";
 };
 
@@ -31,8 +38,24 @@ export type CustomerBookingMemoryRecord = {
 };
 
 export type CustomerBookingMemoryReadResult = {
+  booker_profile: CustomerBookingMemoryBookerProfile | null;
   memories: CustomerBookingMemoryRecord[];
+  travelers: CustomerBookingMemoryTraveler[];
   version: typeof customerBookingMemoryReadVersion;
+};
+
+export type CustomerBookingMemoryBookerProfile = {
+  booker_name: string | null;
+  email: string;
+  phone: string | null;
+};
+
+export type CustomerBookingMemoryTraveler = {
+  default_dropoff_address: string | null;
+  default_pickup_address: string | null;
+  id: number;
+  preferred_vehicle: string | null;
+  traveler_name: string;
 };
 
 type UnknownRecord = Record<string, unknown>;
@@ -48,7 +71,10 @@ const maxMemoryLimit = 10;
 const maxMemoryQueryLength = 120;
 const maxSafeTextLength = 500;
 const customerAccountSelect =
-  "customer_account_reference, account_status";
+  "customer_account_reference, account_status, company_id, booker_id";
+const customerBookerProfileSelect = "id, company_id, booker_name, email, phone";
+const customerTravelerSelect =
+  "id, company_id, booker_id, traveler_name, preferred_vehicle, default_pickup_address, default_dropoff_address";
 const customerBookingMemorySelect =
   "booking_reference, passenger_name, pickup_location, dropoff_location, service_type, route_type, vehicle_type, vehicle, pickup_at, pickup_datetime, updated_at, created_at";
 const customerBookingMemoryAuthRequiredError =
@@ -182,6 +208,20 @@ function validBookingReference(value: unknown) {
     cleaned.length <= maxMemoryQueryLength &&
     /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(cleaned) &&
     !includesForbiddenFragment(cleaned)
+    ? cleaned
+    : null;
+}
+
+function positiveInteger(value: unknown) {
+  const parsed = Number(value);
+
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function safeEmailFromDb(value: unknown) {
+  const cleaned = safeTextFromDb(value, 254)?.toLowerCase() || null;
+
+  return cleaned && /^[^\s@<>()[\],;:"\\]+@[^\s@<>()[\],;:"\\]+\.[^\s@<>()[\],;:"\\]+$/.test(cleaned)
     ? cleaned
     : null;
 }
@@ -659,6 +699,28 @@ export function resolveCustomerBookingMemoryBoundary(
     return customerBookingMemoryAuthRequiredResult();
   }
 
+  const portalBoundary = resolveCustomerSavedBookingsBoundaryForPurpose(
+    request,
+    "customer-booking-memory-read",
+    "/book",
+  );
+
+  if (portalBoundary.ok) {
+    return {
+      data: {
+        auth_user_id: portalBoundary.data.auth_user_id,
+        booker_id: portalBoundary.data.booker_id,
+        company_id: portalBoundary.data.company_id,
+        customer_account_reference: portalBoundary.data.customer_account_reference,
+        mode: portalBoundary.data.mode,
+        portal_link_issued_at: portalBoundary.data.portal_link_issued_at,
+        portal_link_revision: portalBoundary.data.portal_link_revision,
+        source_surface: "customer_api",
+      },
+      ok: true,
+    };
+  }
+
   if (process.env.PRESTIGE_CUSTOMER_BOOKING_MEMORY_AUTH_ENABLED !== "true") {
     return customerBookingMemoryAuthRequiredResult();
   }
@@ -703,25 +765,49 @@ export async function loadCustomerBookingMemory(
     return clientResult;
   }
 
-  const { data: accountRows, error: accountError } = await clientResult.data
-    .from("customer_access_accounts")
-    .select(customerAccountSelect)
-    .eq("auth_user_id", context.auth_user_id)
-    .eq("account_status", "active")
-    .limit(1);
+  let accountRow: UnknownRecord;
 
-  if (accountError) {
-    return safeAdapterFailure(customerBookingMemoryReadError, 500, accountError);
+  if (context.customer_account_reference) {
+    const activeAccount = await assertActiveCustomerPortalAccessAccount(
+      context.customer_account_reference,
+      clientResult.data,
+      context.portal_link_revision || context.portal_link_issued_at
+        ? {
+            issuedAt: context.portal_link_issued_at,
+            linkRevision: context.portal_link_revision,
+          }
+        : undefined,
+    );
+
+    if (!activeAccount.ok) {
+      return customerBookingMemoryAuthRequiredResult();
+    }
+
+    accountRow = activeAccount.data;
+  } else {
+    const { data: accountRows, error: accountError } = await clientResult.data
+      .from("customer_access_accounts")
+      .select(customerAccountSelect)
+      .eq("auth_user_id", context.auth_user_id)
+      .eq("account_status", "active")
+      .limit(1);
+
+    if (accountError) {
+      return safeAdapterFailure(customerBookingMemoryReadError, 500, accountError);
+    }
+
+    accountRow = asRecord(asArray(accountRows)[0]);
   }
-
-  const customerAccountReference = validBookingReference(
-    asRecord(asArray(accountRows)[0]).customer_account_reference,
-  );
+  const customerAccountReference = validBookingReference(accountRow.customer_account_reference);
+  const companyId = positiveInteger(accountRow.company_id) || positiveInteger(context.company_id);
+  const bookerId = positiveInteger(accountRow.booker_id) || positiveInteger(context.booker_id);
 
   if (!customerAccountReference) {
     return {
       data: {
+        booker_profile: null,
         memories: [],
+        travelers: [],
         version: customerBookingMemoryReadVersion,
       },
       ok: true,
@@ -739,9 +825,69 @@ export async function loadCustomerBookingMemory(
     return safeAdapterFailure(customerBookingMemoryReadError, 500, bookingError);
   }
 
+  let bookerProfile: CustomerBookingMemoryBookerProfile | null = null;
+  let travelers: CustomerBookingMemoryTraveler[] = [];
+
+  if (companyId && bookerId) {
+    const [bookerResult, travelerResult] = await Promise.all([
+      clientResult.data
+        .from("bookers")
+        .select(customerBookerProfileSelect)
+        .eq("id", bookerId)
+        .eq("company_id", companyId)
+        .limit(1),
+      clientResult.data
+        .from("travelers")
+        .select(customerTravelerSelect)
+        .eq("company_id", companyId)
+        .eq("booker_id", bookerId)
+        .order("traveler_name", { ascending: true })
+        .limit(50),
+    ]);
+
+    if (bookerResult.error || travelerResult.error) {
+      return safeAdapterFailure(
+        customerBookingMemoryReadError,
+        500,
+        bookerResult.error || travelerResult.error,
+      );
+    }
+
+    const bookerRow = asRecord(asArray(bookerResult.data)[0]);
+    const bookerEmail = safeEmailFromDb(bookerRow.email);
+
+    if (positiveInteger(bookerRow.id) === bookerId && bookerEmail) {
+      bookerProfile = {
+        booker_name: safeTextFromDb(bookerRow.booker_name, 160),
+        email: bookerEmail,
+        phone: safeTextFromDb(bookerRow.phone, 80),
+      };
+    }
+
+    travelers = asArray(travelerResult.data)
+      .map(asRecord)
+      .map((row) => {
+        const id = positiveInteger(row.id);
+        const travelerName = safeTextFromDb(row.traveler_name, 160);
+
+        return id && travelerName && positiveInteger(row.booker_id) === bookerId
+          ? {
+              default_dropoff_address: safeTextFromDb(row.default_dropoff_address),
+              default_pickup_address: safeTextFromDb(row.default_pickup_address),
+              id,
+              preferred_vehicle: safeTextFromDb(row.preferred_vehicle, 120),
+              traveler_name: travelerName,
+            }
+          : null;
+      })
+      .filter((traveler): traveler is CustomerBookingMemoryTraveler => Boolean(traveler));
+  }
+
   return {
     data: {
+      booker_profile: bookerProfile,
       memories: dedupeMemoryRows(asArray(bookingRows).map(asRecord), parsed.data.q, parsed.data.limit),
+      travelers,
       version: customerBookingMemoryReadVersion,
     },
     ok: true,

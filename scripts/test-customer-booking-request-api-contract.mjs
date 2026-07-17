@@ -36,6 +36,7 @@ async function loadRouteHarness() {
   const adapterPath = path.join(tempDir, "lib/admin-booking-supabase-adapter.js");
   const emailAlertPath = path.join(tempDir, "lib/admin-new-booking-email-alert.js");
   const devicePushAlertPath = path.join(tempDir, "lib/admin-device-push-notification.js");
+  const receiptEmailPath = path.join(tempDir, "lib/customer-booking-receipt-email.js");
   const customerSavedBookingsReadPath = path.join(tempDir, "lib/customer-saved-bookings-read.js");
   const codexJobCardAutoPreparationPath = path.join(
     tempDir,
@@ -126,6 +127,18 @@ async function loadRouteHarness() {
     ].join("\n"),
   );
   await writeFile(
+    receiptEmailPath,
+    [
+      "function mock() { return globalThis.__prestigeCustomerBookingRequestApiMock; }",
+      "async function sendCustomerBookingReceiptEmail(bookings) {",
+      "  const state = mock();",
+      "  state.receiptCalls = [...(state.receiptCalls || []), bookings];",
+      "  return state.receiptResult || { ok: false, reason: 'gate_closed', status: 'blocked' };",
+      "}",
+      "module.exports = { sendCustomerBookingReceiptEmail };",
+    ].join("\n"),
+  );
+  await writeFile(
     customerSavedBookingsReadPath,
     [
       "function mock() { return globalThis.__prestigeCustomerBookingRequestApiMock; }",
@@ -133,8 +146,9 @@ async function loadRouteHarness() {
       "  const state = mock();",
       "  return state.portalBoundary || { ok: false, error: 'no portal session', status: 403 };",
       "}",
-      "async function resolveCustomerSavedBookingsVerifiedIdentity() {",
+      "async function resolveCustomerSavedBookingsVerifiedIdentity(context, travelerId) {",
       "  const state = mock();",
+      "  state.identityCalls.push({ context, travelerId });",
       "  return state.verifiedIdentity || { ok: false, error: 'identity unavailable', status: 403 };",
       "}",
       "function expiredCustomerSavedBookingsSessionCookieHeaders() {",
@@ -188,6 +202,7 @@ function installMock(overrides = {}) {
     },
     devicePushAlertCalls: [],
     devicePushAlertThrows: false,
+    identityCalls: [],
     parseCalls: [],
     parseResult: {
       data: {
@@ -354,6 +369,7 @@ try {
     request: {
       booking_reference: "CUST-SAFE-001",
       customer_facing_status: "Request Received",
+      receipt_status: "blocked",
       return_booking_reference: null,
       return_trip_requested: false,
       short_notice_review_required: true,
@@ -389,12 +405,14 @@ try {
         booker_id: 5,
         company_id: 1,
         customer_account_reference: "120",
+        traveler_id: 901,
+        traveler_name: "Verified Traveller",
       },
       ok: true,
     },
   });
   const verifiedPaSuccess = await readJson(
-    await harness.route.POST(postRequest({ passengerName: "Safe PA Passenger" })),
+    await harness.route.POST(postRequest({ passengerName: "Tampered Passenger", travelerId: "901" })),
   );
 
   assert.equal(verifiedPaSuccess.status, 200);
@@ -403,7 +421,10 @@ try {
     booker_id: 5,
     company_id: 1,
     customer_id: "120",
+    passenger_name: "Verified Traveller",
+    traveler_id: 901,
   });
+  assert.equal(verifiedPaMock.identityCalls[0].travelerId, "901");
   assertSafeCustomerBody(verifiedPaSuccess.body, "verified PA success body");
 
   const stalePortalMock = installMock({
@@ -505,6 +526,7 @@ try {
     request: {
       booking_reference: "CUST-RETURN-001-OUT",
       customer_facing_status: "Request Received",
+      receipt_status: "blocked",
       return_booking_reference: "CUST-RETURN-001-RET",
       return_trip_requested: true,
       short_notice_review_required: true,
@@ -572,6 +594,7 @@ try {
     request: {
       booking_reference: "CUST-SAFE-INAPP-FAIL",
       customer_facing_status: "Request Received",
+      receipt_status: "blocked",
       return_booking_reference: null,
       return_trip_requested: false,
       short_notice_review_required: true,
@@ -604,6 +627,7 @@ try {
     request: {
       booking_reference: "CUST-SAFE-ALERT-FAIL",
       customer_facing_status: "Request Received",
+      receipt_status: "blocked",
       return_booking_reference: null,
       return_trip_requested: false,
       short_notice_review_required: true,
@@ -636,6 +660,7 @@ try {
     request: {
       booking_reference: "CUST-SAFE-PUSH-FAIL",
       customer_facing_status: "Request Received",
+      receipt_status: "blocked",
       return_booking_reference: null,
       return_trip_requested: false,
       short_notice_review_required: true,

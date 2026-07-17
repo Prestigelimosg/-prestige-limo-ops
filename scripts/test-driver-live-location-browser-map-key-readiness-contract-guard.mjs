@@ -118,7 +118,9 @@ for (const fragment of [
   "data-admin-active-jobs-map-google-base",
   "data-admin-active-jobs-map-google-slot",
   "data-admin-active-jobs-map-live-movement",
-  "document.body.appendChild(mapElement);",
+  "mapSlotElement.appendChild(mapElement);",
+  'mapElement.style.inset = "0";',
+  'mapElement.style.position = "absolute";',
   "Google Maps visual DOM did not render safely.",
   "data-admin-active-jobs-map-canvas",
   "data-dispatch-live-driver-map-config-message",
@@ -145,6 +147,10 @@ for (const fragment of [
 for (const forbiddenFragment of [
   "loading=async&libraries=maps,marker",
   'script.addEventListener("load", finish',
+  "document.body.appendChild(mapElement);",
+  'mapElement.style.position = "fixed";',
+  "updateMapPortalRect",
+  'window.addEventListener("scroll", updateMapPortalRect, true);',
 ]) {
   assertExcludes(appPage, forbiddenFragment, "admin browser map callback readiness");
 }

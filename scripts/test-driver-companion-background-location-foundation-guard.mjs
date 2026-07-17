@@ -11,6 +11,7 @@ const files = {
   package: "driver-companion/package.json",
   preactivation: "scripts/test-preactivation-verification-suite.mjs",
   readme: "driver-companion/README.md",
+  rootTsconfig: "tsconfig.json",
   secureStore: "driver-companion/src/active-job-store.ts",
   tracking: "driver-companion/src/tracking.ts",
 };
@@ -85,6 +86,7 @@ includes("app", 'edges={["top", "right", "bottom", "left"]}');
 includes("app", "Tracking does not start automatically");
 includes("app", "Force-quitting the app,");
 includes("readme", "Expo Go cannot test this background-location workflow.");
+includes("rootTsconfig", '"exclude": ["node_modules", "driver-companion"]');
 includes("preactivation", "scripts/test-driver-companion-background-location-foundation-guard.mjs");
 
 const combinedNativeSource = [

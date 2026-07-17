@@ -4100,8 +4100,9 @@ function AdminActiveJobsBrowserMap({
     let cancelled = false;
     let tileFallbackInline = false;
     const hasActiveMarkers = activeMarkerJobs.length > 0;
+    const mapSlotElement = mapSlotRef.current;
 
-    if (!apiKey || !hasActiveMarkers) {
+    if (!apiKey || !hasActiveMarkers || !mapSlotElement) {
       return () => {
         cancelled = true;
       };
@@ -4111,10 +4112,11 @@ function AdminActiveJobsBrowserMap({
     const mapElement = document.createElement("div");
     mapElement.setAttribute("data-admin-active-jobs-map-google-base", "true");
     mapElement.style.background = "#e5e7eb";
+    mapElement.style.inset = "0";
     mapElement.style.overflow = "hidden";
-    mapElement.style.position = "fixed";
+    mapElement.style.position = "absolute";
     mapElement.style.zIndex = "5";
-    document.body.appendChild(mapElement);
+    mapSlotElement.appendChild(mapElement);
     mapElementRef.current = mapElement;
     const markGoogleMapUserAdjusted = () => {
       if (
@@ -4125,44 +4127,6 @@ function AdminActiveJobsBrowserMap({
       }
     };
 
-    const updateMapPortalRect = () => {
-      const slotElement = mapSlotRef.current;
-      const portalElement = mapElementRef.current;
-
-      if (!portalElement) {
-        return;
-      }
-
-      if (
-        tileFallbackInline ||
-        portalElement.getAttribute("data-admin-active-jobs-map-google-tile-base") === "true"
-      ) {
-        positionAdminActiveJobsBrowserMapTileFallbackElement(portalElement);
-        return;
-      }
-
-      if (!slotElement) {
-        portalElement.style.display = "none";
-        return;
-      }
-
-      const rect = slotElement.getBoundingClientRect();
-      portalElement.style.display =
-        rect.width > 0 && rect.height > 0 ? "block" : "none";
-      portalElement.style.height = `${Math.max(0, rect.height)}px`;
-      portalElement.style.left = `${rect.left}px`;
-      portalElement.style.top = `${rect.top}px`;
-      portalElement.style.width = `${Math.max(0, rect.width)}px`;
-    };
-    const resizeObserver =
-      typeof ResizeObserver !== "undefined"
-        ? new ResizeObserver(updateMapPortalRect)
-        : null;
-
-    updateMapPortalRect();
-    resizeObserver?.observe(mapSlotRef.current || document.body);
-    window.addEventListener("resize", updateMapPortalRect);
-    window.addEventListener("scroll", updateMapPortalRect, true);
     mapElement.addEventListener("pointerdown", markGoogleMapUserAdjusted);
     mapElement.addEventListener("wheel", markGoogleMapUserAdjusted);
 
@@ -4224,7 +4188,7 @@ function AdminActiveJobsBrowserMap({
           mapRef.current = null;
           mapsRuntimeRef.current = null;
           tileFallbackInline = true;
-          mapSlotRef.current?.prepend(mapElement);
+          mapSlotElement.prepend(mapElement);
           const latestMarkerJobs = activeMarkerJobsRef.current;
 
           if (latestMarkerJobs.length === 0) {
@@ -4232,7 +4196,7 @@ function AdminActiveJobsBrowserMap({
           }
 
           renderAdminActiveJobsBrowserMapTileFallback(mapElement, latestMarkerJobs);
-          updateMapPortalRect();
+          positionAdminActiveJobsBrowserMapTileFallbackElement(mapElement);
           await waitForAdminActiveJobsBrowserMapTileFallback(mapElement);
 
           if (!cancelled) {
@@ -4247,9 +4211,6 @@ function AdminActiveJobsBrowserMap({
 
     return () => {
       cancelled = true;
-      resizeObserver?.disconnect();
-      window.removeEventListener("resize", updateMapPortalRect);
-      window.removeEventListener("scroll", updateMapPortalRect, true);
       mapElement.removeEventListener("pointerdown", markGoogleMapUserAdjusted);
       mapElement.removeEventListener("wheel", markGoogleMapUserAdjusted);
       cleanupAdminActiveJobsBrowserMapTileFallback(mapElement);

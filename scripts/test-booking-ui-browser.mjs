@@ -8015,6 +8015,9 @@ async function runChromeTest() {
           const rows = [...document.querySelectorAll("[data-dashboard-command-centre-row]")];
           const activeJobs = [...document.querySelectorAll("[data-admin-multi-driver-active-job]")];
           const notificationFeed = document.querySelector("[data-admin-app-notification-feed='true']");
+          const notificationFeedHeaderActions = document.querySelector("[data-admin-app-notification-feed-header-actions='true']");
+          const notificationFeedState = document.querySelector("[data-admin-app-notification-feed-state='true']");
+          const devicePushToggle = document.querySelector("[data-admin-device-push-toggle='true']");
           const urgentRequestsPanel = document.querySelector("[data-dashboard-urgent-booking-requests-panel='true']");
           const systemNotices = document.querySelector("[data-dashboard-codex-system-notices='true']");
           const codexPreparedJobCards = document.querySelector("[data-codex-prepared-job-cards='true']");
@@ -8050,6 +8053,29 @@ async function runChromeTest() {
                   ? getComputedStyle(codexPreparedJobCardList).overflowY
                   : "",
                 forbiddenDuplicateControlCount: forbiddenDuplicateControls.length,
+                devicePushToggleCount: document.querySelectorAll("[data-admin-device-push-toggle='true']").length,
+                devicePushToggleHeight: devicePushToggle ? Math.round(devicePushToggle.getBoundingClientRect().height) : 0,
+                devicePushToggleInsideHeaderActions: Boolean(
+                  notificationFeedHeaderActions?.contains(devicePushToggle),
+                ),
+                devicePushToggleLabel: devicePushToggle?.getAttribute("aria-label") || "",
+                devicePushToggleSameRowAsFeedState: (() => {
+                  const stateRect = notificationFeedState?.getBoundingClientRect();
+                  const pushRect = devicePushToggle?.getBoundingClientRect();
+
+                  return Boolean(
+                    stateRect &&
+                    pushRect &&
+                    Math.abs(
+                      stateRect.top + stateRect.height / 2 -
+                        (pushRect.top + pushRect.height / 2),
+                    ) <= 2,
+                  );
+                })(),
+                devicePushToggleText: devicePushToggle?.textContent.trim() || "",
+                feedStateInsideHeaderActions: Boolean(
+                  notificationFeedHeaderActions?.contains(notificationFeedState),
+                ),
                 notificationFeedCount: document.querySelectorAll("[data-admin-app-notification-feed='true']").length,
                 rowCount: rows.length,
                 globalStatusPanelOutsideNotificationFeedCount: [...document.querySelectorAll("[data-status-panel='global']")]
@@ -8077,6 +8103,17 @@ async function runChromeTest() {
     assert.equal(dashboardCommandCentreState.automationRole, "switch");
     assert.equal(dashboardCommandCentreState.automationText, "Automation OFF");
     assert.equal(dashboardCommandCentreState.notificationFeedCount, 1);
+    assert.equal(dashboardCommandCentreState.devicePushToggleCount, 1);
+    assert.equal(dashboardCommandCentreState.devicePushToggleInsideHeaderActions, true);
+    assert.equal(dashboardCommandCentreState.devicePushToggleSameRowAsFeedState, true);
+    assert.equal(dashboardCommandCentreState.feedStateInsideHeaderActions, true);
+    assert.equal(dashboardCommandCentreState.devicePushToggleLabel, "Push alerts OFF");
+    assert.equal(dashboardCommandCentreState.devicePushToggleText, "Push OFF");
+    assert.equal(
+      dashboardCommandCentreState.devicePushToggleHeight <= 32,
+      true,
+      `Expected compact push switch no taller than 32px, got ${dashboardCommandCentreState.devicePushToggleHeight}px`,
+    );
     assert.equal(dashboardCommandCentreState.globalStatusPanelOutsideNotificationFeedCount, 0);
     assert.equal(dashboardCommandCentreState.systemNoticesContainedOrAbsent, true);
     assert.equal(dashboardCommandCentreState.urgentRequestsPanelCount, 1);

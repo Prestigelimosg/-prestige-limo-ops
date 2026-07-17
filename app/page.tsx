@@ -43768,7 +43768,12 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   Internal admin inbox only. External messages are not sent from here.
                 </p>
               </div>
-              <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+              <div
+                className="flex flex-wrap items-center gap-2 sm:justify-end"
+                data-admin-app-notification-feed-header-actions="true"
+                data-admin-device-push-panel="true"
+                data-admin-device-push-state={adminDevicePushState.status}
+              >
                 <span
                   className="rounded-full border border-sky-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-sky-800"
                   data-admin-app-notification-feed-state="true"
@@ -43783,8 +43788,50 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                           ? `${otherAdminAppNotifications.length} other`
                           : "Ready"}
                 </span>
+                <button
+                  aria-checked={adminDevicePushState.status === "enabled"}
+                  aria-label={adminDevicePushState.status === "enabled" ? "Push alerts ON" : "Push alerts OFF"}
+                  className={`min-h-7 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition disabled:cursor-not-allowed disabled:text-slate-400 ${
+                    adminDevicePushState.status === "enabled"
+                      ? "border-sky-700 bg-sky-700 text-white hover:bg-sky-600"
+                      : "border-sky-300 bg-white text-sky-800 hover:bg-sky-50"
+                  }`}
+                  data-admin-device-push-toggle="true"
+                  disabled={
+                    adminDevicePushAction !== null ||
+                    !adminDevicePushState.supported ||
+                    (adminDevicePushState.status !== "enabled" && !adminDevicePushState.publicKey)
+                  }
+                  onClick={
+                    adminDevicePushState.status === "enabled"
+                      ? handleAdminDevicePushDisable
+                      : handleAdminDevicePushEnable
+                  }
+                  role="switch"
+                  title={adminDevicePushState.message?.text || "Optional browser alert for new booking requests."}
+                  type="button"
+                >
+                  {adminDevicePushAction
+                    ? adminDevicePushAction === "enable"
+                      ? "Turning ON..."
+                      : "Turning OFF..."
+                    : adminDevicePushState.status === "enabled"
+                      ? "Push ON"
+                      : "Push OFF"}
+                </button>
               </div>
             </div>
+
+            {adminDevicePushState.message?.tone === "error" ? (
+              <div
+                className={`mt-2 rounded-md border px-2 py-1.5 text-xs ${statusClass(
+                  adminDevicePushState.message.tone,
+                )}`}
+                data-admin-device-push-feedback="true"
+              >
+                {adminDevicePushState.message.text}
+              </div>
+            ) : null}
 
             {dashboardSystemNotices.length > 0 ? (
               <div
@@ -44114,60 +44161,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             </section>
 
             {codexPreparedJobCardsPanel}
-
-            <div
-              className="mt-2 rounded-md border border-sky-100 bg-white p-2"
-              data-admin-device-push-panel="true"
-              data-admin-device-push-state={adminDevicePushState.status}
-            >
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <h4 className="text-sm font-semibold text-slate-950">Device Push Alerts</h4>
-	                  <p className="text-xs text-slate-600">
-	                    Optional phone/Mac browser alert for new booking requests. This does not change the booking queue.
-	                  </p>
-                </div>
-                <button
-                  aria-checked={adminDevicePushState.status === "enabled"}
-                  className={`h-8 rounded-full border px-3 text-xs font-semibold transition disabled:cursor-not-allowed disabled:text-slate-400 ${
-                    adminDevicePushState.status === "enabled"
-                      ? "border-sky-700 bg-sky-700 text-white hover:bg-sky-600"
-                      : "border-sky-300 bg-white text-sky-800 hover:bg-sky-50"
-                  }`}
-                  data-admin-device-push-toggle="true"
-                  disabled={
-                    adminDevicePushAction !== null ||
-                    !adminDevicePushState.supported ||
-                    (adminDevicePushState.status !== "enabled" && !adminDevicePushState.publicKey)
-                  }
-                  onClick={
-                    adminDevicePushState.status === "enabled"
-                      ? handleAdminDevicePushDisable
-                      : handleAdminDevicePushEnable
-                  }
-                  role="switch"
-                  type="button"
-                >
-                  {adminDevicePushAction
-                    ? adminDevicePushAction === "enable"
-                      ? "Turning ON..."
-                      : "Turning OFF..."
-                    : adminDevicePushState.status === "enabled"
-                      ? "Push alerts ON"
-                      : "Push alerts OFF"}
-                </button>
-              </div>
-              {adminDevicePushState.message ? (
-                <div
-                  className={`mt-2 rounded-md border px-2 py-1.5 text-xs ${statusClass(
-                    adminDevicePushState.message.tone,
-                  )}`}
-                  data-admin-device-push-feedback="true"
-                >
-                  {adminDevicePushState.message.text}
-                </div>
-              ) : null}
-            </div>
 
             {otherAdminAppNotifications.length > 0 ? (
               <div

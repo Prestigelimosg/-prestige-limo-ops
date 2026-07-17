@@ -1,13 +1,13 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-a65fec27 Merge PR #24: Compact prepared job actions
+52b3cc08 Merge PR #26: Add Driver Companion and repair active jobs map
 
-Latest pushed main/staging runtime checkpoint:
-a65fec27 Merge PR #24: Compact prepared job actions
+Latest pushed Production main runtime checkpoint:
+52b3cc08 Merge PR #26: Add Driver Companion and repair active jobs map
 
-Latest remote main/staging deployment checkpoint verified before this docs note:
-a65fec27 Merge PR #24: Compact prepared job actions
+Latest remote Production deployment checkpoint verified before this docs note:
+52b3cc08 Merge PR #26: Add Driver Companion and repair active jobs map
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.

@@ -249,7 +249,7 @@ for (const fragment of [
 
 const portalTripUpdatesAdapter = files["lib/customer-portal-trip-updates-adapter.ts"];
 for (const fragment of [
-  "fetcher(\n      `${customerPortalTripUpdatesApiPath}?booking_reference=${encodeURIComponent(safeReference)}&limit=5&page=1`",
+  "fetcher(\n      `${customerPortalTripUpdatesApiPath}?booking_reference=${encodeURIComponent(safeReference)}&limit=10&page=1`",
   'cache: "no-store"',
   'credentials: "same-origin"',
   '"x-prestige-customer-purpose": "customer-in-app-notification-read"',

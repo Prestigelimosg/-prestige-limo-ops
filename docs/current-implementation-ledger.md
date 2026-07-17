@@ -12,6 +12,16 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Customer Driver Details Explicit Acknowledgement (2026-07-17)
+
+- The owner approved one explicit customer acknowledgement for the existing fixed-template Dispatch `Customer Copy` → `Send In-App` driver-details workflow. Merely opening My Bookings, expanding a booking, or viewing driver details never counts as acknowledgement and performs no write.
+- The existing admin send continues creating the exact booking-scoped `customer_app_updates` / `Driver details ready` outbox record. The existing Bookings card now shows a compact blue `Detail sent [SGT time]` pill beside `Cal saved`; after an explicit customer acknowledgement it shows a compact green `Acknowledged [SGT time]` pill in the same position.
+- My Bookings shows `Acknowledge driver details` inside the existing Driver Details card only when the exact booking's authenticated customer read contains the prior `Driver details ready` record. The existing bounded trip-update read uses its established safe maximum of 10 rows so this operational update is less likely to be displaced by newer messages. The action reuses the existing `POST /api/customer-driver-quick-replies` route, customer session/account/booking scope, controlled runtime gates, fixed-template validation, and existing notification outbox.
+- The server independently requires the prior exact-booking admin/dispatcher `Driver details ready` record before accepting acknowledgement. The first tap stores one `customer_app` / `customer_driver_details_acknowledgements` record with fixed safe text; repeated taps return the existing acknowledgement and do not create duplicates.
+- The acknowledgement is `customer_to_admin` and `customer_app` only. It is never written to `driver_app`, so the driver cannot see it. It contains no free text, driver-link token, provider send, Email, WhatsApp, SMS, Telegram, price, billing, invoice/payment, payout/PayNow, internal note, parser/debug content, secret, or other-booking data.
+- Bookings reuses the existing paginated admin notification GET when the Bookings surface opens or its loaded booking-reference set changes. It adds no route, API writer, table, panel, composer, provider send, polling timer, background retry, or read-receipt assumption. A failed read is shown explicitly and produces no guessed sent/acknowledged pill.
+- Focused protection: `scripts/test-customer-driver-details-acknowledgement-guard.mjs` plus the existing customer quick-reply, customer notification API, public surface, Customer Copy, and booking browser guards. Runtime acceptance remains required on an exact deployed build in the owner's Chrome with all live mutation methods blocked; no customer acknowledgement or notification write is authorized merely for verification.
+
 ### Active Assigned Jobs Customer Message Queue Indicator (2026-07-17)
 
 - The owner approved replacing the truncated raw internal booking-status pill such as `admin_review...` in each existing `Active Assigned Jobs` card. The underlying booking workflow status remains unchanged and available to its established internal consumers; only that unhelpful card pill is removed.

@@ -7,6 +7,7 @@ export type CustomerPortalTripUpdate = {
   status: string;
   title: string;
   type: string;
+  workflowArea: string;
 };
 
 export type CustomerPortalTripUpdatesResult = {
@@ -199,6 +200,7 @@ function mapTripUpdate(value: unknown): CustomerPortalTripUpdate | null {
     status: safeStatusLabel(record.notification_status),
     title: title || "Trip update",
     type: safeText(record.notification_type, 80) || "trip_update",
+    workflowArea: safeText(record.workflow_area, 80),
   };
 }
 
@@ -261,7 +263,7 @@ export async function loadCustomerPortalTripUpdates({
 
   try {
     const response = await fetcher(
-      `${customerPortalTripUpdatesApiPath}?booking_reference=${encodeURIComponent(safeReference)}&limit=5&page=1`,
+      `${customerPortalTripUpdatesApiPath}?booking_reference=${encodeURIComponent(safeReference)}&limit=10&page=1`,
       {
         cache: "no-store",
         credentials: "same-origin",

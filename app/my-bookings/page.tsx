@@ -39,7 +39,11 @@ type DriverTrackingByBookingId = Record<string, CustomerPortalDriverTrackingResu
 type TripUpdatesByBookingId = Record<string, CustomerPortalTripUpdatesResult>;
 type CustomerQuickReplyState = Record<
   string,
-  { feedback: BookingRequestFeedback | null; sendingKey: string }
+  {
+    feedback: BookingRequestFeedback | null;
+    feedbackTarget: "driver" | "driver_details";
+    sendingKey: string;
+  }
 >;
 
 type BookingRequestFeedback = {
@@ -118,6 +122,10 @@ function rowMatchesFilter(booking: CustomerPortalBooking, filter: BookingFilter)
 
 function normalize(value: string) {
   return value.trim().toLowerCase();
+}
+
+function compactSingaporeTimeLabel(value: string) {
+  return value.match(/\b\d{2}:\d{2}\b/)?.[0] || "";
 }
 
 function getBookingMonthInfo(booking: CustomerPortalBooking) {
@@ -295,14 +303,24 @@ export default function CustomerPortalPage() {
   const companyName = companyProfile.company_name || defaultCompanyProfile.company_name;
   const companyContactLines = companyProfileContactLines(companyProfile);
 
-  async function sendCustomerDriverQuickReply(booking: CustomerPortalBooking, templateKey: string, message: string) {
+  async function sendCustomerDriverQuickReply(
+    booking: CustomerPortalBooking,
+    templateKey: string,
+    message: string,
+    expectedDirection: "customer_to_admin" | "customer_to_driver" = "customer_to_driver",
+  ) {
     const bookingReference = bookingReferenceFromPortalId(booking.id);
+    const isDriverDetailsAcknowledgement = expectedDirection === "customer_to_admin";
 
     if (!bookingReference || customerQuickReplies[booking.id]?.sendingKey) return;
 
     setCustomerQuickReplies((current) => ({
       ...current,
-      [booking.id]: { feedback: null, sendingKey: templateKey },
+      [booking.id]: {
+        feedback: null,
+        feedbackTarget: isDriverDetailsAcknowledgement ? "driver_details" : "driver",
+        sendingKey: templateKey,
+      },
     }));
 
     try {
@@ -317,29 +335,55 @@ export default function CustomerPortalPage() {
       });
       const result = await response.json().catch(() => null);
 
-      if (!response.ok || !result?.ok || result?.direction !== "customer_to_driver") {
+      if (
+        !response.ok ||
+        !result?.ok ||
+        result?.direction !== expectedDirection ||
+        (result?.direction !== "customer_to_driver" && result?.direction !== "customer_to_admin")
+      ) {
         throw new Error(
           response.status === 409
-            ? "Driver replies close after Passenger on board."
-            : result?.error || "Reply could not be sent. Please contact Prestige Limo.",
+            ? isDriverDetailsAcknowledgement
+              ? result?.error || "Driver details cannot be acknowledged yet."
+              : "Driver replies close after Passenger on board."
+            : result?.error ||
+                (isDriverDetailsAcknowledgement
+                  ? "Driver details could not be acknowledged. Please contact Prestige Limo."
+                  : "Reply could not be sent. Please contact Prestige Limo."),
         );
       }
 
       setCustomerQuickReplies((current) => ({
         ...current,
         [booking.id]: {
-          feedback: { tone: "success", text: `Sent to driver: ${message}` },
+          feedback: {
+            tone: "success",
+            text: isDriverDetailsAcknowledgement
+              ? "Driver details acknowledged. Prestige Limo has been notified."
+              : `Sent to driver: ${message}`,
+          },
+          feedbackTarget: isDriverDetailsAcknowledgement ? "driver_details" : "driver",
           sendingKey: "",
         },
       }));
+
+      if (isDriverDetailsAcknowledgement) {
+        await loadTripUpdatesForBooking(booking);
+      }
     } catch (error) {
       setCustomerQuickReplies((current) => ({
         ...current,
         [booking.id]: {
           feedback: {
             tone: "error",
-            text: error instanceof Error ? error.message : "Reply could not be sent. Please contact Prestige Limo.",
+            text:
+              error instanceof Error
+                ? error.message
+                : isDriverDetailsAcknowledgement
+                  ? "Driver details could not be acknowledged. Please contact Prestige Limo."
+                  : "Reply could not be sent. Please contact Prestige Limo.",
           },
+          feedbackTarget: isDriverDetailsAcknowledgement ? "driver_details" : "driver",
           sendingKey: "",
         },
       }));
@@ -1606,8 +1650,25 @@ export default function CustomerPortalPage() {
                     latestTripStatus.includes("completed");
                   const customerQuickReplyState = customerQuickReplies[expandedBooking.id] || {
                     feedback: null,
+                    feedbackTarget: "driver" as const,
                     sendingKey: "",
                   };
+                  const driverDetailsSentUpdate = tripUpdates?.updates.find(
+                    (update) => update.workflowArea === "customer_app_updates",
+                  );
+                  const latestDriverDetailsDeliveryUpdate = tripUpdates?.updates.find(
+                    (update) =>
+                      update.workflowArea === "customer_app_updates" ||
+                      update.workflowArea === "customer_driver_details_acknowledgements",
+                  );
+                  const driverDetailsAcknowledgedUpdate =
+                    latestDriverDetailsDeliveryUpdate?.workflowArea ===
+                    "customer_driver_details_acknowledgements"
+                      ? latestDriverDetailsDeliveryUpdate
+                      : undefined;
+                  const driverDetailsAcknowledgedTime = compactSingaporeTimeLabel(
+                    driverDetailsAcknowledgedUpdate?.createdAt || "",
+                  );
                   const customerQuickRepliesClosed =
                     tripStatusStopsCustomerTracking ||
                     expandedBooking.status === "Completed" ||
@@ -1735,6 +1796,49 @@ export default function CustomerPortalPage() {
                               </dd>
                             </div>
                           </dl>
+                          {driverDetailsSentUpdate ? (
+                            <div className="mt-3 border-t border-emerald-200 pt-3">
+                              <button
+                                className="min-h-10 rounded-md border border-emerald-700 bg-white px-3 py-1.5 text-sm font-semibold text-emerald-950 transition enabled:hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-70"
+                                data-customer-driver-details-acknowledgement={expandedBooking.id}
+                                disabled={
+                                  Boolean(driverDetailsAcknowledgedUpdate) ||
+                                  Boolean(customerQuickReplyState.sendingKey) ||
+                                  customerQuickRepliesClosed
+                                }
+                                onClick={() =>
+                                  void sendCustomerDriverQuickReply(
+                                    expandedBooking,
+                                    "customer_driver_details_acknowledged",
+                                    "Driver details acknowledged.",
+                                    "customer_to_admin",
+                                  )
+                                }
+                                type="button"
+                              >
+                                {driverDetailsAcknowledgedUpdate
+                                  ? `Acknowledged${
+                                      driverDetailsAcknowledgedTime
+                                        ? ` ${driverDetailsAcknowledgedTime}`
+                                        : ""
+                                    }`
+                                  : customerQuickReplyState.sendingKey ===
+                                      "customer_driver_details_acknowledged"
+                                    ? "Acknowledging..."
+                                    : "Acknowledge driver details"}
+                              </button>
+                              {customerQuickReplyState.feedback &&
+                              customerQuickReplyState.feedbackTarget === "driver_details" ? (
+                                <p
+                                  aria-live="polite"
+                                  className={`mt-2 rounded-md border px-2.5 py-2 text-sm font-semibold ${feedbackClass(customerQuickReplyState.feedback.tone)}`}
+                                  data-customer-driver-details-acknowledgement-feedback={expandedBooking.id}
+                                >
+                                  {customerQuickReplyState.feedback.text}
+                                </p>
+                              ) : null}
+                            </div>
+                          ) : null}
                         </div>
                       ) : null}
                       {driverDetails ? (
@@ -1765,7 +1869,8 @@ export default function CustomerPortalPage() {
                               Driver replies close after Passenger on board.
                             </p>
                           ) : null}
-                          {customerQuickReplyState.feedback ? (
+                          {customerQuickReplyState.feedback &&
+                          customerQuickReplyState.feedbackTarget === "driver" ? (
                             <p
                               aria-live="polite"
                               className={`mt-2 rounded-md border px-2.5 py-2 text-sm font-semibold ${feedbackClass(customerQuickReplyState.feedback.tone)}`}

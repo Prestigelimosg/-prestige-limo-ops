@@ -1127,11 +1127,17 @@ type AdminTodayJobDriverMessageState = {
 
 type AdminTodayJobMessageRecord = {
   actor_role?: string | null;
+  booking_reference?: string | null;
   created_at?: string | null;
   delivery_surface?: string | null;
   id?: string | null;
   safe_message?: string | null;
   workflow_area?: string | null;
+};
+
+type AdminBookingDriverDetailsDeliveryStatus = {
+  occurredAt: string;
+  status: "acknowledged" | "sent";
 };
 
 type AdminTodayJobMessageHistoryState = {
@@ -3112,6 +3118,23 @@ function formatAdminLiveLocationTimestamp(value: string | null | undefined) {
     month: "short",
     timeZone: "Asia/Singapore",
   })} SGT`;
+}
+
+function formatAdminBookingDriverDetailsStatusTime(value: string | null | undefined) {
+  const cleaned = clean(value);
+  const date = new Date(cleaned);
+
+  if (!cleaned || !Number.isFinite(date.getTime())) {
+    return "";
+  }
+
+  return new Intl.DateTimeFormat("en-SG", {
+    hour: "2-digit",
+    hour12: false,
+    hourCycle: "h23",
+    minute: "2-digit",
+    timeZone: "Asia/Singapore",
+  }).format(date);
 }
 
 function googleMapsLocationUrl(latitude: number | null | undefined, longitude: number | null | undefined) {
@@ -13033,6 +13056,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     useState<Record<string, AdminBookingGoogleCalendarStatusValue>>({});
   const [bookingGoogleCalendarStatusMessage, setBookingGoogleCalendarStatusMessage] =
     useState<Message | null>(null);
+  const [bookingDriverDetailsDeliveryStatuses, setBookingDriverDetailsDeliveryStatuses] =
+    useState<Record<string, AdminBookingDriverDetailsDeliveryStatus>>({});
+  const [bookingDriverDetailsDeliveryStatusMessage, setBookingDriverDetailsDeliveryStatusMessage] =
+    useState<Message | null>(null);
   const bookingGoogleCalendarStatusSourceRef = useRef<BookingRecord[]>([]);
   const bookingGoogleCalendarStatusRequestRevisionRef = useRef(0);
   const dashboardBookingsInitialLoadAttemptedRef = useRef(false);
@@ -17317,6 +17344,13 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const bookingGoogleCalendarStatusPayloadSignature = JSON.stringify(
     operationalBookings.map(buildSavedBookingCalendarEventPayload),
   );
+  const bookingDriverDetailsDeliveryReferenceKey = Array.from(
+    new Set(
+      operationalBookings
+        .map((bookingRecord) => cleanReferenceText(bookingRecord.booking_reference).toLowerCase())
+        .filter(Boolean),
+    ),
+  ).join("\n");
   bookingGoogleCalendarStatusSourceRef.current = operationalBookings;
   const filteredCompletedBookingDisplayItems =
     buildLoadBookingsOperationalDisplayItems(visibleCompletedBookings, { useTypedOperationalOrder: true });
@@ -17495,6 +17529,107 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       cancelled = true;
     };
   }, [activeTab, bookingGoogleCalendarStatusPayloadSignature]);
+
+  useEffect(() => {
+    if (activeTab !== "bookings") {
+      return;
+    }
+
+    const bookingReferences = bookingDriverDetailsDeliveryReferenceKey
+      .split("\n")
+      .filter(Boolean);
+
+    if (bookingReferences.length === 0) {
+      setBookingDriverDetailsDeliveryStatuses({});
+      setBookingDriverDetailsDeliveryStatusMessage(null);
+      return;
+    }
+
+    const bookingReferenceSet = new Set(bookingReferences);
+    let cancelled = false;
+
+    async function loadBookingDriverDetailsDeliveryStatuses() {
+      const nextStatuses: Record<string, AdminBookingDriverDetailsDeliveryStatus> = {};
+
+      for (let page = 1; page <= 5; page += 1) {
+        const params = new URLSearchParams({
+          delivery_surface: "customer_app",
+          limit: "100",
+          page: String(page),
+        });
+        const response = await fetch(
+          `${adminCustomerDriverAppNotificationsApiPath}?${params.toString()}`,
+          {
+            cache: "no-store",
+            headers: { "x-prestige-admin-purpose": adminLegacyDataPurpose },
+          },
+        );
+        const result = await response.json().catch(() => null);
+
+        if (!response.ok || !result?.ok || !Array.isArray(result.notifications)) {
+          throw new Error("Driver-details delivery status could not be loaded.");
+        }
+
+        for (const notification of result.notifications as AdminTodayJobMessageRecord[]) {
+          const bookingReference = cleanReferenceText(
+            notification.booking_reference,
+          ).toLowerCase();
+
+          if (!bookingReferenceSet.has(bookingReference) || nextStatuses[bookingReference]) {
+            continue;
+          }
+
+          if (
+            notification.delivery_surface === "customer_app" &&
+            notification.workflow_area === "customer_driver_details_acknowledgements"
+          ) {
+            nextStatuses[bookingReference] = {
+              occurredAt: clean(notification.created_at),
+              status: "acknowledged",
+            };
+          } else if (
+            notification.delivery_surface === "customer_app" &&
+            notification.workflow_area === "customer_app_updates"
+          ) {
+            nextStatuses[bookingReference] = {
+              occurredAt: clean(notification.created_at),
+              status: "sent",
+            };
+          }
+        }
+
+        if (
+          bookingReferences.every((bookingReference) => nextStatuses[bookingReference]) ||
+          result.pagination?.has_next_page !== true
+        ) {
+          break;
+        }
+      }
+
+      if (cancelled) {
+        return;
+      }
+
+      setBookingDriverDetailsDeliveryStatuses(nextStatuses);
+      setBookingDriverDetailsDeliveryStatusMessage(null);
+    }
+
+    void loadBookingDriverDetailsDeliveryStatuses().catch(() => {
+      if (cancelled) {
+        return;
+      }
+
+      setBookingDriverDetailsDeliveryStatuses({});
+      setBookingDriverDetailsDeliveryStatusMessage({
+        tone: "error",
+        text: "Driver-details delivery status unavailable. No sent or acknowledgement status is assumed.",
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, bookingDriverDetailsDeliveryReferenceKey]);
 
   async function resolveAdminMapLocation(
     field: AdminMapRouteAssistLocationField,
@@ -24254,6 +24389,16 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           {bookingGoogleCalendarStatusMessage.text}
         </p>
       ) : null}
+      {bookingDriverDetailsDeliveryStatusMessage ? (
+        <p
+          className={`mt-2 rounded-md border px-3 py-2 text-sm ${statusClass(
+            bookingDriverDetailsDeliveryStatusMessage.tone,
+          )}`}
+          data-bookings-driver-details-status-message="true"
+        >
+          {bookingDriverDetailsDeliveryStatusMessage.text}
+        </p>
+      ) : null}
       {hasBookingsSearch && filteredRecentBookings.length === 0 ? (
         <p
           className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
@@ -24315,6 +24460,26 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 : bookingGoogleCalendarStatus === "save_to_calendar"
                   ? "Save to Cal"
                   : "";
+          const bookingReferenceKey = cleanReferenceText(
+            operationalCard.booking_reference || savedBooking.booking_reference,
+          ).toLowerCase();
+          const bookingDriverDetailsDeliveryStatus =
+            bookingDriverDetailsDeliveryStatuses[bookingReferenceKey];
+          const bookingDriverDetailsDeliveryStatusTime =
+            formatAdminBookingDriverDetailsStatusTime(
+              bookingDriverDetailsDeliveryStatus?.occurredAt,
+            );
+          const bookingDriverDetailsDeliveryStatusLabel = bookingDriverDetailsDeliveryStatus
+            ? `${
+                bookingDriverDetailsDeliveryStatus.status === "acknowledged"
+                  ? "Acknowledged"
+                  : "Detail sent"
+              }${
+                bookingDriverDetailsDeliveryStatusTime
+                  ? ` ${bookingDriverDetailsDeliveryStatusTime}`
+                  : ""
+              }`
+            : "";
           const bookingAlternateColour = bookingIndex % 2 === 0 ? "sky" : "violet";
 
           return (
@@ -24397,6 +24562,21 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                           data-bookings-calendar-status-value={bookingGoogleCalendarStatus}
                         >
                           {bookingGoogleCalendarStatusLabel}
+                        </span>
+                      ) : null}
+                      {bookingDriverDetailsDeliveryStatusLabel ? (
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ${
+                            bookingDriverDetailsDeliveryStatus?.status === "acknowledged"
+                              ? "bg-emerald-100 text-emerald-800 ring-emerald-200"
+                              : "bg-sky-100 text-sky-800 ring-sky-200"
+                          }`}
+                          data-bookings-driver-details-status={bookingId}
+                          data-bookings-driver-details-status-value={
+                            bookingDriverDetailsDeliveryStatus?.status
+                          }
+                        >
+                          {bookingDriverDetailsDeliveryStatusLabel}
                         </span>
                       ) : null}
                       {showBookingsListStatus ? (
@@ -25828,6 +26008,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       if (!response.ok || result?.ok !== true) {
         throw new Error(result?.error || "Customer In-App update could not be completed.");
       }
+
+      setBookingDriverDetailsDeliveryStatuses((current) => ({
+        ...current,
+        [bookingReference.toLowerCase()]: {
+          occurredAt: clean(result?.notification?.created_at),
+          status: "sent",
+        },
+      }));
 
       setAdminCustomerDriverDetailsCustomerInAppActionState({
         actionStatus: "loaded",

@@ -8200,8 +8200,8 @@ async function runChromeTest() {
     assert.deepEqual(codexPreparedRequestState.actionOptions, [
       "Choose action",
       "Edit booking",
-      "Approve — notify customer",
-      "Decline — notify customer",
+      "Approve booking",
+      "Decline booking",
     ]);
     assert.equal(codexPreparedRequestState.oldControlCount, 0);
     assert.match(codexPreparedRequestState.rowText, /01 Jan 2099, 1000hrs SGT/);
@@ -8344,11 +8344,11 @@ async function runChromeTest() {
     })()`);
     assert.deepEqual(preparedActionSelectionState.approveState, {
       buttonText: "Approve booking",
-      helpText: "Confirms this booking and queues a customer in-app update.",
+      helpText: "Confirms this booking, then attempts a customer in-app update.",
     });
     assert.deepEqual(preparedActionSelectionState.declineState, {
       buttonText: "Decline booking",
-      helpText: "Declines this booking and queues a customer in-app update.",
+      helpText: "Declines this booking, then attempts a customer in-app update.",
     });
     assert.equal(
       preparedActionSelectionState.fetchCalls.some((call) => /\b(?:PATCH|POST)\b/.test(call)),
@@ -8411,8 +8411,8 @@ async function runChromeTest() {
     assert.deepEqual(existingReturnedReviewState.actionOptions, [
       "Choose action",
       "Edit booking",
-      "Approve — notify customer",
-      "Decline — notify customer",
+      "Approve booking",
+      "Decline booking",
     ]);
     assert.match(existingReturnedReviewState.rowText, /Corrected Preview Ready/);
 

@@ -429,8 +429,8 @@ for (const customerRequestFragment of [
   "data-new-customer-booking-request-load",
   "Choose action",
   "Edit booking",
-  "Approve — notify customer",
-  "Decline — notify customer",
+  "Approve booking",
+  "Decline booking",
   "Nothing happens until you press Continue.",
   'data-admin-prepared-job-card-action-select=',
   'data-admin-prepared-job-card-action-submit=',
@@ -476,6 +476,21 @@ const preparedJobCardPanel = sliceBetween(
   "const codexPreparedJobCardsPanel = (",
   "const bookingsFindToolbar = (",
 );
+assertExcludes(
+  preparedJobCardPanel,
+  "notify customer",
+  "Prepared job card action labels must not promise customer notification delivery",
+);
+for (const accurateDecisionHelpText of [
+  "Confirms this booking, then attempts a customer in-app update.",
+  "Declines this booking, then attempts a customer in-app update.",
+]) {
+  assertIncludes(
+    preparedJobCardPanel,
+    accurateDecisionHelpText,
+    `Prepared job card accurately discloses decision and notification ordering ${accurateDecisionHelpText}`,
+  );
+}
 for (const removedPreparedJobCardControl of [
   "Instruction to Codex (internal only)",
   'data-codex-job-card-instruction=',

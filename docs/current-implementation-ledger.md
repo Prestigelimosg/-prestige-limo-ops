@@ -21,6 +21,13 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This repairs the established server runtime helper only. It adds no route, API, table, writer, panel, button, map, polling timer, provider send, customer lane, driver messaging lane, schema, migration, environment setting, Supabase configuration, or live-data action. The abandoned Driver Companion rollout remains unused; the browser Driver Job consumer continues using the same route.
 - Focused protection is `scripts/test-driver-live-location-assigned-active-eligibility-guard.mjs`, registered in `scripts/test-preactivation-verification-suite.mjs`. It proves unassigned and terminal Share/Readiness are rejected without position or audit writes, an assigned non-terminal job with `admin_review_required` remains accepted, and Stop cleanup remains available.
 
+### Prepared Job Card Accurate Notification Copy (2026-07-17)
+
+- Owner inspection confirmed that the established prepared-card approval/decline decision is persisted before its separate customer in-app notification attempt. The dropdown labels therefore no longer promise `notify customer`; they now read `Approve booking` and `Decline booking`.
+- The selected-action helper accurately describes the ordering as confirming or declining the booking first, then attempting a customer in-app update. Existing success feedback continues disclosing whether that update was queued, could not be queued, or was not applicable.
+- This is a copy-only repair inside the existing `Codex Prepared Job Cards` control. It does not change the established `/api/admin-bookings` PATCH, decision statuses, notification writer, failure ordering, Calendar behavior, driver/vehicle assignment, external sending, or any live record.
+- Focused protection remains `scripts/test-admin-load-bookings-crm-fallback-compact-guard.mjs`, with visible selection coverage in `scripts/test-booking-ui-browser.mjs`.
+
 ### Active Jobs Embedded Map Scroll-Position Repair (2026-07-17)
 
 - During the owner-approved Pixel 6 background-location test for exact assigned booking `CUST-20260716035942-O7Z73G-OUT`, Production build `237b3212` received current movement while the phone was locked: the admin row advanced from 17:58 to 18:03 SGT and its coordinates changed. Stop cleanup removed the exact marker, and the temporary Live Dispatch Map runtime was closed with zero drivers displayed.

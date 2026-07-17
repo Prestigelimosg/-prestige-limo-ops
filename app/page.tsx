@@ -23924,9 +23924,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             selectedAction === "edit"
               ? "Opens Dispatch. Nothing is saved or sent."
               : selectedAction === "approve"
-                ? "Confirms this booking and queues a customer in-app update."
+                ? "Confirms this booking, then attempts a customer in-app update."
                 : selectedAction === "decline"
-                  ? "Declines this booking and queues a customer in-app update."
+                  ? "Declines this booking, then attempts a customer in-app update."
                   : "Choose one action. Nothing happens until you press Continue.";
           const selectedActionButtonLabel =
             selectedAction === "edit"
@@ -24004,10 +24004,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   <option value="">Choose action</option>
                   <option value="edit">Edit booking</option>
                   <option disabled={!requestRecord} value="approve">
-                    Approve — notify customer
+                    Approve booking
                   </option>
                   <option disabled={!requestRecord} value="decline">
-                    Decline — notify customer
+                    Decline booking
                   </option>
                 </select>
                 <button

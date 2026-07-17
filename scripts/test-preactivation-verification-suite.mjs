@@ -991,6 +991,10 @@ const guardChecks = [
     script: "scripts/test-driver-live-location-stale-offline-readiness-contract-guard.mjs",
   },
   {
+    label: "Driver Companion iPhone/Android background-location foundation guard",
+    script: "scripts/test-driver-companion-background-location-foundation-guard.mjs",
+  },
+  {
     label: "Customer Live Location link readiness contract guard",
     script: "scripts/test-customer-live-location-link-readiness-contract-guard.mjs",
   },

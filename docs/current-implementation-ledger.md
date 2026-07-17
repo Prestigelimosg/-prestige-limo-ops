@@ -7995,6 +7995,10 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The audit output is normalized to counts and missing env names only; it must not print Supabase URLs, service-role keys, Resend keys, Google keys, admin session tokens, env values, cookies, DB URLs, row IDs, booking references, or private customer/driver data.
 - A missing env name is only a configuration drift signal; the audit does not approve opening gates, DB writes, provider sends, GPS activation, production activation, billing/payment/PDF/payout, or deploys.
 - This guard adds `scripts/test-vercel-env-drift-audit-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+- Vercel Sensitive environment values are non-readable after creation. `vercel env pull` cannot be used to clone a Sensitive Production value into Preview; adding a pulled hidden value creates an invalid placeholder configuration and the established admin boundary must continue failing closed.
+- The corrected bounded Preview procedure preserves each original encrypted value and changes only its Vercel target metadata without supplying a replacement value. A fresh SSO-protected deployment is required, and every temporary Preview target must be restored to Production-only after read-only evidence.
+- Exact protected Preview build `c1912006` then loaded 9 saved bookings and showed 7 active bookings through the existing `/api/admin-saved-bookings` GET with zero browser errors. No Save, Open/Edit, Complete, Cancel, Copy + App Link, email, message, calendar action, live-record write, or Supabase mutation was performed.
+- The temporary Supabase/admin-dispatcher Preview targets were restored to Production-only after evidence. Production values were never read, printed, replaced, decrypted, committed, or sent to the browser; the restored credential-free Preview must fail closed again.
 
 ### Driver Live Location Consent Runtime Evidence Contract Guard Lock
 - This is a docs/test-only guard for the future Driver Live Location driver-consent runtime evidence pass.

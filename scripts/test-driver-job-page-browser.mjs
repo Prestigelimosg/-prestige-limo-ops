@@ -751,7 +751,7 @@ async function runChromeTest() {
               blobTexts.length === 1 &&
               blobTypes.length === 1 &&
               revokedUrls.length === 1 &&
-              feedback === "Calendar file downloaded. Open it to add or update this job."
+              feedback === "Calendar file downloaded with a private Open Driver Job shortcut. Do not share the calendar event."
               ? { blobText: blobTexts[0], blobType: blobTypes[0], download: downloads[0], feedback, revokedUrls }
               : false;
           })()`),
@@ -775,7 +775,11 @@ async function runChromeTest() {
       assert.match(downloadState.blobText, /DTSTART;TZID=Asia\/Singapore:20260529T164500/);
       assert.match(downloadState.blobText, /DTEND;TZID=Asia\/Singapore:20260529T181500/);
       assert.match(downloadState.blobText, /BEGIN:VALARM[\s\S]*TRIGGER:-PT1H[\s\S]*END:VALARM/);
-      assert.equal(downloadState.blobText.includes(mockDriverJobTokens.workflowOrder), false);
+      const unfoldedCalendar = downloadState.blobText.replace(/\r\n /g, "");
+      const expectedDriverJobUrl = `${appUrl}/driver-job/${mockDriverJobTokens.workflowOrder}`;
+      assert.equal(unfoldedCalendar.includes(`URL:${expectedDriverJobUrl}`), true);
+      assert.equal(unfoldedCalendar.includes(`Open Driver Job: ${expectedDriverJobUrl}`), true);
+      assert.match(unfoldedCalendar, /Private driver link - do not share this calendar event\./);
       assertNoSensitiveText({
         fetchCalls: afterState.fetchCalls,
         resourceCalls: [],

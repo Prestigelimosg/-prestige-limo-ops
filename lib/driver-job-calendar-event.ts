@@ -142,6 +142,27 @@ function escapeIcs(value: string) {
     .replace(/;/g, "\\;");
 }
 
+function safeDriverJobUrl(value: string) {
+  try {
+    const url = new URL(value);
+
+    if (
+      !["http:", "https:"].includes(url.protocol) ||
+      url.username ||
+      url.password ||
+      url.hash ||
+      url.search ||
+      !/^\/driver-job\/[^/]+$/.test(url.pathname)
+    ) {
+      return "";
+    }
+
+    return url.toString();
+  } catch {
+    return "";
+  }
+}
+
 function foldLine(line: string) {
   const lines: string[] = [];
   let remaining = line;
@@ -172,14 +193,16 @@ function calendarSequence(payload: SafeDriverJobPayload) {
 
 export function buildDriverJobCalendarDownload(
   payload: SafeDriverJobPayload,
+  driverJobUrlValue: string,
   now = new Date(),
 ): DriverJobCalendarDownloadResult {
   const reference = clean(payload.reference);
   const startsAt = pickupParts(payload);
+  const driverJobUrl = safeDriverJobUrl(driverJobUrlValue);
 
-  if (!reference || !startsAt) {
+  if (!reference || !startsAt || !driverJobUrl) {
     return {
-      error: "Driver calendar requires a valid booking reference and pickup date/time.",
+      error: "Driver calendar requires a valid booking reference, pickup date/time, and Driver Job URL.",
       ok: false,
       status: 400,
     };
@@ -194,7 +217,9 @@ export function buildDriverJobCalendarDownload(
     `Booking: ${reference}`,
     clean(payload.route) ? `Route: ${clean(payload.route)}` : "",
     clean(payload.flightNumber) ? `Flight: ${clean(payload.flightNumber)}` : "",
-    "Open the original Driver Job Link for the latest instructions and status reporting.",
+    `Open Driver Job: ${driverJobUrl}`,
+    "Private driver link - do not share this calendar event.",
+    "Use this shortcut or the original Driver Job Link for latest instructions and status reporting.",
   ].filter(Boolean).join("\n");
   const lines = [
     "BEGIN:VCALENDAR",
@@ -212,6 +237,7 @@ export function buildDriverJobCalendarDownload(
     `SUMMARY:${escapeIcs(title)}`,
     `LOCATION:${escapeIcs(clean(payload.pickupLocation))}`,
     `DESCRIPTION:${escapeIcs(description)}`,
+    `URL:${driverJobUrl}`,
     "BEGIN:VALARM",
     "ACTION:DISPLAY",
     `DESCRIPTION:${escapeIcs(`Prestige pickup reminder: ${title}`)}`,

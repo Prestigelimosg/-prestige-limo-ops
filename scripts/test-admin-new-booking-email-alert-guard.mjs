@@ -6,6 +6,7 @@ import path from "node:path";
 import ts from "typescript";
 
 const helperPath = "lib/admin-new-booking-email-alert.ts";
+const singaporePickupDisplayPath = "lib/singapore-pickup-display.ts";
 const routePath = "app/api/customer-booking-requests/route.ts";
 const ledgerPath = "docs/current-implementation-ledger.md";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
@@ -28,12 +29,24 @@ async function loadHelperHarness() {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "prestige-admin-new-booking-email-"));
   const sourcePath = path.join(process.cwd(), helperPath);
   const outputPath = path.join(tempDir, helperPath.replace(/\.ts$/, ".js"));
+  const singaporePickupDisplayOutputPath = path.join(
+    tempDir,
+    singaporePickupDisplayPath.replace(/\.ts$/, ".js"),
+  );
   const serverOnlyPath = path.join(tempDir, "node_modules/server-only/index.js");
   const helperSource = await readFile(sourcePath, "utf8");
+  const singaporePickupDisplaySource = await readFile(
+    path.join(process.cwd(), singaporePickupDisplayPath),
+    "utf8",
+  );
 
   await mkdir(path.dirname(outputPath), { recursive: true });
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await writeFile(outputPath, transpileTypescript(helperSource, sourcePath));
+  await writeFile(
+    singaporePickupDisplayOutputPath,
+    transpileTypescript(singaporePickupDisplaySource, singaporePickupDisplayPath),
+  );
   await writeFile(serverOnlyPath, "");
 
   return {
@@ -45,11 +58,12 @@ async function loadHelperHarness() {
 function safeBooking(overrides = {}) {
   return {
     booking_reference: "CUST-ALERT-001",
+    public_booking_reference: "10840",
     contact_phone: "91234567",
     customer_display_name: "Prestige Test Customer",
     dropoff_location: "Changi Airport Terminal 3",
     passenger_name: "William Test",
-    pickup_datetime: "2026-06-28T02:00:00+08:00",
+    pickup_datetime: "2026-07-29T17:00:00+00:00",
     pickup_location: "Orchard Hotel",
     route_type: "DEP",
     route_points: [],
@@ -175,19 +189,25 @@ try {
   const body = JSON.parse(providerRequests[0].init.body);
 
   assert.deepEqual(body.to, ["ops@example.com"]);
-  assert.equal(body.subject, "New booking request: CUST-ALERT-001");
+  assert.equal(body.subject, "New booking request: 10840");
   for (const safeText of [
     "New booking request received.",
-    "Reference: CUST-ALERT-001",
+    "Reference: 10840",
     "Customer/account: Prestige Test Customer",
     "Passenger: William Test",
     "Contact: 91234567",
+    "Pickup time: 30 Jul 2026, 0100hrs SGT",
     "Pickup: Orchard Hotel",
     "Drop-off: Changi Airport Terminal 3",
     "Open dashboard: https://app.prestigelimo.sg/",
   ]) {
     assert.equal(body.text.includes(safeText), true, `Email body must include ${safeText}.`);
   }
+  assert.equal(
+    body.text.includes("CUST-ALERT-001"),
+    false,
+    "Admin email display must not expose the internal booking key when a public reference exists.",
+  );
   assert.equal(forbiddenPattern.test(body.text), false, "Email body must not include forbidden fields.");
 
   const failed = await harness.helper.sendAdminNewBookingEmailAlert(safeBooking(), {

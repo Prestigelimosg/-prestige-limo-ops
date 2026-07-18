@@ -42666,7 +42666,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     data-driver-job-link-booking-details="true"
                     data-driver-job-link-handoff-notice="true"
                   >
-                    <p className="font-semibold">Booking {dispatchReleaseWorkflowBookingReference}</p>
+                    <p className="font-semibold">
+                      Booking {dispatchPublicBookingReference || "Reference unavailable"}
+                    </p>
                     <div className="mt-2 grid gap-2 sm:grid-cols-2">
                       <div>
                         <p className="text-xs font-semibold uppercase text-indigo-700">Passenger</p>

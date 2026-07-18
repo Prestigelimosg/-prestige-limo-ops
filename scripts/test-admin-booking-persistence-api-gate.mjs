@@ -171,6 +171,15 @@ async function writeMockModules(tempDir) {
       "module.exports = { resolveCustomerSavedBookingsBoundaryForPurpose, resolveCustomerSavedBookingsVerifiedIdentity };",
     ].join("\n"),
   );
+  await writeFile(
+    path.join(tempDir, "lib/customer-portal-access-link.js"),
+    [
+      "function createCustomerPortalAccessLinkToken() {",
+      "  return { error: 'Customer portal access is unavailable.', ok: false, status: 403 };",
+      "}",
+      "module.exports = { createCustomerPortalAccessLinkToken };",
+    ].join("\n"),
+  );
 }
 
 async function loadHarness() {

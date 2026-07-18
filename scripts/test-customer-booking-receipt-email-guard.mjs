@@ -80,7 +80,10 @@ const [helperSource, routeSource, ledger, suite] = await Promise.all(
   [helperPath, routePath, ledgerPath, suitePath].map((file) => readFile(file, "utf8")),
 );
 
-assert.ok(routeSource.includes("sendCustomerBookingReceiptEmail(savedRequests)"));
+assert.ok(routeSource.includes("buildVerifiedCustomerPortalReceiptUrl"));
+assert.ok(routeSource.includes("sendCustomerBookingReceiptEmail(savedRequests, { portalUrl })"));
+assert.ok(routeSource.includes("verifiedIdentity.data.booker_email"));
+assert.ok(routeSource.includes("portalBoundary.data.portal_link_revision"));
 assert.ok(routeSource.includes("receipt_status: receipt.status"));
 assert.ok(helperSource.includes('"Idempotency-Key"'));
 assert.ok(ledger.includes("### Permanent Booker Link, Rebooking Identity, and Request Receipt"));
@@ -156,6 +159,8 @@ try {
     ],
     {
       env: env(),
+      portalUrl:
+        "https://app.prestigelimo.sg/api/customer-portal-access/test-token?booking=CUST-RECEIPT-003-OUT",
       providerFetch: async (url, init) => {
         requests.push({ init, url });
         return { ok: true, status: 200 };
@@ -184,10 +189,32 @@ try {
     "Pickup time: 31 Jul 2026, 0110hrs SGT",
     "Pickup: Orchard Hotel",
     "Drop-off: Changi Airport Terminal 3",
+    "View or manage your bookings:",
+    "https://app.prestigelimo.sg/api/customer-portal-access/test-token?booking=CUST-RECEIPT-003-OUT",
   ]) {
     assert.ok(body.text.includes(text), `Receipt must include ${text}`);
   }
   assert.equal(forbiddenCustomerText.test(body.text), false);
+
+  const firstTimeRequests = [];
+  const firstTimeSent = await harness.helper.sendCustomerBookingReceiptEmail(
+    [booking("CUST-RECEIPT-004", { public_booking_reference: "10840" })],
+    {
+      env: env(),
+      providerFetch: async (url, init) => {
+        firstTimeRequests.push({ init, url });
+        return { ok: true, status: 200 };
+      },
+    },
+  );
+  assert.equal(firstTimeSent.status, "sent");
+  assert.equal(firstTimeRequests.length, 1);
+  const firstTimeBody = JSON.parse(firstTimeRequests[0].init.body);
+  assert.equal(
+    firstTimeBody.text.includes("/api/customer-portal-access/"),
+    false,
+    "An unverified first-time receipt must not mint or include portal access.",
+  );
 } finally {
   await harness.cleanup();
 }

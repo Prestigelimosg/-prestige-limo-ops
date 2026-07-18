@@ -99,6 +99,9 @@ for (const fragment of [
 for (const fragment of [
   "resolveCustomerSavedBookingsVerifiedIdentity(portalBoundary.data, body.travelerId)",
   "traveler_id: verifiedIdentity.data.traveler_id",
+  "buildVerifiedCustomerPortalReceiptUrl",
+  "verifiedIdentity.data.booker_email",
+  "portalBoundary.data.portal_link_revision",
   "sendCustomerBookingReceiptEmail",
   "receipt_status",
 ]) {

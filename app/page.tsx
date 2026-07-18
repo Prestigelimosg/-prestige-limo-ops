@@ -3078,9 +3078,7 @@ function bookingPublicReference(
 ) {
   return (
     cleanReferenceText(bookingRecord.public_booking_reference) ||
-    compactBookingReference(
-      bookingRecord.booking_reference || bookingRecord.id,
-    )
+    "Reference unavailable"
   );
 }
 
@@ -4009,7 +4007,7 @@ function adminActiveJobsBrowserMapReference(entry: AdminActiveJobsBrowserMapMark
 function adminActiveJobsBrowserMapDisplayReference(entry: AdminActiveJobsBrowserMapMarkerEntry) {
   return (
     cleanReferenceText(entry.job.public_job_reference) ||
-    compactBookingReference(adminActiveJobsBrowserMapReference(entry))
+    "Reference unavailable"
   );
 }
 
@@ -8378,6 +8376,7 @@ function bookingRecordToAdminBookingPersistenceRecord(
     admin_internal_status:
       archivedStatus || clean(bookingRecord.admin_internal_status) || clean(bookingRecord.status) || null,
     booking_reference: bookingReference,
+    public_booking_reference: clean(bookingRecord.public_booking_reference) || null,
     cancellation_review_status:
       isCancelledStatus ? "cancelled" : clean(bookingRecord.cancellation_review_status) || null,
     change_review_status: clean(bookingRecord.change_review_status) || null,
@@ -9244,6 +9243,7 @@ function adminBookingPersistenceRecordToCalendarBookingRecord(
 
   return {
     booking_reference: bookingReference,
+    public_booking_reference: clean(record.public_booking_reference) || null,
     booking_type: adminBookingPersistenceServiceType(record) || null,
     booker_id: adminDispatchVerifiedIdentityId(record.booker_id),
     company_id: verifiedCompanyId,
@@ -9308,6 +9308,7 @@ function adminBookingPersistenceSourceLabel(record: AdminBookingPersistenceRecor
 function adminBookingPersistenceSearchValues(record: AdminBookingPersistenceRecord) {
   return [
     clean(record.booking_reference),
+    clean(record.public_booking_reference),
     adminBookingPersistenceCustomerDisplayName(record),
     adminBookingPersistencePassengerDisplayName(record),
     clean(record.contact_display_name),
@@ -14694,7 +14695,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         loadedReference: bookingReference,
         message: {
           tone: "info",
-          text: `Checking saved driver job link for ${bookingReference}...`,
+          text: "Checking saved driver job link...",
         },
         oneTimeUrl: current.loadedReference === bookingReference ? current.oneTimeUrl : "",
       }));
@@ -14789,6 +14790,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
   useEffect(() => {
     const bookingReference = clean(dispatchReleaseWorkflowBookingReference);
+    const displayBookingReference = adminVisibleBookingReference(bookingReference);
     let cancelled = false;
 
     async function loadWorkflowAreaStatus({
@@ -14880,11 +14882,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
       await loadWorkflowAreaStatus({
         action: "load-dispatch-release",
-        missingStatusText: `No saved dispatch release workflow status for ${bookingReference}.`,
+        missingStatusText: `No saved dispatch release workflow status for ${displayBookingReference}.`,
         setMessage: setDispatchReleaseMessage,
         setStatus: setDispatchReleaseWorkflowStatus,
         successStatusText: (loadedStatus) =>
-          `Loaded dispatch release workflow status for ${bookingReference}: ${adminBookingWorkflowStatusDisplayLabel(
+          `Loaded dispatch release workflow status for ${displayBookingReference}: ${adminBookingWorkflowStatusDisplayLabel(
             loadedStatus,
           )}.`,
         workflowArea: adminDispatchReleaseWorkflowArea,
@@ -14893,11 +14895,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
       await loadWorkflowAreaStatus({
         action: "load-driver-acknowledgement",
-        missingStatusText: `No saved driver acknowledgement workflow status for ${bookingReference}.`,
+        missingStatusText: `No saved driver acknowledgement workflow status for ${displayBookingReference}.`,
         setMessage: setDriverAcknowledgementMessage,
         setStatus: setDriverAcknowledgementWorkflowStatus,
         successStatusText: (loadedStatus) =>
-          `Loaded driver acknowledgement workflow status for ${bookingReference}: ${adminBookingWorkflowStatusDisplayLabel(
+          `Loaded driver acknowledgement workflow status for ${displayBookingReference}: ${adminBookingWorkflowStatusDisplayLabel(
             loadedStatus,
           )}.`,
         workflowArea: adminDriverAcknowledgementWorkflowArea,
@@ -14922,14 +14924,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             );
             setCompletedTripCloseoutReviewMessage({
               tone: "success",
-              text: `Loaded completed closeout for ${bookingReference}: ${adminCompletedBookingCloseoutDisplayLabel(
+              text: `Loaded completed closeout for ${displayBookingReference}: ${adminCompletedBookingCloseoutDisplayLabel(
                 loadedCloseout,
               )}.`,
             });
           } else {
             setCompletedTripCloseoutReviewMessage({
               tone: "info",
-              text: `No saved completed closeout for ${bookingReference}.`,
+              text: `No saved completed closeout for ${displayBookingReference}.`,
             });
           }
         } catch (error) {
@@ -14955,7 +14957,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           latestStatus: null,
           message: {
             tone: "info",
-            text: `Loading saved driver status for ${bookingReference}...`,
+            text: `Loading saved driver status for ${displayBookingReference}...`,
           },
           status: "loading",
           statuses: [],
@@ -14977,8 +14979,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 loadedDriverStatuses.statuses.length > 0
                   ? `Loaded ${loadedDriverStatuses.statuses.length} saved driver status event${
                       loadedDriverStatuses.statuses.length === 1 ? "" : "s"
-                    } for ${bookingReference}.`
-                  : `No saved driver status history for ${bookingReference}.`,
+                    } for ${displayBookingReference}.`
+                  : `No saved driver status history for ${displayBookingReference}.`,
             },
             status: "loaded",
             statuses: loadedDriverStatuses.statuses,
@@ -15007,7 +15009,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           latestProof: null,
           message: {
             tone: "info",
-            text: `Checking OTS photo proof for ${bookingReference}...`,
+            text: `Checking OTS photo proof for ${displayBookingReference}...`,
           },
           proofs: [],
           status: "loading",
@@ -15026,8 +15028,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             message: {
               tone: loadedProofs.latestProof ? "success" : "info",
               text: loadedProofs.latestProof
-                ? `OTS photo proof received for ${bookingReference}.`
-                : `No OTS photo proof for ${bookingReference} yet.`,
+                ? `OTS photo proof received for ${displayBookingReference}.`
+                : `No OTS photo proof for ${displayBookingReference} yet.`,
             },
             proofs: loadedProofs.proofs,
             status: "loaded",
@@ -15058,6 +15060,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     return () => {
       cancelled = true;
     };
+  // The internal booking key is the intentional reload trigger; the public label is resolved from that exact loaded record.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dispatchReleaseWorkflowBookingReference, dispatchReleaseWorkflowLoadRevision]);
 
   useEffect(() => {
@@ -15993,6 +15997,18 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       appliedAdminBookingSnapshotReference,
     );
 
+  function adminVisibleBookingReference(reference: string | number | null | undefined) {
+    const internalReference = cleanReferenceText(reference);
+    const loadedRecord = findLoadedBookingRecordByReference(bookings, internalReference);
+    const savedRecord = findAdminBookingPersistenceRecordByReference(
+      adminBookingPersistenceRecords,
+      internalReference,
+    );
+    const record = loadedRecord || savedRecord;
+
+    return record ? bookingPublicReference(record) : "Booking";
+  }
+
   const route = useMemo(() => {
     const pickup = clean(booking.pickup);
     const dropoff = clean(booking.dropoff);
@@ -16363,6 +16379,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       cleanReferenceText(dispatchReleaseWorkflowBookingReference)
       ? adminDriverJobLinkState.link
       : null;
+  const dispatchReleaseLoadedBookingRecord = loadedBookingId
+    ? bookings.find((bookingRecord) => bookingRecordStableKey(bookingRecord) === loadedBookingId) ?? null
+    : null;
+  const dispatchPublicBookingReference = appliedAdminBookingSnapshot
+    ? bookingPublicReference(appliedAdminBookingSnapshot)
+    : dispatchReleaseLoadedBookingRecord
+      ? bookingPublicReference(dispatchReleaseLoadedBookingRecord)
+      : "";
   const driverJobLinkAcknowledgementStatus = !activeAdminDriverJobLink
     ? {
         label: "No active link",
@@ -16424,7 +16448,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       [
         "CUSTOMER BOOKING DETAILS",
         clean(booking.name) ? `Passenger name: ${clean(booking.name)}` : "",
-        bookingReference ? `Booking reference: ${bookingReference}` : "",
+        dispatchPublicBookingReference
+          ? `Booking reference: ${dispatchPublicBookingReference}`
+          : "",
         serviceType ? `Service: ${serviceType}` : "",
         `Pickup date: ${formatDate(booking.date)}`,
         `Pickup time: ${formatPickupTime(booking.time)}`,
@@ -16446,6 +16472,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     assignedDriverRecord?.plate_number,
     assignedDriverRecord?.vehicle_type,
     booking,
+    dispatchPublicBookingReference,
     dispatchReleaseWorkflowBookingReference,
   ]);
 
@@ -16533,9 +16560,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       return "";
     }
 
-    const bookingReference =
-      cleanReferenceText(dispatchReleaseWorkflowBookingReference) ||
-      cleanReferenceText(activeAdminDriverJobLink?.booking_reference);
+    const driverJobLinkPublicBookingReference = dispatchPublicBookingReference;
     const passengerLine = clean(booking.name) ? `Passenger: ${clean(booking.name)}` : "";
     const flightLocationParts = dispatchCopyLocationFlightParts(booking);
     const driverJobLinkRoute = [
@@ -16569,7 +16594,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       ],
       [
         "Job:",
-        bookingReference ? `Reference: ${bookingReference}` : "",
+        driverJobLinkPublicBookingReference
+          ? `Reference: ${driverJobLinkPublicBookingReference}`
+          : "",
         passengerLine,
         formatPickupDateTime(booking.date, booking.time),
         flightLocationParts.standaloneFlightLine,
@@ -16600,7 +16627,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     activeAdminDriverJobLink,
     adminDriverJobLinkState.oneTimeUrl,
     booking,
-    dispatchReleaseWorkflowBookingReference,
+    dispatchPublicBookingReference,
     isDspItinerary,
     itineraryDisplayStops,
   ]);
@@ -19932,6 +19959,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       bookingRecordPersistedReference(bookingRecord) ||
       cleanReferenceText(bookingRecord.flight_no) ||
       getBookingDateKey(bookingRecord);
+    const bookingDisplayReference = bookingPublicReference(bookingRecord);
 
     const loadedBookingForm = options.bookingFormOverride
       ? { ...options.bookingFormOverride }
@@ -19945,7 +19973,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       latestStatus: null,
       message: {
         tone: "info",
-        text: `Loading saved driver status for ${bookingReference}...`,
+        text: `Loading saved driver status for ${bookingDisplayReference}...`,
       },
       status: "loading",
       statuses: [],
@@ -19955,7 +19983,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       latestProof: null,
       message: {
         tone: "info",
-        text: `Checking OTS photo proof for ${bookingReference}...`,
+        text: `Checking OTS photo proof for ${bookingDisplayReference}...`,
       },
       proofs: [],
       status: "loading",
@@ -20023,14 +20051,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     setMessage({
       tone: "success",
       text: options.focusDriverJobLink
-        ? `Booking ${bookingReference || "selected booking"} loaded. Driver Job Link is ready for admin action.`
+        ? `Booking ${bookingDisplayReference} loaded. Driver Job Link is ready for admin action.`
         : options.focusJobCard
           ? options.correctionSummary
-            ? `Booking ${bookingReference || "selected booking"} loaded with review-only corrections (${options.correctionSummary}). Job Card Preview is ready for admin review. The saved booking, calendar, and external messages were not changed.`
-            : `Booking ${bookingReference || "selected booking"} loaded. Job Card Preview is ready for admin review. No booking or external action was changed.`
+            ? `Booking ${bookingDisplayReference} loaded with review-only corrections (${options.correctionSummary}). Job Card Preview is ready for admin review. The saved booking, calendar, and external messages were not changed.`
+            : `Booking ${bookingDisplayReference} loaded. Job Card Preview is ready for admin review. No booking or external action was changed.`
         : options.focusCustomerCopy
-        ? `Booking ${bookingReference || "selected booking"} loaded. Customer Copy is ready for admin review.`
-        : `Booking ${bookingReference || "selected booking"} loaded.`,
+        ? `Booking ${bookingDisplayReference} loaded. Customer Copy is ready for admin review.`
+        : `Booking ${bookingDisplayReference} loaded.`,
     });
   }
 
@@ -20800,6 +20828,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     }
 
     const bookingReference = clean(record.booking_reference) || "selected snapshot";
+    const displayBookingReference = clean(record.public_booking_reference) || "Reference unavailable";
     const reviewSuffix =
       appliedSnapshot.reviewStatus === "Admin Review Required"
         ? " Admin Review Required."
@@ -20815,7 +20844,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     clearBookingMessageInput();
     setAdminBookingPersistenceMessage({
       tone: "success",
-      text: `Operational snapshot applied: ${bookingReference}.${reviewSuffix}`,
+      text: `Operational snapshot applied: ${displayBookingReference}.${reviewSuffix}`,
     });
   }
 
@@ -20918,12 +20947,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       return;
     }
 
+    const displayBookingReference = adminVisibleBookingReference(bookingReference);
+
     setAdminDriverOtsPhotoProofReadState({
       bookingReference,
       latestProof: null,
       message: {
         tone: "info",
-        text: `Checking OTS photo proof for ${bookingReference}...`,
+        text: `Checking OTS photo proof for ${displayBookingReference}...`,
       },
       proofs: [],
       status: "loading",
@@ -20945,8 +20976,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         message: {
           tone: loadedProofs.latestProof ? "success" : "info",
           text: loadedProofs.latestProof
-            ? `OTS photo proof received for ${bookingReference}.`
-            : `No OTS photo proof for ${bookingReference} yet.`,
+            ? `OTS photo proof received for ${displayBookingReference}.`
+            : `No OTS photo proof for ${displayBookingReference} yet.`,
         },
         proofs: loadedProofs.proofs,
         status: "loaded",
@@ -20991,12 +21022,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       return;
     }
 
+    const displayBookingReference = adminVisibleBookingReference(bookingReference);
+
     setAdminDriverJobStatusReadState({
       bookingReference,
       latestStatus: null,
       message: {
         tone: "info",
-        text: `Refreshing saved driver status for ${bookingReference}...`,
+        text: `Refreshing saved driver status for ${displayBookingReference}...`,
       },
       status: "loading",
       statuses: [],
@@ -21025,8 +21058,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             loadedDriverStatuses.statuses.length > 0
               ? `Loaded ${loadedDriverStatuses.statuses.length} saved driver status event${
                   loadedDriverStatuses.statuses.length === 1 ? "" : "s"
-                } for ${bookingReference}.`
-              : `No saved driver status history for ${bookingReference}.`,
+                } for ${displayBookingReference}.`
+              : `No saved driver status history for ${displayBookingReference}.`,
         },
         status: "loaded",
         statuses: loadedDriverStatuses.statuses,
@@ -21212,7 +21245,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 ...location,
                 public_job_reference: bookingRecord
                   ? bookingPublicReference(bookingRecord)
-                  : compactBookingReference(location.assigned_job_reference),
+                  : "Reference unavailable",
               };
             })
         : [];
@@ -21301,7 +21334,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         markerCount: Math.max(0, current.markerCount - 1),
         message: {
           tone: "success",
-          text: `Removed stale pin for ${compactBookingReference(bookingReference)}. Booking unchanged.`,
+          text: `Removed stale pin for ${adminVisibleBookingReference(bookingReference)}. Booking unchanged.`,
         },
       }));
     } catch (error) {
@@ -21467,7 +21500,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         latestStatus: null,
         message: {
           tone: "info",
-          text: `Loading driver report for ${compactBookingReference(bookingReference)}...`,
+          text: `Loading driver report for ${adminVisibleBookingReference(bookingReference)}...`,
         },
         status: "loading",
         statuses: [],
@@ -21490,8 +21523,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             tone: loadedDriverStatuses.statuses.length > 0 ? "success" : "info",
             text:
               loadedDriverStatuses.statuses.length > 0
-                ? `Loaded driver report for ${compactBookingReference(bookingReference)}.`
-                : `No driver report for ${compactBookingReference(bookingReference)} yet.`,
+                ? `Loaded driver report for ${adminVisibleBookingReference(bookingReference)}.`
+                : `No driver report for ${adminVisibleBookingReference(bookingReference)} yet.`,
           },
           status: "loaded",
           statuses: loadedDriverStatuses.statuses,
@@ -21615,7 +21648,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         latestProof: null,
         message: {
           tone: "info",
-          text: `Checking OTS photo for ${compactBookingReference(bookingReference)}...`,
+          text: `Checking OTS photo for ${adminVisibleBookingReference(bookingReference)}...`,
         },
         proofs: [],
         status: "loading",
@@ -21633,8 +21666,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           message: {
             tone: loadedProofs.latestProof ? "success" : "info",
             text: loadedProofs.latestProof
-              ? `OTS photo received for ${compactBookingReference(bookingReference)}.`
-              : `No OTS photo for ${compactBookingReference(bookingReference)} yet.`,
+              ? `OTS photo received for ${adminVisibleBookingReference(bookingReference)}.`
+              : `No OTS photo for ${adminVisibleBookingReference(bookingReference)} yet.`,
           },
           proofs: loadedProofs.proofs,
           status: "loaded",
@@ -21659,6 +21692,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
   async function saveDispatchReleaseWorkflowStatus() {
     const bookingReference = clean(dispatchReleaseWorkflowBookingReference);
+    const displayBookingReference = adminVisibleBookingReference(bookingReference);
 
     if (!dispatchReleaseConfirmedOnlyEligible) {
       setDispatchReleaseMessage({
@@ -21687,7 +21721,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     setAdminBookingWorkflowStatusAction("save-dispatch-release");
     setDispatchReleaseMessage({
       tone: "info",
-      text: `Saving dispatch release workflow status for ${bookingReference}...`,
+      text: `Saving dispatch release workflow status for ${displayBookingReference}...`,
     });
 
     try {
@@ -21720,7 +21754,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       setDispatchReleaseWorkflowStatus(savedStatus);
       setDispatchReleaseMessage({
         tone: "success",
-        text: `Dispatch release workflow status saved for ${bookingReference}: ${adminBookingWorkflowStatusDisplayLabel(
+        text: `Dispatch release workflow status saved for ${displayBookingReference}: ${adminBookingWorkflowStatusDisplayLabel(
           savedStatus,
         )}.`,
       });
@@ -21736,6 +21770,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
   async function saveDriverAcknowledgementWorkflowStatus() {
     const bookingReference = clean(dispatchReleaseWorkflowBookingReference);
+    const displayBookingReference = adminVisibleBookingReference(bookingReference);
 
     if (!driverAcknowledgementReleaseEligible) {
       setDriverAcknowledgementMessage({
@@ -21764,7 +21799,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     setAdminBookingWorkflowStatusAction("save-driver-acknowledgement");
     setDriverAcknowledgementMessage({
       tone: "info",
-      text: `Saving driver acknowledgement workflow status for ${bookingReference}...`,
+      text: `Saving driver acknowledgement workflow status for ${displayBookingReference}...`,
     });
 
     try {
@@ -21795,7 +21830,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       setDriverAcknowledgementWorkflowStatus(savedStatus);
       setDriverAcknowledgementMessage({
         tone: "success",
-        text: `Driver acknowledgement workflow status saved for ${bookingReference}: ${adminBookingWorkflowStatusDisplayLabel(
+        text: `Driver acknowledgement workflow status saved for ${displayBookingReference}: ${adminBookingWorkflowStatusDisplayLabel(
           savedStatus,
         )}.`,
       });
@@ -22277,6 +22312,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
   async function copyCustomerDriverDetailsWithCustomerAppLink() {
     const bookingReference = customerDriverDetailsPortalBookingReference;
+    const displayBookingReference = dispatchPublicBookingReference || "loaded booking";
     const messageText = getDispatchCopyText("customerCopy");
 
     setCustomerDriverDetailsPortalLinkCopyState({
@@ -22286,7 +22322,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       portalLinkCopied: false,
       portalUrl: "",
       tone: "info",
-      text: `Preparing customer app link for ${bookingReference || "loaded booking"}...`,
+      text: `Preparing customer app link for ${displayBookingReference}...`,
     });
 
     try {
@@ -22305,7 +22341,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         portalLinkCopied: true,
         portalUrl,
         tone: "success",
-        text: `Customer driver details and customer app link copied for ${bookingReference}. Paste/send manually; no provider message was sent.`,
+        text: `Customer driver details and customer app link copied for ${displayBookingReference}. Paste/send manually; no provider message was sent.`,
       });
       setCopyFeedback({
         target: "customerCopy",
@@ -22506,7 +22542,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       action: "create",
       message: {
         tone: "info",
-        text: `Creating driver job link for ${payloadResult.data.booking_reference}...`,
+        text: `Creating driver job link for ${dispatchPublicBookingReference || "Booking"}...`,
       },
       oneTimeUrl: "",
     }));
@@ -22566,7 +22602,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           loadedReference: link.booking_reference,
           message: {
             tone: "success",
-            text: `Live movement is authorized for ${compactBookingReference(
+            text: `Live movement is authorized for ${adminVisibleBookingReference(
               link.booking_reference,
             )}. Driver still taps Share Location from the same link.`,
           },
@@ -23053,7 +23089,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       driverCompletedBookingStatusSyncRequestedRef.current.delete(bookingStatusReference);
       setMessage({
         tone: "error",
-        text: `Driver reported Job Completed for ${compactBookingReference(
+        text: `Driver reported Job Completed for ${adminVisibleBookingReference(
           bookingStatusReference,
         )}, but booking status was not changed: ${result.errorText}`,
       });
@@ -23085,7 +23121,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     resolution: "completed" | "cancelled",
   ) {
     const bookingId = bookingRecordStableKey(bookingRecord);
-    const referenceLabel = compactBookingReference(bookingRecordStatusReference(bookingRecord));
+    const referenceLabel = bookingPublicReference(bookingRecord);
     const isCompletedResolution = resolution === "completed";
     const confirmed = window.confirm(
       [
@@ -23132,8 +23168,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     } = {},
   ) {
     const bookingId = bookingRecordStableKey(bookingRecord);
-    const bookingStatusReference = bookingRecordStatusReference(bookingRecord);
-    const referenceLabel = compactBookingReference(bookingStatusReference);
+    const referenceLabel = bookingPublicReference(bookingRecord);
     const driverLabel = clean(context.driverLabel) || clean(bookingRecord.driver_name) || "Driver TBC";
     const latestDriverReportLabel = clean(context.latestDriverReportLabel) || "No completed driver report";
     const confirmed = window.confirm(
@@ -24595,14 +24630,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     safeDriverVehicleModelDisplay(booking.driverVehicleModel) ||
       safeDriverVehicleModelDisplay(assignedDriverRecord?.vehicle_type),
   ].filter(Boolean).join(" / ");
-  const dispatchReleaseLoadedBookingRecord = loadedBookingId
-    ? bookings.find((bookingRecord) => bookingRecordStableKey(bookingRecord) === loadedBookingId) ?? null
-    : null;
-  const dispatchPublicBookingReference = appliedAdminBookingSnapshot
-    ? bookingPublicReference(appliedAdminBookingSnapshot)
-    : dispatchReleaseLoadedBookingRecord
-      ? bookingPublicReference(dispatchReleaseLoadedBookingRecord)
-      : compactBookingReference(dispatchReleaseWorkflowBookingReference);
   const dispatchReadableSummaryItems = [
     { label: "Passenger", value: clean(booking.name) || "Passenger not set" },
     { label: "Company", value: clean(booking.company) || "Company not set" },
@@ -24811,9 +24838,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     dispatchReleaseConfirmedOnlyEligible &&
     dispatchReleaseChecklist.every((item) => item.state === "ready");
   const dispatchReleaseContextLabel = appliedAdminBookingSnapshot
-    ? `Applied snapshot: ${clean(appliedAdminBookingSnapshot.booking_reference) || "selected operational snapshot"}`
+    ? `Applied snapshot: ${dispatchPublicBookingReference || "selected operational snapshot"}`
     : loadedBookingId
-      ? `Loaded booking: ${loadedBookingId}`
+      ? `Loaded booking: ${dispatchPublicBookingReference || "Booking"}`
       : "Current dispatch draft";
   const dispatchReleasePendingCount = dispatchReleaseChecklist.filter((item) => item.state !== "ready").length;
   const dispatchReleaseSavedReady =
@@ -26933,7 +26960,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 <div className="flex min-w-0 items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate font-semibold text-lime-950">
-                      {compactBookingReference(activeJobBookingReference)}
+                      {bookingPublicReference(activeJobBooking)}
                     </p>
                     <p className="truncate text-xs text-lime-800">
                       {formatPickupDateTime(
@@ -27489,7 +27516,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       <p className="break-words font-semibold leading-3">
                         {job.driver_display_label || "Assigned driver"} ·{" "}
                         {cleanReferenceText(job.public_job_reference) ||
-                          compactBookingReference(job.assigned_job_reference || "")}
+                          "Reference unavailable"}
                       </p>
                       <p className="break-words text-[10px] leading-3 text-lime-900">
                         {job.is_stale ? "Stale" : "Current"} ·{" "}
@@ -42593,7 +42620,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                         title={driverJobLinkAcknowledgementStatus.title}
                       >
                         <span className="max-w-[8rem] truncate">
-                          {compactBookingReference(dispatchReleaseWorkflowBookingReference)}
+                          {dispatchPublicBookingReference || "Booking"}
                         </span>
                         <span className="mx-1" aria-hidden="true">·</span>
                         <span>{driverJobLinkAcknowledgementStatus.label}</span>
@@ -44156,6 +44183,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     : savedRecord;
                   const displayRecord = loadedRecord ||
                     (savedRecord ? adminBookingPersistenceRecordToCalendarBookingRecord(savedRecord) : null);
+                  const displayReference = displayRecord
+                    ? bookingPublicReference(displayRecord)
+                    : "New booking request";
                   const routeText = safeRecord
                     ? adminBookingPersistenceRouteSummary(safeRecord) ||
                       [clean(safeRecord.pickup_location), clean(safeRecord.dropoff_location)]
@@ -44193,7 +44223,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                             {isUrgent ? "New / Urgent" : "New"}
                           </span>
                           <p className="mt-1 truncate font-semibold text-slate-950">
-                            {bookingReference || clean(notification.safe_title) || "New booking request"}
+                            {displayReference}
                           </p>
                           <p className="truncate text-xs text-slate-500">
                             {displayRecord ? formatBookingPickupDateTimeSgt(displayRecord) : "Pickup time pending review"}

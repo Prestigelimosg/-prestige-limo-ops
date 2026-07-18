@@ -12,6 +12,13 @@ Latest remote Production deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Admin Device Push Header Compact Control (2026-07-18)
+
+- The existing single admin Device Push ON/OFF switch now sits directly beside the `Ready` state in the `Codex Review & Admin App Notifications` header. Its compact visible labels are `Push OFF`, `Push ON`, `Turning ON...`, and `Turning OFF...`.
+- The separate `Device Push Alerts` panel, heading, description, and visible readiness banner are removed. Existing readiness and action feedback remains attached to the same switch as its tooltip and screen-reader live text, so this layout change does not add or replace push behavior.
+- The established enable/disable handlers, notification-permission request, service worker, subscription API, runtime gate, safe payload, and customer-booking best-effort alert call remain unchanged. No switch was toggled and no permission, subscription, push send, booking, notification, provider, Calendar, customer, driver, environment, or Supabase record/configuration was changed during source verification.
+- No duplicate button, route, API, panel, subscription writer, push sender, notification format, service worker, polling timer, or external messaging lane was added. Focused protection remains `scripts/test-admin-device-push-notification-guard.mjs`, which now requires exactly one switch inside the Codex header and rejects the removed expanded visual wording. The related `scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs` now follows that header placement and the already-recorded prepared-card Close-only layout instead of its stale pre-simplification wording.
+
 ### Admin Current-Schema CRM Identity Display Repair (2026-07-18)
 
 - Owner screenshots of exact customer request `CUST-20260718025251-AYV641` showed the saved trip correctly in Bookings and its receipt correctly at `30 Jul 2026, 1155hrs SGT`, but the admin card displayed `Booker: Unknown` and used the traveller label as its company title.

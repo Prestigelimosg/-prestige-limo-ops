@@ -995,6 +995,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Focused guard: `scripts/test-admin-dispatch-crm-identity-selectors-guard.mjs`.
 - The established rate-setup traveler projection includes verified `booker_id` and safe `booker_name`, allowing the PA selector to use persisted relationships instead of names or inferred matches.
 - The typed admin-bookers API contract guard now protects that established selector consumer instead of requiring a retired direct `/api/admin-bookers` call from `app/page.tsx`. The route remains the typed server boundary for exact booker lookup/create/update, the UI remains on the existing rate-setup traveler projection, and no route, selector, write lane, or runtime behavior changed.
+- The existing typed `/api/admin-bookers` POST boundary now accepts the same verified same-origin admin/dispatcher server-session role already used by the CRM company/traveler create route and verified traveler-link PATCH. This repairs deliberate booker creation without exposing the server token to the browser. Cross-origin, missing-purpose, wrong-role, unsafe-field, PUT, and DELETE requests remain blocked; PATCH retains its explicit-token boundary. No new route, writer, selector, table, schema, or inferred identity path was added.
 
 ### Verified Traveler–Booker Link PATCH Boundary
 

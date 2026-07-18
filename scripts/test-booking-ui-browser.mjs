@@ -473,6 +473,7 @@ const persistedRealNicoleRohanHarmlessTestFixture = {
 };
 const dashboardDriverAssignmentFixture = {
   id: "ui-dashboard-driver-assignment-fixture",
+  public_booking_reference: "10841",
   company_id: 701,
   booker_id: 702,
   traveler_id: 703,
@@ -10071,7 +10072,7 @@ async function runChromeTest() {
     );
     assert.equal(driverJobLinkCreateState.copyButtonDisabled, false);
     assert.match(driverJobLinkCreateState.feedbackText, /Driver job link created/);
-    assert.match(driverJobLinkCreateState.statusText, /Active saved link for ui-dashboard-driver-assignment-fixture/);
+    assert.match(driverJobLinkCreateState.statusText, /Active saved link for 10841/);
     assert.equal(driverJobLinkCreateState.acknowledgementState, "waiting");
     assert.match(driverJobLinkCreateState.acknowledgementText, /Waiting for driver/);
     assert.ok(
@@ -10255,7 +10256,12 @@ async function runChromeTest() {
       /\/driver-job-demo|mock-driver-job-valid-a|Mock\/demo driver job link|Local demo link/,
       "Expected Driver Job Link copy not to point to the demo token or include mock/demo wording",
     );
-    assert.match(driverJobLinkCopyState.copiedText, /Reference: ui-dashboard-driver-assignment-fixture/);
+    assert.match(driverJobLinkCopyState.copiedText, /Reference: 10841/);
+    assert.doesNotMatch(
+      driverJobLinkCopyState.copiedText,
+      /ui-dashboard-driver-assignment-fixture/,
+      "Expected Driver Job Link copy not to expose the internal booking key.",
+    );
     assert.match(driverJobLinkCopyState.copiedText, /Passenger: DASHBOARD DRIVER TEST TRAVELER/);
     assert.match(driverJobLinkCopyState.copiedText, /29 May 2026, 1115hrs/);
     assert.match(driverJobLinkCopyState.copiedText, /Flight: SQ777/);

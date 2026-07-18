@@ -7,6 +7,7 @@ const paths = {
   adminCustomerRead: "lib/admin-customer-accounts-read.ts",
   adminCustomerUi: "app/customers/page.tsx",
   adminUi: "app/page.tsx",
+  adminAlertEmail: "lib/admin-new-booking-email-alert.ts",
   customerAdapter: "lib/customer-portal-saved-bookings-adapter.ts",
   customerRead: "lib/customer-saved-bookings-read.ts",
   customerUi: "app/my-bookings/page.tsx",
@@ -84,6 +85,8 @@ includes("customerAdapter", "internalBookingReference", "customer internal opera
 includes("customerAdapter", "publicBookingReference", "customer public display reference");
 includes("customerUi", "booking.publicBookingReference", "customer visible public reference");
 includes("receiptEmail", "booking.public_booking_reference", "customer receipt public reference");
+includes("adminAlertEmail", "bookingRecord.public_booking_reference", "admin alert public reference");
+includes("adminAlertEmail", "formatSingaporePickupDisplay", "admin alert SGT pickup display");
 includes("requestRoute", "primaryRequest.public_booking_reference", "customer request response public reference");
 includes("driverRead", "public_reference: publicBookingReference", "driver public reference display mapping");
 includes("driverUi", '{ label: "Reference", value: job.reference }', "driver visible public reference row");
@@ -124,6 +127,16 @@ includes(
   "adminUi",
   "driverJobLinkPublicBookingReference",
   "driver-link copy public reference display",
+);
+includes(
+  "adminUi",
+  'Booking {dispatchPublicBookingReference || "Reference unavailable"}',
+  "Driver Job Link handoff public reference display",
+);
+excludes(
+  "adminUi",
+  /Booking \{dispatchReleaseWorkflowBookingReference\}/,
+  "Driver Job Link handoff internal reference display",
 );
 for (const fragment of [
   "adminVisibleBookingReference",

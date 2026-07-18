@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { AdminBookingPersistenceRecord } from "./admin-booking-persistence";
+import { formatSingaporePickupDisplay } from "./singapore-pickup-display";
 
 export const adminNewBookingEmailAlertVersion = "admin-new-booking-email-alert-v1";
 export const adminNewBookingEmailAlertEnvGateName =
@@ -263,7 +264,10 @@ function normalizeBooking(booking: AdminBookingPersistenceRecord) {
     customer_display_name: safeText(bookingRecord.customer_display_name, 140),
     dropoff_location: safeText(bookingRecord.dropoff_location, 220),
     passenger_name: safeText(bookingRecord.passenger_name, 140),
-    pickup_datetime: safeText(bookingRecord.pickup_datetime, 120),
+    display_reference:
+      safeText(bookingRecord.public_booking_reference, 40) || bookingReference,
+    pickup_datetime:
+      formatSingaporePickupDisplay(safeText(bookingRecord.pickup_datetime, 120)) || null,
     pickup_location: safeText(bookingRecord.pickup_location, 220),
     route_type: safeText(bookingRecord.route_type, 120),
   };
@@ -273,7 +277,7 @@ function buildEmailText(booking: NonNullable<ReturnType<typeof normalizeBooking>
   return [
     "New booking request received.",
     "",
-    `Reference: ${booking.booking_reference}`,
+    `Reference: ${booking.display_reference}`,
     booking.customer_display_name ? `Customer/account: ${booking.customer_display_name}` : "",
     booking.passenger_name ? `Passenger: ${booking.passenger_name}` : "",
     booking.contact_phone ? `Contact: ${booking.contact_phone}` : "",
@@ -295,7 +299,7 @@ function buildProviderBody(
   return JSON.stringify({
     from: selectedSender,
     reply_to: selectedReplyTo,
-    subject: `New booking request: ${booking.booking_reference}`,
+    subject: `New booking request: ${booking.display_reference}`,
     text: buildEmailText(booking),
     to: [recipient],
   });

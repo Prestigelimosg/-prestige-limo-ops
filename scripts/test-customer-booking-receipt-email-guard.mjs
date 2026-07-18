@@ -77,6 +77,19 @@ assert.ok(routeSource.includes("sendCustomerBookingReceiptEmail(savedRequests)")
 assert.ok(routeSource.includes("receipt_status: receipt.status"));
 assert.ok(helperSource.includes('"Idempotency-Key"'));
 assert.ok(ledger.includes("### Permanent Booker Link, Rebooking Identity, and Request Receipt"));
+assert.ok(
+  ledger.includes("### Production Customer Booking Receipt Email Configuration Repair"),
+  "Ledger must record the bounded Production receipt-email configuration repair.",
+);
+for (const evidence of [
+  "CUST-20260718021747-8V1IPY",
+  "PRESTIGE_CUSTOMER_BOOKING_RECEIPT_EMAIL_ENABLED",
+  "PRESTIGE_CUSTOMER_BOOKING_RECEIPT_EMAIL_FROM",
+  "dpl_7WQVBYLZzD73wGJUXs2YwFovuSGJ",
+  "No post-repair receipt email delivery was runtime-tested",
+]) {
+  assert.ok(ledger.includes(evidence), `Ledger must include Production receipt evidence: ${evidence}`);
+}
 assert.ok(suite.includes(guardPath));
 
 const harness = await loadHarness();

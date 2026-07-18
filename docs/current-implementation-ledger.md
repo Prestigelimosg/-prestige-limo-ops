@@ -12,6 +12,14 @@ Latest remote Production deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Dashboard Overdue Job Resolution And Existing Monitor Lock (2026-07-18)
+
+- Every loaded saved booking continues using the established silent booking refresh every 3 seconds while Dashboard, Bookings, or Dispatch is open. Time-dependent job classification continues recalculating every 30 seconds, and every assigned active job continues using the existing 10-second driver-status/OTS/link refresh. An authoritative driver `Job Completed` report continues syncing that exact saved booking to `completed` through the established status-only writer.
+- An unassigned non-customer job whose pickup time has passed inside the existing active-job monitor window now displays `Overdue` instead of the incorrect `Driver TBC under 1h`. Time passing never guesses that a trip completed or was cancelled.
+- Each overdue row exposes `Completed` and `Cancel`. Both require an explicit confirmation that distinguishes a trip that happened from one that did not, then reuse the single existing `/api/admin-saved-booking-statuses` PATCH writer. A successful status update opens the existing Completed / History page, where both completed and cancelled records already belong.
+- No new polling timer, API, route, table, status writer, Completed page, booking list, Calendar sync, message, notification, provider send, invoice/payment/payout action, GPS action, environment setting, schema, migration, or Supabase configuration was added. Existing customer-request and non-overdue Driver TBC rows retain their current Dispatch handoff.
+- Focused protection is in `scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs` and the existing `scripts/test-booking-ui-browser.mjs`. Browser coverage uses two in-memory overdue fixtures, confirms one completed and one cancelled status-only mock PATCH, verifies both land in Completed / History, and performs no live Supabase mutation.
+
 ### Admin Device Push Header Compact Control (2026-07-18)
 
 - The existing single admin Device Push ON/OFF switch now sits directly beside the `Ready` state in the `Codex Review & Admin App Notifications` header. Its compact visible labels are `Push OFF`, `Push ON`, `Turning ON...`, and `Turning OFF...`.

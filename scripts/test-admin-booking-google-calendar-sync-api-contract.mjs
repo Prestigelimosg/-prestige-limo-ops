@@ -426,7 +426,7 @@ try {
   const updateAppliedSnapshotSource = sourceBetween(
     appSource,
     "async function updateAppliedAdminBookingOperationalSnapshot()",
-    "async function updateAdminCustomerRequestReviewDecision(",
+    "function getDispatchCopyText(",
   );
   assert.match(
     updateAppliedSnapshotSource,

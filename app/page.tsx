@@ -453,6 +453,8 @@ type BookingForm = {
   vehicle: string;
   date: string;
   time: string;
+  dspEndDate: string;
+  dspEndTime: string;
   flight: string;
   pickup: string;
   dropoff: string;
@@ -518,6 +520,8 @@ type LoadBookingsOperationalFormFields = Pick<
   | "company"
   | "companyId"
   | "date"
+  | "dspEndDate"
+  | "dspEndTime"
   | "driverContact"
   | "driverId"
   | "driverName"
@@ -748,6 +752,7 @@ type BookingRecord = {
   pickup_time: string | null;
   pickup_at?: string | null;
   pickup_datetime?: string | null;
+  dropoff_datetime?: string | null;
   pickup_address: string | null;
   pickup_location?: string | null;
   dropoff_address: string | null;
@@ -2209,6 +2214,7 @@ type AdminBookingPersistenceRecord = {
   traveler_id?: number | null;
   pickup_datetime?: string | null;
   pickup_at?: string | null;
+  dropoff_datetime?: string | null;
   pickup_location?: string | null;
   dropoff_location?: string | null;
   route_type?: string | null;
@@ -2264,6 +2270,7 @@ type AdminBookingPersistenceRequestBody = {
     booker_id?: number | null;
     traveler_id?: number | null;
     pickup_datetime: string | null;
+    dropoff_datetime?: string | null;
     pickup_location: string | null;
     dropoff_location: string | null;
     route_type: string | null;
@@ -2854,6 +2861,8 @@ function createInitialBooking(): BookingForm {
     vehicle: "AVF",
     date: "",
     time: "",
+    dspEndDate: "",
+    dspEndTime: "",
     flight: "",
     pickup: "",
     dropoff: "",
@@ -2938,6 +2947,8 @@ const fieldLabels: Record<keyof BookingForm, string> = {
   vehicle: "Vehicle",
   date: "Pickup date",
   time: "Pickup time",
+  dspEndDate: "DSP end date",
+  dspEndTime: "DSP end time",
   flight: "Flight number",
   pickup: "Pickup",
   dropoff: "Drop-off",
@@ -2988,8 +2999,10 @@ const tripRouteFieldOrder: Array<keyof BookingForm> = [
   "vehicle",
   "date",
   "time",
-  "flight",
   "bookingType",
+  "dspEndDate",
+  "dspEndTime",
+  "flight",
   "pickup",
   "dropoff",
 ];
@@ -5465,6 +5478,9 @@ function mergeParsedBookingIntoForm(
   currentBooking: BookingForm,
   parsedBooking: ParsedBooking,
 ): BookingForm {
+  const parsedStandbyUntil = clean(
+    (parsedBooking as ParsedBooking & { standbyUntil?: string }).standbyUntil,
+  );
   const parsedName = clean(parsedBooking.name);
   const parsedExtraStopLocation = clean(parsedBooking.extraStopLocation);
   const parsedExtraStopCount = parsedExtraStopLocation ? clean(parsedBooking.extraStopCount) || "1" : parsedBooking.extraStopCount;
@@ -5477,6 +5493,7 @@ function mergeParsedBookingIntoForm(
     ...bookingFields,
     ...(parsedName ? { name: parsedName } : {}),
     ...(parsedExtraStopCount ? { extraStopCount: parsedExtraStopCount } : {}),
+    ...(parsedStandbyUntil ? { dspEndTime: parsedStandbyUntil } : {}),
   });
   const safeCompany = normalizeCompanyAccount(
     mergedBooking.company,
@@ -5501,6 +5518,9 @@ function mergeCrmUpdatesIntoForm(
   currentBooking: BookingForm,
   crmUpdates: ParsedBooking,
 ): BookingForm {
+  const crmStandbyUntil = clean(
+    (crmUpdates as ParsedBooking & { standbyUntil?: string }).standbyUntil,
+  );
   const currentName = clean(currentBooking.name);
   const crmName = clean(crmUpdates.name);
   const bookingFields = Object.fromEntries(
@@ -5511,6 +5531,7 @@ function mergeCrmUpdatesIntoForm(
   const mergedBooking = mergeParsedBookingState(currentBooking, {
     ...bookingFields,
     name: currentName || crmName,
+    ...(crmStandbyUntil ? { dspEndTime: crmStandbyUntil } : {}),
   });
   const safeCompany = normalizeCompanyAccount(
     mergedBooking.company,
@@ -8091,7 +8112,7 @@ function buildLoadBookingsOperationalDisplayCard(
     created_at: loadBookingsOperationalDisplayText(createdAt || bookingRecord.created_at, 120),
     customer_display_name: loadBookingsOperationalDisplayText(companyDisplay || passengerDisplay, 220),
     dropoff_address: loadBookingsOperationalDisplayText(dropoffAddress, 500),
-    dropoff_datetime: null,
+    dropoff_datetime: loadBookingsOperationalDisplayText(bookingRecord.dropoff_datetime, 120),
     extra_stop_display: loadBookingsOperationalDisplayText(
       extraStopCount > 0 ? `Extra stops: ${extraStopCount}` : null,
       220,
@@ -8278,6 +8299,7 @@ function bookingRecordToOperationalFormFields(bookingRecord: BookingRecord): Loa
     "MNG";
   const pickupTime =
     normalizePickupTimeForStorage(formatPickupTimeFromRecord(bookingRecord));
+  const dspEndParts = singaporePickupDateTimePartsFromTimestamp(bookingRecord.dropoff_datetime);
   const vehicleDisplay =
     clean(bookingRecord.vehicle_type_or_category) ||
     clean(bookingRecord.vehicle_type) ||
@@ -8296,6 +8318,8 @@ function bookingRecordToOperationalFormFields(bookingRecord: BookingRecord): Loa
     vehicle: vehicleDisplay,
     date: getBookingDateKey(bookingRecord),
     time: pickupTime,
+    dspEndDate: dspEndParts?.date || "",
+    dspEndTime: dspEndParts?.time || "",
     flight: clean(bookingRecord.flight_no),
     pickup,
     extraStopLocation: extraStopLocations.join(" > "),
@@ -8413,6 +8437,7 @@ function bookingRecordToAdminBookingPersistenceRecord(
     driver_name: clean(bookingRecord.driver_name) || null,
     driver_plate_number: clean(bookingRecord.driver_plate_number) || null,
     dropoff_location: dropoffLocation || null,
+    dropoff_datetime: clean(bookingRecord.dropoff_datetime) || null,
     flight_no: clean(bookingRecord.flight_no) || null,
     passenger_name: getBookingName(bookingRecord) || null,
     passenger_phone: clean(bookingRecord.passenger_phone) || null,
@@ -8496,6 +8521,24 @@ function formatAdminBookingPickupDateTime(bookingValue: BookingForm) {
   return `${date}T${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:00+08:00`;
 }
 
+function formatAdminBookingDspEndDateTime(bookingValue: BookingForm) {
+  const date = clean(bookingValue.dspEndDate);
+  const time = normalizePickupTimeForStorage(bookingValue.dspEndTime);
+
+  if (!date || time.length < 4) {
+    return null;
+  }
+
+  const hours = Number(time.slice(0, 2));
+  const minutes = Number(time.slice(2, 4));
+
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes) || hours > 23 || minutes > 59) {
+    return null;
+  }
+
+  return `${date}T${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:00+08:00`;
+}
+
 const adminDraftPickupDateTimeFallback = "2099-12-31T00:00:00+08:00";
 const adminDraftPickupFallback = "Pickup To Confirm";
 const adminDraftDropoffFallback = "Drop-off To Confirm";
@@ -8518,6 +8561,16 @@ function adminDispatchSaveCrmMissingPickupFields(bookingValue: BookingForm) {
 
   if (normalizePickupTimeForStorage(bookingValue.time).length < 4) {
     missingFields.push(fieldLabels.time);
+  }
+
+  if (normalizeBookingType(bookingValue.bookingType) === "DSP") {
+    if (!clean(bookingValue.dspEndDate)) {
+      missingFields.push(fieldLabels.dspEndDate);
+    }
+
+    if (normalizePickupTimeForStorage(bookingValue.dspEndTime).length < 4) {
+      missingFields.push(fieldLabels.dspEndTime);
+    }
   }
 
   return missingFields;
@@ -8660,6 +8713,10 @@ function buildAdminBookingPersistencePayload(
   const pickupDateTime =
     formatAdminBookingPickupDateTime(bookingValue) || adminDraftPickupDateTimeFallback;
   const serviceType = clean(bookingValue.bookingType) || "TRF";
+  const dspEndDateTime =
+    normalizeBookingType(serviceType) === "DSP"
+      ? formatAdminBookingDspEndDateTime(bookingValue)
+      : null;
 
   return {
     booking: {
@@ -8670,6 +8727,7 @@ function buildAdminBookingPersistencePayload(
       booker_id: adminDispatchVerifiedIdentityId(bookingValue.bookerId),
       traveler_id: adminDispatchVerifiedIdentityId(bookingValue.travelerId),
       pickup_datetime: pickupDateTime,
+      dropoff_datetime: dspEndDateTime,
       pickup_location: pickupLocation,
       dropoff_location: dropoffLocation,
       route_type: serviceType,
@@ -9280,6 +9338,7 @@ function adminBookingPersistenceRecordToCalendarBookingRecord(
         : null,
     dropoff_address: dropoffLocation,
     dropoff_location: dropoffLocation,
+    dropoff_datetime: clean(record.dropoff_datetime) || null,
     driver_contact: clean(record.driver_contact) || null,
     driver_name: clean(record.driver_name) || null,
     driver_plate_number: clean(record.driver_plate_number) || null,
@@ -23596,6 +23655,13 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     </div>
   );
   const renderDispatchBookingField = (field: keyof BookingForm) => {
+    if (
+      (field === "dspEndDate" || field === "dspEndTime") &&
+      normalizeBookingType(booking.bookingType) !== "DSP"
+    ) {
+      return null;
+    }
+
     const fieldContainerClass =
       field === "pickup" ||
       field === "dropoff" ||
@@ -23655,10 +23721,12 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       : undefined
                 }
                 min={field === "pax" ? 1 : undefined}
+                data-admin-dispatch-dsp-end-date={field === "dspEndDate" ? "true" : undefined}
+                data-admin-dispatch-dsp-end-time={field === "dspEndTime" ? "true" : undefined}
                 onChange={(event) => update(field, event.target.value)}
                 placeholder={fieldLabels[field]}
                 type={
-                  field === "date" || field === "returnDate"
+                  field === "date" || field === "returnDate" || field === "dspEndDate"
                     ? "date"
                     : field === "bookerEmail"
                       ? "email"

@@ -19,6 +19,15 @@ import {
 } from "../../lib/hourly-billing";
 import { formatSingaporePickupDisplay } from "../../lib/singapore-pickup-display";
 import {
+  calculateDspCustomerInvoiceAmountCents,
+  initialRateSettings,
+  normalizeBookingType,
+  resolvePricing,
+  type DriverPayoutRules,
+  type RateRules,
+  type RateSettings,
+} from "../../lib/pricing";
+import {
   downloadCustomerInvoicePdf,
   formatInvoiceAmount,
   formatInvoiceDate,
@@ -44,6 +53,7 @@ const adminCustomerInvoiceEmailApiPath = "/api/admin-customer-invoice-email";
 const adminCompletedBookingCloseoutApiPath = "/api/admin-completed-booking-closeouts";
 const adminDriverJobDspActualTimeSummariesApiPath =
   "/api/admin-driver-job-dsp-actual-time-summaries";
+const adminRateSetupApiPath = "/api/admin-rate-setup";
 const customerFolderDispatchHandoffTab = "dispatch";
 const customerFolderDispatchHandoffReferenceParam = "booking_reference";
 const customerInvoiceTestArtifactArchiveAction = "archive_test_invoice";
@@ -249,6 +259,12 @@ type UnbilledCustomerRow = {
   customerId: string;
   companyId: number | null;
   bookerId: number | null;
+  travelerId: number | null;
+  bookingType: string;
+  vehicleType: string;
+  pickupAt: string;
+  childSeatCount: number;
+  extraStopCount: number;
   customerName: string;
   dateLabel: string;
   invoiceLineDescription?: string;
@@ -513,6 +529,8 @@ type RegularCustomerSavedBookingReadRecord = {
   customer_account?: string | null;
   customer_id?: string | null;
   company_id?: number | null;
+  traveler_id?: number | null;
+  vehicle_type_or_category?: string | null;
   customer_price_amount?: number | null;
   customer_price_override_reason?: string | null;
   customer_rate?: number | null;
@@ -527,6 +545,100 @@ type RegularCustomerSavedBookingReadRecord = {
   route_type?: string | null;
   service_type?: string | null;
 };
+
+type CustomerInvoiceRateSetupRecord = {
+  companies?: Array<{
+    customer_rates?: RateRules | null;
+    driver_payout_rules?: DriverPayoutRules | null;
+    id?: number | null;
+  }>;
+  settings?: Partial<{
+    child_seat_customer_surcharge: number | null;
+    child_seat_driver_payout: number | null;
+    customer_rates: RateRules;
+    driver_payout_rules: DriverPayoutRules;
+    extra_stop_payout: number | null;
+    extra_stop_surcharge: number | null;
+    midnight_payout: number | null;
+    midnight_surcharge: number | null;
+  }> | null;
+  travelers?: Array<{
+    company_id?: number | null;
+    customer_rates?: RateRules | null;
+    driver_payout_rules?: DriverPayoutRules | null;
+    id?: number | null;
+  }>;
+};
+
+function customerInvoiceFiniteRate(value: unknown, fallback: number) {
+  if (value === null || value === undefined || value === "") {
+    return fallback;
+  }
+
+  const parsed = Number(value);
+
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function customerInvoiceRateSettings(
+  rateSetup: CustomerInvoiceRateSetupRecord,
+): RateSettings {
+  const settings = rateSetup.settings;
+
+  return {
+    customerRates: {
+      ...initialRateSettings.customerRates,
+      ...(settings?.customer_rates || {}),
+    },
+    driverPayoutRules: {
+      ...initialRateSettings.driverPayoutRules,
+      ...(settings?.driver_payout_rules || {}),
+    },
+    midnightSurcharge: customerInvoiceFiniteRate(
+      settings?.midnight_surcharge,
+      initialRateSettings.midnightSurcharge,
+    ),
+    extraStopSurcharge: customerInvoiceFiniteRate(
+      settings?.extra_stop_surcharge,
+      initialRateSettings.extraStopSurcharge,
+    ),
+    midnightPayout: customerInvoiceFiniteRate(
+      settings?.midnight_payout,
+      initialRateSettings.midnightPayout,
+    ),
+    extraStopPayout: customerInvoiceFiniteRate(
+      settings?.extra_stop_payout,
+      initialRateSettings.extraStopPayout,
+    ),
+    childSeatCustomerSurcharge: customerInvoiceFiniteRate(
+      settings?.child_seat_customer_surcharge,
+      initialRateSettings.childSeatCustomerSurcharge,
+    ),
+    childSeatDriverPayout: customerInvoiceFiniteRate(
+      settings?.child_seat_driver_payout,
+      initialRateSettings.childSeatDriverPayout,
+    ),
+  };
+}
+
+function customerInvoiceSingaporePickupClock(value: string) {
+  const parsed = new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  const parts = new Intl.DateTimeFormat("en-SG", {
+    hour: "2-digit",
+    hour12: false,
+    minute: "2-digit",
+    timeZone: "Asia/Singapore",
+  }).formatToParts(parsed);
+  const hour = parts.find((part) => part.type === "hour")?.value || "";
+  const minute = parts.find((part) => part.type === "minute")?.value || "";
+
+  return hour && minute ? `${hour}${minute}` : "";
+}
 
 type CustomerFolderExactBookingRoutePoint = {
   location?: string | null;
@@ -1848,6 +1960,12 @@ function savedBookingUnbilledRow(
     customerId,
     companyId: booking.company_id ?? null,
     bookerId: booking.booker_id ?? null,
+    travelerId: booking.traveler_id ?? null,
+    bookingType: String(booking.booking_type || booking.service_type || booking.route_type || ""),
+    vehicleType: String(booking.vehicle_type_or_category || "AVF"),
+    pickupAt: String(booking.pickup_at || ""),
+    childSeatCount: Number(booking.child_seat_count) || 0,
+    extraStopCount: Number(booking.extra_stop_count) || 0,
     customerName,
     dateLabel: savedBookingDateLabel(booking),
     invoiceLineDescription: `${billableServiceLabel} - ${reference}`,
@@ -5001,7 +5119,111 @@ export default function MockCustomerDashboardPage() {
     ).slice(0, customerInvoiceLineDescriptionMaxLength);
   }
 
-  function prepareMonthlyBillingGroupForInvoice(group: CustomerMonthlyBillingGroup) {
+  async function readAdminRateSetupForDspInvoice() {
+    const response = await fetch(adminRateSetupApiPath, {
+      headers: {
+        "x-prestige-admin-purpose": "admin-booking-persistence",
+      },
+      method: "GET",
+    });
+    const result = (await response.json().catch(() => null)) as
+      | (CustomerInvoiceRateSetupRecord & { error?: string; ok?: boolean })
+      | null;
+
+    if (!response.ok || result?.ok !== true) {
+      throw new Error(result?.error || "CRM rate setup could not be loaded.");
+    }
+
+    return result;
+  }
+
+  async function prepareMonthlyBillingDspRowsForInvoice(rows: UnbilledCustomerRow[]) {
+    const hasDspRows = rows.some(
+      (row) => normalizeBookingType(row.bookingType || row.service) === "DSP",
+    );
+
+    if (!hasDspRows) {
+      return rows;
+    }
+
+    const rateSetup = await readAdminRateSetupForDspInvoice();
+    const settings = customerInvoiceRateSettings(rateSetup);
+
+    return Promise.all(
+      rows.map(async (row) => {
+        if (normalizeBookingType(row.bookingType || row.service) !== "DSP") {
+          return row;
+        }
+
+        const summary = await readCustomerInvoiceDriverActualTimeSummary(row.reference);
+
+        if (
+          summary?.actual_time_status !== "complete" ||
+          !Number.isFinite(Number(summary.dsp_total_minutes)) ||
+          Number(summary.dsp_total_minutes) <= 0
+        ) {
+          throw new Error(
+            `DSP actual timing is incomplete for ${row.reference}. Complete Driver OTS/JC before invoice preparation.`,
+          );
+        }
+
+        const verifiedScope = {
+          travelerId: row.travelerId,
+          companyId: row.companyId,
+        };
+        const companyRecord =
+          rateSetup.companies?.find((company) => company.id === verifiedScope.companyId) || null;
+        const travelerRecord =
+          rateSetup.travelers?.find(
+            (traveler) =>
+              traveler.id === verifiedScope.travelerId &&
+              (!verifiedScope.companyId || traveler.company_id === verifiedScope.companyId),
+          ) || null;
+        const pricing = resolvePricing(
+          {
+            bookingType: "DSP",
+            childSeatCount: row.childSeatCount,
+            childSeatRequired: row.childSeatCount > 0,
+            extraStopCount: row.extraStopCount,
+            time: customerInvoiceSingaporePickupClock(row.pickupAt),
+            vehicleType: row.vehicleType,
+          },
+          companyRecord || {},
+          travelerRecord,
+          settings,
+        );
+        const calculation = calculateDspCustomerInvoiceAmountCents(
+          Number(summary.dsp_total_minutes),
+          pricing,
+        );
+
+        if (!calculation) {
+          throw new Error(
+            `DSP CRM rate calculation is unavailable for ${row.reference}. Review the verified traveler/company rate setup.`,
+          );
+        }
+
+        const surchargeLabel = calculation.surchargeAmountCents
+          ? ` + ${formatInvoiceAmount(calculation.surchargeAmountCents)} surcharges`
+          : "";
+
+        return {
+          ...row,
+          amount: formatInvoiceAmount(calculation.amountCents),
+          billingBreakdown:
+            `${calculation.actualMinutes} actual min → ${calculation.billableHours} billable hr × ` +
+            `${formatInvoiceAmount(Math.round(calculation.hourlyRate * 100))}/hr${surchargeLabel}. ` +
+            `CRM source: ${pricing.pricingSource}.`,
+          invoiceLineDescription:
+            `DSP ${row.dateLabel} | ${calculation.billableHours} hr @ ` +
+            `${formatInvoiceAmount(Math.round(calculation.hourlyRate * 100))}/hr | ${row.reference}`,
+          statusLabel: "Closeout ready / DSP actual time and CRM rate applied",
+        };
+      }),
+    );
+  }
+
+  async function prepareMonthlyBillingGroupForInvoice(group: CustomerMonthlyBillingGroup) {
     if (group.rows.length === 0) {
       setPlainInvoiceFeedback("No jobs are available in this billing account/month group.");
       setPlainInvoiceFeedbackTone("error");
@@ -5016,7 +5238,22 @@ export default function MockCustomerDashboardPage() {
       return;
     }
 
-    const preparedRows = group.rows.slice(0, plainInvoiceMaxLineItems);
+    setPreparingMonthlyBillingGroupKey(group.key);
+    let preparedRows: UnbilledCustomerRow[];
+
+    try {
+      preparedRows = await prepareMonthlyBillingDspRowsForInvoice(
+        group.rows.slice(0, plainInvoiceMaxLineItems),
+      );
+    } catch (error) {
+      setPreparingMonthlyBillingGroupKey("");
+      setPlainInvoiceFeedback(
+        error instanceof Error ? error.message : "DSP invoice preparation failed safely.",
+      );
+      setPlainInvoiceFeedbackTone("error");
+      return;
+    }
+
     const overflowCount = Math.max(0, group.rows.length - preparedRows.length);
     const [firstRow, ...additionalRows] = preparedRows;
     const referenceList = group.rows.map((row) => row.reference).filter(Boolean);
@@ -5024,7 +5261,6 @@ export default function MockCustomerDashboardPage() {
       ? `${group.customerName} / ${group.accountScopeLabel}`
       : group.customerName;
 
-    setPreparingMonthlyBillingGroupKey(group.key);
     setPlainInvoiceForm({
       amount: monthlyBillingInvoiceAmountInput(firstRow),
       billToEmail: "",
@@ -5082,7 +5318,7 @@ export default function MockCustomerDashboardPage() {
     }
 
     setSelectedMonthlyBillingGroupKey(selectedCustomerPrimaryMonthlyBillingGroup.key);
-    prepareMonthlyBillingGroupForInvoice(selectedCustomerPrimaryMonthlyBillingGroup);
+    void prepareMonthlyBillingGroupForInvoice(selectedCustomerPrimaryMonthlyBillingGroup);
   }
 
   async function readCustomerInvoiceDriverActualTimeSummary(bookingReference: string) {

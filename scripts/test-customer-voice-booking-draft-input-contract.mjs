@@ -39,6 +39,7 @@ const safeCustomerBookingFields = [
   "passengerCount",
   "luggage",
   "extraStops",
+  "travelerId",
 ];
 
 const forbiddenCustomerVoiceFragments = [

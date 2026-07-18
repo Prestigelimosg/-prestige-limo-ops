@@ -149,12 +149,16 @@ for (const fragment of [
   "function readCustomerPortalBookingDeepLink()",
   "new URLSearchParams(window.location.search)",
   'safePortalBookingReference(params.get("booking"))',
-  'safePortalBookingReference(params.get("booking_reference"))',
   'openTracking: params.get("tracking") === "1"',
-  "portalBookings.find((booking) => booking.id === targetBookingId)",
+  "(booking) => booking.publicBookingReference === deepLink.bookingReference",
 ]) {
   assertIncludes(customerPortalPage, fragment, `/my-bookings bounded query read ${fragment}`);
 }
+assertExcludes(
+  customerPortalPage,
+  'params.get("booking_reference")',
+  "/my-bookings must not restore the internal booking-reference query",
+);
 
 for (const [path, source] of publicPagePaths.map((path) => [path, files[path]])) {
   assertExcludes(source, /<a\b/i, `${path} raw anchor tags`);

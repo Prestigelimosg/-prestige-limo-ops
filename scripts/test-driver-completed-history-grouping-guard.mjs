@@ -52,7 +52,7 @@ const completedHistoryPanel = sliceBetween(
 const activeMonitorSource = sliceBetween(
   appPage,
   "const activeJobDashboardSearchTerm = clean(searchTerm);",
-  "async function sendAdminTodayJobDriverMessage",
+  "async function refreshAdminTodayJobMessageHistory",
 );
 const ledgerSection = sliceBetween(
   ledger,

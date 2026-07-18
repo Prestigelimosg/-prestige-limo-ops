@@ -289,9 +289,10 @@ assertIncludes(
   'new Set(["booking_id", "booking_reference", "id"])',
   "detail read params",
 );
-assertIncludes(savedBookingRead, 'new Set(["limit"])', "list read params");
+assertIncludes(savedBookingRead, 'new Set(["limit", "offset", "scope"])', "list read params");
 assertIncludes(savedBookingRead, "const defaultListLimit = 25;", "default list limit");
 assertIncludes(savedBookingRead, "const maxListLimit = 100;", "max list limit");
+assertIncludes(savedBookingRead, "const maxListOffset = 10_000;", "max list offset");
 assertIncludes(savedBookingRead, "validServerDatabaseUrl", "server URL validation");
 assertIncludes(savedBookingRead, "validServerCredential", "server credential validation");
 assertIncludes(savedBookingRead, "configValueOrNull(process.env.SUPABASE_URL)", "server URL env-name");
@@ -346,7 +347,7 @@ assertIncludes(
 assertIncludes(savedBookingRead, ".eq(\"id\", parsed.data.id)", "typed detail id filter");
 assertIncludes(savedBookingRead, ".order(\"created_at\", { ascending: false })", "typed list order");
 assertIncludes(savedBookingRead, ".limit(1)", "typed detail limit");
-assertIncludes(savedBookingRead, ".limit(parsed.data.limit)", "typed list limit");
+assertIncludes(savedBookingRead, "parsed.data.offset + parsed.data.limit - 1", "typed list bounded range");
 assertIncludes(savedBookingRead, ".maybeSingle()", "typed detail maybeSingle");
 assertExcludes(savedBookingRead, ".select(\"*\")", "typed read wildcard select");
 assertExcludes(savedBookingRead, ".storage", "typed read storage path");
@@ -393,7 +394,7 @@ assertIncludes(
 );
 assertIncludes(
   loadBookingsBlock,
-  "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`",
+  "fetchAdminSavedBookingsList(searchParams)",
   "Load Bookings legacy booking/form/detail source",
 );
 assertIncludes(loadBookingsBlock, "setBookings(loadedBookings);", "legacy records remain action source");

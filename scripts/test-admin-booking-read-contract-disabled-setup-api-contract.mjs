@@ -283,7 +283,7 @@ assertExcludes(saveBookingBlock, setupApiName, "Save Booking + CRM safe route");
 const loadBookingsBlock = sliceBetween(appPage, "async function loadBookings", "function loadSelectedBooking");
 assertIncludes(
   loadBookingsBlock,
-  "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`",
+  "fetchAdminSavedBookingsList(searchParams)",
   "Load Bookings legacy read remains separate",
 );
 assertExcludes(loadBookingsBlock, setupApiName, "Load Bookings must not wire disabled read contract yet");

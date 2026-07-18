@@ -44,6 +44,11 @@ const approvedSubmittedFields = [
   "extraStops",
 ];
 
+const acceptedCustomerRequestFields = [
+  ...approvedSubmittedFields,
+  "travelerId",
+];
+
 function assertIncludes(source, fragment, label = fragment) {
   assert.equal(source.includes(fragment), true, `${label} must include ${fragment}.`);
 }
@@ -339,8 +344,13 @@ for (const forbidden of [
 
 assertSameList(
   extractNewSetItems(adminBookingPersistence, "customerBookingRequestFields"),
-  approvedSubmittedFields,
+  acceptedCustomerRequestFields,
   "customer booking request accepted persistence fields",
+);
+assertExcludes(
+  customerBookingLocalVoiceDraft,
+  '"travelerId"',
+  "voice field-fill UI must not select or overwrite verified traveller identity",
 );
 
 const unsafeBackendPathPattern = /(?:customer[-/]voice|voice[-/]booking|speech|stt|audio|recording)/i;

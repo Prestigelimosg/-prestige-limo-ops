@@ -294,6 +294,10 @@ const guardChecks = [
     script: "scripts/test-customer-hourly-invoice-auto-calculation-guard.mjs",
   },
   {
+    label: "admin Dispatch DSP scheduled-end and invoice wiring guard",
+    script: "scripts/test-admin-dispatch-dsp-scheduled-end-invoice-wiring-guard.mjs",
+  },
+  {
     label: "customer invoice driver JC timing and override guard",
     script: "scripts/test-customer-invoice-driver-jc-override-guard.mjs",
   },

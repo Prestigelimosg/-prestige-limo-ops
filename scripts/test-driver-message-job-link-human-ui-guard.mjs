@@ -30,7 +30,7 @@ assert.ok(!messagePanel.includes("Driver In-App status"), "Dispatch must not ret
 for (const fragment of [
   'data-driver-job-link-booking-details="true"',
   "clean(dispatchReleaseWorkflowBookingReference)",
-  "Booking {dispatchReleaseWorkflowBookingReference}",
+  'Booking {dispatchPublicBookingReference || "Reference unavailable"}',
   "Passenger",
   "Pickup",
   "Route",

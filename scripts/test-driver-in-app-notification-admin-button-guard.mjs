@@ -33,7 +33,7 @@ for (const fragment of [
   'data-admin-active-job-driver-message-input="true"',
   'data-admin-active-job-driver-message-send="true"',
   "Send to Driver",
-  "sendAdminTodayJobDriverMessage",
+  "sendAdminTodayJobMessage",
   'delivery_surface: "driver_app"',
   'workflow_area: "admin_driver_job_messages"',
   "Queued to Driver Job page at ${adminDriverJobStatusTimeLabel(new Date().toISOString())}.",

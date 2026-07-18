@@ -67,7 +67,7 @@ for (const fragment of [
   '"CUSTOMER BOOKING DETAILS"',
   '"DRIVER DETAILS"',
   "`Passenger name: ${clean(booking.name)}`",
-  "`Booking reference: ${bookingReference}`",
+  "`Booking reference: ${dispatchPublicBookingReference}`",
   "`Service: ${serviceType}`",
   "`Pickup date: ${formatDate(booking.date)}`",
   "`Pickup time: ${formatPickupTime(booking.time)}`",

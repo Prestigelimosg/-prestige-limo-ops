@@ -132,15 +132,24 @@ assertIncludes(
 );
 assertIncludes(
   loadBookingsBlock,
-  "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`",
+  "fetchAdminSavedBookingsList(searchParams)",
   "Saved bookings first read",
+);
+assertIncludes(
+  loadBookingsBlock,
+  "`${adminSavedBookingsApiPath}?${listSearchParams.toString()}`",
+  "Saved bookings shared GET helper",
 );
 assertExcludes(loadBookingsBlock, "adminBookingsApiPath", "Admin bookings fallback read");
 assertIncludes(loadBookingsBlock, '"x-prestige-admin-purpose": adminLegacyDataPurpose', "Admin purpose header");
 assertIncludes(loadBookingsBlock, 'method: "GET"', "Load Bookings GET-only method");
 assertExcludes(loadBookingsBlock, 'source: "admin-bookings"', "Admin bookings fallback source marker");
 assertExcludes(loadBookingsBlock, "CRM list fallback used.", "Operator fallback success note");
-assertIncludes(loadBookingsBlock, "sortBookingsNewestFirst(bookingsListResult.bookings)", "Fallback list feeds CRM list");
+assertIncludes(
+  loadBookingsBlock,
+  "mergeSavedBookingMonitorCoverage(\n          bookingsListResult.bookings,\n          monitorableBookings,\n        )",
+  "Recent and monitorable saved bookings feed the CRM list",
+);
 assertIncludes(
   loadBookingsBlock,
   "fetchLoadBookingsTypedOperationalDisplayResult(searchParams)",
@@ -989,7 +998,7 @@ const typedOperationalFetchIndex = loadBookingsBlock.indexOf(
   "fetchLoadBookingsTypedOperationalDisplayResult(searchParams)",
 );
 const savedBookingsFetchIndex = loadBookingsBlock.indexOf(
-  "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`",
+  "fetchAdminSavedBookingsList(searchParams)",
 );
 const adminBookingsFetchIndex = loadBookingsBlock.indexOf(
   "const adminBookingsResponse = await fetch(`${adminBookingsApiPath}?${searchParams.toString()}`, requestInit);",

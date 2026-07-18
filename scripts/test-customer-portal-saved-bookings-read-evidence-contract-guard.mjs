@@ -27,6 +27,7 @@ const allowedSavedBookingRecordFields = [
   "passenger_name",
   "pickup_at",
   "pickup_location",
+  "public_booking_reference",
   "service_type",
   "updated_at",
 ];

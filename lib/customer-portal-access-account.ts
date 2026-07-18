@@ -402,7 +402,7 @@ export async function ensureAdminCustomerPortalAccessAccount(
   const { data, error } = await clientResult.data
     .from(customerPortalAccessAccountTable)
     .upsert(payload, {
-      onConflict: referenceRecord ? "customer_account_reference" : "booker_id",
+      onConflict: "customer_account_reference",
     })
     .select(customerPortalAccessAccountSelect)
     .maybeSingle();

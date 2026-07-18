@@ -47,10 +47,15 @@ for (const fragment of [
   "link_revision",
   "companyId",
   "bookerId",
-  ': "booker_id"',
+  'onConflict: "customer_account_reference"',
 ]) {
   includes(accountHelper, fragment);
 }
+assert.doesNotMatch(
+  files[accountHelper],
+  /onConflict:\s*referenceRecord\s*\?\s*["']customer_account_reference["']\s*:\s*["']booker_id["']/,
+  "portal account creation must not target the partial booker index as an upsert conflict column",
+);
 for (const fragment of [
   "companyId: body.companyId",
   "bookerId: body.bookerId",

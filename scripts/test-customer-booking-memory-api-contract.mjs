@@ -447,6 +447,8 @@ const readPathSourceText = await Promise.all(
     "app/api/customer-booking-memory/route.ts",
   ].map((relativePath) => readFile(path.join(process.cwd(), relativePath), "utf8")),
 );
+const bookingMemorySelectSource =
+  joinedSourceText.match(/customerBookingMemorySelect\s*=\s*([^;]+)/)?.[1] || "";
 
 assert.equal(
   /\.(?:insert|upsert|delete|update)\s*\(/.test(readPathSourceText.join("\n")),
@@ -454,8 +456,18 @@ assert.equal(
   "Customer booking memory read path must remain read-only.",
 );
 assert.equal(
+  bookingMemorySelectSource.includes("vehicle_type_or_category"),
+  true,
+  "Customer booking memory must select the wired bookings vehicle column.",
+);
+assert.equal(
+  bookingMemorySelectSource.includes(", vehicle_type,"),
+  false,
+  "Customer booking memory must not select the absent legacy vehicle_type column.",
+);
+assert.equal(
   /admin_internal_status|contact_phone|contact_email|passenger_phone|customer_price|driver_payout|paynow|invoice|payment|payout|parser_source_reference/.test(
-    joinedSourceText.match(/customerBookingMemorySelect\s*=\s*([^;]+)/)?.[1] || "",
+    bookingMemorySelectSource,
   ),
   false,
   "Customer booking memory select must not include private customer/admin/finance/payout/parser columns.",

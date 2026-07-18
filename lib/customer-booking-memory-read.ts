@@ -76,7 +76,7 @@ const customerBookerProfileSelect = "id, company_id, booker_name, email, phone";
 const customerTravelerSelect =
   "id, company_id, booker_id, traveler_name, preferred_vehicle, default_pickup_address, default_dropoff_address";
 const customerBookingMemorySelect =
-  "booking_reference, passenger_name, pickup_location, dropoff_location, service_type, route_type, vehicle_type, vehicle, pickup_at, pickup_datetime, updated_at, created_at";
+  "booking_reference, passenger_name, pickup_location, dropoff_location, service_type, route_type, vehicle_type_or_category, vehicle, pickup_at, pickup_datetime, updated_at, created_at";
 const customerBookingMemoryAuthRequiredError =
   "Customer booking memory read requires secure customer account access.";
 const customerBookingMemoryDisabledError =
@@ -574,7 +574,10 @@ function toCustomerBookingMemoryRecord(row: UnknownRecord): CustomerBookingMemor
     passenger_name: passengerName,
     pickup_location: safeTextFromDb(row.pickup_location),
     service_type: safeTextFromDb(row.service_type, 120) || safeTextFromDb(row.route_type, 120),
-    vehicle_type: safeTextFromDb(row.vehicle_type, 120) || safeTextFromDb(row.vehicle, 120),
+    vehicle_type:
+      safeTextFromDb(row.vehicle_type_or_category, 120) ||
+      safeTextFromDb(row.vehicle_type, 120) ||
+      safeTextFromDb(row.vehicle, 120),
   };
 }
 

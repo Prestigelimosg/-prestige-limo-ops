@@ -196,3 +196,10 @@ alter table public.global_booking_reference_sequence enable row level security;
 revoke all on table public.customer_booking_reference_sequences from anon, authenticated;
 revoke all on table public.global_booking_reference_sequence from anon, authenticated;
 revoke all on function public.assign_booking_public_reference() from public, anon, authenticated;
+
+-- Current Supabase projects can disable automatic Data API grants. The
+-- established server-only Supabase client needs only these explicit rights;
+-- public customer and driver roles remain fully revoked.
+grant select, insert, update on table public.customer_booking_reference_sequences to service_role;
+grant select, update on table public.global_booking_reference_sequence to service_role;
+grant execute on function public.assign_booking_public_reference() to service_role;

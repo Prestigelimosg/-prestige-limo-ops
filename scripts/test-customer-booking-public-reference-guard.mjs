@@ -45,6 +45,9 @@ for (const fragment of [
   "[A-Z0-9]{2,12}-[0-9]{5}",
   "enable row level security",
   "revoke all",
+  "grant select, insert, update on table public.customer_booking_reference_sequences to service_role",
+  "grant select, update on table public.global_booking_reference_sequence to service_role",
+  "grant execute on function public.assign_booking_public_reference() to service_role",
 ]) {
   includes("migration", fragment, "public booking reference schema contract");
 }
@@ -55,6 +58,7 @@ includes("migration", "new.customer_id", "customer-scoped prefix lookup");
 includes("migration", "booking_public_reference_exhausted", "five-digit exhaustion fail-closed path");
 includes("migration", "booking_public_reference_prefix_unavailable", "locked prefix unavailable fail-closed path");
 excludes("migration", /customer_invoice_sequences|monthly_invoice_issue_records|invoice_prefix/i, "invoice schema coupling");
+excludes("migration", /grant[^;]*(?:anon|authenticated)/i, "public role grant");
 
 for (const key of ["adminAdapter", "adminRead", "customerRead", "driverRead"]) {
   includes(key, "public_booking_reference", `${key} public reference read`);

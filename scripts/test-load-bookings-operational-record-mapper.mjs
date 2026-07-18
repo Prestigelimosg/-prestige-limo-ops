@@ -192,6 +192,29 @@ function transpileTypescript(source, filename) {
   }).outputText.replace(/require\("([^"]+)\.ts"\)/g, 'require("$1.js")');
 }
 
+function loadCreatedAtFormatter(source) {
+  const formatterSource = sliceBetween(
+    source,
+    "function formatCreatedAt",
+    "function getRoutePoints",
+  );
+  const testModule = { exports: {} };
+  const executable = ts.transpileModule(
+    `${formatterSource}\nmodule.exports = { formatCreatedAt };`,
+    {
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS,
+        target: ts.ScriptTarget.ES2022,
+      },
+      fileName: appPagePath,
+    },
+  ).outputText;
+
+  new Function("module", "exports", executable)(testModule, testModule.exports);
+
+  return testModule.exports.formatCreatedAt;
+}
+
 async function loadHarness() {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "prestige-load-bookings-record-mapper-"));
   const serverOnlyPath = path.join(tempDir, "node_modules/server-only/index.js");
@@ -278,6 +301,38 @@ assertIncludes(
 assertIncludes(loadBookingsBlock, 'method: "GET"', "Current Load Bookings method");
 assertExcludes(loadBookingsBlock, helperExportName, "Load Bookings app wiring to operational mapper");
 assertExcludes(loadBookingsBlock, "admin-load-bookings-operational-record-mapper", "Load Bookings app wiring");
+
+const formatCreatedAt = loadCreatedAtFormatter(appPage);
+assert.equal(
+  formatCreatedAt("2026-07-18T14:00:18.861093"),
+  "18 Jul 2026, 2200hrs SGT",
+  "Legacy timezone-less created_at must be treated as UTC and displayed in Singapore time.",
+);
+assert.equal(
+  formatCreatedAt("2026-07-18T14:00:18.861093+00:00"),
+  "18 Jul 2026, 2200hrs SGT",
+  "UTC-aware created_at must display in Singapore time.",
+);
+assert.equal(
+  formatCreatedAt("2026-07-18T22:00:18.861093+08:00"),
+  "18 Jul 2026, 2200hrs SGT",
+  "Singapore-offset created_at must keep the same Singapore clock time.",
+);
+assert.equal(formatCreatedAt("not-a-timestamp"), "not-a-timestamp");
+assert.equal(formatCreatedAt(null), "");
+
+const createdAtRendererExpression =
+  "const createdAt = formatCreatedAt(operationalCard.created_at || savedBooking.created_at);";
+assert.equal(
+  appPage.split(createdAtRendererExpression).length - 1,
+  2,
+  "Active and completed booking cards must both format the typed operational created_at value.",
+);
+assertExcludes(
+  appPage,
+  "const createdAt = operationalCard.created_at || formatCreatedAt(savedBooking.created_at);",
+  "raw typed operational created_at renderer",
+);
 
 const saveBookingBlock = sliceBetween(appPage, "async function saveBooking", "async function loadBookings");
 assertIncludes(saveBookingBlock, 'fetch("/api/admin-bookings"', "Save Booking + CRM endpoint");

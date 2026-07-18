@@ -7869,23 +7869,42 @@ function buildCompletedBookingBillingReadinessAuditPayload(
 }
 
 function formatCreatedAt(value: string | null | undefined) {
-  if (!value) {
+  const cleaned = String(value ?? "").trim();
+
+  if (!cleaned) {
     return "";
   }
 
-  const date = new Date(value);
+  const legacyUtcValue = /^\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(cleaned)
+    ? `${cleaned}Z`
+    : cleaned;
+  const date = new Date(legacyUtcValue);
 
   if (Number.isNaN(date.getTime())) {
-    return clean(value);
+    return cleaned;
   }
 
-  return new Intl.DateTimeFormat("en-SG", {
+  const parts = new Intl.DateTimeFormat("en-SG", {
     day: "2-digit",
-    month: "short",
-    year: "numeric",
     hour: "2-digit",
+    hour12: false,
+    hourCycle: "h23",
     minute: "2-digit",
-  }).format(date);
+    month: "short",
+    timeZone: "Asia/Singapore",
+    year: "numeric",
+  }).formatToParts(date);
+  const partValue = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value || "";
+  const day = partValue("day");
+  const month = partValue("month");
+  const year = partValue("year");
+  const hour = partValue("hour") === "24" ? "00" : partValue("hour");
+  const minute = partValue("minute");
+
+  return day && month && year && hour && minute
+    ? `${day} ${month} ${year}, ${hour}${minute}hrs SGT`
+    : cleaned;
 }
 
 function getRoutePoints(bookingRecord: BookingRecord) {
@@ -23938,7 +23957,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           const routeText =
             operationalCard.route_points_summary ||
             (routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`);
-          const createdAt = operationalCard.created_at || formatCreatedAt(savedBooking.created_at);
+          const createdAt = formatCreatedAt(operationalCard.created_at || savedBooking.created_at);
           const bookingId = bookingRecordStableKey(savedBooking, operationalCard);
           const isCompleted = clean(savedBooking.status).toLowerCase() === "completed";
           const rawBookingCompletionMessage = bookingCompletionMessages[bookingId] ?? null;
@@ -24361,7 +24380,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               const routeText =
                 operationalCard.route_points_summary ||
                 (routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`);
-              const createdAt = operationalCard.created_at || formatCreatedAt(savedBooking.created_at);
+              const createdAt = formatCreatedAt(operationalCard.created_at || savedBooking.created_at);
               const bookingId = bookingRecordStableKey(savedBooking, operationalCard);
               const rawBookingCompletionMessage = bookingCompletionMessages[bookingId] ?? null;
               const bookingCompletionMessage =

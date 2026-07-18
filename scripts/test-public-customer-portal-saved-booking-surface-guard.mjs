@@ -19,6 +19,7 @@ const allowedPortalBookingFields = [
   "passengerName",
   "pickupDateTime",
   "pickupLocation",
+  "publicBookingReference",
   "serviceType",
   "specialRequest",
   "status",
@@ -35,6 +36,7 @@ const allowedApiRecordFields = [
   "passenger_name",
   "pickup_at",
   "pickup_location",
+  "public_booking_reference",
   "service_type",
   "updated_at",
 ];
@@ -490,12 +492,12 @@ assertExcludes(
 assertSameList(extractSetItems(savedBookingsRead, "allowedQueryParams"), allowedQueryParams, "customer saved bookings query params");
 assertIncludes(
   savedBookingsRead,
-  "booking_reference, service_type, pickup_at, pickup_location, dropoff_location, passenger_name, customer_facing_status, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, created_at, updated_at",
+  "booking_reference, public_booking_reference, service_type, pickup_at, pickup_location, dropoff_location, passenger_name, customer_facing_status, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, created_at, updated_at",
   "customer saved bookings current-schema safe DB select",
 );
 assertIncludes(
   savedBookingsRead,
-  "booking_reference, route_type, pickup_datetime, pickup_location, dropoff_location, customer_display_name, customer_facing_status, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, created_at, updated_at",
+  "booking_reference, public_booking_reference, route_type, pickup_datetime, pickup_location, dropoff_location, customer_display_name, customer_facing_status, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, created_at, updated_at",
   "customer saved bookings foundation-schema safe DB select",
 );
 assertIncludes(savedBookingsRead, 'refererUrl.pathname !== "/my-bookings"', "customer saved bookings my-bookings referer boundary");

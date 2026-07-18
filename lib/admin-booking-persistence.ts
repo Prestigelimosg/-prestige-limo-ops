@@ -8,6 +8,7 @@ import {
 
 export type AdminBookingRecordInput = {
   booking_reference?: string | null;
+  public_booking_reference?: string | null;
   source_channel?: string | null;
   source_surface?: string | null;
   customer_id?: number | string | null;

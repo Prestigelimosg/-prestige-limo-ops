@@ -1425,6 +1425,12 @@ export default function CustomerPortalPage() {
                       >
                         <div className="grid gap-3 lg:grid-cols-[1.1fr_1.5fr_1fr_auto] lg:items-center">
                           <div className="min-w-0">
+                            <p
+                              className="text-xs font-bold uppercase tracking-wide text-sky-800"
+                              data-customer-booking-public-reference="true"
+                            >
+                              Ref: {booking.publicBookingReference}
+                            </p>
                             <p className="text-sm font-semibold text-slate-950" data-customer-portal-passenger="true">
                               {booking.passengerName}
                             </p>

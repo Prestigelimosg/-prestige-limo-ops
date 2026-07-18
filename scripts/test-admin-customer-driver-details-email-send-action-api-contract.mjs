@@ -118,6 +118,7 @@ function validPayload(overrides = {}) {
   return {
     customer_booking_details: {
       booking_reference: "PLO-EMAIL-001",
+      customer_visible_booking_reference: "ABC-00123",
       customer_passenger_traveler_name: "Ms Lim Traveler",
       customer_facing_flight_number: "SQ318",
       drop_off_location: "Changi Airport Terminal 3",
@@ -590,6 +591,9 @@ try {
         assert.equal(providerBody.reply_to, selectedReplyTo);
         assert.match(providerBody.text, /Hi Ms Lim Traveler,/);
         assert.match(providerBody.text, /CUSTOMER BOOKING DETAILS/);
+        assert.match(providerBody.text, /Booking reference: ABC-00123/);
+        assert.doesNotMatch(providerBody.text, /Booking reference: PLO-EMAIL-001/);
+        assert.equal(providerBody.subject, "Driver details for ABC-00123");
         assert.match(providerBody.text, /Passenger name: Ms Lim Traveler/);
         assert.doesNotMatch(providerBody.text, /Customer\/passenger\/traveler name:/);
         assert.match(providerBody.text, /DRIVER DETAILS/);

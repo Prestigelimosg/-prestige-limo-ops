@@ -19,6 +19,7 @@ export type AdminSavedBookingListReadParams = {
 
 export type AdminSavedBookingRecord = {
   booking_reference: string | null;
+  public_booking_reference: string | null;
   source_channel: string | null;
   source_surface: string | null;
   customer_id: number | null;
@@ -144,10 +145,16 @@ const adminSavedBookingCurrentMinimalReadSelect =
   "id, booking_reference, source_surface, customer_id, company_id, booker_id, traveler_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, admin_internal_status, customer_facing_status, created_at, updated_at, companies(company_name, domain), bookers(booker_name, email, phone), travelers(traveler_name)";
 const adminSavedBookingFoundationScalarReadSelect =
   "id, booking_reference, source_channel, booking_type, vehicle, pickup_time, pickup_address, dropoff_address, flight_no, route, pax, job_card, status, driver_id, driver_name, driver_contact, driver_plate_number, created_at, updated_at";
+const withPublicBookingReference = (select: string) =>
+  select.replace("booking_reference, ", "booking_reference, public_booking_reference, ");
 const adminSavedBookingReadSelects = [
+  withPublicBookingReference(adminSavedBookingLegacyReadSelect),
   adminSavedBookingLegacyReadSelect,
+  withPublicBookingReference(adminSavedBookingCurrentReadSelect),
   adminSavedBookingCurrentReadSelect,
+  withPublicBookingReference(adminSavedBookingCurrentMinimalReadSelect),
   adminSavedBookingCurrentMinimalReadSelect,
+  withPublicBookingReference(adminSavedBookingFoundationScalarReadSelect),
   adminSavedBookingFoundationScalarReadSelect,
 ] as const;
 const defaultListLimit = 25;
@@ -537,6 +544,7 @@ function toSavedBookingRecord(value: unknown): AdminSavedBookingRecord | null {
 
   return {
     booking_reference: textOrNull(row.booking_reference, 160),
+    public_booking_reference: textOrNull(row.public_booking_reference, 40),
     source_channel: textOrNull(row.source_channel, 120),
     source_surface: textOrNull(row.source_surface, 120),
     booker_id: integerOrNull(row.booker_id),

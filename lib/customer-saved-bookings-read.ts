@@ -44,6 +44,7 @@ export type CustomerSavedBookingsReadParams = {
 export type CustomerSavedBookingRecord = {
   booking_month: string | null;
   booking_reference: string;
+  public_booking_reference: string;
   created_at: string | null;
   customer_driver_details: {
     car_plate: string | null;
@@ -101,9 +102,13 @@ const maxSafeTextLength = 500;
 const customerAccountSelect =
   "customer_account_reference, account_status, company_id, booker_id";
 const customerSavedBookingsCurrentSelect =
-  "booking_reference, service_type, pickup_at, pickup_location, dropoff_location, passenger_name, customer_facing_status, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, created_at, updated_at";
+  "booking_reference, public_booking_reference, service_type, pickup_at, pickup_location, dropoff_location, passenger_name, customer_facing_status, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, created_at, updated_at";
+const customerSavedBookingsCurrentSelectWithoutPublicReference =
+  customerSavedBookingsCurrentSelect.replace("public_booking_reference, ", "");
 const customerSavedBookingsFoundationSelect =
-  "booking_reference, route_type, pickup_datetime, pickup_location, dropoff_location, customer_display_name, customer_facing_status, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, created_at, updated_at";
+  "booking_reference, public_booking_reference, route_type, pickup_datetime, pickup_location, dropoff_location, customer_display_name, customer_facing_status, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, created_at, updated_at";
+const customerSavedBookingsFoundationSelectWithoutPublicReference =
+  customerSavedBookingsFoundationSelect.replace("public_booking_reference, ", "");
 const customerSavedBookingsAuthRequiredError =
   "Customer saved bookings read requires secure customer account access before saved bookings can be read.";
 const customerSavedBookingsDisabledError =
@@ -733,6 +738,7 @@ function getServerOnlyCustomerSavedBookingsSupabaseClient(
 
 function toCustomerSavedBookingRecord(row: UnknownRecord): CustomerSavedBookingRecord | null {
   const bookingReference = validBookingReference(row.booking_reference);
+  const publicBookingReference = validBookingReference(row.public_booking_reference) || bookingReference;
   const pickupAt = safeDateTextFromDb(row.pickup_at) || safeDateTextFromDb(row.pickup_datetime);
   const serviceType = safeTextFromDb(row.service_type) || safeTextFromDb(row.route_type);
   const passengerName = safeTextFromDb(row.passenger_name) || safeTextFromDb(row.customer_display_name);
@@ -750,13 +756,14 @@ function toCustomerSavedBookingRecord(row: UnknownRecord): CustomerSavedBookingR
         }
       : null;
 
-  if (!bookingReference) {
+  if (!bookingReference || !publicBookingReference) {
     return null;
   }
 
   return {
     booking_month: validBookingMonth(pickupAt),
     booking_reference: bookingReference,
+    public_booking_reference: publicBookingReference,
     created_at: safeDateTextFromDb(row.created_at),
     customer_driver_details: customerDriverDetails,
     customer_facing_status: publicSafeStatus(row.customer_facing_status),
@@ -831,12 +838,40 @@ async function readCustomerSavedBookingRows(
     return currentResult;
   }
 
-  return readCustomerSavedBookingRowsForSchema({
+  const currentWithoutPublicReferenceResult =
+    await readCustomerSavedBookingRowsForSchema({
+      client,
+      bookingFilters,
+      parsed,
+      pickupColumn: "pickup_at",
+      selectedColumns: customerSavedBookingsCurrentSelectWithoutPublicReference,
+    });
+
+  if (
+    currentWithoutPublicReferenceResult.ok ||
+    currentWithoutPublicReferenceResult.category !== "column_missing"
+  ) {
+    return currentWithoutPublicReferenceResult;
+  }
+
+  const foundationResult = await readCustomerSavedBookingRowsForSchema({
     client,
     bookingFilters,
     parsed,
     pickupColumn: "pickup_datetime",
     selectedColumns: customerSavedBookingsFoundationSelect,
+  });
+
+  if (foundationResult.ok || foundationResult.category !== "column_missing") {
+    return foundationResult;
+  }
+
+  return readCustomerSavedBookingRowsForSchema({
+    client,
+    bookingFilters,
+    parsed,
+    pickupColumn: "pickup_datetime",
+    selectedColumns: customerSavedBookingsFoundationSelectWithoutPublicReference,
   });
 }
 

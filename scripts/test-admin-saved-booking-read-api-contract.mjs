@@ -835,13 +835,13 @@ try {
   assert.equal(currentFallbackResult.body.booking.status, "draft");
   assert.equal(currentFallbackResult.body.booking.internal_admin_note, undefined);
   assert.equal(currentFallbackResult.body.booking.parser_debug, undefined);
-  assert.equal(currentFallbackMock.client.selectHistory.length, 2);
+  assert.equal(currentFallbackMock.client.selectHistory.length, 3);
   assert.equal(currentFallbackMock.client.selectHistory[0].selectedColumns.includes("companies("), true);
-  assert.equal(currentFallbackMock.client.selectHistory[1].selectedColumns.includes("companies("), true);
-  assert.equal(currentFallbackMock.client.selectHistory[1].selectedColumns.includes("bookers("), true);
-  assert.equal(currentFallbackMock.client.selectHistory[1].selectedColumns.includes("travelers("), true);
-  assert.equal(currentFallbackMock.client.selectHistory[1].selectedColumns.includes("contact_display_name"), true);
-  assert.equal(currentFallbackMock.client.selectHistory[1].selectedColumns.includes("driver_plate_number"), true);
+  assert.equal(currentFallbackMock.client.selectHistory[2].selectedColumns.includes("companies("), true);
+  assert.equal(currentFallbackMock.client.selectHistory[2].selectedColumns.includes("bookers("), true);
+  assert.equal(currentFallbackMock.client.selectHistory[2].selectedColumns.includes("travelers("), true);
+  assert.equal(currentFallbackMock.client.selectHistory[2].selectedColumns.includes("contact_display_name"), true);
+  assert.equal(currentFallbackMock.client.selectHistory[2].selectedColumns.includes("driver_plate_number"), true);
   assertNoWrites(currentFallbackMock, "current schema fallback read");
   assertNoUnsafeResponse(currentFallbackResult, "current schema fallback response");
 
@@ -909,9 +909,9 @@ try {
   assert.equal(foundationFallbackResult.body.booking.status, "assigned");
   assert.equal(foundationFallbackResult.body.booking.internal_admin_note, undefined);
   assert.equal(foundationFallbackResult.body.booking.parser_debug, undefined);
-  assert.equal(foundationFallbackMock.client.selectHistory.length, 4);
-  assert.equal(foundationFallbackMock.client.selectHistory[3].selectedColumns.includes("contact_display_name"), false);
-  assert.equal(foundationFallbackMock.client.selectHistory[3].selectedColumns.includes("pickup_time"), true);
+  assert.equal(foundationFallbackMock.client.selectHistory.length, 7);
+  assert.equal(foundationFallbackMock.client.selectHistory[6].selectedColumns.includes("contact_display_name"), false);
+  assert.equal(foundationFallbackMock.client.selectHistory[6].selectedColumns.includes("pickup_time"), true);
   assertNoWrites(foundationFallbackMock, "foundation schema fallback read");
   assertNoUnsafeResponse(foundationFallbackResult, "foundation schema fallback response");
 

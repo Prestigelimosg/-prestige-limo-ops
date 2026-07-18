@@ -9,6 +9,7 @@ import { CustomerInvoiceFolderPanel } from "./customer-invoice-folder-panel";
 import { CustomerCompanyProfileEditor } from "./customer-company-profile-editor";
 import { CustomerFolderSavedBookingsPanel } from "./saved-bookings-panel";
 import { CustomerInvoicePrefixSettingsPanel } from "./invoice-prefix-settings-panel";
+import { CustomerBookingReferenceSettingsPanel } from "./booking-reference-settings-panel";
 import { CustomerAccountDangerZone } from "./customer-account-danger-zone";
 
 type CustomerFolderPageProps = {
@@ -91,10 +92,14 @@ export default async function MockCustomerFolderPage({ params, searchParams }: C
               </p>
             </div>
           </div>
-          <div className="mt-3">
+          <div className="mt-3 grid gap-3 lg:grid-cols-2">
             <CustomerInvoicePrefixSettingsPanel
               customerAccount={customer.companyName}
               suggestedPrefix={customer.invoicePrefix}
+            />
+            <CustomerBookingReferenceSettingsPanel
+              customerAccount={customer.id}
+              customerName={customer.companyName}
             />
           </div>
         </header>

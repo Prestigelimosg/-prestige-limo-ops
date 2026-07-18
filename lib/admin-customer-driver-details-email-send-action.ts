@@ -39,6 +39,7 @@ export type CustomerDriverDetailsEmailSendInput = {
 export type CustomerDriverDetailsEmailPayload = {
   customer_booking_details: {
     booking_reference: string;
+    customer_visible_booking_reference: string;
     customer_passenger_traveler_name: string | null;
     customer_facing_flight_number: string | null;
     drop_off_location: string;
@@ -129,6 +130,7 @@ const allowedTopLevelKeys = new Set([
 ]);
 const allowedCustomerBookingKeys = new Set([
   "booking_reference",
+  "customer_visible_booking_reference",
   "customer_passenger_traveler_name",
   "customer_facing_flight_number",
   "drop_off_location",
@@ -301,6 +303,10 @@ function normalizePayload(input: CustomerDriverDetailsEmailSendInput) {
   const payload: CustomerDriverDetailsEmailPayload = {
     customer_booking_details: {
       booking_reference: safeText(customerBooking.booking_reference, 120) || "",
+      customer_visible_booking_reference:
+        safeText(customerBooking.customer_visible_booking_reference, 120) ||
+        safeText(customerBooking.booking_reference, 120) ||
+        "",
       customer_passenger_traveler_name: safeText(
         customerBooking.customer_passenger_traveler_name,
         120,
@@ -434,7 +440,7 @@ function buildEmailText(payload: CustomerDriverDetailsEmailPayload) {
     ...greetingLines,
     "CUSTOMER BOOKING DETAILS",
     ...customerNameLine,
-    `Booking reference: ${payload.customer_booking_details.booking_reference}`,
+    `Booking reference: ${payload.customer_booking_details.customer_visible_booking_reference}`,
     `Service type: ${payload.customer_booking_details.service_type}`,
     `Pickup date: ${payload.customer_booking_details.pickup_date}`,
     `Pickup time: ${payload.customer_booking_details.pickup_time}`,
@@ -455,7 +461,7 @@ function buildProviderBody(payload: CustomerDriverDetailsEmailPayload, from: str
   return JSON.stringify({
     from,
     reply_to: replyTo,
-    subject: `Driver details for ${payload.customer_booking_details.booking_reference}`,
+    subject: `Driver details for ${payload.customer_booking_details.customer_visible_booking_reference}`,
     text: buildEmailText(payload),
     to: [payload.recipient_email],
   });

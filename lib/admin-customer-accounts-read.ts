@@ -24,6 +24,7 @@ export type AdminCustomerAccountSafeRecord = {
   customer_folder_key: string;
   customer_id: string | null;
   latest_booking_reference: string | null;
+  latest_public_booking_reference: string | null;
   latest_pickup_at: string | null;
   latest_service_type: string | null;
   saved_booking_count: number;
@@ -177,6 +178,7 @@ function filterAccountsBySearch(accounts: AdminCustomerAccountSafeRecord[], sear
       account.customer_account,
       customerIdSearchText,
       account.latest_booking_reference || "",
+      account.latest_public_booking_reference || "",
     ]
       .join(" ")
       .toLowerCase();
@@ -245,12 +247,14 @@ function pickupSortValue(value: unknown) {
 function updateLatestBooking(account: MutableCustomerAccount, booking: AdminBookingPersistenceRecord) {
   const pickupAt = pickupSortValue(booking.pickup_at || booking.pickup_datetime);
   const bookingReference = safeText(booking.booking_reference, 120);
+  const publicBookingReference = safeText(booking.public_booking_reference, 40);
   const serviceType = safeText(booking.service_type || booking.route_type, 80);
 
   if (pickupAt && pickupAt >= account.latestSortValue) {
     account.latestSortValue = pickupAt;
     account.latest_pickup_at = pickupAt;
     account.latest_booking_reference = bookingReference;
+    account.latest_public_booking_reference = publicBookingReference;
     account.latest_service_type = serviceType;
   }
 }
@@ -264,6 +268,7 @@ function toSafeAccount(account: MutableCustomerAccount): AdminCustomerAccountSaf
     customer_folder_key: account.customer_folder_key,
     customer_id: account.customer_id,
     latest_booking_reference: account.latest_booking_reference,
+    latest_public_booking_reference: account.latest_public_booking_reference,
     latest_pickup_at: account.latest_pickup_at,
     latest_service_type: account.latest_service_type,
     saved_booking_count: account.saved_booking_count,
@@ -297,6 +302,7 @@ function toCustomerAccounts(
         customer_folder_key: key,
         customer_id: customerId,
         latest_booking_reference: null,
+        latest_public_booking_reference: null,
         latest_pickup_at: null,
         latest_service_type: null,
         latestSortValue: "",
@@ -409,6 +415,7 @@ function mergeCustomerDirectoryRows(
       customer_folder_key: `${customerId}::customer_account`,
       customer_id: customerId,
       latest_booking_reference: null,
+      latest_public_booking_reference: null,
       latest_pickup_at: null,
       latest_service_type: null,
       saved_booking_count: 0,

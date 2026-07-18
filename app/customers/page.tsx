@@ -626,6 +626,7 @@ type RegularCustomerAccountReadRecord = {
   customer_folder_key?: string | null;
   customer_id?: string | null;
   latest_booking_reference?: string | null;
+  latest_public_booking_reference?: string | null;
   latest_pickup_at?: string | null;
   latest_service_type?: string | null;
   saved_booking_count?: number | null;
@@ -1517,6 +1518,7 @@ function customerFolderRowFromSavedAccount(account: RegularCustomerAccountReadRe
     folderHref: customerFolderHrefFor(customerId, customerAccount),
     historyRows: Number(account.saved_booking_count ?? 0),
     latestBookingReference: account.latest_booking_reference ?? null,
+    latestPublicBookingReference: account.latest_public_booking_reference ?? null,
     latestPickupAt: account.latest_pickup_at ?? null,
     latestServiceType: account.latest_service_type ?? null,
     source: "saved-account-read" as const,
@@ -1765,13 +1767,17 @@ function customerFolderLatestPickupDisplay(value: string | null | undefined) {
 
 function customerFolderLatestSummary(customer: {
   latestBookingReference?: string | null;
+  latestPublicBookingReference?: string | null;
   latestPickupAt?: string | null;
   latestServiceType?: string | null;
 }) {
   const summaryParts = [
     customerFolderLatestPickupDisplay(customer.latestPickupAt),
     savedBookingDisplayText(customer.latestServiceType, ""),
-    compactCustomerBookingReference(customer.latestBookingReference, ""),
+    compactCustomerBookingReference(
+      customer.latestPublicBookingReference || customer.latestBookingReference,
+      "",
+    ),
   ].filter(Boolean);
 
   return summaryParts.join(" | ") || "Latest saved service not available";
@@ -2525,6 +2531,7 @@ export default function MockCustomerDashboardPage() {
         row.customerId,
         row.accountScopeLabel,
         row.latestBookingReference ?? "",
+        row.latestPublicBookingReference ?? "",
         row.latestPickupAt ?? "",
         row.latestServiceType ?? "",
       ]
@@ -7503,7 +7510,8 @@ export default function MockCustomerDashboardPage() {
                               ? [
                                   customer.latestPickupAt,
                                   customer.latestServiceType,
-                                  customer.latestBookingReference,
+                                  customer.latestPublicBookingReference ||
+                                    customer.latestBookingReference,
                                 ]
                                   .filter(Boolean)
                                   .join(" | ")

@@ -150,7 +150,10 @@ try {
 
   const requests = [];
   const sent = await harness.helper.sendCustomerBookingReceiptEmail(
-    [booking("CUST-RECEIPT-003-OUT"), booking("CUST-RECEIPT-003-RET")],
+    [
+      booking("CUST-RECEIPT-003-OUT", { public_booking_reference: "WIL-00003" }),
+      booking("CUST-RECEIPT-003-RET", { public_booking_reference: "WIL-00004" }),
+    ],
     {
       env: env(),
       providerFetch: async (url, init) => {
@@ -166,17 +169,17 @@ try {
   assert.equal(requests[0].url, "https://api.resend.com/emails");
   assert.match(
     requests[0].init.headers["Idempotency-Key"],
-    /^customer-request-receipt-CUST-RECEIPT-003-OUT-[a-f0-9]{16}$/,
+    /^customer-request-receipt-WIL-00003-[a-f0-9]{16}$/,
   );
 
   const body = JSON.parse(requests[0].init.body);
   assert.deepEqual(body.to, ["william@prestigelimo.sg"]);
-  assert.equal(body.subject, "Request received: CUST-RECEIPT-003-OUT");
+  assert.equal(body.subject, "Request received: WIL-00003");
   for (const text of [
     "Request received — pending review",
     "This is not a booking confirmation.",
-    "Reference: CUST-RECEIPT-003-OUT",
-    "Reference: CUST-RECEIPT-003-RET",
+    "Reference: WIL-00003",
+    "Reference: WIL-00004",
     "Passenger: William Test",
     "Pickup time: 31 Jul 2026, 0110hrs SGT",
     "Pickup: Orchard Hotel",

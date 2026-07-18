@@ -732,6 +732,7 @@ type AdminTravelerCrmIdentityApiResponse = {
 type BookingRecord = {
   id?: string | number | null;
   booking_reference?: string | null;
+  public_booking_reference?: string | null;
   source_channel?: string | null;
   source_surface?: string | null;
   company_id: number | null;
@@ -823,6 +824,7 @@ const loadBookingsOperationalDisplayFieldNames = [
   "audit_summary",
   "booking_id",
   "booking_reference",
+  "public_booking_reference",
   "booking_status",
   "booking_type",
   "booker_display_name",
@@ -1339,6 +1341,7 @@ type AdminActiveJobsMapLocation = {
   job_status?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  public_job_reference?: string | null;
   sharing_state?: string | null;
   speed_meters_per_second?: number | null;
   stale_after?: string | null;
@@ -2197,6 +2200,7 @@ type MonthlyBillingMonthGroupingReviewStatus =
 
 type AdminBookingPersistenceRecord = {
   booking_reference: string;
+  public_booking_reference?: string | null;
   source_channel?: string | null;
   source_surface?: string | null;
   customer_id?: number | string | null;
@@ -3066,6 +3070,20 @@ function compactBookingReference(value: string | number | null | undefined) {
   return `${prefix}-${reference.slice(-6)}`;
 }
 
+function bookingPublicReference(
+  bookingRecord: Pick<
+    BookingRecord,
+    "booking_reference" | "id" | "public_booking_reference"
+  >,
+) {
+  return (
+    cleanReferenceText(bookingRecord.public_booking_reference) ||
+    compactBookingReference(
+      bookingRecord.booking_reference || bookingRecord.id,
+    )
+  );
+}
+
 function cleanDispatchHandoffBookingReference(value: string | number | null | undefined) {
   const cleaned = cleanReferenceText(value);
 
@@ -3889,7 +3907,7 @@ function renderAdminActiveJobsBrowserMapTileFallback(
     const isStale = Boolean(entry.job.is_stale);
 
     marker.setAttribute("data-admin-active-jobs-map-tile-fallback-marker", reference);
-    marker.title = `${entry.job.driver_display_label || "Driver"} · ${compactBookingReference(reference)}`;
+    marker.title = `${entry.job.driver_display_label || "Driver"} · ${adminActiveJobsBrowserMapDisplayReference(entry)}`;
     marker.style.alignItems = "center";
     marker.style.background = isStale ? "#d97706" : index === 0 ? "#dc2626" : "#ea580c";
     marker.style.border = "2px solid #ffffff";
@@ -3986,6 +4004,13 @@ function validAdminActiveJobMapPosition(job: AdminActiveJobsMapLocation) {
 
 function adminActiveJobsBrowserMapReference(entry: AdminActiveJobsBrowserMapMarkerEntry) {
   return cleanReferenceText(entry.job.assigned_job_reference) || cleanReferenceText(entry.job.assigned_job_label) || "unknown";
+}
+
+function adminActiveJobsBrowserMapDisplayReference(entry: AdminActiveJobsBrowserMapMarkerEntry) {
+  return (
+    cleanReferenceText(entry.job.public_job_reference) ||
+    compactBookingReference(adminActiveJobsBrowserMapReference(entry))
+  );
 }
 
 function adminActiveJobsBrowserMapMarkerLabel(entry: AdminActiveJobsBrowserMapMarkerEntry) {
@@ -4252,7 +4277,7 @@ function AdminActiveJobsBrowserMap({
 
     activeMarkerJobs.forEach((entry) => {
       const reference = adminActiveJobsBrowserMapReference(entry);
-      const title = `${entry.job.driver_display_label || "Driver"} · ${compactBookingReference(reference)}`;
+      const title = `${entry.job.driver_display_label || "Driver"} · ${adminActiveJobsBrowserMapDisplayReference(entry)}`;
       const existingMarker = markersRef.current.get(reference);
 
       activeReferences.add(reference);
@@ -7695,6 +7720,7 @@ function bookingMatchesLocalSearch(bookingRecord: BookingRecord, searchValue: st
   const searchableText = [
     bookingRecord.id,
     bookingRecord.booking_reference,
+    bookingRecord.public_booking_reference,
     getBookingName(bookingRecord),
     getBookerName(bookingRecord),
     getBookingCompany(bookingRecord),
@@ -8029,6 +8055,10 @@ function buildLoadBookingsOperationalDisplayCard(
     ),
     booking_id: loadBookingsOperationalDisplayText(bookingRecord.id, 160),
     booking_reference: loadBookingsOperationalDisplayText(bookingRecord.booking_reference || bookingRecord.id, 160),
+    public_booking_reference: loadBookingsOperationalDisplayText(
+      bookingRecord.public_booking_reference,
+      40,
+    ),
     booking_status: loadBookingsOperationalDisplayText(bookingRecord.status, 120),
     booking_type: loadBookingsOperationalDisplayText(serviceType, 120),
     booker_display_name: loadBookingsOperationalDisplayText(bookerDisplay, 220),
@@ -21062,6 +21092,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       job_status: clean(row.job_status) || "assigned",
       latitude,
       longitude,
+      public_job_reference: cleanReferenceText(row.public_job_reference),
       sharing_state: clean(row.sharing_state) || "active",
       speed_meters_per_second:
         typeof row.speed_meters_per_second === "number" ? row.speed_meters_per_second : null,
@@ -21171,6 +21202,19 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         ? result.active_jobs
             .map(normalizeAdminActiveJobsMapLocation)
             .filter(isAdminActiveJobsMapLocation)
+            .map((location) => {
+              const bookingRecord = findLoadedBookingRecordByReference(
+                bookings,
+                cleanReferenceText(location.assigned_job_reference),
+              );
+
+              return {
+                ...location,
+                public_job_reference: bookingRecord
+                  ? bookingPublicReference(bookingRecord)
+                  : compactBookingReference(location.assigned_job_reference),
+              };
+            })
         : [];
       const activeJobs = collapseAdminActiveJobsMapDriverDuplicates(allActiveJobs);
       const duplicateCount = allActiveJobs.length - activeJobs.length;
@@ -24035,7 +24079,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     <div className="grid gap-2 md:grid-cols-2">
                       <OperationalCardSection section="booking" title="Booking">
                         {operationalCard.booking_reference ? (
-                          <p>Ref: {operationalCard.booking_reference}</p>
+                          <p>
+                            Ref: {operationalCard.public_booking_reference || bookingPublicReference(savedBooking)}
+                          </p>
                         ) : null}
                         {operationalCard.job_card_display ? (
                           <p>Flight: <AdminOperationalUppercaseValue field="flight">{operationalCard.job_card_display.replace(/^Flight\s*/i, "")}</AdminOperationalUppercaseValue></p>
@@ -24548,12 +24594,20 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     safeDriverVehicleModelDisplay(booking.driverVehicleModel) ||
       safeDriverVehicleModelDisplay(assignedDriverRecord?.vehicle_type),
   ].filter(Boolean).join(" / ");
+  const dispatchReleaseLoadedBookingRecord = loadedBookingId
+    ? bookings.find((bookingRecord) => bookingRecordStableKey(bookingRecord) === loadedBookingId) ?? null
+    : null;
+  const dispatchPublicBookingReference = appliedAdminBookingSnapshot
+    ? bookingPublicReference(appliedAdminBookingSnapshot)
+    : dispatchReleaseLoadedBookingRecord
+      ? bookingPublicReference(dispatchReleaseLoadedBookingRecord)
+      : compactBookingReference(dispatchReleaseWorkflowBookingReference);
   const dispatchReadableSummaryItems = [
     { label: "Passenger", value: clean(booking.name) || "Passenger not set" },
     { label: "Company", value: clean(booking.company) || "Company not set" },
     {
       label: "Reference",
-      value: clean(dispatchReleaseWorkflowBookingReference) || "Not saved yet",
+      value: dispatchPublicBookingReference || "Not saved yet",
     },
     {
       label: "Service",
@@ -24589,9 +24643,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     Boolean(bookingSaveMessage && displayedSaveCrmBillingIdentityMessage && saveCrmBillingIdentityReview) &&
     clean(bookingSaveMessage?.text) === clean(displayedSaveCrmBillingIdentityMessage?.text);
   const showDriverJobLinkCopy = Boolean(cleanReferenceText(dispatchReleaseWorkflowBookingReference));
-  const dispatchReleaseLoadedBookingRecord = loadedBookingId
-    ? bookings.find((bookingRecord) => bookingRecordStableKey(bookingRecord) === loadedBookingId) ?? null
-    : null;
   const customerDriverDetailsPortalBookingReference =
     cleanReferenceText(dispatchReleaseWorkflowBookingReference) ||
     cleanReferenceText(appliedAdminBookingSnapshot?.booking_reference) ||
@@ -24908,6 +24959,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const customerDriverDetailsEmailReviewVehicleType =
     clean(assignedDriverRecord?.vehicle_type) || clean(booking.vehicle);
   const adminCustomerDriverDetailsEmailReviewBookingReference = clean(dispatchReleaseWorkflowBookingReference);
+  const adminCustomerDriverDetailsEmailPublicReference = dispatchReleaseLoadedBookingRecord
+    ? bookingPublicReference(dispatchReleaseLoadedBookingRecord)
+    : compactBookingReference(adminCustomerDriverDetailsEmailReviewBookingReference);
   const adminCustomerDriverDetailsEmailReviewCustomerEmail = clean(booking.bookerEmail);
   const adminCustomerDriverDetailsEmailReviewCanReadApi = Boolean(
     adminCustomerDriverDetailsEmailReviewBookingReference &&
@@ -25223,6 +25277,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         body: JSON.stringify({
           customer_booking_details: {
             booking_reference: bookingReference,
+            customer_visible_booking_reference: adminCustomerDriverDetailsEmailPublicReference,
             customer_facing_flight_number: clean(booking.flight) || null,
             customer_passenger_traveler_name: clean(booking.name) || null,
             drop_off_location: dropOffLocation,
@@ -27432,7 +27487,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     <div className="min-w-0">
                       <p className="break-words font-semibold leading-3">
                         {job.driver_display_label || "Assigned driver"} ·{" "}
-                        {compactBookingReference(job.assigned_job_reference || "")}
+                        {cleanReferenceText(job.public_job_reference) ||
+                          compactBookingReference(job.assigned_job_reference || "")}
                       </p>
                       <p className="break-words text-[10px] leading-3 text-lime-900">
                         {job.is_stale ? "Stale" : "Current"} ·{" "}
@@ -38839,7 +38895,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       >
                         <div className="min-w-0">
                           <p className="break-words font-semibold text-emerald-950">
-                            {record.booking_reference}
+                            {bookingPublicReference(record)}
                           </p>
                           <p className="mt-0.5 break-words text-slate-500">
                             {adminBookingPersistencePickupDisplay(record)}
@@ -43890,7 +43946,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       >
                         <span className="min-w-0">
                           <span className="block truncate font-semibold text-slate-950">
-                            {compactBookingReference(bookingReference)}
+                            {bookingPublicReference(bookingRecord)}
                           </span>
                           <span className="block truncate text-xs text-slate-500">
                             {formatPickupDateTime(

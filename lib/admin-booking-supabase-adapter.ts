@@ -126,11 +126,17 @@ const safeEnableReadinessError =
 const defaultAdminBookingListLimit = 25;
 const maxAdminBookingListLimit = 200;
 const adminBookingCurrentLoadSelect =
-  "id, booking_reference, customer_id, company_id, booker_id, traveler_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, flight_no, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, admin_internal_status, customer_facing_status, short_notice_review_status, request_review_status, change_review_status, cancellation_review_status, source_surface, created_at, updated_at, booking_route_points(point_type, sequence, location, notes), booking_service_items(item_type, quantity, notes)";
+  "id, booking_reference, public_booking_reference, customer_id, company_id, booker_id, traveler_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, flight_no, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, admin_internal_status, customer_facing_status, short_notice_review_status, request_review_status, change_review_status, cancellation_review_status, source_surface, created_at, updated_at, booking_route_points(point_type, sequence, location, notes), booking_service_items(item_type, quantity, notes)";
+const adminBookingCurrentLoadSelectWithoutPublicReference =
+  adminBookingCurrentLoadSelect.replace("public_booking_reference, ", "");
 const adminBookingFoundationLoadSelect =
-  "id, booking_reference, customer_id, company_id, booker_id, traveler_id, source_channel, pickup_datetime, pickup_location, dropoff_location, route_type, customer_display_name, contact_phone, contact_email, flight_no, driver_name, driver_contact, driver_plate_number, pax_count, luggage_count, vehicle_type_or_category, customer_facing_status, admin_internal_status, short_notice_review_status, parser_source_reference, created_at, updated_at, booking_route_points(point_type, sequence_number, location_text, timing_note), booking_service_items(service_item_type, quantity, blocks_count)";
+  "id, booking_reference, public_booking_reference, customer_id, company_id, booker_id, traveler_id, source_channel, pickup_datetime, pickup_location, dropoff_location, route_type, customer_display_name, contact_phone, contact_email, flight_no, driver_name, driver_contact, driver_plate_number, pax_count, luggage_count, vehicle_type_or_category, customer_facing_status, admin_internal_status, short_notice_review_status, parser_source_reference, created_at, updated_at, booking_route_points(point_type, sequence_number, location_text, timing_note), booking_service_items(service_item_type, quantity, blocks_count)";
+const adminBookingFoundationLoadSelectWithoutPublicReference =
+  adminBookingFoundationLoadSelect.replace("public_booking_reference, ", "");
 const adminBookingFoundationLoadSelectWithoutDriver =
-  "id, booking_reference, customer_id, company_id, booker_id, traveler_id, source_channel, pickup_datetime, pickup_location, dropoff_location, route_type, customer_display_name, contact_phone, contact_email, flight_no, pax_count, luggage_count, vehicle_type_or_category, customer_facing_status, admin_internal_status, short_notice_review_status, parser_source_reference, created_at, updated_at, booking_route_points(point_type, sequence_number, location_text, timing_note), booking_service_items(service_item_type, quantity, blocks_count)";
+  "id, booking_reference, public_booking_reference, customer_id, company_id, booker_id, traveler_id, source_channel, pickup_datetime, pickup_location, dropoff_location, route_type, customer_display_name, contact_phone, contact_email, flight_no, pax_count, luggage_count, vehicle_type_or_category, customer_facing_status, admin_internal_status, short_notice_review_status, parser_source_reference, created_at, updated_at, booking_route_points(point_type, sequence_number, location_text, timing_note), booking_service_items(service_item_type, quantity, blocks_count)";
+const adminBookingFoundationLoadSelectWithoutDriverOrPublicReference =
+  adminBookingFoundationLoadSelectWithoutDriver.replace("public_booking_reference, ", "");
 
 const allowedAdapterRoles = new Set(["admin", "dispatcher", "system"]);
 const allowedAdapterSourceSurfaces = new Set(["admin_api", "customer_booking_request", "system"]);
@@ -1041,13 +1047,46 @@ async function loadAdminBookingsWithFoundationFallback<T>(
     return currentResult;
   }
 
+  const currentWithoutPublicReferenceResult = await buildQuery(
+    adminBookingCurrentLoadSelectWithoutPublicReference,
+  );
+
+  if (
+    !currentWithoutPublicReferenceResult.error ||
+    !isColumnMissingFailure(currentWithoutPublicReferenceResult.error)
+  ) {
+    return currentWithoutPublicReferenceResult;
+  }
+
   const foundationResult = await buildQuery(adminBookingFoundationLoadSelect);
 
   if (!foundationResult.error || !isColumnMissingFailure(foundationResult.error)) {
     return foundationResult;
   }
 
-  return buildQuery(adminBookingFoundationLoadSelectWithoutDriver);
+  const foundationWithoutPublicReferenceResult = await buildQuery(
+    adminBookingFoundationLoadSelectWithoutPublicReference,
+  );
+
+  if (
+    !foundationWithoutPublicReferenceResult.error ||
+    !isColumnMissingFailure(foundationWithoutPublicReferenceResult.error)
+  ) {
+    return foundationWithoutPublicReferenceResult;
+  }
+
+  const foundationWithoutDriverResult = await buildQuery(
+    adminBookingFoundationLoadSelectWithoutDriver,
+  );
+
+  if (
+    !foundationWithoutDriverResult.error ||
+    !isColumnMissingFailure(foundationWithoutDriverResult.error)
+  ) {
+    return foundationWithoutDriverResult;
+  }
+
+  return buildQuery(adminBookingFoundationLoadSelectWithoutDriverOrPublicReference);
 }
 
 function toAdminBookingDto(row: UnknownRecord): AdminBookingPersistenceRecord {
@@ -1086,6 +1125,7 @@ function toAdminBookingDto(row: UnknownRecord): AdminBookingPersistenceRecord {
 
   return {
     booking_reference: textOrNull(row.booking_reference) || "",
+    public_booking_reference: textOrNull(row.public_booking_reference),
     source_channel: sourceSurfaceToUi(sourceSurface),
     source_surface: sourceSurface,
     customer_id: dbIdentifierTextOrNull(row.customer_id),

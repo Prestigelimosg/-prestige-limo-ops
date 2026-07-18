@@ -138,7 +138,9 @@ function safeResult(
 
 function normalizeTrip(record: AdminBookingPersistenceRecord) {
   const booking = asRecord(record);
-  const bookingReference = safeText(booking.booking_reference, 120);
+  const bookingReference =
+    safeText(booking.public_booking_reference, 40) ||
+    safeText(booking.booking_reference, 120);
   const recipient = safeEmail(booking.contact_email);
 
   if (!bookingReference || !recipient) {

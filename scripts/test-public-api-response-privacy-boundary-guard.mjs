@@ -257,9 +257,9 @@ for (const routePath of customerRoutePaths) {
 
 const customerBookingRequestRoute = files["app/api/customer-booking-requests/route.ts"];
 for (const safeRequestFragment of [
-  "booking_reference: primaryRequest.booking_reference",
+  "primaryRequest.public_booking_reference || primaryRequest.booking_reference",
   "customer_facing_status: primaryRequest.customer_facing_status",
-  "return_booking_reference: returnRequest?.booking_reference ?? null",
+  "returnRequest?.public_booking_reference",
   "return_trip_requested: parsed.data.returnTripRequested",
   "short_notice_review_required:",
   "customerSafeError",

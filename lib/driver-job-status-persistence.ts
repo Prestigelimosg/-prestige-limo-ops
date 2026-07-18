@@ -176,7 +176,9 @@ type DriverJobSharingCleanupResult = {
 const driverJobLinkSelect =
   "id, booking_reference, link_status, expires_at, revoked_at, safe_link_context";
 const currentSafeBookingScheduleSelect =
-  "booking_reference, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, flight_no, admin_internal_status, customer_facing_status, updated_at";
+  "booking_reference, public_booking_reference, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, flight_no, admin_internal_status, customer_facing_status, updated_at";
+const currentSafeBookingScheduleSelectWithoutPublicReference =
+  currentSafeBookingScheduleSelect.replace("public_booking_reference, ", "");
 const driverJobStatusEventSelect =
   "id, booking_reference, driver_job_link_id, status_value, status_source, safe_status_note, safe_status_context, occurred_at, source_surface, actor_role, actor_label, created_at";
 const driverJobActualTimeEventSelect =
@@ -636,17 +638,30 @@ async function loadCurrentSafeBookingSchedule(
   link: DriverJobLinkPersistenceRow,
 ) {
   try {
-    const { data, error } = await client
+    const currentResult = await client
       .from("bookings")
       .select(currentSafeBookingScheduleSelect)
       .eq("booking_reference", link.booking_reference)
       .maybeSingle();
+    let data: unknown = currentResult.data;
+    let error: unknown = currentResult.error;
 
     if (error) {
-      return null;
+      const fallbackResult = await client
+        .from("bookings")
+        .select(currentSafeBookingScheduleSelectWithoutPublicReference)
+        .eq("booking_reference", link.booking_reference)
+        .maybeSingle();
+
+      data = fallbackResult.data;
+      error = fallbackResult.error;
+
+      if (error) return null;
     }
 
     const row = asRecord(data);
+    const publicBookingReference =
+      safeIdentifierFromDb(row.public_booking_reference) || link.booking_reference;
     const pickupAt = safeDateTextFromDb(row.pickup_at);
     const pickup = singaporePickupParts(pickupAt);
 
@@ -663,7 +678,7 @@ async function loadCurrentSafeBookingSchedule(
       pickup_date: pickup.pickupDate,
       pickup_datetime: pickup.pickupDateTime,
       pickup_time: pickup.pickupTime,
-      public_reference: link.booking_reference,
+      public_reference: publicBookingReference,
       route: safeTextFromDb(row.route_summary),
       schedule_updated_at: safeDateTextFromDb(row.updated_at),
       status:

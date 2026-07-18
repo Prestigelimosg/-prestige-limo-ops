@@ -281,9 +281,13 @@ export async function POST(request: Request) {
     return Response.json({
       ok: true,
       request: {
-        booking_reference: primaryRequest.booking_reference,
+        booking_reference:
+          primaryRequest.public_booking_reference || primaryRequest.booking_reference,
         customer_facing_status: primaryRequest.customer_facing_status,
-        return_booking_reference: returnRequest?.booking_reference ?? null,
+        return_booking_reference:
+          returnRequest?.public_booking_reference ||
+          returnRequest?.booking_reference ||
+          null,
         return_trip_requested: parsed.data.returnTripRequested,
         receipt_status: receipt.status,
         short_notice_review_required:

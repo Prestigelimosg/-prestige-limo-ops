@@ -336,7 +336,7 @@ for (const fragment of [
   "const defaultMemoryLimit = 10;",
   "const maxMemoryLimit = 10;",
   "const maxMemoryQueryLength = 120;",
-  "booking_reference, passenger_name, pickup_location, dropoff_location, service_type, route_type, vehicle_type, vehicle, pickup_at, pickup_datetime, updated_at, created_at",
+  "booking_reference, passenger_name, pickup_location, dropoff_location, service_type, route_type, vehicle_type_or_category, vehicle, pickup_at, pickup_datetime, updated_at, created_at",
   "purpose !== \"customer-booking-memory-read\"",
   "refererUrl.origin !== requestUrl.origin || refererUrl.pathname !== \"/book\"",
   "process.env.PRESTIGE_CUSTOMER_BOOKING_MEMORY_AUTH_ENABLED !== \"true\"",

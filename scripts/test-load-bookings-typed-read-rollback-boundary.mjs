@@ -100,7 +100,7 @@ for (const forbiddenPhrase of [
 
 const loadBookingsBlock = sliceBetween(appPage, "async function loadBookings", "function loadSelectedBooking");
 const typedFetchFragment = "fetchLoadBookingsTypedOperationalDisplayResult(searchParams)";
-const legacyFetchFragment = "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`";
+const legacyFetchFragment = "fetchAdminSavedBookingsList(searchParams)";
 
 assertIncludes(appPage, `const adminLoadBookingsTypedReadApiPath = "${typedReadPath}"`, "typed read path");
 assertIncludes(loadBookingsBlock, typedFetchFragment, "typed operational display bridge");

@@ -399,7 +399,7 @@ for (const fragment of [
   'data-dispatch-workflow-step="driver-job-link"',
   'data-driver-job-link-handoff-notice="true"',
   'data-driver-job-link-booking-details="true"',
-  "<p className=\"font-semibold\">Booking {dispatchReleaseWorkflowBookingReference}</p>",
+  'Booking {dispatchPublicBookingReference || "Reference unavailable"}',
   "Passenger",
   "Pickup",
   "Route",

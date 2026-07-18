@@ -150,7 +150,7 @@ for (const forbiddenApprovalPhrase of [
 const loadBookingsBlock = sliceBetween(appPage, "async function loadBookings", "function loadSelectedBooking");
 assertIncludes(
   loadBookingsBlock,
-  "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`",
+  "fetchAdminSavedBookingsList(searchParams)",
   "Current Load Bookings endpoint",
 );
 assertIncludes(loadBookingsBlock, 'method: "GET"', "Current Load Bookings method");
@@ -163,7 +163,7 @@ const typedOperationalFetchIndex = loadBookingsBlock.indexOf(
   "fetchLoadBookingsTypedOperationalDisplayResult(searchParams)",
 );
 const legacySavedBookingsFetchIndex = loadBookingsBlock.indexOf(
-  "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`",
+  "fetchAdminSavedBookingsList(searchParams)",
 );
 assert.equal(
   typedOperationalFetchIndex > -1 && legacySavedBookingsFetchIndex > -1,

@@ -67,7 +67,7 @@ const saveBookingBlock = sectionBetween(
 const updateAppliedSnapshotBlock = sectionBetween(
   appPage,
   "async function updateAppliedAdminBookingOperationalSnapshot",
-  "async function updateAdminCustomerRequestReviewDecision",
+  "function getDispatchCopyText",
 );
 const driverJobLinkLoadBlock = sectionBetween(
   appPage,

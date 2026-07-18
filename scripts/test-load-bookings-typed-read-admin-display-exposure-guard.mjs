@@ -326,7 +326,7 @@ assertIncludes(
 );
 assertIncludes(
   loadBookingsBlock,
-  "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`",
+  "fetchAdminSavedBookingsList(searchParams)",
   "legacy saved-bookings read remains",
 );
 assertIncludes(loadBookingsBlock, "setBookings(loadedBookings);", "legacy BookingRecord source remains");
@@ -358,13 +358,17 @@ const driverJobLinkMessageBlock = sliceBetween(
 );
 assertNoTypedReadExposure(driverJobLinkMessageBlock, "Driver Job Link copy");
 for (const fragment of [
-  "const bookingReference =",
-  "cleanReferenceText(dispatchReleaseWorkflowBookingReference)",
-  "cleanReferenceText(activeAdminDriverJobLink?.booking_reference)",
-  "bookingReference ? `Reference: ${bookingReference}`",
+  "const driverJobLinkPublicBookingReference = dispatchPublicBookingReference;",
+  "driverJobLinkPublicBookingReference",
+  "`Reference: ${driverJobLinkPublicBookingReference}`",
 ]) {
-  assertIncludes(driverJobLinkMessageBlock, fragment, `Driver Job Link legacy reference ${fragment}`);
+  assertIncludes(driverJobLinkMessageBlock, fragment, `Driver Job Link public reference ${fragment}`);
 }
+assertExcludes(
+  driverJobLinkMessageBlock,
+  "dispatchReleaseWorkflowBookingReference",
+  "Driver Job Link visible copy must not expose the internal workflow reference",
+);
 
 const driverJobLinkPayloadBlock = sliceBetween(
   appPage,

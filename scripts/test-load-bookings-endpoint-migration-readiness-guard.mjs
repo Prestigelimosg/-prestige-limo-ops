@@ -127,7 +127,7 @@ const bookingCardPriceLineBlock = sliceBetween(appPage, "function bookingCardPri
 const saveBookingBlock = sliceBetween(appPage, "async function saveBooking", "async function loadBookings");
 
 const typedDisplayFetchFragment = "fetchLoadBookingsTypedOperationalDisplayResult(searchParams)";
-const legacySavedBookingsFetchFragment = "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`";
+const legacySavedBookingsFetchFragment = "fetchAdminSavedBookingsList(searchParams)";
 
 assertIncludes(loadBookingsBlock, `${typedDisplayFetchFragment}.catch(() => null)`, "typed display safe fallback");
 assertIncludes(loadBookingsBlock, legacySavedBookingsFetchFragment, "legacy saved-bookings fetch");

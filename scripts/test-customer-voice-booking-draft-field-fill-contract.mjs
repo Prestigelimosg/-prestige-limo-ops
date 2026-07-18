@@ -49,6 +49,11 @@ const safeSubmittedFieldFillTargets = [
   "extraStops",
 ];
 
+const safeAcceptedCustomerRequestFields = [
+  ...safeSubmittedFieldFillTargets,
+  "travelerId",
+];
+
 const excludedFieldFillFragments = [
   "pricing",
   "payout",
@@ -300,8 +305,13 @@ assertSameList(
 );
 assertSameList(
   extractNewSetItems(adminBookingPersistence, "customerBookingRequestFields"),
-  safeSubmittedFieldFillTargets,
+  safeAcceptedCustomerRequestFields,
   "customer booking request accepted persistence fields",
+);
+assertExcludes(
+  customerBookingLocalVoiceDraft,
+  '"travelerId"',
+  "local voice field fill must not select or overwrite verified traveller identity",
 );
 
 for (const fragment of [

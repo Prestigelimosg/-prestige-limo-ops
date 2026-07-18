@@ -258,7 +258,7 @@ assertExcludes(saveBookingBlock, helperPathFragment, "Save Booking + CRM helper 
 const loadBookingsBlock = sliceBetween(appPage, "async function loadBookings", "function loadSelectedBooking");
 assertIncludes(
   loadBookingsBlock,
-  "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`",
+  "fetchAdminSavedBookingsList(searchParams)",
   "Load Bookings legacy read remains separate",
 );
 assertIncludes(loadBookingsBlock, 'method: "GET"', "Load Bookings legacy read method");

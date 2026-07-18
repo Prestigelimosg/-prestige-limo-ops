@@ -12,6 +12,12 @@ Latest remote Production deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Customer Saved-Bookings PA Scope Guard Alignment (2026-07-18)
+
+- The public-reference closure audit exposed one stale guard-only assertion in `scripts/test-customer-saved-bookings-pa-scope-guard.mjs`: it expected the earlier customer access-account projection ending at `company_id, booker_id`, while Production commit `d4b591ae` intentionally appended `updated_at` for the established permanent-link revision check.
+- Read-only blame and commit inspection confirmed the verified PA identity fields remain present and unchanged. `updated_at` is read only to derive `link_revision`, allowing revoked or reissued permanent customer links to invalidate older links; it does not broaden customer company/booker scope or invoice authorization.
+- The existing PA-scope guard now requires the exact current projection including `updated_at`. No application source, route, API, query, authentication rule, customer session, access account, booking, invoice workflow, table, schema, migration, environment setting, Supabase configuration, or live record changed.
+
 ### Driver Job Public Reference Display Repair (2026-07-18)
 
 - Owner-Chrome testing of one freshly replaced private Driver Job Link for exact public booking `10834` reproduced a display gap: the established Production token read already resolved `public_booking_reference` and mapped it into the existing safe `job.reference`, but the Driver Job Card omitted that safe value from its visible detail rows.

@@ -13,6 +13,7 @@ const paths = {
   receiptEmail: "lib/customer-booking-receipt-email.ts",
   requestRoute: "app/api/customer-booking-requests/route.ts",
   driverRead: "lib/driver-job-status-persistence.ts",
+  driverUi: "app/driver-job/[token]/page.tsx",
   driverDetailsEmail: "lib/admin-customer-driver-details-email-send-action.ts",
   ledger: "docs/current-implementation-ledger.md",
   migration: "supabase/migrations/202607180001_customer_booking_public_reference_foundation.sql",
@@ -85,6 +86,7 @@ includes("customerUi", "booking.publicBookingReference", "customer visible publi
 includes("receiptEmail", "booking.public_booking_reference", "customer receipt public reference");
 includes("requestRoute", "primaryRequest.public_booking_reference", "customer request response public reference");
 includes("driverRead", "public_reference: publicBookingReference", "driver public reference display mapping");
+includes("driverUi", '{ label: "Reference", value: job.reference }', "driver visible public reference row");
 includes("adminUi", "bookingPublicReference", "admin shared public reference selector");
 includes("adminUi", "bookingRecord.public_booking_reference", "admin public reference search/display");
 includes(

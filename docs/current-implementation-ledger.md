@@ -12,6 +12,13 @@ Latest remote Production deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Driver Job Public Reference Display Repair (2026-07-18)
+
+- Owner-Chrome testing of one freshly replaced private Driver Job Link for exact public booking `10834` reproduced a display gap: the established Production token read already resolved `public_booking_reference` and mapped it into the existing safe `job.reference`, but the Driver Job Card omitted that safe value from its visible detail rows.
+- The existing Driver Job Card now renders one `Reference` row from `job.reference`. For current Production bookings this is the persisted five-digit public reference; the existing safe fallback remains the internal booking reference only where a legacy schema or record has no public reference.
+- This is a display-only repair in the established token-scoped Driver Job page. No route, API, query, table, token, link writer, status writer, acknowledgement, message, polling timer, map, GPS action, Calendar action, provider send, schema, migration, environment setting, Supabase configuration, invoice, payment, payout, or live booking record is added or changed.
+- Focused protection remains in `scripts/test-customer-booking-public-reference-guard.mjs`, `scripts/test-public-driver-job-action-surface-guard.mjs`, and `scripts/test-driver-job-page-browser.mjs`. The source guard requires the established Driver Job card to consume `job.reference`, the exact public surface allowlist admits only the new safe `Reference` label, and the browser guard requires the safe mock public reference to be visibly rendered while retaining the driver privacy exclusions.
+
 ### Complete Active-Job Monitor Read Coverage (2026-07-18)
 
 - The established Dashboard/Bookings/Dispatch saved-booking refresh keeps its single 3-second timer and latest-100 general display/history read. When that general page is full, the same `/api/admin-saved-bookings` GET lane additionally reads `scope=monitorable` pages of 100 and merges every returned non-terminal booking into the existing booking state. An older-created active job therefore cannot disappear merely because 100 newer terminal records exist.

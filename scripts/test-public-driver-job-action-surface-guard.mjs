@@ -36,6 +36,7 @@ const allowedIssueChoices = [
 ];
 
 const allowedDetailLabels = [
+  "Reference",
   "Date/time",
   "Service",
   "Pickup",

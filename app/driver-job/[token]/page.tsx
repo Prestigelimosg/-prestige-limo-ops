@@ -572,6 +572,7 @@ function statusTimingRows(statusHistory: SafeDriverJobStatusHistoryItem[]): Driv
 
 function detailRows(job: SafeDriverJobPayload) {
   return [
+    { label: "Reference", value: job.reference },
     { label: "Date/time", value: job.pickupDateTime || [job.pickupDate, job.pickupTime].filter(Boolean).join(", ") },
     { label: "Service", value: job.bookingTypeLabel || job.bookingType },
     { label: "Pickup", value: job.pickupLocation },

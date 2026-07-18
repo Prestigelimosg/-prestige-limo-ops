@@ -17,6 +17,7 @@ export type AdminBookingRecordInput = {
   traveler_id?: number | null;
   pickup_datetime?: string | null;
   pickup_at?: string | null;
+  dropoff_datetime?: string | null;
   pickup_location?: string | null;
   dropoff_location?: string | null;
   route_type?: string | null;
@@ -202,6 +203,7 @@ const bookingFields = new Set([
   "traveler_id",
   "pickup_datetime",
   "pickup_at",
+  "dropoff_datetime",
   "pickup_location",
   "dropoff_location",
   "route_type",
@@ -483,6 +485,7 @@ function sanitizeBooking(record: UnknownRecord): AdminBookingRecordInput {
     traveler_id: integerOrNull(record.traveler_id),
     pickup_datetime: pickupDateTime,
     pickup_at: pickupDateTime,
+    dropoff_datetime: textOrNull(record.dropoff_datetime),
     pickup_location: pickupLocation,
     dropoff_location: dropoffLocation,
     route_type: routeType,
@@ -665,10 +668,58 @@ function validateRequiredBookingFields(booking: AdminBookingRecordInput): AdminB
     };
   }
 
+  const dspScheduledEndResult = validateDspScheduledEnd(booking);
+
+  if (!dspScheduledEndResult.ok) {
+    return dspScheduledEndResult;
+  }
+
   return {
     ok: true,
     data: null,
   };
+}
+
+function validateDspScheduledEnd(
+  booking: AdminBookingRecordInput,
+): AdminBookingResult<null> {
+  if (textOrNull(booking.dropoff_datetime) && !validDateTime(booking.dropoff_datetime)) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Malformed operational booking dropoff_datetime rejected.",
+    };
+  }
+
+  const isAdminDashboardDsp =
+    (textOrNull(booking.source_channel) === "admin-dashboard" ||
+      textOrNull(booking.source_surface) === "admin_api") &&
+    textOrNull(booking.service_type || booking.route_type)?.toUpperCase() === "DSP";
+
+  if (!isAdminDashboardDsp) {
+    return { data: null, ok: true };
+  }
+
+  if (!validDateTime(booking.dropoff_datetime)) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Admin DSP booking requires a valid scheduled dropoff_datetime.",
+    };
+  }
+
+  const pickupMs = Date.parse(textOrNull(booking.pickup_datetime) || "");
+  const dropoffMs = Date.parse(textOrNull(booking.dropoff_datetime) || "");
+
+  if (!Number.isFinite(pickupMs) || !Number.isFinite(dropoffMs) || dropoffMs <= pickupMs) {
+    return {
+      ok: false,
+      status: 400,
+      error: "DSP scheduled end must be after its scheduled pickup.",
+    };
+  }
+
+  return { data: null, ok: true };
 }
 
 function validateRequiredRoutePoints(

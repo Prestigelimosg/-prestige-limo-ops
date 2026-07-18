@@ -12,6 +12,16 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Dispatch DSP Scheduled End And Final Invoice Calculation (2026-07-19)
+
+- Dispatch keeps one booking lane: the existing scheduled pickup persists as `pickup_datetime`, while DSP now requires an explicit scheduled `dropoff_datetime` end date and time in the same Booking Details / Trip & Route form and Supabase booking row.
+- Scheduled `dropoff_datetime` is planning data only. It never substitutes for actual Driver OTS/JC timing and does not alter the existing driver actual-time event or summary lane.
+- Selected-customer monthly invoice preparation calculates DSP rows only after actual Driver OTS/JC timing is complete, using the established two-hour minimum and 15-minute grace whole-hour rule.
+- The customer hourly rate is resolved through the existing admin rate-setup read, using exact verified traveler/company IDs with traveler → company → global settings precedence; names and display labels are never identity evidence.
+- DSP calculation applies the resolved hourly rate plus established customer midnight, extra-stop, and child-seat surcharges. Missing timing or rate evidence fails closed before the existing invoice review/preview/issue lane is populated.
+- This pass adds no duplicate form, booking route, invoice route, PDF path, notification, provider send, payment path, driver payout path, or customer/driver data exposure. Scheduled end remains admin-only and customer/driver privacy boundaries remain unchanged.
+- Schema change is tracked in `supabase/migrations/20260718165716_add_booking_dropoff_datetime.sql`. Guard coverage lives in `scripts/test-admin-dispatch-dsp-scheduled-end-invoice-wiring-guard.mjs` and the updated selected-customer invoice guard, both registered in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Current Workflow Guard Alignment Repair (2026-07-18)
 
 - A read-only run of the complete pre-activation verification suite reproduced a stale calendar-conflict guard failure. The application was not missing its approved current behavior: the owner-approved `Prepared Job Card Close-Only Simplification` intentionally removed the conflict badge/result and every other action or status wording from the established Codex card, leaving one `Close` button and exact saved job details.
@@ -2294,9 +2304,9 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Customer Hourly Invoice Auto Calculation Lock
 
 - The removed mock/local hourly unbilled-row auto-calculation UI is not part of the active selected-customer monthly invoice workflow.
-- Selected-customer monthly preparation copies only an existing saved reviewed customer amount; when no approved amount exists, the row remains `Draft amount not set` and admin must enter and review it before Preview, Draft, Issue, or Email.
-- The active `prepareMonthlyBillingGroupForInvoice` path must not call Driver JC timing reads, the default `$65/hr` calculator, or customer-page automatic hourly amount state.
-- DSP whole-hour counting and the established monthly billable-item review remain separate and unchanged; this lock must not recreate automatic CRM vehicle-rate DSP amount calculation.
+- Non-DSP selected-customer monthly preparation copies only an existing saved reviewed customer amount; when no approved amount exists, the row remains `Draft amount not set` and admin must enter and review it before Preview, Draft, Issue, or Email.
+- The active path does not use the mock/local default `$65/hr` calculator or customer-page automatic hourly amount state.
+- DSP is the explicit exception: selected-customer monthly preparation requires actual Driver OTS/JC timing, applies the established DSP whole-hour rule, and resolves the CRM vehicle rate by verified identity IDs before populating the existing Create Invoice form.
 - Guard coverage lives in `scripts/test-customer-hourly-invoice-auto-calculation-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Customer Invoice Driver JC Timing And Override Guard

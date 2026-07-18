@@ -40,8 +40,10 @@ const sourceFiles = [
   "lib/admin-app-notification-persistence.ts",
   "lib/admin-device-push-notification.ts",
   "lib/admin-new-booking-email-alert.ts",
+  "lib/singapore-pickup-display.ts",
   "lib/customer-runtime-session-map.ts",
   "lib/customer-driver-app-notification-persistence.ts",
+  "lib/customer-booking-receipt-email.ts",
   "lib/customer-portal-access-account.ts",
   "lib/customer-portal-access-link.ts",
   "lib/customer-saved-bookings-read.ts",
@@ -801,6 +803,7 @@ function assertSixTableCreateMapping(mock) {
     driver_contact: null,
     driver_name: null,
     driver_plate_number: null,
+    dropoff_datetime: null,
     dropoff_location: "Safe Canonical Dropoff",
     flight_no: null,
     passenger_name: "Safe Passenger",
@@ -1328,6 +1331,7 @@ try {
     customer_display_name: "Safe Ops Account",
     customer_facing_status: "pending_review",
     customer_id: 1,
+    dropoff_datetime: null,
     dropoff_location: "Safe Canonical Dropoff",
     driver_contact: "+65 9000 0100",
     driver_name: "Foundation Safe Driver",
@@ -1412,7 +1416,6 @@ try {
             code: "PGRST204",
             message: "Sanitized mock schema cache column source.",
           },
-          once: true,
           table: "bookings",
         },
       ],
@@ -1454,12 +1457,12 @@ try {
   ]);
   assert.equal(foundationReadMock.createdClients.length, 1);
   assert.equal(foundationReadMock.client.operations.length, 0);
-  assert.equal(foundationReadMock.client.selectFailures[0].calls, 1);
-  assert.equal(foundationReadMock.client.selectHistory.length, 2);
+  assert.equal(foundationReadMock.client.selectFailures[0].calls, 2);
+  assert.equal(foundationReadMock.client.selectHistory.length, 3);
   assert.match(foundationReadMock.client.selectHistory[0].selectedColumns, /pickup_at/);
-  assert.match(foundationReadMock.client.selectHistory[1].selectedColumns, /driver_name/);
-  assert.match(foundationReadMock.client.selectHistory[1].selectedColumns, /pickup_datetime/);
-  assert.doesNotMatch(foundationReadMock.client.selectHistory[1].selectedColumns, /internal_note/);
+  assert.match(foundationReadMock.client.selectHistory[2].selectedColumns, /driver_name/);
+  assert.match(foundationReadMock.client.selectHistory[2].selectedColumns, /pickup_datetime/);
+  assert.doesNotMatch(foundationReadMock.client.selectHistory[2].selectedColumns, /internal_note/);
   assertNoUnsafeKeys(foundationFallbackRoute, "foundation fallback GET response");
 
   const foundationReadLegacyDriverMock = installMockClient(
@@ -1497,7 +1500,6 @@ try {
             code: "PGRST204",
             message: "Sanitized mock schema cache column source.",
           },
-          once: true,
           table: "bookings",
         },
         {
@@ -1506,7 +1508,6 @@ try {
             code: "PGRST204",
             message: "Sanitized mock legacy driver column source.",
           },
-          once: true,
           table: "bookings",
         },
       ],
@@ -1530,11 +1531,11 @@ try {
     "SAFE-FOUNDATION-LEGACY-DRIVER-GET-001",
   );
   assert.equal(foundationLegacyDriverFallbackRoute.body.bookings[0].driver_name, null);
-  assert.equal(foundationReadLegacyDriverMock.client.selectFailures[0].calls, 1);
-  assert.equal(foundationReadLegacyDriverMock.client.selectFailures[1].calls, 1);
-  assert.equal(foundationReadLegacyDriverMock.client.selectHistory.length, 3);
-  assert.match(foundationReadLegacyDriverMock.client.selectHistory[1].selectedColumns, /driver_name/);
-  assert.doesNotMatch(foundationReadLegacyDriverMock.client.selectHistory[2].selectedColumns, /driver_name/);
+  assert.equal(foundationReadLegacyDriverMock.client.selectFailures[0].calls, 2);
+  assert.equal(foundationReadLegacyDriverMock.client.selectFailures[1].calls, 2);
+  assert.equal(foundationReadLegacyDriverMock.client.selectHistory.length, 5);
+  assert.match(foundationReadLegacyDriverMock.client.selectHistory[2].selectedColumns, /driver_name/);
+  assert.doesNotMatch(foundationReadLegacyDriverMock.client.selectHistory[4].selectedColumns, /driver_name/);
   assertNoUnsafeKeys(
     foundationLegacyDriverFallbackRoute,
     "foundation legacy driver fallback GET response",

@@ -41,7 +41,7 @@ const savedBookingBillingRow = sectionBetween(
 );
 const activeMonthlyPreparation = sectionBetween(
   customersPage,
-  "function prepareMonthlyBillingGroupForInvoice",
+  "async function readAdminRateSetupForDspInvoice",
   "async function readCustomerInvoiceDriverActualTimeSummary",
 );
 const ledgerSection = sectionBetween(
@@ -61,7 +61,12 @@ for (const fragment of [
 }
 
 for (const fragment of [
-  "function prepareMonthlyBillingGroupForInvoice(group: CustomerMonthlyBillingGroup)",
+  "async function prepareMonthlyBillingGroupForInvoice(group: CustomerMonthlyBillingGroup)",
+  "prepareMonthlyBillingDspRowsForInvoice",
+  "readCustomerInvoiceDriverActualTimeSummary",
+  "calculateDspCustomerInvoiceAmountCents",
+  "resolvePricing",
+  "adminRateSetupApiPath",
   "amount: monthlyBillingInvoiceAmountInput(firstRow)",
   "lineDescription: monthlyBillingInvoiceLineDescription(firstRow)",
   "additionalRows.map((row) => ({",
@@ -69,13 +74,12 @@ for (const fragment of [
   "lineDescription: monthlyBillingInvoiceLineDescription(row)",
   "Enter approved amounts before Preview, Draft, Issue, or Email.",
   "function prepareSelectedCustomerMonthlyInvoice()",
-  "prepareMonthlyBillingGroupForInvoice(selectedCustomerPrimaryMonthlyBillingGroup);",
+  "void prepareMonthlyBillingGroupForInvoice(selectedCustomerPrimaryMonthlyBillingGroup);",
 ]) {
   assertIncludes(activeMonthlyPreparation, fragment, `active monthly preparation ${fragment}`);
 }
 
 for (const forbidden of [
-  "readCustomerInvoiceDriverActualTimeSummary",
   "getCustomerInvoiceDriverActualTimeCalculatedAmount",
   "calculateHourlyInvoiceAmountCents",
   "calculateHourlyBillableMinutes",
@@ -100,9 +104,9 @@ assertExcludes(
 
 for (const phrase of [
   "The removed mock/local hourly unbilled-row auto-calculation UI is not part of the active selected-customer monthly invoice workflow.",
-  "Selected-customer monthly preparation copies only an existing saved reviewed customer amount; when no approved amount exists, the row remains `Draft amount not set` and admin must enter and review it before Preview, Draft, Issue, or Email.",
-  "The active `prepareMonthlyBillingGroupForInvoice` path must not call Driver JC timing reads, the default `$65/hr` calculator, or customer-page automatic hourly amount state.",
-  "DSP whole-hour counting and the established monthly billable-item review remain separate and unchanged; this lock must not recreate automatic CRM vehicle-rate DSP amount calculation.",
+  "Non-DSP selected-customer monthly preparation copies only an existing saved reviewed customer amount; when no approved amount exists, the row remains `Draft amount not set` and admin must enter and review it before Preview, Draft, Issue, or Email.",
+  "The active path does not use the mock/local default `$65/hr` calculator or customer-page automatic hourly amount state.",
+  "DSP is the explicit exception: selected-customer monthly preparation requires actual Driver OTS/JC timing, applies the established DSP whole-hour rule, and resolves the CRM vehicle rate by verified identity IDs before populating the existing Create Invoice form.",
   "Guard coverage lives in `scripts/test-customer-hourly-invoice-auto-calculation-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {
   assertIncludes(ledgerSection, phrase, `ledger phrase ${phrase}`);

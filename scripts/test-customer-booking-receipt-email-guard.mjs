@@ -6,6 +6,7 @@ import path from "node:path";
 import ts from "typescript";
 
 const helperPath = "lib/customer-booking-receipt-email.ts";
+const singaporePickupDisplayPath = "lib/singapore-pickup-display.ts";
 const routePath = "app/api/customer-booking-requests/route.ts";
 const ledgerPath = "docs/current-implementation-ledger.md";
 const suitePath = "scripts/test-preactivation-verification-suite.mjs";
@@ -28,11 +29,17 @@ async function loadHarness() {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "prestige-customer-receipt-"));
   const sourcePath = path.join(process.cwd(), helperPath);
   const outputPath = path.join(tempDir, "lib/customer-booking-receipt-email.js");
+  const singaporePickupDisplaySourcePath = path.join(process.cwd(), singaporePickupDisplayPath);
+  const singaporePickupDisplayOutputPath = path.join(tempDir, "lib/singapore-pickup-display.js");
   const serverOnlyPath = path.join(tempDir, "node_modules/server-only/index.js");
 
   await mkdir(path.dirname(outputPath), { recursive: true });
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await writeFile(outputPath, transpile(await readFile(sourcePath, "utf8"), sourcePath));
+  await writeFile(
+    singaporePickupDisplayOutputPath,
+    transpile(await readFile(singaporePickupDisplaySourcePath, "utf8"), singaporePickupDisplaySourcePath),
+  );
   await writeFile(serverOnlyPath, "");
 
   return {
@@ -47,7 +54,7 @@ function booking(reference, overrides = {}) {
     contact_email: "william@prestigelimo.sg",
     dropoff_location: "Changi Airport Terminal 3",
     passenger_name: "William Test",
-    pickup_datetime: "2026-07-20T10:00:00+08:00",
+    pickup_datetime: "2026-07-30T17:10:00+00:00",
     pickup_location: "Orchard Hotel",
     route_type: "Airport Departure",
     route_points: [],
@@ -77,6 +84,29 @@ assert.ok(routeSource.includes("sendCustomerBookingReceiptEmail(savedRequests)")
 assert.ok(routeSource.includes("receipt_status: receipt.status"));
 assert.ok(helperSource.includes('"Idempotency-Key"'));
 assert.ok(ledger.includes("### Permanent Booker Link, Rebooking Identity, and Request Receipt"));
+assert.ok(
+  ledger.includes("### Production Customer Booking Receipt Email Configuration Repair"),
+  "Ledger must record the bounded Production receipt-email configuration repair.",
+);
+assert.ok(
+  ledger.includes("### Production Customer Booking Receipt Singapore Time Repair"),
+  "Ledger must record the Production receipt Singapore-time repair.",
+);
+assert.ok(
+  ledger.includes("2026-07-30T17:10:00+00:00") && ledger.includes("31 Jul 2026, 0110hrs SGT"),
+  "Ledger must preserve the exact reproduced UTC-to-SGT receipt evidence.",
+);
+for (const evidence of [
+  "CUST-20260718021747-8V1IPY",
+  "PRESTIGE_CUSTOMER_BOOKING_RECEIPT_EMAIL_ENABLED",
+  "PRESTIGE_CUSTOMER_BOOKING_RECEIPT_EMAIL_FROM",
+  "dpl_7WQVBYLZzD73wGJUXs2YwFovuSGJ",
+  "CUST-20260718023143-J16UW4",
+  "Receipt email sent to william@prestigelimo.sg",
+  "Mailbox receipt confirmation remains pending",
+]) {
+  assert.ok(ledger.includes(evidence), `Ledger must include Production receipt evidence: ${evidence}`);
+}
 assert.ok(suite.includes(guardPath));
 
 const harness = await loadHarness();
@@ -139,6 +169,7 @@ try {
     "Reference: CUST-RECEIPT-003-OUT",
     "Reference: CUST-RECEIPT-003-RET",
     "Passenger: William Test",
+    "Pickup time: 31 Jul 2026, 0110hrs SGT",
     "Pickup: Orchard Hotel",
     "Drop-off: Changi Airport Terminal 3",
   ]) {

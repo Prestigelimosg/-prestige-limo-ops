@@ -3,6 +3,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 
 import type { AdminBookingPersistenceRecord } from "./admin-booking-persistence";
+import { formatSingaporePickupDisplay } from "./singapore-pickup-display";
 
 export const customerBookingReceiptEmailVersion = "customer-booking-receipt-email-v1";
 export const customerBookingReceiptEmailGateName =
@@ -148,7 +149,7 @@ function normalizeTrip(record: AdminBookingPersistenceRecord) {
     bookingReference,
     dropoffLocation: safeText(booking.dropoff_location),
     passengerName: safeText(booking.passenger_name, 160),
-    pickupDateTime: safeText(booking.pickup_datetime, 120),
+    pickupDateTime: formatSingaporePickupDisplay(safeText(booking.pickup_datetime, 120)) || null,
     pickupLocation: safeText(booking.pickup_location),
     recipient,
     serviceType: safeText(booking.route_type, 120),

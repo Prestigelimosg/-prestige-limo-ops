@@ -16,6 +16,7 @@ const paths = {
   driverDetailsEmail: "lib/admin-customer-driver-details-email-send-action.ts",
   ledger: "docs/current-implementation-ledger.md",
   migration: "supabase/migrations/202607180001_customer_booking_public_reference_foundation.sql",
+  permissionMigration: "supabase/migrations/202607180002_customer_booking_public_reference_service_role_least_privilege.sql",
   panel: "app/customers/[customerId]/booking-reference-settings-panel.tsx",
   route: "app/api/admin-customer-booking-reference-settings/route.ts",
   settings: "lib/admin-customer-booking-reference-settings.ts",
@@ -59,6 +60,16 @@ includes("migration", "booking_public_reference_exhausted", "five-digit exhausti
 includes("migration", "booking_public_reference_prefix_unavailable", "locked prefix unavailable fail-closed path");
 excludes("migration", /customer_invoice_sequences|monthly_invoice_issue_records|invoice_prefix/i, "invoice schema coupling");
 excludes("migration", /grant[^;]*(?:anon|authenticated)/i, "public role grant");
+
+for (const fragment of [
+  "revoke all on table public.customer_booking_reference_sequences from service_role",
+  "revoke all on table public.global_booking_reference_sequence from service_role",
+  "grant select, insert, update on table public.customer_booking_reference_sequences to service_role",
+  "grant select, update on table public.global_booking_reference_sequence to service_role",
+]) {
+  includes("permissionMigration", fragment, "service-role least-privilege correction");
+}
+excludes("permissionMigration", /^\s*grant[^;]*(?:delete|anon|authenticated)/im, "broad sequence-table grant");
 
 for (const key of ["adminAdapter", "adminRead", "customerRead", "driverRead"]) {
   includes(key, "public_booking_reference", `${key} public reference read`);

@@ -7214,6 +7214,15 @@ function bookingRecordIsPickupWithinNextHours(
   );
 }
 
+function bookingRecordIsPickupOverdue(
+  bookingRecord: BookingRecord,
+  currentTimeMs: number,
+) {
+  const pickupTimeMs = bookingRecordPickupDateTimeMs(bookingRecord);
+
+  return pickupTimeMs !== null && pickupTimeMs < currentTimeMs;
+}
+
 function bookingRecordIsInsideActiveJobMonitorWindow(
   bookingRecord: BookingRecord,
   currentTimeMs: number,
@@ -22838,7 +22847,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     loadingText: string,
     successText: string,
     errorPrefix: string,
-  ) {
+  ): Promise<boolean> {
     const bookingId = bookingRecordStableKey(bookingRecord);
     const bookingStatusReference = bookingRecordStatusReference(bookingRecord);
 
@@ -22861,10 +22870,12 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       setBookingCompletionMessage(bookingId, successMessage);
       await loadBookings("Bookings synced.", { silent: true });
       applyBookingStatusLocally(bookingRecord, [bookingStatusReference], nextStatus, result.updatedAt);
+      return true;
     } catch (error) {
       const errorText = error instanceof Error ? error.message : "Unknown booking status error.";
       const errorMessage = { tone: "error", text: `${errorPrefix}: ${errorText}` } satisfies Message;
       setBookingCompletionMessage(bookingId, errorMessage);
+      return false;
     } finally {
       setCompletingBookingId(null);
     }
@@ -22915,7 +22926,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   }
 
   async function markBookingCompleted(bookingRecord: BookingRecord) {
-    await updateBookingStatusOnly(
+    return updateBookingStatusOnly(
       bookingRecord,
       "completed",
       "Marking booking completed...",
@@ -22925,13 +22936,57 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   }
 
   async function markBookingCancelled(bookingRecord: BookingRecord) {
-    await updateBookingStatusOnly(
+    return updateBookingStatusOnly(
       bookingRecord,
       "cancelled",
       "Cancelling booking...",
       "Booking cancelled.",
       "Cancel booking failed",
     );
+  }
+
+  async function resolveDashboardOverdueBooking(
+    bookingRecord: BookingRecord,
+    resolution: "completed" | "cancelled",
+  ) {
+    const bookingId = bookingRecordStableKey(bookingRecord);
+    const referenceLabel = compactBookingReference(bookingRecordStatusReference(bookingRecord));
+    const isCompletedResolution = resolution === "completed";
+    const confirmed = window.confirm(
+      [
+        isCompletedResolution
+          ? "Mark this overdue job Completed?"
+          : "Cancel this overdue job?",
+        "",
+        `Reference: ${referenceLabel}`,
+        "",
+        isCompletedResolution
+          ? "Use Completed only if the trip happened."
+          : "Use Cancel if the trip did not happen.",
+      ].join("\n"),
+    );
+
+    if (!confirmed) {
+      setBookingCompletionMessage(bookingId, {
+        tone: "info",
+        text: isCompletedResolution
+          ? "Overdue completion cancelled."
+          : "Overdue cancellation cancelled.",
+      });
+      return;
+    }
+
+    const statusUpdated = isCompletedResolution
+      ? await markBookingCompleted(bookingRecord)
+      : await markBookingCancelled(bookingRecord);
+
+    if (!statusUpdated) {
+      return;
+    }
+
+    setCompletedMonthFilter(bookingRecordCompletedHistoryMonthKey(bookingRecord));
+    setCompletedSearchTerm("");
+    selectAppTab("completed");
   }
 
   async function adminConfirmBookingCompletedByPhone(
@@ -44035,45 +44090,89 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     operationalCard.route_points_summary ||
                     (routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`);
                   const bookingId = bookingRecordStableKey(bookingRecord, operationalCard);
+                  const statusBookingId = bookingRecordStableKey(bookingRecord);
                   const isCustomerRequest = bookingRecordIsCustomerBookingRequest(bookingRecord);
+                  const isOverdue =
+                    !isCustomerRequest && bookingRecordIsPickupOverdue(bookingRecord, currentTimeMs);
                   const passengerText = getLoadBookingsOperationalPassengerDisplay(operationalCard, bookingRecord);
+                  const overdueResolutionMessage = bookingCompletionMessages[statusBookingId] || null;
 
                   return (
-                    <button
-                      className="grid min-h-10 gap-1 rounded-md border border-amber-200 bg-white px-3 py-2 text-left text-sm transition hover:bg-amber-50 md:grid-cols-[minmax(9rem,0.8fr)_minmax(10rem,0.8fr)_minmax(12rem,1.2fr)] md:items-center"
+                    <article
+                      className="overflow-hidden rounded-md border border-amber-200 bg-white text-sm"
                       data-dashboard-new-booking-request-row={bookingId}
                       data-dashboard-urgent-booking-request-kind={
                         isCustomerRequest ? "customer-request" : "driver-tbc"
                       }
                       data-dashboard-urgent-booking-request-row={bookingId}
                       key={`dashboard-request-${bookingId}`}
-                      onClick={() => {
-                        loadSelectedBooking(bookingRecord, { focusDriverJobLink: true });
-                      }}
-                      type="button"
                     >
-                      <span className="min-w-0">
-                        <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900 ring-1 ring-amber-200">
-                          {isCustomerRequest ? "New / Urgent" : "Driver TBC"}
+                      <button
+                        className="grid min-h-10 w-full gap-1 px-3 py-2 text-left transition hover:bg-amber-50 md:grid-cols-[minmax(9rem,0.8fr)_minmax(10rem,0.8fr)_minmax(12rem,1.2fr)] md:items-center"
+                        data-dashboard-overdue-booking-open={isOverdue ? bookingId : undefined}
+                        onClick={() => {
+                          loadSelectedBooking(bookingRecord, { focusDriverJobLink: true });
+                        }}
+                        type="button"
+                      >
+                        <span className="min-w-0">
+                          <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900 ring-1 ring-amber-200">
+                            {isCustomerRequest ? "New / Urgent" : "Driver TBC"}
+                          </span>
+                          <span className="block truncate font-semibold text-slate-950">
+                            {getLoadBookingsOperationalRequestDisplayTitle(operationalCard, bookingRecord)}
+                          </span>
+                          <span className="block truncate text-xs text-slate-500">
+                            {formatBookingPickupDateTimeSgt(bookingRecord)}
+                          </span>
                         </span>
-                        <span className="block truncate font-semibold text-slate-950">
-                          {getLoadBookingsOperationalRequestDisplayTitle(operationalCard, bookingRecord)}
+                        <span className="truncate text-slate-800">
+                          Passenger: {passengerText}
                         </span>
-                        <span className="block truncate text-xs text-slate-500">
-                          {formatBookingPickupDateTimeSgt(bookingRecord)}
+                        <span className="truncate text-slate-700">
+                          {isCustomerRequest
+                            ? `Needs driver link | ${routeText}`
+                            : `${isOverdue ? "Overdue" : "Driver TBC under 1h"} | ${routeText}`}
                         </span>
-                      </span>
-                      <span className="truncate text-slate-800">
-                        Passenger: {passengerText}
-                      </span>
-                      <span className="truncate text-slate-700">
-                        {isCustomerRequest
-                          ? `Needs driver link | ${routeText}`
-                          : `Driver TBC under 1h | ${routeText}`}
-                      </span>
                       </button>
-                    );
-                  })}
+                      {isOverdue ? (
+                        <div
+                          className="flex flex-wrap justify-end gap-2 border-t border-amber-100 bg-amber-50/70 px-3 py-2"
+                          data-dashboard-overdue-booking-actions={bookingId}
+                        >
+                          <button
+                            className="h-8 rounded-md border border-emerald-300 bg-white px-3 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                            data-dashboard-overdue-booking-completed={bookingId}
+                            disabled={completingBookingId === statusBookingId}
+                            onClick={() => void resolveDashboardOverdueBooking(bookingRecord, "completed")}
+                            type="button"
+                          >
+                            {completingBookingId === statusBookingId ? "Working..." : "Completed"}
+                          </button>
+                          <button
+                            className="h-8 rounded-md border border-red-200 bg-white px-3 text-xs font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                            data-dashboard-overdue-booking-cancel={bookingId}
+                            disabled={completingBookingId === statusBookingId}
+                            onClick={() => void resolveDashboardOverdueBooking(bookingRecord, "cancelled")}
+                            type="button"
+                          >
+                            {completingBookingId === statusBookingId ? "Working..." : "Cancel"}
+                          </button>
+                        </div>
+                      ) : null}
+                      {isOverdue && overdueResolutionMessage ? (
+                        <p
+                          className={`border-t px-3 py-2 text-xs font-semibold ${statusClass(
+                            overdueResolutionMessage.tone,
+                          )}`}
+                          data-dashboard-overdue-booking-message={bookingId}
+                        >
+                          {overdueResolutionMessage.text}
+                        </p>
+                      ) : null}
+                    </article>
+                  );
+                })}
                 {customerBookingChangeRequestNotifications.map((notification) => {
                   const notificationId = clean(notification.id);
                   const changeRequestContext = adminAppNotificationChangeRequestContext(notification);

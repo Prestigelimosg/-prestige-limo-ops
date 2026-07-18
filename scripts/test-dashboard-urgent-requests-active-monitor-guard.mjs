@@ -76,6 +76,16 @@ const saveBookingSection = sliceBetween(
   "async function saveBooking()",
   "function bookingRecordReferenceCandidates",
 );
+const bookingStatusUpdateSection = sliceBetween(
+  appPage,
+  "async function updateBookingStatusOnly(",
+  "async function syncBookingCompletedStatusFromDriverReport(",
+);
+const dashboardOverdueResolutionSection = sliceBetween(
+  appPage,
+  "async function resolveDashboardOverdueBooking(",
+  "async function adminConfirmBookingCompletedByPhone(",
+);
 const activeMonitorSource = sliceBetween(
   appPage,
   "const activeJobDashboardSearchTerm = clean(searchTerm);",
@@ -105,9 +115,11 @@ const ledgerSection = sliceBetween(
 for (const fragment of [
   "function bookingRecordPickupDateTimeMs",
   "function bookingRecordIsPickupWithinNextHours",
+  "function bookingRecordIsPickupOverdue",
   "function bookingRecordIsInsideActiveJobMonitorWindow",
   "pickupTimeMs >= currentTimeMs",
   "pickupTimeMs - currentTimeMs < hours * 60 * 60 * 1000",
+  "pickupTimeMs < currentTimeMs",
   "const monitorWindowStartMs = pickupTimeMs - 60 * 60 * 1000;",
   "const monitorWindowEndMs = pickupTimeMs + 24 * 60 * 60 * 1000;",
 ]) {
@@ -210,11 +222,21 @@ for (const fragment of [
   '"driver-tbc"',
   'data-dashboard-urgent-booking-request-row={bookingId}',
   "const passengerText = getLoadBookingsOperationalPassengerDisplay(operationalCard, bookingRecord);",
+  "const isOverdue =",
+  "bookingRecordIsPickupOverdue(bookingRecord, currentTimeMs)",
   "{getLoadBookingsOperationalRequestDisplayTitle(operationalCard, bookingRecord)}",
   "Passenger: {passengerText}",
   '"New / Urgent"',
   '"Driver TBC"',
+  'isOverdue ? "Overdue" : "Driver TBC under 1h"',
   "loadSelectedBooking(bookingRecord, { focusDriverJobLink: true })",
+  'data-dashboard-overdue-booking-actions={bookingId}',
+  'data-dashboard-overdue-booking-completed={bookingId}',
+  'data-dashboard-overdue-booking-cancel={bookingId}',
+  'resolveDashboardOverdueBooking(bookingRecord, "completed")',
+  'resolveDashboardOverdueBooking(bookingRecord, "cancelled")',
+  '"Completed"',
+  '"Cancel"',
   "customerBookingChangeRequestNotifications.map",
   "adminAppNotificationChangeRequestContext(notification)",
   'data-dashboard-change-cancel-request-row={safeRowKey}',
@@ -227,6 +249,62 @@ for (const fragment of [
   "No new, urgent, amendment, or cancellation requests.",
 ]) {
   assertIncludes(dashboardUrgentPanel, fragment, `dashboard urgent panel fragment ${fragment}`);
+}
+
+for (const fragment of [
+  "): Promise<boolean>",
+  "return true;",
+  "return false;",
+]) {
+  assertIncludes(bookingStatusUpdateSection, fragment, `booking status result fragment ${fragment}`);
+}
+
+for (const fragment of [
+  'resolution: "completed" | "cancelled"',
+  "Mark this overdue job Completed?",
+  "Use Completed only if the trip happened.",
+  "Cancel this overdue job?",
+  "Use Cancel if the trip did not happen.",
+  "window.confirm(",
+  "await markBookingCompleted(bookingRecord)",
+  "await markBookingCancelled(bookingRecord)",
+  "setCompletedMonthFilter(bookingRecordCompletedHistoryMonthKey(bookingRecord))",
+  'selectAppTab("completed")',
+]) {
+  assertIncludes(
+    dashboardOverdueResolutionSection,
+    fragment,
+    `dashboard overdue resolution fragment ${fragment}`,
+  );
+}
+for (const forbidden of [
+  "fetch(",
+  "setInterval(",
+  "autoSyncSavedBookingGoogleCalendar",
+  "sendAdmin",
+  "notification",
+]) {
+  assertExcludes(
+    dashboardOverdueResolutionSection,
+    forbidden,
+    `dashboard overdue resolution duplicate side effect ${forbidden}`,
+  );
+}
+assert.equal(
+  (appPage.match(/fetch\(adminSavedBookingStatusesApiPath/g) || []).length,
+  1,
+  "Dashboard overdue actions must reuse the single saved-booking-status writer.",
+);
+for (const monitorFragment of [
+  "setCurrentTimeMs(Date.now());",
+  "}, 30 * 1000);",
+  'void loadBookings("Bookings synced.", { silent: true }).finally(() => {',
+  "}, 3 * 1000);",
+  "void refreshDashboardDriverJobStatusRead(bookingReference);",
+  "}, 10 * 1000);",
+  "syncBookingCompletedStatusFromDriverReport(",
+]) {
+  assertIncludes(appPage, monitorFragment, `established booking monitor fragment ${monitorFragment}`);
 }
 
 for (const fragment of [

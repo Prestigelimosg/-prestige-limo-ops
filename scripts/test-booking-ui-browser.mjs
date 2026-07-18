@@ -222,6 +222,40 @@ const codexCalendarConflictExistingBookingFixture = {
   driver_contact: codexPreparedCustomerRequestFixture.driver_contact,
   driver_plate_number: codexPreparedCustomerRequestFixture.driver_plate_number,
 };
+const dashboardOverduePickupAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+const dashboardOverdueCompletedFixture = {
+  ...loadedSavedBookingFixture,
+  id: "ui-dashboard-overdue-completed",
+  booking_reference: "OVERDUE-COMPLETED-001",
+  pickup_at: dashboardOverduePickupAt,
+  pickup_datetime: dashboardOverduePickupAt,
+  pickup_address: "Overdue Completed Pickup",
+  dropoff_address: "Overdue Completed Drop-off",
+  route: "Overdue Completed Pickup > Overdue Completed Drop-off",
+  job_card:
+    "AVF DEP\nOverdue test pickup\nOverdue Completed Pickup > Overdue Completed Drop-off\nPassenger: OVERDUE COMPLETED TRAVELER\nPax: 1",
+  status: "confirmed",
+  driver_id: null,
+  driver_name: null,
+  driver_contact: null,
+  driver_plate_number: null,
+  travelers: {
+    traveler_name: "OVERDUE COMPLETED TRAVELER",
+  },
+};
+const dashboardOverdueCancelledFixture = {
+  ...dashboardOverdueCompletedFixture,
+  id: "ui-dashboard-overdue-cancelled",
+  booking_reference: "OVERDUE-CANCELLED-001",
+  pickup_address: "Overdue Cancelled Pickup",
+  dropoff_address: "Overdue Cancelled Drop-off",
+  route: "Overdue Cancelled Pickup > Overdue Cancelled Drop-off",
+  job_card:
+    "AVF DEP\nOverdue test pickup\nOverdue Cancelled Pickup > Overdue Cancelled Drop-off\nPassenger: OVERDUE CANCELLED TRAVELER\nPax: 1",
+  travelers: {
+    traveler_name: "OVERDUE CANCELLED TRAVELER",
+  },
+};
 const persistedTestSaveBookingFixture = {
   ...loadedSavedBookingFixture,
   id: 905001,
@@ -8105,13 +8139,20 @@ async function runChromeTest() {
     await evaluate(`(() => {
       const fixture = ${JSON.stringify(codexPreparedCustomerRequestFixture)};
       const conflictFixture = ${JSON.stringify(codexCalendarConflictExistingBookingFixture)};
+      const overdueCompletedFixture = ${JSON.stringify(dashboardOverdueCompletedFixture)};
+      const overdueCancelledFixture = ${JSON.stringify(dashboardOverdueCancelledFixture)};
       window.__prestigeLoadedBookings = [
         fixture,
         conflictFixture,
+        overdueCompletedFixture,
+        overdueCancelledFixture,
         ...(window.__prestigeLoadedBookings || []).filter(
-          (booking) => ![fixture.booking_reference, conflictFixture.booking_reference].includes(
-            String(booking.booking_reference || booking.id),
-          ),
+          (booking) => ![
+            fixture.booking_reference,
+            conflictFixture.booking_reference,
+            overdueCompletedFixture.booking_reference,
+            overdueCancelledFixture.booking_reference,
+          ].includes(String(booking.booking_reference || booking.id)),
         ),
       ];
       window.__prestigeCustomerDriverAppNotifications = [
@@ -8191,6 +8232,149 @@ async function runChromeTest() {
     );
     assert.match(codexPreparedRequestState.rowText, /01 Jan 2099, 1000hrs SGT/);
     assert.doesNotMatch(codexPreparedRequestState.rowText, /2099-01-01T02:00:00\+00:00/);
+
+    const overdueDashboardActionState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const completedReference = "${dashboardOverdueCompletedFixture.booking_reference}";
+          const cancelledReference = "${dashboardOverdueCancelledFixture.booking_reference}";
+          const completedRow = document.querySelector(
+            '[data-dashboard-urgent-booking-request-row="' + completedReference + '"]',
+          );
+          const cancelledRow = document.querySelector(
+            '[data-dashboard-urgent-booking-request-row="' + cancelledReference + '"]',
+          );
+          const completedButton = completedRow?.querySelector(
+            '[data-dashboard-overdue-booking-completed="' + completedReference + '"]',
+          );
+          const completedCancelButton = completedRow?.querySelector(
+            '[data-dashboard-overdue-booking-cancel="' + completedReference + '"]',
+          );
+          const cancelledButton = cancelledRow?.querySelector(
+            '[data-dashboard-overdue-booking-cancel="' + cancelledReference + '"]',
+          );
+
+          return completedRow && cancelledRow && completedButton && completedCancelButton && cancelledButton
+            ? {
+                completedButtonText: completedButton.textContent.trim(),
+                completedCancelButtonText: completedCancelButton.textContent.trim(),
+                completedRowText: completedRow.textContent.replace(/\\s+/g, " ").trim(),
+                cancelledButtonText: cancelledButton.textContent.trim(),
+                cancelledRowText: cancelledRow.textContent.replace(/\\s+/g, " ").trim(),
+              }
+            : false;
+        })()`),
+      10000,
+      "overdue dashboard completed and cancel actions",
+    );
+    assert.equal(overdueDashboardActionState.completedButtonText, "Completed");
+    assert.equal(overdueDashboardActionState.completedCancelButtonText, "Cancel");
+    assert.equal(overdueDashboardActionState.cancelledButtonText, "Cancel");
+    assert.match(overdueDashboardActionState.completedRowText, /Overdue/);
+    assert.match(overdueDashboardActionState.cancelledRowText, /Overdue/);
+    assert.doesNotMatch(overdueDashboardActionState.completedRowText, /Driver TBC under 1h/);
+    assert.doesNotMatch(overdueDashboardActionState.cancelledRowText, /Driver TBC under 1h/);
+
+    const overdueCompletedClicked = await evaluate(`(() => {
+      window.__prestigeOriginalConfirm = window.__prestigeOriginalConfirm || window.confirm;
+      window.confirm = () => true;
+      window.__prestigeBookingCompletionRequests = [];
+      const button = document.querySelector(
+        '[data-dashboard-overdue-booking-completed="${dashboardOverdueCompletedFixture.booking_reference}"]',
+      );
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(overdueCompletedClicked, true, "Expected overdue Completed action to be available");
+
+    const overdueCompletedRuntimeState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const card = document.querySelector(
+            '[data-completed-operational-card="${dashboardOverdueCompletedFixture.booking_reference}"]',
+          );
+          const requests = window.__prestigeBookingCompletionRequests || [];
+
+          return card && requests.length === 1
+            ? {
+                cardText: card.textContent.replace(/\\s+/g, " ").trim(),
+                requests,
+              }
+            : false;
+        })()`),
+      10000,
+      "overdue Completed action history handoff",
+    );
+    assert.equal(overdueCompletedRuntimeState.requests[0]?.method, "PATCH");
+    assert.deepEqual(overdueCompletedRuntimeState.requests[0]?.body, {
+      booking_id: dashboardOverdueCompletedFixture.booking_reference,
+      status: "completed",
+    });
+    assert.match(overdueCompletedRuntimeState.cardText, /Completed/);
+
+    await clickTab("Dashboard", "Operations Dashboard");
+    const overdueCancelledClicked = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const button = document.querySelector(
+            '[data-dashboard-overdue-booking-cancel="${dashboardOverdueCancelledFixture.booking_reference}"]',
+          );
+
+          if (!button || button.disabled) {
+            return false;
+          }
+
+          button.click();
+          return true;
+        })()`),
+      10000,
+      "overdue Cancel action",
+    );
+    assert.equal(overdueCancelledClicked, true, "Expected overdue Cancel action to be available");
+
+    const overdueCancelledRuntimeState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const card = document.querySelector(
+            '[data-completed-operational-card="${dashboardOverdueCancelledFixture.booking_reference}"]',
+          );
+          const requests = window.__prestigeBookingCompletionRequests || [];
+
+          return card && requests.length === 2
+            ? {
+                cardText: card.textContent.replace(/\\s+/g, " ").trim(),
+                requests,
+              }
+            : false;
+        })()`),
+      10000,
+      "overdue Cancel action history handoff",
+    );
+    assert.deepEqual(overdueCancelledRuntimeState.requests[1]?.body, {
+      booking_id: dashboardOverdueCancelledFixture.booking_reference,
+      status: "cancelled",
+    });
+    assert.match(overdueCancelledRuntimeState.cardText, /Cancelled/);
+    await setInputValue(
+      "[data-completed-month-filter='true']",
+      "all",
+      "Completed / History month reset after overdue action checks",
+    );
+    await evaluate(`(() => {
+      window.confirm = window.__prestigeOriginalConfirm;
+      const fixtureReferences = new Set([
+        "${dashboardOverdueCompletedFixture.booking_reference}",
+        "${dashboardOverdueCancelledFixture.booking_reference}",
+      ]);
+      window.__prestigeLoadedBookings = (window.__prestigeLoadedBookings || []).filter(
+        (booking) => !fixtureReferences.has(String(booking.booking_reference || booking.id)),
+      );
+    })()`);
 
     await clickTab("Bookings", "Find saved jobs");
     const bookingsCalendarStatusRuntimeState = await waitForCondition(

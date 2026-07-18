@@ -86,7 +86,9 @@ for (const evidence of [
   "PRESTIGE_CUSTOMER_BOOKING_RECEIPT_EMAIL_ENABLED",
   "PRESTIGE_CUSTOMER_BOOKING_RECEIPT_EMAIL_FROM",
   "dpl_7WQVBYLZzD73wGJUXs2YwFovuSGJ",
-  "No post-repair receipt email delivery was runtime-tested",
+  "CUST-20260718023143-J16UW4",
+  "Receipt email sent to william@prestigelimo.sg",
+  "Mailbox receipt confirmation remains pending",
 ]) {
   assert.ok(ledger.includes(evidence), `Ledger must include Production receipt evidence: ${evidence}`);
 }

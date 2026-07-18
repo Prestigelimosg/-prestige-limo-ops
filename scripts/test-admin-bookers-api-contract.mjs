@@ -307,7 +307,11 @@ const [helperSource, routeSource, appPageSource, legacyRouteSource] = await Prom
 assert.equal(helperSource.includes('from("bookers")'), true, "Typed helper must own bookers access.");
 assert.equal(routeSource.includes("/api/admin-legacy-data/rest/v1"), false, "Typed route must not use legacy shim.");
 assert.equal(appPageSource.includes("adminLegacyTables.bookers"), false, "App must not use legacy bookers table.");
-assert.equal(appPageSource.includes("/api/admin-bookers"), true, "App must use typed admin bookers API.");
+assert.equal(
+  appPageSource.includes("traveler.booker_id") && appPageSource.includes("traveler.booker_name"),
+  true,
+  "Verified PA selector must reuse the established rate-setup traveler projection.",
+);
 assert.equal(legacyRouteSource.includes("bookers: new Set"), false, "Legacy route must not allow bookers.");
 assert.equal(
   /\.(?:delete|upsert|rpc)\s*\(/.test(helperSource),

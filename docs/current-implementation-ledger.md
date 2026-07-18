@@ -994,6 +994,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The selectors retain exact numeric IDs only and do not replace or rewrite the existing company, booker, passenger, contact, parser, pricing, or save fields.
 - Focused guard: `scripts/test-admin-dispatch-crm-identity-selectors-guard.mjs`.
 - The established rate-setup traveler projection includes verified `booker_id` and safe `booker_name`, allowing the PA selector to use persisted relationships instead of names or inferred matches.
+- The typed admin-bookers API contract guard now protects that established selector consumer instead of requiring a retired direct `/api/admin-bookers` call from `app/page.tsx`. The route remains the typed server boundary for exact booker lookup/create/update, the UI remains on the existing rate-setup traveler projection, and no route, selector, write lane, or runtime behavior changed.
 
 ### Verified Traveler–Booker Link PATCH Boundary
 

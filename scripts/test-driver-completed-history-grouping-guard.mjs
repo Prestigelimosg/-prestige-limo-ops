@@ -88,10 +88,6 @@ for (const fragment of [
   '"completed",',
   "matchingBooking,",
   "driverCompletedBookingStatusSyncRequestedRef.current.add(bookingStatusReference)",
-  "function DispatcherStatusSummaryBlock",
-  "const status = bookingRecordIsCancelledStatus(bookingRecord)",
-  "? \"cancelled\"",
-  ": bookingRecordIsCompletedStatus(bookingRecord)",
 ]) {
   assertIncludes(appPage, fragment, `driver completed status sync fragment ${fragment}`);
 }

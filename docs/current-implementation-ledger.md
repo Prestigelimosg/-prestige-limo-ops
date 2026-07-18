@@ -1,16 +1,25 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-394e3d5c Wire DSP scheduled end and invoice rates
+55950e1b Show DSP schedule in completed history
 
 Latest pushed main/staging runtime checkpoint:
-394e3d5c Wire DSP scheduled end and invoice rates
+55950e1b Show DSP schedule in completed history
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-340e2649 Merge pull request #49 from Prestigelimosg/codex/restore-current-workflow-guards
+a77c2793 Merge pull request #50 from Prestigelimosg/codex/restore-current-workflow-guards
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Completed History Single-Detail Compact Card (2026-07-19)
+
+- Completed / History keeps its established compact expandable card and action lane. The closed summary remains the single scan view for company, scheduled time, passenger/booker, route, driver, vehicle/pax, and row status.
+- Expansion now shows each remaining operational detail once: public booking reference, exact pickup/drop-off, driver contact/plate, OTS/replacement readiness, child-seat/extra-stop details when present, and created time.
+- The repeated expanded status, company/passenger/booker identity, full route line, driver name/vehicle box, and Vehicle / pax section are removed in place. The monthly status count and row status pill retain their distinct group-summary and row-identification purposes.
+- Existing `Load this booking`, `Undo completed`, `Billing ready`, and `Delete` actions are unchanged. The shared assigned-driver component used by Current / Upcoming remains unchanged; the two status/readiness wrappers left with no consumer after this compaction are retired while their established readiness helper remains the source for the compact Operations strip.
+- This pass is display-only: no route, API, writer, booking field, invoice/PDF/payment/payout lane, provider send, Calendar/GPS behavior, schema, migration, environment, Supabase configuration, or live record changes.
+- Guard coverage is an extension of `scripts/test-bookings-earlier-history-compact-guard.mjs`, already registered in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Completed DSP Scheduled Start And End Display (2026-07-19)
 

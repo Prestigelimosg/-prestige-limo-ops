@@ -168,7 +168,11 @@ async function loadRouteHarness() {
       "  const state = globalThis.__prestigeCustomerBookingRequestApiMock;",
       "  return state.portalLinkResult || { ok: false, error: 'portal link unavailable', status: 403 };",
       "}",
-      "module.exports = { createCustomerPortalAccessLinkToken };",
+      "function safeCustomerPortalPublicBookingReference(value) {",
+      "  const cleaned = typeof value === 'string' || typeof value === 'number' ? String(value).trim().toUpperCase() : '';",
+      "  return /^(?:[0-9]{5}|[A-Z0-9]{2,12}-[0-9]{5})$/.test(cleaned) ? cleaned : null;",
+      "}",
+      "module.exports = { createCustomerPortalAccessLinkToken, safeCustomerPortalPublicBookingReference };",
     ].join("\n"),
   );
   await writeFile(
@@ -421,6 +425,7 @@ try {
         booking_reference: "CUST-SAFE-001",
         contact_email: "william@prestigelimo.sg",
         customer_facing_status: "Request Received",
+        public_booking_reference: "10841",
         short_notice_review_status: "Admin Review Required",
       },
       ok: true,
@@ -464,7 +469,7 @@ try {
   assert.equal(verifiedPaMock.identityCalls[0].travelerId, "901");
   assert.match(
     verifiedPaMock.receiptCalls[0].options.portalUrl,
-    /^http:\/\/localhost\/api\/customer-portal-access\/customer-portal-access-link-v1\.test\.signature\?booking=CUST-SAFE-001&tracking=1$/,
+    /^http:\/\/localhost\/api\/customer-portal-access\/customer-portal-access-link-v1\.test\.signature\?booking=10841&tracking=1$/,
   );
   assertSafeCustomerBody(verifiedPaSuccess.body, "verified PA success body");
 

@@ -14,7 +14,10 @@ import {
 } from "../../../lib/customer-saved-bookings-read";
 import { prepareCodexJobCardForAdminReview } from "../../../lib/codex-job-card-auto-preparation";
 import { sendCustomerBookingReceiptEmail } from "../../../lib/customer-booking-receipt-email";
-import { createCustomerPortalAccessLinkToken } from "../../../lib/customer-portal-access-link";
+import {
+  createCustomerPortalAccessLinkToken,
+  safeCustomerPortalPublicBookingReference,
+} from "../../../lib/customer-portal-access-link";
 
 export const dynamic = "force-dynamic";
 
@@ -142,14 +145,13 @@ function buildVerifiedCustomerPortalReceiptUrl({
 }) {
   const recipient = normalizedReceiptEmail(booking.contact_email);
   const verifiedRecipient = normalizedReceiptEmail(verifiedBookerEmail);
-  const bookingReference = typeof booking.booking_reference === "string"
-    ? booking.booking_reference.trim()
-    : "";
+  const publicBookingReference = safeCustomerPortalPublicBookingReference(
+    booking.public_booking_reference,
+  );
 
   if (
     !recipient ||
-    recipient !== verifiedRecipient ||
-    !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(bookingReference)
+    recipient !== verifiedRecipient
   ) {
     return null;
   }
@@ -167,8 +169,10 @@ function buildVerifiedCustomerPortalReceiptUrl({
     `/api/customer-portal-access/${encodeURIComponent(tokenResult.data.token)}`,
     request.url,
   );
-  url.searchParams.set("booking", bookingReference);
-  url.searchParams.set("tracking", "1");
+  if (publicBookingReference) {
+    url.searchParams.set("booking", publicBookingReference);
+    url.searchParams.set("tracking", "1");
+  }
 
   return url.toString();
 }

@@ -3,6 +3,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 
 import type { AdminBookingPersistenceRecord } from "./admin-booking-persistence";
+import { safeCustomerPortalPublicBookingReference } from "./customer-portal-access-link";
 import { formatSingaporePickupDisplay } from "./singapore-pickup-display";
 
 export const customerBookingReceiptEmailVersion = "customer-booking-receipt-email-v1";
@@ -121,6 +122,21 @@ function safePortalUrl(value: unknown) {
       !url.pathname.startsWith("/api/customer-portal-access/")
     ) {
       return null;
+    }
+
+    const publicBookingReference = safeCustomerPortalPublicBookingReference(
+      url.searchParams.get("booking"),
+    );
+    const openTracking = publicBookingReference && url.searchParams.get("tracking") === "1";
+
+    url.search = "";
+
+    if (publicBookingReference) {
+      url.searchParams.set("booking", publicBookingReference);
+
+      if (openTracking) {
+        url.searchParams.set("tracking", "1");
+      }
     }
 
     return url.toString();

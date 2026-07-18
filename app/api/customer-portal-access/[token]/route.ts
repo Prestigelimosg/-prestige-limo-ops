@@ -4,6 +4,7 @@ import { assertActiveCustomerPortalAccessAccount } from "../../../../lib/custome
 import {
   customerPortalAccessCookieHeader,
   resolveCustomerPortalAccessSession,
+  safeCustomerPortalPublicBookingReference,
 } from "../../../../lib/customer-portal-access-link";
 
 export const dynamic = "force-dynamic";
@@ -24,18 +25,12 @@ function blockedResponse() {
   );
 }
 
-function safeBookingReference(value: string | null) {
-  const cleaned = value?.replace(/\s+/g, " ").trim() || "";
-
-  return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(cleaned) ? cleaned : "";
-}
-
 function customerPortalRedirectUrl(request: Request) {
   const requestUrl = new URL(request.url);
   const redirectUrl = new URL("/my-bookings", request.url);
-  const bookingReference =
-    safeBookingReference(requestUrl.searchParams.get("booking")) ||
-    safeBookingReference(requestUrl.searchParams.get("booking_reference"));
+  const bookingReference = safeCustomerPortalPublicBookingReference(
+    requestUrl.searchParams.get("booking"),
+  );
 
   if (bookingReference) {
     redirectUrl.searchParams.set("booking", bookingReference);

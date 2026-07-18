@@ -87,6 +87,16 @@ includes("requestRoute", "primaryRequest.public_booking_reference", "customer re
 includes("driverRead", "public_reference: publicBookingReference", "driver public reference display mapping");
 includes("adminUi", "bookingPublicReference", "admin shared public reference selector");
 includes("adminUi", "bookingRecord.public_booking_reference", "admin public reference search/display");
+includes(
+  "adminUi",
+  "Ref: {operationalCard.public_booking_reference || bookingPublicReference(savedBooking)}",
+  "admin operational details public reference label",
+);
+excludes(
+  "adminUi",
+  /operationalCard\.booking_reference\s*\?\s*\(\s*<p>\s*Ref:/,
+  "admin public reference label gated by an unrelated operational fallback field",
+);
 includes("adminUi", "public_job_reference", "admin live-map public reference display projection");
 includes("adminUi", "customer_visible_booking_reference", "customer driver-details email public reference payload");
 includes("adminUi", "dispatchPublicBookingReference", "customer and driver dispatch-copy public reference display");

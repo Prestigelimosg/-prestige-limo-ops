@@ -24078,11 +24078,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   <div className="mt-1.5 grid gap-2 border-t border-stone-100 px-2 pt-2" data-recent-operational-body={bookingId}>
                     <div className="grid gap-2 md:grid-cols-2">
                       <OperationalCardSection section="booking" title="Booking">
-                        {operationalCard.booking_reference ? (
-                          <p>
-                            Ref: {operationalCard.public_booking_reference || bookingPublicReference(savedBooking)}
-                          </p>
-                        ) : null}
+                        <p>
+                          Ref: {operationalCard.public_booking_reference || bookingPublicReference(savedBooking)}
+                        </p>
                         {operationalCard.job_card_display ? (
                           <p>Flight: <AdminOperationalUppercaseValue field="flight">{operationalCard.job_card_display.replace(/^Flight\s*/i, "")}</AdminOperationalUppercaseValue></p>
                         ) : null}

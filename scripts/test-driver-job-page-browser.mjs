@@ -915,6 +915,10 @@ async function runChromeTest() {
     assert.ok(validState.visibleText.includes("Mock Workflow Waypoint"));
     assert.ok(validState.visibleText.includes("SQ889"));
     assert.ok(validState.visibleText.includes("Mock Workflow Passenger"));
+    assert.ok(
+      validState.visibleText.includes("MOCK-DRIVER-JOB-WORKFLOW"),
+      "Expected the established Driver Job card to show its safe public booking reference.",
+    );
     assert.deepEqual(
       validState.driverDetailValues,
       {

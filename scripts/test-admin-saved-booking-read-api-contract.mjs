@@ -624,11 +624,13 @@ try {
           id: "current-schema-booking",
           admin_internal_status: "draft",
           booking_reference: "ADM-20260630160450",
-          contact_display_name: "Codex Booker",
+          booker_id: 11,
+          company_id: 26,
+          contact_display_name: null,
           contact_email: "william@prestigelimo.sg",
           contact_phone: "+6599999999",
           created_at: "2026-06-30T16:04:50.000Z",
-          customer_display_name: "Codex Calendar Test",
+          customer_display_name: "William Test Traveller",
           customer_facing_status: "pending_review",
           dropoff_location: "Changi Airport Terminal 3",
           driver_contact: "+6598888888",
@@ -642,8 +644,21 @@ try {
           route_summary: "10 Anson Road > Changi Airport Terminal 3",
           service_type: "TRF",
           source_surface: "admin_dashboard",
+          traveler_id: 22,
           updated_at: "2026-06-30T16:05:00.000Z",
           vehicle_type_or_category: "AVF",
+          companies: {
+            company_name: "CODEX CUSTOMER REBOOKING TEST",
+            domain: "prestigelimo.sg",
+          },
+          bookers: {
+            booker_name: "William Test",
+            email: "william@prestigelimo.sg",
+            phone: "+6599999999",
+          },
+          travelers: {
+            traveler_name: "William Test Traveller",
+          },
           internal_admin_note: "SHOULD_NOT_LEAK",
           parser_debug: "SHOULD_NOT_LEAK",
         },
@@ -652,10 +667,10 @@ try {
     {
       failures: {
         "select:bookings": ({ selectedColumns }) =>
-          selectedColumns.includes("companies(")
+          /(?:^|, )vehicle_type(?:,|$)/.test(selectedColumns)
             ? {
-                code: "PGRST200",
-                message: `Relationship cache miss with ${serviceRoleSentinel} SHOULD_NOT_LEAK`,
+                code: "42703",
+                message: `Legacy scalar column cache miss with ${serviceRoleSentinel} SHOULD_NOT_LEAK`,
               }
             : null,
       },
@@ -675,7 +690,16 @@ try {
   assert.equal(currentFallbackResult.body.booking.booking_reference, "ADM-20260630160450");
   assert.equal(currentFallbackResult.body.booking.pickup_at, "2026-07-03T03:00:00+00:00");
   assert.equal(currentFallbackResult.body.booking.service_type, "TRF");
-  assert.equal(currentFallbackResult.body.booking.contact_display_name, "Codex Booker");
+  assert.equal(currentFallbackResult.body.booking.contact_display_name, null);
+  assert.equal(
+    currentFallbackResult.body.booking.companies.company_name,
+    "CODEX CUSTOMER REBOOKING TEST",
+  );
+  assert.equal(currentFallbackResult.body.booking.bookers.booker_name, "William Test");
+  assert.equal(
+    currentFallbackResult.body.booking.travelers.traveler_name,
+    "William Test Traveller",
+  );
   assert.equal(currentFallbackResult.body.booking.flight_no, "SQ123");
   assert.equal(currentFallbackResult.body.booking.driver_name, "Codex Driver");
   assert.equal(currentFallbackResult.body.booking.driver_contact, "+6598888888");
@@ -685,7 +709,9 @@ try {
   assert.equal(currentFallbackResult.body.booking.parser_debug, undefined);
   assert.equal(currentFallbackMock.client.selectHistory.length, 2);
   assert.equal(currentFallbackMock.client.selectHistory[0].selectedColumns.includes("companies("), true);
-  assert.equal(currentFallbackMock.client.selectHistory[1].selectedColumns.includes("companies("), false);
+  assert.equal(currentFallbackMock.client.selectHistory[1].selectedColumns.includes("companies("), true);
+  assert.equal(currentFallbackMock.client.selectHistory[1].selectedColumns.includes("bookers("), true);
+  assert.equal(currentFallbackMock.client.selectHistory[1].selectedColumns.includes("travelers("), true);
   assert.equal(currentFallbackMock.client.selectHistory[1].selectedColumns.includes("contact_display_name"), true);
   assert.equal(currentFallbackMock.client.selectHistory[1].selectedColumns.includes("driver_plate_number"), true);
   assertNoWrites(currentFallbackMock, "current schema fallback read");

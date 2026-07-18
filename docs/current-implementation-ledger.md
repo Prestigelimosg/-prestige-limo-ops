@@ -12,6 +12,14 @@ Latest remote Production deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Admin Current-Schema CRM Identity Display Repair (2026-07-18)
+
+- Owner screenshots of exact customer request `CUST-20260718025251-AYV641` showed the saved trip correctly in Bookings and its receipt correctly at `30 Jul 2026, 1155hrs SGT`, but the admin card displayed `Booker: Unknown` and used the traveller label as its company title.
+- Read-only database inspection found exactly one matching booking and one active customer access account. The booking already retained verified `company_id 26`, `booker_id 11`, and `traveler_id 22`; the linked CRM rows resolved to company `CODEX CUSTOMER REBOOKING TEST`, booker `William Test`, and traveller `William Test Traveller`. The owner had not omitted the booker.
+- The established saved-booking legacy projection requests schema-compatible legacy fields first. On the current Production schema, its absent scalar field causes the intended current-schema fallback, but both current projections omitted the already-supported `companies`, `bookers`, and `travelers` relation embeddings. The operational card therefore received the verified IDs but no CRM display names and fell back to `Unknown` or passenger text.
+- The existing current and current-minimal saved-booking projections now embed the same bounded safe CRM fields already used by the legacy projection: company name/domain, booker name/email/phone, and traveller name. The existing mapper and card consume those fields in place; no identity is inferred from email, phone, names, parser output, or display labels.
+- No route, API, table, schema, migration, account, writer, panel, button, timer, message lane, provider send, Calendar action, booking mutation, or Supabase configuration was added or changed. Focused protection remains `scripts/test-admin-saved-booking-read-api-contract.mjs`; its current-schema fallback case now first fails on an absent legacy scalar and then requires the verified CRM relations to survive the successful fallback read with zero writes and no unsafe response fields.
+
 ### Driver Live Location Assigned-Active Eligibility Repair (2026-07-17)
 
 - The owner-approved Pixel test reproduced one real server eligibility gap: an active private Driver Job link for an unassigned `Driver TBC` booking could pass live-location readiness and make the phone report tracking active even though that booking was intentionally absent from the existing `Active Assigned Jobs` admin map.

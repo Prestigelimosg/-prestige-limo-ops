@@ -107,6 +107,8 @@ const adminFullDriverProfileRuntimeWriteActionApiPath =
 const adminSavedBookingsApiPath = "/api/admin-saved-bookings";
 const adminBookingsApiPath = "/api/admin-bookings";
 const adminLoadBookingsListLimit = "100";
+const adminMonitorableBookingListScope = "monitorable";
+const adminMonitorableBookingMaxPages = 100;
 const dispatchHandoffReferenceQueryParam = "booking_reference";
 const dispatchHandoffAlternateReferenceQueryParam = "dispatch_booking_reference";
 const dispatchHandoffCustomerReturnQueryParam = "customer_return_url";
@@ -609,6 +611,17 @@ type AdminBookingsListReadResult =
       ok: true;
     }
   | {
+      error: string;
+      ok: false;
+    };
+
+type AdminMonitorableBookingsReadResult =
+  | {
+      bookings: BookingRecord[];
+      ok: true;
+    }
+  | {
+      bookings: BookingRecord[];
       error: string;
       ok: false;
     };
@@ -6958,6 +6971,23 @@ function sortBookingsNewestFirst(bookingRecords: BookingRecord[]) {
   return [...bookingRecords].sort(
     (firstBooking, secondBooking) => getBookingSortValue(secondBooking) - getBookingSortValue(firstBooking),
   );
+}
+
+function mergeSavedBookingMonitorCoverage(
+  recentBookingRecords: BookingRecord[],
+  monitorableBookingRecords: BookingRecord[],
+) {
+  const mergedRecordsByKey = new Map<string, BookingRecord>();
+
+  [...recentBookingRecords, ...monitorableBookingRecords].forEach((bookingRecord) => {
+    const bookingKey = bookingRecordStableKey(bookingRecord);
+
+    if (!mergedRecordsByKey.has(bookingKey)) {
+      mergedRecordsByKey.set(bookingKey, bookingRecord);
+    }
+  });
+
+  return sortBookingsNewestFirst([...mergedRecordsByKey.values()]);
 }
 
 function getBookingCompany(bookingRecord: BookingRecord) {
@@ -19688,16 +19718,20 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         }
       }
       searchParams.set("limit", adminLoadBookingsListLimit);
+      const requestInit = {
+        headers: {
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "GET",
+      } satisfies RequestInit;
 
-      async function fetchAdminSavedBookingsList(): Promise<AdminBookingsListReadResult> {
-        const requestInit = {
-          headers: {
-            "x-prestige-admin-purpose": adminLegacyDataPurpose,
-          },
-          method: "GET",
-        } satisfies RequestInit;
-
-        const savedBookingsResponse = await fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`, requestInit);
+      async function fetchAdminSavedBookingsList(
+        listSearchParams: URLSearchParams,
+      ): Promise<AdminBookingsListReadResult> {
+        const savedBookingsResponse = await fetch(
+          `${adminSavedBookingsApiPath}?${listSearchParams.toString()}`,
+          requestInit,
+        );
         const savedBookingsBody = (await savedBookingsResponse.json().catch(() => null)) as
           | AdminSavedBookingReadResponse
           | null;
@@ -19722,7 +19756,44 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         };
       }
 
-      const bookingsListResult = await fetchAdminSavedBookingsList();
+      async function fetchCompleteMonitorableSavedBookingList(): Promise<AdminMonitorableBookingsReadResult> {
+        const monitorableBookings: BookingRecord[] = [];
+
+        for (let pageIndex = 0; pageIndex < adminMonitorableBookingMaxPages; pageIndex += 1) {
+          const monitorableSearchParams = new URLSearchParams({
+            limit: adminLoadBookingsListLimit,
+            offset: String(pageIndex * Number(adminLoadBookingsListLimit)),
+            scope: adminMonitorableBookingListScope,
+          });
+          const monitorablePageResult = await fetchAdminSavedBookingsList(monitorableSearchParams);
+
+          if (!monitorablePageResult.ok) {
+            return {
+              bookings: monitorableBookings,
+              error: monitorablePageResult.error,
+              ok: false,
+            };
+          }
+
+          const monitorablePage = monitorablePageResult.bookings;
+          monitorableBookings.push(...monitorablePage);
+
+          if (monitorablePage.length < Number(adminLoadBookingsListLimit)) {
+            return {
+              bookings: monitorableBookings,
+              ok: true,
+            };
+          }
+        }
+
+        return {
+          bookings: monitorableBookings,
+          error: "Active booking monitoring reached the safe 10,000-job read ceiling; additional active jobs may exist.",
+          ok: false,
+        };
+      }
+
+      const bookingsListResult = await fetchAdminSavedBookingsList(searchParams);
 
       if (!bookingsListResult.ok) {
         if (canShowMessage()) {
@@ -19732,7 +19803,22 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           });
         }
       } else {
-        const loadedBookings = sortBookingsNewestFirst(bookingsListResult.bookings);
+        let monitorableBookings: BookingRecord[] = [];
+        let monitoringCoverageError = "";
+
+        if (bookingsListResult.bookings.length === Number(adminLoadBookingsListLimit)) {
+          const monitorableBookingsResult = await fetchCompleteMonitorableSavedBookingList();
+          monitorableBookings = monitorableBookingsResult.bookings;
+
+          if (!monitorableBookingsResult.ok) {
+            monitoringCoverageError = formatSupabaseError(monitorableBookingsResult.error);
+          }
+        }
+
+        const loadedBookings = mergeSavedBookingMonitorCoverage(
+          bookingsListResult.bookings,
+          monitorableBookings,
+        );
         const selectedBookingReference =
           cleanReferenceText(appliedAdminBookingSnapshotReferenceRef.current) ||
           cleanReferenceText(loadedBookingIdRef.current);
@@ -19746,7 +19832,12 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         }
         setLoadBookingsTypedOperationalCardsById(typedOperationalDisplay?.cardsById ?? {});
         setLoadBookingsTypedOperationalCardOrder(typedOperationalDisplay?.orderedCardIds ?? []);
-        if (canShowMessage()) {
+        if (monitoringCoverageError) {
+          setMessage({
+            tone: "error",
+            text: `Monitoring coverage incomplete: ${monitoringCoverageError}`,
+          });
+        } else if (canShowMessage()) {
           if (loadedBookings.length === 0) {
             setMessage({ tone: "info", text: "No bookings found." });
           } else {

@@ -7389,15 +7389,39 @@ async function runChromeTest() {
           String(target).includes("/api/admin-saved-bookings")
         ) {
           const listUrl = new URL(String(target), window.location.href);
+          const listLimit = Number(listUrl.searchParams.get("limit") || "100");
+          const listOffset = Number(listUrl.searchParams.get("offset") || "0");
+          const listScope = listUrl.searchParams.get("scope") || "all";
 
           window.__prestigeAdminSavedBookingListRequests.push({
-            limit: listUrl.searchParams.get("limit") || "",
+            limit: String(listLimit),
             method,
+            offset: String(listOffset),
+            scope: listScope,
             url: String(target),
           });
 
+          const terminalStatuses = new Set([
+            "archived",
+            "canceled",
+            "cancelled",
+            "complete",
+            "completed",
+            "declined_internal",
+            "job_completed",
+          ]);
+          const sourceBookings = window.__prestigeLoadedBookings || [];
+          const scopedBookings = listScope === "monitorable"
+            ? sourceBookings.filter((booking) => {
+                const status = String(
+                  booking.status || booking.admin_internal_status || "",
+                ).trim().toLowerCase();
+                return !terminalStatuses.has(status);
+              })
+            : sourceBookings;
+
           return new Response(JSON.stringify({
-            bookings: window.__prestigeLoadedBookings || [],
+            bookings: scopedBookings.slice(listOffset, listOffset + listLimit),
             ok: true,
             version: "browser-admin-saved-booking-list-read-mock",
           }), {
@@ -7803,6 +7827,119 @@ async function runChromeTest() {
       [],
       "Expected Load Bookings not to read the booking list through the legacy admin data shim",
     );
+
+    await evaluate(`(() => {
+      window.__prestigeMonitorCoverageOriginalBookings = window.__prestigeLoadedBookings || [];
+      const terminalBookings = Array.from({ length: 100 }, (_, index) => ({
+        id: "ui-monitor-terminal-" + String(index + 1).padStart(3, "0"),
+        booking_reference: "MONITOR-TERMINAL-" + String(index + 1).padStart(3, "0"),
+        created_at: new Date(Date.now() - index * 1000).toISOString(),
+        job_card: "AVF DEP\\nMonitor terminal fixture\\nPassenger: MONITOR TERMINAL " + index,
+        status: "completed",
+      }));
+      const olderActivePickup = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+      const olderActiveBooking = {
+        id: "ui-monitor-coverage-older-active",
+        booking_reference: "MONITOR-COVERAGE-OLDER-ACTIVE",
+        created_at: "2020-01-01T00:00:00.000Z",
+        driver_contact: null,
+        driver_id: null,
+        driver_name: null,
+        driver_plate_number: null,
+        dropoff_address: "Monitor Coverage Drop-off",
+        job_card:
+          "AVF DEP\\nMonitor coverage active pickup\\nMonitor Coverage Pickup > Monitor Coverage Drop-off\\nPassenger: MONITOR COVERAGE ACTIVE TRAVELER\\nPax: 1",
+        pickup_address: "Monitor Coverage Pickup",
+        pickup_at: olderActivePickup,
+        pickup_datetime: olderActivePickup,
+        route: "Monitor Coverage Pickup > Monitor Coverage Drop-off",
+        status: "confirmed",
+        travelers: { traveler_name: "MONITOR COVERAGE ACTIVE TRAVELER" },
+      };
+
+      window.__prestigeLoadedBookings = [...terminalBookings, olderActiveBooking];
+      window.__prestigeAdminSavedBookingListRequests = [];
+    })()`);
+    await clickTab("Dashboard", "Refresh Dashboard");
+    const clickedMonitorCoverageRefresh = await evaluate(`(() => {
+      const button = [...document.querySelectorAll("button")].find(
+        (candidate) => candidate.textContent.trim() === "Refresh Dashboard",
+      );
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(clickedMonitorCoverageRefresh, true, "Expected monitor coverage refresh");
+
+    const completeMonitorCoverageState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const reference = "MONITOR-COVERAGE-OLDER-ACTIVE";
+          const row = document.querySelector(
+            '[data-dashboard-urgent-booking-request-row="' + reference + '"]',
+          );
+          const requests = window.__prestigeAdminSavedBookingListRequests || [];
+          const generalRequest = requests.find(
+            (request) => request.scope === "all" && request.limit === "100",
+          );
+          const monitorableRequest = requests.find(
+            (request) =>
+              request.scope === "monitorable" &&
+              request.limit === "100" &&
+              request.offset === "0",
+          );
+
+          return row && generalRequest && monitorableRequest
+            ? {
+                monitorableRequest,
+                rowText: row.textContent.replace(/\\s+/g, " ").trim(),
+              }
+            : false;
+        })()`),
+      10000,
+      "older active booking beyond latest 100 monitor coverage",
+    );
+    assert.match(completeMonitorCoverageState.rowText, /MONITOR COVERAGE ACTIVE TRAVELER/);
+    assert.match(completeMonitorCoverageState.rowText, /Driver TBC under 1h/);
+
+    await evaluate(`(() => {
+      window.__prestigeLoadedBookings = window.__prestigeMonitorCoverageOriginalBookings || [];
+      delete window.__prestigeMonitorCoverageOriginalBookings;
+      window.__prestigeAdminSavedBookingListRequests = [];
+    })()`);
+    const clickedMonitorCoverageRestore = await evaluate(`(() => {
+      const button = [...document.querySelectorAll("button")].find(
+        (candidate) => candidate.textContent.trim() === "Refresh Dashboard",
+      );
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(clickedMonitorCoverageRestore, true, "Expected monitor coverage fixture restore");
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const refreshed = (window.__prestigeAdminSavedBookingListRequests || []).some(
+            (request) => request.scope === "all" && request.limit === "100"
+          );
+          const savedCount = document.body.innerText.match(/Saved\\s+(\\d+)/)?.[1] || "";
+          const coverageRow = document.querySelector(
+            '[data-dashboard-urgent-booking-request-row="MONITOR-COVERAGE-OLDER-ACTIVE"]',
+          );
+          return refreshed && savedCount === "18" && !coverageRow;
+        })()`),
+      10000,
+      "monitor coverage fixture restore refresh",
+    );
+    await clickTab("Completed", "Completed / History");
 
     const hiddenLegacyMrLeeBookingsState = await evaluate(`(() => {
       const articles = [...document.querySelectorAll("article")].map((article) => article.innerText);

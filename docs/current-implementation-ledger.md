@@ -12,6 +12,14 @@ Latest remote Production deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Complete Active-Job Monitor Read Coverage (2026-07-18)
+
+- The established Dashboard/Bookings/Dispatch saved-booking refresh keeps its single 3-second timer and latest-100 general display/history read. When that general page is full, the same `/api/admin-saved-bookings` GET lane additionally reads `scope=monitorable` pages of 100 and merges every returned non-terminal booking into the existing booking state. An older-created active job therefore cannot disappear merely because 100 newer terminal records exist.
+- The existing saved-booking list parser now accepts only bounded `offset` plus exact `all` or `monitorable` scope. Monitorable reads exclude completed, cancelled/canceled, archived, and declined terminal statuses on the schema-appropriate saved status column before pagination. Null/unknown saved status remains visible for safe admin review instead of being silently discarded.
+- Pagination stops visibly with `Monitoring coverage incomplete` rather than claiming complete coverage when the guarded 10,000 active-job ceiling is reached. The already-read first 10,000 monitorable jobs remain merged into the page, and the warning cannot be replaced by a normal load-success message. Production currently has far fewer saved records; the ceiling is an explicit safety boundary, not a claim of unlimited database history.
+- No new timer, API, route, writer, panel, table, schema, migration, environment value, provider call, notification, message, calendar action, GPS action, invoice workflow, billing behavior, payment, payout, or live-record mutation was added. Completed / History retains the established latest-100 source behavior; this repair expands operational monitoring only.
+- Focused protection remains in `scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs` and `scripts/test-admin-saved-booking-read-api-contract.mjs`. The established `scripts/test-booking-ui-browser.mjs` uses 100 temporary in-memory terminal fixtures plus one older active fixture, proves the older active job is merged through the monitorable read, then discards every fixture without Supabase mutation.
+
 ### Dashboard Overdue Job Resolution And Existing Monitor Lock (2026-07-18)
 
 - Every loaded saved booking continues using the established silent booking refresh every 3 seconds while Dashboard, Bookings, or Dispatch is open. Time-dependent job classification continues recalculating every 30 seconds, and every assigned active job continues using the existing 10-second driver-status/OTS/link refresh. An authoritative driver `Job Completed` report continues syncing that exact saved booking to `completed` through the established status-only writer.

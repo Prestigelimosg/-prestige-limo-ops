@@ -152,6 +152,7 @@ class MockSupabaseQuery {
     this.orderBy = [];
     this.resultLimit = null;
     this.resultMode = "many";
+    this.resultOffset = 0;
     this.selectedColumns = null;
     this.table = table;
   }
@@ -172,8 +173,24 @@ class MockSupabaseQuery {
     return this;
   }
 
+  or(expression) {
+    this.filters.push({
+      expression,
+      type: "or",
+    });
+
+    return this;
+  }
+
   order(column, options) {
     this.orderBy.push({ column, options });
+
+    return this;
+  }
+
+  range(from, to) {
+    this.resultLimit = to - from + 1;
+    this.resultOffset = from;
 
     return this;
   }
@@ -201,6 +218,7 @@ class MockSupabaseQuery {
       this.orderBy,
       this.resultLimit,
       this.resultMode,
+      this.resultOffset,
       this.selectedColumns,
     );
   }
@@ -228,11 +246,31 @@ class MockSupabaseClient {
 
   filterRows(table, filters) {
     return this.tables[table].filter((row) =>
-      filters.every((filter) => String(row[filter.column]) === String(filter.value)),
+      filters.every((filter) => {
+        if (filter.type === "or") {
+          const match = String(filter.expression).match(
+            /^([a-z_]+)\.is\.null,\1\.not\.in\.\(([^)]+)\)$/,
+          );
+          assert.ok(match, `Unexpected mocked OR filter: ${filter.expression}`);
+          const [, column, excludedList] = match;
+          const rowValue = row[column];
+          const excludedValues = excludedList
+            .split(",")
+            .map((value) => value.trim().toLowerCase());
+
+          return (
+            rowValue === null ||
+            rowValue === undefined ||
+            !excludedValues.includes(String(rowValue).trim().toLowerCase())
+          );
+        }
+
+        return String(row[filter.column]) === String(filter.value);
+      }),
     );
   }
 
-  selectRows(table, filters, orderBy, resultLimit, resultMode, selectedColumns) {
+  selectRows(table, filters, orderBy, resultLimit, resultMode, resultOffset, selectedColumns) {
     const configuredFailure = this.failures[`select:${table}`] || this.failures[table] || null;
     const failure =
       typeof configuredFailure === "function"
@@ -241,6 +279,7 @@ class MockSupabaseClient {
             orderBy,
             resultLimit,
             resultMode,
+            resultOffset,
             selectedColumns,
             table,
           })
@@ -251,6 +290,7 @@ class MockSupabaseClient {
       limit: resultLimit,
       orderBy: clone(orderBy),
       resultMode,
+      resultOffset,
       selectedColumns,
       table,
     });
@@ -281,7 +321,7 @@ class MockSupabaseClient {
 
         return 0;
       })
-      .slice(0, resultLimit || undefined);
+      .slice(resultOffset, resultLimit ? resultOffset + resultLimit : undefined);
 
     return {
       data: resultMode === "maybeSingle" ? rows[0] ?? null : rows,
@@ -409,15 +449,34 @@ try {
   assert.deepEqual(reader.parseAdminSavedBookingListReadParams({}), {
     data: {
       limit: 25,
+      offset: 0,
+      scope: "all",
     },
     ok: true,
   });
   assert.deepEqual(reader.parseAdminSavedBookingListReadParams({ limit: "2" }), {
     data: {
       limit: 2,
+      offset: 0,
+      scope: "all",
     },
     ok: true,
   });
+  assert.deepEqual(
+    reader.parseAdminSavedBookingListReadParams({
+      limit: "100",
+      offset: "100",
+      scope: "monitorable",
+    }),
+    {
+      data: {
+        limit: 100,
+        offset: 100,
+        scope: "monitorable",
+      },
+      ok: true,
+    },
+  );
   assert.deepEqual(reader.parseAdminSavedBookingReadParams({ booking_reference: "ADM-SAVE-READ-1" }), {
     data: {
       booking_reference: "ADM-SAVE-READ-1",
@@ -434,6 +493,8 @@ try {
   );
   assert.equal(reader.parseAdminSavedBookingReadParams({ id: "save-read-1", limit: "2" }).ok, false);
   assert.equal(reader.parseAdminSavedBookingListReadParams({ limit: "0" }).ok, false);
+  assert.equal(reader.parseAdminSavedBookingListReadParams({ offset: "-1" }).ok, false);
+  assert.equal(reader.parseAdminSavedBookingListReadParams({ scope: "completed" }).ok, false);
   assert.equal(reader.parseAdminSavedBookingListReadParams({ id: "save-read-1" }).ok, false);
   assert.equal(
     reader.parseAdminSavedBookingReadParams({
@@ -444,6 +505,73 @@ try {
   );
 
   setEnv(enabledEnv());
+
+  const monitorCoverageBookings = [
+    ...Array.from({ length: 101 }, (_, index) => ({
+      id: `monitorable-${String(index + 1).padStart(3, "0")}`,
+      booking_reference: `MONITORABLE-${String(index + 1).padStart(3, "0")}`,
+      created_at: new Date(Date.UTC(2026, 6, 31, 0, 0, index)).toISOString(),
+      status: index % 2 === 0 ? "confirmed" : "assigned",
+    })),
+    {
+      id: "monitor-terminal-completed",
+      booking_reference: "MONITOR-TERMINAL-COMPLETED",
+      created_at: "2026-08-01T00:00:02.000Z",
+      status: "completed",
+    },
+    {
+      id: "monitor-terminal-cancelled",
+      booking_reference: "MONITOR-TERMINAL-CANCELLED",
+      created_at: "2026-08-01T00:00:01.000Z",
+      status: "cancelled",
+    },
+  ];
+  const monitorCoverageMock = installMockClient({ bookings: monitorCoverageBookings });
+  const monitorCoverageFirstPage = await routeJson(
+    await route.GET(
+      new Request(
+        "http://localhost/api/admin-saved-bookings?limit=100&offset=0&scope=monitorable",
+        { headers: sessionHeaders() },
+      ),
+    ),
+  );
+  const monitorCoverageSecondPage = await routeJson(
+    await route.GET(
+      new Request(
+        "http://localhost/api/admin-saved-bookings?limit=100&offset=100&scope=monitorable",
+        { headers: sessionHeaders() },
+      ),
+    ),
+  );
+
+  assert.equal(monitorCoverageFirstPage.status, 200);
+  assert.equal(monitorCoverageFirstPage.body.bookings.length, 100);
+  assert.equal(monitorCoverageSecondPage.status, 200);
+  assert.equal(monitorCoverageSecondPage.body.bookings.length, 1);
+  assert.equal(
+    [...monitorCoverageFirstPage.body.bookings, ...monitorCoverageSecondPage.body.bookings].some(
+      (booking) => ["completed", "cancelled"].includes(booking.status),
+    ),
+    false,
+  );
+  assert.equal(
+    monitorCoverageMock.client.selectHistory.every((entry) =>
+      entry.filters.some(
+        (filter) =>
+          filter.type === "or" &&
+          String(filter.expression).includes("completed") &&
+          String(filter.expression).includes("cancelled"),
+      ),
+    ),
+    true,
+  );
+  assert.deepEqual(
+    monitorCoverageMock.client.selectHistory.map((entry) => entry.resultOffset),
+    [0, 100],
+  );
+  assertNoWrites(monitorCoverageMock, "monitorable saved booking pagination");
+  assertNoUnsafeResponse(monitorCoverageFirstPage, "monitorable first page response");
+  assertNoUnsafeResponse(monitorCoverageSecondPage, "monitorable second page response");
 
   const blockedMock = installMockClient(seed);
   const blockedResult = await routeJson(

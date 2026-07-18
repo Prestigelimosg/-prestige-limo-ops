@@ -101,6 +101,7 @@ for (const deployedEvidence of [
   "8735aa97",
   "dpl_jqRo4V4aPa4dwrZQf7JoVLbfSpxS",
   "Build 6d492a9a",
+  "confirmed the delivered receipt time is correct",
 ]) {
   assert.ok(ledger.includes(deployedEvidence), `Ledger must include deployed time-repair evidence: ${deployedEvidence}`);
 }

@@ -331,6 +331,7 @@ try {
     companies: { company_name: "UBS Singapore" },
     bookers: { booker_name: "Jane Booker", email: "jane@example.com", phone: "+6599999999" },
     travelers: { traveler_name: "Mr Lee" },
+    customer_display_name: "Mr Lee",
     customer_rate: "812.35",
     driver_payout_amount: "64.20",
     driver_notes: "driver payout should stay parked",
@@ -341,6 +342,7 @@ try {
   assertMappedNoLive(safeResult, "Safe saved-booking shaped mapper payload");
   assert.equal(safeResult.safe_dto.booking_reference, "BK-REF-100");
   assert.equal(safeResult.safe_dto.company_display_name, "UBS Singapore");
+  assert.equal(safeResult.safe_dto.customer_display_name, "Mr Lee");
   assert.equal(safeResult.safe_dto.traveler_display_name, "Mr Lee");
   assert.equal(safeResult.safe_dto.assigned_driver_display_name, "Ali Driver");
   assert.equal(safeResult.safe_card.pickup_address, "Raffles Hotel Singapore");

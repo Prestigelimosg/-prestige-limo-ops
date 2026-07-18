@@ -1043,6 +1043,13 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This proves the repaired application reached a successful provider response for one exact Production request after activation. Mailbox receipt confirmation remains pending, so do not claim inbox delivery until the owner confirms that exact message arrived. No second submit, retry, resend, batch, return booking, alternate channel, admin action, calendar action, acknowledgement, GPS action, invoice, payment, payout, schema change, or unrelated environment change occurred.
 - Focused protection remains `scripts/test-customer-booking-receipt-email-guard.mjs`; it now also locks this exact Production evidence and limitation without creating a duplicate guard.
 
+### Production Customer Booking Receipt Singapore Time Repair
+
+- Owner mailbox evidence for successful request `CUST-20260718023143-J16UW4` reproduced one exact display defect: the customer entered 31 July 2026 at 01:10 SGT, while the receipt printed the saved instant as raw UTC `2026-07-30T17:10:00+00:00`. The stored instant was correct; only the customer email presentation was wrong. No booking, customer, portal account, provider record, or Supabase row was edited during diagnosis.
+- The established receipt helper now reuses the existing shared `formatSingaporePickupDisplay` formatter after its existing safe-field validation. That exact UTC instant renders as `31 Jul 2026, 0110hrs SGT`; offset-bearing timestamps are converted to `Asia/Singapore`, while the existing formatter preserves its established bare-local fallback behavior.
+- No second date formatter, route, email helper, provider lane, button, retry, resend, scheduler, polling timer, database writer, schema, migration, environment change, customer message, driver message, calendar action, invoice, payment, payout, or GPS action was added. The already-sent incorrect receipt was not resent or modified.
+- The existing `scripts/test-customer-booking-receipt-email-guard.mjs` first failed on the raw UTC output and now locks the exact UTC-to-SGT conversion in the same one-request receipt body. Deployed email proof for this display repair remains pending and requires a separately approved new Production booking receipt after the repaired application is deployed.
+
 ### Completed Undo Local Status Fix
 
 - When admin undoes a completed booking back to assigned/confirmed, the local `customer_facing_status` now resets from `completed` to the matching active customer-safe status so the card can leave Completed / History immediately instead of waiting for a reload.

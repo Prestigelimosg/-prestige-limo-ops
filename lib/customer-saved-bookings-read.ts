@@ -22,6 +22,8 @@ export type CustomerSavedBookingsBoundaryContext = {
   booker_id?: number | null;
   customer_account_reference?: string | null;
   mode: "server-session-cookie" | "server-session-token";
+  portal_link_issued_at?: number | null;
+  portal_link_revision?: string | null;
   runtime_gate: ControlledCustomerRuntimeGate;
   source_surface: "customer_api";
 };
@@ -73,6 +75,8 @@ export type CustomerSavedBookingsVerifiedIdentity = {
   booker_id: number;
   company_id: number;
   customer_account_reference: string;
+  traveler_id: number | null;
+  traveler_name: string | null;
 };
 
 type UnknownRecord = Record<string, unknown>;
@@ -977,6 +981,8 @@ export function resolveCustomerSavedBookingsBoundaryForPurpose(
         auth_user_id: portalAccessSession.data.auth_user_id,
         customer_account_reference: portalAccessSession.data.customer_account_reference,
         mode: "server-session-cookie",
+        portal_link_issued_at: portalAccessSession.data.issued_at,
+        portal_link_revision: portalAccessSession.data.link_revision,
         runtime_gate: effectiveRuntimeGate,
         source_surface: "customer_api",
       },
@@ -1052,6 +1058,7 @@ export function resolveCustomerSavedBookingsBoundaryForPurpose(
 
 export async function resolveCustomerSavedBookingsVerifiedIdentity(
   context: CustomerSavedBookingsBoundaryContext,
+  travelerIdInput?: unknown,
 ): Promise<AdminBookingResult<CustomerSavedBookingsVerifiedIdentity>> {
   const clientResult = getServerOnlyCustomerSavedBookingsSupabaseClient(context);
 
@@ -1083,6 +1090,12 @@ export async function resolveCustomerSavedBookingsVerifiedIdentity(
     const account = await assertActiveCustomerPortalAccessAccount(
       customerAccountReference,
       clientResult.data,
+      context.portal_link_revision || context.portal_link_issued_at
+        ? {
+            issuedAt: context.portal_link_issued_at,
+            linkRevision: context.portal_link_revision,
+          }
+        : undefined,
     );
 
     if (!account.ok) {
@@ -1106,11 +1119,49 @@ export async function resolveCustomerSavedBookingsVerifiedIdentity(
     return customerSavedBookingsAuthRequiredResult();
   }
 
+  const travelerId =
+    travelerIdInput === undefined || travelerIdInput === null || travelerIdInput === ""
+      ? null
+      : verifiedIdentityId(travelerIdInput);
+  let travelerName: string | null = null;
+
+  if (travelerIdInput !== undefined && travelerIdInput !== null && travelerIdInput !== "" && !travelerId) {
+    return customerSavedBookingsAuthRequiredResult();
+  }
+
+  if (travelerId) {
+    const { data: travelerRows, error: travelerError } = await clientResult.data
+      .from("travelers")
+      .select("id, company_id, booker_id, traveler_name")
+      .eq("id", travelerId)
+      .eq("company_id", companyId)
+      .eq("booker_id", bookerId)
+      .limit(1);
+
+    if (travelerError) {
+      return customerSavedBookingsAuthRequiredResult();
+    }
+
+    const travelerRow = asRecord(asArray(travelerRows)[0]);
+    travelerName = safeTextFromDb(travelerRow.traveler_name, 160);
+
+    if (
+      verifiedIdentityId(travelerRow.id) !== travelerId ||
+      verifiedIdentityId(travelerRow.company_id) !== companyId ||
+      verifiedIdentityId(travelerRow.booker_id) !== bookerId ||
+      !travelerName
+    ) {
+      return customerSavedBookingsAuthRequiredResult();
+    }
+  }
+
   return {
     data: {
       booker_id: bookerId,
       company_id: companyId,
       customer_account_reference: customerAccountReference,
+      traveler_id: travelerId,
+      traveler_name: travelerName,
     },
     ok: true,
   };
@@ -1186,6 +1237,12 @@ export async function loadCustomerSavedBookings(
     const activeAccessAccount = await assertActiveCustomerPortalAccessAccount(
       customerAccountReference,
       clientResult.data,
+      context.portal_link_revision || context.portal_link_issued_at
+        ? {
+            issuedAt: context.portal_link_issued_at,
+            linkRevision: context.portal_link_revision,
+          }
+        : undefined,
     );
 
     if (!activeAccessAccount.ok) {

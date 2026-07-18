@@ -226,7 +226,7 @@ for (const [label, routeSource] of [
 
 for (const fragment of [
   "const customerAccountReference = customerDriverDetailsPortalAccountReference;",
-  "if (!dispatchReleaseCustomerCopyReady)",
+  "if (!customerDriverDetailsPortalLinkCopyReady)",
   "fetch(adminCustomerPortalAccessLinksApiPath",
   "customerAccountReference,",
   "safeDisplayLabel: customerDriverDetailsPortalSafeDisplayLabel || customerAccountReference",

@@ -129,9 +129,12 @@ async function writeHarnessFile(tempDir, relativePath) {
 async function writeMockModules(tempDir) {
   const serverOnlyPath = path.join(tempDir, "node_modules/server-only/index.js");
   const supabasePath = path.join(tempDir, "node_modules/@supabase/supabase-js/index.js");
+  const savedBookingsPath = path.join(tempDir, "lib/customer-saved-bookings-read.js");
+  const accessAccountPath = path.join(tempDir, "lib/customer-portal-access-account.js");
 
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await mkdir(path.dirname(supabasePath), { recursive: true });
+  await mkdir(path.dirname(savedBookingsPath), { recursive: true });
   await writeFile(serverOnlyPath, "");
   await writeFile(
     supabasePath,
@@ -146,6 +149,19 @@ async function writeMockModules(tempDir) {
       "}",
       "module.exports = { createClient };",
     ].join("\n"),
+  );
+  await writeFile(
+    savedBookingsPath,
+    [
+      "function resolveCustomerSavedBookingsBoundaryForPurpose() {",
+      "  return { error: 'legacy memory session fallback', ok: false, status: 403 };",
+      "}",
+      "module.exports = { resolveCustomerSavedBookingsBoundaryForPurpose };",
+    ].join("\n"),
+  );
+  await writeFile(
+    accessAccountPath,
+    "module.exports = { async assertActiveCustomerPortalAccessAccount() { return { error: 'not used by legacy harness', ok: false, status: 403 }; } };",
   );
 }
 
@@ -224,8 +240,10 @@ class MockSupabaseClient {
     this.operations = [];
     this.selectHistory = [];
     this.tables = {
+      bookers: [],
       bookings: [],
       customer_access_accounts: [],
+      travelers: [],
     };
 
     for (const [table, rows] of Object.entries(seed)) {
@@ -429,6 +447,8 @@ const readPathSourceText = await Promise.all(
     "app/api/customer-booking-memory/route.ts",
   ].map((relativePath) => readFile(path.join(process.cwd(), relativePath), "utf8")),
 );
+const bookingMemorySelectSource =
+  joinedSourceText.match(/customerBookingMemorySelect\s*=\s*([^;]+)/)?.[1] || "";
 
 assert.equal(
   /\.(?:insert|upsert|delete|update)\s*\(/.test(readPathSourceText.join("\n")),
@@ -436,8 +456,18 @@ assert.equal(
   "Customer booking memory read path must remain read-only.",
 );
 assert.equal(
+  bookingMemorySelectSource.includes("vehicle_type_or_category"),
+  true,
+  "Customer booking memory must select the wired bookings vehicle column.",
+);
+assert.equal(
+  bookingMemorySelectSource.includes(", vehicle_type,"),
+  false,
+  "Customer booking memory must not select the absent legacy vehicle_type column.",
+);
+assert.equal(
   /admin_internal_status|contact_phone|contact_email|passenger_phone|customer_price|driver_payout|paynow|invoice|payment|payout|parser_source_reference/.test(
-    joinedSourceText.match(/customerBookingMemorySelect\s*=\s*([^;]+)/)?.[1] || "",
+    bookingMemorySelectSource,
   ),
   false,
   "Customer booking memory select must not include private customer/admin/finance/payout/parser columns.",
@@ -682,6 +712,75 @@ try {
     false,
     "Select columns should avoid private customer/admin/finance/payout/parser fields.",
   );
+
+  validEnv();
+  const profileSeed = seedBookingMemoryRows();
+  profileSeed.customer_access_accounts[0].company_id = 7;
+  profileSeed.customer_access_accounts[0].booker_id = 55;
+  profileSeed.bookers = [
+    {
+      booker_name: "William Booker",
+      company_id: 7,
+      email: "william@prestigelimo.sg",
+      id: 55,
+      phone: "+65 9000 1234",
+    },
+  ];
+  profileSeed.travelers = [
+    {
+      booker_id: 55,
+      company_id: 7,
+      default_dropoff_address: "Changi Airport Terminal 3",
+      default_pickup_address: "Orchard Hotel",
+      id: 901,
+      preferred_vehicle: "Alphard / Vellfire",
+      traveler_name: "Traveller One",
+    },
+    {
+      booker_id: 77,
+      company_id: 7,
+      id: 902,
+      traveler_name: "Other Booker Traveller",
+    },
+  ];
+  const profileMock = installMockClient(profileSeed);
+  const profileResponse = await harness.route.GET(
+    new Request("http://localhost/api/customer-booking-memory?limit=2", {
+      headers: validHeaders(),
+    }),
+  );
+  const profileBody = await json(profileResponse);
+
+  assert.equal(profileResponse.status, 200);
+  assert.deepEqual(profileBody.booker_profile, {
+    booker_name: "William Booker",
+    email: "william@prestigelimo.sg",
+    phone: "+65 9000 1234",
+  });
+  assert.deepEqual(profileBody.travelers, [
+    {
+      default_dropoff_address: "Changi Airport Terminal 3",
+      default_pickup_address: "Orchard Hotel",
+      id: 901,
+      preferred_vehicle: "Alphard / Vellfire",
+      traveler_name: "Traveller One",
+    },
+  ]);
+  assert.deepEqual(
+    profileMock.client.selectHistory.find((query) => query.table === "bookers").filters,
+    [
+      { column: "id", value: 55 },
+      { column: "company_id", value: 7 },
+    ],
+  );
+  assert.deepEqual(
+    profileMock.client.selectHistory.find((query) => query.table === "travelers").filters,
+    [
+      { column: "company_id", value: 7 },
+      { column: "booker_id", value: 55 },
+    ],
+  );
+  assertSafeApiBody(profileBody, "verified booker profile response");
 
   validEnv();
   const cookieRouteMock = installMockClient(seedBookingMemoryRows());

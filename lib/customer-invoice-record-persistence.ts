@@ -1327,6 +1327,12 @@ export async function loadCustomerInvoiceRecordsForPortal(
   const activeAccount = await assertActiveCustomerPortalAccessAccount(
     customerAccountReference,
     invoiceClient,
+    context.portal_link_revision || context.portal_link_issued_at
+      ? {
+          issuedAt: context.portal_link_issued_at,
+          linkRevision: context.portal_link_revision,
+        }
+      : undefined,
   );
 
   if (!activeAccount.ok) {
@@ -1405,6 +1411,12 @@ export async function loadCustomerInvoicePdfForPortal(
   const activeAccount = await assertActiveCustomerPortalAccessAccount(
     customerAccountReference,
     invoiceClient,
+    context.portal_link_revision || context.portal_link_issued_at
+      ? {
+          issuedAt: context.portal_link_issued_at,
+          linkRevision: context.portal_link_revision,
+        }
+      : undefined,
   );
 
   if (!activeAccount.ok) {

@@ -62,10 +62,17 @@ function setEnv(overrides = {}) {
 
 function adminHeaders(extra = {}) {
   return {
+    ...sameOriginAdminHeaders(),
+    "x-prestige-admin-session-token": serverSessionToken,
+    ...extra,
+  };
+}
+
+function sameOriginAdminHeaders(extra = {}) {
+  return {
     origin: "http://localhost",
     referer: "http://localhost/",
     "x-prestige-admin-purpose": "admin-booking-persistence",
-    "x-prestige-admin-session-token": serverSessionToken,
     ...extra,
   };
 }
@@ -306,8 +313,17 @@ const [helperSource, routeSource, appPageSource, legacyRouteSource] = await Prom
 
 assert.equal(helperSource.includes('from("bookers")'), true, "Typed helper must own bookers access.");
 assert.equal(routeSource.includes("/api/admin-legacy-data/rest/v1"), false, "Typed route must not use legacy shim.");
+assert.equal(
+  routeSource.includes('allowServerSessionRoleMethodsWithoutRequestToken: ["POST"]'),
+  true,
+  "Typed booker create must reuse the verified same-origin server-session POST boundary.",
+);
 assert.equal(appPageSource.includes("adminLegacyTables.bookers"), false, "App must not use legacy bookers table.");
-assert.equal(appPageSource.includes("/api/admin-bookers"), true, "App must use typed admin bookers API.");
+assert.equal(
+  appPageSource.includes("traveler.booker_id") && appPageSource.includes("traveler.booker_name"),
+  true,
+  "Verified PA selector must reuse the established rate-setup traveler projection.",
+);
 assert.equal(legacyRouteSource.includes("bookers: new Set"), false, "Legacy route must not allow bookers.");
 assert.equal(
   /\.(?:delete|upsert|rpc)\s*\(/.test(helperSource),
@@ -359,6 +375,53 @@ try {
     ],
   );
   assertSafeBody(response.body, "safe lookup");
+
+  setEnv();
+  mock = installMock();
+  response = await readResponse(
+    await harness.route.POST(
+      jsonRequest(
+        "http://localhost/api/admin-bookers",
+        {
+          booker_name: "Same-Origin Booker",
+          company_id: 7,
+          email: "same-origin@example.invalid",
+          phone: "90000001",
+        },
+        sameOriginAdminHeaders(),
+      ),
+    ),
+  );
+
+  assert.equal(response.status, 200, "Verified same-origin server-session booker create should pass without a browser token.");
+  assert.equal(response.body.booker.id, 102);
+  assert.equal(mock.client.operations[0].operation, "insert");
+  assert.equal(mock.client.operations[0].table, "bookers");
+  assertSafeBody(response.body, "same-origin safe create");
+
+  setEnv();
+  mock = installMock();
+  response = await readResponse(
+    await harness.route.POST(
+      jsonRequest(
+        "http://localhost/api/admin-bookers",
+        {
+          booker_name: "Cross-Origin Booker",
+          company_id: 7,
+          email: "cross-origin@example.invalid",
+          phone: "90000002",
+        },
+        sameOriginAdminHeaders({
+          origin: "https://outside.invalid",
+          referer: "https://outside.invalid/",
+        }),
+      ),
+    ),
+  );
+
+  assert.equal(response.status, 403, "Cross-origin tokenless booker create must stay blocked.");
+  assert.equal(mock.client.operations.length, 0);
+  assertSafeBody(response.body, "cross-origin create");
 
   setEnv();
   mock = installMock();

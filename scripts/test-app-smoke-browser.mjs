@@ -682,13 +682,17 @@ const customerPortalInvoicesApiPattern = /\/api\/customer-invoices(?:[/?#]|$)/i;
 const customerPortalTripUpdatesApiPattern = /\/api\/customer-app-notifications(?:[/?#]|$)/i;
 const combineAllowedRuntimePatterns = (...patterns) =>
   new RegExp(patterns.map((pattern) => pattern.source).join("|"), "i");
-const customerBookingPageRuntimeAllowedPattern = publicCompanyProfileApiPattern;
+const customerBookingPageRuntimeAllowedPattern = combineAllowedRuntimePatterns(
+  publicCompanyProfileApiPattern,
+  customerBookingMemoryApiPattern,
+);
 const customerBookingMemoryRuntimeAllowedPattern = combineAllowedRuntimePatterns(
   publicCompanyProfileApiPattern,
   customerBookingMemoryApiPattern,
 );
 const customerBookingRequestRuntimeAllowedPattern = combineAllowedRuntimePatterns(
   publicCompanyProfileApiPattern,
+  customerBookingMemoryApiPattern,
   customerBookingRequestApiPattern,
 );
 const customerPortalRuntimeAllowedPattern = combineAllowedRuntimePatterns(
@@ -32478,6 +32482,9 @@ async function runChromeTest() {
                 request: {
                   booking_reference: "CUST-REQUEST-001",
                   customer_facing_status: "Request Received",
+                  receipt_status: "sent",
+                  return_booking_reference: null,
+                  return_trip_requested: false,
                   short_notice_review_required: body.pickupDate === "2026-06-02",
                 },
               }),
@@ -33507,7 +33514,15 @@ async function runChromeTest() {
       assert.equal(invalidState.confirmationStatus.visible, false, "Expected invalid /book submit not to show request status");
       assert.deepEqual(
         invalidState.missingFields,
-        ["Contact no.", "Passenger name", "Pickup date", "Pickup time", "Pickup location", "Drop-off location"],
+        [
+          "Contact no.",
+          "Email address",
+          "Passenger name",
+          "Pickup date",
+          "Pickup time",
+          "Pickup location",
+          "Drop-off location",
+        ],
         "Expected invalid /book submit to list required operational request fields only",
       );
       assert.equal(
@@ -33526,7 +33541,7 @@ async function runChromeTest() {
         invalidState.integrationCalls,
         invalidState.resourceCalls,
         "/book invalid submit",
-        customerBookingPageRuntimeAllowedPattern,
+        customerBookingMemoryRuntimeAllowedPattern,
       );
       assertNoBrowserPersistenceLeaks(
         await readBrowserPersistenceState("/book invalid submit"),
@@ -33638,7 +33653,7 @@ async function runChromeTest() {
         termsRequiredState.integrationCalls,
         termsRequiredState.resourceCalls,
         "/book terms-required submit",
-        customerBookingPageRuntimeAllowedPattern,
+        customerBookingMemoryRuntimeAllowedPattern,
       );
 
       await acceptCustomerBookingTerms();
@@ -33646,7 +33661,8 @@ async function runChromeTest() {
       const validState = await waitForCondition(
         async () => {
           const candidateState = await readCustomerBookingPageState();
-          return candidateState.feedbackText.includes("Booking request received. Our team will review")
+          return candidateState.feedbackText ===
+            "Booking request CUST-REQUEST-001 received. Receipt email sent to customer-test@example.com."
             ? candidateState
             : false;
         },
@@ -33656,8 +33672,8 @@ async function runChromeTest() {
       assert.equal(validState.feedbackTone, "success", "Expected valid /book submit to show a local success message");
       assert.equal(
         validState.feedbackText,
-        "Booking request received. Our team will review and confirm availability.",
-        "Expected customer-safe not-confirmed success feedback",
+        "Booking request CUST-REQUEST-001 received. Receipt email sent to customer-test@example.com.",
+        "Expected customer-safe receipt success feedback",
       );
       assert.equal(validState.confirmationStatus.visible, true, "Expected valid /book submit to show request status");
       assert.equal(
@@ -33667,14 +33683,14 @@ async function runChromeTest() {
       );
       assert.equal(
         validState.confirmationStatus.detail,
-        "This is not confirmed yet. We will contact you after review.",
-        "Expected /book status detail to state request is not confirmed yet",
+        "CUST-REQUEST-001. This is not confirmed yet. We will contact you after review.",
+        "Expected /book status detail to include the saved reference and state it is not confirmed yet",
       );
       assert.equal(validState.feedbackDistanceFromSubmit < 160, true, "Expected valid /book feedback near the submit button");
       assert.equal(
-        /[A-Z]{2,}-\d{3,}/.test(validState.text),
+        /[A-Z]{2,}-\d{3,}/.test(validState.text.replaceAll("CUST-REQUEST-001", "")),
         false,
-        "Expected valid /book submit not to create an invoice-style number",
+        "Expected valid /book submit to show only its safe booking reference, never an invoice-style number",
       );
       assert.deepEqual(
         validState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
@@ -33715,6 +33731,7 @@ async function runChromeTest() {
           "returnPickupTime",
           "returnTripRequested",
           "serviceType",
+          "travelerId",
           "vehicleType",
         ],
         "Expected /book customer request payload to include only approved safe operational and return-trip fields",
@@ -33763,6 +33780,7 @@ async function runChromeTest() {
           returnPickupTime: validState.customerBookingRequestCalls[0].body.returnPickupTime,
           returnTripRequested: validState.customerBookingRequestCalls[0].body.returnTripRequested,
           serviceType: validState.customerBookingRequestCalls[0].body.serviceType,
+          travelerId: validState.customerBookingRequestCalls[0].body.travelerId,
           vehicleType: validState.customerBookingRequestCalls[0].body.vehicleType,
         },
         {
@@ -33786,6 +33804,7 @@ async function runChromeTest() {
           returnPickupTime: "",
           returnTripRequested: "",
           serviceType: "Airport Arrival",
+          travelerId: "",
           vehicleType: "Alphard / Vellfire",
         },
         "Expected /book payload values to match safe customer request and inactive return-trip fields",
@@ -33814,7 +33833,7 @@ async function runChromeTest() {
         async () => {
           const candidateState = await readCustomerBookingPageState();
           return candidateState.feedbackText ===
-            "Booking request received. Our team will review and confirm availability."
+            "Booking request CUST-REQUEST-001 received. Receipt email sent to customer-test@example.com."
             ? candidateState
             : false;
         },
@@ -33823,12 +33842,12 @@ async function runChromeTest() {
       );
       assert.equal(
         sameTimeRepeatState.feedbackText,
-        "Booking request received. Our team will review and confirm availability.",
+        "Booking request CUST-REQUEST-001 received. Receipt email sent to customer-test@example.com.",
         "Expected same-date/same-time /book submit to remain a staff-reviewed request",
       );
       assert.equal(
         sameTimeRepeatState.confirmationStatus.detail,
-        "This is not confirmed yet. We will contact you after review.",
+        "CUST-REQUEST-001. This is not confirmed yet. We will contact you after review.",
         "Expected repeated /book submit to keep request-only status wording",
       );
       assert.deepEqual(
@@ -33862,7 +33881,7 @@ async function runChromeTest() {
         async () => {
           const candidateState = await readCustomerBookingPageState();
           return candidateState.feedbackText ===
-            "This booking is within 24 hours, so our team will review and confirm availability."
+            "Booking request CUST-REQUEST-001 received. Receipt email sent to customer-test@example.com."
             ? candidateState
             : false;
         },
@@ -33872,8 +33891,8 @@ async function runChromeTest() {
       assert.equal(shortNoticeState.feedbackTone, "success", "Expected short-notice submit to show success review message");
       assert.equal(
         shortNoticeState.confirmationStatus.detail,
-        "This booking is within 24 hours, so our team will review and confirm availability.",
-        "Expected short-notice status detail to preserve exact customer wording",
+        "CUST-REQUEST-001. This booking is within 24 hours and needs availability review.",
+        "Expected short-notice status detail to include the saved reference and review wording",
       );
       assert.equal(
         shortNoticeState.customerBookingRequestCalls.at(-1)?.body.pickupDate,
@@ -34099,7 +34118,7 @@ async function runChromeTest() {
         mobileState.integrationCalls,
         mobileState.resourceCalls,
         "/book mobile",
-        customerBookingPageRuntimeAllowedPattern,
+        customerBookingMemoryRuntimeAllowedPattern,
       );
       assertNoBrowserPersistenceLeaks(
         await readBrowserPersistenceState("/book mobile"),

@@ -170,6 +170,7 @@ const customerBookingRequestFields = new Set([
   "companyName",
   "contactNo",
   "emailAddress",
+  "travelerId",
   "passengerName",
   "pickupDate",
   "pickupTime",
@@ -981,6 +982,7 @@ export function parseCustomerBookingRequestPayloads(
   }
 
   const contactNo = textOrNull(body.contactNo);
+  const emailAddress = textOrNull(body.emailAddress)?.toLowerCase() || null;
   const passengerName = textOrNull(body.passengerName);
   const pickupDate = textOrNull(body.pickupDate);
   const pickupTime = textOrNull(body.pickupTime);
@@ -989,6 +991,7 @@ export function parseCustomerBookingRequestPayloads(
   const pickupDateTime = validCustomerPickupDateTime(pickupDate, pickupTime);
   const missingFields = [
     !contactNo ? "contactNo" : "",
+    !emailAddress ? "emailAddress" : "",
     !passengerName ? "passengerName" : "",
     !pickupDate ? "pickupDate" : "",
     !pickupTime ? "pickupTime" : "",
@@ -1001,6 +1004,14 @@ export function parseCustomerBookingRequestPayloads(
       ok: false,
       status: 400,
       error: `Missing required customer booking request fields: ${missingFields.join(", ")}`,
+    };
+  }
+
+  if (!/^[^\s@<>()[\],;:"\\]+@[^\s@<>()[\],;:"\\]+\.[^\s@<>()[\],;:"\\]+$/.test(emailAddress || "")) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Malformed customer booking request email address rejected.",
     };
   }
 

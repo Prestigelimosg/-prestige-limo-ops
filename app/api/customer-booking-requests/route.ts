@@ -13,6 +13,7 @@ import {
   resolveCustomerSavedBookingsVerifiedIdentity,
 } from "../../../lib/customer-saved-bookings-read";
 import { prepareCodexJobCardForAdminReview } from "../../../lib/codex-job-card-auto-preparation";
+import { sendCustomerBookingReceiptEmail } from "../../../lib/customer-booking-receipt-email";
 
 export const dynamic = "force-dynamic";
 
@@ -196,7 +197,8 @@ export async function POST(request: Request) {
       return blockedResponse();
     }
 
-    const parsed = parseCustomerBookingRequestPayloads(await readJsonBody(request));
+    const body = await readJsonBody(request);
+    const parsed = parseCustomerBookingRequestPayloads(body);
 
     if (!parsed.ok) {
       return Response.json(
@@ -214,11 +216,15 @@ export async function POST(request: Request) {
       "/book",
     );
     const verifiedIdentity = portalBoundary.ok
-      ? await resolveCustomerSavedBookingsVerifiedIdentity(portalBoundary.data)
+      ? await resolveCustomerSavedBookingsVerifiedIdentity(portalBoundary.data, body.travelerId)
       : null;
 
     if (verifiedIdentity && !verifiedIdentity.ok) {
       return stalePortalAccessResponse();
+    }
+
+    if (!verifiedIdentity?.ok && body.travelerId !== undefined && body.travelerId !== null && body.travelerId !== "") {
+      return blockedResponse();
     }
 
     const savedRequests: AdminBookingPersistenceRecord[] = [];
@@ -232,6 +238,12 @@ export async function POST(request: Request) {
               customer_id: verifiedIdentity.data.customer_account_reference,
               company_id: verifiedIdentity.data.company_id,
               booker_id: verifiedIdentity.data.booker_id,
+              ...(verifiedIdentity.data.traveler_id && verifiedIdentity.data.traveler_name
+                ? {
+                    passenger_name: verifiedIdentity.data.traveler_name,
+                    traveler_id: verifiedIdentity.data.traveler_id,
+                  }
+                : {}),
             },
           }
         : requestPayload;
@@ -264,6 +276,7 @@ export async function POST(request: Request) {
 
     await prepareSavedCustomerBookingRequestJobCards(savedRequests);
     await notifyAdminNewBookingRequest(primaryRequest);
+    const receipt = await sendCustomerBookingReceiptEmail(savedRequests);
 
     return Response.json({
       ok: true,
@@ -272,6 +285,7 @@ export async function POST(request: Request) {
         customer_facing_status: primaryRequest.customer_facing_status,
         return_booking_reference: returnRequest?.booking_reference ?? null,
         return_trip_requested: parsed.data.returnTripRequested,
+        receipt_status: receipt.status,
         short_notice_review_required:
           savedRequests.some((savedRequest) => savedRequest.short_notice_review_status === "Admin Review Required"),
       },

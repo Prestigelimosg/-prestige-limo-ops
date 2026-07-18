@@ -142,7 +142,8 @@ for (const fragment of [
   "customerPortalAccessTokenPrefix = \"portal_access_v1\"",
   'scope?: "portal_account" | "stored_document"',
   'access_scope: "allowlisted" | "portal_account" | "stored_document"',
-  'options: { scope?: "portal_account" | "stored_document" } = {}',
+  "linkRevision?: unknown",
+  "link_revision: safeLinkRevision(payload.rev)",
   'options.scope === "portal_account"',
   'scope === "allowlisted" && !accountAllowed(account, config.data.accountAllowlist)',
   'scope === "portal_account" ? {} : { exp: expiresAtSeconds }',
@@ -172,6 +173,7 @@ for (const fragment of [
   ".eq(\"customer_account_reference\", customerAccountReference)",
   ".eq(\"account_status\", \"active\")",
   ".upsert(payload,",
+  'onConflict: "customer_account_reference"',
   ".update({",
   'account_status: "revoked"',
   "SUPABASE_URL",
@@ -180,6 +182,7 @@ for (const fragment of [
   assertIncludes(accountHelper, fragment, `portal access account helper ${fragment}`);
 }
 assertExcludes(accountHelper, /NEXT_PUBLIC_[A-Z0-9_]+|messages\.create|whatsapp|telegram|stripe|payment_intent/i, "portal access account helper unsafe provider/client path");
+assertExcludes(accountHelper, /onConflict:\s*referenceRecord\s*\?\s*["']customer_account_reference["']\s*:\s*["']booker_id["']/, "portal access account helper partial booker index conflict target");
 
 assertIncludes(customerBoundary, "resolveCustomerPortalAccessSession(providedToken.token, runtimeGate.data)", "customer boundary portal access handoff");
 assertIncludes(customerBoundary, "isCustomerPortalAccessToken(providedToken.token)", "customer boundary portal access token guard");
@@ -257,7 +260,7 @@ for (const fragment of [
 
 for (const fragment of [
   "const customerAccountReference = customerDriverDetailsPortalAccountReference;",
-  "if (!dispatchReleaseCustomerCopyReady)",
+  "if (!customerDriverDetailsPortalLinkCopyReady)",
   "fetch(adminCustomerPortalAccessLinksApiPath",
   "bookingReference,",
   "customerAccountReference,",

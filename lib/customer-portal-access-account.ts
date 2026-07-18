@@ -19,13 +19,14 @@ export type CustomerPortalAccessAccountRecord = {
   company_id: number | null;
   booker_id: number | null;
   customer_account_reference: string;
+  link_revision: string;
   safe_display_label: string | null;
   version: typeof customerPortalAccessAccountVersion;
 };
 
 const customerPortalAccessAccountTable = "customer_access_accounts";
 const customerPortalAccessAccountSelect =
-  "customer_account_reference, account_status, safe_display_label, company_id, booker_id";
+  "customer_account_reference, account_status, safe_display_label, company_id, booker_id, updated_at";
 const safeConfigError = "Customer portal access account configuration is not ready.";
 const safeForbiddenError = "Customer portal access requires an active invited customer account.";
 const safeMutationError = "Customer portal access account update failed safely.";
@@ -130,6 +131,13 @@ function verifiedIdentityId(value: unknown) {
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
+function safeLinkRevision(value: unknown) {
+  const cleaned = textOrNull(value, 80);
+  const timestamp = cleaned ? Date.parse(cleaned) : Number.NaN;
+
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
+}
+
 function safeActor(actor: AdminBookingPersistenceAdapterActor): AdminBookingResult<null> {
   if (
     !actor ||
@@ -205,6 +213,7 @@ function toRecord(row: Record<string, unknown>): CustomerPortalAccessAccountReco
     row.customer_account_reference,
   );
   const accountStatus = textOrNull(row.account_status, 40);
+  const linkRevision = safeLinkRevision(row.updated_at) || new Date(0).toISOString();
 
   if (
     !customerAccountReference ||
@@ -218,6 +227,7 @@ function toRecord(row: Record<string, unknown>): CustomerPortalAccessAccountReco
     company_id: verifiedIdentityId(row.company_id),
     booker_id: verifiedIdentityId(row.booker_id),
     customer_account_reference: customerAccountReference,
+    link_revision: linkRevision,
     safe_display_label: textOrNull(row.safe_display_label, 160),
     version: customerPortalAccessAccountVersion,
   };
@@ -234,6 +244,10 @@ function safeFailure<T>(error: string, status: number): AdminBookingResult<T> {
 export async function assertActiveCustomerPortalAccessAccount(
   customerAccountReferenceInput: unknown,
   clientInput?: CustomerPortalAccessAccountClient,
+  expectedLink?: {
+    issuedAt?: number | null;
+    linkRevision?: string | null;
+  },
 ): Promise<AdminBookingResult<CustomerPortalAccessAccountRecord>> {
   const customerAccountReference = safeCustomerPortalAccessAccountReference(
     customerAccountReferenceInput,
@@ -268,7 +282,19 @@ export async function assertActiveCustomerPortalAccessAccount(
       ? toRecord(row as Record<string, unknown>)
       : null;
 
-  return record?.account_status === "active"
+  const expectedRevision = safeLinkRevision(expectedLink?.linkRevision);
+  const expectedIssuedAt = Number(expectedLink?.issuedAt);
+  const legacyRevisionStillCurrent =
+    !expectedRevision &&
+    Number.isInteger(expectedIssuedAt) &&
+    Math.floor(Date.parse(record?.link_revision || "") / 1000) <= expectedIssuedAt;
+  const linkStillCurrent =
+    !expectedLink ||
+    (expectedRevision
+      ? record?.link_revision === expectedRevision
+      : legacyRevisionStillCurrent);
+
+  return record?.account_status === "active" && linkStillCurrent
     ? {
         data: record,
         ok: true,
@@ -278,6 +304,8 @@ export async function assertActiveCustomerPortalAccessAccount(
 
 export async function ensureAdminCustomerPortalAccessAccount(
   input: {
+    bookerId: unknown;
+    companyId: unknown;
     customerAccountReference: unknown;
     safeDisplayLabel?: unknown;
   },
@@ -293,8 +321,10 @@ export async function ensureAdminCustomerPortalAccessAccount(
   const customerAccountReference = safeCustomerPortalAccessAccountReference(
     input.customerAccountReference,
   );
+  const companyId = verifiedIdentityId(input.companyId);
+  const bookerId = verifiedIdentityId(input.bookerId);
 
-  if (!customerAccountReference) {
+  if (!customerAccountReference || !companyId || !bookerId) {
     return safeFailure(safeValidationError, 400);
   }
 
@@ -306,13 +336,65 @@ export async function ensureAdminCustomerPortalAccessAccount(
     return clientResult;
   }
 
-  const now = new Date().toISOString();
+  const { data: referenceRows, error: referenceError } = await clientResult.data
+    .from(customerPortalAccessAccountTable)
+    .select(customerPortalAccessAccountSelect)
+    .eq("customer_account_reference", customerAccountReference)
+    .limit(1);
+
+  if (referenceError) {
+    return safeFailure(safeMutationError, 500);
+  }
+
+  const referenceRecord = toRecord(
+    Array.isArray(referenceRows) && referenceRows[0] && typeof referenceRows[0] === "object"
+      ? (referenceRows[0] as Record<string, unknown>)
+      : {},
+  );
+
+  if (
+    referenceRecord &&
+    ((referenceRecord.company_id && referenceRecord.company_id !== companyId) ||
+      (referenceRecord.booker_id && referenceRecord.booker_id !== bookerId))
+  ) {
+    return safeFailure(safeValidationError, 409);
+  }
+
+  let resolvedAccountReference = referenceRecord?.customer_account_reference || null;
+
+  if (!resolvedAccountReference) {
+    const { data: bookerRows, error: bookerError } = await clientResult.data
+      .from(customerPortalAccessAccountTable)
+      .select(customerPortalAccessAccountSelect)
+      .eq("booker_id", bookerId)
+      .limit(1);
+
+    if (bookerError) {
+      return safeFailure(safeMutationError, 500);
+    }
+
+    const bookerRecord = toRecord(
+      Array.isArray(bookerRows) && bookerRows[0] && typeof bookerRows[0] === "object"
+        ? (bookerRows[0] as Record<string, unknown>)
+        : {},
+    );
+
+    if (bookerRecord?.company_id && bookerRecord.company_id !== companyId) {
+      return safeFailure(safeValidationError, 409);
+    }
+
+    resolvedAccountReference = bookerRecord?.customer_account_reference || customerAccountReference;
+  }
+
+  const now = new Date(Math.ceil((Date.now() + 1) / 1000) * 1000).toISOString();
   const payload = {
     account_status: "active",
     auth_provider: "supabase_auth",
-    auth_user_id: deterministicPortalAuthUserId(customerAccountReference),
-    customer_account_reference: customerAccountReference,
-    safe_display_label: safeDisplayLabel(input.safeDisplayLabel, customerAccountReference),
+    auth_user_id: deterministicPortalAuthUserId(resolvedAccountReference),
+    booker_id: bookerId,
+    company_id: companyId,
+    customer_account_reference: resolvedAccountReference,
+    safe_display_label: safeDisplayLabel(input.safeDisplayLabel, resolvedAccountReference),
     source_surface: "admin_api",
     updated_at: now,
   };

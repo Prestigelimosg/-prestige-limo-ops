@@ -161,6 +161,7 @@ try {
   const { parseCustomerBookingRequestPayloads } = createRequire(import.meta.url)(outputPath);
   const parsed = parseCustomerBookingRequestPayloads({
     contactNo: "+65 9000 1111",
+    emailAddress: "return-test@example.com",
     passengerName: "Return Stop Test Passenger",
     pickupDate: "2026-08-20",
     pickupTime: "09:00",

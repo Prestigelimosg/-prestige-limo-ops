@@ -344,6 +344,7 @@ try {
   process.env.PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_ACCOUNT_ALLOWLIST =
     accountReference;
   const portalTokenResult = createCustomerPortalAccessLinkToken(accountReference, {
+    linkRevision: "2026-07-06T00:00:00.000Z",
     scope: "portal_account",
   });
 

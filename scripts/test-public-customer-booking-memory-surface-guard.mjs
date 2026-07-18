@@ -21,7 +21,7 @@ const allowedMemoryRecordFields = [
   "vehicle_type",
 ];
 
-const allowedMemoryPayloadFields = ["memories", "ok", "version"];
+const allowedMemoryPayloadFields = ["booker_profile", "memories", "ok", "travelers", "version"];
 const allowedMemoryQueryParams = ["limit", "q"];
 const expectedRouteMethods = ["DELETE", "GET", "PATCH", "POST", "PUT"];
 
@@ -308,7 +308,8 @@ for (const fragment of [
   '"x-prestige-customer-purpose": "customer-booking-memory-read"',
   "if (q && !query) {\n    return null;\n  }",
   "if (!response.ok) {\n      return null;\n    }",
-  "return mapCustomerBookingMemoryPayload(await response.json());",
+  "return await response.json();",
+  "return payload ? mapCustomerBookingMemoryPayload(payload) : null;",
   "return null;",
 ]) {
   assertIncludes(memoryAdapter, fragment, `customer booking memory adapter safe behavior ${fragment}`);
@@ -363,7 +364,7 @@ assertExcludes(
 );
 assertExcludes(
   memoryReadExposureSource,
-  /\/api\/admin-saved-bookings|\/api\/ai-parse|telegram|whatsapp|sms|email|provider|send/i,
+  /\/api\/admin-saved-bookings|\/api\/ai-parse|telegram|whatsapp|sms|provider|send/i,
   "customer booking memory server reader forbidden dependencies",
 );
 
@@ -372,6 +373,8 @@ assertIncludes(memoryRoute, 'export const dynamic = "force-dynamic";', "customer
 assertIncludes(memoryRoute, "const boundary = resolveCustomerBookingMemoryBoundary(request);", "customer booking memory route boundary");
 assertIncludes(memoryRoute, "loadCustomerBookingMemory(new URL(request.url).searchParams, boundary.data)", "customer booking memory route read call");
 assertIncludes(memoryRoute, "memories: result.data.memories", "customer booking memory route safe response memories");
+assertIncludes(memoryRoute, "booker_profile: result.data.booker_profile", "customer booking memory route verified booker profile");
+assertIncludes(memoryRoute, "travelers: result.data.travelers", "customer booking memory route verified travelers");
 assertIncludes(memoryRoute, "version: result.data.version", "customer booking memory route safe response version");
 assert.equal(countOccurrences(memoryRoute, "customerBookingMemoryAuthRequiredResult()"), 4, "non-GET memory route auth block count");
 assertExcludes(memoryRoute, /Set-Cookie|cookie:|session_token|raw_token|token_hash|service_role/i, "customer booking memory route response/source leak");

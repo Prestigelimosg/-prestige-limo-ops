@@ -62,6 +62,11 @@ export async function GET(
 
     const activeAccount = await assertActiveCustomerPortalAccessAccount(
       session.data.customer_account_reference,
+      undefined,
+      {
+        issuedAt: session.data.issued_at,
+        linkRevision: session.data.link_revision,
+      },
     );
 
     if (!activeAccount.ok) {

@@ -62,6 +62,8 @@ export async function POST(request: Request) {
     const bookingReference = safeBookingReference(body.bookingReference);
     const account = await ensureAdminCustomerPortalAccessAccount(
       {
+        bookerId: body.bookerId,
+        companyId: body.companyId,
         customerAccountReference: body.customerAccountReference,
         safeDisplayLabel: body.safeDisplayLabel,
       },
@@ -73,6 +75,7 @@ export async function POST(request: Request) {
     }
 
     const result = createCustomerPortalAccessLinkToken(account.data.customer_account_reference, {
+      linkRevision: account.data.link_revision,
       scope: "portal_account",
     });
 

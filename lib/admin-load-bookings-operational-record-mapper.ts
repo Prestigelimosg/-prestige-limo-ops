@@ -340,12 +340,17 @@ function sourceToSafeFields(input: unknown): Record<(typeof safeOperationalField
     cleanText(source.passenger_name) || nestedText(source, "travelers", "traveler_name");
   const contactName =
     cleanText(source.contact_display_name) || nestedText(source, "bookers", "booker_name");
+  const companyName =
+    nestedText(source, "companies", "company_name") ||
+    cleanText(source.customer_display_name) ||
+    contactName;
   const customerName =
     cleanText(source.customer_display_name) ||
-    nestedText(source, "companies", "company_name") ||
+    companyName ||
     contactName;
   const safePassengerName = optionalSafeDisplayText(passengerName, 220);
   const safeContactName = optionalSafeDisplayText(contactName, 220);
+  const safeCompanyName = optionalSafeDisplayText(companyName, 220);
   const safeCustomerName = optionalSafeDisplayText(customerName, 220);
   const vehicleDisplay =
     cleanText(source.vehicle_type_or_category) ||
@@ -372,7 +377,7 @@ function sourceToSafeFields(input: unknown): Record<(typeof safeOperationalField
     booker_email: cleanText(source.contact_email) || nestedText(source, "bookers", "email"),
     booker_phone: cleanText(source.contact_phone) || nestedText(source, "bookers", "phone"),
     child_seat_display: childSeatDisplay(source),
-    company_display_name: safeCustomerName,
+    company_display_name: safeCompanyName,
     created_at: cleanText(source.created_at),
     customer_display_name: customerName ? safeCustomerName : safePassengerName,
     dropoff_address: dropoffAddress,

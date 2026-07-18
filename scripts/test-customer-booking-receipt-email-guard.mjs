@@ -96,6 +96,14 @@ assert.ok(
   ledger.includes("2026-07-30T17:10:00+00:00") && ledger.includes("31 Jul 2026, 0110hrs SGT"),
   "Ledger must preserve the exact reproduced UTC-to-SGT receipt evidence.",
 );
+for (const deployedEvidence of [
+  "PR `#32`",
+  "8735aa97",
+  "dpl_jqRo4V4aPa4dwrZQf7JoVLbfSpxS",
+  "Build 6d492a9a",
+]) {
+  assert.ok(ledger.includes(deployedEvidence), `Ledger must include deployed time-repair evidence: ${deployedEvidence}`);
+}
 for (const evidence of [
   "CUST-20260718021747-8V1IPY",
   "PRESTIGE_CUSTOMER_BOOKING_RECEIPT_EMAIL_ENABLED",

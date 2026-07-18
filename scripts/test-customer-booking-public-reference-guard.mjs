@@ -97,6 +97,21 @@ excludes(
   /operationalCard\.booking_reference\s*\?\s*\(\s*<p>\s*Ref:/,
   "admin public reference label gated by an unrelated operational fallback field",
 );
+const completedDetailsStart = source.adminUi.indexOf(
+  'data-completed-operational-body={bookingId}',
+);
+const completedDetailsEnd = source.adminUi.indexOf(
+  'data-completed-operational-actions={bookingId}',
+  completedDetailsStart,
+);
+assert.ok(completedDetailsStart >= 0, "Missing completed operational details block");
+assert.ok(completedDetailsEnd > completedDetailsStart, "Missing completed operational details boundary");
+assert.ok(
+  source.adminUi
+    .slice(completedDetailsStart, completedDetailsEnd)
+    .includes("Ref: {operationalCard.public_booking_reference || bookingPublicReference(savedBooking)}"),
+  "Completed operational details must visibly show the persisted public booking reference",
+);
 includes("adminUi", "public_job_reference", "admin live-map public reference display projection");
 includes("adminUi", "customer_visible_booking_reference", "customer driver-details email public reference payload");
 includes("adminUi", "dispatchPublicBookingReference", "customer and driver dispatch-copy public reference display");

@@ -501,8 +501,20 @@ function safeAdapterFailure<T>(
   };
 }
 
-function getServerOnlyCustomerBookingMemoryClient(): AdminBookingResult<CustomerBookingMemoryClient> {
-  if (process.env.PRESTIGE_CUSTOMER_BOOKING_MEMORY_AUTH_ENABLED !== "true") {
+function getServerOnlyCustomerBookingMemoryClient(
+  context: CustomerBookingMemoryBoundaryContext,
+): AdminBookingResult<CustomerBookingMemoryClient> {
+  const signedPortalCookieSession =
+    context.mode === "server-session-cookie" &&
+    Boolean(context.customer_account_reference) &&
+    (Boolean(context.portal_link_revision) ||
+      (context.portal_link_issued_at != null &&
+        Number.isInteger(context.portal_link_issued_at)));
+
+  if (
+    process.env.PRESTIGE_CUSTOMER_BOOKING_MEMORY_AUTH_ENABLED !== "true" &&
+    !signedPortalCookieSession
+  ) {
     return {
       error: customerBookingMemoryDisabledError,
       ok: false,
@@ -759,7 +771,7 @@ export async function loadCustomerBookingMemory(
     return parsed;
   }
 
-  const clientResult = getServerOnlyCustomerBookingMemoryClient();
+  const clientResult = getServerOnlyCustomerBookingMemoryClient(context);
 
   if (!clientResult.ok) {
     return clientResult;

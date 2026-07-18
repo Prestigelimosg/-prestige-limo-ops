@@ -69,6 +69,16 @@ for (const fragment of [
   includes(memoryAdapter, fragment === '.from("bookers")' || fragment === '.from("travelers")' || fragment === '.eq("booker_id", bookerId)' ? "CustomerBookingMemoryProfile" : fragment);
 }
 for (const fragment of [
+  "context.mode === \"server-session-cookie\"",
+  "Boolean(context.customer_account_reference)",
+  "Boolean(context.portal_link_revision)",
+  "context.portal_link_issued_at != null",
+  "Number.isInteger(context.portal_link_issued_at)",
+  "getServerOnlyCustomerBookingMemoryClient(context)",
+]) {
+  includes(memoryRead, fragment);
+}
+for (const fragment of [
   '"travelerId"',
   '"emailAddress"',
 ]) {

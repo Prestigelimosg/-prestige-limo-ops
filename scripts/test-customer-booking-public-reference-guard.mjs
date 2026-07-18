@@ -50,6 +50,7 @@ for (const fragment of [
 }
 
 includes("migration", "new.public_booking_reference", "insert-time persisted public reference");
+includes("migration", "values (true, 10826)", "approved unprefixed public reference starting number");
 includes("migration", "new.customer_id", "customer-scoped prefix lookup");
 includes("migration", "booking_public_reference_exhausted", "five-digit exhaustion fail-closed path");
 includes("migration", "booking_public_reference_prefix_unavailable", "locked prefix unavailable fail-closed path");

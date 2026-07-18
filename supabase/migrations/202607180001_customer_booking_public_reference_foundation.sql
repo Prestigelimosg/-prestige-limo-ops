@@ -44,7 +44,7 @@ create unique index if not exists customer_booking_reference_sequences_prefix_ke
 
 create table if not exists public.global_booking_reference_sequence (
   singleton boolean primary key default true,
-  next_sequence_number integer not null default 1,
+  next_sequence_number integer not null default 10826,
   updated_at timestamptz not null default now(),
   constraint global_booking_reference_sequence_singleton check (singleton),
   constraint global_booking_reference_sequence_next_range check (
@@ -56,7 +56,7 @@ insert into public.global_booking_reference_sequence (
   singleton,
   next_sequence_number
 )
-values (true, 1)
+values (true, 10826)
 on conflict (singleton) do nothing;
 
 -- Existing bookings receive stable five-digit public references in a single

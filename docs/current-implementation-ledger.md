@@ -1,16 +1,24 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-6f8dc304 Show admin created times in Singapore time
+394e3d5c Wire DSP scheduled end and invoice rates
 
 Latest pushed main/staging runtime checkpoint:
-6f8dc304 Show admin created times in Singapore time
+394e3d5c Wire DSP scheduled end and invoice rates
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-6919e261 Merge pull request #48 from Prestigelimosg/codex/admin-created-at-sgt-display
+340e2649 Merge pull request #49 from Prestigelimosg/codex/restore-current-workflow-guards
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Completed DSP Scheduled Start And End Display (2026-07-19)
+
+- Completed / History reuses the existing safe operational booking card and now labels the scheduled DSP start and end directly in its compact summary. The start remains the established `pickup_datetime`; the end is the established nullable `dropoff_datetime` introduced through the single Dispatch booking lane.
+- The schedule is DSP-only. Legacy DSP rows without a saved scheduled end display `End: Not set`; the UI never infers an end from duration, customer rates, invoice amounts, Driver OTS/JC evidence, names, or display labels.
+- Actual Driver OTS/JC timing remains the separate established invoice-evidence lane and is not duplicated onto the Completed schedule display. The Completed card does not expose customer price or invoice amount.
+- This pass adds no route, API, writer, panel, invoice calculation, PDF path, provider send, payment path, payout path, schema, migration, Supabase configuration, or live-record change. Existing Completed actions and privacy boundaries are unchanged.
+- Guard coverage is an extension of `scripts/test-bookings-earlier-history-compact-guard.mjs`, already registered in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Dispatch DSP Scheduled End And Final Invoice Calculation (2026-07-19)
 

@@ -6903,6 +6903,16 @@ function formatBookingPickupDateTimeSgt(bookingRecord: BookingRecord) {
   return `${formatDate(dateValue)}, ${formattedTime}${formattedTime === "Time TBC" ? "" : " SGT"}`;
 }
 
+function formatBookingTimestampSgt(value: string | null | undefined) {
+  const timestampParts = singaporePickupDateTimePartsFromTimestamp(value);
+
+  if (!timestampParts) {
+    return "";
+  }
+
+  return `${formatDate(timestampParts.date)}, ${formatPickupTime(timestampParts.time)} SGT`;
+}
+
 function singaporePickupDateTimePartsFromTimestamp(value: string | null | undefined) {
   const rawValue = clean(value);
   const localDateTimeMatch = rawValue.match(
@@ -24463,8 +24473,22 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 operationalCard.assigned_driver_display_name ||
                 clean(savedBooking.driver_name) ||
                 "Driver TBC";
+              const isDspBooking =
+                normalizeBookingType(
+                  operationalCard.booking_type ||
+                    savedBooking.service_type ||
+                    savedBooking.route_type ||
+                    savedBooking.booking_type,
+                ) === "DSP";
+              const dspScheduledEndText = formatBookingTimestampSgt(
+                operationalCard.dropoff_datetime || savedBooking.dropoff_datetime,
+              );
               const pickupMetaText = [
-                formatBookingPickupDateTimeSgt(savedBooking),
+                isDspBooking
+                  ? `DSP start: ${formatBookingPickupDateTimeSgt(savedBooking)} · End: ${
+                      dspScheduledEndText || "Not set"
+                    }`
+                  : formatBookingPickupDateTimeSgt(savedBooking),
                 operationalCard.job_card_display,
               ].filter(Boolean).join(" · ");
               const isCompletedStatus = bookingRecordIsCompletedStatus(savedBooking);
@@ -24506,7 +24530,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                               {getLoadBookingsOperationalDisplayTitle(operationalCard)}
                             </AdminOperationalUppercaseValue>
                           </span>
-                          <span className="block truncate text-xs text-slate-500">
+                          <span
+                            className={`block text-xs text-slate-500 ${isDspBooking ? "" : "truncate"}`}
+                            data-completed-dsp-schedule={isDspBooking ? bookingId : undefined}
+                          >
                             {pickupMetaText}
                           </span>
                         </span>

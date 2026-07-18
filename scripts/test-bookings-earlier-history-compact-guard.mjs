@@ -186,6 +186,12 @@ for (const fragment of [
   "const isCompletedStatus = bookingRecordIsCompletedStatus(savedBooking);",
   "const isDriverCompletedHistoryJob =",
   "const isEarlierHistoryJob = bookingRecordIsEarlierJob(savedBooking, todayKey);",
+  "const isDspBooking =",
+  "normalizeBookingType(",
+  "operationalCard.dropoff_datetime || savedBooking.dropoff_datetime",
+  'data-completed-dsp-schedule={isDspBooking ? bookingId : undefined}',
+  "? `DSP start: ${formatBookingPickupDateTimeSgt(savedBooking)} · End: ${",
+  'dspScheduledEndText || "Not set"',
   "const completedHistoryDisplayStatus = isDriverCompletedHistoryJob",
   "? \"completed\"",
   ": isCancelledStatus",
@@ -243,7 +249,7 @@ for (const forbiddenPattern of [
   /fetch\(|\/api\/|createClient|service_role|process\.env/i,
   /sendMail|new\s+Resend|api\.telegram\.org|twilio/i,
   /navigator\.geolocation|watchPosition|getCurrentPosition/i,
-  /driver payout|PayNow payout|payout comparisons|customer price/i,
+  /driver payout|PayNow payout|payout comparisons|customer price|invoice amount/i,
   /internal admin notes|internal finance notes|parser\/debug|mock QA|dev archive/i,
 ]) {
   assertExcludes(currentUpcomingPanel, forbiddenPattern, "current/upcoming panel privacy boundary");

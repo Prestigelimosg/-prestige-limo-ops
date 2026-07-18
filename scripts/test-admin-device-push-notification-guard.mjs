@@ -153,16 +153,51 @@ assertIncludes(
     "PushManager",
     "Notification.requestPermission",
     "data-admin-device-push-panel",
+    "data-admin-device-push-compact-control",
     "data-admin-device-push-toggle",
     'role="switch"',
-    "Device Push Alerts",
-    "Optional phone/Mac browser alert for new booking requests.",
-    "Push alerts ON",
-    "Push alerts OFF",
+    "Push ON",
+    "Push OFF",
     "handleAdminDevicePushEnable",
     "handleAdminDevicePushDisable",
   ],
   "dashboard device push UI",
+);
+assertExcludes(
+  dashboardSource,
+  [
+    ">Device Push Alerts<",
+    "Optional phone/Mac browser alert for new booking requests.",
+    "Push alerts ON",
+    "Push alerts OFF",
+  ],
+  "removed expanded dashboard device push UI",
+);
+assert.equal(
+  dashboardSource.match(/data-admin-device-push-toggle="true"/g)?.length,
+  1,
+  "dashboard must render exactly one admin device push toggle",
+);
+
+const codexHeaderStart = dashboardSource.indexOf(
+  'aria-label="Codex Review and Admin App Notifications"',
+);
+const codexHeaderEnd = dashboardSource.indexOf(
+  "{dashboardSystemNotices.length > 0 ? (",
+  codexHeaderStart,
+);
+assert.notEqual(codexHeaderStart, -1, "Codex notification header must exist");
+assert.notEqual(codexHeaderEnd, -1, "Codex notification header boundary must exist");
+const codexHeaderSource = dashboardSource.slice(codexHeaderStart, codexHeaderEnd);
+assertIncludes(
+  codexHeaderSource,
+  [
+    'data-admin-app-notification-feed-state="true"',
+    'data-admin-device-push-panel="true"',
+    'data-admin-device-push-compact-control="true"',
+    'data-admin-device-push-toggle="true"',
+  ],
+  "Codex notification header compact device push control",
 );
 
 assertIncludes(

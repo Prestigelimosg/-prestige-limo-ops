@@ -166,21 +166,29 @@ assertExcludes(
 for (const fragment of [
   "Codex Prepared Job Cards",
   "Prepared from exact saved requests. Admin reviews every card before calendar action.",
-  "Calendar changes still require admin action in Dispatch.",
-  'data-new-customer-booking-requests-urgent-count={String(urgentCustomerBookingRequestCount)}',
-  'data-new-customer-booking-request-urgency={isUrgentRequest ? "urgent" : "new"}',
+  'data-codex-prepared-job-card-list="true"',
+  "customerBookingRequestDisplayItems.map",
   "const passengerText = getLoadBookingsOperationalPassengerDisplay(operationalCard, requestBooking);",
   "{getLoadBookingsOperationalRequestDisplayTitle(operationalCard, requestBooking)}",
   "Passenger: {passengerText}",
-  "Urgent >1h",
-  "New",
+  "{routeText}",
+  "data-admin-prepared-job-card-close={bookingId}",
+  "onClick={() => rememberHandledCustomerBookingRequest(requestBooking)}",
+  "Close",
+]) {
+  assertIncludes(codexPreparedJobCardsPanel, fragment, `Codex prepared queue fragment ${fragment}`);
+}
+for (const removedFragment of [
+  "Calendar changes still require admin action in Dispatch.",
   "Review Job Card",
   "Review Corrected Job Card",
   "loadSelectedBooking(requestBooking, {",
-  "bookingFormOverride: correctionReady",
-  "focusJobCard: true",
 ]) {
-  assertIncludes(codexPreparedJobCardsPanel, fragment, `Codex prepared queue fragment ${fragment}`);
+  assertExcludes(
+    codexPreparedJobCardsPanel,
+    removedFragment,
+    `Codex prepared close-only queue removes ${removedFragment}`,
+  );
 }
 
 for (const fragment of [
@@ -239,7 +247,6 @@ assertSourceOrder(
     'data-dashboard-codex-system-notices="true"',
     'aria-label="Booking Requests"',
     "{codexPreparedJobCardsPanel}",
-    'data-admin-device-push-panel="true"',
   ],
   "single Codex workbench order",
 );

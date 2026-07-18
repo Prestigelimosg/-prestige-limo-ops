@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 const appPagePath = "app/page.tsx";
 const ledgerPath = "docs/current-implementation-ledger.md";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
+const savedBookingReadPath = "lib/admin-saved-booking-read.ts";
 const guardScript = "scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs";
 
 function assertIncludes(source, fragment, label = fragment) {
@@ -40,10 +41,11 @@ function assertSourceOrder(source, fragments, label) {
   }
 }
 
-const [appPage, ledger, preactivationSuite] = await Promise.all([
+const [appPage, ledger, preactivationSuite, savedBookingRead] = await Promise.all([
   readFile(appPagePath, "utf8"),
   readFile(ledgerPath, "utf8"),
   readFile(preactivationSuitePath, "utf8"),
+  readFile(savedBookingReadPath, "utf8"),
 ]);
 
 const helperSection = sliceBetween(
@@ -85,6 +87,11 @@ const dashboardOverdueResolutionSection = sliceBetween(
   appPage,
   "async function resolveDashboardOverdueBooking(",
   "async function adminConfirmBookingCompletedByPhone(",
+);
+const loadBookingsSection = sliceBetween(
+  appPage,
+  "async function loadBookings(",
+  "function rememberHandledCustomerBookingRequest(",
 );
 const activeMonitorSource = sliceBetween(
   appPage,
@@ -305,6 +312,36 @@ for (const monitorFragment of [
   "syncBookingCompletedStatusFromDriverReport(",
 ]) {
   assertIncludes(appPage, monitorFragment, `established booking monitor fragment ${monitorFragment}`);
+}
+for (const fragment of [
+  "adminMonitorableBookingListScope",
+  "fetchCompleteMonitorableSavedBookingList",
+  'scope: adminMonitorableBookingListScope',
+  "offset: String(pageIndex * Number(adminLoadBookingsListLimit))",
+  "monitorablePage.length < Number(adminLoadBookingsListLimit)",
+  "mergeSavedBookingMonitorCoverage",
+  "monitorableBookings = monitorableBookingsResult.bookings",
+  "if (monitoringCoverageError)",
+]) {
+  assertIncludes(loadBookingsSection, fragment, `complete monitor coverage fragment ${fragment}`);
+}
+for (const forbidden of ["setInterval(", "setTimeout(", "PATCH", "POST", "DELETE"] ) {
+  assertExcludes(
+    loadBookingsSection,
+    forbidden,
+    `complete monitor coverage duplicate timer or writer ${forbidden}`,
+  );
+}
+for (const fragment of [
+  'const allowedListReadQueryParams = new Set(["limit", "offset", "scope"]);',
+  'scope: "all" | "monitorable";',
+  'scope === "monitorable"',
+  "query.or(",
+  "`${statusColumn}.is.null,${statusColumn}.not.in.${terminalSavedBookingStatuses}`",
+  "return query.range(",
+  "parsed.data.offset + parsed.data.limit - 1",
+]) {
+  assertIncludes(savedBookingRead, fragment, `monitorable saved-booking read fragment ${fragment}`);
 }
 
 for (const fragment of [

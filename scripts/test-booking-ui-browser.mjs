@@ -131,6 +131,7 @@ const crmSavedBookingFixture = {
 };
 const loadedSavedBookingFixture = {
   id: "ui-cleanup-load-fixture",
+  public_booking_reference: "10839",
   company_id: 501,
   booker_id: 502,
   traveler_id: 503,
@@ -16833,6 +16834,7 @@ async function runChromeTest() {
             ),
             workflowStatusRequests: window.__prestigeWorkflowStatusRequests || [],
             jobCardPreview: preTextByHeading("Job Card Preview"),
+            customerCopy: preTextByHeading("Customer Copy"),
             driverDispatch: preTextByHeading("Manual WhatsApp Copy — Optional"),
             pastedMessage: document.querySelector("textarea")?.value || "",
             fields: {
@@ -16946,6 +16948,16 @@ async function runChromeTest() {
     assert.equal(loadedBookingState.aiDraftExists, false, "Expected AI draft panel to clear after loading saved booking");
     assert.equal(loadedBookingState.aiFeedbackExists, false, "Expected AI feedback to clear after loading saved booking");
     assert.equal(loadedBookingState.pastedMessage, "", "Expected pasted intake message to clear after loading saved booking");
+    assert.match(
+      loadedBookingState.customerCopy,
+      /Booking reference: 10839/,
+      "Expected Customer Copy to show the persisted five-digit public booking reference",
+    );
+    assert.doesNotMatch(
+      loadedBookingState.customerCopy,
+      /ui-cleanup-load-fixture/,
+      "Expected Customer Copy to keep the internal booking key hidden",
+    );
     const expectedLoadedBookingFetchCalls = [
       "GET /api/admin-booking-workflow-statuses?booking_reference=ui-cleanup-load-fixture&workflow_area=dispatch_release",
       "GET /api/admin-booking-workflow-statuses?booking_reference=ui-cleanup-load-fixture&workflow_area=driver_acknowledgement",
@@ -16964,7 +16976,21 @@ async function runChromeTest() {
       "GET /api/admin-monthly-invoice-issue-reviews?limit=1&page=1&billing_month=2026-05",
       "GET /api/admin-monthly-invoice-issue-records?limit=1&page=1&billing_month=2026-05&issue_review_id=33333333-3333-4333-8333-333333333333&draft_id=11111111-1111-4111-8111-111111111111",
     ];
-    const loadedBookingFetchCallSet = new Set(loadedBookingState.fetchCalls);
+    const loadedBookingTypedReadCalls = loadedBookingState.fetchCalls.filter((call) =>
+      call.includes("/api/admin-load-bookings-typed-read"),
+    );
+    assert.ok(
+      loadedBookingTypedReadCalls.length <= 1 &&
+        loadedBookingTypedReadCalls.every(
+          (call) => call === "GET /api/admin-load-bookings-typed-read?limit=25",
+        ),
+      `Expected at most one guarded typed-read refresh, got ${loadedBookingTypedReadCalls.join(", ")}`,
+    );
+    const loadedBookingFetchCallSet = new Set(
+      loadedBookingState.fetchCalls.filter(
+        (call) => !call.includes("/api/admin-load-bookings-typed-read"),
+      ),
+    );
     assert.deepEqual(
       [...loadedBookingFetchCallSet].sort(),
       [...expectedLoadedBookingFetchCalls].sort(),
@@ -17215,7 +17241,7 @@ async function runChromeTest() {
       {
         history: "I've arrived at 2026-06-07 17:25 SGT",
         latest: "I've arrived",
-        message: "Loaded 1 saved driver status event for ui-cleanup-load-fixture.",
+        message: "Loaded 1 saved driver status event for 10839.",
         refreshButton: {
           disabled: false,
           text: "Refresh status",
@@ -17279,7 +17305,7 @@ async function runChromeTest() {
     assert.equal(refreshedDriverStatusState.latest, "I've arrived");
     assert.equal(
       refreshedDriverStatusState.message,
-      "Loaded 1 saved driver status event for ui-cleanup-load-fixture.",
+      "Loaded 1 saved driver status event for 10839.",
     );
     assert.ok(
       refreshedDriverStatusState.requestCount >= 2,
@@ -18950,7 +18976,7 @@ async function runChromeTest() {
     );
     assert.equal(
       dispatchReleaseReadyForWorkflowSaveState.dispatchReleaseChecklist.context,
-      "Applied snapshot: ui-cleanup-load-fixture",
+      "Applied snapshot: 10839",
     );
     const clickedDispatchReleaseWorkflowSave = await evaluate(`(() => {
       const button = document.querySelector("[data-admin-dispatch-release-mark-ready='true']");
@@ -18977,7 +19003,7 @@ async function runChromeTest() {
               ?.textContent.replace(/\\s+/g, " ")
               .trim() || "";
 
-          return feedback.includes("Dispatch release workflow status saved for ui-cleanup-load-fixture")
+          return feedback.includes("Dispatch release workflow status saved for 10839")
             ? {
                 feedback,
                 fetchCalls: window.__prestigeFetchCalls || [],
@@ -19072,7 +19098,7 @@ async function runChromeTest() {
               ?.textContent.replace(/\\s+/g, " ")
               .trim() || "";
 
-          return feedback.includes("Driver acknowledgement workflow status saved for ui-cleanup-load-fixture")
+          return feedback.includes("Driver acknowledgement workflow status saved for 10839")
             ? {
                 feedback,
                 workflowStatusRequests: window.__prestigeWorkflowStatusRequests || [],

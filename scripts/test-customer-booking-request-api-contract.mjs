@@ -38,6 +38,7 @@ async function loadRouteHarness() {
   const devicePushAlertPath = path.join(tempDir, "lib/admin-device-push-notification.js");
   const receiptEmailPath = path.join(tempDir, "lib/customer-booking-receipt-email.js");
   const customerSavedBookingsReadPath = path.join(tempDir, "lib/customer-saved-bookings-read.js");
+  const customerPortalAccessLinkPath = path.join(tempDir, "lib/customer-portal-access-link.js");
   const codexJobCardAutoPreparationPath = path.join(
     tempDir,
     "lib/codex-job-card-auto-preparation.js",
@@ -130,9 +131,9 @@ async function loadRouteHarness() {
     receiptEmailPath,
     [
       "function mock() { return globalThis.__prestigeCustomerBookingRequestApiMock; }",
-      "async function sendCustomerBookingReceiptEmail(bookings) {",
+      "async function sendCustomerBookingReceiptEmail(bookings, options) {",
       "  const state = mock();",
-      "  state.receiptCalls = [...(state.receiptCalls || []), bookings];",
+      "  state.receiptCalls = [...(state.receiptCalls || []), { bookings, options }];",
       "  return state.receiptResult || { ok: false, reason: 'gate_closed', status: 'blocked' };",
       "}",
       "module.exports = { sendCustomerBookingReceiptEmail };",
@@ -158,6 +159,16 @@ async function loadRouteHarness() {
       "  ];",
       "}",
       "module.exports = { expiredCustomerSavedBookingsSessionCookieHeaders, resolveCustomerSavedBookingsBoundaryForPurpose, resolveCustomerSavedBookingsVerifiedIdentity };",
+    ].join("\n"),
+  );
+  await writeFile(
+    customerPortalAccessLinkPath,
+    [
+      "function createCustomerPortalAccessLinkToken() {",
+      "  const state = globalThis.__prestigeCustomerBookingRequestApiMock;",
+      "  return state.portalLinkResult || { ok: false, error: 'portal link unavailable', status: 403 };",
+      "}",
+      "module.exports = { createCustomerPortalAccessLinkToken };",
     ].join("\n"),
   );
   await writeFile(
@@ -387,6 +398,11 @@ try {
   );
   assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.devicePushAlertCalls.length, 1);
   assert.equal(
+    globalThis.__prestigeCustomerBookingRequestApiMock.receiptCalls[0].options.portalUrl,
+    null,
+    "A first-time request must not receive portal access inferred from contact fields.",
+  );
+  assert.equal(
     globalThis.__prestigeCustomerBookingRequestApiMock.devicePushAlertCalls[0].booking_reference,
     "CUST-SAFE-001",
   );
@@ -399,9 +415,30 @@ try {
   assertSafeCustomerBody(success.body, "short-notice success body");
 
   const verifiedPaMock = installMock({
-    portalBoundary: { data: { auth_user_id: "verified-pa" }, ok: true },
+    createResult: {
+      data: {
+        admin_internal_status: "Admin Review Required",
+        booking_reference: "CUST-SAFE-001",
+        contact_email: "william@prestigelimo.sg",
+        customer_facing_status: "Request Received",
+        short_notice_review_status: "Admin Review Required",
+      },
+      ok: true,
+    },
+    portalBoundary: {
+      data: {
+        auth_user_id: "verified-pa",
+        portal_link_revision: "verified-link-revision",
+      },
+      ok: true,
+    },
+    portalLinkResult: {
+      data: { token: "customer-portal-access-link-v1.test.signature" },
+      ok: true,
+    },
     verifiedIdentity: {
       data: {
+        booker_email: "william@prestigelimo.sg",
         booker_id: 5,
         company_id: 1,
         customer_account_reference: "120",
@@ -425,7 +462,55 @@ try {
     traveler_id: 901,
   });
   assert.equal(verifiedPaMock.identityCalls[0].travelerId, "901");
+  assert.match(
+    verifiedPaMock.receiptCalls[0].options.portalUrl,
+    /^http:\/\/localhost\/api\/customer-portal-access\/customer-portal-access-link-v1\.test\.signature\?booking=CUST-SAFE-001&tracking=1$/,
+  );
   assertSafeCustomerBody(verifiedPaSuccess.body, "verified PA success body");
+
+  const mismatchedEmailMock = installMock({
+    createResult: {
+      data: {
+        admin_internal_status: "Admin Review Required",
+        booking_reference: "CUST-SAFE-001",
+        contact_email: "other@example.com",
+        customer_facing_status: "Request Received",
+        short_notice_review_status: "Admin Review Required",
+      },
+      ok: true,
+    },
+    portalBoundary: {
+      data: {
+        auth_user_id: "verified-pa",
+        portal_link_revision: "verified-link-revision",
+      },
+      ok: true,
+    },
+    portalLinkResult: {
+      data: { token: "customer-portal-access-link-v1.test.signature" },
+      ok: true,
+    },
+    verifiedIdentity: {
+      data: {
+        booker_email: "william@prestigelimo.sg",
+        booker_id: 5,
+        company_id: 1,
+        customer_account_reference: "120",
+        traveler_id: 901,
+        traveler_name: "Verified Traveller",
+      },
+      ok: true,
+    },
+  });
+  const mismatchedEmailSuccess = await readJson(
+    await harness.route.POST(postRequest({ passengerName: "Tampered Passenger", travelerId: "901" })),
+  );
+  assert.equal(mismatchedEmailSuccess.status, 200);
+  assert.equal(
+    mismatchedEmailMock.receiptCalls[0].options.portalUrl,
+    null,
+    "A receipt sent to an address other than the verified booker email must not include portal access.",
+  );
 
   const stalePortalMock = installMock({
     portalBoundary: { data: { auth_user_id: "removed-portal-account" }, ok: true },

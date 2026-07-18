@@ -14,6 +14,7 @@ import {
 } from "../../../lib/customer-saved-bookings-read";
 import { prepareCodexJobCardForAdminReview } from "../../../lib/codex-job-card-auto-preparation";
 import { sendCustomerBookingReceiptEmail } from "../../../lib/customer-booking-receipt-email";
+import { createCustomerPortalAccessLinkToken } from "../../../lib/customer-portal-access-link";
 
 export const dynamic = "force-dynamic";
 
@@ -120,6 +121,56 @@ function customerSafeError(rawError: string) {
   }
 
   return "Booking request could not be saved safely.";
+}
+
+function normalizedReceiptEmail(value: unknown) {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function buildVerifiedCustomerPortalReceiptUrl({
+  booking,
+  customerAccountReference,
+  linkRevision,
+  request,
+  verifiedBookerEmail,
+}: {
+  booking: AdminBookingPersistenceRecord;
+  customerAccountReference: string;
+  linkRevision: string;
+  request: Request;
+  verifiedBookerEmail: string | null;
+}) {
+  const recipient = normalizedReceiptEmail(booking.contact_email);
+  const verifiedRecipient = normalizedReceiptEmail(verifiedBookerEmail);
+  const bookingReference = typeof booking.booking_reference === "string"
+    ? booking.booking_reference.trim()
+    : "";
+
+  if (
+    !recipient ||
+    recipient !== verifiedRecipient ||
+    !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(bookingReference)
+  ) {
+    return null;
+  }
+
+  const tokenResult = createCustomerPortalAccessLinkToken(customerAccountReference, {
+    linkRevision,
+    scope: "portal_account",
+  });
+
+  if (!tokenResult.ok) {
+    return null;
+  }
+
+  const url = new URL(
+    `/api/customer-portal-access/${encodeURIComponent(tokenResult.data.token)}`,
+    request.url,
+  );
+  url.searchParams.set("booking", bookingReference);
+  url.searchParams.set("tracking", "1");
+
+  return url.toString();
 }
 
 async function notifyAdminNewBookingRequest(booking: AdminBookingPersistenceRecord) {
@@ -276,7 +327,16 @@ export async function POST(request: Request) {
 
     await prepareSavedCustomerBookingRequestJobCards(savedRequests);
     await notifyAdminNewBookingRequest(primaryRequest);
-    const receipt = await sendCustomerBookingReceiptEmail(savedRequests);
+    const portalUrl = portalBoundary.ok && verifiedIdentity?.ok && portalBoundary.data.portal_link_revision
+      ? buildVerifiedCustomerPortalReceiptUrl({
+          booking: primaryRequest,
+          customerAccountReference: verifiedIdentity.data.customer_account_reference,
+          linkRevision: portalBoundary.data.portal_link_revision,
+          request,
+          verifiedBookerEmail: verifiedIdentity.data.booker_email,
+        })
+      : null;
+    const receipt = await sendCustomerBookingReceiptEmail(savedRequests, { portalUrl });
 
     return Response.json({
       ok: true,

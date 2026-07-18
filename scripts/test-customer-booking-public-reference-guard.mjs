@@ -89,6 +89,70 @@ includes("driverRead", "public_reference: publicBookingReference", "driver publi
 includes("driverUi", '{ label: "Reference", value: job.reference }', "driver visible public reference row");
 includes("adminUi", "bookingPublicReference", "admin shared public reference selector");
 includes("adminUi", "bookingRecord.public_booking_reference", "admin public reference search/display");
+excludes(
+  "adminUi",
+  /cleanReferenceText\(bookingRecord\.public_booking_reference\)\s*\|\|\s*compactBookingReference/,
+  "admin internal-reference display fallback",
+);
+includes("adminUi", '"Reference unavailable"', "missing public reference fail-closed display");
+includes(
+  "adminUi",
+  "public_booking_reference: clean(record.public_booking_reference) || null",
+  "operational-record public reference retention",
+);
+assert.ok(
+  (source.adminUi.match(/public_booking_reference: clean\([^\n]+public_booking_reference\) \|\| null/g) || []).length >= 2,
+  "Both admin compatibility mappers must retain the public booking reference.",
+);
+includes(
+  "adminUi",
+  "clean(record.public_booking_reference)",
+  "operational-record public reference search",
+);
+includes(
+  "adminUi",
+  "const displayReference = displayRecord",
+  "new-booking notification public reference display",
+);
+includes("adminUi", "{displayReference}", "new-booking notification public reference label");
+includes(
+  "adminUi",
+  "`Booking reference: ${dispatchPublicBookingReference}`",
+  "customer copy public reference display",
+);
+includes(
+  "adminUi",
+  "driverJobLinkPublicBookingReference",
+  "driver-link copy public reference display",
+);
+for (const fragment of [
+  "adminVisibleBookingReference",
+  "bookingPublicReference(activeJobBooking)",
+  '{dispatchPublicBookingReference || "Booking"}',
+  "displayBookingReference = dispatchPublicBookingReference",
+  "displayBookingReference = adminVisibleBookingReference(bookingReference)",
+  "Operational snapshot applied: ${displayBookingReference}",
+  "Dispatch release workflow status saved for ${displayBookingReference}",
+  "Driver acknowledgement workflow status saved for ${displayBookingReference}",
+]) {
+  includes("adminUi", fragment, `admin public reference consumer ${fragment}`);
+}
+for (const pattern of [
+  /Operational snapshot applied: \$\{bookingReference\}/,
+  /Loaded dispatch release workflow status for \$\{bookingReference\}/,
+  /Loaded driver acknowledgement workflow status for \$\{bookingReference\}/,
+  /Loading saved driver status for \$\{bookingReference\}/,
+  /Checking OTS photo proof for \$\{bookingReference\}/,
+  /Dispatch release workflow status saved for \$\{bookingReference\}/,
+  /Driver acknowledgement workflow status saved for \$\{bookingReference\}/,
+]) {
+  excludes("adminUi", pattern, `active admin internal-reference message ${pattern}`);
+}
+excludes(
+  "adminUi",
+  /\{bookingReference \|\| clean\(notification\.safe_title\) \|\| \"New booking request\"\}/,
+  "internal new-booking notification reference display",
+);
 includes(
   "adminUi",
   "Ref: {operationalCard.public_booking_reference || bookingPublicReference(savedBooking)}",

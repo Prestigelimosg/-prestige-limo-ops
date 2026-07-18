@@ -73,6 +73,7 @@ export type CustomerSavedBookingsReadResult = {
 };
 
 export type CustomerSavedBookingsVerifiedIdentity = {
+  booker_email: string | null;
   booker_id: number;
   company_id: number;
   customer_account_reference: string;
@@ -235,6 +236,14 @@ function safeTextFromDb(value: unknown, maxLength = maxSafeTextLength) {
   }
 
   return cleaned;
+}
+
+function safeEmailFromDb(value: unknown) {
+  const email = safeTextFromDb(value, 254)?.toLowerCase() || null;
+
+  return email && /^[^\s@<>()[\],;:"\\]+@[^\s@<>()[\],;:"\\]+\.[^\s@<>()[\],;:"\\]+$/.test(email)
+    ? email
+    : null;
 }
 
 function safeDateTextFromDb(value: unknown) {
@@ -1154,6 +1163,28 @@ export async function resolveCustomerSavedBookingsVerifiedIdentity(
     return customerSavedBookingsAuthRequiredResult();
   }
 
+  const { data: bookerRows, error: bookerError } = await clientResult.data
+    .from("bookers")
+    .select("id, company_id, email")
+    .eq("id", bookerId)
+    .eq("company_id", companyId)
+    .limit(1);
+
+  if (bookerError) {
+    return customerSavedBookingsAuthRequiredResult();
+  }
+
+  const bookerRow = asRecord(asArray(bookerRows)[0]);
+
+  if (
+    verifiedIdentityId(bookerRow.id) !== bookerId ||
+    verifiedIdentityId(bookerRow.company_id) !== companyId
+  ) {
+    return customerSavedBookingsAuthRequiredResult();
+  }
+
+  const bookerEmail = safeEmailFromDb(bookerRow.email);
+
   const travelerId =
     travelerIdInput === undefined || travelerIdInput === null || travelerIdInput === ""
       ? null
@@ -1192,6 +1223,7 @@ export async function resolveCustomerSavedBookingsVerifiedIdentity(
 
   return {
     data: {
+      booker_email: bookerEmail,
       booker_id: bookerId,
       company_id: companyId,
       customer_account_reference: customerAccountReference,

@@ -140,6 +140,24 @@ async function writeMockModules(tempDir, options = {}) {
     ].join("\n"),
   );
   await writeFile(
+    path.join(tempDir, "lib/customer-booking-receipt-email.js"),
+    [
+      "async function sendCustomerBookingReceiptEmail() {",
+      "  return { ok: false, reason: 'gate_closed', status: 'blocked' };",
+      "}",
+      "module.exports = { sendCustomerBookingReceiptEmail };",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(tempDir, "lib/customer-portal-access-link.js"),
+    [
+      "function createCustomerPortalAccessLinkToken() {",
+      "  return { error: 'Customer portal access is unavailable.', ok: false, status: 403 };",
+      "}",
+      "module.exports = { createCustomerPortalAccessLinkToken };",
+    ].join("\n"),
+  );
+  await writeFile(
     path.join(tempDir, "lib/customer-driver-app-notification-persistence.js"),
     [
       "async function createCustomerDriverAppNotification() {",

@@ -29,6 +29,7 @@ export type CustomerBookingReceiptEmailResult = {
 
 export type CustomerBookingReceiptEmailOptions = {
   env?: NodeJS.ProcessEnv;
+  portalUrl?: string | null;
   providerFetch?: (
     url: string,
     init: {
@@ -102,6 +103,32 @@ function safeEmail(value: unknown) {
     : null;
 }
 
+function safePortalUrl(value: unknown) {
+  const candidate = textOrNull(value, 4096);
+
+  if (!candidate) {
+    return null;
+  }
+
+  try {
+    const url = new URL(candidate);
+
+    if (
+      url.protocol !== "https:" ||
+      url.username ||
+      url.password ||
+      url.hash ||
+      !url.pathname.startsWith("/api/customer-portal-access/")
+    ) {
+      return null;
+    }
+
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
 function configValue(env: NodeJS.ProcessEnv, key: string) {
   const value = env[key]?.trim() || null;
 
@@ -158,7 +185,10 @@ function normalizeTrip(record: AdminBookingPersistenceRecord) {
   };
 }
 
-function emailText(trips: Array<NonNullable<ReturnType<typeof normalizeTrip>>>) {
+function emailText(
+  trips: Array<NonNullable<ReturnType<typeof normalizeTrip>>>,
+  portalUrl: string | null,
+) {
   return [
     "Request received — pending review",
     "This is not a booking confirmation.",
@@ -174,6 +204,9 @@ function emailText(trips: Array<NonNullable<ReturnType<typeof normalizeTrip>>>) 
       "",
     ]),
     "Our team will review availability and contact you after review.",
+    ...(portalUrl
+      ? ["", "View or manage your bookings:", portalUrl]
+      : []),
   ]
     .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
     .join("\n")
@@ -225,6 +258,7 @@ export async function sendCustomerBookingReceiptEmail(
   }
 
   const providerFetch = options.providerFetch || fetch;
+  const portalUrl = safePortalUrl(options.portalUrl);
   const timeoutMs =
     Number.isFinite(options.timeoutMs) && (options.timeoutMs || 0) >= 1000 && (options.timeoutMs || 0) <= 10000
       ? (options.timeoutMs as number)
@@ -236,7 +270,7 @@ export async function sendCustomerBookingReceiptEmail(
         from: sender,
         reply_to: replyTo,
         subject: `Request received: ${safeTrips[0].bookingReference}`,
-        text: emailText(safeTrips),
+        text: emailText(safeTrips, portalUrl),
         to: [recipient],
       }),
       headers: {

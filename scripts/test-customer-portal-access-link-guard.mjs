@@ -258,7 +258,7 @@ for (const fragment of [
 
 for (const fragment of [
   "const customerAccountReference = customerDriverDetailsPortalAccountReference;",
-  "if (!dispatchReleaseCustomerCopyReady)",
+  "if (!customerDriverDetailsPortalLinkCopyReady)",
   "fetch(adminCustomerPortalAccessLinksApiPath",
   "bookingReference,",
   "customerAccountReference,",

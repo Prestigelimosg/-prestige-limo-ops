@@ -22091,8 +22091,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       throw new Error("Load a saved booking before copying the customer app link.");
     }
 
-    if (!dispatchReleaseCustomerCopyReady) {
-      throw new Error("Complete trip and assigned-driver details before copying the customer app link.");
+    if (!customerDriverDetailsPortalLinkCopyReady) {
+      throw new Error("Complete the saved trip details before copying the customer app link.");
     }
 
     if (!customerAccountReference) {
@@ -24528,6 +24528,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     dispatchReleaseDriverReady &&
     clean(customerCopyText).startsWith("CUSTOMER BOOKING DETAILS") &&
     !dispatchReleaseCustomerCopyHasPlaceholder;
+  const customerDriverDetailsPortalLinkCopyReady =
+    dispatchReleaseTripComplete &&
+    clean(customerCopyText).startsWith("CUSTOMER BOOKING DETAILS");
   const dispatchReleaseDriverDispatchHasPlaceholder =
     /\bTBC\b|Pickup > Drop-off|Date TBC|Time TBC/i.test(driverDispatchCopyText);
   const dispatchReleaseDriverDispatchHasFinanceLine = /payout\s*:/i.test(driverDispatchCopyText);
@@ -30545,7 +30548,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         : "Copy + App Link";
   const customerDriverDetailsPortalLinkCopyDisabled =
     customerDriverDetailsPortalLinkCopyDisplayState?.tone === "info" ||
-    !dispatchReleaseCustomerCopyReady ||
+    !customerDriverDetailsPortalLinkCopyReady ||
     !customerDriverDetailsPortalAccountReference ||
     !customerDriverDetailsPortalCompanyId ||
     !customerDriverDetailsPortalBookerId;
@@ -41848,8 +41851,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       disabled={customerDriverDetailsPortalLinkCopyDisabled}
                       onClick={copyCustomerDriverDetailsWithCustomerAppLink}
                       title={
-                        !dispatchReleaseCustomerCopyReady
-                          ? "Complete trip and assigned-driver details first. Live location is not required for the app link."
+                        !customerDriverDetailsPortalLinkCopyReady
+                          ? "Complete the saved trip details first. Driver assignment and live location are not required for the app link."
                           : !customerDriverDetailsPortalAccountReference
                             ? "Save + CRM or load the saved booking before copying a customer app link."
                             : !customerDriverDetailsPortalCompanyId || !customerDriverDetailsPortalBookerId

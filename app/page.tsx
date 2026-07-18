@@ -22285,9 +22285,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     const response = await fetch(adminCustomerPortalAccessLinksApiPath, {
       body: JSON.stringify({
         bookerId,
-        bookingReference,
         companyId,
         customerAccountReference,
+        publicBookingReference: dispatchPublicBookingReference,
         safeDisplayLabel: customerDriverDetailsPortalSafeDisplayLabel || customerAccountReference,
       }),
       cache: "no-store",

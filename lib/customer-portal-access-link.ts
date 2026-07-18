@@ -159,6 +159,14 @@ export function safeCustomerPortalAccessAccountReference(value: unknown) {
     : null;
 }
 
+export function safeCustomerPortalPublicBookingReference(value: unknown) {
+  const cleaned = textOrNull(value)?.toUpperCase() || "";
+
+  return /^(?:[0-9]{5}|[A-Z0-9]{2,12}-[0-9]{5})$/.test(cleaned)
+    ? cleaned
+    : null;
+}
+
 function safeCookieName(value: unknown) {
   const cleaned = textOrNull(value);
 

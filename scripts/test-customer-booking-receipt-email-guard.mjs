@@ -6,6 +6,7 @@ import path from "node:path";
 import ts from "typescript";
 
 const helperPath = "lib/customer-booking-receipt-email.ts";
+const customerPortalAccessLinkPath = "lib/customer-portal-access-link.ts";
 const singaporePickupDisplayPath = "lib/singapore-pickup-display.ts";
 const routePath = "app/api/customer-booking-requests/route.ts";
 const ledgerPath = "docs/current-implementation-ledger.md";
@@ -29,6 +30,14 @@ async function loadHarness() {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "prestige-customer-receipt-"));
   const sourcePath = path.join(process.cwd(), helperPath);
   const outputPath = path.join(tempDir, "lib/customer-booking-receipt-email.js");
+  const customerPortalAccessLinkSourcePath = path.join(
+    process.cwd(),
+    customerPortalAccessLinkPath,
+  );
+  const customerPortalAccessLinkOutputPath = path.join(
+    tempDir,
+    "lib/customer-portal-access-link.js",
+  );
   const singaporePickupDisplaySourcePath = path.join(process.cwd(), singaporePickupDisplayPath);
   const singaporePickupDisplayOutputPath = path.join(tempDir, "lib/singapore-pickup-display.js");
   const serverOnlyPath = path.join(tempDir, "node_modules/server-only/index.js");
@@ -36,6 +45,13 @@ async function loadHarness() {
   await mkdir(path.dirname(outputPath), { recursive: true });
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await writeFile(outputPath, transpile(await readFile(sourcePath, "utf8"), sourcePath));
+  await writeFile(
+    customerPortalAccessLinkOutputPath,
+    transpile(
+      await readFile(customerPortalAccessLinkSourcePath, "utf8"),
+      customerPortalAccessLinkSourcePath,
+    ),
+  );
   await writeFile(
     singaporePickupDisplayOutputPath,
     transpile(await readFile(singaporePickupDisplaySourcePath, "utf8"), singaporePickupDisplaySourcePath),
@@ -160,7 +176,7 @@ try {
     {
       env: env(),
       portalUrl:
-        "https://app.prestigelimo.sg/api/customer-portal-access/test-token?booking=CUST-RECEIPT-003-OUT",
+        "https://app.prestigelimo.sg/api/customer-portal-access/test-token?booking=WIL-00003&tracking=1",
       providerFetch: async (url, init) => {
         requests.push({ init, url });
         return { ok: true, status: 200 };
@@ -190,11 +206,40 @@ try {
     "Pickup: Orchard Hotel",
     "Drop-off: Changi Airport Terminal 3",
     "View or manage your bookings:",
-    "https://app.prestigelimo.sg/api/customer-portal-access/test-token?booking=CUST-RECEIPT-003-OUT",
+    "https://app.prestigelimo.sg/api/customer-portal-access/test-token?booking=WIL-00003&tracking=1",
   ]) {
     assert.ok(body.text.includes(text), `Receipt must include ${text}`);
   }
+  assert.equal(
+    body.text.includes("CUST-RECEIPT-003-OUT"),
+    false,
+    "A receipt portal link must not expose the internal booking reference.",
+  );
   assert.equal(forbiddenCustomerText.test(body.text), false);
+
+  const unsafeLinkRequests = [];
+  const unsafeLinkSent = await harness.helper.sendCustomerBookingReceiptEmail(
+    [booking("CUST-RECEIPT-005", { public_booking_reference: "10842" })],
+    {
+      env: env(),
+      portalUrl:
+        "https://app.prestigelimo.sg/api/customer-portal-access/test-token?booking=CUST-RECEIPT-005&tracking=1",
+      providerFetch: async (url, init) => {
+        unsafeLinkRequests.push({ init, url });
+        return { ok: true, status: 200 };
+      },
+    },
+  );
+  assert.equal(unsafeLinkSent.status, "sent");
+  const unsafeLinkBody = JSON.parse(unsafeLinkRequests[0].init.body);
+  assert.ok(
+    unsafeLinkBody.text.includes(
+      "https://app.prestigelimo.sg/api/customer-portal-access/test-token",
+    ),
+    "A valid portal token must remain available when an unsafe deep-link query is removed.",
+  );
+  assert.equal(unsafeLinkBody.text.includes("?booking="), false);
+  assert.equal(unsafeLinkBody.text.includes("CUST-RECEIPT-005"), false);
 
   const firstTimeRequests = [];
   const firstTimeSent = await harness.helper.sendCustomerBookingReceiptEmail(

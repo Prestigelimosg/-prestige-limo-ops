@@ -201,9 +201,9 @@ function bookingFilterForBooking(booking: CustomerPortalBooking): BookingFilter 
 }
 
 function safePortalBookingReference(value: string | null) {
-  const cleaned = value?.replace(/\s+/g, " ").trim() || "";
+  const cleaned = value?.replace(/\s+/g, " ").trim().toUpperCase() || "";
 
-  return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(cleaned) ? cleaned : "";
+  return /^(?:[0-9]{5}|[A-Z0-9]{2,12}-[0-9]{5})$/.test(cleaned) ? cleaned : "";
 }
 
 function readCustomerPortalBookingDeepLink() {
@@ -212,9 +212,7 @@ function readCustomerPortalBookingDeepLink() {
   }
 
   const params = new URLSearchParams(window.location.search);
-  const bookingReference =
-    safePortalBookingReference(params.get("booking")) ||
-    safePortalBookingReference(params.get("booking_reference"));
+  const bookingReference = safePortalBookingReference(params.get("booking"));
 
   return bookingReference
     ? {
@@ -747,8 +745,9 @@ export default function CustomerPortalPage() {
         return;
       }
 
-      const targetBookingId = `saved-${deepLink.bookingReference}`;
-      const targetBooking = portalBookings.find((booking) => booking.id === targetBookingId);
+      const targetBooking = portalBookings.find(
+        (booking) => booking.publicBookingReference === deepLink.bookingReference,
+      );
 
       if (!targetBooking) {
         setDeepLinkApplied(true);

@@ -157,6 +157,8 @@ for (const fragment of [
   "Priority=High",
   "maxCustomerPortalAccessLinkAgeSeconds",
   "maxCustomerPortalCookieAgeSeconds",
+  "safeCustomerPortalPublicBookingReference",
+  "/^(?:[0-9]{5}|[A-Z0-9]{2,12}-[0-9]{5})$/",
 ]) {
   assertIncludes(helper, fragment, `portal access helper ${fragment}`);
 }
@@ -209,7 +211,10 @@ assertIncludes(adminRoute, "ensureAdminCustomerPortalAccessAccount", "admin port
 assertIncludes(adminRoute, "revokeAdminCustomerPortalAccessAccount", "admin portal access route revoke action");
 assertIncludes(adminRoute, "createCustomerPortalAccessLinkToken(account.data.customer_account_reference", "admin portal access route account-scoped link creation");
 assertIncludes(adminRoute, 'scope: "portal_account"', "admin portal access route portal-account scoped token");
+assertIncludes(adminRoute, "safeCustomerPortalPublicBookingReference(", "admin portal access route public booking deep-link validation");
+assertIncludes(adminRoute, "body.publicBookingReference,", "admin portal access route public booking deep-link input");
 assertIncludes(adminRoute, 'action !== "revoke"', "admin portal access route only allows revoke patch action");
+assertExcludes(adminRoute, "body.bookingReference", "admin portal access route internal booking deep-link input");
 assertExcludes(adminRoute, /Set-Cookie|NextResponse|@supabase\/supabase-js|\bcreateClient\b|\.(?:from|insert|upsert|update|delete|rpc)\s*\(/, "admin portal access route unsafe path");
 
 for (const fragment of [
@@ -233,11 +238,13 @@ assertIncludes(publicAccessRoute, "resolveCustomerPortalAccessSession(token)", "
 assertIncludes(publicAccessRoute, "assertActiveCustomerPortalAccessAccount", "public access route active account check");
 assertIncludes(publicAccessRoute, "customerPortalAccessCookieHeader(token)", "public access route cookie creation");
 assertIncludes(publicAccessRoute, "customerPortalRedirectUrl(request)", "public access route redirect");
+assertIncludes(publicAccessRoute, "safeCustomerPortalPublicBookingReference", "public access route public booking deep-link validation");
 assertIncludes(publicAccessRoute, "redirectUrl.searchParams.set(\"booking\", bookingReference)", "public access route booking deep-link");
 assertIncludes(publicAccessRoute, "redirectUrl.searchParams.set(\"tracking\", \"1\")", "public access route tracking deep-link");
 assertIncludes(publicAccessRoute, "response.headers.set(\"Set-Cookie\", cookie.data)", "public access route Set-Cookie");
 assertIncludes(publicAccessRoute, "\"Cache-Control\": \"no-store\"", "public access route no-store blocked response");
 assertExcludes(publicAccessRoute, /@supabase\/supabase-js|\bcreateClient\b|\.(?:from|insert|upsert|update|delete|rpc)\s*\(/, "public access route DB/provider path");
+assertExcludes(publicAccessRoute, 'searchParams.get("booking_reference")', "public access route legacy internal booking query");
 assertExcludes(publicAccessRoute, forbiddenCustomerPortalAccessSurfacePattern, "public access route customer-visible private fields");
 
 for (const fragment of [
@@ -262,7 +269,7 @@ for (const fragment of [
   "const customerAccountReference = customerDriverDetailsPortalAccountReference;",
   "if (!customerDriverDetailsPortalLinkCopyReady)",
   "fetch(adminCustomerPortalAccessLinksApiPath",
-  "bookingReference,",
+  "publicBookingReference: dispatchPublicBookingReference,",
   "customerAccountReference,",
   "safeDisplayLabel: customerDriverDetailsPortalSafeDisplayLabel || customerAccountReference",
   '"x-prestige-admin-purpose": adminLegacyDataPurpose',
@@ -296,6 +303,8 @@ assertExcludes(portalClientSource, "/api/customer-portal-access", "customer port
 assertExcludes(portalClientSource, "/api/admin-customer-portal-access-links", "customer portal client must not call admin access route");
 assertExcludes(portalClientSource, forbiddenClientAuthPattern, "customer portal client auth plumbing");
 assertIncludes(portalClientSource, "readCustomerPortalBookingDeepLink", "customer portal booking deep-link read");
+assertIncludes(portalClientSource, "booking.publicBookingReference === deepLink.bookingReference", "customer portal public booking deep-link match");
+assertExcludes(portalClientSource, "`saved-${deepLink.bookingReference}`", "customer portal internal booking deep-link reconstruction");
 assertIncludes(portalClientSource, "setExpandedBookingId(targetBooking.id)", "customer portal booking deep-link opens detail");
 assertIncludes(portalClientSource, "setActiveTrackingBookingId(targetBooking.id)", "customer portal booking deep-link opens tracking");
 assertIncludes(portalClientSource, "refreshCustomerTrackingForBooking(targetBooking)", "customer portal booking deep-link loads driver reporting");

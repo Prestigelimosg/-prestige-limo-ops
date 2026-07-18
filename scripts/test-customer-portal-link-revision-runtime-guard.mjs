@@ -136,6 +136,27 @@ try {
   process.env.PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_SECRET = secret;
   process.env.PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_ACCOUNT_ALLOWLIST = accountReference;
 
+  assert.equal(harness.accessLink.safeCustomerPortalPublicBookingReference("10841"), "10841");
+  assert.equal(
+    harness.accessLink.safeCustomerPortalPublicBookingReference("wil-00003"),
+    "WIL-00003",
+  );
+  for (const internalOrMalformedReference of [
+    "CUST-20260718140016-47HOPM",
+    "ADM-20260718140016-47HOPM",
+    "1084",
+    "WIL-000003",
+    "WIL_00003",
+  ]) {
+    assert.equal(
+      harness.accessLink.safeCustomerPortalPublicBookingReference(
+        internalOrMalformedReference,
+      ),
+      null,
+      `Customer-visible deep links must reject ${internalOrMalformedReference}.`,
+    );
+  }
+
   const oldRevision = "2026-07-18T10:00:00.000Z";
   const currentRevision = "2026-07-18T10:05:00.000Z";
   const oldToken = harness.accessLink.createCustomerPortalAccessLinkToken(accountReference, {

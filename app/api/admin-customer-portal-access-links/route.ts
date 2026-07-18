@@ -3,7 +3,10 @@ import {
   ensureAdminCustomerPortalAccessAccount,
   revokeAdminCustomerPortalAccessAccount,
 } from "../../../lib/customer-portal-access-account";
-import { createCustomerPortalAccessLinkToken } from "../../../lib/customer-portal-access-link";
+import {
+  createCustomerPortalAccessLinkToken,
+  safeCustomerPortalPublicBookingReference,
+} from "../../../lib/customer-portal-access-link";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -28,16 +31,6 @@ function safeFailureResponse() {
   );
 }
 
-function safeBookingReference(value: unknown) {
-  if (typeof value !== "string" && typeof value !== "number") {
-    return "";
-  }
-
-  const cleaned = String(value).replace(/\s+/g, " ").trim();
-
-  return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(cleaned) ? cleaned : "";
-}
-
 async function readJsonBody(request: Request): Promise<Record<string, unknown>> {
   try {
     const body = await request.json();
@@ -59,7 +52,9 @@ export async function POST(request: Request) {
     }
 
     const body = await readJsonBody(request);
-    const bookingReference = safeBookingReference(body.bookingReference);
+    const publicBookingReference = safeCustomerPortalPublicBookingReference(
+      body.publicBookingReference,
+    );
     const account = await ensureAdminCustomerPortalAccessAccount(
       {
         bookerId: body.bookerId,
@@ -88,8 +83,8 @@ export async function POST(request: Request) {
       request.url,
     );
 
-    if (bookingReference) {
-      url.searchParams.set("booking", bookingReference);
+    if (publicBookingReference) {
+      url.searchParams.set("booking", publicBookingReference);
       url.searchParams.set("tracking", "1");
     }
 

@@ -105,6 +105,7 @@ const nonShortNoticeAdminSnapshotPickupDateText = [
 function customerPortalSmokePickupAt(monthKey, day, hour = 9, minute = 0) {
   return `${monthKey}-${String(day).padStart(2, "0")}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00.000Z`;
 }
+let customerPortalSmokePublicReferenceSequence = 92000;
 function customerPortalSmokeSavedBooking({
   bookingReference,
   day,
@@ -120,6 +121,7 @@ function customerPortalSmokeSavedBooking({
   return {
     booking_month: monthKey,
     booking_reference: bookingReference,
+    public_booking_reference: String(++customerPortalSmokePublicReferenceSequence),
     created_at: customerPortalSmokePickupAt(monthKey, Math.max(1, day - 1), 8, 0),
     customer_driver_details: null,
     customer_facing_status: status,
@@ -2097,6 +2099,7 @@ async function runChromeTest() {
                   bookings: [
                     {
                       booking_reference: "SECOND-OPS-002",
+                      public_booking_reference: "91002",
                       source_channel: "admin-dashboard",
                       customer_id: null,
                       pickup_datetime: "2026-06-05T14:45:00+08:00",
@@ -2174,6 +2177,7 @@ async function runChromeTest() {
                   bookings: [
                     {
                       booking_reference: "LOADED-OPS-001",
+                      public_booking_reference: "91001",
                       source_channel: "admin-dashboard",
                       customer_id: null,
                       pickup_datetime: "2026-06-02T08:15:00+08:00",
@@ -2228,6 +2232,7 @@ async function runChromeTest() {
                     },
                     {
                       booking_reference: "BROKEN-OPS-001",
+                      public_booking_reference: "91004",
                       source_channel: "admin-dashboard",
                       customer_id: null,
                       pickup_datetime: null,
@@ -2261,6 +2266,7 @@ async function runChromeTest() {
                 bookings: [
                   {
                     booking_reference: "LOW-REQ-003",
+                    public_booking_reference: "91003",
                     source_channel: "customer-booking-request",
                     customer_id: null,
                     pickup_datetime: "2030-06-05T14:45:00+08:00",
@@ -2298,6 +2304,7 @@ async function runChromeTest() {
                   },
                   {
                     booking_reference: "LOADED-OPS-001",
+                    public_booking_reference: "91001",
                     source_channel: "customer-booking-request",
                     customer_id: null,
                     pickup_datetime: "2026-06-02T08:15:00+08:00",
@@ -2356,6 +2363,7 @@ async function runChromeTest() {
                   },
                   {
                     booking_reference: "SECOND-OPS-002",
+                    public_booking_reference: "91002",
                     source_channel: "admin-dashboard",
                     customer_id: null,
                     pickup_datetime: "2026-06-05T14:45:00+08:00",
@@ -3756,7 +3764,7 @@ async function runChromeTest() {
               .querySelector("[data-admin-booking-persistence-applied-reference]")
               ?.textContent.trim() || "";
 
-            return feedback.includes("Operational snapshot applied: LOADED-OPS-001") &&
+            return feedback.includes("Operational snapshot applied: 91001") &&
               appliedReference.includes("LOADED-OPS-001");
           })()`),
         10000,
@@ -4076,7 +4084,7 @@ async function runChromeTest() {
               .querySelector("[data-admin-booking-persistence-applied-reference]")
               ?.textContent.trim() || "";
 
-            return feedback.includes("Operational snapshot applied: LOADED-OPS-001") &&
+            return feedback.includes("Operational snapshot applied: 91001") &&
               appliedReference.includes("LOADED-OPS-001");
           })()`),
         10000,
@@ -34146,7 +34154,7 @@ async function runChromeTest() {
       };
     };
 
-    const setCustomerPortalViewportAndLoad = async (viewport) => {
+    const setCustomerPortalViewportAndLoad = async (viewport, routeUrl = customerPortalUrl) => {
       await client.send("Emulation.setDeviceMetricsOverride", {
         deviceScaleFactor: viewport.scale,
         height: viewport.height,
@@ -34154,7 +34162,7 @@ async function runChromeTest() {
         width: viewport.width,
       });
 
-      await navigateWithLoadEvent(client, customerPortalUrl);
+      await navigateWithLoadEvent(client, routeUrl);
       await waitForSelector(
         evaluate,
         "[data-customer-portal-page]",
@@ -35028,6 +35036,29 @@ async function runChromeTest() {
     const checkCustomerPortalRoute = async () => {
       const desktopViewport = { height: 900, label: "desktop customer portal", mobile: false, scale: 1, width: 1440 };
       const mobileViewport = { height: 812, label: "mobile customer portal", mobile: true, scale: 3, width: 375 };
+
+      await setCustomerPortalViewportAndLoad(
+        desktopViewport,
+        `${customerPortalUrl}?booking=92001&tracking=1`,
+      );
+      const publicDeepLinkState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerPortalState();
+          return candidateState.detailId === "saved-booking-001" ? candidateState : false;
+        },
+        10000,
+        "customer portal public booking deep link",
+      );
+      assert.equal(
+        publicDeepLinkState.text.includes("REF: 92001"),
+        true,
+        "Expected the public deep link to open the matching public booking reference.",
+      );
+      assert.equal(
+        await evaluate(`window.location.search.includes("booking-001")`),
+        false,
+        "Expected the customer-visible deep-link query not to contain the internal booking key.",
+      );
 
       await setCustomerPortalViewportAndLoad(desktopViewport);
 

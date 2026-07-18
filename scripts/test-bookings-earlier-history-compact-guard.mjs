@@ -58,6 +58,11 @@ const completedHistoryPanel = sliceBetween(
   "const completedBookingsPanel = (",
   "const jobCardCopyEditState =",
 );
+const completedOperationalBody = sliceBetween(
+  completedHistoryPanel,
+  'data-completed-operational-body={bookingId}',
+  'data-completed-operational-actions={bookingId}',
+);
 const bookingsTabSection = sliceBetween(
   appPage,
   '{activeTab === "bookings" ? (',
@@ -210,9 +215,37 @@ for (const fragment of [
   "{canDeleteCompletedHistoryBooking ? (",
   "data-completed-delete-booking={bookingId}",
   'className="mt-1.5 grid gap-2 border-t border-stone-100 px-2 pt-2"',
-  'className="grid gap-2 sm:grid-cols-3"',
+  'data-completed-operational-detail-grid={bookingId}',
+  'className="grid gap-2 md:grid-cols-2 xl:grid-cols-4"',
+  '<OperationalCardSection section="booking" title="Booking">',
+  '<OperationalCardSection section="route" title="Route">',
+  '<OperationalCardSection section="driver-contact" title="Driver contact">',
+  '<OperationalCardSection section="operations" title="Operations">',
+  '<OperationalCardSection section="trip-details" title="Trip details">',
+  'Contact: {completedDriverContact.contact || "Not set"}',
+  '{completedDriverContact.plate || "Not set"}',
+  'OTS: {completedOperationalReadiness.otsProof}',
+  'Replacement: {completedOperationalReadiness.exceptionReplacement}',
 ]) {
   assertIncludes(completedHistoryPanel, fragment, `completed/history panel fragment ${fragment}`);
+}
+
+for (const duplicateFragment of [
+  "<DispatcherStatusSummaryBlock",
+  "<AssignedDriverSummaryBlock",
+  "<OperationalReadinessSummaryBlock",
+  "<p>Company:",
+  "<p>Booker:",
+  "<p>Name:",
+  '<p className="break-words">Route:',
+  "<p>Vehicle:",
+  "<p>Pax:",
+]) {
+  assertExcludes(
+    completedOperationalBody,
+    duplicateFragment,
+    `completed expanded-body duplicate ${duplicateFragment}`,
+  );
 }
 
 for (const forbidden of [

@@ -2571,31 +2571,6 @@ function AssignedDriverSummaryBlock({
   );
 }
 
-function DispatcherStatusSummaryBlock({
-  bookingRecord,
-  flush = false,
-  operationalCard,
-}: {
-  bookingRecord: BookingRecord;
-  flush?: boolean;
-  operationalCard?: LoadBookingsOperationalDisplayCard;
-}) {
-  const status = bookingRecordIsCancelledStatus(bookingRecord)
-    ? "cancelled"
-    : bookingRecordIsCompletedStatus(bookingRecord)
-      ? "completed"
-      : operationalCard?.booking_status || bookingRecord.status;
-
-  return (
-    <div
-      className={`${flush ? "" : "mt-2 "}rounded-md border border-emerald-100 bg-emerald-50/70 px-2 py-1.5 text-xs leading-5 text-slate-700`}
-      data-dispatcher-status-summary={bookingRecordStableKey(bookingRecord, operationalCard)}
-    >
-      <p className="font-semibold text-emerald-950">Status: {bookingStatusLabel(status)}</p>
-    </div>
-  );
-}
-
 function getOperationalReadinessSummary(
   bookingRecord: BookingRecord,
   operationalCard?: LoadBookingsOperationalDisplayCard,
@@ -2627,30 +2602,6 @@ function getOperationalReadinessSummary(
     exceptionReplacement,
     otsProof,
   };
-}
-
-function OperationalReadinessSummaryBlock({
-  bookingRecord,
-  flush = false,
-  operationalCard,
-}: {
-  bookingRecord: BookingRecord;
-  flush?: boolean;
-  operationalCard?: LoadBookingsOperationalDisplayCard;
-}) {
-  const readinessSummary = getOperationalReadinessSummary(bookingRecord, operationalCard);
-
-  return (
-    <div
-      className={`${flush ? "" : "mt-2 "}rounded-md border border-amber-100 bg-amber-50/70 px-2 py-1.5 text-xs leading-5 text-slate-700`}
-      data-operational-readiness-summary={bookingRecordStableKey(bookingRecord, operationalCard)}
-    >
-      <p className="font-semibold text-amber-950">Ops: {readinessSummary.otsProof}</p>
-      <p className="mt-0.5 truncate text-slate-600">
-        Replacement: {readinessSummary.exceptionReplacement}
-      </p>
-    </div>
-  );
 }
 
 function OperationalCardSection({
@@ -24473,6 +24424,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 operationalCard.assigned_driver_display_name ||
                 clean(savedBooking.driver_name) ||
                 "Driver TBC";
+              const completedDriverContact = getAssignedDriverSummary(savedBooking, operationalCard);
+              const completedOperationalReadiness = getOperationalReadinessSummary(
+                savedBooking,
+                operationalCard,
+              );
               const isDspBooking =
                 normalizeBookingType(
                   operationalCard.booking_type ||
@@ -24572,46 +24528,34 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                         </span>
                       </summary>
                       <div className="mt-1.5 grid gap-2 border-t border-stone-100 px-2 pt-2" data-completed-operational-body={bookingId}>
-                        <div className="grid gap-2 md:grid-cols-2">
+                        <div
+                          className="grid gap-2 md:grid-cols-2 xl:grid-cols-4"
+                          data-completed-operational-detail-grid={bookingId}
+                        >
                           <OperationalCardSection section="booking" title="Booking">
                             <p>
                               Ref: {operationalCard.public_booking_reference || bookingPublicReference(savedBooking)}
                             </p>
-                            {operationalCard.job_card_display ? (
-                              <p>Flight: <AdminOperationalUppercaseValue field="flight">{operationalCard.job_card_display.replace(/^Flight\s*/i, "")}</AdminOperationalUppercaseValue></p>
-                            ) : null}
-                            {operationalCard.company_display_name ? (
-                              <p>Company: <AdminOperationalUppercaseValue field="company">{operationalCard.company_display_name}</AdminOperationalUppercaseValue></p>
-                            ) : null}
-                            <p>Booker: {bookerText}</p>
-                            <p>Name: <AdminOperationalUppercaseValue field="passenger">{passengerText}</AdminOperationalUppercaseValue></p>
                           </OperationalCardSection>
                           <OperationalCardSection section="route" title="Route">
                             <p>Pickup: <AdminOperationalUppercaseValue field="pickup">{pickup}</AdminOperationalUppercaseValue></p>
                             <p>Drop-off: <AdminOperationalUppercaseValue field="dropoff">{dropoff}</AdminOperationalUppercaseValue></p>
-                            <p className="break-words">Route: <AdminOperationalUppercaseValue field="pickup">{routeText}</AdminOperationalUppercaseValue></p>
+                          </OperationalCardSection>
+                          <OperationalCardSection section="driver-contact" title="Driver contact">
+                            <p>Contact: {completedDriverContact.contact || "Not set"}</p>
+                            <p>
+                              Plate:{" "}
+                              <AdminOperationalUppercaseValue field="plate">
+                                {completedDriverContact.plate || "Not set"}
+                              </AdminOperationalUppercaseValue>
+                            </p>
+                          </OperationalCardSection>
+                          <OperationalCardSection section="operations" title="Operations">
+                            <p>OTS: {completedOperationalReadiness.otsProof}</p>
+                            <p>Replacement: {completedOperationalReadiness.exceptionReplacement}</p>
                           </OperationalCardSection>
                         </div>
-                        <div className="grid gap-2 sm:grid-cols-3" data-operational-card-summary-grid={bookingId}>
-                          <DispatcherStatusSummaryBlock
-                            bookingRecord={savedBooking}
-                            flush
-                            operationalCard={operationalCard}
-                          />
-                          <AssignedDriverSummaryBlock
-                            bookingRecord={savedBooking}
-                            flush
-                            operationalCard={operationalCard}
-                          />
-                          <OperationalReadinessSummaryBlock
-                            bookingRecord={savedBooking}
-                            flush
-                            operationalCard={operationalCard}
-                          />
-                        </div>
-                        <OperationalCardSection section="vehicle-pax-price" title="Vehicle / pax">
-                          <p>Vehicle: <AdminOperationalUppercaseValue field="vehicle">{operationalCard.vehicle_display || "Vehicle TBC"}</AdminOperationalUppercaseValue></p>
-                          <p>Pax: {operationalCard.pax_display || "1"}</p>
+                        <OperationalCardSection section="trip-details" title="Trip details">
                           {operationalCard.child_seat_display ? (
                             <p>{operationalCard.child_seat_display}</p>
                           ) : null}

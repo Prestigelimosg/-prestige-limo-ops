@@ -512,20 +512,20 @@ assertIncludes(
   "Dashboard day-of-trip monitor boundary",
 );
 
-for (const [label, start, end, expectedDisplayItemMap, requiresVehiclePax] of [
+for (const [label, start, end, expectedDisplayItemMap, expectedDetailTitle] of [
   [
     "recent operational cards",
     "const recentBookingsPanel",
     "const completedEmptyState",
     "filteredRecentBookingDisplayItems.map(({ bookingRecord: savedBooking, operationalCard }, bookingIndex)",
-    true,
+    "Vehicle / pax",
   ],
   [
     "completed operational cards",
     "const completedBookingsPanel",
     "const jobCardCopyEditState",
     "monthGroup.displayItems.map(({ bookingRecord: savedBooking, operationalCard })",
-    true,
+    "Trip details",
   ],
 ]) {
   const source = sliceBetween(appPage, start, end);
@@ -534,9 +534,7 @@ for (const [label, start, end, expectedDisplayItemMap, requiresVehiclePax] of [
   assertExcludes(source, "bookingCardPriceLine(savedBooking)", label);
   assertExcludes(source, "Customer override:", label);
   assertExcludes(source, "Vehicle / pax / price", label);
-  if (requiresVehiclePax) {
-    assertIncludes(source, "Vehicle / pax", label);
-  }
+  assertIncludes(source, expectedDetailTitle, label);
 }
 
 for (const billingDependency of [

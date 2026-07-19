@@ -5,6 +5,8 @@ const paths = {
   migration: "supabase/migrations/20260719064413_traveler_invoice_separation.sql",
   travelerIndexMigration:
     "supabase/migrations/20260719070000_traveler_invoice_record_traveler_index.sql",
+  identityScopeRepairMigration:
+    "supabase/migrations/20260719084000_fix_traveler_invoice_sequence_identity_scope.sql",
   prefixHelper: "lib/admin-customer-invoice-prefix-settings.ts",
   prefixPanel: "app/customers/[customerId]/invoice-prefix-settings-panel.tsx",
   folderPage: "app/customers/[customerId]/page.tsx",
@@ -46,6 +48,27 @@ includes(
   sources.travelerIndexMigration,
   "customer_invoice_records_traveler_idx",
   "stored invoice traveller foreign-key index",
+);
+
+for (const fragment of [
+  "create or replace function public.reserve_customer_invoice_number(",
+  "where sequence.booker_id = p_booker_id",
+  "and sequence.traveler_id = p_traveler_id",
+  "Customer display labels are document metadata and never identity evidence",
+  "revoke all on function public.reserve_customer_invoice_number",
+  "grant execute on function public.reserve_customer_invoice_number",
+]) {
+  includes(
+    sources.identityScopeRepairMigration,
+    fragment,
+    `traveller invoice identity-scope repair ${fragment}`,
+  );
+}
+
+assert.equal(
+  sources.identityScopeRepairMigration.includes("where sequence.customer_account = v_customer_account"),
+  false,
+  "verified traveller invoice reservation must not use a mutable customer display label as sequence identity",
 );
 
 for (const fragment of [

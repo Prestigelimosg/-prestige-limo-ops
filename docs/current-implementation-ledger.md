@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-1e80b1dd Fix customer job public reference display
+1125adb5 Separate invoices by verified traveller
 
 Latest pushed main/staging runtime checkpoint:
 ea5780da Wire temporary customer invoice pricing
@@ -11,6 +11,16 @@ bc0b49ec Merge pull request #56 from Prestigelimosg/codex/restore-current-workfl
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Verified Traveller Invoice Reservation Identity-Scope Repair (2026-07-19)
+
+- Production Chrome proved the established separate-traveller lane end to end for Stanley: two reviewed jobs created `STAN-0001` for SGD140, retained verified `booker_id = 12` and `traveler_id = 24`, and the existing sender delivered it to the owner-approved shared PA address `william@prestigelimo.sg`.
+- The first Deep send failed closed with HTTP 409 before invoice persistence or email delivery. Exact production data showed Deep's locked prefix row belonged to verified `booker_id = 12 + traveler_id = 23`, but the reservation RPC additionally compared the mutable prefix-folder label `tiger [Deep JULY]` with the invoice's display label `Tiger JULY TEST [Deep JULY]`. That label mismatch was the sole reproduced failure; no Deep invoice number was consumed and no Deep email was sent.
+- The existing `reserve_customer_invoice_number` function is repaired in place. It preserves its signature, verified traveller-to-booker relationship check, row lock, atomic sequence update, service-role-only permission, prefix validation, and all existing callers, but resolves the already-unique sequence solely by verified `booker_id + traveler_id`. The customer-account string remains required document input for compatibility and is never identity evidence.
+- A production transaction called the repaired function with the exact mismatched Deep invoice label plus verified `booker_id = 12 + traveler_id = 23` and returned `DEEP-0001`; the transaction was rolled back. A separate read confirmed the Deep sequence remained at 1 with no last reserved number and customer 139 still had zero invoices, so this verification created no invoice and sent no email.
+- The post-repair Chrome email retry remains uncompleted: Chrome's native Send confirmation held the controlled test tab and the automation connection could not dismiss or accept it. Production storage was checked immediately afterward and still contained zero Deep invoices. Do not represent `DEEP-0001` as issued or delivered until the existing Chrome send is cleanly repeated and both the stored invoice and email delivery receipt are verified.
+- No route, UI, table, helper, prefix control, invoice writer, email sender, or alternate lane is added. Stripe/card payment remains parked, and the repair creates no payment, payout, PayNow payout, GPS, provider configuration, or customer/driver finance exposure.
+- Focused protection remains `scripts/test-customer-traveler-invoice-separation-guard.mjs`, now also locking the identity-scoped repair migration and forbidding the failed mutable-label predicate.
 
 ### Verified Traveller Invoice Separation and Prefix Ownership (2026-07-19)
 

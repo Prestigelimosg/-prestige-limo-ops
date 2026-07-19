@@ -5688,6 +5688,28 @@ function customerRateMatrixValue(
     0;
 }
 
+function customerRateOverrideMatrixValue(
+  rules: RateRules | null | undefined,
+  bookingType: keyof Required<RateRules>,
+  vehicleType: CustomerRateVehicleType,
+) {
+  const rate = rules?.[bookingType];
+
+  if (typeof rate === "number" && Number.isFinite(rate)) {
+    return rate;
+  }
+
+  if (!rate || typeof rate !== "object" || Array.isArray(rate)) {
+    return null;
+  }
+
+  const exactVehicleRate = rate[vehicleType];
+
+  return typeof exactVehicleRate === "number" && Number.isFinite(exactVehicleRate)
+    ? exactVehicleRate
+    : null;
+}
+
 function setCustomerRateMatrixValue(
   rules: RateRules,
   bookingType: keyof Required<RateRules>,
@@ -43741,7 +43763,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                             onChange={(event) => updateCompanyOverrideRate(bookingType, vehicleType, event.target.value)}
                             placeholder="-"
                             type="number"
-                            value={customerRateValue(rateOverrideDraft.customerRates, bookingType, vehicleType) ?? ""}
+                            value={customerRateOverrideMatrixValue(
+                              rateOverrideDraft.customerRates,
+                              bookingType,
+                              vehicleType,
+                            ) ?? ""}
                           />
                         </td>
                       ))}

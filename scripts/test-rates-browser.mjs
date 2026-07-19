@@ -199,6 +199,11 @@ function assertRatesState(state) {
   assert.ok(state.buttonLabels.includes("Load Rates"));
   assert.ok(state.buttonLabels.includes("Save Defaults"));
   assert.ok(state.buttonLabels.includes("Save Override"));
+  assert.equal(
+    state.customerOverrideInputCount,
+    16,
+    "Expected one customer override input for every service and vehicle combination",
+  );
   assert.ok(
     state.visibleText.includes("Rates loaded.") || state.visibleText.includes("Load failed:"),
     "Expected Load Rates to finish with a visible status message.",
@@ -364,6 +369,9 @@ async function runChromeTest() {
       ),
       errors: await evaluate(`window.__prestigeErrors || []`),
       consoleErrors: await evaluate(`window.__prestigeConsoleErrors || []`),
+      customerOverrideInputCount: await evaluate(
+        `document.querySelectorAll("[data-override-vehicle-customer-rates='true'] input[aria-label$='customer override']").length`,
+      ),
       visibleText: await evaluate(`document.body.innerText`),
     };
     state.errors = [...browserErrors, ...(state.errors || [])];
@@ -461,13 +469,26 @@ async function runChromeTest() {
         input.dispatchEvent(new Event("change", { bubbles: true }));
         return input.value === value;
       };
+      const setCustomerOverrideInput = (labelText, value) => {
+        const input = document.querySelector('input[aria-label="' + labelText + '"]');
+
+        if (!input) {
+          return false;
+        }
+
+        const descriptor = Object.getOwnPropertyDescriptor(input.constructor.prototype, "value");
+        descriptor?.set?.call(input, value);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        return input.value === value;
+      };
 
       return setLabeledInput("Company / Account", "BLANK RATE SAFETY TEST") &&
         setLabeledInput("Boss / Name", "") &&
-        setLabeledInput("MNG customer", "") &&
-        setLabeledInput("DEP customer", "") &&
-        setLabeledInput("TRF customer", "") &&
-        setLabeledInput("DSP customer", "") &&
+        setCustomerOverrideInput("MNG / Arrival E / AVF customer override", "") &&
+        setCustomerOverrideInput("DEP / Departure E / AVF customer override", "") &&
+        setCustomerOverrideInput("TRF / Transfer E / AVF customer override", "") &&
+        setCustomerOverrideInput("DSP / Hourly E / AVF customer override", "") &&
         setLabeledInput("MNG driver", "") &&
         setLabeledInput("DEP driver", "") &&
         setLabeledInput("TRF driver", "") &&
@@ -543,9 +564,22 @@ async function runChromeTest() {
         input.dispatchEvent(new Event("change", { bubbles: true }));
         return input.value === value;
       };
+      const setCustomerOverrideInput = (labelText, value) => {
+        const input = document.querySelector('input[aria-label="' + labelText + '"]');
+
+        if (!input) {
+          return false;
+        }
+
+        const descriptor = Object.getOwnPropertyDescriptor(input.constructor.prototype, "value");
+        descriptor?.set?.call(input, value);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        return input.value === value;
+      };
 
       return setLabeledInput("Company / Account", "NEGATIVE RATE SAFETY TEST") &&
-        setLabeledInput("MNG customer", "-5");
+        setCustomerOverrideInput("MNG / Arrival E / AVF customer override", "-5");
     })()`);
     assert.equal(preparedNegativeOverride, true, "Expected negative rate override test fields to be editable");
 
@@ -587,7 +621,7 @@ async function runChromeTest() {
       10000,
       "negative rate override validation feedback",
     );
-    assert.match(invalidRateFeedbackState.feedbackText, /MNG customer/);
+    assert.match(invalidRateFeedbackState.feedbackText, /MNG E \/ AVF customer/);
     assert.deepEqual(
       invalidRateFeedbackState.blockedWrites,
       [],
@@ -606,7 +640,7 @@ async function runChromeTest() {
             id: 9001,
             company_name: duplicateCompanyName,
             domain: null,
-            customer_rates: { MNG: 85 },
+            customer_rates: { MNG: { AVF: 85 } },
             driver_payout_rules: {},
             transzend_excel_privacy: false,
           },
@@ -712,19 +746,59 @@ async function runChromeTest() {
           input.dispatchEvent(new Event("change", { bubbles: true }));
           return input.value === value;
         };
+        const setCustomerOverrideInput = (labelText, value) => {
+          const input = document.querySelector('input[aria-label="' + labelText + '"]');
+
+          if (!input) {
+            return false;
+          }
+
+          const descriptor = Object.getOwnPropertyDescriptor(input.constructor.prototype, "value");
+          descriptor?.set?.call(input, value);
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+          return input.value === value;
+        };
 
         return setLabeledInput("Company / Account", "DUPLICATE RATE SAFETY TEST") &&
           setLabeledInput("Boss / Name", "") &&
-          setLabeledInput("MNG customer", ${JSON.stringify(String(customerRate))}) &&
-          setLabeledInput("DEP customer", "") &&
-          setLabeledInput("TRF customer", "") &&
-          setLabeledInput("DSP customer", "") &&
+          setCustomerOverrideInput("MNG / Arrival E / AVF customer override", ${JSON.stringify(String(customerRate))}) &&
+          setCustomerOverrideInput("DEP / Departure E / AVF customer override", "") &&
+          setCustomerOverrideInput("TRF / Transfer E / AVF customer override", "") &&
+          setCustomerOverrideInput("DSP / Hourly E / AVF customer override", "") &&
           setLabeledInput("MNG driver", "") &&
           setLabeledInput("DEP driver", "") &&
           setLabeledInput("TRF driver", "") &&
           setLabeledInput("DSP driver", "");
       })()`);
       assert.equal(preparedDuplicateOverride, true, `Expected duplicate override ${customerRate} fields to be editable`);
+
+      const alignedOverrideDraft = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const valueFor = (label) => document.querySelector('input[aria-label="' + label + '"]')?.value;
+            const values = {
+              avf: valueFor("MNG / Arrival E / AVF customer override"),
+              combi: valueFor("MNG / Arrival COMBI customer override"),
+              s: valueFor("MNG / Arrival S customer override"),
+              vvv: valueFor("MNG / Arrival VVV customer override"),
+            };
+
+            return values.avf === ${JSON.stringify(String(customerRate))} &&
+              values.s === "" &&
+              values.vvv === "" &&
+              values.combi === ""
+              ? values
+              : false;
+          })()`),
+        10000,
+        `vehicle-specific override ${customerRate} alignment`,
+      );
+      assert.deepEqual(
+        alignedOverrideDraft,
+        { avf: String(customerRate), combi: "", s: "", vvv: "" },
+        "Expected an E/AVF account override not to populate S, VVV, or COMBI editor cells",
+      );
 
       const clickedDuplicateOverrideSave = await evaluate(`(() => {
         const saveOverrideButton = [...document.querySelectorAll("button")].find(
@@ -753,7 +827,7 @@ async function runChromeTest() {
             (element) => element.querySelector("p")?.textContent.trim() === "DUPLICATE RATE SAFETY TEST",
           );
 
-          return rows.length === 1 && rows[0].innerText.includes("Customer: MNG 90.00");
+          return rows.length === 1 && rows[0].innerText.includes("Customer: MNG E / AVF 90.00");
         })()`),
       10000,
       "first duplicate rate override save refresh",
@@ -782,7 +856,7 @@ async function runChromeTest() {
             !feedback ||
             !feedback.textContent.includes("Override saved.") ||
             rows.length !== 1 ||
-            !rows[0].innerText.includes("Customer: MNG 95.00")
+            !rows[0].innerText.includes("Customer: MNG E / AVF 95.00")
           ) {
             return false;
           }
@@ -806,7 +880,7 @@ async function runChromeTest() {
       "second duplicate rate override save refresh",
     );
     assert.equal(duplicateSaveState.rowCount, 1, "Expected same company override to appear once after repeated saves");
-    assert.match(duplicateSaveState.rowText, /Customer: MNG 95\.00/);
+    assert.match(duplicateSaveState.rowText, /Customer: MNG E \/ AVF 95\.00/);
     assert.equal(
       duplicateSaveState.updateCalls.length,
       2,
@@ -829,6 +903,52 @@ async function runChromeTest() {
       duplicateSaveState.globalOverrideMessages,
       0,
       "Expected duplicate save feedback not to duplicate in the top Rates status panel",
+    );
+
+    const clickedPersistenceReload = await evaluate(`(() => {
+      const loadRatesButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Load Rates",
+      );
+
+      if (!loadRatesButton || loadRatesButton.disabled) {
+        return false;
+      }
+
+      loadRatesButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedPersistenceReload, true, "Expected persisted override reload to be clickable");
+
+    const persistedOverrideState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const heading = [...document.querySelectorAll("h4")].find(
+            (element) => element.textContent.trim() === "Company Overrides",
+          );
+          const panel = heading?.parentElement;
+          const rows = [...(panel?.querySelectorAll("[data-rate-company-override-row]") || [])].filter(
+            (element) => element.querySelector("p")?.textContent.trim() === "DUPLICATE RATE SAFETY TEST",
+          );
+
+          if (rows.length !== 1 || !rows[0].innerText.includes("Customer: MNG E / AVF 95.00")) {
+            return false;
+          }
+
+          return {
+            rowCount: rows.length,
+            rowText: rows[0].innerText,
+            storedCustomerRates: window.__prestigeRateDuplicateStore?.companies?.[0]?.customer_rates,
+          };
+        })()`),
+      10000,
+      "saved company override persistence reload",
+    );
+    assert.equal(persistedOverrideState.rowCount, 1, "Expected one saved company override after reload");
+    assert.match(persistedOverrideState.rowText, /Customer: MNG E \/ AVF 95\.00/);
+    assert.deepEqual(
+      persistedOverrideState.storedCustomerRates,
+      { MNG: { AVF: 95 } },
+      "Expected the individual account customer rate map to survive a fresh rate reload",
     );
 
     const clickedRemoveDuplicateOverride = await evaluate(`(() => {
@@ -870,7 +990,7 @@ async function runChromeTest() {
             !feedback ||
             !feedback.textContent.includes("DUPLICATE RATE SAFETY TEST override removed.") ||
             rows.length !== 0 ||
-            panel?.innerText.includes("Customer: MNG 95.00")
+            panel?.innerText.includes("Customer: MNG E / AVF 95.00")
           ) {
             return false;
           }

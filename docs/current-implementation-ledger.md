@@ -12,6 +12,16 @@ bc0b49ec Merge pull request #56 from Prestigelimosg/codex/restore-current-workfl
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Customer Rate Override Matrix And Persistence Alignment (2026-07-19)
+
+- The established 4×4 customer-override editor remains MNG, DEP, TRF, and DSP across E/AVF, S, VVV, and COMBI. Its display now reads only the exact saved vehicle cell when the override uses a vehicle map, so entering an E/AVF override no longer visually copies that fallback into blank S, VVV, and COMBI cells. Legacy scalar overrides still display in all four cells because those records intentionally apply one amount to every vehicle. Invoice rate resolution keeps the established AVF fallback; only editor rendering is made exact.
+- The established Rates browser guard is aligned to those current vehicle-specific inputs. It no longer searches for the retired single-service controls, asserts all 16 override inputs exist, and proves one E/AVF draft leaves S, VVV, and COMBI blank. No second Rates panel, writer, API, table, or override lane is added.
+- The focused browser test saves the same bounded company/account customer-rate override twice through the existing path, confirms one saved override row with the latest vehicle-specific amount, performs a separate fresh `Load Rates`, and confirms the same persisted customer-rate map still appears exactly once. The test then exercises the existing remove path and verifies the saved map is cleared.
+- This protection distinguishes persisted rate evidence from temporary React state. Company/account and verified traveler overrides remain keyed only by their existing verified CRM IDs; customer-folder invoice preparation continues applying verified traveler rate, then verified company rate, then Prestige default. Display names are never used to infer rate ownership.
+- Standalone `customers` rows do not own a separate `customer_rates` column or write path. An individual person receives an override through the existing verified traveler record (including the established Internal Account grouping where applicable), and the saved booking must carry that verified `traveler_id`; the app must not invent a parallel customer-name override lane.
+- Runtime verification for this guard uses an isolated browser-side persisted mock store and performs no production or staging database write. No default rate, company, traveler, customer, booking, invoice, payment, payout, provider, environment, or Supabase configuration is changed.
+- Focused protection is `scripts/test-rates-browser.mjs`; customer-folder consumption remains protected by `scripts/test-customer-folder-price-review-guard.mjs` and the shared invoice-rate calculator.
+
 ### Customer-Folder Public Reference And Inline Job Editor (2026-07-19)
 
 - Customer-folder job cards now project the already-persisted `public_booking_reference` through the existing safe saved-bookings read. Visible row, expanded detail, selection, and invoice-review copy uses only the established public format: five digits, optionally preceded by the saved customer booking prefix. The internal `booking_reference` remains the immutable server operation key and is not derived, changed, or printed as the customer-facing reference.

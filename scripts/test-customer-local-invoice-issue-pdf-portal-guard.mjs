@@ -110,6 +110,7 @@ for (const fragment of [
   '"CREDIT NOTE"',
   "Item & Description",
   "Balance Due",
+  "Payment Made",
   "Sub Total",
   "Bank information",
   "Terms & Conditions:",
@@ -121,6 +122,16 @@ for (const fragment of [
   "%PDF-1.4",
 ]) {
   assertIncludes(localPdfHelper, fragment, `PDF helper fragment ${fragment}`);
+}
+
+for (const fragment of [
+  'const paidInvoice = documentType === "invoice" && invoice.status === "Paid";',
+  'const paymentMadeValue = paidInvoice ? `(-) ${sgdAmount}` : "SGD0.00";',
+  'const balanceDueValue = paidInvoice ? "SGD0.00" : sgdAmount;',
+  'pdfRightTextAt("Payment Made"',
+  "pdfRightTextAt(balanceDueValue",
+]) {
+  assertIncludes(localPdfHelper, fragment, `status-correct PDF fragment ${fragment}`);
 }
 
 for (const fragment of [

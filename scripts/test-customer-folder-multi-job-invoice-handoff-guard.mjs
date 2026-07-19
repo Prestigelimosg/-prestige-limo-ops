@@ -84,8 +84,46 @@ for (const fragment of [
   "bookingReference: firstInvoiceRow.bookingReference",
   "bookingReference: row.bookingReference",
   "All ${invoiceRows.length} selected job",
+  "setPlainInvoiceSelectedJobReviewActive(true)",
+  "plainInvoicePreviewFromForm(nextPlainInvoiceForm)",
+  'data-selected-job-invoice-review="true"',
+  'data-selected-job-invoice-actions="true"',
+  'data-selected-job-invoice-edit="true"',
+  'data-selected-job-invoice-send="true"',
+  'data-selected-job-invoice-pdf-download="true"',
+  'data-selected-job-invoice-paper="true"',
+  'data-selected-job-invoice-status="true"',
+  'data-selected-job-invoice-balance="true"',
+  "toggleSelectedJobInvoiceEditing",
+  "sendSelectedJobInvoice",
+  "downloadSelectedJobInvoicePdf",
+  "plainInvoiceIssuedRecord",
+  "PDF Download",
 ]) {
   includes(customersPage, fragment, `multi-job invoice handoff fragment ${fragment}`);
+}
+
+const selectedReviewStart = customersPage.indexOf('data-selected-job-invoice-review="true"');
+const selectedReviewEnd = customersPage.indexOf('data-plain-invoice-crm-account="true"', selectedReviewStart);
+assert.notEqual(selectedReviewStart, -1, "selected-job invoice review must exist");
+assert.notEqual(selectedReviewEnd, -1, "selected-job invoice review must end before the generic CRM workbench");
+const selectedReview = customersPage.slice(selectedReviewStart, selectedReviewEnd);
+
+for (const label of ["Edit", ': "Send"', ': "PDF Download"']) {
+  includes(selectedReview, label, `compact selected-job invoice action ${label.trim()}`);
+}
+
+for (const forbiddenControl of [
+  'data-plain-invoice-draft-action="true"',
+  'data-plain-invoice-issue-action="true"',
+  'data-plain-invoice-clear-action="true"',
+  "Advanced invoice workbench",
+]) {
+  assert.equal(
+    selectedReview.includes(forbiddenControl),
+    false,
+    `selected-job invoice review must not render ${forbiddenControl}`,
+  );
 }
 
 for (const fragment of [
@@ -93,6 +131,16 @@ for (const fragment of [
   "const bookingReference = text(item.bookingReference);",
 ]) {
   includes(localInvoices, fragment, `stored invoice line reference fragment ${fragment}`);
+}
+
+for (const fragment of [
+  'const paidInvoice = documentType === "invoice" && invoice.status === "Paid";',
+  'const paymentMadeValue = paidInvoice ? `(-) ${sgdAmount}` : "SGD0.00";',
+  'const balanceDueValue = paidInvoice ? "SGD0.00" : sgdAmount;',
+  'pdfRightTextAt("Payment Made"',
+  "pdfRightTextAt(balanceDueValue",
+]) {
+  includes(localInvoices, fragment, `status-correct shared PDF fragment ${fragment}`);
 }
 
 for (const fragment of [

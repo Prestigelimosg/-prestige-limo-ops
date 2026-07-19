@@ -100,7 +100,9 @@ for (const fragment of [
   "Customers & Invoices",
   'className="rounded-lg border border-sky-300 border-l-8 bg-sky-50 shadow-sm"',
   'className="rounded-lg border border-emerald-300 border-l-8 bg-emerald-50 shadow-sm"',
-  'className="rounded-lg border border-violet-300 border-l-8 bg-violet-50 shadow-sm"',
+  '"rounded-lg border border-violet-300 border-l-8 bg-violet-50 shadow-sm"',
+  "plainInvoiceSelectedJobReviewActive",
+  'data-selected-job-invoice-actions="true"',
 ]) {
   assertIncludes(customersPage, fragment, `customers invoice workspace fragment ${fragment}`);
 }

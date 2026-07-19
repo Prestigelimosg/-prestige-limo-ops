@@ -341,6 +341,7 @@ type CustomerDisplayedInvoiceRecord = CustomerLocalInvoiceRecord & {
   emailSentAt?: string | null;
   pdfFilename?: string;
   storageSource?: "local" | "server";
+  travelerId?: number;
 };
 
 type InvoiceSafetyActionConfirmation = {
@@ -465,6 +466,7 @@ type PlainInvoiceForm = {
   reference: string;
   route: string;
   service: string;
+  travelerId: number | null;
 };
 
 type PlainInvoiceAdditionalLineItem = {
@@ -613,6 +615,7 @@ type CustomerFolderExactBookingRecord = {
   short_notice_review_status?: string | null;
   source_channel?: string | null;
   source_surface?: string | null;
+  traveler_id?: number | null;
   vehicle_type_or_category?: string | null;
 };
 
@@ -1121,6 +1124,7 @@ function plainInvoiceInitialForm(): PlainInvoiceForm {
     reference: plainInvoiceDefaultReference(),
     route: "",
     service: "Ad hoc service",
+    travelerId: null,
   };
 }
 
@@ -1170,6 +1174,7 @@ function plainInvoicePreviewKeyFromForm(form: PlainInvoiceForm) {
     form.crmCustomerName.trim(),
     form.bookingReference,
     form.bookerId ?? "",
+    form.travelerId ?? "",
     reference,
     service,
     form.route.trim(),
@@ -5127,6 +5132,7 @@ export default function MockCustomerDashboardPage() {
             const exactCustomerName =
               String(exactBooking.customer_display_name ?? customerName).trim() || customerName;
             const exactBookerId = exactBooking.booker_id ?? targetBooking.booker_id ?? null;
+            const exactTravelerId = exactBooking.traveler_id ?? targetBooking.traveler_id ?? null;
             const mismatchedCustomer = exactBookings.some(
               (booking, index) =>
                 String(booking.customer_id ?? targetBookings[index]?.customer_id ?? customerId).trim() !==
@@ -5135,6 +5141,10 @@ export default function MockCustomerDashboardPage() {
             const mismatchedBooker = exactBookings.some(
               (booking, index) =>
                 (booking.booker_id ?? targetBookings[index]?.booker_id ?? null) !== exactBookerId,
+            );
+            const mismatchedTraveler = exactBookings.some(
+              (booking, index) =>
+                (booking.traveler_id ?? targetBookings[index]?.traveler_id ?? null) !== exactTravelerId,
             );
             const invoiceRows = exactBookings.map((booking, index) => {
               const selectedBooking = targetBookings[index];
@@ -5175,10 +5185,19 @@ export default function MockCustomerDashboardPage() {
               ),
             );
 
-            if (mismatchedCustomer || mismatchedBooker || missingPublicReference || !firstInvoiceRow) {
+            if (
+              mismatchedCustomer ||
+              mismatchedBooker ||
+              mismatchedTraveler ||
+              !exactTravelerId ||
+              missingPublicReference ||
+              !firstInvoiceRow
+            ) {
               setPlainInvoiceFeedback(
                 missingPublicReference
                   ? "A selected job has no saved public booking reference. Repair its five-digit reference before invoice preparation."
+                  : mismatchedTraveler || !exactTravelerId
+                    ? "The selected jobs do not share one verified traveller. Issue and Email are blocked."
                   : "The selected jobs do not share the same verified customer and PA / booker. Issue and Email are blocked.",
               );
               setPlainInvoiceFeedbackTone("error");
@@ -5216,6 +5235,7 @@ export default function MockCustomerDashboardPage() {
                 invoiceRows.length === 1
                   ? firstInvoiceRow.service
                   : `Selected customer jobs (${invoiceRows.length})`,
+              travelerId: exactTravelerId,
             };
 
             setPlainInvoiceSavedBookings(targetBookings);
@@ -5529,6 +5549,23 @@ export default function MockCustomerDashboardPage() {
       return;
     }
 
+    const exactTravelerId = group.rows[0]?.travelerId ?? null;
+    const exactBookerId = group.rows[0]?.bookerId ?? null;
+
+    if (
+      !exactTravelerId ||
+      !exactBookerId ||
+      group.rows.some(
+        (row) => row.travelerId !== exactTravelerId || row.bookerId !== exactBookerId,
+      )
+    ) {
+      setPlainInvoiceFeedback(
+        "Monthly bill prep is blocked because the selected jobs do not share one verified traveller and PA / booker.",
+      );
+      setPlainInvoiceFeedbackTone("error");
+      return;
+    }
+
     setPreparingMonthlyBillingGroupKey(group.key);
     let preparedRows: UnbilledCustomerRow[];
 
@@ -5575,6 +5612,7 @@ export default function MockCustomerDashboardPage() {
       reference: monthlyBillingGroupReference(group),
       route: `${group.rows.length} job${group.rows.length === 1 ? "" : "s"}: ${referenceList.join(", ")}`,
       service: `Monthly billing - ${group.billingMonthLabel}`,
+      travelerId: exactTravelerId,
     });
     setSelectedPlainInvoiceCrmFolderKey(group.key);
     setPlainInvoicePreview(null);
@@ -5855,6 +5893,7 @@ export default function MockCustomerDashboardPage() {
         nextForm.crmCustomerName = "";
         nextForm.bookerId = null;
         nextForm.bookingReference = "";
+        nextForm.travelerId = null;
       }
 
       if (
@@ -5865,6 +5904,7 @@ export default function MockCustomerDashboardPage() {
       ) {
         nextForm.bookerId = null;
         nextForm.bookingReference = "";
+        nextForm.travelerId = null;
       }
 
       return nextForm;
@@ -5914,6 +5954,7 @@ export default function MockCustomerDashboardPage() {
       bookerId: null,
       bookingReference: "",
       recipientEmails: [],
+      travelerId: null,
     }));
     setPlainInvoiceRecipientOptions([]);
 
@@ -5964,6 +6005,7 @@ export default function MockCustomerDashboardPage() {
       bookerId: selectedBooking?.booker_id ?? null,
       bookingReference: selectedBooking ? bookingReference : "",
       reference: selectedBooking ? bookingReference : currentForm.reference,
+      travelerId: selectedBooking?.traveler_id ?? null,
     }));
     setPlainInvoicePreview(null);
     setPlainInvoiceFeedback(
@@ -6151,6 +6193,7 @@ export default function MockCustomerDashboardPage() {
       route: plainInvoicePreview.route,
       service: plainInvoicePreview.service,
       status: plainInvoicePreview.folder,
+      travelerId: plainInvoiceForm.travelerId,
     };
   }
 
@@ -6226,8 +6269,8 @@ export default function MockCustomerDashboardPage() {
       return;
     }
 
-    if (!plainInvoiceForm.bookingReference || !plainInvoiceForm.bookerId) {
-      setPlainInvoiceFeedback("Select an exact saved booking with a verified PA / booker before issuing Create Invoice.");
+    if (!plainInvoiceForm.bookingReference || !plainInvoiceForm.bookerId || !plainInvoiceForm.travelerId) {
+      setPlainInvoiceFeedback("Select an exact saved booking with a verified traveller and PA / booker before issuing Create Invoice.");
       setPlainInvoiceFeedbackTone("error");
       document.querySelector<HTMLElement>("[data-plain-invoice-booking-reference='true']")?.focus();
       return;
@@ -6316,8 +6359,8 @@ export default function MockCustomerDashboardPage() {
       return;
     }
 
-    if (!plainInvoiceForm.bookingReference || !plainInvoiceForm.bookerId) {
-      setPlainInvoiceFeedback("Select an exact saved booking with a verified PA / booker before emailing Create Invoice.");
+    if (!plainInvoiceForm.bookingReference || !plainInvoiceForm.bookerId || !plainInvoiceForm.travelerId) {
+      setPlainInvoiceFeedback("Select an exact saved booking with a verified traveller and PA / booker before emailing Create Invoice.");
       setPlainInvoiceFeedbackTone("error");
       document.querySelector<HTMLElement>("[data-plain-invoice-booking-reference='true']")?.focus();
       return;
@@ -6622,12 +6665,20 @@ export default function MockCustomerDashboardPage() {
       route: customerInvoicePrepRow.route,
       service: customerInvoicePrepRow.service,
       status: customerInvoicePreview.folder,
+      travelerId: customerInvoicePrepRow.travelerId,
     };
   }
 
   async function saveCustomerInvoiceDraft() {
     if (!customerInvoicePrepRow) {
       setCustomerInvoiceIssueFeedback("Choose Prepare monthly invoice in the selected customer workspace before saving a draft.");
+      return;
+    }
+
+    if (!customerInvoicePrepRow.bookerId || !customerInvoicePrepRow.travelerId) {
+      setCustomerInvoiceIssueFeedback(
+        "Draft save is blocked until the exact booking has one verified traveller and PA / booker.",
+      );
       return;
     }
 
@@ -6692,9 +6743,9 @@ export default function MockCustomerDashboardPage() {
       return;
     }
 
-    if (!customerInvoicePrepRow.bookerId) {
+    if (!customerInvoicePrepRow.bookerId || !customerInvoicePrepRow.travelerId) {
       setCustomerInvoiceIssueFeedback(
-        "Assign a verified PA / booker to the exact saved booking before issuing. Draft saving remains admin-only.",
+        "Assign a verified traveller and PA / booker to the exact saved booking before issuing. Draft saving remains admin-only.",
       );
       return;
     }

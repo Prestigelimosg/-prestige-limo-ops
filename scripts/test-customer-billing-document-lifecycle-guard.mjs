@@ -10,6 +10,10 @@ const migration = readFileSync(
   "supabase/migrations/202606300001_customer_billing_document_lifecycle.sql",
   "utf8",
 );
+const travelerInvoiceMigration = readFileSync(
+  "supabase/migrations/20260719064413_traveler_invoice_separation.sql",
+  "utf8",
+);
 
 function assertIncludes(source, fragment, label) {
   assert.ok(source.includes(fragment), `Missing ${label}: ${fragment}`);
@@ -136,7 +140,17 @@ assertIncludes(
   "credit note accounting comment",
 );
 
-assertIncludes(invoicePersistence, "const invoiceNumberPattern = /^(INV|QUO|CN)-", "stored INV/QUO/CN number validation");
+assertIncludes(invoicePersistence, "const invoiceNumberPattern = /^(?:(INV|QUO|CN)-", "stored legacy and traveller invoice number validation");
+assertIncludes(
+  travelerInvoiceMigration,
+  "customer_invoice_records_invoice_number_check",
+  "traveller prefix invoice constraint replacement",
+);
+assertIncludes(
+  travelerInvoiceMigration,
+  "[A-Z0-9]{2,12}-[0-9]{4,}",
+  "traveller prefix invoice number format",
+);
 assertIncludes(invoicePersistence, "document_type: sanitized.data.documentType", "stored document type insert");
 assertIncludes(invoicePersistence, "document_state: sanitized.data.documentState", "stored document state insert");
 assertIncludes(invoicePersistence, ".eq(\"document_state\", \"issued\")", "customer portal issued-only invoice records");

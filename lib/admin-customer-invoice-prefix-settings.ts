@@ -16,7 +16,9 @@ export const adminCustomerInvoicePrefixSettingsVersion =
 export const customerInvoiceSequencesTableName = "customer_invoice_sequences";
 
 export type AdminCustomerInvoicePrefixSettingsInput = {
+  booker_id: number | null;
   customer_account: string;
+  traveler_id: number | null;
 };
 
 export type AdminCustomerInvoicePrefixSettingsSaveInput =
@@ -26,6 +28,7 @@ export type AdminCustomerInvoicePrefixSettingsSaveInput =
   };
 
 export type AdminCustomerInvoicePrefixSettingRecord = {
+  booker_id: number | null;
   customer_account: string;
   invoice_prefix: string;
   last_reserved_at: string | null;
@@ -36,6 +39,7 @@ export type AdminCustomerInvoicePrefixSettingRecord = {
   prefix_locked: boolean;
   sequence_scope: "lifetime";
   sequence_status: "active" | "on_hold" | "archived";
+  traveler_id: number | null;
 };
 
 export type AdminCustomerInvoicePrefixSettingsData = {
@@ -49,6 +53,7 @@ type UnknownRecord = Record<string, unknown>;
 const maxCustomerAccountLength = 160;
 const maxSafeSequenceNoteLength = 1000;
 const sequenceSelect = [
+  "booker_id",
   "customer_account",
   "invoice_prefix",
   "last_reserved_at",
@@ -56,6 +61,7 @@ const sequenceSelect = [
   "last_reserved_sequence_number",
   "next_sequence_number",
   "sequence_status",
+  "traveler_id",
 ].join(", ");
 const disabledPrefixSettingsError =
   "Admin customer invoice prefix settings are not enabled on this server.";
@@ -73,11 +79,15 @@ const safePrefixSettingsReadError =
   "Admin customer invoice prefix settings read failed safely.";
 const safePrefixSettingsSaveError =
   "Admin customer invoice prefix settings save failed safely.";
-const allowedReadFields = new Set(["customer_account"]);
+const mismatchedTravelerPrefixSettingsError =
+  "Admin customer invoice prefix settings require a verified traveller and PA/booker match.";
+const allowedReadFields = new Set(["booker_id", "customer_account", "traveler_id"]);
 const allowedSaveFields = new Set([
+  "booker_id",
   "customer_account",
   "invoice_prefix",
   "safe_sequence_note",
+  "traveler_id",
 ]);
 const allowedActorRoles = new Set(["admin", "dispatcher", "system"]);
 const allowedSequenceStatuses = new Set(["active", "on_hold", "archived"]);
@@ -176,7 +186,9 @@ function validInvoicePrefix(value: unknown) {
     return null;
   }
 
-  return /^[A-Z0-9]{2,12}$/.test(cleaned) ? cleaned : null;
+  return /^[A-Z0-9]{2,12}$/.test(cleaned) && !["INV", "QUO", "CN"].includes(cleaned)
+    ? cleaned
+    : null;
 }
 
 function positiveInteger(value: unknown) {
@@ -401,18 +413,21 @@ function normalizePrefixSettingRow(
   row: UnknownRecord,
 ): AdminCustomerInvoicePrefixSettingRecord | null {
   const customerAccount = safeText(row.customer_account, maxCustomerAccountLength);
+  const bookerId = optionalPositiveInteger(row.booker_id);
   const invoicePrefix = validInvoicePrefix(row.invoice_prefix);
   const nextSequenceNumber = positiveInteger(row.next_sequence_number);
   const lastReservedSequenceNumber = optionalPositiveInteger(row.last_reserved_sequence_number);
   const lastReservedInvoiceNumber = textOrNull(row.last_reserved_invoice_number);
   const lastReservedAt = safeDateText(row.last_reserved_at);
   const sequenceStatus = safeSequenceStatus(row.sequence_status);
+  const travelerId = optionalPositiveInteger(row.traveler_id);
 
   if (
     !customerAccount ||
     !invoicePrefix ||
     !nextSequenceNumber ||
     !sequenceStatus ||
+    Boolean(bookerId) !== Boolean(travelerId) ||
     (lastReservedInvoiceNumber &&
       !new RegExp(`^${invoicePrefix}-[0-9]{4,}$`).test(lastReservedInvoiceNumber))
   ) {
@@ -422,6 +437,7 @@ function normalizePrefixSettingRow(
   const prefixLocked = true;
 
   return {
+    booker_id: bookerId,
     customer_account: customerAccount,
     invoice_prefix: invoicePrefix,
     last_reserved_at: lastReservedAt,
@@ -432,6 +448,7 @@ function normalizePrefixSettingRow(
     prefix_locked: prefixLocked,
     sequence_scope: "lifetime",
     sequence_status: sequenceStatus,
+    traveler_id: travelerId,
   };
 }
 
@@ -452,8 +469,10 @@ function parseCustomerAccountInput(
     readParamsValue(input, "customer_account"),
     maxCustomerAccountLength,
   );
+  const bookerId = optionalPositiveInteger(readParamsValue(input, "booker_id"));
+  const travelerId = optionalPositiveInteger(readParamsValue(input, "traveler_id"));
 
-  if (!customerAccount) {
+  if (!customerAccount || Boolean(bookerId) !== Boolean(travelerId)) {
     return {
       error: malformedPrefixSettingsError,
       ok: false,
@@ -463,7 +482,9 @@ function parseCustomerAccountInput(
 
   return {
     data: {
+      booker_id: bookerId,
       customer_account: customerAccount,
+      traveler_id: travelerId,
     },
     ok: true,
   };
@@ -486,15 +507,18 @@ export function parseAdminCustomerInvoicePrefixSettingsSavePayload(
   }
 
   const customerAccount = safeText(record.customer_account, maxCustomerAccountLength);
+  const bookerId = optionalPositiveInteger(record.booker_id);
   const invoicePrefix = validInvoicePrefix(record.invoice_prefix);
   const safeSequenceNote = optionalSafeText(
     record.safe_sequence_note,
     maxSafeSequenceNoteLength,
   );
+  const travelerId = optionalPositiveInteger(record.traveler_id);
 
   if (
     !customerAccount ||
     !invoicePrefix ||
+    Boolean(bookerId) !== Boolean(travelerId) ||
     (record.safe_sequence_note && !safeSequenceNote)
   ) {
     return {
@@ -506,9 +530,11 @@ export function parseAdminCustomerInvoicePrefixSettingsSavePayload(
 
   return {
     data: {
+      booker_id: bookerId,
       customer_account: customerAccount,
       invoice_prefix: invoicePrefix,
       safe_sequence_note: safeSequenceNote,
+      traveler_id: travelerId,
     },
     ok: true,
   };
@@ -516,13 +542,16 @@ export function parseAdminCustomerInvoicePrefixSettingsSavePayload(
 
 async function loadRawPrefixSetting(
   client: SupabaseClient,
-  customerAccount: string,
+  input: AdminCustomerInvoicePrefixSettingsInput,
 ): Promise<AdminBookingResult<UnknownRecord | null>> {
-  const { data, error } = await client
+  const baseQuery = client
     .from(customerInvoiceSequencesTableName)
     .select(sequenceSelect)
-    .eq("customer_account", customerAccount)
-    .maybeSingle();
+    .eq("customer_account", input.customer_account);
+  const scopedQuery = input.traveler_id && input.booker_id
+    ? baseQuery.eq("traveler_id", input.traveler_id).eq("booker_id", input.booker_id)
+    : baseQuery.is("traveler_id", null).is("booker_id", null);
+  const { data, error } = await scopedQuery.maybeSingle();
 
   if (error) {
     return safeAdapterFailure(safePrefixSettingsReadError, 500, error);
@@ -530,6 +559,42 @@ async function loadRawPrefixSetting(
 
   return {
     data: data ? asRecord(data) : null,
+    ok: true,
+  };
+}
+
+async function verifyTravelerBookerIdentity(
+  client: SupabaseClient,
+  input: AdminCustomerInvoicePrefixSettingsInput,
+): Promise<AdminBookingResult<null>> {
+  if (!input.traveler_id || !input.booker_id) {
+    return {
+      data: null,
+      ok: true,
+    };
+  }
+
+  const { data, error } = await client
+    .from("travelers")
+    .select("id")
+    .eq("id", input.traveler_id)
+    .eq("booker_id", input.booker_id)
+    .maybeSingle();
+
+  if (error) {
+    return safeAdapterFailure(safePrefixSettingsSaveError, 500, error);
+  }
+
+  if (!data) {
+    return {
+      error: mismatchedTravelerPrefixSettingsError,
+      ok: false,
+      status: 409,
+    };
+  }
+
+  return {
+    data: null,
     ok: true,
   };
 }
@@ -552,7 +617,7 @@ export async function loadAdminCustomerInvoicePrefixSetting(
 
   const rawResult = await loadRawPrefixSetting(
     clientResult.data,
-    parsed.data.customer_account,
+    parsed.data,
   );
 
   if (!rawResult.ok) {
@@ -592,7 +657,13 @@ export async function saveAdminCustomerInvoicePrefixSetting(
   }
 
   const client = clientResult.data;
-  const rawResult = await loadRawPrefixSetting(client, input.customer_account);
+  const verifiedIdentity = await verifyTravelerBookerIdentity(client, input);
+
+  if (!verifiedIdentity.ok) {
+    return verifiedIdentity;
+  }
+
+  const rawResult = await loadRawPrefixSetting(client, input);
 
   if (!rawResult.ok) {
     return rawResult;
@@ -630,12 +701,14 @@ export async function saveAdminCustomerInvoicePrefixSetting(
   const sequencePayload = {
     actor_label: actor.actor_label,
     actor_role: actor.actor_role,
+    booker_id: input.booker_id,
     customer_account: input.customer_account,
     invoice_prefix: input.invoice_prefix,
     next_sequence_number: 1,
     safe_sequence_note: input.safe_sequence_note,
     sequence_status: "active",
     source_surface: "admin_api",
+    traveler_id: input.traveler_id,
     updated_at: new Date().toISOString(),
   };
   const saveRequest = current

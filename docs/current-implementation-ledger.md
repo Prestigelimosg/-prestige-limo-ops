@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-1836c52f Fix customer override matrix persistence
+1e80b1dd Fix customer job public reference display
 
 Latest pushed main/staging runtime checkpoint:
 ea5780da Wire temporary customer invoice pricing
@@ -11,6 +11,18 @@ bc0b49ec Merge pull request #56 from Prestigelimosg/codex/restore-current-workfl
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Verified Traveller Invoice Separation and Prefix Ownership (2026-07-19)
+
+- The established customer-folder invoice handoff now fails closed unless every selected saved job carries a verified `booker_id + traveler_id` pair. Selected jobs are grouped automatically by exact traveller ID and each group opens the same existing invoice review lane as one separate invoice; passenger names, company labels, email addresses, parser text, and internal booking keys are never used as identity evidence.
+- One PA/booker email may therefore receive separate invoices for multiple verified travellers without merging their billable jobs. The existing recipient selector and one established email sender remain unchanged; the invoice record and prefix are owned by the verified traveller, while the delivery address may be shared.
+- The existing customer-folder prefix settings panel now lists the verified travellers found on that folder's saved bookings and keeps one compact row per traveller. Saving reuses the existing guarded prefix route and server client. The server proves the exact traveller belongs to the submitted PA/booker before inserting one globally unique, locked lifetime prefix. Reserved legacy document tokens `INV`, `QUO`, and `CN` are rejected.
+- Stored invoices now retain nullable verified `traveler_id` beside the existing `booker_id`. An issued traveller invoice must prove every line-item booking belongs to the exact customer, PA/booker, and traveller before the server-only `reserve_customer_invoice_number` RPC atomically reserves `PREFIX-0001`, `PREFIX-0002`, and onward. Draft/preview state does not reserve a traveller number; failed or crafted identity scope cannot fall back to an account-wide invoice.
+- The migration preserves legacy dated `INV`, `QUO`, and `CN` records, allows traveller-prefixed invoices and their later credit notes, and retains the legacy account sequence only for old non-traveller workflows. The existing monthly account lane fails closed once that account has traveller-owned sequences so it cannot combine multiple travellers into one monthly invoice.
+- Production Supabase schema verification confirmed the traveller/booker columns, both invoice-number constraints, and service-role-only reservation permission. Anonymous and authenticated roles cannot execute the reservation RPC. The new foreign key has a covering index. Both invoice tables remain RLS-enabled with no public policies, matching the established server-only design; unused-index advisor notices are expected while the new tables contain no traveller sequence or invoice rows.
+- Production read-only identity diagnosis found that the Stanley and Deep test bookings still have null `company_id`, `booker_id`, and `traveler_id`, and currently belong to two separate legacy customer rows. No verified Tiger company/booker/traveller records exist yet. The app must not infer or issue from those labels: the established CRM selectors must create/select and bind the exact Tiger, Stanley, and Deep test identities before the owner-authorized separate sends to `william@prestigelimo.sg`. No invoice or email was created during this diagnosis.
+- Stripe remains parked. This repair creates no Checkout session, payment link, charge, payment status, payout, PayNow payout, driver finance exposure, or customer-visible internal note. Stanley/Deep/Tiger test artifacts remain owner-designated test data for cleanup after 1 August.
+- Focused protection is `scripts/test-customer-traveler-invoice-separation-guard.mjs`, registered in `scripts/test-preactivation-verification-suite.mjs`, plus the existing prefix, folder handoff, booker ownership, multi-recipient email, and billing lifecycle guards.
 
 ### Customers Workspace Public Reference And SGT Row Repair (2026-07-19)
 

@@ -42,6 +42,7 @@ export type CustomerInvoiceStoredRecord = CustomerLocalInvoiceRecord & {
   emailSentAt?: string | null;
   pdfFilename: string;
   storageSource: "server";
+  travelerId?: number;
 };
 
 export type CustomerInvoiceCreateInput = {
@@ -62,6 +63,7 @@ export type CustomerInvoiceCreateInput = {
   route?: unknown;
   service?: unknown;
   status?: unknown;
+  travelerId?: unknown;
 };
 
 export type CustomerInvoiceTestArtifactArchiveInput = {
@@ -72,7 +74,7 @@ export type CustomerInvoiceTestArtifactArchiveInput = {
 };
 
 type UnknownRecord = Record<string, unknown>;
-type CustomerInvoiceClient = Pick<SupabaseClient, "from">;
+type CustomerInvoiceClient = Pick<SupabaseClient, "from" | "rpc">;
 type CustomerBillingDocumentState = "draft" | "issued";
 
 type CustomerInvoiceResult<T> =
@@ -120,7 +122,7 @@ const customerInvoiceLegacySelect = [
   "created_at",
   "updated_at",
 ].join(", ");
-const customerInvoiceSelect = `${customerInvoiceLegacySelect}, booker_id, document_type, document_state, original_invoice_number, credit_note_reason`;
+const customerInvoiceSelect = `${customerInvoiceLegacySelect}, booker_id, traveler_id, document_type, document_state, original_invoice_number, credit_note_reason`;
 const customerInvoiceLegacyPdfSelect =
   "invoice_number, customer_id, pdf_base64, pdf_content_type, pdf_filename";
 const customerInvoicePdfSelect = `${customerInvoiceLegacyPdfSelect}, document_type, document_state`;
@@ -171,8 +173,8 @@ const forbiddenCustomerInvoiceFragments = [
   "token_hash",
 ];
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const invoiceNumberPattern = /^(INV|QUO|CN)-\d{8}-\d{4}$/;
-const originalInvoiceNumberPattern = /^INV-\d{8}-\d{4}$/;
+const invoiceNumberPattern = /^(?:(INV|QUO|CN)-\d{8}-\d{4}|[A-Z0-9]{2,12}-\d{4,})$/;
+const originalInvoiceNumberPattern = /^(?:INV-\d{8}-\d{4}|[A-Z0-9]{2,12}-\d{4,})$/;
 const localJpegLogoPattern = /^\/[a-z0-9][a-z0-9/_-]*\.jpe?g$/i;
 
 function createServerClient() {
@@ -457,6 +459,9 @@ function toStoredRecord(row: UnknownRecord): CustomerInvoiceStoredRecord | null 
     source: "local-admin-issued-invoice-v1",
     status,
     storageSource: "server",
+    ...(positiveIdentityId(row.traveler_id)
+      ? { travelerId: positiveIdentityId(row.traveler_id) || undefined }
+      : {}),
   };
 }
 
@@ -478,6 +483,7 @@ function sanitizeCreateInput(input: CustomerInvoiceCreateInput): CustomerInvoice
   route: string;
   service: string;
   status: CustomerLocalInvoiceStatus;
+  travelerId: number | null;
 }> {
   const amountCents = safeAmountCents(input.amountCents);
   const bookerId = positiveIdentityId(input.bookerId);
@@ -489,6 +495,7 @@ function sanitizeCreateInput(input: CustomerInvoiceCreateInput): CustomerInvoice
   const route = safeText(input.route, 600);
   const service = safeText(input.service, 160);
   const status = safeStatus(input.status);
+  const travelerId = positiveIdentityId(input.travelerId);
   const lineItems = safeLineItems(input.lineItems);
   const documentType = safeDocumentType(input.documentType) || "invoice";
   const documentState = safeDocumentState(input.documentState) || "issued";
@@ -541,6 +548,7 @@ function sanitizeCreateInput(input: CustomerInvoiceCreateInput): CustomerInvoice
       route,
       service,
       status,
+      travelerId,
     },
     ok: true,
     version: customerInvoiceRecordVersion,
@@ -581,10 +589,11 @@ async function verifyIssuedInvoiceBookingOwnership(
     bookingReference: string | null;
     customerId: string;
     lineItems: CustomerLocalInvoiceLineItem[];
+    travelerId: number | null;
   },
   invoiceClient: CustomerInvoiceClient,
 ): Promise<CustomerInvoiceResult<true>> {
-  if (!input.bookerId || !input.bookingReference) {
+  if (!input.bookerId || !input.bookingReference || !input.travelerId) {
     return safeFailure(safeValidationError, 400);
   }
 
@@ -604,10 +613,11 @@ async function verifyIssuedInvoiceBookingOwnership(
 
   const { data: ownedBookings, error: ownedBookingsError } = await invoiceClient
     .from("bookings")
-    .select("booking_reference")
+    .select("booking_reference, traveler_id")
     .in("booking_reference", bookingReferences)
     .eq("customer_id", input.customerId)
-    .eq("booker_id", input.bookerId);
+    .eq("booker_id", input.bookerId)
+    .eq("traveler_id", input.travelerId);
   const ownedBookingReferences = new Set(
     asArray(ownedBookings)
       .map((row) => safeText(asRecord(row).booking_reference, 160))
@@ -750,6 +760,45 @@ async function nextInvoiceNumber(
   return `${prefix}-${dateKey}-${String(sequence).padStart(4, "0")}`;
 }
 
+async function reserveTravelerInvoiceNumber(
+  client: CustomerInvoiceClient,
+  input: {
+    actor: AdminBookingPersistenceAdapterActor;
+    bookerId: number;
+    customerAccount: string;
+    travelerId: number;
+  },
+): Promise<CustomerInvoiceResult<string>> {
+  const { data, error } = await client.rpc("reserve_customer_invoice_number", {
+    p_actor_label: input.actor.actor_label,
+    p_actor_role: input.actor.actor_role,
+    p_booker_id: input.bookerId,
+    p_customer_account: input.customerAccount,
+    p_traveler_id: input.travelerId,
+  });
+  const firstRow = asRecord(asArray(data)[0] ?? data);
+  const invoiceNumber = safeInvoiceNumber(firstRow.invoice_number);
+
+  if (error || !invoiceNumber) {
+    const errorText = Object.values(asRecord(error))
+      .map((value) => String(value ?? "").toLowerCase())
+      .join(" ");
+
+    return safeFailure(
+      errorText.includes("traveler_invoice_prefix_required")
+        ? "Set and lock this verified traveller's invoice prefix before issuing or emailing."
+        : safeWriteError,
+      errorText.includes("traveler_invoice_prefix_required") ? 409 : 503,
+    );
+  }
+
+  return {
+    data: invoiceNumber,
+    ok: true,
+    version: customerInvoiceRecordVersion,
+  };
+}
+
 export async function createCustomerInvoiceRecord(
   input: CustomerInvoiceCreateInput,
   actor: AdminBookingPersistenceAdapterActor,
@@ -787,6 +836,22 @@ export async function createCustomerInvoiceRecord(
       return verification;
     }
   }
+  const travelerInvoiceNumber =
+    sanitized.data.documentState === "issued" &&
+    sanitized.data.travelerId &&
+    sanitized.data.bookerId &&
+    sanitized.data.documentType === "invoice"
+      ? await reserveTravelerInvoiceNumber(invoiceClient, {
+          actor,
+          bookerId: sanitized.data.bookerId,
+          customerAccount: sanitized.data.customerName,
+          travelerId: sanitized.data.travelerId,
+        })
+      : null;
+
+  if (travelerInvoiceNumber && !travelerInvoiceNumber.ok) {
+    return travelerInvoiceNumber;
+  }
   const issueDate = new Date();
   const invoiceDateKey = issueDate.toISOString().slice(0, 10).replace(/-/g, "");
   const amountLabel = formatInvoiceAmount(sanitized.data.amountCents);
@@ -803,12 +868,14 @@ export async function createCustomerInvoiceRecord(
   const { logoImage, profile } = await loadServerLogoImage();
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const invoiceNumber = await nextInvoiceNumber(
-      invoiceClient,
-      invoiceDateKey,
-      attempt,
-      sanitized.data.documentType,
-    );
+    const invoiceNumber = travelerInvoiceNumber?.ok
+      ? travelerInvoiceNumber.data
+      : await nextInvoiceNumber(
+          invoiceClient,
+          invoiceDateKey,
+          attempt,
+          sanitized.data.documentType,
+        );
     const invoiceForPdf: CustomerLocalInvoiceRecord = {
       amountCents: sanitized.data.amountCents,
       amountLabel,
@@ -864,6 +931,7 @@ export async function createCustomerInvoiceRecord(
       service: invoiceForPdf.service,
       source_surface: "admin_api",
       status: invoiceForPdf.status,
+      traveler_id: sanitized.data.travelerId,
       updated_at: new Date().toISOString(),
     };
     const { data, error } = await invoiceClient
@@ -883,6 +951,10 @@ export async function createCustomerInvoiceRecord(
     }
 
     if (lifecycleColumnUnavailableError(error)) {
+      if (travelerInvoiceNumber) {
+        return safeFailure(safeWriteError, 503);
+      }
+
       if (sanitized.data.documentType !== "invoice" || sanitized.data.documentState !== "issued") {
         return safeFailure(safeWriteError, 503);
       }
@@ -939,6 +1011,10 @@ export async function createCustomerInvoiceRecord(
 
     if (!duplicateInvoiceError(error)) {
       return safeFailure(safeWriteError, 500);
+    }
+
+    if (travelerInvoiceNumber) {
+      return safeFailure(safeWriteError, 409);
     }
   }
 

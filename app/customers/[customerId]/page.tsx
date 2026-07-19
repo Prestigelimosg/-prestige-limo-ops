@@ -98,6 +98,7 @@ export default async function MockCustomerFolderPage({ params, searchParams }: C
             <div className="mt-3 grid gap-3 lg:grid-cols-2">
               <CustomerInvoicePrefixSettingsPanel
                 customerAccount={customer.companyName}
+                customerId={customer.id}
                 suggestedPrefix={customer.invoicePrefix}
               />
               <CustomerBookingReferenceSettingsPanel

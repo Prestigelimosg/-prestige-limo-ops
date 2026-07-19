@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-ea5780da Wire temporary customer invoice pricing
+1836c52f Fix customer override matrix persistence
 
 Latest pushed main/staging runtime checkpoint:
 ea5780da Wire temporary customer invoice pricing
@@ -11,6 +11,16 @@ bc0b49ec Merge pull request #56 from Prestigelimosg/codex/restore-current-workfl
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Customer Rate Override To Invoice Consumption Verification (2026-07-19)
+
+- Read-only Production database evidence confirmed the existing test account owns verified `company_id = 26` and `traveler_id = 22`, both current `customer_rates` maps are empty, and the established default rate record contains DEP `70` with midnight surcharge `15`. The exact test bookings carry those verified IDs; no name or display label was used as rate ownership evidence.
+- Production Chrome on the deployed customer folder showed daytime DEP proposals at SGD70 and midnight DEP proposals at SGD85. The latter is the same SGD70 default plus the established SGD15 midnight surcharge, not an unexplained override.
+- Existing test job public reference `10835` was opened through its one customer-price tag. The inline box showed SGD70, `Source: Prestige default rate`, and `Temporary Codex proposal`; clicking `Save price review` changed browser review state only and enabled the existing Invoice handoff. The resulting existing invoice preview carried exactly SGD70 as Rate, Amount, Sub Total, Total, and Balance Due, remained `Not issued` / Unpaid, and no Send or PDF action was clicked.
+- Because the live test account currently has no saved override, Production runtime evidence proves the default and surcharge paths but must not be represented as a live override write test. The strengthened focused guard now executes the actual shared calculator for four exact cases: no override → Prestige default; matching company override → company; matching traveler override → traveler; mismatched-company or unrelated-service traveler data → ignored, preserving company fallback. This is calculator execution, not source-string inspection.
+- Override consumption remains traveler → company → Prestige default. The calculator's legacy internal source value `boss` continues mapping only to the admin label `verified traveler rate`; it is not identity evidence and is not customer-visible.
+- Separate finding, not repaired in this pricing pass: the admin `/customers` job list still displays shortened internal-style booking labels while the selected invoice correctly uses public reference `10835`. That public-reference display discrepancy requires its own established-lane diagnosis and must not be hidden inside a pricing change.
+- No customer/company/traveler rate, default, booking, invoice record, payment, payout, provider, environment value, Supabase configuration, or schema was changed. No invoice was issued, downloaded, emailed, paid, or sent. Focused protection remains `scripts/test-customer-folder-price-review-guard.mjs`.
 
 ### Customer Rate Override Matrix And Persistence Alignment (2026-07-19)
 

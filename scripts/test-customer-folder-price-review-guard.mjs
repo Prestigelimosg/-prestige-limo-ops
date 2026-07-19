@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import os from "node:os";
+import path from "node:path";
+import ts from "typescript";
 
 const guardScript = "scripts/test-customer-folder-price-review-guard.mjs";
 const [folder, customers, sharedCalculation, savedBookingsRead, rateSetupRoute, ledger, suite] = await Promise.all([
@@ -127,5 +131,120 @@ for (const phrase of [
 }
 
 includes(suite, guardScript, "preactivation price-review guard registration");
+
+const calculationRuntimeDir = await mkdtemp(
+  path.join(os.tmpdir(), "prestige-customer-invoice-rate-review-"),
+);
+
+try {
+  for (const moduleName of ["hourly-billing", "pricing", "customer-dsp-invoice-review"]) {
+    const source = await readFile(`lib/${moduleName}.ts`, "utf8");
+
+    await writeFile(
+      path.join(calculationRuntimeDir, `${moduleName}.js`),
+      ts.transpileModule(source, {
+        compilerOptions: {
+          esModuleInterop: true,
+          module: ts.ModuleKind.CommonJS,
+          target: ts.ScriptTarget.ES2022,
+        },
+      }).outputText,
+    );
+  }
+
+  const require = createRequire(import.meta.url);
+  const { calculateCustomerInvoiceRateReview } = require(
+    path.join(calculationRuntimeDir, "customer-dsp-invoice-review.js"),
+  );
+  const exactIdentityInput = {
+    actualMinutes: null,
+    bookingType: "DEP",
+    childSeatCount: 0,
+    companyId: 26,
+    extraStopCount: 0,
+    pickupAt: "2026-07-20T04:00:00.000Z",
+    travelerId: 22,
+    vehicleType: "AVF",
+  };
+  const exactDefaultSetup = {
+    companies: [{ customer_rates: {}, id: 26 }],
+    settings: {
+      child_seat_customer_surcharge: 15,
+      customer_rates: { DEP: { AVF: 70 } },
+      extra_stop_surcharge: 0,
+      midnight_surcharge: 15,
+    },
+    travelers: [{ company_id: 26, customer_rates: {}, id: 22 }],
+  };
+
+  assert.deepEqual(
+    calculateCustomerInvoiceRateReview(exactIdentityInput, exactDefaultSetup),
+    {
+      actualMinutes: null,
+      amountCents: 7000,
+      baseAmountCents: 7000,
+      billableHours: null,
+      billableMinutes: null,
+      bookingType: "DEP",
+      customerRateSource: "default",
+      customerRateUnit: "job",
+      rateCents: 7000,
+      surchargeAmountCents: 0,
+    },
+    "Exact verified identities with no override must use the Prestige default rate",
+  );
+
+  const companyOverrideSetup = {
+    ...exactDefaultSetup,
+    companies: [{ customer_rates: { DEP: { AVF: 72 } }, id: 26 }],
+  };
+  const companyOverrideReview = calculateCustomerInvoiceRateReview(
+    exactIdentityInput,
+    companyOverrideSetup,
+  );
+  assert.equal(companyOverrideReview?.rateCents, 7200);
+  assert.equal(companyOverrideReview?.amountCents, 7200);
+  assert.equal(companyOverrideReview?.customerRateSource, "company");
+
+  const travelerOverrideSetup = {
+    ...companyOverrideSetup,
+    travelers: [
+      { company_id: 26, customer_rates: { DEP: { AVF: 73 } }, id: 22 },
+    ],
+  };
+  const travelerOverrideReview = calculateCustomerInvoiceRateReview(
+    exactIdentityInput,
+    travelerOverrideSetup,
+  );
+  assert.equal(travelerOverrideReview?.rateCents, 7300);
+  assert.equal(travelerOverrideReview?.amountCents, 7300);
+  assert.equal(travelerOverrideReview?.customerRateSource, "boss");
+
+  const mismatchedTravelerReview = calculateCustomerInvoiceRateReview(
+    exactIdentityInput,
+    {
+      ...companyOverrideSetup,
+      travelers: [
+        { company_id: 999, customer_rates: { DEP: { AVF: 99 } }, id: 22 },
+      ],
+    },
+  );
+  assert.equal(mismatchedTravelerReview?.rateCents, 7200);
+  assert.equal(mismatchedTravelerReview?.customerRateSource, "company");
+
+  const unrelatedTravelerReview = calculateCustomerInvoiceRateReview(
+    exactIdentityInput,
+    {
+      ...companyOverrideSetup,
+      travelers: [
+        { company_id: 26, customer_rates: { MNG: { AVF: 99 } }, id: 22 },
+      ],
+    },
+  );
+  assert.equal(unrelatedTravelerReview?.rateCents, 7200);
+  assert.equal(unrelatedTravelerReview?.customerRateSource, "company");
+} finally {
+  await rm(calculationRuntimeDir, { force: true, recursive: true });
+}
 
 console.log("Customer-folder price review guard passed");

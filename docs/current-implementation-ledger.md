@@ -1,16 +1,27 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-55950e1b Show DSP schedule in completed history
+c17fc164 Compact completed history details
 
 Latest pushed main/staging runtime checkpoint:
-55950e1b Show DSP schedule in completed history
+c17fc164 Compact completed history details
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-a77c2793 Merge pull request #50 from Prestigelimosg/codex/restore-current-workflow-guards
+a7844a7f Merge pull request #51 from Prestigelimosg/codex/restore-current-workflow-guards
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Customer Folder Compact Selected-Job Invoice Review (2026-07-19)
+
+- `Review invoice & email` keeps the established customer-folder selected-job handoff, exact saved-booking reads, verified customer/PA ownership, Create Invoice request builder, stored invoice route, PDF route, email route, and action confirmations. No second invoice lane, route, persistence helper, send path, or customer-folder panel is added.
+- The selected-job handoff now opens the existing Create Invoice content as a compact review surface instead of exposing the generic `Advanced invoice workbench`. Its compact action strip is `Edit`, `Send`, and `PDF Download`; selected-job review does not render the generic `Draft`, `Issue`, `Clear`, or manual-workbench controls. The generic manual Create Invoice lane remains available and unchanged outside this exact handoff mode.
+- The paper-style review carries every selected job line and shows actual document number, Unpaid/Paid status, payment made, and balance due. Before issuance it clearly displays `Not issued` and blocks Send/PDF until every selected amount is reviewed through Edit and the current preview is valid.
+- Send on an unissued review uses the existing guarded Email flow, which issues one stored Unpaid invoice and then emails that stored PDF. `PDF Download` on an unissued review uses the existing guarded Issue flow and downloads the stored PDF; after either action, Send and PDF Download reuse the same issued record so selected jobs cannot be issued twice and the displayed line items, downloaded PDF, and email attachment stay tied to one stored invoice.
+- Issued is not treated as Paid. Selected-job issuance is always Unpaid; payment status remains a separate established billing-document action. Once issued, invoice content editing is locked. A later Paid/Unpaid status update regenerates the stored PDF through the existing status route.
+- The shared PDF renderer now prints `Payment Made` and derives both top and totals `Balance Due` from the actual stored status: Unpaid keeps the full balance, while Paid prints the full payment made and `SGD0.00` balance. The existing email route continues attaching the stored PDF bytes rather than regenerating a separate email document.
+- This pass adds no schema, migration, environment or Supabase configuration change; no payment, bank reconciliation, card charge, payout, PayNow payout, provider job send, Calendar, GPS/live-location, customer/driver exposure, or automatic invoice action. Chrome verification must exercise only the non-writing Review/Edit controls; Send and issue-producing PDF actions remain unclicked.
+- Focused protection extends `scripts/test-customer-folder-multi-job-invoice-handoff-guard.mjs`, `scripts/test-admin-create-invoice-manual-bill-to-guard.mjs`, `scripts/test-customer-local-invoice-issue-pdf-portal-guard.mjs`, and `scripts/test-customers-invoice-workspace-cleanup-guard.mjs`, all already registered in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Completed History Single-Detail Compact Card (2026-07-19)
 

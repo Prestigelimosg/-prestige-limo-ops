@@ -592,7 +592,7 @@ export function CustomerFolderSavedBookingsPanel({
               </div>
               {createInvoiceHref ? (
                 <Link
-                  className="inline-flex min-h-9 items-center justify-center rounded-md border border-sky-800 bg-sky-800 px-3 text-xs font-bold text-white transition hover:bg-sky-700"
+                  className="inline-flex h-8 items-center justify-center rounded-md border border-sky-800 bg-sky-800 px-2.5 text-[11px] font-bold text-white transition hover:bg-sky-700"
                   data-customer-folder-create-invoice-selected="true"
                   href={createInvoiceHref}
                 >
@@ -600,7 +600,7 @@ export function CustomerFolderSavedBookingsPanel({
                 </Link>
               ) : (
                 <button
-                  className="inline-flex min-h-9 cursor-not-allowed items-center justify-center rounded-md border border-slate-200 bg-slate-100 px-3 text-xs font-bold text-slate-400"
+                  className="inline-flex h-8 cursor-not-allowed items-center justify-center rounded-md border border-slate-200 bg-slate-100 px-2.5 text-[11px] font-bold text-slate-400"
                   data-customer-folder-create-invoice-selected-disabled="true"
                   disabled
                   type="button"

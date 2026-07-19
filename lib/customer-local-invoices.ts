@@ -586,6 +586,9 @@ export function createCustomerInvoicePdfBytes(
   ];
   const amountValue = invoiceMoneyValue(invoice.amountLabel);
   const sgdAmount = invoiceSgdValue(invoice.amountLabel);
+  const paidInvoice = documentType === "invoice" && invoice.status === "Paid";
+  const paymentMadeValue = paidInvoice ? `(-) ${sgdAmount}` : "SGD0.00";
+  const balanceDueValue = paidInvoice ? "SGD0.00" : sgdAmount;
   const logoDisplayWidth = 150;
   const logoDisplayHeight = logoImage
     ? Math.max(40, Math.min(76, Math.round((logoDisplayWidth * logoImage.height) / logoImage.width)))
@@ -662,7 +665,7 @@ export function createCustomerInvoicePdfBytes(
     pdfRightTextAt(documentTitle, 562, 725, 30),
     pdfRightTextAt(`${documentNumberLabel} ${invoice.invoiceNumber}`, 562, 700, 9),
     pdfRightTextAt(balanceLabel, 562, 672, 8),
-    pdfRightTextAt(sgdAmount, 562, 654, 12),
+    pdfRightTextAt(balanceDueValue, 562, 654, 12),
     ...companyHeaderCommands,
     ...billToCommands,
     ...dateCommands,
@@ -671,9 +674,15 @@ export function createCustomerInvoicePdfBytes(
     pdfRightTextAt(amountValue, 562, totalsY, 8),
     pdfRightTextAt("Total", 495, totalsY - 24, 9),
     pdfRightTextAt(sgdAmount, 562, totalsY - 24, 9),
-    pdfRect(338, totalsY - 58, 224, 26, "0.94 g"),
-    pdfRightTextAt(balanceLabel, 495, totalsY - 50, 9),
-    pdfRightTextAt(sgdAmount, 562, totalsY - 50, 9),
+    ...(documentType === "invoice"
+      ? [
+          pdfRightTextAt("Payment Made", 495, totalsY - 44, 8),
+          pdfRightTextAt(paymentMadeValue, 562, totalsY - 44, 8),
+        ]
+      : []),
+    pdfRect(338, totalsY - 78, 224, 26, "0.94 g"),
+    pdfRightTextAt(balanceLabel, 495, totalsY - 70, 9),
+    pdfRightTextAt(balanceDueValue, 562, totalsY - 70, 9),
     pdfLinePath(50, totalsY + 22, 562, totalsY + 22, 0.8, "0.75 G"),
     pdfTextAt("Thank you for your business", 50, signoffY, 8),
     pdfTextAt("Best Regards,", 50, signoffY - 21, 8),

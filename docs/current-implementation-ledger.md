@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-62f60c47 Order and paginate upcoming bookings
+43c2bc29 Keep saved Calendar badges green
 
 Latest pushed main/staging runtime checkpoint:
 1e80b1dd Fix customer job public reference display
@@ -19,6 +19,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The existing configured-provider comparison remains strict for event ID, title, schedule/timezone, location, all other description lines, private Prestige markers, and reminders. It adds only a bounded compatibility match for an older Customer description line whose sole difference is the exact current passenger suffix already present on the separate Passenger line. A changed company, passenger, status, driver, flight, vehicle, route, schedule, reminder set, or provider marker still returns amber `Update Cal`.
 - The existing Upcoming booking card no longer renders the `draft` workflow-status pill. Draft remains persisted and continues to feed booking/Calendar workflow behavior; only the redundant visible status chip is suppressed. Confirmed, Assigned, Driver OTW, POB, Completed, Cancelled, driver-assignment, Calendar, and customer-detail delivery indicators are unchanged.
 - No booking, Calendar event, CRM identity, provider configuration, route, status writer, button, panel, helper lane, table, Supabase object, customer/driver message, invoice/payment/payout, or external contact is added or mutated by this source repair. Focused protection remains `scripts/test-admin-booking-google-calendar-sync-api-contract.mjs` and `scripts/test-bookings-earlier-history-compact-guard.mjs`.
+- Exact application commit `43c2bc29` deployed through the linked Vercel production target as deployment `dpl_4VdFTsDFnD2kh89z6m5FY8MpPJxg`, reached Ready, and was aliased to `https://app.prestigelimo.sg`. Signed-in owner Chrome displayed `Build 43c2bc29`; exact booking `10835` showed green `Cal saved` with no Draft pill. After a full page reload and a fresh configured-provider comparison, the same card again showed exactly one green `Cal saved` badge and no Draft pill, with zero Chrome console errors.
+- Production acceptance was read-only. It did not click `Save + CRM`, `Update + Cal`, Open/Edit, Complete, Cancel, or any Calendar/provider action and did not change a booking, workflow status, CRM identity, Calendar event, message, invoice, payment, payout, environment value, or Supabase configuration.
 
 ### Admin Bookings Upcoming Pickup Order And Pagination (2026-07-19)
 

@@ -1,13 +1,13 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-c17fc164 Compact completed history details
+8b6f76b3 Compact selected-job invoice review
 
 Latest pushed main/staging runtime checkpoint:
-c17fc164 Compact completed history details
+8b6f76b3 Compact selected-job invoice review
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-a7844a7f Merge pull request #51 from Prestigelimosg/codex/restore-current-workflow-guards
+051938eb Merge pull request #52 from Prestigelimosg/codex/restore-current-workflow-guards
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -16,6 +16,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 - `Review invoice & email` keeps the established customer-folder selected-job handoff, exact saved-booking reads, verified customer/PA ownership, Create Invoice request builder, stored invoice route, PDF route, email route, and action confirmations. No second invoice lane, route, persistence helper, send path, or customer-folder panel is added.
 - The selected-job handoff now opens the existing Create Invoice content as a compact review surface instead of exposing the generic `Advanced invoice workbench`. Its compact action strip is `Edit`, `Send`, and `PDF Download`; selected-job review does not render the generic `Draft`, `Issue`, `Clear`, or manual-workbench controls. The generic manual Create Invoice lane remains available and unchanged outside this exact handoff mode.
+- Chrome runtime review found and removed the browser-generated default `Details` summary from the selected-job wrapper. A hidden explicit summary preserves valid native details markup without adding a visible card, label, or control above the compact action strip.
 - The paper-style review carries every selected job line and shows actual document number, Unpaid/Paid status, payment made, and balance due. Before issuance it clearly displays `Not issued` and blocks Send/PDF until every selected amount is reviewed through Edit and the current preview is valid.
 - Send on an unissued review uses the existing guarded Email flow, which issues one stored Unpaid invoice and then emails that stored PDF. `PDF Download` on an unissued review uses the existing guarded Issue flow and downloads the stored PDF; after either action, Send and PDF Download reuse the same issued record so selected jobs cannot be issued twice and the displayed line items, downloaded PDF, and email attachment stay tied to one stored invoice.
 - Issued is not treated as Paid. Selected-job issuance is always Unpaid; payment status remains a separate established billing-document action. Once issued, invoice content editing is locked. A later Paid/Unpaid status update regenerates the stored PDF through the existing status route.

@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-36110128 Require explicit verified driver selection
+9b038b21 Persist verified driver identity on bookings
 
 Latest pushed main/staging runtime checkpoint:
 1e80b1dd Fix customer job public reference display

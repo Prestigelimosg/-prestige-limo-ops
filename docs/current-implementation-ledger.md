@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-c0f8a2e9 Open driver jobs in phone calendar
+3ef93403 Connect driver jobs to Google Calendar
 
 Latest pushed main/staging runtime checkpoint:
 1e80b1dd Fix customer job public reference display

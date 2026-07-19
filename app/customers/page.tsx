@@ -8501,6 +8501,7 @@ export default function MockCustomerDashboardPage() {
                         const bookingReference =
                           savedBookingReference(booking) ||
                           `${booking.customer_id || "customer"}-${booking.pickup_at || "job"}`;
+                        const publicBookingReference = customerFolderPublicBookingReference(booking);
                         const isExpanded = expandedCustomerFolderJobReference === bookingReference;
                         const dispatchHandoffHref = customerFolderJobDispatchHref(booking);
                         const exactEditorIsCurrent =
@@ -8529,16 +8530,18 @@ export default function MockCustomerDashboardPage() {
                             <div className="min-w-0">
                               <p
                                 className="truncate font-bold text-slate-950"
-                                title={savedBookingDisplayText(booking.booking_reference, "Reference unavailable")}
+                                title={publicBookingReference || "Reference unavailable"}
                               >
-                                {compactCustomerBookingReference(booking.booking_reference, "Reference unavailable")}
+                                {publicBookingReference || "Reference unavailable"}
                               </p>
                               <p className="mt-0.5 truncate text-xs font-semibold text-slate-500">
                                 Account: {savedBookingDisplayText(booking.customer_id, "Not linked")}
                               </p>
                             </div>
                             <p className="min-w-0 text-xs font-semibold text-slate-600">
-                              <span className="block truncate">{savedBookingDateLabel(booking)}</span>
+                              <span className="block truncate">
+                                {formatSingaporePickupDisplay(booking.pickup_at, "Pickup not available")}
+                              </span>
                               <span className="block truncate">
                                 {savedBookingDisplayText(booking.service_type, "Service not set")}
                               </span>
@@ -8566,7 +8569,7 @@ export default function MockCustomerDashboardPage() {
                                     <span className="block text-[10px] uppercase tracking-[0.12em] text-slate-500">
                                       Reference
                                     </span>
-                                    {savedBookingDisplayText(booking.booking_reference)}
+                                    {publicBookingReference || "Reference unavailable"}
                                   </p>
                                   <p>
                                     <span className="block text-[10px] uppercase tracking-[0.12em] text-slate-500">

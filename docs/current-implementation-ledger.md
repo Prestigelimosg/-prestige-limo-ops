@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-4e48b207 Complete customer folder billing review
+ea5780da Wire temporary customer invoice pricing
 
 Latest pushed main/staging runtime checkpoint:
 4e48b207 Complete customer folder billing review

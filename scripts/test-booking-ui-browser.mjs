@@ -10866,6 +10866,88 @@ async function runChromeTest() {
     });
 
     await evaluate(`(() => {
+      window.__prestigeDriverJobStatuses["${dashboardCompletionActionFixture.id}"] = [
+        {
+          actor_label: "Browser driver status mock",
+          actor_role: "driver",
+          booking_reference: "${dashboardCompletionActionFixture.id}",
+          created_at: "2026-05-30T11:20:00.000Z",
+          occurred_at: "2026-05-30T11:20:00.000Z",
+          source_surface: "driver_job_api",
+          status_source: "driver_job_api",
+          status_value: "completed",
+        },
+        {
+          actor_label: "Browser driver status mock",
+          actor_role: "driver",
+          booking_reference: "${dashboardCompletionActionFixture.id}",
+          created_at: "2026-05-30T10:40:00.000Z",
+          occurred_at: "2026-05-30T10:40:00.000Z",
+          source_surface: "driver_job_api",
+          status_source: "driver_job_api",
+          status_value: "pob",
+        },
+      ];
+      window.__prestigeFetchCalls = [];
+      window.__prestigeBookingCompletionRequests = [];
+
+      const article = document.querySelector(
+        '[data-admin-multi-driver-active-job="${dashboardCompletionActionFixture.id}"]',
+      );
+      const refreshButton = article?.querySelector(
+        "[data-admin-multi-driver-active-job-driver-report-refresh='true']",
+      );
+      refreshButton?.click();
+    })()`);
+
+    const driverJcEvidenceRetentionState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const article = document.querySelector(
+            '[data-admin-multi-driver-active-job="${dashboardCompletionActionFixture.id}"]',
+          );
+          const report = article?.querySelector(
+            "[data-admin-multi-driver-active-job-driver-report='true']",
+          );
+
+          return article && report?.innerText.includes("Job Completed")
+            ? {
+                articleText: article.innerText,
+                completionRequests: window.__prestigeBookingCompletionRequests || [],
+                fetchCalls: window.__prestigeFetchCalls || [],
+                hasAdminConfirmButton: Boolean(
+                  article.querySelector(
+                    "[data-dashboard-mark-completed='${dashboardCompletionActionFixture.id}']",
+                  ),
+                ),
+                reportText: report.innerText,
+              }
+            : false;
+        })()`),
+      10000,
+      "driver JC evidence retained in Today's Jobs until admin confirmation",
+    );
+    assert.match(driverJcEvidenceRetentionState.reportText, /Latest report:\s*Job Completed/);
+    assert.match(driverJcEvidenceRetentionState.reportText, /POB/);
+    assert.equal(
+      driverJcEvidenceRetentionState.hasAdminConfirmButton,
+      true,
+      "Expected the existing admin completion action to remain available after driver JC evidence arrives",
+    );
+    assert.deepEqual(
+      driverJcEvidenceRetentionState.completionRequests,
+      [],
+      "Expected reading driver JC evidence not to persist admin booking completion",
+    );
+    assert.equal(
+      driverJcEvidenceRetentionState.fetchCalls.some(
+        (call) => call.startsWith("PATCH ") && call.includes("/api/admin-saved-booking-statuses"),
+      ),
+      false,
+      "Expected reading driver JC evidence not to call the admin completion writer",
+    );
+
+    await evaluate(`(() => {
       window.__prestigeFetchCalls = [];
       window.__prestigeBookingCompletionRequests = [];
       window.__prestigeUnhandledSupabaseCalls = [];

@@ -125,9 +125,9 @@ for (const fragment of [
 
 for (const fragment of [
   "const todayKey = toDateKey(new Date());",
-  "const bookingRecordBelongsInCompletedHistoryWithDriverReport = useCallback",
+  "const bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation = useCallback",
   "const earlierHistoryDashboardBookings = useMemo(",
-  ".filter((bookingRecord) => bookingRecordBelongsInCompletedHistoryWithDriverReport(bookingRecord))",
+  ".filter((bookingRecord) => bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation(bookingRecord))",
   ".sort(sortBookingHistoryNewestFirst)",
   "bookingRecord.status,",
   "cancelledCount: number;",
@@ -235,7 +235,6 @@ for (const fragment of [
   "data-completed-history-month-jobs={monthGroup.monthKey}",
   "monthGroup.displayItems.map",
   "const isCompletedStatus = bookingRecordIsCompletedStatus(savedBooking);",
-  "const isDriverCompletedHistoryJob =",
   "const isEarlierHistoryJob = bookingRecordIsEarlierJob(savedBooking, todayKey);",
   "const isDspBooking =",
   "normalizeBookingType(",
@@ -243,9 +242,7 @@ for (const fragment of [
   'data-completed-dsp-schedule={isDspBooking ? bookingId : undefined}',
   "? `DSP start: ${formatBookingPickupDateTimeSgt(savedBooking)} · End: ${",
   'dspScheduledEndText || "Not set"',
-  "const completedHistoryDisplayStatus = isDriverCompletedHistoryJob",
-  "? \"completed\"",
-  ": isCancelledStatus",
+  "const completedHistoryDisplayStatus = isCancelledStatus",
   "? \"cancelled\"",
   ": isCompletedStatus",
   "const canDeleteCompletedHistoryBooking = bookingRecordCanBeDeletedFromCompletedHistory(savedBooking);",
@@ -253,8 +250,6 @@ for (const fragment of [
   "flex min-w-0 flex-wrap items-center gap-1.5 md:justify-end md:text-right",
   "inline-flex items-center rounded-full",
   "data-completed-history-bucket={",
-  "isDriverCompletedHistoryJob",
-  "\"driver-completed\"",
   "Earlier",
   "{isCompletedStatus ? (",
   "data-completed-undo-booking={bookingId}",
@@ -274,6 +269,14 @@ for (const fragment of [
   'Replacement: {completedOperationalReadiness.exceptionReplacement}',
 ]) {
   assertIncludes(completedHistoryPanel, fragment, `completed/history panel fragment ${fragment}`);
+}
+
+for (const retiredDriverJcFallback of ["isDriverCompletedHistoryJob", '"driver-completed"']) {
+  assertExcludes(
+    completedHistoryPanel,
+    retiredDriverJcFallback,
+    "driver JC evidence must wait for admin completion before Completed / History",
+  );
 }
 
 for (const duplicateFragment of [

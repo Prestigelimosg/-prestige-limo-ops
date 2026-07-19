@@ -765,7 +765,7 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  "operationalBookings\n        .filter((bookingRecord) => !bookingRecordBelongsInCompletedHistoryWithDriverReport(bookingRecord))",
+  "operationalBookings\n        .filter((bookingRecord) => !bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation(bookingRecord))",
   "Dashboard urgent saved-job queue uses loaded operational bookings independent of dashboard search",
 );
 assertIncludes(

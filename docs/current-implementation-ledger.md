@@ -12,6 +12,14 @@ bc0b49ec Merge pull request #56 from Prestigelimosg/codex/restore-current-workfl
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Driver JC Evidence Retention Until Admin Confirmation (2026-07-20)
+
+- The existing Dashboard `Today's Jobs` Driver Reports card now remains visible when the persisted driver status history reaches `Job Completed`. Driver JC remains evidence only: the two established admin driver-status refresh paths no longer PATCH the saved booking to `completed` merely because they read that evidence.
+- The existing `Admin confirm completed` button remains the single admin-owned completion action. Only that explicit, confirmed action uses the established saved-booking-status writer to move the booking to Completed / History. Until then, the card continues displaying the saved OTW, OTS, POB and JC timestamps and stays refreshable in the same `Today's Jobs` lane.
+- Completed / History now requires the booking's saved completed/cancelled/history classification. A driver JC report alone no longer creates a completed-history fallback row or enables archived-job deletion before admin confirmation. The existing live-map eligibility may still stop at driver JC independently of the retained evidence card.
+- No second card, reporting page, status route, timestamp writer, completion control, provider-send path, or booking writer is added. The Driver Calendar system is unchanged. Customer/driver finance and internal-data privacy boundaries remain unchanged. No live status, booking, Calendar event, OAuth credential, provider configuration, message, invoice, payment, payout, PayNow payout, GPS, photo, or external contact was changed during this source repair.
+- Focused protection is extended in `scripts/test-admin-active-job-confirm-completed-guard.mjs`, `scripts/test-driver-completed-history-grouping-guard.mjs`, and `scripts/test-booking-ui-browser.mjs`; the browser suite reproduces driver JC evidence in the existing card, verifies that no completion PATCH occurs, then exercises the existing admin confirmation transition into Completed / History.
+
 ### Production Full Driver Profile Same-Origin Session Repair (2026-07-19)
 
 - The owner approved one temporary Production write window to create the first verified Driver Database profile needed by the existing Driver Job Google Calendar identity lane. The exact target is `https://app.prestigelimo.sg`, the exact gate is `PRESTIGE_FULL_DRIVER_PROFILE_WRITE_ENABLED`, and the one approved record is limited to `driver_name`, `contact_number`, `vehicle_type`, `plate_number`, and `availability_status`; payout preferences, driver payout rules, notes, pricing, payment, billing, provider, calendar credentials, location/photo, internal/admin data, parser/debug data, and QA/archive fields remain excluded.
@@ -2163,13 +2171,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Driver Completed History Grouping Lock
 
-- Saved driver `Job Completed` reports now persist the saved booking status as `completed`, moving the loaded booking out of Today/Upcoming and `Today's Jobs` and into Completed / History.
-- The booking row status is updated through the existing guarded saved-booking-status API only; no booking details, customer data, route data, prices, or driver payout fields are overwritten by the driver status read.
-- Driver-completed fallback rows display as `Completed` in Completed / History while the status sync lands; the old visible `Pending` plus `Driver completed` double-label is not shown.
-- Completed / History rows show plain operator feedback: deleting shows `Deleting job...`, success shows `Job deleted.`, and completed rows show `Completed` instead of a driver-completed/internal label.
-- Completed / History exposes Delete only for archived `completed` or `cancelled` rows, plus driver-completed fallback rows after a guarded status sync to `completed`; it does not become a general active-booking delete path.
-- This is status-only sync on the existing route; it does not add routes/APIs, DB schema changes, provider sends, notification sends, GPS/live location, billing/payment/PDF/invoice/payout, calendar sync, env changes, deploy activation, parser changes, or shims.
-- Guard coverage lives in `scripts/test-driver-completed-history-grouping-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+- Historical checkpoint only; its automatic driver-JC completion behavior is superseded by `Driver JC Evidence Retention Until Admin Confirmation (2026-07-20)` above. Current behavior keeps the existing `Today's Jobs` Driver Reports card and evidence visible until the existing admin confirmation action explicitly persists `completed`.
+- This historical checkpoint previously allowed a driver JC read to auto-sync `completed`, render a driver-completed fallback in Completed / History, and enable fallback deletion. Those three behaviors are retired. The focused guard remains registered but now protects the admin-confirmation boundary and rejects restoration of the fallback.
 
 ### Admin New Booking Email Alert Runtime Gate
 

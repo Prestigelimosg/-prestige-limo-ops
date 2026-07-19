@@ -13064,7 +13064,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     });
   const dashboardDriverJobLinksReadRequestRevisionRef = useRef(0);
   const dashboardDriverJobStatusAutoRequestedRef = useRef<Set<string>>(new Set());
-  const driverCompletedBookingStatusSyncRequestedRef = useRef<Set<string>>(new Set());
   const [bookingsSearchTerm, setBookingsSearchTerm] = useState("");
   const [bookingsSelectedDate, setBookingsSelectedDate] = useState(() => toDateKey(new Date()));
   const [bookingsShowUpcoming, setBookingsShowUpcoming] = useState(true);
@@ -16815,25 +16814,24 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       adminDriverJobStatusReadStateIsCompleted(dashboardDriverStatusState)
     );
   }, [adminDriverJobStatusReadState, dashboardDriverJobStatusReadStates]);
-  const bookingRecordBelongsInCompletedHistoryWithDriverReport = useCallback(
+  const bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation = useCallback(
     (bookingRecord: BookingRecord) =>
-      bookingRecordBelongsInCompletedHistory(bookingRecord, todayKey) ||
-      bookingRecordHasCompletedDriverReport(bookingRecord),
-    [bookingRecordHasCompletedDriverReport, todayKey],
+      bookingRecordBelongsInCompletedHistory(bookingRecord, todayKey),
+    [todayKey],
   );
   const earlierHistoryDashboardBookings = useMemo(
     () =>
       dashboardBookings.filter((bookingRecord) =>
-        bookingRecordBelongsInCompletedHistoryWithDriverReport(bookingRecord),
+        bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation(bookingRecord),
       ),
-    [bookingRecordBelongsInCompletedHistoryWithDriverReport, dashboardBookings],
+    [bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation, dashboardBookings],
   );
   const completedBookings = useMemo(
     () =>
       completedHistorySourceBookings
-        .filter((bookingRecord) => bookingRecordBelongsInCompletedHistoryWithDriverReport(bookingRecord))
+        .filter((bookingRecord) => bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation(bookingRecord))
         .sort(sortBookingHistoryNewestFirst),
-    [bookingRecordBelongsInCompletedHistoryWithDriverReport, completedHistorySourceBookings],
+    [bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation, completedHistorySourceBookings],
   );
   const completedBillingAuditBookings = useMemo(
     () => completedBookings.filter(bookingRecordIsCompletedStatus),
@@ -16886,7 +16884,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const urgentUnassignedSavedBookingRequests = useMemo(
     () =>
       operationalBookings
-        .filter((bookingRecord) => !bookingRecordBelongsInCompletedHistoryWithDriverReport(bookingRecord))
+        .filter((bookingRecord) => !bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation(bookingRecord))
         .filter(
           (bookingRecord) =>
             !bookingRecordIsCustomerBookingRequest(bookingRecord) &&
@@ -16899,7 +16897,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
           return firstPickupTimeMs - secondPickupTimeMs;
         }),
-    [bookingRecordBelongsInCompletedHistoryWithDriverReport, currentTimeMs, operationalBookings],
+    [bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation, currentTimeMs, operationalBookings],
   );
   const dashboardUrgentBookingRequestBookings = useMemo(
     () =>
@@ -16929,14 +16927,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const filteredRecentBookings = useMemo(
     () =>
       operationalBookings
-        .filter((bookingRecord) => !bookingRecordBelongsInCompletedHistoryWithDriverReport(bookingRecord))
+        .filter((bookingRecord) => !bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation(bookingRecord))
         .filter(
           (bookingRecord) =>
             bookingsShowUpcoming || getBookingDateKey(bookingRecord) === bookingsSelectedDate,
         )
         .filter((bookingRecord) => bookingMatchesLocalSearch(bookingRecord, bookingsSearchTerm)),
     [
-      bookingRecordBelongsInCompletedHistoryWithDriverReport,
+      bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation,
       bookingsSearchTerm,
       bookingsSelectedDate,
       bookingsShowUpcoming,
@@ -17225,7 +17223,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         cancelledCount: number;
         completedCount: number;
         displayItems: LoadBookingsOperationalDisplayItem[];
-        driverCompletedCount: number;
         earlierCount: number;
         monthKey: string;
         monthLabel: string;
@@ -17241,7 +17238,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           cancelledCount: 0,
           completedCount: 0,
           displayItems: [],
-          driverCompletedCount: 0,
           earlierCount: 0,
           monthKey,
           monthLabel: completedHistoryMonthLabel(monthKey),
@@ -17250,10 +17246,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
       const isCompletedStatus = bookingRecordIsCompletedStatus(displayItem.bookingRecord);
       const isCancelledStatus = bookingRecordIsCancelledStatus(displayItem.bookingRecord);
-      const isDriverCompletedHistoryJob =
-        !isCompletedStatus &&
-        !isCancelledStatus &&
-        bookingRecordHasCompletedDriverReport(displayItem.bookingRecord);
       const isEarlierHistoryJob = bookingRecordIsEarlierJob(displayItem.bookingRecord, todayKey);
 
       existingGroup.displayItems.push(displayItem);
@@ -17267,10 +17259,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         existingGroup.cancelledCount += 1;
       }
 
-      if (isDriverCompletedHistoryJob) {
-        existingGroup.driverCompletedCount += 1;
-      }
-
       if (!isCompletedStatus && !isCancelledStatus && isEarlierHistoryJob) {
         existingGroup.earlierCount += 1;
       }
@@ -17281,11 +17269,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     return Array.from(groups.values()).sort((firstGroup, secondGroup) =>
       sortCompletedHistoryMonthKeysNewestFirst(firstGroup.monthKey, secondGroup.monthKey),
     );
-  }, [
-    bookingRecordHasCompletedDriverReport,
-    filteredCompletedBookingDisplayItems,
-    todayKey,
-  ]);
+  }, [filteredCompletedBookingDisplayItems, todayKey]);
 
   function update(field: keyof BookingForm, value: string) {
     setCustomerMatchFeedback(null);
@@ -21148,10 +21132,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         return;
       }
 
-      void syncBookingCompletedStatusFromDriverReport(
-        bookingReference,
-        loadedDriverStatuses.latestStatus,
-      );
       setAdminDriverJobStatusReadState({
         bookingReference,
         latestStatus: loadedDriverStatuses.latestStatus,
@@ -21613,10 +21593,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     try {
       const loadedDriverStatuses = await loadAdminDriverJobStatusRead(bookingReference);
 
-      void syncBookingCompletedStatusFromDriverReport(
-        bookingReference,
-        loadedDriverStatuses.latestStatus,
-      );
       setDashboardDriverJobStatusReadStates((currentStates) => ({
         ...currentStates,
         [bookingReference]: {
@@ -23155,50 +23131,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     }
   }
 
-  async function syncBookingCompletedStatusFromDriverReport(
-    bookingReferenceValue: string,
-    latestStatus: AdminDriverJobStatusEvent | null,
-  ) {
-    if (clean(latestStatus?.status_value).toLowerCase() !== "completed") {
-      return;
-    }
-
-    const bookingStatusReference = cleanReferenceText(bookingReferenceValue);
-
-    if (!bookingStatusReference || driverCompletedBookingStatusSyncRequestedRef.current.has(bookingStatusReference)) {
-      return;
-    }
-
-    const matchingBooking = operationalBookings.find(
-      (bookingRecord) => getBookingDriverJobStatusReference(bookingRecord) === bookingStatusReference,
-    );
-
-    if (
-      !matchingBooking ||
-      bookingRecordIsCompletedStatus(matchingBooking) ||
-      bookingRecordIsCancelledStatus(matchingBooking)
-    ) {
-      return;
-    }
-
-    driverCompletedBookingStatusSyncRequestedRef.current.add(bookingStatusReference);
-    const result = await patchBookingStatusReference(
-      bookingStatusReference,
-      "completed",
-      matchingBooking,
-    );
-
-    if (!result.ok) {
-      driverCompletedBookingStatusSyncRequestedRef.current.delete(bookingStatusReference);
-      setMessage({
-        tone: "error",
-        text: `Driver reported Job Completed for ${adminVisibleBookingReference(
-          bookingStatusReference,
-        )}, but booking status was not changed: ${result.errorText}`,
-      });
-    }
-  }
-
   async function markBookingCompleted(bookingRecord: BookingRecord) {
     return updateBookingStatusOnly(
       bookingRecord,
@@ -23409,10 +23341,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   function bookingRecordCanBeDeletedFromCompletedHistory(bookingRecord: BookingRecord) {
     const isCompletedStatus = bookingRecordIsCompletedStatus(bookingRecord);
     const isCancelledStatus = bookingRecordIsCancelledStatus(bookingRecord);
-    const isDriverCompletedHistoryJob =
-      !isCompletedStatus && !isCancelledStatus && bookingRecordHasCompletedDriverReport(bookingRecord);
 
-    return isCompletedStatus || isCancelledStatus || isDriverCompletedHistoryJob;
+    return isCompletedStatus || isCancelledStatus;
   }
 
   async function resolveCompletedHistoryDeleteBookingId(
@@ -23481,13 +23411,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     const bookingId = bookingRecordStableKey(bookingRecord, operationalCard);
     const isCompletedStatus = bookingRecordIsCompletedStatus(bookingRecord);
     const isCancelledStatus = bookingRecordIsCancelledStatus(bookingRecord);
-    const isDriverCompletedHistoryJob =
-      !isCompletedStatus && !isCancelledStatus && bookingRecordHasCompletedDriverReport(bookingRecord);
 
-    if (!isCompletedStatus && !isCancelledStatus && !isDriverCompletedHistoryJob) {
+    if (!isCompletedStatus && !isCancelledStatus) {
       setBookingCompletionMessage(bookingId, {
         tone: "error",
-        text: "Delete job failed: only completed, cancelled, or driver-completed jobs can be deleted here.",
+        text: "Delete job failed: only completed or cancelled jobs can be deleted here.",
       });
       return;
     }
@@ -23515,18 +23443,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
       if (!deleteBookingId) {
         throw new Error("saved booking id is missing. Reload bookings, then try again.");
-      }
-
-      if (isDriverCompletedHistoryJob) {
-        const statusResult = await patchBookingStatusReference(
-          bookingRecordStatusReference(bookingRecord),
-          "completed",
-          bookingRecord,
-        );
-
-        if (!statusResult.ok) {
-          throw new Error(`Driver completed status update failed: ${statusResult.errorText}`);
-        }
       }
 
       const response = await fetch(adminSavedBookingsApiPath, {
@@ -24567,11 +24483,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               ].filter(Boolean).join(" · ");
               const isCompletedStatus = bookingRecordIsCompletedStatus(savedBooking);
               const isCancelledStatus = bookingRecordIsCancelledStatus(savedBooking);
-              const isDriverCompletedHistoryJob =
-                !isCompletedStatus && !isCancelledStatus && bookingRecordHasCompletedDriverReport(savedBooking);
-              const completedHistoryDisplayStatus = isDriverCompletedHistoryJob
-                ? "completed"
-                : isCancelledStatus
+              const completedHistoryDisplayStatus = isCancelledStatus
                   ? "cancelled"
                   : isCompletedStatus
                     ? "completed"
@@ -24587,8 +24499,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       ? "completed"
                       : isCancelledStatus
                         ? "cancelled"
-                        : isDriverCompletedHistoryJob
-                        ? "driver-completed"
                         : isEarlierHistoryJob
                           ? "earlier"
                           : "history"
@@ -26145,8 +26055,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     .filter((bookingRecord) => {
       return (
         !bookingRecordIsCompletedStatus(bookingRecord) &&
-        !bookingRecordIsCancelledStatus(bookingRecord) &&
-        !bookingRecordHasCompletedDriverReport(bookingRecord)
+        !bookingRecordIsCancelledStatus(bookingRecord)
       );
     })
     .filter((bookingRecord) =>

@@ -2,6 +2,7 @@ import {
   calculateDspCustomerInvoiceAmountCents,
   initialRateSettings,
   resolvePricing,
+  type BookingType,
   type DriverPayoutRules,
   type RateRules,
   type RateSettings,
@@ -41,15 +42,28 @@ export type CustomerDspInvoiceReviewInput = {
   vehicleType: string | null | undefined;
 };
 
-export type CustomerDspInvoiceReview = {
-  actualMinutes: number;
+export type CustomerInvoiceRateReviewInput = CustomerDspInvoiceReviewInput & {
+  bookingType: string | null | undefined;
+};
+
+export type CustomerInvoiceRateReview = {
+  actualMinutes: number | null;
   amountCents: number;
   baseAmountCents: number;
+  billableHours: number | null;
+  billableMinutes: number | null;
+  bookingType: BookingType;
+  customerRateSource: string;
+  customerRateUnit: "hour" | "job";
+  rateCents: number;
+  surchargeAmountCents: number;
+};
+
+export type CustomerDspInvoiceReview = CustomerInvoiceRateReview & {
+  actualMinutes: number;
   billableHours: number;
   billableMinutes: number;
-  customerRateSource: string;
   hourlyRateCents: number;
-  surchargeAmountCents: number;
 };
 
 function finiteRate(value: unknown, fallback: number) {
@@ -114,10 +128,32 @@ function singaporePickupClock(value: string | null | undefined) {
   return hour && minute ? `${hour}${minute}` : "";
 }
 
-export function calculateCustomerDspInvoiceReview(
-  input: CustomerDspInvoiceReviewInput,
+export function customerInvoiceBookingType(
+  value: string | null | undefined,
+): BookingType | null {
+  const bookingType = String(value ?? "").trim().toUpperCase();
+
+  if (
+    bookingType === "MNG" ||
+    bookingType === "DEP" ||
+    bookingType === "TRF" ||
+    bookingType === "DSP"
+  ) {
+    return bookingType;
+  }
+
+  return null;
+}
+
+export function calculateCustomerInvoiceRateReview(
+  input: CustomerInvoiceRateReviewInput,
   rateSetup: CustomerInvoiceRateSetupRecord,
-): CustomerDspInvoiceReview | null {
+): CustomerInvoiceRateReview | null {
+  const bookingType = customerInvoiceBookingType(input.bookingType);
+
+  if (!bookingType) {
+    return null;
+  }
   const companyRecord =
     rateSetup.companies?.find((company) => company.id === input.companyId) || null;
   const travelerRecord =
@@ -128,7 +164,7 @@ export function calculateCustomerDspInvoiceReview(
     ) || null;
   const pricing = resolvePricing(
     {
-      bookingType: "DSP",
+      bookingType,
       childSeatCount: Number(input.childSeatCount) || 0,
       childSeatRequired: Number(input.childSeatCount) > 0,
       extraStopCount: Number(input.extraStopCount) || 0,
@@ -139,6 +175,34 @@ export function calculateCustomerDspInvoiceReview(
     travelerRecord,
     rateSettings(rateSetup),
   );
+  const surchargeAmountCents = Math.round(
+    (pricing.midnightSurcharge +
+      pricing.extraStopCustomerAmount +
+      pricing.childSeatCustomerAmount) *
+      100,
+  );
+
+  if (bookingType !== "DSP") {
+    const baseAmountCents = Math.round(pricing.customerRate * 100);
+
+    if (baseAmountCents <= 0) {
+      return null;
+    }
+
+    return {
+      actualMinutes: null,
+      amountCents: baseAmountCents + surchargeAmountCents,
+      baseAmountCents,
+      billableHours: null,
+      billableMinutes: null,
+      bookingType,
+      customerRateSource: pricing.pricingSource,
+      customerRateUnit: "job",
+      rateCents: baseAmountCents,
+      surchargeAmountCents,
+    };
+  }
+
   const calculation = calculateDspCustomerInvoiceAmountCents(input.actualMinutes, pricing);
 
   if (!calculation) {
@@ -151,8 +215,37 @@ export function calculateCustomerDspInvoiceReview(
     baseAmountCents: calculation.baseAmountCents,
     billableHours: calculation.billableHours,
     billableMinutes: calculation.billableMinutes,
+    bookingType,
     customerRateSource: pricing.pricingSource,
-    hourlyRateCents: Math.round(calculation.hourlyRate * 100),
+    customerRateUnit: "hour",
+    rateCents: Math.round(calculation.hourlyRate * 100),
     surchargeAmountCents: calculation.surchargeAmountCents,
+  };
+}
+
+export function calculateCustomerDspInvoiceReview(
+  input: CustomerDspInvoiceReviewInput,
+  rateSetup: CustomerInvoiceRateSetupRecord,
+): CustomerDspInvoiceReview | null {
+  const review = calculateCustomerInvoiceRateReview(
+    { ...input, bookingType: "DSP" },
+    rateSetup,
+  );
+
+  if (
+    !review ||
+    review.actualMinutes === null ||
+    review.billableHours === null ||
+    review.billableMinutes === null
+  ) {
+    return null;
+  }
+
+  return {
+    ...review,
+    actualMinutes: review.actualMinutes,
+    billableHours: review.billableHours,
+    billableMinutes: review.billableMinutes,
+    hourlyRateCents: review.rateCents,
   };
 }

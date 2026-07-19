@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const guardScript = "scripts/test-customer-folder-price-review-guard.mjs";
-const [folder, customers, sharedCalculation, savedBookingsRead, ledger, suite] = await Promise.all([
+const [folder, customers, sharedCalculation, savedBookingsRead, rateSetupRoute, ledger, suite] = await Promise.all([
   readFile("app/customers/[customerId]/saved-bookings-panel.tsx", "utf8"),
   readFile("app/customers/page.tsx", "utf8"),
   readFile("lib/customer-dsp-invoice-review.ts", "utf8"),
   readFile("lib/admin-customer-saved-bookings-read.ts", "utf8"),
+  readFile("app/api/admin-rate-setup/route.ts", "utf8"),
   readFile("docs/current-implementation-ledger.md", "utf8"),
   readFile("scripts/test-preactivation-verification-suite.mjs", "utf8"),
 ]);
@@ -32,13 +33,15 @@ for (const fragment of [
   "Customer price",
   "Save price review",
   '"Review required"',
-  '"Auto price · review"',
+  '"Codex price · review"',
   '"Review every price first"',
   'review?.status === "reviewed"',
-  'normalizeBookingType(booking.service_type) === "DSP"',
+  "loadAutomatedBillingReviews",
+  "customerInvoiceBookingType",
+  "Confirm a supported saved service (MNG, DEP, TRF, or DSP) before price review.",
   "adminDriverJobDspActualTimeSummariesApiPath",
   "adminRateSetupApiPath",
-  "calculateCustomerDspInvoiceReview",
+  "calculateCustomerInvoiceRateReview",
   "customerFolderReviewedPricePayload",
   'params.set("selected_booking_references"',
   "customerFolderSelectedPriceReviewsParam",
@@ -61,9 +64,13 @@ for (const fragment of [
 }
 
 for (const fragment of [
+  "export function calculateCustomerInvoiceRateReview",
+  "export function customerInvoiceBookingType",
   "export function calculateCustomerDspInvoiceReview",
   "calculateDspCustomerInvoiceAmountCents",
-  'bookingType: "DSP"',
+  "if (!bookingType)",
+  "baseAmountCents",
+  "customerRateUnit",
   "traveler.id === input.travelerId",
   "company.id === input.companyId",
   "hourlyRateCents",
@@ -75,8 +82,8 @@ for (const fragment of [
 
 const safeReviewShape = sectionBetween(
   sharedCalculation,
-  "export type CustomerDspInvoiceReview = {",
-  "function finiteRate",
+  "export type CustomerInvoiceRateReview = {",
+  "export type CustomerDspInvoiceReview",
 );
 for (const forbidden of ["driverPayout", "payout", "payNow", "internal", "finance"]) {
   assert.equal(
@@ -96,6 +103,13 @@ for (const fragment of [
   includes(savedBookingsRead, fragment, `existing safe booking calculation input ${fragment}`);
 }
 
+for (const fragment of [
+  'additionalSameOriginRefererPathPrefixes: ["/customers/"]',
+  'additionalSameOriginRefererPathnames: ["/customers"]',
+]) {
+  includes(rateSetupRoute, fragment, `customer-folder rate setup boundary ${fragment}`);
+}
+
 const ledgerSection = sectionBetween(
   ledger,
   "### Customer-Folder Price Review Before Invoice (2026-07-19)",
@@ -103,7 +117,8 @@ const ledgerSection = sectionBetween(
 );
 for (const phrase of [
   "Every existing `Jobs not billed yet` row now has one compact `Customer price` tag.",
-  "DEP, TRF, and MNG rows are never guessed",
+  "DEP, TRF, and MNG rows without a saved amount receive a temporary Codex proposal from the existing Prestige rate setup",
+  "The proposal remains in browser memory only until admin clicks `Save price review`",
   "Multi-job `Review invoice & email` remains disabled until every selected row has a positive reviewed customer price.",
   "no driver payout or payout comparison is returned or rendered.",
   guardScript,

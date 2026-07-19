@@ -4,14 +4,14 @@ import Link from "next/link";
 import { Fragment, useEffect, useRef, useState } from "react";
 
 import {
-  calculateCustomerDspInvoiceReview,
+  calculateCustomerInvoiceRateReview,
+  customerInvoiceBookingType,
   type CustomerInvoiceRateSetupRecord,
 } from "../../../lib/customer-dsp-invoice-review";
 import {
   formatInvoiceAmount,
   parseInvoiceAmountToCents,
 } from "../../../lib/customer-local-invoices";
-import { normalizeBookingType } from "../../../lib/pricing";
 import { formatSingaporePickupDisplay } from "../../../lib/singapore-pickup-display";
 
 const adminCustomerSavedBookingsApiPath = "/api/admin-customer-saved-bookings";
@@ -340,21 +340,38 @@ function customerFolderBillingReviewForBooking(
     };
   }
 
-  if (normalizeBookingType(booking.service_type) === "DSP") {
+  const bookingType = customerInvoiceBookingType(booking.service_type);
+
+  if (!bookingType) {
     return {
       amountCents: null,
-      breakdown: "Checking Driver OTS→JC actual time and the verified CRM customer rate.",
-      message: "Calculating",
-      status: "calculating",
+      breakdown: "Confirm a supported saved service (MNG, DEP, TRF, or DSP) before price review.",
+      message: "Review required",
+      status: "required",
     };
   }
 
   return {
     amountCents: null,
-    breakdown: "Enter the approved customer price before adding this job to an invoice.",
-    message: "Review required",
-    status: "required",
+    breakdown:
+      bookingType === "DSP"
+        ? "Checking Driver OTS→JC actual time and the verified Prestige customer rate."
+        : "Calculating a temporary proposal from the existing Prestige customer rate setup.",
+    message: "Calculating",
+    status: "calculating",
   };
+}
+
+function customerFolderRateSourceLabel(source: string) {
+  if (source === "company") {
+    return "verified company rate";
+  }
+
+  if (source === "boss") {
+    return "verified traveler rate";
+  }
+
+  return "Prestige default rate";
 }
 
 function customerFolderInitialBillingReviews(bookings: CustomerFolderSavedBookingRecord[]) {
@@ -544,13 +561,15 @@ export function CustomerFolderSavedBookingsPanel({
     tone: "info",
   });
 
-  async function loadDspBillingReviews(bookings: CustomerFolderSavedBookingRecord[]) {
-    const dspBookings = bookings.filter(
+  async function loadAutomatedBillingReviews(bookings: CustomerFolderSavedBookingRecord[]) {
+    const proposalBookings = bookings.filter(
       (booking) =>
-        safeDispatchReference(booking) && normalizeBookingType(booking.service_type) === "DSP",
+        safeDispatchReference(booking) &&
+        customerInvoiceBookingType(booking.service_type) !== null &&
+        !parseInvoiceAmountToCents(String(booking.customer_price_label ?? "")),
     );
 
-    if (dspBookings.length === 0) {
+    if (proposalBookings.length === 0) {
       return;
     }
 
@@ -570,47 +589,67 @@ export function CustomerFolderSavedBookingsPanel({
       }
 
       const calculatedReviews = await Promise.all(
-        dspBookings.map(async (booking) => {
+        proposalBookings.map(async (booking) => {
           const reference = safeDispatchReference(booking);
-          const params = new URLSearchParams({ booking_reference: reference, limit: "1" });
-          const timingResponse = await fetch(
-            `${adminDriverJobDspActualTimeSummariesApiPath}?${params.toString()}`,
-            {
-              headers: {
-                "x-prestige-admin-purpose": "admin-booking-persistence",
-              },
-              method: "GET",
-            },
-          );
-          const timingResult = (await timingResponse.json().catch(() => null)) as
-            | {
-                latest_summary?: CustomerFolderDspActualTimeSummary | null;
-                ok?: boolean;
-              }
-            | null;
-          const summary = timingResult?.latest_summary;
+          const bookingType = customerInvoiceBookingType(booking.service_type);
+          let actualMinutes: number | null = null;
 
-          if (
-            !timingResponse.ok ||
-            timingResult?.ok !== true ||
-            summary?.actual_time_status !== "complete" ||
-            !Number.isFinite(Number(summary.dsp_total_minutes)) ||
-            Number(summary.dsp_total_minutes) <= 0
-          ) {
+          if (!bookingType) {
             return {
               reference,
               review: {
                 amountCents: null,
-                breakdown: "Complete Driver OTS→JC actual time, then reload this customer folder.",
+                breakdown: "Confirm a supported saved service (MNG, DEP, TRF, or DSP) before price review.",
                 message: "Review required",
                 status: "required",
               } satisfies CustomerFolderBillingReview,
             };
           }
 
-          const calculation = calculateCustomerDspInvoiceReview(
+          if (bookingType === "DSP") {
+            const params = new URLSearchParams({ booking_reference: reference, limit: "1" });
+            const timingResponse = await fetch(
+              `${adminDriverJobDspActualTimeSummariesApiPath}?${params.toString()}`,
+              {
+                headers: {
+                  "x-prestige-admin-purpose": "admin-booking-persistence",
+                },
+                method: "GET",
+              },
+            );
+            const timingResult = (await timingResponse.json().catch(() => null)) as
+              | {
+                  latest_summary?: CustomerFolderDspActualTimeSummary | null;
+                  ok?: boolean;
+                }
+              | null;
+            const summary = timingResult?.latest_summary;
+
+            if (
+              !timingResponse.ok ||
+              timingResult?.ok !== true ||
+              summary?.actual_time_status !== "complete" ||
+              !Number.isFinite(Number(summary.dsp_total_minutes)) ||
+              Number(summary.dsp_total_minutes) <= 0
+            ) {
+              return {
+                reference,
+                review: {
+                  amountCents: null,
+                  breakdown: "Complete Driver OTS→JC actual time, then reload this customer folder.",
+                  message: "Review required",
+                  status: "required",
+                } satisfies CustomerFolderBillingReview,
+              };
+            }
+
+            actualMinutes = Number(summary.dsp_total_minutes);
+          }
+
+          const calculation = calculateCustomerInvoiceRateReview(
             {
-              actualMinutes: Number(summary.dsp_total_minutes),
+              actualMinutes,
+              bookingType,
               childSeatCount: booking.child_seat_count,
               companyId: booking.company_id,
               extraStopCount: booking.extra_stop_count,
@@ -626,7 +665,7 @@ export function CustomerFolderSavedBookingsPanel({
               reference,
               review: {
                 amountCents: null,
-                breakdown: "Review the verified traveler/company DSP customer rate, then reload.",
+                breakdown: "Review the saved Prestige customer rate setup, then reload.",
                 message: "Review required",
                 status: "required",
               } satisfies CustomerFolderBillingReview,
@@ -636,16 +675,20 @@ export function CustomerFolderSavedBookingsPanel({
           const surchargeLabel = calculation.surchargeAmountCents
             ? ` + ${formatInvoiceAmount(calculation.surchargeAmountCents)} surcharges`
             : "";
+          const sourceLabel = customerFolderRateSourceLabel(calculation.customerRateSource);
+          const breakdown =
+            bookingType === "DSP" && calculation.actualMinutes !== null && calculation.billableHours !== null
+              ? `${calculation.actualMinutes} actual min → ${calculation.billableHours} billable hr × ` +
+                `${formatInvoiceAmount(calculation.rateCents)}/hr${surchargeLabel}. Source: ${sourceLabel}.`
+              : `${formatInvoiceAmount(calculation.baseAmountCents)} fixed trip${surchargeLabel}. ` +
+                `Source: ${sourceLabel}.`;
 
           return {
             reference,
             review: {
               amountCents: calculation.amountCents,
-              breakdown:
-                `${calculation.actualMinutes} actual min → ${calculation.billableHours} billable hr × ` +
-                `${formatInvoiceAmount(calculation.hourlyRateCents)}/hr${surchargeLabel}. ` +
-                `CRM source: ${calculation.customerRateSource}.`,
-              message: "Auto price · review",
+              breakdown: `${breakdown} Temporary Codex proposal; edit or approve before invoice handoff.`,
+              message: "Codex price · review",
               status: "proposed",
             } satisfies CustomerFolderBillingReview,
           };
@@ -667,13 +710,13 @@ export function CustomerFolderSavedBookingsPanel({
       setBillingReviews((current) => {
         const next = { ...current };
 
-        dspBookings.forEach((booking) => {
+        proposalBookings.forEach((booking) => {
           const reference = safeDispatchReference(booking);
 
           if (next[reference]?.status !== "reviewed") {
             next[reference] = {
               amountCents: null,
-              breakdown: "DSP timing or CRM customer rate is unavailable. Enter an approved price manually.",
+              breakdown: "Prestige rate calculation is unavailable. Enter an approved price manually.",
               message: "Review required",
               status: "required",
             };
@@ -727,7 +770,7 @@ export function CustomerFolderSavedBookingsPanel({
         (booking) => !isClearlyBilledOrClosedJob(booking),
       );
       setBillingReviews(customerFolderInitialBillingReviews(visibleSavedBookings));
-      void loadDspBillingReviews(visibleSavedBookings);
+      void loadAutomatedBillingReviews(visibleSavedBookings);
       const focusReturned = focusBookingReference
         ? savedBookings.some((booking) => safeDispatchReference(booking) === focusBookingReference)
         : false;

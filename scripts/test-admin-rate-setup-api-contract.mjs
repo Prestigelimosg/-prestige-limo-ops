@@ -15,6 +15,8 @@ const unsafeSuccessFieldPattern =
 const safeApiLeakPattern =
   /SUPABASE_SERVICE_ROLE_KEY_ADMIN_RATE_SETUP_SENTINEL|mock-admin-rate-setup-session-token|admin-rate-setup-contract\.supabase\.co|service_role|server-only|server_only|stack|sql|secret|api_key|createClient/i;
 const sourceFiles = [
+  "lib/hourly-billing.ts",
+  "lib/pricing.ts",
   "lib/admin-rate-setup-read.ts",
   "lib/admin-booking-supabase-adapter.ts",
   "lib/admin-booking-persistence.ts",
@@ -374,7 +376,8 @@ try {
         {
           filters: [],
           orderBy: [{ column: "traveler_name", options: { ascending: true } }],
-          selectedColumns: "id, company_id, traveler_name, customer_rates, driver_payout_rules",
+          selectedColumns:
+            "id, company_id, booker_id, booker_name, traveler_name, customer_rates, driver_payout_rules",
           table: "travelers",
         },
       ],
@@ -386,16 +389,28 @@ try {
       "Admin rate setup route must remain read-only.",
     );
 
-    for (const [label, request] of [
-      ["anonymous", new Request("http://localhost/api/admin-rate-setup")],
-      [
-        "customer",
+    setEnv(validEnv());
+    const customerFolderMock = installMockClient();
+    const customerFolderRead = await responseJson(
+      await route.GET(
         new Request("http://localhost/api/admin-rate-setup", {
           headers: validAdminHeaders({
             referer: "http://localhost/customers/acme",
           }),
         }),
-      ],
+      ),
+    );
+
+    assert.equal(customerFolderRead.status, 200, "Expected signed-in customer folder rate read to be allowed");
+    assert.equal(customerFolderRead.body.ok, true);
+    assert.equal(
+      customerFolderMock.client.operations.every((operation) => operation.action === "select"),
+      true,
+      "Customer folder rate setup access must remain read-only.",
+    );
+
+    for (const [label, request] of [
+      ["anonymous", new Request("http://localhost/api/admin-rate-setup")],
       [
         "driver",
         new Request("http://localhost/api/admin-rate-setup", {

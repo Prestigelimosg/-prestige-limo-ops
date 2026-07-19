@@ -176,6 +176,18 @@ assert.equal(
   true,
   "Ledger must record the exact in-place Google Calendar repair.",
 );
+for (const productionEvidence of [
+  "Production activation proof opened that saved Google event",
+  "Google retained event ID `9379e3a443911206f67238be115e3b152bf05025c5e8d3e8bea2`",
+  "The booking and personal event were then restored to `Town`",
+  "all four timestamps remained `Not recorded`",
+]) {
+  assert.equal(
+    ledger.includes(productionEvidence),
+    true,
+    `Ledger must retain verified Production calendar evidence: ${productionEvidence}.`,
+  );
+}
 assert.equal(suite.includes(guardPath), true, "Preactivation suite must keep the focused calendar guard.");
 
 const { buildDriverJobGoogleCalendarEvent } = await import("../lib/driver-job-calendar-event.ts");

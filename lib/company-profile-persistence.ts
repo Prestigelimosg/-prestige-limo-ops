@@ -56,6 +56,7 @@ const companyProfileSelect = [
   "stripe_card_fee_required",
   "stripe_card_fee_percent",
   "invoice_footer_terms",
+  "invoice_signoff_name",
   "source_surface",
   "actor_role",
   "actor_label",

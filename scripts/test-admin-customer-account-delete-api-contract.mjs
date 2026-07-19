@@ -17,6 +17,10 @@ const profilePage = await readFile(
   new URL("../app/customers/[customerId]/page.tsx", import.meta.url),
   "utf8",
 );
+const profileEditor = await readFile(
+  new URL("../app/customers/[customerId]/customer-company-profile-editor.tsx", import.meta.url),
+  "utf8",
+);
 
 assert.match(helper, /export async function inspectAdminCustomerAccountDeletion/);
 assert.match(helper, /export async function deleteAdminCustomerAccount/);
@@ -46,8 +50,11 @@ assert.match(dangerZone, /method: "DELETE"/);
 assert.match(dangerZone, /window\.location\.assign\("\/customers"\)/);
 assert.doesNotMatch(dangerZone, /company_name|booker_id|traveler_id/);
 
-assert.match(profilePage, /CustomerAccountDangerZone/);
-assert.match(profilePage, /customerId=\{customer\.id\}/);
-assert.match(profilePage, /customerName=\{customer\.companyName\}/);
+assert.match(profileEditor, /import \{ CustomerAccountDangerZone \}/);
+assert.match(profileEditor, /<CustomerAccountDangerZone compact customerId=\{customerId\} customerName=\{customerName\} \/>/);
+assert.match(dangerZone, /compact && status === "idle"/);
+assert.match(dangerZone, />\s*Delete customer\s*<\/button>/);
+assert.doesNotMatch(profilePage, /<CustomerAccountDangerZone/);
+assert.doesNotMatch(profilePage, /Danger zone/);
 
 console.log("Admin exact customer account delete API contract passed.");

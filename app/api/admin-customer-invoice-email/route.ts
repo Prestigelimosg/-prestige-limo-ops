@@ -1,4 +1,10 @@
+import { createHash } from "node:crypto";
+
 import { resolveAdminCustomerInvoiceBoundary } from "../../../lib/admin-customer-invoice-boundary";
+import {
+  customerInvoiceRecipientsAllowed,
+  selectedCustomerInvoiceRecipients,
+} from "../../../lib/customer-invoice-email-recipients";
 import {
   loadAdminCustomerInvoicePdf,
   sanitizeCustomerInvoiceRecipientEmail,
@@ -101,7 +107,7 @@ function buildProviderBody(input: {
   filename: string;
   from: string;
   invoiceNumber: string;
-  recipient: string;
+  recipients: string[];
   replyTo: string | null;
 }) {
   return JSON.stringify({
@@ -126,7 +132,7 @@ function buildProviderBody(input: {
       "",
       "Thank you for choosing Prestige Limo SG.",
     ].join("\n"),
-    to: input.recipient,
+    to: input.recipients,
   });
 }
 
@@ -152,9 +158,15 @@ export async function POST(request: Request) {
 
     const body = await readJsonBody(request);
     const invoiceNumber = body?.invoiceNumber;
-    const recipient = sanitizeCustomerInvoiceRecipientEmail(body?.recipientEmail);
+    const recipients = selectedCustomerInvoiceRecipients(
+      {
+        recipientEmail: body?.recipientEmail,
+        recipientEmails: body?.recipientEmails,
+      },
+      sanitizeCustomerInvoiceRecipientEmail,
+    );
 
-    if (!recipient) {
+    if (!recipients) {
       return safeErrorResponse({
         error: safeRecipientError,
         status: 400,
@@ -216,7 +228,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (allowlist.length > 0 && !allowlist.includes(recipient)) {
+    if (!customerInvoiceRecipientsAllowed(recipients, allowlist)) {
       const updated = await updateCustomerInvoiceEmailStatus(
         pdfResult.data.invoiceNumber,
         "blocked",
@@ -245,13 +257,16 @@ export async function POST(request: Request) {
           filename: pdfResult.data.filename,
           from: from as string,
           invoiceNumber: pdfResult.data.invoiceNumber,
-          recipient,
+          recipients,
           replyTo,
         }),
         headers: {
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
-          "Idempotency-Key": `customer-invoice-${pdfResult.data.invoiceNumber}-${recipient}`,
+          "Idempotency-Key": `customer-invoice-${pdfResult.data.invoiceNumber}-${createHash("sha256")
+            .update([...recipients].sort().join(","))
+            .digest("hex")
+            .slice(0, 24)}`,
         },
         method: "POST",
         signal: controller.signal,
@@ -290,6 +305,7 @@ export async function POST(request: Request) {
       return Response.json({
         invoice: updated.data,
         ok: true,
+        recipientEmails: recipients,
       });
     } catch {
       const updated = await updateCustomerInvoiceEmailStatus(

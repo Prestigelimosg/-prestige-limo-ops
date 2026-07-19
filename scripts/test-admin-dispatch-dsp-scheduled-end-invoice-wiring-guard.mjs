@@ -8,6 +8,7 @@ const files = {
   adapter: await readFile("lib/admin-booking-supabase-adapter.ts", "utf8"),
   savedBookings: await readFile("lib/admin-customer-saved-bookings-read.ts", "utf8"),
   pricing: await readFile("lib/pricing.ts", "utf8"),
+  customerDspReview: await readFile("lib/customer-dsp-invoice-review.ts", "utf8"),
   migration: await readFile(
     "supabase/migrations/20260718165716_add_booking_dropoff_datetime.sql",
     "utf8",
@@ -68,13 +69,22 @@ for (const fragment of [
 for (const fragment of [
   "prepareMonthlyBillingDspRowsForInvoice",
   "readCustomerInvoiceDriverActualTimeSummary",
-  "calculateDspCustomerInvoiceAmountCents",
+  "calculateCustomerDspInvoiceReview",
   "adminRateSetupApiPath",
   "travelerId: row.travelerId",
   "companyId: row.companyId",
   "DSP actual timing is incomplete",
 ]) {
   mustInclude(files.customers, fragment, "existing selected-customer invoice preparation lane");
+}
+
+for (const fragment of [
+  "calculateDspCustomerInvoiceAmountCents",
+  'bookingType: "DSP"',
+  "traveler.id === input.travelerId",
+  "company.id === input.companyId",
+]) {
+  mustInclude(files.customerDspReview, fragment, "shared DSP customer review lane");
 }
 
 for (const fragment of [

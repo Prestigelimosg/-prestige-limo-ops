@@ -1195,6 +1195,36 @@ try {
     /contact_phone|contact_email|customer_price|driver_payout|paynow|invoice|payment|pdf|billing|finance|telegram|whatsapp|sms|email|raw_token|token_hash|internal_note|admin_note|mock_qa|archive/i,
     "Expected customer request decision notification insert to stay customer-safe.",
   );
+  const notificationCountBeforeNoChangeEdit = insertedOperations(
+    createMock.client,
+    "customer_driver_app_notification_outbox",
+  ).length;
+  const noChangeCustomerRequestEditRoute = await readRouteResponse(
+    await adminRoute.PATCH(
+      jsonRequest(
+        "http://localhost/api/admin-bookings",
+        {
+          ...customerRequestDecisionPayload,
+          target_booking_reference: "SAFE-ADM-001",
+        },
+        {
+          headers: adminHeaders({
+            "x-prestige-admin-session-token": serverSessionToken,
+          }),
+          method: "PATCH",
+        },
+      ),
+    ),
+  );
+
+  assert.equal(noChangeCustomerRequestEditRoute.status, 200);
+  assert.equal(noChangeCustomerRequestEditRoute.body.ok, true);
+  assert.equal(noChangeCustomerRequestEditRoute.body.customer_notification, null);
+  assert.equal(
+    insertedOperations(createMock.client, "customer_driver_app_notification_outbox").length,
+    notificationCountBeforeNoChangeEdit,
+    "Editing an unchanged approved request must not queue a duplicate customer notification.",
+  );
 
   const splitCustomerMock = installMockClient();
   const splitFirst = persistence.parseAdminBookingPersistencePayload(

@@ -25,9 +25,14 @@ const adminRoute = read("app/api/admin-company-profile/route.ts");
 const adminDispatcherBoundary = read("lib/admin-dispatcher-auth-boundary.ts");
 const adminPage = read("app/page.tsx");
 const bookPage = read("app/book/page.tsx");
+const customersPage = read("app/customers/page.tsx");
 const ledger = read("docs/current-implementation-ledger.md");
+const localInvoices = read("lib/customer-local-invoices.ts");
 const portalPage = read("app/my-bookings/page.tsx");
 const migration = read("supabase/migrations/202606290001_company_profile_settings_foundation.sql");
+const signoffMigration = read(
+  "supabase/migrations/20260719004843_add_invoice_signoff_name_to_company_profile.sql",
+);
 const defaultLogoPath = "public/prestige-limo-sg-logo.jpg";
 
 assert(existsSync(defaultLogoPath), "Default company logo asset file is missing.");
@@ -42,10 +47,15 @@ for (const field of [
   "stripe_card_fee_required",
   "stripe_card_fee_percent",
   "invoice_footer_terms",
+  "invoice_signoff_name",
 ]) {
   assertIncludes(shared, field, `Shared company profile is missing ${field}.`);
   assertIncludes(adminPage, field, `Admin Company settings UI is missing ${field}.`);
-  assertIncludes(migration, field, `Company profile migration is missing ${field}.`);
+  assertIncludes(
+    field === "invoice_signoff_name" ? signoffMigration : migration,
+    field,
+    `Company profile migration is missing ${field}.`,
+  );
 }
 
 assertIncludes(
@@ -72,6 +82,11 @@ assertIncludes(
   shared,
   "Payment is due upon completion unless otherwise agreed in writing.",
   "Default company profile invoice footer terms must stay short and essential.",
+);
+assertIncludes(
+  shared,
+  'invoice_signoff_name: "Finance Team"',
+  "Default invoice sign-off name must preserve the existing Finance Team wording.",
 );
 assertIncludes(
   shared,
@@ -169,11 +184,21 @@ assertNotIncludes(
   "SUPABASE_ANON_KEY",
   "Company profile persistence must not rely on public Supabase anon credentials.",
 );
+assertIncludes(
+  persistence,
+  '"invoice_signoff_name"',
+  "Company profile persistence must select the saved invoice sign-off name.",
+);
 
 assertIncludes(adminPage, '"company"', "Admin app tab type must include Company.");
 assertIncludes(adminPage, 'data-company-profile-settings="true"', "Admin Company settings panel is missing.");
 assertIncludes(adminPage, 'data-company-profile-save="true"', "Admin Company settings save button is missing.");
 assertIncludes(adminPage, 'data-company-profile-preview="true"', "Admin Company settings preview is missing.");
+assertIncludes(
+  adminPage,
+  'data-company-profile-field="invoice_signoff_name"',
+  "Admin Company settings must expose the editable invoice sign-off name.",
+);
 assertIncludes(
   adminPage,
   '^\\/[a-z0-9][a-z0-9/_-]*\\.(?:png|jpe?g|webp)$',
@@ -246,6 +271,49 @@ assertNotIncludes(
   adminPage,
   "<p>{companyProfileDraft.phone || \"Phone not shown\"}</p>",
   "Admin Company profile preview must not print duplicate phone separately.",
+);
+
+assertIncludes(
+  customersPage,
+  "loadPublicCompanyProfile",
+  "Selected-job invoice review must load the established public company profile.",
+);
+for (const fragment of [
+  "companyProfile.invoice_signoff_name",
+  "companyProfile.phone",
+  "companyProfilePaymentSummary(companyProfile)",
+  "companyProfile.invoice_footer_terms",
+]) {
+  assertIncludes(
+    customersPage,
+    fragment,
+    `Selected-job invoice review must use saved company profile fragment ${fragment}.`,
+  );
+}
+for (const fragment of [
+  "companyProfile.invoice_signoff_name",
+  "companyProfile.phone",
+]) {
+  assertIncludes(
+    localInvoices,
+    fragment,
+    `Shared invoice PDF must use saved company profile fragment ${fragment}.`,
+  );
+}
+assertNotIncludes(
+  localInvoices,
+  'pdfTextAt("Finance Team", 50, signoffY - 32, 8)',
+  "Shared invoice PDF must not restore the hardcoded sign-off name.",
+);
+assertIncludes(
+  signoffMigration,
+  "company_profile_settings_invoice_signoff_name_length_check",
+  "Invoice sign-off migration must constrain the public text length.",
+);
+assertIncludes(
+  ledger,
+  "### Editable Invoice Company Footer Profile",
+  "Ledger must record the editable invoice company footer profile wiring.",
 );
 
 assertIncludes(migration, "enable row level security", "Company profile table must enable RLS.");

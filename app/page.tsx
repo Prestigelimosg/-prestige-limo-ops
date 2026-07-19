@@ -43382,6 +43382,21 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 </div>
 
                 <label>
+                  <span className="mb-1 block text-sm font-medium text-slate-700">
+                    Invoice sign-off name (admin)
+                  </span>
+                  <input
+                    className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                    data-company-profile-field="invoice_signoff_name"
+                    onChange={(event) =>
+                      updateCompanyProfileDraft("invoice_signoff_name", event.target.value)
+                    }
+                    placeholder="Finance Team"
+                    value={companyProfileDraft.invoice_signoff_name}
+                  />
+                </label>
+
+                <label>
                   <span className="mb-1 block text-sm font-medium text-slate-700">Invoice footer terms</span>
                   <textarea
                     className="min-h-24 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
@@ -43439,6 +43454,17 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   ) : (
                     <p className="mt-2">Stripe card: not shown.</p>
                   )}
+                </div>
+                <div className="mt-3 rounded-md border border-white bg-white p-2 text-xs leading-5 text-slate-700">
+                  <p className="font-semibold text-slate-900">Invoice sign-off</p>
+                  <p>Thank you for your business</p>
+                  <p className="mt-2">Best Regards,</p>
+                  <p>{companyProfileDraft.invoice_signoff_name}</p>
+                  <p>{companyProfileDraft.phone}</p>
+                </div>
+                <div className="mt-3 rounded-md border border-white bg-white p-2 text-xs leading-5 text-slate-700">
+                  <p className="font-semibold text-slate-900">Terms &amp; Conditions</p>
+                  <p className="whitespace-pre-wrap">{companyProfileDraft.invoice_footer_terms}</p>
                 </div>
                 <p className="mt-3 text-xs leading-5 text-slate-500">
                   Customer-facing public settings only. This does not generate invoices, payment links,

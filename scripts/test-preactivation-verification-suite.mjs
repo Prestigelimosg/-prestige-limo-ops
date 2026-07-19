@@ -54,6 +54,18 @@ const guardChecks = [
     script: "scripts/test-customer-folder-multi-job-invoice-handoff-guard.mjs",
   },
   {
+    label: "customer folder public reference and inline job edit guard",
+    script: "scripts/test-customer-folder-inline-job-edit-guard.mjs",
+  },
+  {
+    label: "customer folder price review guard",
+    script: "scripts/test-customer-folder-price-review-guard.mjs",
+  },
+  {
+    label: "customer invoice multi-recipient email guard",
+    script: "scripts/test-customer-invoice-multi-recipient-email-guard.mjs",
+  },
+  {
     label: "business-grade forward completion sequence guard",
     script: "scripts/test-business-grade-forward-completion-sequence.mjs",
   },

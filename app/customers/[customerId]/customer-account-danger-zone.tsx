@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 type CustomerAccountDangerZoneProps = {
+  compact?: boolean;
   customerId: string;
   customerName: string;
 };
@@ -54,7 +55,7 @@ function blockerLabel(blocker: string) {
   return labels[blocker] || "protected records";
 }
 
-export function CustomerAccountDangerZone({ customerId, customerName }: CustomerAccountDangerZoneProps) {
+export function CustomerAccountDangerZone({ compact = false, customerId, customerName }: CustomerAccountDangerZoneProps) {
   const [status, setStatus] = useState<Status>("idle");
   const [message, setMessage] = useState(
     "Deletion is available only after the app verifies the exact customer ID and confirms that no protected records remain.",
@@ -146,11 +147,42 @@ export function CustomerAccountDangerZone({ customerId, customerName }: Customer
   }
 
   return (
-    <section
-      className="rounded-md border border-rose-300 bg-rose-50 p-3"
-      data-customer-account-danger-zone={customerId}
-    >
-      <h2 className="text-sm font-bold text-rose-950">Danger zone</h2>
+    <div className={compact ? "relative" : ""} data-customer-account-danger-zone={customerId}>
+      {compact && status === "idle" ? (
+        <button
+          className="min-h-8 rounded-md border border-rose-300 bg-white px-3 text-xs font-bold text-rose-800 transition hover:border-rose-700"
+          data-customer-account-delete-check={customerId}
+          onClick={checkDeletion}
+          type="button"
+        >
+          Delete customer
+        </button>
+      ) : null}
+      <section
+        className={
+          compact
+            ? "absolute right-0 top-[calc(100%+0.5rem)] z-50 w-[min(26rem,calc(100vw-2rem))] rounded-md border border-rose-300 bg-rose-50 p-3 shadow-xl"
+            : "rounded-md border border-rose-300 bg-rose-50 p-3"
+        }
+        hidden={compact && status === "idle"}
+      >
+      <div className="flex items-start justify-between gap-3">
+        <h2 className="text-sm font-bold text-rose-950">Delete customer account</h2>
+        {compact ? (
+          <button
+            className="text-xs font-bold text-rose-800 underline underline-offset-2"
+            onClick={() => {
+              setStatus("idle");
+              setInspection(null);
+              setConfirmationName("");
+              setMessage("Deletion is available only after the app verifies the exact customer ID and confirms that no protected records remain.");
+            }}
+            type="button"
+          >
+            Close
+          </button>
+        ) : null}
+      </div>
       <p className="mt-1 text-xs font-semibold leading-5 text-rose-900">
         Delete only this verified customer account. Company, booker, traveler, invoices, jobs, payments, and
         other customers are never deleted from this action.
@@ -203,6 +235,7 @@ export function CustomerAccountDangerZone({ customerId, customerName }: Customer
       <p className="mt-2 text-xs font-semibold text-rose-950" role="status">
         {message || `No change made to ${customerName}.`}
       </p>
-    </section>
+      </section>
+    </div>
   );
 }

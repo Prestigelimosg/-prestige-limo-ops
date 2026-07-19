@@ -1,16 +1,75 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-f9235b76 Hide native invoice details label
+124a6919 Rearrange selected-job invoice layout
 
 Latest pushed main/staging runtime checkpoint:
-f9235b76 Hide native invoice details label
+124a6919 Rearrange selected-job invoice layout
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-7501518a Merge pull request #53 from Prestigelimosg/codex/restore-current-workflow-guards
+759967bd Merge pull request #54 from Prestigelimosg/codex/restore-current-workflow-guards
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Customer-Folder Public Reference And Inline Job Editor (2026-07-19)
+
+- Customer-folder job cards now project the already-persisted `public_booking_reference` through the existing safe saved-bookings read. Visible row, expanded detail, selection, and invoice-review copy uses only the established public format: five digits, optionally preceded by the saved customer booking prefix. The internal `booking_reference` remains the immutable server operation key and is not derived, changed, or printed as the customer-facing reference.
+- A missing or malformed public reference displays `Reference unavailable` and blocks the folder-to-invoice handoff. The UI never derives five digits from the internal `CUST-...` key or silently substitutes that key. Admin must repair the established public-reference record before invoice preparation.
+- The existing row `Edit` control now opens the existing expanded job box instead of navigating to a second Dispatch editor. The box exact-reads the booking through the established admin-only `GET /api/admin-bookings` route and makes Customer/company, Passenger, Pickup date/time, Pickup, Drop-off, Route, and Service editable while the public reference remains read-only.
+- `Save job details` reuses the established admin-only `PATCH /api/admin-bookings` writer, exact internal target key, current booking identities/statuses, current route points/service items, same-origin session boundary, validation, persistence adapter, and audit lane. No new job writer, API route, table, or alternate booking state is introduced.
+- The same PATCH route now exact-reads the previous request-review status before update and queues the established customer in-app decision notification only when that status truly changes. Editing an already-approved/declined job therefore cannot repeat its customer notification.
+- The customer-price field and its DSP calculation breakdown are inside that same expanded box. `Save price review` updates only the in-memory invoice-preparation review; it does not write the booking or invoice. The separate exact booking PATCH runs only when admin explicitly clicks `Save job details`.
+- This pass does not change a public reference, auto-save a booking, issue/email/pay an invoice, contact a customer, call Stripe, create a payout, or expose internal booking keys/finance/payout data to customer or driver surfaces. Chrome verification must edit fields without clicking either save action.
+- Focused protection is `scripts/test-customer-folder-inline-job-edit-guard.mjs`, registered in `scripts/test-preactivation-verification-suite.mjs`; the admin saved-bookings read contract now locks the public-reference projection.
+
+### Customer-Folder Price Review Before Invoice (2026-07-19)
+
+- Every existing `Jobs not billed yet` row now has one compact `Customer price` tag. The tag opens an inline amount editor in the same table; there is no second calculator, billing card, invoice route, persistence writer, or duplicate Invoice action.
+- DSP tags automatically read the existing exact-booking Driver OTS→JC summary and the existing admin CRM rate setup, then call the same shared customer-only DSP calculation used by Monthly Billing. The proposed tag shows actual minutes, billable hours, the verified customer hourly rate, customer surcharges, and the resolved customer-rate source; no driver payout or payout comparison is returned or rendered.
+- A DSP row with incomplete actual timing or unavailable rate evidence fails visibly to `Review required`. DEP, TRF, and MNG rows are never guessed; they also begin at `Review required` unless an existing saved customer amount is available.
+- Admin clicks the price tag, edits or accepts the SGD amount, then clicks `Save review`. The row turns to `Reviewed`, and its existing `Invoice` action becomes available. Multi-job `Review invoice & email` remains disabled until every selected row has a positive reviewed customer price.
+- The exact reviewed cents are paired with each selected booking reference in the existing customer-folder handoff. The established `/customers` workspace revalidates the selected exact references, rejects a missing/malformed/out-of-range price, and populates those same line amounts in the existing selected-job invoice editor. Admin may still make a final edit there before issue/send.
+- Automatic calculation and price editing perform no database write. This pass does not issue/email/pay an invoice, call Stripe, change a booking/customer/driver, expose customer billing to drivers, expose payouts to customers, or change Supabase/provider configuration.
+- Focused protection is `scripts/test-customer-folder-price-review-guard.mjs`, registered in `scripts/test-preactivation-verification-suite.mjs`; the existing multi-job handoff and DSP auto-calculation guards are aligned to the same shared helper.
+
+### Admin-Selected Invoice Email Recipients (2026-07-19)
+
+- The established Create Invoice and selected-job `Edit` surfaces now read the saved company Billing, Accounts, and Operations email fields through the existing guarded company-identity route and present them as compact recipient checkboxes. The exact booking contact remains an available option when it differs.
+- Admin may select one, two, or three unique addresses. The current preview key includes the exact selection, the existing final confirmation lists every recipient, and one Send click reuses `POST /api/admin-customer-invoice-email`; no second sender, button, route, provider, or background send is added.
+- The existing single-recipient request remains backward compatible. The guarded route accepts at most three recipients, validates every address, requires every selected address to pass the existing configured allowlist, collapses duplicates, and fails the entire request before the provider if any address is invalid or blocked.
+- Resend receives one email request with its supported `to` array, one stored PDF attachment, and one deterministic idempotency key derived from the invoice number plus the sorted recipient set. The invoice record keeps its existing primary `customer_email` value and delivery status; no schema or Supabase configuration change is required.
+- Loading recipient choices or ticking checkboxes sends nothing. The only provider call remains the explicit admin Send action after the established issued-document, session, same-origin, allowlist, configuration, and final-confirmation checks.
+- The customer-profile form is also compacted without changing its CRM writer: Billing address is shorter, the existing Contact name label remains clear, and Operations email no longer creates a full-width empty row.
+- This pass does not send a test/customer email, create an invoice, change payment/payout state, expose internal finance data, modify a customer/booking, alter provider configuration, or add a payment link. Focused protection is `scripts/test-customer-invoice-multi-recipient-email-guard.mjs`, registered in the complete pre-activation suite.
+
+### Invoice Line-Item Quantity And Multiline Editing (2026-07-19)
+
+- The existing Create Invoice form and selected-job `Edit` surface now provide one editable Qty field for every established line item. Existing stored line-item JSON without a quantity fails safely to Qty `1`; no new invoice table, writer, route, or parallel item editor is introduced.
+- Qty accepts a positive value from `0.01` through `999` with at most two decimal places. The reviewed Amount remains the line total, Rate is derived as Amount divided by Qty, and Sub Total / Total continue summing the reviewed line totals without multiplying them a second time.
+- Each existing item description control is now a multiline textarea. Admin Return/Enter line breaks survive preview-key validation, stored `line_items` JSON sanitization, browser reload, selected-job preview, and the shared PDF renderer; ordinary wrapping is still applied within each manual line.
+- Selected-job and generic Create Invoice previews render preserved line breaks, and the shared PDF prints the same Qty, derived Rate, and total Amount. Issued invoices that predate this pass continue rendering `1.00` and their original Rate/Amount.
+- This change does not issue, email, pay, or alter the status of an invoice; it does not activate Stripe, create a payment link, modify bookings, expose internal finance data, create payouts, change Supabase schema/configuration, or add an external send.
+- Focused protection extends `scripts/test-customer-folder-multi-job-invoice-handoff-guard.mjs`, already registered in `scripts/test-preactivation-verification-suite.mjs`.
+
+### Compact Customer Profile Controls (2026-07-19)
+
+- The customer folder keeps exactly one invoice-prefix writer and one trip-reference-prefix writer because they govern distinct numbering sequences. Both existing controls are now contained in one closed `Customer numbering · Invoice and trip references` disclosure, removing the duplicated-card appearance without merging their data or adding another route.
+- The existing company `primary_contact_name` field is labelled `Contact name`; no second contact-name field, database column, or CRM write path is added.
+- The exact-customer deletion workflow keeps its read-only dependency inspection, typed exact-name confirmation, final browser confirmation, same-origin admin boundary, and exact numeric-customer-ID delete. Its large standalone Danger zone card is removed; the same component now appears as one compact red `Delete customer` button beside Create/Save profile and expands only while the guarded check is active.
+- This presentation pass creates or deletes no customer, company, contact, booking, invoice, payment, payout, message, or provider record. Focused protection extends `scripts/test-admin-customer-invoice-prefix-settings-guard.mjs`, `scripts/test-customer-company-profile-contract.mjs`, and `scripts/test-admin-customer-account-delete-api-contract.mjs`.
+
+### Editable Invoice Company Footer Profile (2026-07-19)
+
+- The existing `/settings/invoice` Company Settings lane now owns the complete customer-facing invoice footer profile: bank/PayNow/payment instructions, invoice footer terms, and the invoice sign-off admin name. The sign-off is editable text only; no handwritten signature, image upload, Storage bucket, or second settings panel is introduced.
+- `invoice_signoff_name` is added to the existing singleton `company_profile_settings` row with the preserved `Finance Team` fallback and a 120-character database constraint. The established admin-only GET/POST route, service-role persistence, sanitizer, RLS, revoked anon/authenticated access, and public-safe GET projection remain the only profile read/write lane.
+- The selected-job invoice review now loads the same public-safe Company Profile used by customer pages and renders the saved company name, address, phone, sign-off admin name, bank/payment instructions, and terms. It no longer bypasses saved settings with built-in bank, terms, sign-off, or phone defaults.
+- The selected-job bank block is a compact disclosure closed by default. `Bank Details` and `Click to view` remain visible; one click reveals the saved payment lines without duplicating the heading. The non-interactive stored PDF continues printing the full payment details.
+- Notes now finish the invoice beside Terms & Conditions in a compact two-column footer, stacking only on narrow screens. The shared PDF mirrors that footer with Notes on the left and saved Terms & Conditions on the right; sign-off and bank details remain immediately above it.
+- Compact selected-job `Edit` now exposes the established per-invoice `Card` and `10% fee` form state as `Allow card payment for this invoice` and `Apply 10% card fee`. Turning Card off clears the fee through the existing form updater. This is the admin enable/disable location and still controls invoice wording only; no customer payment button, Stripe URL, Checkout session, charge, webhook, or payment-status write is activated without the separately approved Stripe link/provider lane.
+- The shared stored PDF renderer uses the same saved sign-off admin name and phone alongside its already-wired saved bank/payment instructions and terms. Issued PDF download, emailed PDF attachment, and later Paid/Unpaid PDF regeneration therefore remain on one renderer and one stored invoice record.
+- This pass does not create or issue an invoice, send email, change payment state, modify a booking/customer/driver record, activate Stripe or PayNow, create a payout, message anyone, start GPS, alter Calendar, expose finance data to customers/drivers, or add another invoice/PDF/email route.
+- Focused protection extends `scripts/test-company-profile-settings-guard.mjs`, `scripts/test-customer-folder-multi-job-invoice-handoff-guard.mjs`, and `scripts/test-customer-billing-document-lifecycle-guard.mjs`, all already registered in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Customer Folder Compact Selected-Job Invoice Review (2026-07-19)
 
@@ -920,7 +979,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Exact Customer Account Deletion From Customer Profile
 
 - The existing customer directory now supplements its booking-derived account rows with exact `public.customers` records, so a customer with no saved booking remains searchable through the established Customers surface. Existing booking/account-scope rows and their billing consumers remain unchanged.
-- The existing `/customers/[customerId]` profile contains one `Danger zone` action for the exact positive numeric `customers.id`. It never resolves deletion by customer name, company name, account label, booker, traveler, or parser output.
+- The existing `/customers/[customerId]` profile contains one compact `Delete customer` action beside Create/Save profile for the exact positive numeric `customers.id`. It never resolves deletion by customer name, company name, account label, booker, traveler, or parser output.
 - The first `Delete customer account` click performs a read-only dependency inspection. Any saved booking, stored invoice, monthly billing draft, or monthly invoice draft blocks deletion and is reported before confirmation is available.
 - An eligible deletion requires typing the exact verified `customers.display_name` and accepting the final browser confirmation. The server repeats the complete dependency inspection immediately before writing.
 - The write order revokes matching `customer_access_accounts` access first, then deletes only the exact `customers.id`; existing `customer_contacts.customer_id ON DELETE CASCADE` removes that account's contacts. Audit rows retain their established `ON DELETE SET NULL` behavior.
@@ -1290,6 +1349,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The existing admin monthly invoice number reservation RPC now treats the browser-derived prefix as an auto-generated fallback only: an existing saved `customer_invoice_sequences` prefix wins, and if no row exists the RPC creates one from the fallback prefix and starts at `-0001`.
 - The new route allows same-origin `/customers` and `/customers/*` referers only, requires the existing admin purpose header, allows guarded reads for admin/dispatcher server sessions, and requires the admin role or local admin surface for writes.
 - The UI is limited to the existing admin customer company-profile header via `CustomerInvoicePrefixSettingsPanel`; the invoice folder does not mount a duplicate, and `/settings/invoice`, the dashboard monthly invoice reservation workbench, customer portal, public booking, and driver pages are not wired to this prefix route.
+- The profile header presents this invoice-prefix writer and the distinct booking-reference-prefix writer inside one compact closed `Customer numbering` disclosure. Each writer remains mounted exactly once and keeps its own existing storage and API lane.
 - This lane does not create invoices, execute invoice-number reservations, generate PDFs, send invoice/customer/provider messages, activate payment links, record payments, create payouts, change the running-number digit width, change DB schema, change env, use Vercel CLI, or touch GPS/live-location.
 - Focused guard coverage lives in `scripts/test-admin-customer-invoice-prefix-settings-guard.mjs` and `scripts/test-admin-monthly-invoice-saved-prefix-precedence-guard.mjs`.
 

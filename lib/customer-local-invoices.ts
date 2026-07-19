@@ -12,6 +12,7 @@ export type CustomerLocalInvoiceLineItem = {
   amountLabel: string;
   bookingReference?: string;
   description: string;
+  quantity?: number;
 };
 
 export type CustomerLocalInvoiceRecord = {
@@ -114,7 +115,7 @@ function safeLineItems(value: unknown): CustomerLocalInvoiceLineItem[] {
   }
 
   return value
-    .map((item) => {
+    .map<CustomerLocalInvoiceLineItem | null>((item) => {
       if (!isRecord(item)) {
         return null;
       }
@@ -122,14 +123,21 @@ function safeLineItems(value: unknown): CustomerLocalInvoiceLineItem[] {
       const description = text(item.description);
       const amountLabel = text(item.amountLabel);
       const bookingReference = text(item.bookingReference);
+      const quantityValue = numberValue(item.quantity, 1);
+      const quantity =
+        quantityValue > 0 &&
+        quantityValue <= 999 &&
+        Math.round(quantityValue * 100) === quantityValue * 100
+          ? quantityValue
+          : 1;
 
       if (!description || !amountLabel) {
         return null;
       }
 
       return bookingReference
-        ? { amountLabel, bookingReference, description }
-        : { amountLabel, description };
+        ? { amountLabel, bookingReference, description, quantity }
+        : { amountLabel, description, quantity };
     })
     .filter((item): item is CustomerLocalInvoiceLineItem => Boolean(item));
 }
@@ -340,23 +348,32 @@ function escapePdfText(value: string) {
 }
 
 function wrapText(value: string, maxLength = 86) {
-  const words = ascii(value).split(/\s+/).filter(Boolean);
   const lines: string[] = [];
-  let line = "";
+  const manualLines = value.replace(/\r\n?/g, "\n").split("\n");
 
-  for (const word of words) {
-    const nextLine = line ? `${line} ${word}` : word;
+  for (const manualLine of manualLines) {
+    const words = ascii(manualLine).split(/\s+/).filter(Boolean);
+    let line = "";
 
-    if (nextLine.length > maxLength && line) {
-      lines.push(line);
-      line = word;
-    } else {
-      line = nextLine;
+    if (words.length === 0) {
+      lines.push("");
+      continue;
     }
-  }
 
-  if (line) {
-    lines.push(line);
+    for (const word of words) {
+      const nextLine = line ? `${line} ${word}` : word;
+
+      if (nextLine.length > maxLength && line) {
+        lines.push(line);
+        line = word;
+      } else {
+        line = nextLine;
+      }
+    }
+
+    if (line) {
+      lines.push(line);
+    }
   }
 
   return lines.length > 0 ? lines : [""];
@@ -577,14 +594,16 @@ export function createCustomerInvoicePdfBytes(
     companyProfile.invoice_footer_terms ||
       defaultCompanyProfile.invoice_footer_terms ||
       "Thank you for choosing our service.",
-    116,
-  ).slice(0, 4);
+    54,
+  ).slice(0, 8);
   const noteLines = [
     "Midnight surcharge: $15 applies from 11:00 PM to 6:59 AM.",
     "Waiting time: 15 minutes grace; airport arrivals include 60 minutes grace.",
     "Additional waiting time: $15 per 15-minute block.",
     "Hourly jobs: 15 minutes grace; 16 minutes onward counts as the next hour.",
-  ];
+  ]
+    .flatMap((line) => wrapText(line, 54))
+    .slice(0, 8);
   const amountValue = invoiceMoneyValue(invoice.amountLabel);
   const sgdAmount = invoiceSgdValue(invoice.amountLabel);
   const paidInvoice = documentType === "invoice" && invoice.status === "Paid";
@@ -644,23 +663,25 @@ export function createCustomerInvoicePdfBytes(
     const descriptionLines = wrapText(item.description, 60).slice(0, 7);
     const rowHeight = Math.max(42, 18 + descriptionLines.length * 11);
     const itemAmountValue = invoiceMoneyValue(item.amountLabel);
+    const quantity = typeof item.quantity === "number" && item.quantity > 0 ? item.quantity : 1;
+    const itemAmountCents = parseInvoiceAmountToCents(item.amountLabel) || 0;
+    const itemRateValue = invoiceMoneyValue(formatInvoiceAmount(Math.round(itemAmountCents / quantity)));
 
     lineItemCommands.push(pdfTextAt(String(index + 1), 62, rowY, 8));
     descriptionLines.forEach((line, lineIndex) => {
       lineItemCommands.push(pdfTextAt(line, 90, rowY - lineIndex * 10, lineIndex === 0 ? 8 : 7));
     });
-    lineItemCommands.push(pdfRightTextAt("1.00", 435, rowY, 8));
-    lineItemCommands.push(pdfRightTextAt(itemAmountValue, 495, rowY, 8));
+    lineItemCommands.push(pdfRightTextAt(quantity.toFixed(2), 435, rowY, 8));
+    lineItemCommands.push(pdfRightTextAt(itemRateValue, 495, rowY, 8));
     lineItemCommands.push(pdfRightTextAt(itemAmountValue, 552, rowY, 8));
     rowY -= rowHeight;
     lineItemCommands.push(pdfLinePath(50, rowY + 11, 562, rowY + 11));
   });
 
   const totalsY = Math.max(360, rowY - 8);
-  const notesY = 320;
   const signoffY = 245;
   const paymentY = 182;
-  const termsY = 55;
+  const footerY = 88;
   const streamLines = [
     ...logoStreamLines,
     pdfRightTextAt(documentTitle, 562, 725, 30),
@@ -685,18 +706,18 @@ export function createCustomerInvoicePdfBytes(
     pdfRightTextAt(balanceLabel, 495, totalsY - 70, 9),
     pdfRightTextAt(balanceDueValue, 562, totalsY - 70, 9),
     pdfLinePath(50, totalsY + 22, 562, totalsY + 22, 0.8, "0.75 G"),
-    pdfTextAt("Notes", 50, notesY, 8, "0.35 g"),
-    ...noteLines.map((line, index) => pdfTextAt(line, 50, notesY - 15 - index * 12, 7)),
     pdfTextAt("Thank you for your business", 50, signoffY, 8),
     pdfTextAt("Best Regards,", 50, signoffY - 21, 8),
-    pdfTextAt("Finance Team", 50, signoffY - 32, 8),
-    pdfTextAt(defaultCompanyProfile.phone, 50, signoffY - 43, 8),
+    pdfTextAt(companyProfile.invoice_signoff_name, 50, signoffY - 32, 8),
+    pdfTextAt(companyProfile.phone, 50, signoffY - 43, 8),
     pdfTextAt(paymentHeading, 50, paymentY, 8, "0.35 g"),
     ...paymentDetailLines.map((line, index) =>
       pdfTextAt(line, 50, paymentY - 15 - index * 8, 7),
     ),
-    pdfTextAt("Terms & Conditions:", 50, termsY, 8, "0.35 g"),
-    ...termsLines.map((line, index) => pdfTextAt(line, 50, termsY - 13 - index * 9, 6.5)),
+    pdfTextAt("Notes", 50, footerY, 8, "0.35 g"),
+    ...noteLines.map((line, index) => pdfTextAt(line, 50, footerY - 13 - index * 8, 6.5)),
+    pdfTextAt("Terms & Conditions:", 310, footerY, 8, "0.35 g"),
+    ...termsLines.map((line, index) => pdfTextAt(line, 310, footerY - 13 - index * 8, 6.5)),
   ];
   const stream = streamLines.join("\n");
   const streamBytes = bytesForPdfText(stream);

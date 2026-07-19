@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-3ef93403 Connect driver jobs to Google Calendar
+36110128 Require explicit verified driver selection
 
 Latest pushed main/staging runtime checkpoint:
 1e80b1dd Fix customer job public reference display
@@ -20,6 +20,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The first attempted gate window was closed and redeployed before this source repair. No driver, booking assignment, Driver Job link, Google event, job status, customer/driver message, invoice, payment, payout, PayNow payout, email, or other external contact was created or changed during that failed window.
 - Focused protection remains `scripts/test-full-driver-profile-runtime-activation-readiness-guard.mjs` and `scripts/test-full-driver-profile-runtime-write-action-api-contract.mjs`, now also locking the exact typed-route same-origin POST allowance without broadening the legacy route. The focused guards, admin persistence API gate, full pre-activation suite, TypeScript/production build, lint with zero errors, and booking UI browser workflow with zero console errors all passed before commit.
 - The approved Production proof then created exactly one five-safe-field Driver Database row and immediately closed the write gate. When booking 10841 was loaded afterward, its legacy `driver_name` matched the new profile and made the existing driver selector visually show that profile even though the saved booking correctly still had `driver_id = null`. The established selector is repaired in place so its selected value comes only from the explicit verified `driverId`; a display-name match can no longer appear selected or silently stand in for identity. Admin must select the verified profile before Apply Driver to Draft and Update + Cal. Focused protection is `scripts/test-admin-driver-assignment-display-api-contract.mjs`.
+- Production then reproduced a second established-lane gap: after an explicit ID 8 selection, Apply Driver to Draft, and Update + Cal, the saved booking still had `driver_id = null` because the existing operational booking payload/contract/adapter carried the driver display fields but omitted the verified ID. The same admin booking persistence lane is repaired in place to accept, sanitize, persist, reload, and return nullable positive `driver_id`; its schema-compatibility fallback still drops all driver fields together for an older database rather than creating a second write path. Focused protection is the existing `scripts/test-admin-booking-persistence-api-gate.mjs`, now locking driver ID 8 through the safe mocked booking insert, plus `scripts/test-customer-booking-request-api-contract.mjs`, which preserves the established flight field and no-driver schema fallback around the additive safe ID. The canonical booking UI browser guard treats only this nullable verified ID as safe and still proves a cleared/deleted driver is sent as `driver_id: null` while all finance, payout, notes, provider, auth, photo/location, debug, and QA/archive fields remain forbidden.
 
 ### Driver Personal Google Calendar Connection (2026-07-19)
 

@@ -1405,7 +1405,6 @@ const forbiddenAdminBookingRequestKeyFragments = [
   "customer_price",
   "customer_rate",
   "customer_rates",
-  "driver_id",
   "driver_notes",
   "driver_dispatch",
   "driver_payout",
@@ -14690,6 +14689,7 @@ async function runChromeTest() {
     assert.equal(updateAfterDriverDeleteState.bookingUpdate?.booking?.company_id, null);
     assert.equal(updateAfterDriverDeleteState.bookingUpdate?.booking?.booker_id, 906102);
     assert.equal(updateAfterDriverDeleteState.bookingUpdate?.booking?.traveler_id, 906103);
+    assert.equal(updateAfterDriverDeleteState.bookingUpdate?.booking?.driver_id, null);
     assert.equal(updateAfterDriverDeleteState.bookingUpdate?.booking?.pax_count, 4);
     assert.equal(updateAfterDriverDeleteState.bookingUpdate?.booking?.source_channel, "admin-dashboard");
     assert.equal(

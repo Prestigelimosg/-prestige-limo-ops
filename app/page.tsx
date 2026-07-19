@@ -2228,6 +2228,7 @@ type AdminBookingPersistenceRecord = {
   passenger_name?: string | null;
   passenger_phone?: string | null;
   flight_no?: string | null;
+  driver_id?: number | null;
   driver_contact?: string | null;
   driver_name?: string | null;
   driver_plate_number?: string | null;
@@ -2284,6 +2285,7 @@ type AdminBookingPersistenceRequestBody = {
     passenger_name: string | null;
     passenger_phone: string | null;
     flight_no: string | null;
+    driver_id?: number | null;
     driver_contact: string | null;
     driver_name: string | null;
     driver_plate_number: string | null;
@@ -8740,6 +8742,7 @@ function buildAdminBookingPersistencePayload(
       passenger_name: clean(bookingValue.name) || null,
       passenger_phone: null,
       flight_no: clean(bookingValue.flight) || null,
+      driver_id: adminDispatchVerifiedIdentityId(bookingValue.driverId),
       driver_contact: clean(bookingValue.driverContact) || null,
       driver_name: clean(bookingValue.driverName) || null,
       driver_plate_number: clean(bookingValue.driverPlate) || null,

@@ -4,10 +4,10 @@ Latest verified clean runtime checkpoint:
 ea5780da Wire temporary customer invoice pricing
 
 Latest pushed main/staging runtime checkpoint:
-4e48b207 Complete customer folder billing review
+ea5780da Wire temporary customer invoice pricing
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-b0ba9b1a Merge pull request #55 from Prestigelimosg/codex/restore-current-workflow-guards
+bc0b49ec Merge pull request #56 from Prestigelimosg/codex/restore-current-workflow-guards
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.

@@ -591,16 +591,14 @@ function activityTime() {
   });
 }
 
-function downloadDriverCalendarBlob(blob: Blob, filename: string) {
-  const url = window.URL.createObjectURL(blob);
+function openDriverCalendarImport(calendarUrl: string) {
   const anchor = document.createElement("a");
 
-  anchor.href = url;
-  anchor.download = filename;
+  anchor.href = calendarUrl;
+  anchor.dataset.driverJobCalendarImport = "true";
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  window.requestAnimationFrame(() => window.URL.revokeObjectURL(url));
 }
 
 export default function DriverJobPage() {
@@ -633,8 +631,6 @@ export default function DriverJobPage() {
   const [driverOtsPhotoProof, setDriverOtsPhotoProof] =
     useState<DriverOtsPhotoProofState>(emptyDriverOtsPhotoProofState);
   const [statusFeedback, setStatusFeedback] = useState<StatusFeedback | null>(null);
-  const [calendarDownloadFeedback, setCalendarDownloadFeedback] = useState<ControlFeedback | null>(null);
-  const [downloadingCalendar, setDownloadingCalendar] = useState(false);
   const [workflowStatus, setWorkflowStatus] = useState("assigned");
   const [updatingStatus, setUpdatingStatus] = useState("");
   const driverOtsPhotoProofInputRef = useRef<HTMLInputElement | null>(null);
@@ -986,40 +982,12 @@ export default function DriverJobPage() {
     }
   }
 
-  async function downloadDriverJobCalendar() {
-    if (!acknowledged || !token || downloadingCalendar) {
+  function openDriverJobCalendar() {
+    if (!acknowledged || !token) {
       return;
     }
 
-    setDownloadingCalendar(true);
-    setCalendarDownloadFeedback(null);
-
-    try {
-      const response = await fetch(`/api/driver-job/${encodeURIComponent(token)}/calendar`, {
-        headers: { accept: "text/calendar" },
-      });
-
-      if (!response.ok) {
-        throw new Error("calendar_download_failed");
-      }
-
-      const contentDisposition = response.headers.get("content-disposition") || "";
-      const responseFilename = contentDisposition.match(/filename="?([^";]+)"?/i)?.[1] || "";
-      const filename = responseFilename.trim() || "prestige-driver-job-calendar.ics";
-
-      downloadDriverCalendarBlob(await response.blob(), filename);
-      setCalendarDownloadFeedback({
-        tone: "success",
-        text: "Calendar file downloaded with a private Open Driver Job shortcut. Do not share the calendar event.",
-      });
-    } catch {
-      setCalendarDownloadFeedback({
-        tone: "error",
-        text: "Calendar download failed. Keep this Driver Job page open and try again.",
-      });
-    } finally {
-      setDownloadingCalendar(false);
-    }
+    openDriverCalendarImport(`/api/driver-job/${encodeURIComponent(token)}/calendar`);
   }
 
   async function reportDriverIssue() {
@@ -1993,28 +1961,16 @@ export default function DriverJobPage() {
                       className="flex h-11 w-full items-center justify-center rounded-md border border-sky-700 bg-white px-3 text-sm font-semibold text-sky-950 transition hover:bg-sky-100"
                       data-driver-job-calendar-action="true"
                       data-driver-job-calendar-source="current-driver-job-schedule"
-                      disabled={downloadingCalendar}
-                      onClick={downloadDriverJobCalendar}
+                      onClick={openDriverJobCalendar}
                       type="button"
                     >
-                      {downloadingCalendar ? "Downloading Calendar..." : "Add / Update Calendar"}
+                      Add / Update Calendar
                     </button>
                     <p className="text-xs font-medium leading-5 text-sky-900">
-                      Saves this job with a one-hour reminder and a private Open Driver Job shortcut. Later, use
-                      the calendar shortcut or the original link to report status. After an amendment, return here
-                      and update the calendar. Do not share the calendar event.
+                      Opens this job in your phone calendar. Tap Add or Save to keep its one-hour reminder and
+                      private Open Driver Job shortcut. After an amendment, use this same action again to update
+                      the pickup date, time, and location. Do not share the calendar event.
                     </p>
-                    {calendarDownloadFeedback ? (
-                      <p
-                        className={[
-                          "text-xs font-semibold leading-5",
-                          calendarDownloadFeedback.tone === "success" ? "text-emerald-800" : "text-red-700",
-                        ].join(" ")}
-                        data-driver-job-calendar-feedback={calendarDownloadFeedback.tone}
-                      >
-                        {calendarDownloadFeedback.text}
-                      </p>
-                    ) : null}
                   </div>
                 ) : null}
               </div>

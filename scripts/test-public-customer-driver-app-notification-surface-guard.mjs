@@ -144,7 +144,7 @@ const contractChecks = [
     label: "public API client caller boundary guard",
     requiredFragments: [
       "`/api/driver-job/${encodeURIComponent(token)}/notifications?limit=5&page=1`",
-      "`/driver-job/[token]` must keep driver API calls limited to safe job GET, token-scoped driver-details PATCH, notification GET, acknowledged calendar attachment GET, issue-alert POST with `issue_type`, fixed-template customer quick-reply POST with `template_key` only, admin-only OTS photo proof POST, and status PATCH with `status` only.",
+      "`/driver-job/[token]` must keep driver API calls limited to safe job GET, token-scoped driver-details PATCH, notification GET, one direct acknowledged calendar-import navigation, issue-alert POST with `issue_type`, fixed-template customer quick-reply POST with `template_key` only, admin-only OTS photo proof POST, and status PATCH with `status` only.",
       "Public API client caller boundary guard passed",
     ],
     script: "scripts/test-public-api-client-caller-boundary-guard.mjs",
@@ -576,7 +576,7 @@ assertIncludes(
   "`/api/driver-job/${encodeURIComponent(token)}/notifications?limit=5&page=1`",
   "driver page safe notification GET caller",
 );
-assert.equal(countOccurrences(files[driverPagePath], "fetch("), 11, "driver page fetch count must not grow beyond approved callers");
+assert.equal(countOccurrences(files[driverPagePath], "fetch("), 10, "driver page fetch count must not grow beyond approved callers");
 assert.equal(
   countOccurrences(files[driverPagePath], 'cache: "no-store"'),
   8,
@@ -604,8 +604,8 @@ assertIncludes(
 );
 assertIncludes(
   files[driverPagePath],
-  'fetch(`/api/driver-job/${encodeURIComponent(token)}/calendar`',
-  "driver page approved token-scoped calendar attachment caller",
+  'openDriverCalendarImport(`/api/driver-job/${encodeURIComponent(token)}/calendar`)',
+  "driver page approved token-scoped calendar import handoff",
 );
 assertIncludes(
   files[driverPagePath],

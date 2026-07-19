@@ -299,8 +299,8 @@ for (const fragment of [
 }
 assertIncludes(
   driverPage,
-  "window.URL.createObjectURL(blob)",
-  "public driver page approved calendar attachment blob URL",
+  'openDriverCalendarImport(`/api/driver-job/${encodeURIComponent(token)}/calendar`)',
+  "public driver page approved same-origin calendar import handoff",
 );
 
 console.log("Public driver Flight ETA setup surface guard passed");

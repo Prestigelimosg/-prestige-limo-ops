@@ -68,7 +68,7 @@ export async function GET(request: Request, context: DriverJobCalendarRouteConte
   return new Response(calendar.ics, {
     headers: {
       "cache-control": "private, no-store, max-age=0",
-      "content-disposition": `attachment; filename="${calendar.filename}"`,
+      "content-disposition": `inline; filename="${calendar.filename}"`,
       "content-type": "text/calendar; charset=utf-8",
       "x-content-type-options": "nosniff",
     },

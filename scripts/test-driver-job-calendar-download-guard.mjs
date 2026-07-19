@@ -65,6 +65,7 @@ for (const fragment of [
   '"content-type": "text/calendar; charset=utf-8"',
   '"cache-control": "private, no-store, max-age=0"',
   '"content-disposition"',
+  '`inline; filename="${calendar.filename}"`',
   "payloadResult.payload.acknowledged",
   "Acknowledge this Driver Job before adding it to a calendar.",
   "request.url",
@@ -82,30 +83,41 @@ assert.doesNotMatch(
 for (const fragment of [
   'data-driver-job-calendar-action="true"',
   'data-driver-job-calendar-source="current-driver-job-schedule"',
-  "async function downloadDriverJobCalendar()",
-  'fetch(`/api/driver-job/${encodeURIComponent(token)}/calendar`',
-  "downloadDriverCalendarBlob(await response.blob(), filename)",
-  "window.requestAnimationFrame(() => window.URL.revokeObjectURL(url))",
-  "onClick={downloadDriverJobCalendar}",
+  "function openDriverCalendarImport(calendarUrl: string)",
+  'anchor.dataset.driverJobCalendarImport = "true"',
+  "function openDriverJobCalendar()",
+  'openDriverCalendarImport(`/api/driver-job/${encodeURIComponent(token)}/calendar`)',
+  "onClick={openDriverJobCalendar}",
   'type="button"',
   "Add / Update Calendar",
   "private Open Driver Job shortcut",
+  "Tap Add or Save",
+  "use this same action again to update",
   "Do not share the calendar event",
   "/calendar",
 ]) {
   assert.equal(page.includes(fragment), true, `Driver Job page must include ${fragment}.`);
 }
 
-assert.doesNotMatch(page, /<a\b/i, "Driver calendar download must not reopen raw public anchor navigation.");
+for (const forbiddenFragment of [
+  "downloadDriverCalendarBlob",
+  "downloadDriverJobCalendar",
+  "window.URL.createObjectURL",
+  ".download = filename",
+  'fetch(`/api/driver-job/${encodeURIComponent(token)}/calendar`',
+]) {
+  assert.equal(
+    page.includes(forbiddenFragment),
+    false,
+    `Driver calendar import must not retain forced-download behavior: ${forbiddenFragment}.`,
+  );
+}
 
 for (const fragment of [
-  "const downloadDriverJobCalendar = async () =>",
+  "const openDriverJobCalendarImport = async () =>",
   'document.querySelector("[data-driver-job-calendar-action=\'true\']")',
-  "window.__driverJobCalendarDownloads",
-  "window.__driverJobCalendarBlobTexts",
-  "window.__driverJobCalendarRevokedUrls",
-  "acknowledged Driver Job calendar attachment download",
-  "TRIGGER:-PT1H",
+  "window.__driverJobCalendarImports",
+  "acknowledged Driver Job calendar import handoff",
 ]) {
   assert.equal(
     browserGuard.includes(fragment),
@@ -219,7 +231,7 @@ try {
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("content-type"), "text/calendar; charset=utf-8");
   assert.equal(response.headers.get("cache-control"), "private, no-store, max-age=0");
-  assert.match(response.headers.get("content-disposition") || "", /attachment; filename=/);
+  assert.match(response.headers.get("content-disposition") || "", /inline; filename=/);
   assert.match(routeIcs, /BEGIN:VCALENDAR/);
   assert.match(routeIcs, /TRIGGER:-PT1H/);
   const unfoldedRouteIcs = routeIcs.replace(/\r\n /g, "");
@@ -254,4 +266,4 @@ try {
   else process.env.PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED = originalProductionGate;
 }
 
-console.log("Driver Job calendar download guard passed");
+console.log("Driver Job calendar import/update guard passed");

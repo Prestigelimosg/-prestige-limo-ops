@@ -147,8 +147,8 @@ async function assertNoRealLocationImplementation() {
   assert.doesNotMatch(source, /supabase\.storage|storage\.from|\.upload\s*\(/i, "Driver pages must not preview or write storage directly.");
   assert.equal(
     (source.match(/window\.URL\.createObjectURL\(blob\)/g) || []).length,
-    1,
-    "Driver page may create one object URL only for the acknowledged calendar attachment download.",
+    0,
+    "Driver calendar import must not create a forced-download blob URL.",
   );
 }
 
@@ -209,10 +209,7 @@ async function runChromeTest() {
     await client.send("Page.addScriptToEvaluateOnNewDocument", {
       source: `
         window.__driverJobFetchCalls = [];
-        window.__driverJobCalendarBlobTexts = [];
-        window.__driverJobCalendarBlobTypes = [];
-        window.__driverJobCalendarDownloads = [];
-        window.__driverJobCalendarRevokedUrls = [];
+        window.__driverJobCalendarImports = [];
         window.__prestigeErrors = [];
         window.__prestigeConsoleErrors = [];
         window.addEventListener("error", (event) => window.__prestigeErrors.push(event.message));
@@ -223,25 +220,16 @@ async function runChromeTest() {
           originalError.apply(console, args);
         };
         const originalFetch = window.fetch.bind(window);
-        const originalCreateObjectURL = window.URL.createObjectURL.bind(window.URL);
-        const originalRevokeObjectURL = window.URL.revokeObjectURL.bind(window.URL);
         const originalAnchorClick = window.HTMLAnchorElement.prototype.click;
 
-        window.URL.createObjectURL = (blob) => {
-          window.__driverJobCalendarBlobTypes.push(blob.type);
-          blob.text().then((text) => window.__driverJobCalendarBlobTexts.push(text));
-          return originalCreateObjectURL(blob);
-        };
-        window.URL.revokeObjectURL = (url) => {
-          window.__driverJobCalendarRevokedUrls.push(String(url));
-          return originalRevokeObjectURL(url);
-        };
-        window.HTMLAnchorElement.prototype.click = function driverJobCalendarDownloadRecorder() {
-          if (this.download) {
-            window.__driverJobCalendarDownloads.push({
+        window.HTMLAnchorElement.prototype.click = function driverJobCalendarImportRecorder() {
+          if (this.dataset.driverJobCalendarImport === "true") {
+            window.__driverJobCalendarImports.push({
               download: this.download,
               href: this.href,
+              target: this.target,
             });
+            return;
           }
           return originalAnchorClick.call(this);
         };
@@ -307,12 +295,8 @@ async function runChromeTest() {
         consoleErrors: window.__prestigeConsoleErrors || [],
         errors: window.__prestigeErrors || [],
         fetchCalls: window.__driverJobFetchCalls || [],
-        calendarDownload: {
-          blobTexts: window.__driverJobCalendarBlobTexts || [],
-          blobTypes: window.__driverJobCalendarBlobTypes || [],
-          downloads: window.__driverJobCalendarDownloads || [],
-          feedback: document.querySelector("[data-driver-job-calendar-feedback]")?.textContent.trim() || "",
-          revokedUrls: window.__driverJobCalendarRevokedUrls || [],
+        calendarImport: {
+          imports: window.__driverJobCalendarImports || [],
           visible: Boolean(document.querySelector("[data-driver-job-calendar-action='true']")),
         },
         fileInputs: [...document.querySelectorAll("input[type='file'], input[capture], input[accept*='image'], input[accept*='photo']")]
@@ -724,7 +708,7 @@ async function runChromeTest() {
       return state;
     };
 
-    const downloadDriverJobCalendar = async () => {
+    const openDriverJobCalendarImport = async () => {
       const beforeState = await pageState();
       const clicked = await evaluate(`(() => {
         const button = document.querySelector("[data-driver-job-calendar-action='true']");
@@ -738,52 +722,30 @@ async function runChromeTest() {
       })()`);
       assert.equal(clicked, true, "Expected acknowledged Driver Job calendar action to be clickable.");
 
-      const downloadState = await waitForCondition(
+      const importState = await waitForCondition(
         () =>
           evaluate(`(() => {
-            const downloads = window.__driverJobCalendarDownloads || [];
-            const blobTexts = window.__driverJobCalendarBlobTexts || [];
-            const blobTypes = window.__driverJobCalendarBlobTypes || [];
-            const revokedUrls = window.__driverJobCalendarRevokedUrls || [];
-            const feedback = document.querySelector("[data-driver-job-calendar-feedback]")?.textContent.trim() || "";
-
-            return downloads.length === 1 &&
-              blobTexts.length === 1 &&
-              blobTypes.length === 1 &&
-              revokedUrls.length === 1 &&
-              feedback === "Calendar file downloaded with a private Open Driver Job shortcut. Do not share the calendar event."
-              ? { blobText: blobTexts[0], blobType: blobTypes[0], download: downloads[0], feedback, revokedUrls }
-              : false;
+            const imports = window.__driverJobCalendarImports || [];
+            return imports.length === 1 ? imports[0] : false;
           })()`),
         10000,
-        "acknowledged Driver Job calendar attachment download",
+        "acknowledged Driver Job calendar import handoff",
       );
       const afterState = await pageState();
       const expectedCalendarPath = `/api/driver-job/${mockDriverJobTokens.workflowOrder}/calendar`;
 
       assert.equal(
         afterState.fetchCalls.length,
-        beforeState.fetchCalls.length + 1,
-        "Driver calendar action should make one token-scoped calendar GET only.",
+        beforeState.fetchCalls.length,
+        "Driver calendar import must use direct browser navigation instead of a JavaScript fetch/blob download.",
       );
-      assert.equal(afterState.fetchCalls.at(-1), `GET ${expectedCalendarPath}`);
-      assert.equal(downloadState.blobType, "text/calendar");
-      assert.equal(downloadState.download.download, "prestige-driver-job-mock-driver-job-workflow.ics");
-      assert.match(downloadState.download.href, /^blob:http:\/\/localhost:3000\//);
-      assert.deepEqual(downloadState.revokedUrls, [downloadState.download.href]);
-      assert.match(downloadState.blobText, /UID:driver-job-MOCK-DRIVER-JOB-WORKFLOW@prestige-limo-ops/);
-      assert.match(downloadState.blobText, /DTSTART;TZID=Asia\/Singapore:20260529T164500/);
-      assert.match(downloadState.blobText, /DTEND;TZID=Asia\/Singapore:20260529T181500/);
-      assert.match(downloadState.blobText, /BEGIN:VALARM[\s\S]*TRIGGER:-PT1H[\s\S]*END:VALARM/);
-      const unfoldedCalendar = downloadState.blobText.replace(/\r\n /g, "");
-      const expectedDriverJobUrl = `${appUrl}/driver-job/${mockDriverJobTokens.workflowOrder}`;
-      assert.equal(unfoldedCalendar.includes(`URL:${expectedDriverJobUrl}`), true);
-      assert.equal(unfoldedCalendar.includes(`Open Driver Job: ${expectedDriverJobUrl}`), true);
-      assert.match(unfoldedCalendar, /Private driver link - do not share this calendar event\./);
+      assert.equal(importState.href, `${appUrl}${expectedCalendarPath}`);
+      assert.equal(importState.download, "", "Calendar import action must not force a downloaded attachment.");
+      assert.equal(importState.target, "", "Calendar import should open through the phone's current browser context.");
       assertNoSensitiveText({
         fetchCalls: afterState.fetchCalls,
         resourceCalls: [],
-        visibleText: downloadState.blobText,
+        visibleText: importState.href,
       });
       assertNoSensitiveText(afterState);
       return afterState;
@@ -1180,7 +1142,7 @@ async function runChromeTest() {
 
     await clickBlockedStatus("OTW", "Save & Acknowledge Job before updating status.", startingStatusText);
     await saveAndAcknowledgeJob();
-    await downloadDriverJobCalendar();
+    await openDriverJobCalendarImport();
     await clickBlockedStatus("OTS", "Update OTW before OTS.", startingStatusText);
     await clickBlockedStatus("POB", "Update OTW before POB.", startingStatusText);
     await clickBlockedStatus("Job Completed", "Update OTW before Job Completed.", startingStatusText);

@@ -4988,11 +4988,9 @@ export default function MockCustomerDashboardPage() {
               ),
             );
 
-            if (!exactBookerId || mismatchedCustomer || mismatchedBooker || !firstInvoiceRow) {
+            if (mismatchedCustomer || mismatchedBooker || !firstInvoiceRow) {
               setPlainInvoiceFeedback(
-                !exactBookerId
-                  ? "The selected jobs do not have one verified PA / booker. Draft remains admin-only; Issue and Email are blocked."
-                  : "The selected jobs do not share the same verified customer and PA / booker. Issue and Email are blocked.",
+                "The selected jobs do not share the same verified customer and PA / booker. Issue and Email are blocked.",
               );
               setPlainInvoiceFeedbackTone("error");
               return;
@@ -5028,6 +5026,18 @@ export default function MockCustomerDashboardPage() {
             setPlainInvoiceSavedBookings(targetBookings);
             setPlainInvoiceForm(nextPlainInvoiceForm);
             setPlainInvoicePreview(plainInvoicePreviewFromForm(nextPlainInvoiceForm));
+
+            if (!exactBookerId) {
+              setPlainInvoiceFeedback(
+                "The selected jobs are shown for review but do not have one verified PA / booker. Send and PDF Download remain blocked.",
+              );
+              setPlainInvoiceFeedbackTone("error");
+              window.setTimeout(() => {
+                plainInvoicePanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+              }, 100);
+              return;
+            }
+
             setPlainInvoiceFeedback(
               `All ${invoiceRows.length} selected job${invoiceRows.length === 1 ? "" : "s"} loaded with one verified PA. Use Edit to enter every approved amount; Send and PDF Download stay blocked until the compact review is current.`,
             );
@@ -9260,7 +9270,9 @@ export default function MockCustomerDashboardPage() {
                             width={180}
                           />
                           <p className="mt-2 font-bold text-slate-950">{defaultCompanyProfile.company_name}</p>
-                          <p className="mt-0.5 leading-4 text-slate-600">{defaultCompanyProfile.address}</p>
+                          <p className="mt-0.5 max-w-xs leading-4 text-slate-600">
+                            {defaultCompanyProfile.address}
+                          </p>
                         </div>
                         <div className="text-right">
                           <h3 className="text-2xl font-medium tracking-wide text-slate-950">INVOICE</h3>
@@ -9274,7 +9286,7 @@ export default function MockCustomerDashboardPage() {
                         </div>
                       </div>
 
-                      <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                      <div className="mt-4 grid gap-4 sm:grid-cols-2">
                         <div>
                           <p className="font-semibold text-slate-500">Bill To</p>
                           <p className="mt-1 font-bold text-sky-700" data-plain-invoice-preview-bill-to="true">
@@ -9356,25 +9368,43 @@ export default function MockCustomerDashboardPage() {
                         </p>
                       ) : null}
 
-                      <div className="mt-6 grid gap-5 sm:grid-cols-2">
-                        <div>
-                          <p>Thank you for your business</p>
-                          <p className="mt-3">Best Regards,</p>
-                          <p>Finance Team</p>
-                          <p>{defaultCompanyProfile.phone}</p>
-                        </div>
-                        <div className="whitespace-pre-line leading-4">
-                          <p className="font-bold underline">Bank Details</p>
-                          {companyProfilePaymentSummary(defaultCompanyProfile)}
-                        </div>
-                      </div>
-                      <div className="mt-5 border-t border-slate-200 pt-3 text-[11px] leading-4 text-slate-600">
+                      <div
+                        className="mt-6 max-w-lg text-[11px] leading-4 text-slate-600"
+                        data-selected-job-invoice-notes="true"
+                      >
                         <p className="font-semibold text-slate-800">Notes</p>
                         <p>Midnight surcharge: $15 applies from 11:00 PM to 6:59 AM.</p>
                         <p>Waiting time: 15 minutes grace; airport arrivals include 60 minutes grace.</p>
                         <p>Additional waiting time: $15 per 15-minute block.</p>
                         <p>Hourly jobs: 15 minutes grace; 16 minutes onward counts as the next hour.</p>
-                        <p className="mt-3 font-semibold text-slate-800">Terms &amp; Conditions</p>
+                      </div>
+
+                      <div className="mt-6 max-w-lg" data-selected-job-invoice-signoff="true">
+                        <p>Thank you for your business</p>
+                        <p className="mt-3">Best Regards,</p>
+                        <p>Finance Team</p>
+                        <p>{defaultCompanyProfile.phone}</p>
+                      </div>
+
+                      <div
+                        className="mt-5 max-w-lg break-words leading-4"
+                        data-selected-job-invoice-bank="true"
+                      >
+                        {companyProfilePaymentSummary(defaultCompanyProfile)
+                          .split(/\n+/)
+                          .filter(Boolean)
+                          .map((line, index) => (
+                            <p className={index === 0 ? "font-bold underline" : ""} key={`${index}-${line}`}>
+                              {line}
+                            </p>
+                          ))}
+                      </div>
+
+                      <div
+                        className="mt-6 max-w-3xl break-words border-t border-slate-200 pt-3 text-[11px] leading-4 text-slate-600"
+                        data-selected-job-invoice-terms="true"
+                      >
+                        <p className="font-semibold text-slate-800">Terms &amp; Conditions</p>
                         <p>{defaultCompanyProfile.invoice_footer_terms}</p>
                       </div>
                     </article>

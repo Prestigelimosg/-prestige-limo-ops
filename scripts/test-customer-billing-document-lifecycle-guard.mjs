@@ -39,15 +39,18 @@ assertIncludes(
   "pdfTextAt(documentDateLabel, dateX, billToY - 3, 8",
   "PDF uses document-aware date label",
 );
-assertIncludes(localInvoices, "const paymentY = 260;", "bank section position");
-assertIncludes(localInvoices, "const notesY = 135;", "notes moved above terms");
+assertIncludes(localInvoices, "const notesY = 320;", "notes section position");
+assertIncludes(localInvoices, "const signoffY = 245;", "signoff section position");
+assertIncludes(localInvoices, "const paymentY = 182;", "bank section position");
 assertIncludes(localInvoices, "const termsY = 55;", "terms below notes");
 assert.ok(
-  localInvoices.indexOf('pdfTextAt("Bank information"') <
-    localInvoices.indexOf('pdfTextAt("Notes"') &&
-    localInvoices.indexOf('pdfTextAt("Notes"') <
+  localInvoices.indexOf('pdfTextAt("Notes"') <
+    localInvoices.indexOf('pdfTextAt("Thank you for your business"') &&
+    localInvoices.indexOf('pdfTextAt("Thank you for your business"') <
+      localInvoices.indexOf("pdfTextAt(paymentHeading") &&
+    localInvoices.indexOf("pdfTextAt(paymentHeading") <
       localInvoices.indexOf('pdfTextAt("Terms & Conditions:"'),
-  "PDF order must be bank information, then notes, then terms and conditions.",
+  "PDF order must be notes, signoff, one bank block, then terms and conditions.",
 );
 
 assertIncludes(customersPage, 'data-customer-invoice-document-type="true"', "document type select");

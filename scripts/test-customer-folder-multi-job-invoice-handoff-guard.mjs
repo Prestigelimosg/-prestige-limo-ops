@@ -94,6 +94,10 @@ for (const fragment of [
   'data-selected-job-invoice-paper="true"',
   'data-selected-job-invoice-status="true"',
   'data-selected-job-invoice-balance="true"',
+  'data-selected-job-invoice-notes="true"',
+  'data-selected-job-invoice-signoff="true"',
+  'data-selected-job-invoice-bank="true"',
+  'data-selected-job-invoice-terms="true"',
   '<summary aria-hidden="true" className="hidden">',
   "Selected jobs invoice review",
   "toggleSelectedJobInvoiceEditing",
@@ -110,6 +114,24 @@ const selectedReviewEnd = customersPage.indexOf('data-plain-invoice-crm-account=
 assert.notEqual(selectedReviewStart, -1, "selected-job invoice review must exist");
 assert.notEqual(selectedReviewEnd, -1, "selected-job invoice review must end before the generic CRM workbench");
 const selectedReview = customersPage.slice(selectedReviewStart, selectedReviewEnd);
+
+const notesIndex = selectedReview.indexOf('data-selected-job-invoice-notes="true"');
+const signoffIndex = selectedReview.indexOf('data-selected-job-invoice-signoff="true"');
+const bankIndex = selectedReview.indexOf('data-selected-job-invoice-bank="true"');
+const termsIndex = selectedReview.indexOf('data-selected-job-invoice-terms="true"');
+assert.equal(
+  notesIndex < signoffIndex && signoffIndex < bankIndex && bankIndex < termsIndex,
+  true,
+  "selected-job invoice lower content must follow notes, signoff, bank, terms order",
+);
+
+const selectedFormSetIndex = customersPage.indexOf("setPlainInvoiceForm(nextPlainInvoiceForm);");
+const missingBookerBlockIndex = customersPage.indexOf("if (!exactBookerId)", selectedFormSetIndex);
+assert.equal(
+  selectedFormSetIndex !== -1 && selectedFormSetIndex < missingBookerBlockIndex,
+  true,
+  "verified customer/job display must load before missing-booker Send/PDF block",
+);
 
 includes(
   customersPage,
@@ -145,11 +167,22 @@ for (const fragment of [
   'const paidInvoice = documentType === "invoice" && invoice.status === "Paid";',
   'const paymentMadeValue = paidInvoice ? `(-) ${sgdAmount}` : "SGD0.00";',
   'const balanceDueValue = paidInvoice ? "SGD0.00" : sgdAmount;',
+  'const [paymentHeading = "Bank Details", ...paymentDetailLines] = paymentLines;',
+  'const notesY = 320;',
+  'const signoffY = 245;',
+  'const paymentY = 182;',
   'pdfRightTextAt("Payment Made"',
   "pdfRightTextAt(balanceDueValue",
 ]) {
   includes(localInvoices, fragment, `status-correct shared PDF fragment ${fragment}`);
 }
+
+assert.equal(
+  localInvoices.indexOf('pdfTextAt("Notes", 50, notesY') <
+    localInvoices.indexOf('pdfTextAt("Thank you for your business", 50, signoffY'),
+  true,
+  "shared PDF must render notes before signoff",
+);
 
 for (const fragment of [
   "if (value.length > 4)",

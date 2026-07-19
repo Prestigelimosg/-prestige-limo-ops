@@ -94,6 +94,8 @@ for (const fragment of [
   'data-selected-job-invoice-paper="true"',
   'data-selected-job-invoice-status="true"',
   'data-selected-job-invoice-balance="true"',
+  '<summary aria-hidden="true" className="hidden">',
+  "Selected jobs invoice review",
   "toggleSelectedJobInvoiceEditing",
   "sendSelectedJobInvoice",
   "downloadSelectedJobInvoicePdf",
@@ -108,6 +110,12 @@ const selectedReviewEnd = customersPage.indexOf('data-plain-invoice-crm-account=
 assert.notEqual(selectedReviewStart, -1, "selected-job invoice review must exist");
 assert.notEqual(selectedReviewEnd, -1, "selected-job invoice review must end before the generic CRM workbench");
 const selectedReview = customersPage.slice(selectedReviewStart, selectedReviewEnd);
+
+includes(
+  customersPage,
+  "plainInvoiceSelectedJobReviewActive ? (",
+  "selected-job review must suppress the browser default Details summary",
+);
 
 for (const label of ["Edit", ': "Send"', ': "PDF Download"']) {
   includes(selectedReview, label, `compact selected-job invoice action ${label.trim()}`);

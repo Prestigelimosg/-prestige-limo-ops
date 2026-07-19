@@ -8607,7 +8607,11 @@ export default function MockCustomerDashboardPage() {
               Boolean(plainInvoiceForm.billToName.trim())
             }
           >
-          {!plainInvoiceSelectedJobReviewActive ? (
+          {plainInvoiceSelectedJobReviewActive ? (
+            <summary aria-hidden="true" className="hidden">
+              Selected jobs invoice review
+            </summary>
+          ) : (
             <summary
               className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-slate-900 [&::-webkit-details-marker]:hidden"
               data-customer-billing-workbench-summary="true"
@@ -8615,7 +8619,7 @@ export default function MockCustomerDashboardPage() {
 	              Advanced invoice workbench
               <span className="text-xs font-semibold text-slate-500">Open only after review</span>
             </summary>
-          ) : null}
+          )}
           <div
             className={
               plainInvoiceSelectedJobReviewActive

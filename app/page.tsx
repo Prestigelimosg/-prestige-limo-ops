@@ -16434,13 +16434,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       .map(({ displayItem }) => displayItem);
   }
   const assignedDriverId = clean(booking.driverId);
-  const assignedDriverName = clean(booking.driverName).toLowerCase();
-  const assignedDriverRecord = driverAssignmentDisplayDrivers.find(
-    (driver) =>
-      (assignedDriverId && String(driver.id) === assignedDriverId) ||
-      (assignedDriverName && clean(driver.driver_name).toLowerCase() === assignedDriverName),
-  );
-  const assignedDriverSelectValue = assignedDriverId || (assignedDriverRecord ? String(assignedDriverRecord.id) : "");
+  const assignedDriverRecord = assignedDriverId
+    ? driverAssignmentDisplayDrivers.find((driver) => String(driver.id) === assignedDriverId)
+    : undefined;
+  const assignedDriverSelectValue = assignedDriverId;
   const assignedDriverIsInactive = Boolean(assignedDriverRecord && isInactiveDriver(assignedDriverRecord));
   const showSavedAssignedDriverOption = Boolean(
     assignedDriverId && (!assignedDriverRecord || assignedDriverIsInactive),

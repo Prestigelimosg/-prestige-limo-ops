@@ -50,6 +50,12 @@ assert.match(
   /function isMissingCompanyProfileResult\(response: Response, result: unknown\)/,
   "profile editor must explicitly classify safe missing-company lookup responses",
 );
+assert.match(editorSource, />\s*Contact name\s*<input/,
+  "the existing primary_contact_name field must be clearly labelled Contact name",
+);
+assert.doesNotMatch(editorSource, /Primary contact person/,
+  "the customer profile must not show a second ambiguous contact-name label",
+);
 assert.match(
   editorSource,
   /response\.status === 404 \|\| \/not found\|no company\/\.test\(message\)/,

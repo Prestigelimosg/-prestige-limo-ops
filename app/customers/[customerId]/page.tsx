@@ -10,7 +10,6 @@ import { CustomerCompanyProfileEditor } from "./customer-company-profile-editor"
 import { CustomerFolderSavedBookingsPanel } from "./saved-bookings-panel";
 import { CustomerInvoicePrefixSettingsPanel } from "./invoice-prefix-settings-panel";
 import { CustomerBookingReferenceSettingsPanel } from "./booking-reference-settings-panel";
-import { CustomerAccountDangerZone } from "./customer-account-danger-zone";
 
 type CustomerFolderPageProps = {
   params: Promise<{
@@ -92,23 +91,26 @@ export default async function MockCustomerFolderPage({ params, searchParams }: C
               </p>
             </div>
           </div>
-          <div className="mt-3 grid gap-3 lg:grid-cols-2">
-            <CustomerInvoicePrefixSettingsPanel
-              customerAccount={customer.companyName}
-              suggestedPrefix={customer.invoicePrefix}
-            />
-            <CustomerBookingReferenceSettingsPanel
-              customerAccount={customer.id}
-              customerName={customer.companyName}
-            />
-          </div>
+          <details className="mt-3 rounded-md border border-slate-200 bg-white/70 px-3 py-2" data-customer-numbering-settings="true">
+            <summary className="cursor-pointer text-sm font-bold text-slate-900">
+              Customer numbering <span className="font-semibold text-slate-500">· Invoice and trip references</span>
+            </summary>
+            <div className="mt-3 grid gap-3 lg:grid-cols-2">
+              <CustomerInvoicePrefixSettingsPanel
+                customerAccount={customer.companyName}
+                suggestedPrefix={customer.invoicePrefix}
+              />
+              <CustomerBookingReferenceSettingsPanel
+                customerAccount={customer.id}
+                customerName={customer.companyName}
+              />
+            </div>
+          </details>
         </header>
 
         <CustomerInvoiceFolderPanel customer={customer} />
 
         <CustomerFolderSavedBookingsPanel customerId={customer.id} customerName={customer.companyName} />
-
-        <CustomerAccountDangerZone customerId={customer.id} customerName={customer.companyName} />
 
         {customer.bookingHistory.length > 0 ? (
           <section className="rounded-md border border-slate-200 bg-white p-3 shadow-sm" data-customer-booking-history="true">

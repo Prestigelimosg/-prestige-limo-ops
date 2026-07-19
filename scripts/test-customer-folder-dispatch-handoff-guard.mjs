@@ -120,7 +120,7 @@ for (const fragment of [
   "fetch(adminSavedBookingsApiPath, {",
   "Delete is locked until this exact job is completed or cancelled.",
   "data-customer-folder-saved-bookings-edit",
-  ">\n                            Edit\n                          </Link>",
+  ">\n                            Edit\n                          </button>",
 ]) {
   const source = fragment.includes("data-customer-folder-saved-bookings") || fragment.startsWith(">\n")
     ? customerFolderSavedBookingsPanel
@@ -134,7 +134,7 @@ for (const fragment of [
   "data-customer-folder-saved-bookings-row",
   "data-customer-folder-saved-bookings-edit",
   "max-h-[32rem] overflow-x-auto overflow-y-auto",
-  ">\n                            Edit\n                          </Link>",
+  ">\n                            Edit\n                          </button>",
 ]) {
   assertIncludes(customerFolderSavedBookingsPanel, fragment, `customer folder jobs section ${fragment}`);
 }

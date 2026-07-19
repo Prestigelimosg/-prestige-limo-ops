@@ -6,6 +6,7 @@ export type PublicCompanyProfile = {
   company_name: string;
   email: string;
   invoice_footer_terms: string;
+  invoice_signoff_name: string;
   logo_image_url: string;
   phone: string;
   stripe_card_fee_percent: number;
@@ -34,6 +35,7 @@ const maxFieldLengths: Record<keyof PublicCompanyProfile, number> = {
   company_name: 120,
   email: 180,
   invoice_footer_terms: 1400,
+  invoice_signoff_name: 120,
   logo_image_url: 200000,
   phone: 80,
   stripe_card_fee_percent: 10,
@@ -52,6 +54,7 @@ export const defaultCompanyProfile: PublicCompanyProfile = {
   email: "acc@prestigelimo.sg",
   invoice_footer_terms:
     "Thank you for choosing our service. Payment is due upon completion unless otherwise agreed in writing. Waiting time, surcharge, amendment, cancellation, damage, and excess luggage charges may apply where relevant.",
+  invoice_signoff_name: "Finance Team",
   logo_image_url: defaultCompanyLogoPath,
   phone: "+65 9655 0807",
   stripe_card_fee_percent: 10,
@@ -166,6 +169,12 @@ export function sanitizePublicCompanyProfile(input: unknown): CompanyProfileSani
       source,
       "invoice_footer_terms",
       defaultCompanyProfile.invoice_footer_terms,
+      rejectedFields,
+    ),
+    invoice_signoff_name: safePublicText(
+      source,
+      "invoice_signoff_name",
+      defaultCompanyProfile.invoice_signoff_name,
       rejectedFields,
     ),
     logo_image_url: logoImageUrl,

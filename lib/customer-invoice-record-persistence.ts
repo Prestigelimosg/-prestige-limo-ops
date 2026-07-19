@@ -221,6 +221,41 @@ function safeText(value: unknown, maxLength = maxTextLength) {
   return cleaned;
 }
 
+function safeLineItemDescription(value: unknown) {
+  if (typeof value !== "string" && typeof value !== "number") {
+    return null;
+  }
+
+  const cleaned = String(value)
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/[\t\f\v ]+/g, " ").trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  if (!cleaned || cleaned.length > 500 || includesForbiddenFragment(cleaned)) {
+    return null;
+  }
+
+  return cleaned;
+}
+
+function safeLineItemQuantity(value: unknown) {
+  if (value === undefined || value === null || value === "") {
+    return 1;
+  }
+
+  const quantity = typeof value === "number" ? value : Number(value);
+
+  return Number.isFinite(quantity) &&
+    quantity > 0 &&
+    quantity <= 999 &&
+    Math.round(quantity * 100) === quantity * 100
+    ? quantity
+    : null;
+}
+
 function safeEmail(value: unknown) {
   const cleaned = safeText(value, maxEmailLength);
 
@@ -317,19 +352,20 @@ function safeLineItems(value: unknown): CustomerLocalInvoiceLineItem[] | null {
   }
 
   const lineItems = value
-    .map((item) => {
+    .map<CustomerLocalInvoiceLineItem | null>((item) => {
       const record = asRecord(item);
       const amountLabel = safeText(record.amountLabel, 40);
       const bookingReference = safeText(record.bookingReference, 160);
-      const description = safeText(record.description, 500);
+      const description = safeLineItemDescription(record.description);
+      const quantity = safeLineItemQuantity(record.quantity);
 
-      if (!amountLabel || !description) {
+      if (!amountLabel || !description || !quantity) {
         return null;
       }
 
       return bookingReference
-        ? { amountLabel, bookingReference, description }
-        : { amountLabel, description };
+        ? { amountLabel, bookingReference, description, quantity }
+        : { amountLabel, description, quantity };
     })
     .filter((item): item is CustomerLocalInvoiceLineItem => Boolean(item));
 

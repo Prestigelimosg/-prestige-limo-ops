@@ -1,5 +1,6 @@
 import {
   createAdminBooking,
+  type AdminBookingPersistenceRecord,
   type AdminBookingPersistenceUpdateInput,
   loadAdminBookingByReference,
   listAdminBookings,
@@ -168,15 +169,18 @@ function customerRequestDecisionNotificationCopy(requestReviewStatus: string) {
 async function maybeQueueCustomerRequestDecisionNotification(
   input: AdminBookingPersistenceUpdateInput,
   actor: ReturnType<typeof adminDispatcherBoundaryToPersistenceAdapterActor>,
+  previousBooking: AdminBookingPersistenceRecord,
 ): Promise<CustomerRequestDecisionNotificationResult | null> {
   const bookingReference = clean(input.booking.booking_reference);
   const sourceChannel = normalizedToken(input.booking.source_channel);
   const requestReviewStatus = normalizedToken(input.booking.request_review_status);
+  const previousRequestReviewStatus = normalizedToken(previousBooking.request_review_status);
   const customerFacingStatus = normalizedToken(input.booking.customer_facing_status);
 
   if (
     sourceChannel !== "customer_booking_request" ||
     !bookingReference ||
+    requestReviewStatus === previousRequestReviewStatus ||
     !["approved", "declined", "needs_review"].includes(requestReviewStatus)
   ) {
     return null;
@@ -319,6 +323,15 @@ export async function PATCH(request: Request) {
     }
 
     const actor = adminDispatcherBoundaryToPersistenceAdapterActor(boundary.context);
+    const previousBooking = await loadAdminBookingByReference(
+      actor,
+      parsed.data.target_booking_reference,
+    );
+
+    if (!previousBooking.ok) {
+      return adminBookingFailureResponse(previousBooking);
+    }
+
     const result = await updateAdminBooking(parsed.data, actor, {
       action: "admin_booking_update",
       source_route: "/api/admin-bookings",
@@ -330,7 +343,11 @@ export async function PATCH(request: Request) {
       return adminBookingFailureResponse(result);
     }
 
-    const customerNotification = await maybeQueueCustomerRequestDecisionNotification(parsed.data, actor);
+    const customerNotification = await maybeQueueCustomerRequestDecisionNotification(
+      parsed.data,
+      actor,
+      previousBooking.data,
+    );
 
     return Response.json({
       ok: true,

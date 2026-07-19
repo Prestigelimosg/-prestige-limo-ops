@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import { CustomerAccountDangerZone } from "./customer-account-danger-zone";
+
 const adminCompanyIdentityApiPath = "/api/admin-companies-crm-identity";
 const adminCompanyProfileWriteApiPath = "/api/admin-company-traveler-crm-runtime-write-action";
 
@@ -278,6 +280,7 @@ export function CustomerCompanyProfileEditor({
           </p>
         </div>
         <div className="flex gap-2">
+          <CustomerAccountDangerZone compact customerId={customerId} customerName={customerName} />
           <button
             className="min-h-8 rounded-md border border-slate-300 bg-white px-3 text-xs font-bold text-slate-800 transition hover:border-slate-700 disabled:cursor-not-allowed disabled:text-slate-400"
             disabled={status === "saving"}
@@ -326,7 +329,7 @@ export function CustomerCompanyProfileEditor({
         <label className="grid gap-1 text-xs font-bold text-slate-700 sm:col-span-2">
           Billing address
           <textarea
-            className="min-h-20 rounded-md border border-slate-300 bg-white px-2 py-2 text-sm font-semibold text-slate-950"
+            className="min-h-16 rounded-md border border-slate-300 bg-white px-2 py-2 text-sm font-semibold text-slate-950"
             data-customer-company-profile-billing-address={customerId}
             onChange={(event) => setProfile((current) => (current ? { ...current, billing_address: event.target.value } : current))}
             value={profile.billing_address}
@@ -351,7 +354,7 @@ export function CustomerCompanyProfileEditor({
           />
         </label>
         <label className="grid gap-1 text-xs font-bold text-slate-700">
-          Primary contact person
+          Contact name
           <input
             className="min-h-9 rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-950"
             data-customer-company-profile-primary-contact={customerId}
@@ -379,7 +382,7 @@ export function CustomerCompanyProfileEditor({
             value={profile.accounts_email}
           />
         </label>
-        <label className="grid gap-1 text-xs font-bold text-slate-700 sm:col-span-2">
+        <label className="grid gap-1 text-xs font-bold text-slate-700">
           Operations email
           <input
             className="min-h-9 rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-950"

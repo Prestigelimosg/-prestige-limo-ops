@@ -21,16 +21,14 @@ import { formatSingaporePickupDisplay } from "../../lib/singapore-pickup-display
 import {
   companyProfilePaymentSummary,
   defaultCompanyProfile,
+  type PublicCompanyProfile,
 } from "../../lib/company-profile-shared";
+import { loadPublicCompanyProfile } from "../../lib/public-company-profile-adapter";
+import { normalizeBookingType } from "../../lib/pricing";
 import {
-  calculateDspCustomerInvoiceAmountCents,
-  initialRateSettings,
-  normalizeBookingType,
-  resolvePricing,
-  type DriverPayoutRules,
-  type RateRules,
-  type RateSettings,
-} from "../../lib/pricing";
+  calculateCustomerDspInvoiceReview,
+  type CustomerInvoiceRateSetupRecord,
+} from "../../lib/customer-dsp-invoice-review";
 import {
   downloadCustomerInvoicePdf,
   formatInvoiceAmount,
@@ -48,6 +46,7 @@ import {
 } from "../../lib/customer-local-invoices";
 
 const adminCustomerAccountsApiPath = "/api/admin-customer-accounts";
+const adminCompanyIdentityApiPath = "/api/admin-companies-crm-identity";
 const adminCustomerSavedBookingsApiPath = "/api/admin-customer-saved-bookings";
 const adminBookingsApiPath = "/api/admin-bookings";
 const adminSavedBookingsApiPath = "/api/admin-saved-bookings";
@@ -461,6 +460,8 @@ type PlainInvoiceForm = {
   isPaid: boolean;
   lineItems: PlainInvoiceAdditionalLineItem[];
   lineDescription: string;
+  quantity: string;
+  recipientEmails: string[];
   reference: string;
   route: string;
   service: string;
@@ -470,6 +471,12 @@ type PlainInvoiceAdditionalLineItem = {
   amount: string;
   bookingReference?: string;
   lineDescription: string;
+  quantity: string;
+};
+
+type PlainInvoiceRecipientOption = {
+  email: string;
+  label: string;
 };
 
 type RegularCustomerBookingForm = typeof initialRegularCustomerBookingForm;
@@ -546,103 +553,10 @@ type RegularCustomerSavedBookingReadRecord = {
   midnight_surcharge?: number | null;
   pickup_at?: string | null;
   pricing_source?: string | null;
+  public_booking_reference?: string | null;
   route_type?: string | null;
   service_type?: string | null;
 };
-
-type CustomerInvoiceRateSetupRecord = {
-  companies?: Array<{
-    customer_rates?: RateRules | null;
-    driver_payout_rules?: DriverPayoutRules | null;
-    id?: number | null;
-  }>;
-  settings?: Partial<{
-    child_seat_customer_surcharge: number | null;
-    child_seat_driver_payout: number | null;
-    customer_rates: RateRules;
-    driver_payout_rules: DriverPayoutRules;
-    extra_stop_payout: number | null;
-    extra_stop_surcharge: number | null;
-    midnight_payout: number | null;
-    midnight_surcharge: number | null;
-  }> | null;
-  travelers?: Array<{
-    company_id?: number | null;
-    customer_rates?: RateRules | null;
-    driver_payout_rules?: DriverPayoutRules | null;
-    id?: number | null;
-  }>;
-};
-
-function customerInvoiceFiniteRate(value: unknown, fallback: number) {
-  if (value === null || value === undefined || value === "") {
-    return fallback;
-  }
-
-  const parsed = Number(value);
-
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
-}
-
-function customerInvoiceRateSettings(
-  rateSetup: CustomerInvoiceRateSetupRecord,
-): RateSettings {
-  const settings = rateSetup.settings;
-
-  return {
-    customerRates: {
-      ...initialRateSettings.customerRates,
-      ...(settings?.customer_rates || {}),
-    },
-    driverPayoutRules: {
-      ...initialRateSettings.driverPayoutRules,
-      ...(settings?.driver_payout_rules || {}),
-    },
-    midnightSurcharge: customerInvoiceFiniteRate(
-      settings?.midnight_surcharge,
-      initialRateSettings.midnightSurcharge,
-    ),
-    extraStopSurcharge: customerInvoiceFiniteRate(
-      settings?.extra_stop_surcharge,
-      initialRateSettings.extraStopSurcharge,
-    ),
-    midnightPayout: customerInvoiceFiniteRate(
-      settings?.midnight_payout,
-      initialRateSettings.midnightPayout,
-    ),
-    extraStopPayout: customerInvoiceFiniteRate(
-      settings?.extra_stop_payout,
-      initialRateSettings.extraStopPayout,
-    ),
-    childSeatCustomerSurcharge: customerInvoiceFiniteRate(
-      settings?.child_seat_customer_surcharge,
-      initialRateSettings.childSeatCustomerSurcharge,
-    ),
-    childSeatDriverPayout: customerInvoiceFiniteRate(
-      settings?.child_seat_driver_payout,
-      initialRateSettings.childSeatDriverPayout,
-    ),
-  };
-}
-
-function customerInvoiceSingaporePickupClock(value: string) {
-  const parsed = new Date(value);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return "";
-  }
-
-  const parts = new Intl.DateTimeFormat("en-SG", {
-    hour: "2-digit",
-    hour12: false,
-    minute: "2-digit",
-    timeZone: "Asia/Singapore",
-  }).formatToParts(parsed);
-  const hour = parts.find((part) => part.type === "hour")?.value || "";
-  const minute = parts.find((part) => part.type === "minute")?.value || "";
-
-  return hour && minute ? `${hour}${minute}` : "";
-}
 
 type CustomerFolderExactBookingRoutePoint = {
   location?: string | null;
@@ -689,6 +603,7 @@ type CustomerFolderExactBookingRecord = {
   pickup_at?: string | null;
   pickup_datetime?: string | null;
   pickup_location?: string | null;
+  public_booking_reference?: string | null;
   request_review_status?: string | null;
   route_points?: CustomerFolderExactBookingRoutePoint[] | null;
   route_summary?: string | null;
@@ -958,7 +873,7 @@ function appendCustomerInvoiceCardPaymentNote(
     return description;
   }
 
-  const suffix = ` ${note}`;
+  const suffix = `\n${note}`;
   const fullDescription = `${description}${suffix}`;
 
   if (fullDescription.length <= customerInvoiceLineDescriptionMaxLength) {
@@ -981,6 +896,7 @@ function plainInvoiceLineItemRows(form: PlainInvoiceForm) {
       amount: form.amount,
       bookingReference: form.bookingReference,
       lineDescription: form.lineDescription,
+      quantity: form.quantity,
       required: true,
       rowNumber: 1,
     },
@@ -988,6 +904,7 @@ function plainInvoiceLineItemRows(form: PlainInvoiceForm) {
       amount: item.amount,
       bookingReference: item.bookingReference || form.bookingReference,
       lineDescription: item.lineDescription,
+      quantity: item.quantity,
       required: false,
       rowNumber: index + 2,
     })),
@@ -1015,6 +932,10 @@ function plainInvoiceLineItemValidationMessage(form: PlainInvoiceForm) {
     if (!parseInvoiceAmountToCents(row.amount)) {
       return `Enter line item ${row.rowNumber} amount before previewing Create Invoice.`;
     }
+
+    if (!plainInvoiceQuantity(row.quantity)) {
+      return `Enter a quantity from 0.01 to 999 for line item ${row.rowNumber}.`;
+    }
   }
 
   return "";
@@ -1034,6 +955,7 @@ function plainInvoiceLineItemsFromForm(
         amountLabel: formatInvoiceAmount(amountCents),
         bookingReference: row.bookingReference.trim() || undefined,
         description: row.lineDescription.trim(),
+        quantity: plainInvoiceQuantity(row.quantity) || 1,
       };
     });
 
@@ -1056,6 +978,91 @@ function plainInvoiceTotalAmountCents(form: PlainInvoiceForm) {
   return plainInvoiceLineItemsFromForm(form).reduce(
     (total, item) => total + item.amountCents,
     0,
+  );
+}
+
+function plainInvoiceQuantity(value: string | number | null | undefined) {
+  const normalized = String(value ?? "").trim();
+
+  if (!/^(?:\d+|\d*\.\d{1,2})$/.test(normalized)) {
+    return null;
+  }
+
+  const quantity = Number(normalized);
+
+  return Number.isFinite(quantity) && quantity > 0 && quantity <= 999 ? quantity : null;
+}
+
+function plainInvoiceQuantityLabel(value: string | number | null | undefined) {
+  return (plainInvoiceQuantity(value) || 1).toFixed(2);
+}
+
+function plainInvoiceLineItemRateLabel(item: CustomerLocalInvoiceLineItem) {
+  const amountCents = parseInvoiceAmountToCents(item.amountLabel);
+  const quantity = plainInvoiceQuantity(item.quantity) || 1;
+
+  return amountCents ? formatInvoiceAmount(Math.round(amountCents / quantity)) : "Review required";
+}
+
+function PlainInvoiceRecipientSelector({
+  manualEmail,
+  onManualEmailChange,
+  onToggle,
+  options,
+  selectedEmails,
+}: {
+  manualEmail: string;
+  onManualEmailChange: (value: string) => void;
+  onToggle: (email: string, checked: boolean) => void;
+  options: PlainInvoiceRecipientOption[];
+  selectedEmails: string[];
+}) {
+  return (
+    <fieldset
+      className="rounded-md border border-slate-200 bg-white px-2 py-1.5"
+      data-plain-invoice-recipient-options="true"
+    >
+      <legend className="px-1 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+        Invoice recipients
+      </legend>
+      {options.length > 0 ? (
+        <div className="flex flex-wrap gap-x-3 gap-y-1">
+          {options.map((option) => {
+            const checked = selectedEmails.includes(option.email);
+            const selectionFull = selectedEmails.length >= 3;
+
+            return (
+              <label className="inline-flex min-w-0 items-center gap-1.5 text-xs font-semibold text-slate-700" key={option.email}>
+                <input
+                  checked={checked}
+                  className="h-3.5 w-3.5 rounded border-slate-400 text-slate-900"
+                  data-plain-invoice-recipient-option={option.label}
+                  disabled={!checked && selectionFull}
+                  onChange={(event) => onToggle(option.email, event.target.checked)}
+                  type="checkbox"
+                />
+                <span>{option.label}: {option.email}</span>
+              </label>
+            );
+          })}
+        </div>
+      ) : null}
+      <label className="mt-1 grid gap-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
+        {options.length > 0 ? "Other email (used when none above is checked)" : "Recipient email"}
+        <input
+          className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold normal-case tracking-normal text-slate-950 disabled:bg-slate-100"
+          data-plain-invoice-bill-to-email="true"
+          disabled={selectedEmails.length > 0}
+          inputMode="email"
+          onChange={(event) => onManualEmailChange(event.target.value)}
+          type="email"
+          value={selectedEmails.length > 0 ? selectedEmails.join(", ") : manualEmail}
+        />
+      </label>
+      <p className="mt-1 text-[10px] font-semibold text-slate-500">
+        Select up to 3. One Send click uses the same guarded invoice email.
+      </p>
+    </fieldset>
   );
 }
 
@@ -1109,10 +1116,26 @@ function plainInvoiceInitialForm(): PlainInvoiceForm {
     isPaid: false,
     lineItems: [],
     lineDescription: "",
+    quantity: "1",
+    recipientEmails: [],
     reference: plainInvoiceDefaultReference(),
     route: "",
     service: "Ad hoc service",
   };
+}
+
+function plainInvoiceRecipientEmailsFromForm(form: PlainInvoiceForm) {
+  const selected = Array.from(
+    new Set(form.recipientEmails.map((email) => email.trim().toLowerCase()).filter(Boolean)),
+  ).slice(0, 3);
+
+  if (selected.length > 0) {
+    return selected;
+  }
+
+  const manualRecipient = form.billToEmail.trim().toLowerCase();
+
+  return manualRecipient ? [manualRecipient] : [];
 }
 
 function plainInvoicePreviewKeyFromForm(form: PlainInvoiceForm) {
@@ -1123,8 +1146,9 @@ function plainInvoicePreviewKeyFromForm(form: PlainInvoiceForm) {
     includeCardPaymentNote: true,
   });
   const amountCents = plainInvoiceTotalAmountCents(form);
+  const recipientEmails = plainInvoiceRecipientEmailsFromForm(form);
   const lineItemsKey = lineItems
-    .map((item) => `${item.bookingReference || ""}:${item.amountLabel}:${item.description}`)
+    .map((item) => `${item.bookingReference || ""}:${item.quantity || 1}:${item.amountLabel}:${item.description}`)
     .join(";;");
 
   if (
@@ -1141,7 +1165,7 @@ function plainInvoicePreviewKeyFromForm(form: PlainInvoiceForm) {
   return [
     "plain-invoice",
     billToName,
-    form.billToEmail.trim(),
+    recipientEmails.join(","),
     form.crmCustomerId.trim(),
     form.crmCustomerName.trim(),
     form.bookingReference,
@@ -1169,10 +1193,11 @@ function plainInvoicePreviewFromForm(form: PlainInvoiceForm): CustomerInvoicePre
   const amountCents = plainInvoiceTotalAmountCents(form);
   const lineItems = plainInvoiceLineItemsFromForm(form, {
     includeCardPaymentNote: true,
-  }).map(({ amountLabel, bookingReference, description }) => ({
+  }).map(({ amountLabel, bookingReference, description, quantity }) => ({
     amountLabel,
     bookingReference,
     description,
+    quantity,
   }));
 
   return {
@@ -1290,6 +1315,14 @@ function customerFolderStatusToken(value: unknown) {
 
 function customerFolderExactBookingReference(booking: CustomerFolderExactBookingRecord | null | undefined) {
   return cleanCustomerFolderText(booking?.booking_reference, 160);
+}
+
+function customerFolderPublicBookingReference(
+  booking: CustomerFolderExactBookingRecord | RegularCustomerSavedBookingReadRecord | null | undefined,
+) {
+  const reference = cleanCustomerFolderText(booking?.public_booking_reference, 80).toUpperCase();
+
+  return /^(?:[A-Z][A-Z0-9]{0,19}-)?\d{5}$/.test(reference) ? reference : "";
 }
 
 function customerFolderExactBookingId(booking: CustomerFolderExactBookingRecord | null | undefined) {
@@ -1743,6 +1776,41 @@ function selectedInvoiceBookingReferences(value: string) {
         .filter((reference) => /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(reference)),
     ),
   ).slice(0, plainInvoiceMaxLineItems);
+}
+
+function selectedInvoicePriceReviews(value: string, selectedReferences: string[]) {
+  const selectedReferenceSet = new Set(selectedReferences);
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+
+    if (!Array.isArray(parsed) || parsed.length > plainInvoiceMaxLineItems) {
+      return new Map<string, number>();
+    }
+
+    return new Map(
+      parsed
+        .map((entry) => {
+          if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+            return null;
+          }
+
+          const record = entry as Record<string, unknown>;
+          const reference = String(record.booking_reference ?? "").trim();
+          const amountCents = Number(record.amount_cents);
+
+          return selectedReferenceSet.has(reference) &&
+            Number.isSafeInteger(amountCents) &&
+            amountCents > 0 &&
+            amountCents <= 100_000_000
+            ? ([reference, amountCents] as const)
+            : null;
+        })
+        .filter((entry): entry is readonly [string, number] => Boolean(entry)),
+    );
+  } catch {
+    return new Map<string, number>();
+  }
 }
 
 function customerFolderJobDispatchHref(booking: RegularCustomerSavedBookingReadRecord) {
@@ -2454,10 +2522,13 @@ export default function MockCustomerDashboardPage() {
   const customerInvoicePrepPanelRef = useRef<HTMLDivElement | null>(null);
   const plainInvoicePanelRef = useRef<HTMLDivElement | null>(null);
   const plainInvoiceCrmRequestSequenceRef = useRef(0);
+  const plainInvoiceRecipientRequestSequenceRef = useRef(0);
   const plainInvoiceSavedBookingRequestSequenceRef = useRef(0);
   const customerInvoicePrepRowKeyRef = useRef("");
   const customerFolderUrlHandoffRef = useRef("");
   const customerFolderReturnHrefRef = useRef("");
+  const [companyProfile, setCompanyProfile] =
+    useState<PublicCompanyProfile>(defaultCompanyProfile);
   const [searchTerm, setSearchTerm] = useState("");
   const [customerFolderFinderPage, setCustomerFolderFinderPage] = useState(1);
   const [customerFolderFinderSelectedId, setCustomerFolderFinderSelectedId] = useState("");
@@ -2465,6 +2536,9 @@ export default function MockCustomerDashboardPage() {
   const [plainInvoiceCrmPickerOpen, setPlainInvoiceCrmPickerOpen] = useState(false);
   const [selectedPlainInvoiceCrmFolderKey, setSelectedPlainInvoiceCrmFolderKey] = useState("");
   const [plainInvoiceCrmSearchTerm, setPlainInvoiceCrmSearchTerm] = useState("");
+  const [plainInvoiceRecipientOptions, setPlainInvoiceRecipientOptions] = useState<
+    PlainInvoiceRecipientOption[]
+  >([]);
   const [regularCustomerBookingForm, setRegularCustomerBookingForm] = useState<RegularCustomerBookingForm>(
     initialRegularCustomerBookingForm,
   );
@@ -3552,6 +3626,12 @@ export default function MockCustomerDashboardPage() {
       ? 0
       : plainInvoiceSelectedJobReviewAmountCents,
   );
+  const plainInvoiceCompanyPaymentLines = useMemo(
+    () => companyProfilePaymentSummary(companyProfile).split(/\n+/).filter(Boolean),
+    [companyProfile],
+  );
+  const [plainInvoiceCompanyPaymentHeading = "Bank Details", ...plainInvoiceCompanyPaymentDetailLines] =
+    plainInvoiceCompanyPaymentLines;
   const plainInvoiceSelectedJobReviewLines =
     plainInvoiceIssuedRecord?.lineItems ??
     plainInvoicePreview?.lineItems ??
@@ -3560,6 +3640,7 @@ export default function MockCustomerDashboardPage() {
         amount: plainInvoiceForm.amount,
         bookingReference: plainInvoiceForm.bookingReference,
         lineDescription: plainInvoiceForm.lineDescription,
+        quantity: plainInvoiceForm.quantity,
       },
       ...plainInvoiceForm.lineItems,
     ].map((item) => {
@@ -3569,6 +3650,7 @@ export default function MockCustomerDashboardPage() {
         amountLabel: amountCents ? formatInvoiceAmount(amountCents) : "Review required",
         bookingReference: item.bookingReference,
         description: item.lineDescription,
+        quantity: plainInvoiceQuantity(item.quantity) || 1,
       };
     });
   const plainInvoiceCrmPickerLabel =
@@ -3610,6 +3692,19 @@ export default function MockCustomerDashboardPage() {
     customerBillingDocumentStartIndex + customerBillingDocumentPageSize,
     issuedCustomerInvoices.length,
   );
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadInvoiceCompanyProfile() {
+      const profile = await loadPublicCompanyProfile({ signal: controller.signal });
+      setCompanyProfile(profile || defaultCompanyProfile);
+    }
+
+    void loadInvoiceCompanyProfile();
+
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -4010,6 +4105,70 @@ export default function MockCustomerDashboardPage() {
         summary: null,
         tone: "error",
       });
+    }
+  }
+
+  async function loadPlainInvoiceRecipientOptions(
+    customerName: string,
+    bookingEmails: string[] = [],
+  ) {
+    const requestId = plainInvoiceRecipientRequestSequenceRef.current + 1;
+    plainInvoiceRecipientRequestSequenceRef.current = requestId;
+    const options = new Map<string, PlainInvoiceRecipientOption>();
+
+    bookingEmails.forEach((email) => {
+      const normalizedEmail = email.trim().toLowerCase();
+      if (normalizedEmail) options.set(normalizedEmail, { email: normalizedEmail, label: "Job contact" });
+    });
+    setPlainInvoiceRecipientOptions([...options.values()]);
+
+    if (!customerName.trim()) return;
+
+    try {
+      const params = new URLSearchParams({ company_name: customerName.trim() });
+      const response = await fetch(`${adminCompanyIdentityApiPath}?${params.toString()}`, {
+        headers: { "x-prestige-admin-purpose": "admin-booking-persistence" },
+        method: "GET",
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || result?.ok !== true || !result.company) {
+        return;
+      }
+
+      if (requestId !== plainInvoiceRecipientRequestSequenceRef.current) return;
+
+      const company = result.company as Record<string, unknown>;
+      const profileEmailOptions: Array<[string, unknown]> = [
+        ["Billing email", company.billing_email],
+        ["Accounts email", company.accounts_email],
+        ["Operations email", company.operations_email],
+      ];
+
+      profileEmailOptions.forEach(([label, value]) => {
+        const normalizedEmail = typeof value === "string" ? value.trim().toLowerCase() : "";
+        if (normalizedEmail && !options.has(normalizedEmail)) {
+          options.set(normalizedEmail, { email: normalizedEmail, label });
+        }
+      });
+      setPlainInvoiceRecipientOptions([...options.values()]);
+
+      const defaultBillingEmail =
+        typeof company.billing_email === "string" ? company.billing_email.trim().toLowerCase() : "";
+
+      if (defaultBillingEmail) {
+        setPlainInvoiceForm((currentForm) =>
+          currentForm.recipientEmails.length > 0 || currentForm.billToEmail.trim()
+            ? currentForm
+            : {
+                ...currentForm,
+                billToEmail: defaultBillingEmail,
+                recipientEmails: [defaultBillingEmail],
+              },
+        );
+      }
+    } catch {
+      // Existing exact-booking or manual recipient remains available when the profile read fails safely.
     }
   }
 
@@ -4843,6 +5002,7 @@ export default function MockCustomerDashboardPage() {
     action: "edit" | "delete" | "open",
     invoiceAction = "",
     selectedBookingReferences = "",
+    selectedBookingPriceReviews = "",
   ) {
     customerFolderReturnHrefRef.current =
       action === "edit" || action === "delete" ? customerFolderHrefFor(customerId, customerName) : "";
@@ -4877,6 +5037,10 @@ export default function MockCustomerDashboardPage() {
       );
       const savedBookings = result.savedBookings;
       const requestedInvoiceReferences = selectedInvoiceBookingReferences(selectedBookingReferences);
+      const reviewedPricesByReference = selectedInvoicePriceReviews(
+        selectedBookingPriceReviews,
+        requestedInvoiceReferences,
+      );
       const targetReferences =
         invoiceAction === "create" && requestedInvoiceReferences.length > 0
           ? requestedInvoiceReferences
@@ -4896,6 +5060,9 @@ export default function MockCustomerDashboardPage() {
           !targetBookings.some(
             (booking) => safeCustomerFolderDispatchHandoffReference(booking) === reference,
           ),
+      );
+      const missingReviewedPriceReference = targetReferences.find(
+        (reference) => !reviewedPricesByReference.has(reference),
       );
 
       setCustomerFolderJobViewState({
@@ -4918,6 +5085,15 @@ export default function MockCustomerDashboardPage() {
           setPlainInvoiceSelectedJobReviewActive(true);
           setPlainInvoiceSelectedJobEditing(false);
           setPlainInvoiceIssuedRecord(null);
+
+          if (missingReviewedPriceReference) {
+            setCustomerInvoiceWorkspaceTab("statements");
+            setPlainInvoiceFeedback(
+              `Review the customer price for ${missingReviewedPriceReference} in Jobs not billed yet before adding it to the final invoice.`,
+            );
+            setPlainInvoiceFeedbackTone("error");
+            return;
+          }
         }
         const exactBookings =
           invoiceAction === "create"
@@ -4963,6 +5139,10 @@ export default function MockCustomerDashboardPage() {
             const invoiceRows = exactBookings.map((booking, index) => {
               const selectedBooking = targetBookings[index];
               const reference = customerFolderExactBookingReference(booking);
+              const publicReference =
+                customerFolderPublicBookingReference(booking) ||
+                customerFolderPublicBookingReference(selectedBooking) ||
+                "Reference unavailable";
               const service = String(booking.service_type ?? selectedBooking?.service_type ?? "").trim();
               const route =
                 String(booking.route_summary ?? "").trim() ||
@@ -4973,13 +5153,20 @@ export default function MockCustomerDashboardPage() {
                 String(booking.route_type ?? selectedBooking?.route_type ?? "").trim();
 
               return {
+                amountCents: reviewedPricesByReference.get(reference) ?? null,
                 bookingReference: reference,
-                lineDescription: [service || "Service", reference, route].filter(Boolean).join(" | "),
+                lineDescription: [service || "Service", publicReference, route]
+                  .filter(Boolean)
+                  .join(" | "),
+                publicReference,
                 route,
                 service: service || "Service",
               };
             });
             const [firstInvoiceRow, ...additionalInvoiceRows] = invoiceRows;
+            const missingPublicReference = invoiceRows.some(
+              (row) => row.publicReference === "Reference unavailable",
+            );
             const exactRecipientEmails = Array.from(
               new Set(
                 exactBookings
@@ -4988,9 +5175,11 @@ export default function MockCustomerDashboardPage() {
               ),
             );
 
-            if (mismatchedCustomer || mismatchedBooker || !firstInvoiceRow) {
+            if (mismatchedCustomer || mismatchedBooker || missingPublicReference || !firstInvoiceRow) {
               setPlainInvoiceFeedback(
-                "The selected jobs do not share the same verified customer and PA / booker. Issue and Email are blocked.",
+                missingPublicReference
+                  ? "A selected job has no saved public booking reference. Repair its five-digit reference before invoice preparation."
+                  : "The selected jobs do not share the same verified customer and PA / booker. Issue and Email are blocked.",
               );
               setPlainInvoiceFeedbackTone("error");
               return;
@@ -4998,6 +5187,9 @@ export default function MockCustomerDashboardPage() {
 
             const nextPlainInvoiceForm: PlainInvoiceForm = {
               ...plainInvoiceInitialForm(),
+              amount: firstInvoiceRow.amountCents
+                ? (firstInvoiceRow.amountCents / 100).toFixed(2)
+                : "",
               billToEmail: exactRecipientEmails.length === 1 ? exactRecipientEmails[0] : "",
               billToName: exactCustomerName,
               bookerId: exactBookerId,
@@ -5005,17 +5197,20 @@ export default function MockCustomerDashboardPage() {
               crmCustomerId: exactCustomerId,
               crmCustomerName: exactCustomerName,
               lineDescription: firstInvoiceRow.lineDescription,
+              quantity: "1",
+              recipientEmails: exactRecipientEmails,
               lineItems: additionalInvoiceRows.map((row) => ({
-                amount: "",
+                amount: row.amountCents ? (row.amountCents / 100).toFixed(2) : "",
                 bookingReference: row.bookingReference,
                 lineDescription: row.lineDescription,
+                quantity: "1",
               })),
               reference:
                 invoiceRows.length === 1
-                  ? firstInvoiceRow.bookingReference
-                  : `MULTI-${firstInvoiceRow.bookingReference}-${invoiceRows.length}`.slice(0, 160),
+                  ? firstInvoiceRow.publicReference
+                  : `MULTI-${firstInvoiceRow.publicReference}-${invoiceRows.length}`.slice(0, 160),
               route: `${invoiceRows.length} job${invoiceRows.length === 1 ? "" : "s"}: ${invoiceRows
-                .map((row) => row.bookingReference)
+                .map((row) => row.publicReference)
                 .join(", ")}`,
               service:
                 invoiceRows.length === 1
@@ -5025,6 +5220,7 @@ export default function MockCustomerDashboardPage() {
 
             setPlainInvoiceSavedBookings(targetBookings);
             setPlainInvoiceForm(nextPlainInvoiceForm);
+            void loadPlainInvoiceRecipientOptions(exactCustomerName, exactRecipientEmails);
             setPlainInvoicePreview(plainInvoicePreviewFromForm(nextPlainInvoiceForm));
 
             if (!exactBookerId) {
@@ -5039,7 +5235,7 @@ export default function MockCustomerDashboardPage() {
             }
 
             setPlainInvoiceFeedback(
-              `All ${invoiceRows.length} selected job${invoiceRows.length === 1 ? "" : "s"} loaded with one verified PA. Use Edit to enter every approved amount; Send and PDF Download stay blocked until the compact review is current.`,
+              `All ${invoiceRows.length} selected job${invoiceRows.length === 1 ? "" : "s"} loaded with one verified PA and their reviewed customer prices. Use Edit for any final adjustment; Send and PDF Download stay blocked until the compact review is current.`,
             );
             setPlainInvoiceFeedbackTone("success");
             window.setTimeout(() => {
@@ -5079,6 +5275,9 @@ export default function MockCustomerDashboardPage() {
       searchParams.get("selected_booking_references"),
       500,
     );
+    const selectedBookingPriceReviews = String(
+      searchParams.get("selected_booking_price_reviews") ?? "",
+    ).slice(0, 1000);
     const requestedAction = searchParams.get("customer_job_action");
     const invoiceAction = cleanCustomerFolderText(searchParams.get("customer_invoice_action"), 40);
     const action = requestedAction === "delete" ? "delete" : requestedAction === "edit" ? "edit" : "open";
@@ -5092,6 +5291,7 @@ export default function MockCustomerDashboardPage() {
       customerName,
       bookingReference,
       selectedBookingReferences,
+      selectedBookingPriceReviews,
       action,
       invoiceAction,
     ].join("::");
@@ -5108,6 +5308,7 @@ export default function MockCustomerDashboardPage() {
       action,
       invoiceAction,
       selectedBookingReferences,
+      selectedBookingPriceReviews,
     );
     // URL handoff runs once so normal page interactions do not reload the selected customer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -5255,7 +5456,6 @@ export default function MockCustomerDashboardPage() {
     }
 
     const rateSetup = await readAdminRateSetupForDspInvoice();
-    const settings = customerInvoiceRateSettings(rateSetup);
 
     return Promise.all(
       rows.map(async (row) => {
@@ -5275,34 +5475,17 @@ export default function MockCustomerDashboardPage() {
           );
         }
 
-        const verifiedScope = {
-          travelerId: row.travelerId,
-          companyId: row.companyId,
-        };
-        const companyRecord =
-          rateSetup.companies?.find((company) => company.id === verifiedScope.companyId) || null;
-        const travelerRecord =
-          rateSetup.travelers?.find(
-            (traveler) =>
-              traveler.id === verifiedScope.travelerId &&
-              (!verifiedScope.companyId || traveler.company_id === verifiedScope.companyId),
-          ) || null;
-        const pricing = resolvePricing(
+        const calculation = calculateCustomerDspInvoiceReview(
           {
-            bookingType: "DSP",
+            actualMinutes: Number(summary.dsp_total_minutes),
             childSeatCount: row.childSeatCount,
-            childSeatRequired: row.childSeatCount > 0,
+            companyId: row.companyId,
             extraStopCount: row.extraStopCount,
-            time: customerInvoiceSingaporePickupClock(row.pickupAt),
+            pickupAt: row.pickupAt,
+            travelerId: row.travelerId,
             vehicleType: row.vehicleType,
           },
-          companyRecord || {},
-          travelerRecord,
-          settings,
-        );
-        const calculation = calculateDspCustomerInvoiceAmountCents(
-          Number(summary.dsp_total_minutes),
-          pricing,
+          rateSetup,
         );
 
         if (!calculation) {
@@ -5320,11 +5503,11 @@ export default function MockCustomerDashboardPage() {
           amount: formatInvoiceAmount(calculation.amountCents),
           billingBreakdown:
             `${calculation.actualMinutes} actual min → ${calculation.billableHours} billable hr × ` +
-            `${formatInvoiceAmount(Math.round(calculation.hourlyRate * 100))}/hr${surchargeLabel}. ` +
-            `CRM source: ${pricing.pricingSource}.`,
+            `${formatInvoiceAmount(calculation.hourlyRateCents)}/hr${surchargeLabel}. ` +
+            `CRM source: ${calculation.customerRateSource}.`,
           invoiceLineDescription:
             `DSP ${row.dateLabel} | ${calculation.billableHours} hr @ ` +
-            `${formatInvoiceAmount(Math.round(calculation.hourlyRate * 100))}/hr | ${row.reference}`,
+            `${formatInvoiceAmount(calculation.hourlyRateCents)}/hr | ${row.reference}`,
           statusLabel: "Closeout ready / DSP actual time and CRM rate applied",
         };
       }),
@@ -5382,9 +5565,12 @@ export default function MockCustomerDashboardPage() {
       dueDateIso: invoiceDateInputDaysFromNow(7),
       isPaid: false,
       lineDescription: monthlyBillingInvoiceLineDescription(firstRow),
+      quantity: "1",
+      recipientEmails: [],
       lineItems: additionalRows.map((row) => ({
         amount: monthlyBillingInvoiceAmountInput(row),
         lineDescription: monthlyBillingInvoiceLineDescription(row),
+        quantity: "1",
       })),
       reference: monthlyBillingGroupReference(group),
       route: `${group.rows.length} job${group.rows.length === 1 ? "" : "s"}: ${referenceList.join(", ")}`,
@@ -5655,6 +5841,10 @@ export default function MockCustomerDashboardPage() {
         nextForm.cardFeeApplies = false;
       }
 
+      if (field === "billToEmail") {
+        nextForm.recipientEmails = [];
+      }
+
       if (
         field === "billToName" &&
         typeof value === "string" &&
@@ -5689,6 +5879,21 @@ export default function MockCustomerDashboardPage() {
     }
   }
 
+  function togglePlainInvoiceRecipient(email: string, checked: boolean) {
+    setPlainInvoiceForm((currentForm) => {
+      const normalizedEmail = email.trim().toLowerCase();
+      const nextRecipients = checked
+        ? Array.from(new Set([...currentForm.recipientEmails, normalizedEmail])).slice(0, 3)
+        : currentForm.recipientEmails.filter((recipient) => recipient !== normalizedEmail);
+
+      return {
+        ...currentForm,
+        billToEmail: nextRecipients[0] || "",
+        recipientEmails: nextRecipients,
+      };
+    });
+  }
+
   async function updatePlainInvoiceCrmBillingAccount(customerFolderKey: string) {
     const selectedAccount =
       plainInvoiceCrmAccountOptions.find((account) => account.customerFolderKey === customerFolderKey) || null;
@@ -5708,7 +5913,9 @@ export default function MockCustomerDashboardPage() {
       crmCustomerName: selectedAccount?.customerName || "",
       bookerId: null,
       bookingReference: "",
+      recipientEmails: [],
     }));
+    setPlainInvoiceRecipientOptions([]);
 
     setPlainInvoiceFeedback(
       selectedAccount
@@ -5719,6 +5926,8 @@ export default function MockCustomerDashboardPage() {
     setPlainInvoiceCrmPickerOpen(false);
 
     if (!selectedAccount) return;
+
+    void loadPlainInvoiceRecipientOptions(selectedAccount.customerName);
 
     try {
       const result = await readRegularCustomerSavedBookingsForTarget({
@@ -5805,6 +6014,7 @@ export default function MockCustomerDashboardPage() {
         {
           amount: "",
           lineDescription: "",
+          quantity: "1",
         },
       ],
     }));
@@ -5823,6 +6033,7 @@ export default function MockCustomerDashboardPage() {
 
   function clearPlainInvoiceForm() {
     setPlainInvoiceForm(plainInvoiceInitialForm());
+    setPlainInvoiceRecipientOptions([]);
     setPlainInvoicePreview(null);
     setPlainInvoiceSelectedJobReviewActive(false);
     setPlainInvoiceSelectedJobEditing(false);
@@ -5922,7 +6133,7 @@ export default function MockCustomerDashboardPage() {
     return {
       amountCents: plainInvoicePreview.amountCents,
       billingMonthLabel: formatInvoiceMonth(new Date()),
-      customerEmail: plainInvoiceForm.billToEmail,
+      customerEmail: plainInvoiceRecipientEmailsFromForm(plainInvoiceForm)[0] || null,
       customerId:
         plainInvoiceForm.crmCustomerId.trim() ||
         plainInvoiceCustomerId(
@@ -6088,10 +6299,10 @@ export default function MockCustomerDashboardPage() {
       return;
     }
 
-    const recipientEmail = plainInvoiceForm.billToEmail.trim();
+    const recipientEmails = plainInvoiceRecipientEmailsFromForm(plainInvoiceForm);
 
-    if (!recipientEmail) {
-      setPlainInvoiceFeedback("Enter an email address before emailing Create Invoice.");
+    if (recipientEmails.length === 0) {
+      setPlainInvoiceFeedback("Select at least one recipient email before emailing Create Invoice.");
       setPlainInvoiceFeedbackTone("error");
       document.querySelector<HTMLElement>("[data-plain-invoice-bill-to-email='true']")?.focus();
       return;
@@ -6120,7 +6331,7 @@ export default function MockCustomerDashboardPage() {
           "This creates an issued invoice number, stores the PDF, then sends the invoice email through the guarded route.",
         customerName: plainInvoicePreview.customerName,
         documentLabel: "Invoice",
-        recipientEmail,
+        recipientEmail: recipientEmails.join(", "),
         reference: plainInvoicePreview.reference,
       })
     ) {
@@ -6163,7 +6374,7 @@ export default function MockCustomerDashboardPage() {
       const emailResponse = await fetch(adminCustomerInvoiceEmailApiPath, {
         body: JSON.stringify({
           invoiceNumber: issuedInvoice.invoiceNumber,
-          recipientEmail,
+          recipientEmails,
         }),
         headers: {
           "Content-Type": "application/json",
@@ -6187,7 +6398,7 @@ export default function MockCustomerDashboardPage() {
         throw new Error(emailResult?.error || "Create Invoice email could not be sent.");
       }
 
-      setPlainInvoiceFeedback(`Create Invoice ${issuedInvoice.invoiceNumber} emailed to ${recipientEmail}.`);
+      setPlainInvoiceFeedback(`Create Invoice ${issuedInvoice.invoiceNumber} emailed to ${recipientEmails.join(", ")}.`);
       setPlainInvoiceFeedbackTone("success");
       if (!plainInvoiceSelectedJobReviewActive) {
         setPlainInvoicePreview(null);
@@ -6227,7 +6438,9 @@ export default function MockCustomerDashboardPage() {
       return;
     }
 
-    if (!plainInvoiceForm.billToEmail.trim()) {
+    const recipientEmails = plainInvoiceRecipientEmailsFromForm(plainInvoiceForm);
+
+    if (recipientEmails.length === 0) {
       setPlainInvoiceSelectedJobEditing(true);
       setPlainInvoiceFeedback("Enter the verified recipient email before sending this invoice.");
       setPlainInvoiceFeedbackTone("error");
@@ -6240,7 +6453,7 @@ export default function MockCustomerDashboardPage() {
     if (plainInvoiceIssuedRecord) {
       await handleCustomerInvoiceEmailAction(
         plainInvoiceIssuedRecord,
-        plainInvoiceForm.billToEmail.trim(),
+        recipientEmails,
       );
       return;
     }
@@ -6599,12 +6812,13 @@ export default function MockCustomerDashboardPage() {
 
   async function handleCustomerInvoiceEmailAction(
     invoice: CustomerDisplayedInvoiceRecord,
-    recipientEmailOverride = "",
+    recipientEmailOverride: string | string[] = "",
   ) {
-    const recipientEmail =
-      recipientEmailOverride.trim() || invoice.customerEmail || customerInvoiceRecipientEmail.trim();
+    const recipientEmails = Array.isArray(recipientEmailOverride)
+      ? recipientEmailOverride.map((email) => email.trim().toLowerCase()).filter(Boolean).slice(0, 3)
+      : [recipientEmailOverride.trim() || invoice.customerEmail || customerInvoiceRecipientEmail.trim()].filter(Boolean);
 
-    if (!recipientEmail) {
+    if (recipientEmails.length === 0) {
       setCustomerInvoiceIssueFeedback("Enter a customer email before sending this invoice.");
       return;
     }
@@ -6626,7 +6840,7 @@ export default function MockCustomerDashboardPage() {
         customerName: invoice.customerName,
         documentLabel,
         invoiceNumber: invoice.invoiceNumber,
-        recipientEmail,
+        recipientEmail: recipientEmails.join(", "),
         reference: invoice.reference,
       })
     ) {
@@ -6640,7 +6854,7 @@ export default function MockCustomerDashboardPage() {
       const response = await fetch(adminCustomerInvoiceEmailApiPath, {
         body: JSON.stringify({
           invoiceNumber: invoice.invoiceNumber,
-          recipientEmail,
+          recipientEmails,
         }),
         headers: {
           "Content-Type": "application/json",
@@ -6666,7 +6880,7 @@ export default function MockCustomerDashboardPage() {
         throw new Error(result?.error || "Customer invoice email");
       }
 
-      setCustomerInvoiceIssueFeedback(`${invoice.invoiceNumber} emailed to ${recipientEmail}.`);
+      setCustomerInvoiceIssueFeedback(`${invoice.invoiceNumber} emailed to ${recipientEmails.join(", ")}.`);
     } catch (error) {
       setCustomerInvoiceIssueFeedback(customerInvoiceActionFailureMessage(`${invoice.invoiceNumber} email`, error));
     } finally {
@@ -9052,7 +9266,7 @@ export default function MockCustomerDashboardPage() {
                           </dd>
                         </div>
                       </dl>
-                      <p className="mt-2 font-semibold" data-customer-invoice-preview-line="true">
+                      <p className="mt-2 whitespace-pre-wrap font-semibold" data-customer-invoice-preview-line="true">
                         {customerInvoicePreview.lineDescription}
                       </p>
                       <p className="mt-1 text-slate-700">{customerInvoicePreview.route}</p>
@@ -9170,17 +9384,13 @@ export default function MockCustomerDashboardPage() {
                         data-selected-job-invoice-editor="true"
                       >
                         <div className="grid gap-2 sm:grid-cols-2">
-                          <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
-                            Recipient email
-                            <input
-                              className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-950"
-                              data-plain-invoice-bill-to-email="true"
-                              inputMode="email"
-                              onChange={(event) => updatePlainInvoiceForm("billToEmail", event.target.value)}
-                              type="email"
-                              value={plainInvoiceForm.billToEmail}
-                            />
-                          </label>
+                          <PlainInvoiceRecipientSelector
+                            manualEmail={plainInvoiceForm.billToEmail}
+                            onManualEmailChange={(value) => updatePlainInvoiceForm("billToEmail", value)}
+                            onToggle={togglePlainInvoiceRecipient}
+                            options={plainInvoiceRecipientOptions}
+                            selectedEmails={plainInvoiceForm.recipientEmails}
+                          />
                           <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
                             Due date
                             <input
@@ -9197,19 +9407,21 @@ export default function MockCustomerDashboardPage() {
                             {
                               amount: plainInvoiceForm.amount,
                               lineDescription: plainInvoiceForm.lineDescription,
+                              quantity: plainInvoiceForm.quantity,
                             },
                             ...plainInvoiceForm.lineItems,
                           ].map((item, index) => (
                             <div
-                              className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_8rem]"
+                              className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_5rem_8rem]"
                               data-selected-job-invoice-editor-line={index + 1}
                               key={`selected-job-invoice-editor-${index + 1}`}
                             >
                               <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
                                 Item {index + 1}
-                                <input
-                                  className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-950"
+                                <textarea
+                                  className="mt-1 min-h-16 w-full resize-y rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold leading-5 text-slate-950"
                                   data-plain-invoice-line-description={index === 0 ? "true" : undefined}
+                                  maxLength={500}
                                   onChange={(event) =>
                                     index === 0
                                       ? updatePlainInvoiceForm("lineDescription", event.target.value)
@@ -9220,6 +9432,23 @@ export default function MockCustomerDashboardPage() {
                                         )
                                   }
                                   value={item.lineDescription}
+                                />
+                              </label>
+                              <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                                Qty
+                                <input
+                                  className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-950"
+                                  data-plain-invoice-quantity={index === 0 ? "true" : undefined}
+                                  inputMode="decimal"
+                                  min="0.01"
+                                  onChange={(event) =>
+                                    index === 0
+                                      ? updatePlainInvoiceForm("quantity", event.target.value)
+                                      : updatePlainInvoiceAdditionalLineItem(index - 1, "quantity", event.target.value)
+                                  }
+                                  step="0.01"
+                                  type="number"
+                                  value={item.quantity}
                                 />
                               </label>
                               <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
@@ -9239,6 +9468,43 @@ export default function MockCustomerDashboardPage() {
                               </label>
                             </div>
                           ))}
+                        </div>
+                        <div
+                          className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-2"
+                          data-selected-job-invoice-payment-options="true"
+                        >
+                          <p className="mr-1 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                            Payment options
+                          </p>
+                          <label className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700">
+                            <input
+                              checked={plainInvoiceForm.cardPaymentEnabled}
+                              className="h-3.5 w-3.5 rounded border-slate-400 text-slate-900"
+                              data-selected-job-invoice-card-payment-enabled="true"
+                              onChange={(event) =>
+                                updatePlainInvoiceForm("cardPaymentEnabled", event.target.checked)
+                              }
+                              type="checkbox"
+                            />
+                            <span>Allow card payment for this invoice</span>
+                          </label>
+                          <label
+                            className={`inline-flex items-center gap-1.5 text-xs font-bold ${
+                              plainInvoiceForm.cardPaymentEnabled ? "text-slate-700" : "text-slate-400"
+                            }`}
+                          >
+                            <input
+                              checked={plainInvoiceForm.cardFeeApplies}
+                              className="h-3.5 w-3.5 rounded border-slate-400 text-slate-900 disabled:border-slate-300"
+                              data-selected-job-invoice-card-fee-applies="true"
+                              disabled={!plainInvoiceForm.cardPaymentEnabled}
+                              onChange={(event) =>
+                                updatePlainInvoiceForm("cardFeeApplies", event.target.checked)
+                              }
+                              type="checkbox"
+                            />
+                            <span>Apply 10% card fee</span>
+                          </label>
                         </div>
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <p className="text-xs font-semibold text-slate-600">
@@ -9263,15 +9529,15 @@ export default function MockCustomerDashboardPage() {
                       <div className="flex items-start justify-between gap-4">
                         <div className="max-w-[55%]">
                           <Image
-                            alt={`${defaultCompanyProfile.company_name} logo`}
+                            alt={`${companyProfile.company_name} logo`}
                             className="h-auto w-36 object-contain object-left"
                             height={72}
-                            src={defaultCompanyProfile.logo_image_url}
+                            src={companyProfile.logo_image_url}
                             width={180}
                           />
-                          <p className="mt-2 font-bold text-slate-950">{defaultCompanyProfile.company_name}</p>
+                          <p className="mt-2 font-bold text-slate-950">{companyProfile.company_name}</p>
                           <p className="mt-0.5 max-w-xs leading-4 text-slate-600">
-                            {defaultCompanyProfile.address}
+                            {companyProfile.address}
                           </p>
                         </div>
                         <div className="text-right">
@@ -9333,9 +9599,9 @@ export default function MockCustomerDashboardPage() {
                             {plainInvoiceSelectedJobReviewLines.map((item, index) => (
                               <tr className="border-b border-slate-200 align-top" key={`${item.description}-${index}`}>
                                 <td className="px-2 py-2">{index + 1}</td>
-                                <td className="px-2 py-2 font-semibold text-slate-950">{item.description}</td>
-                                <td className="px-2 py-2 text-right">1.00</td>
-                                <td className="px-2 py-2 text-right">{item.amountLabel}</td>
+                                <td className="whitespace-pre-wrap px-2 py-2 font-semibold text-slate-950">{item.description}</td>
+                                <td className="px-2 py-2 text-right">{plainInvoiceQuantityLabel(item.quantity)}</td>
+                                <td className="px-2 py-2 text-right">{plainInvoiceLineItemRateLabel(item)}</td>
                                 <td className="px-2 py-2 text-right font-bold">{item.amountLabel}</td>
                               </tr>
                             ))}
@@ -9368,44 +9634,43 @@ export default function MockCustomerDashboardPage() {
                         </p>
                       ) : null}
 
-                      <div
-                        className="mt-6 max-w-lg text-[11px] leading-4 text-slate-600"
-                        data-selected-job-invoice-notes="true"
-                      >
-                        <p className="font-semibold text-slate-800">Notes</p>
-                        <p>Midnight surcharge: $15 applies from 11:00 PM to 6:59 AM.</p>
-                        <p>Waiting time: 15 minutes grace; airport arrivals include 60 minutes grace.</p>
-                        <p>Additional waiting time: $15 per 15-minute block.</p>
-                        <p>Hourly jobs: 15 minutes grace; 16 minutes onward counts as the next hour.</p>
-                      </div>
-
                       <div className="mt-6 max-w-lg" data-selected-job-invoice-signoff="true">
                         <p>Thank you for your business</p>
                         <p className="mt-3">Best Regards,</p>
-                        <p>Finance Team</p>
-                        <p>{defaultCompanyProfile.phone}</p>
+                        <p>{companyProfile.invoice_signoff_name}</p>
+                        <p>{companyProfile.phone}</p>
                       </div>
 
-                      <div
-                        className="mt-5 max-w-lg break-words leading-4"
+                      <details
+                        className="mt-5 max-w-lg rounded-md border border-slate-200 bg-slate-50 px-3 py-2 break-words leading-4"
                         data-selected-job-invoice-bank="true"
                       >
-                        {companyProfilePaymentSummary(defaultCompanyProfile)
-                          .split(/\n+/)
-                          .filter(Boolean)
-                          .map((line, index) => (
-                            <p className={index === 0 ? "font-bold underline" : ""} key={`${index}-${line}`}>
-                              {line}
-                            </p>
+                        <summary className="flex cursor-pointer items-center justify-between gap-3 font-bold text-slate-900">
+                          <span>{plainInvoiceCompanyPaymentHeading}</span>
+                          <span className="text-[11px] font-semibold text-slate-500">Click to view</span>
+                        </summary>
+                        <div className="mt-2 border-t border-slate-200 pt-2">
+                          {plainInvoiceCompanyPaymentDetailLines.map((line, index) => (
+                            <p key={`${index}-${line}`}>{line}</p>
                           ))}
-                      </div>
+                        </div>
+                      </details>
 
                       <div
-                        className="mt-6 max-w-3xl break-words border-t border-slate-200 pt-3 text-[11px] leading-4 text-slate-600"
-                        data-selected-job-invoice-terms="true"
+                        className="mt-6 grid gap-4 border-t border-slate-200 pt-3 text-[11px] leading-4 text-slate-600 md:grid-cols-2"
+                        data-selected-job-invoice-footer="true"
                       >
-                        <p className="font-semibold text-slate-800">Terms &amp; Conditions</p>
-                        <p>{defaultCompanyProfile.invoice_footer_terms}</p>
+                        <div data-selected-job-invoice-notes="true">
+                          <p className="font-semibold text-slate-800">Notes</p>
+                          <p>Midnight surcharge: $15 applies from 11:00 PM to 6:59 AM.</p>
+                          <p>Waiting time: 15 minutes grace; airport arrivals include 60 minutes grace.</p>
+                          <p>Additional waiting time: $15 per 15-minute block.</p>
+                          <p>Hourly jobs: 15 minutes grace; 16 minutes onward counts as the next hour.</p>
+                        </div>
+                        <div className="break-words" data-selected-job-invoice-terms="true">
+                          <p className="font-semibold text-slate-800">Terms &amp; Conditions</p>
+                          <p>{companyProfile.invoice_footer_terms}</p>
+                        </div>
                       </div>
                     </article>
 
@@ -9599,18 +9864,13 @@ export default function MockCustomerDashboardPage() {
                       value={plainInvoiceForm.billToName}
                     />
                   </label>
-                  <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
-                    Email
-                    <input
-                      className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700"
-                      data-plain-invoice-bill-to-email="true"
-                      inputMode="email"
-                      onChange={(event) => updatePlainInvoiceForm("billToEmail", event.target.value)}
-                      placeholder="optional"
-                      type="email"
-                      value={plainInvoiceForm.billToEmail}
-                    />
-                  </label>
+                  <PlainInvoiceRecipientSelector
+                    manualEmail={plainInvoiceForm.billToEmail}
+                    onManualEmailChange={(value) => updatePlainInvoiceForm("billToEmail", value)}
+                    onToggle={togglePlainInvoiceRecipient}
+                    options={plainInvoiceRecipientOptions}
+                    selectedEmails={plainInvoiceForm.recipientEmails}
+                  />
                   <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
                     Reference
                     <input
@@ -9710,19 +9970,33 @@ export default function MockCustomerDashboardPage() {
                   </div>
                   <div className="mt-2 space-y-2">
                     <div
-                      className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_8rem]"
+                      className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_5rem_8rem]"
                       data-plain-invoice-line-item-row="1"
                     >
                       <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
                         Item 1
-                        <input
-                          className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700"
+                        <textarea
+                          className="mt-1 min-h-16 w-full resize-y rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold leading-5 text-slate-950 outline-none focus:border-slate-700"
                           data-plain-invoice-line-description="true"
+                          maxLength={500}
                           onChange={(event) =>
                             updatePlainInvoiceForm("lineDescription", event.target.value)
                           }
                           placeholder="Service description printed on invoice"
                           value={plainInvoiceForm.lineDescription}
+                        />
+                      </label>
+                      <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                        Qty
+                        <input
+                          className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700"
+                          data-plain-invoice-quantity="true"
+                          inputMode="decimal"
+                          min="0.01"
+                          onChange={(event) => updatePlainInvoiceForm("quantity", event.target.value)}
+                          step="0.01"
+                          type="number"
+                          value={plainInvoiceForm.quantity}
                         />
                       </label>
                       <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
@@ -9742,15 +10016,16 @@ export default function MockCustomerDashboardPage() {
 
                       return (
                         <div
-                          className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_8rem_auto]"
+                          className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_5rem_8rem_auto]"
                           data-plain-invoice-line-item-row={rowNumber}
                           key={`plain-invoice-line-item-${rowNumber}`}
                         >
                           <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
                             Item {rowNumber}
-                            <input
-                              className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700"
+                            <textarea
+                              className="mt-1 min-h-16 w-full resize-y rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold leading-5 text-slate-950 outline-none focus:border-slate-700"
                               data-plain-invoice-extra-line-description={rowNumber}
+                              maxLength={500}
                               onChange={(event) =>
                                 updatePlainInvoiceAdditionalLineItem(
                                   index,
@@ -9760,6 +10035,21 @@ export default function MockCustomerDashboardPage() {
                               }
                               placeholder="Additional service / return trip"
                               value={item.lineDescription}
+                            />
+                          </label>
+                          <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                            Qty
+                            <input
+                              className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700"
+                              data-plain-invoice-extra-line-quantity={rowNumber}
+                              inputMode="decimal"
+                              min="0.01"
+                              onChange={(event) =>
+                                updatePlainInvoiceAdditionalLineItem(index, "quantity", event.target.value)
+                              }
+                              step="0.01"
+                              type="number"
+                              value={item.quantity}
                             />
                           </label>
                           <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">

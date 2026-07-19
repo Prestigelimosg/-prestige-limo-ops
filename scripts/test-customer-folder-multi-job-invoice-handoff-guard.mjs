@@ -89,6 +89,9 @@ for (const fragment of [
   'data-selected-job-invoice-review="true"',
   'data-selected-job-invoice-actions="true"',
   'data-selected-job-invoice-edit="true"',
+  'data-selected-job-invoice-payment-options="true"',
+  'data-selected-job-invoice-card-payment-enabled="true"',
+  'data-selected-job-invoice-card-fee-applies="true"',
   'data-selected-job-invoice-send="true"',
   'data-selected-job-invoice-pdf-download="true"',
   'data-selected-job-invoice-paper="true"',
@@ -98,6 +101,7 @@ for (const fragment of [
   'data-selected-job-invoice-signoff="true"',
   'data-selected-job-invoice-bank="true"',
   'data-selected-job-invoice-terms="true"',
+  'data-selected-job-invoice-footer="true"',
   '<summary aria-hidden="true" className="hidden">',
   "Selected jobs invoice review",
   "toggleSelectedJobInvoiceEditing",
@@ -105,6 +109,18 @@ for (const fragment of [
   "downloadSelectedJobInvoicePdf",
   "plainInvoiceIssuedRecord",
   "PDF Download",
+  "loadPublicCompanyProfile",
+  "companyProfile.invoice_signoff_name",
+  "companyProfilePaymentSummary(companyProfile)",
+  "companyProfile.invoice_footer_terms",
+  "plainInvoiceCompanyPaymentDetailLines",
+  "Click to view",
+  "Allow card payment for this invoice",
+  'data-plain-invoice-quantity="true"',
+  "plainInvoiceLineItemRateLabel(item)",
+  "plainInvoiceQuantityLabel(item.quantity)",
+  "whitespace-pre-wrap",
+  "<textarea",
 ]) {
   includes(customersPage, fragment, `multi-job invoice handoff fragment ${fragment}`);
 }
@@ -120,9 +136,20 @@ const signoffIndex = selectedReview.indexOf('data-selected-job-invoice-signoff="
 const bankIndex = selectedReview.indexOf('data-selected-job-invoice-bank="true"');
 const termsIndex = selectedReview.indexOf('data-selected-job-invoice-terms="true"');
 assert.equal(
-  notesIndex < signoffIndex && signoffIndex < bankIndex && bankIndex < termsIndex,
+  signoffIndex < bankIndex && bankIndex < notesIndex && notesIndex < termsIndex,
   true,
-  "selected-job invoice lower content must follow notes, signoff, bank, terms order",
+  "selected-job invoice lower content must follow signoff, bank, then adjacent notes and terms",
+);
+assert.equal(
+  selectedReview.includes('<details\n                        className="mt-5') &&
+    selectedReview.includes('<summary className="flex cursor-pointer'),
+  true,
+  "selected-job bank details must be a compact closed disclosure",
+);
+assert.equal(
+  selectedReview.includes("<details open"),
+  false,
+  "selected-job bank details must remain collapsed until clicked",
 );
 
 const selectedFormSetIndex = customersPage.indexOf("setPlainInvoiceForm(nextPlainInvoiceForm);");
@@ -158,7 +185,9 @@ for (const forbiddenControl of [
 
 for (const fragment of [
   "bookingReference?: string;",
+  "quantity?: number;",
   "const bookingReference = text(item.bookingReference);",
+  "const quantityValue = numberValue(item.quantity, 1);",
 ]) {
   includes(localInvoices, fragment, `stored invoice line reference fragment ${fragment}`);
 }
@@ -168,24 +197,58 @@ for (const fragment of [
   'const paymentMadeValue = paidInvoice ? `(-) ${sgdAmount}` : "SGD0.00";',
   'const balanceDueValue = paidInvoice ? "SGD0.00" : sgdAmount;',
   'const [paymentHeading = "Bank Details", ...paymentDetailLines] = paymentLines;',
-  'const notesY = 320;',
   'const signoffY = 245;',
   'const paymentY = 182;',
+  'const footerY = 88;',
   'pdfRightTextAt("Payment Made"',
   "pdfRightTextAt(balanceDueValue",
+  "companyProfile.invoice_signoff_name",
+  "companyProfile.phone",
+  'pdfRightTextAt(quantity.toFixed(2), 435, rowY, 8)',
+  "formatInvoiceAmount(Math.round(itemAmountCents / quantity))",
+  'value.replace(/\\r\\n?/g, "\\n").split("\\n")',
 ]) {
   includes(localInvoices, fragment, `status-correct shared PDF fragment ${fragment}`);
 }
 
+for (const hardcodedFragment of [
+  "companyProfilePaymentSummary(defaultCompanyProfile)",
+  "defaultCompanyProfile.invoice_footer_terms",
+]) {
+  assert.equal(
+    selectedReview.includes(hardcodedFragment),
+    false,
+    `selected-job review must not restore hardcoded footer fragment ${hardcodedFragment}`,
+  );
+}
+
+for (const hardcodedFragment of [
+  'pdfTextAt("Finance Team", 50, signoffY - 32, 8)',
+  "pdfTextAt(defaultCompanyProfile.phone, 50, signoffY - 43, 8)",
+]) {
+  assert.equal(
+    localInvoices.includes(hardcodedFragment),
+    false,
+    `shared PDF must not restore hardcoded footer fragment ${hardcodedFragment}`,
+  );
+}
+
 assert.equal(
-  localInvoices.indexOf('pdfTextAt("Notes", 50, notesY') <
-    localInvoices.indexOf('pdfTextAt("Thank you for your business", 50, signoffY'),
+  localInvoices.indexOf('pdfTextAt("Thank you for your business", 50, signoffY') <
+    localInvoices.indexOf("pdfTextAt(paymentHeading") &&
+    localInvoices.indexOf("pdfTextAt(paymentHeading") <
+      localInvoices.indexOf('pdfTextAt("Notes", 50, footerY') &&
+    localInvoices.indexOf('pdfTextAt("Notes", 50, footerY') <
+      localInvoices.indexOf('pdfTextAt("Terms & Conditions:", 310, footerY'),
   true,
-  "shared PDF must render notes before signoff",
+  "shared PDF must render signoff and bank above adjacent footer notes and terms",
 );
 
 for (const fragment of [
   "if (value.length > 4)",
+  "function safeLineItemDescription(value: unknown)",
+  "function safeLineItemQuantity(value: unknown)",
+  "const quantity = safeLineItemQuantity(record.quantity);",
   "function uniqueInvoiceBookingReferences",
   "function verifyIssuedInvoiceBookingOwnership",
   'bookingReferences.includes("ADM-20260712063110")',

@@ -107,6 +107,7 @@ const adminFullDriverProfileRuntimeWriteActionApiPath =
 const adminSavedBookingsApiPath = "/api/admin-saved-bookings";
 const adminBookingsApiPath = "/api/admin-bookings";
 const adminLoadBookingsListLimit = "100";
+const adminUpcomingBookingsPageSize = 20;
 const adminMonitorableBookingListScope = "monitorable";
 const adminMonitorableBookingMaxPages = 100;
 const dispatchHandoffReferenceQueryParam = "booking_reference";
@@ -7257,6 +7258,22 @@ function bookingRecordPickupDateTimeMs(bookingRecord: BookingRecord) {
   );
 }
 
+function sortBookingPickupEarliestFirst(
+  firstBooking: BookingRecord,
+  secondBooking: BookingRecord,
+) {
+  const firstPickupTimeMs =
+    bookingRecordPickupDateTimeMs(firstBooking) ?? Number.POSITIVE_INFINITY;
+  const secondPickupTimeMs =
+    bookingRecordPickupDateTimeMs(secondBooking) ?? Number.POSITIVE_INFINITY;
+
+  if (firstPickupTimeMs !== secondPickupTimeMs) {
+    return firstPickupTimeMs - secondPickupTimeMs;
+  }
+
+  return bookingRecordStableKey(firstBooking).localeCompare(bookingRecordStableKey(secondBooking));
+}
+
 function bookingRecordIsPickupWithinNextHours(
   bookingRecord: BookingRecord,
   currentTimeMs: number,
@@ -13044,7 +13061,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const driverCompletedBookingStatusSyncRequestedRef = useRef<Set<string>>(new Set());
   const [bookingsSearchTerm, setBookingsSearchTerm] = useState("");
   const [bookingsSelectedDate, setBookingsSelectedDate] = useState(() => toDateKey(new Date()));
-  const [bookingsShowAllDates, setBookingsShowAllDates] = useState(true);
+  const [bookingsShowUpcoming, setBookingsShowUpcoming] = useState(true);
+  const [bookingsUpcomingPage, setBookingsUpcomingPage] = useState(1);
   const [completedSearchTerm, setCompletedSearchTerm] = useState("");
   const [completedMonthFilter, setCompletedMonthFilter] = useState("");
   const [driverSearchTerm, setDriverSearchTerm] = useState("");
@@ -16911,14 +16929,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         .filter((bookingRecord) => !bookingRecordBelongsInCompletedHistoryWithDriverReport(bookingRecord))
         .filter(
           (bookingRecord) =>
-            bookingsShowAllDates || getBookingDateKey(bookingRecord) === bookingsSelectedDate,
+            bookingsShowUpcoming || getBookingDateKey(bookingRecord) === bookingsSelectedDate,
         )
         .filter((bookingRecord) => bookingMatchesLocalSearch(bookingRecord, bookingsSearchTerm)),
     [
       bookingRecordBelongsInCompletedHistoryWithDriverReport,
       bookingsSearchTerm,
       bookingsSelectedDate,
-      bookingsShowAllDates,
+      bookingsShowUpcoming,
       operationalBookings,
     ],
   );
@@ -16972,7 +16990,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   );
   const hasBookingsSearch = Boolean(clean(bookingsSearchTerm));
   const selectedBookingsDateLabel = formatDateWithWeekday(bookingsSelectedDate);
-  const bookingsDateScopeLabel = bookingsShowAllDates ? "all active dates" : selectedBookingsDateLabel;
+  const bookingsDateScopeLabel = bookingsShowUpcoming ? "upcoming active jobs" : selectedBookingsDateLabel;
   const hasCompletedSearch = Boolean(clean(completedSearchTerm));
   const loadedBookingIds = new Set(operationalBookings.map((bookingRecord) => bookingRecordStableKey(bookingRecord)));
   const completedBookingIds = new Set(completedBookings.map((bookingRecord) => bookingRecordStableKey(bookingRecord)));
@@ -17161,8 +17179,29 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     newBookingRequestNotificationCount +
     standaloneUrgentBookingRequestDisplayItems.length +
     customerBookingChangeRequestCount;
-  const filteredRecentBookingDisplayItems =
-    buildLoadBookingsOperationalDisplayItems(filteredRecentBookings, { useTypedOperationalOrder: true });
+  const filteredRecentBookingDisplayItems = buildLoadBookingsOperationalDisplayItems(
+    filteredRecentBookings,
+    { useTypedOperationalOrder: true },
+  ).sort((firstItem, secondItem) =>
+    sortBookingPickupEarliestFirst(firstItem.bookingRecord, secondItem.bookingRecord),
+  );
+  const bookingsUpcomingPageCount = Math.max(
+    1,
+    Math.ceil(filteredRecentBookingDisplayItems.length / adminUpcomingBookingsPageSize),
+  );
+  const bookingsUpcomingCurrentPage = Math.min(bookingsUpcomingPage, bookingsUpcomingPageCount);
+  const bookingsUpcomingPageStartIndex =
+    (bookingsUpcomingCurrentPage - 1) * adminUpcomingBookingsPageSize;
+  const visibleRecentBookingDisplayItems = filteredRecentBookingDisplayItems.slice(
+    bookingsUpcomingPageStartIndex,
+    bookingsUpcomingPageStartIndex + adminUpcomingBookingsPageSize,
+  );
+  const bookingsUpcomingVisibleStart =
+    filteredRecentBookingDisplayItems.length > 0 ? bookingsUpcomingPageStartIndex + 1 : 0;
+  const bookingsUpcomingVisibleEnd = Math.min(
+    bookingsUpcomingPageStartIndex + adminUpcomingBookingsPageSize,
+    filteredRecentBookingDisplayItems.length,
+  );
   const bookingGoogleCalendarStatusPayloadSignature = JSON.stringify(
     operationalBookings.map(buildSavedBookingCalendarEventPayload),
   );
@@ -23867,25 +23906,29 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           </p>
         </div>
         <p className="text-xs font-medium text-slate-500" data-bookings-loaded-filter-summary="true">
-          Showing {filteredRecentBookings.length} of {operationalBookings.length} loaded for {bookingsDateScopeLabel}.
+          Showing {bookingsUpcomingVisibleStart}-{bookingsUpcomingVisibleEnd} of{" "}
+          {filteredRecentBookingDisplayItems.length} for {bookingsDateScopeLabel}.
         </p>
       </div>
       <div className="mt-3 overflow-x-auto rounded-md border border-stone-200 bg-white p-2">
         <div className="flex min-w-[56rem] items-center gap-2">
-        <button
-          aria-pressed={bookingsShowAllDates}
-          className={`h-10 shrink-0 rounded-md border px-3 text-sm font-semibold transition ${
-            bookingsShowAllDates
-              ? "border-slate-950 bg-slate-950 text-white hover:bg-slate-800"
-              : "border-slate-300 bg-white text-slate-800 hover:bg-slate-50"
-          }`}
-          data-bookings-all-dates="true"
-          onClick={() => setBookingsShowAllDates(true)}
-          type="button"
-        >
-          All dates
-        </button>
-        <label className="flex w-44 shrink-0 items-center gap-2 rounded-md border border-stone-300 bg-white px-2">
+          <button
+            aria-pressed={bookingsShowUpcoming}
+            className={`h-10 shrink-0 rounded-md border px-3 text-sm font-semibold transition ${
+              bookingsShowUpcoming
+                ? "border-slate-950 bg-slate-950 text-white hover:bg-slate-800"
+                : "border-slate-300 bg-white text-slate-800 hover:bg-slate-50"
+            }`}
+            data-bookings-upcoming="true"
+            onClick={() => {
+              setBookingsShowUpcoming(true);
+              setBookingsUpcomingPage(1);
+            }}
+            type="button"
+          >
+            Upcoming
+          </button>
+          <label className="flex w-44 shrink-0 items-center gap-2 rounded-md border border-stone-300 bg-white px-2">
           <span className="text-xs font-semibold uppercase text-slate-500">Date</span>
           <span className="sr-only">Booking date</span>
           <input
@@ -23895,72 +23938,82 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               const nextDate = clean(event.target.value);
               if (nextDate) {
                 setBookingsSelectedDate(nextDate);
-                setBookingsShowAllDates(false);
+                setBookingsShowUpcoming(false);
+                setBookingsUpcomingPage(1);
               }
             }}
             type="date"
             value={bookingsSelectedDate}
           />
-        </label>
-        <button
+          </label>
+          <button
           className="h-10 shrink-0 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
           data-bookings-prev-day="true"
           onClick={() => {
             setBookingsSelectedDate((currentDate) => shiftDateKey(currentDate, -1));
-            setBookingsShowAllDates(false);
+            setBookingsShowUpcoming(false);
+            setBookingsUpcomingPage(1);
           }}
           type="button"
         >
           Prev Day
-        </button>
-        <div
+          </button>
+          <div
           className="h-10 w-44 shrink-0 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-center text-sm font-semibold text-slate-950"
           data-bookings-selected-date-label="true"
         >
           {selectedBookingsDateLabel}
-        </div>
-        <button
+          </div>
+          <button
           className="h-10 shrink-0 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
           data-bookings-next-day="true"
           onClick={() => {
             setBookingsSelectedDate((currentDate) => shiftDateKey(currentDate, 1));
-            setBookingsShowAllDates(false);
+            setBookingsShowUpcoming(false);
+            setBookingsUpcomingPage(1);
           }}
           type="button"
         >
           Next Day
-        </button>
-        <button
+          </button>
+          <button
           className="h-10 shrink-0 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
           data-bookings-today="true"
           onClick={() => {
             setBookingsSelectedDate(todayKey);
-            setBookingsShowAllDates(false);
+            setBookingsShowUpcoming(false);
+            setBookingsUpcomingPage(1);
           }}
           type="button"
         >
           Today
-        </button>
-        <label className="relative min-w-72 flex-1">
+          </button>
+          <label className="relative min-w-72 flex-1">
           <span className="sr-only">Quick search loaded jobs</span>
           <input
             className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
             data-bookings-search-input="true"
-            onChange={(event) => setBookingsSearchTerm(event.target.value)}
+            onChange={(event) => {
+              setBookingsSearchTerm(event.target.value);
+              setBookingsUpcomingPage(1);
+            }}
             placeholder="Quick search loaded jobs: ref, passenger, flight, route, driver"
             type="search"
             value={bookingsSearchTerm}
           />
-        </label>
-        {hasBookingsSearch ? (
-          <button
-            className="h-10 shrink-0 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-            onClick={() => setBookingsSearchTerm("")}
-            type="button"
-          >
-            Clear
-          </button>
-        ) : null}
+          </label>
+          {hasBookingsSearch ? (
+            <button
+              className="h-10 shrink-0 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              onClick={() => {
+                setBookingsSearchTerm("");
+                setBookingsUpcomingPage(1);
+              }}
+              type="button"
+            >
+              Clear
+            </button>
+          ) : null}
         </div>
       </div>
     </div>
@@ -23997,8 +24050,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         </p>
       ) : null}
       {filteredRecentBookings.length > 0 ? (
-      <div className="mt-3 max-h-[34rem] space-y-2 overflow-auto" data-current-upcoming-bookings-list="true">
-        {filteredRecentBookingDisplayItems.map(({ bookingRecord: savedBooking, operationalCard }, bookingIndex) => {
+        <>
+          <div className="mt-3 max-h-[34rem] space-y-2 overflow-auto" data-current-upcoming-bookings-list="true">
+        {visibleRecentBookingDisplayItems.map(({ bookingRecord: savedBooking, operationalCard }, bookingIndex) => {
           const routePoints = getRoutePoints(savedBooking);
           const pickup = operationalCard.pickup_address || routePoints[0] || "Pickup";
           const dropoff =
@@ -24091,7 +24145,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                           {getLoadBookingsOperationalDisplayTitle(operationalCard)}
                         </AdminOperationalUppercaseValue>
                       </span>
-                      <span className="block truncate text-xs text-slate-500">
+                      <span className="block truncate text-sm font-bold text-slate-900">
                         {pickupMetaText}
                       </span>
                     </span>
@@ -24264,7 +24318,45 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             </article>
           );
         })}
-      </div>
+          </div>
+          <div
+            className="mt-3 flex flex-col gap-2 rounded-md border border-stone-200 bg-white px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+            data-bookings-upcoming-pagination="true"
+          >
+        <p
+          className="text-sm font-bold text-slate-900"
+          data-bookings-upcoming-page-summary="true"
+        >
+          Page {bookingsUpcomingCurrentPage} of {bookingsUpcomingPageCount} · 20 jobs per page
+        </p>
+        <div className="grid grid-cols-2 gap-2 sm:w-64">
+          <button
+            className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition enabled:hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            data-bookings-upcoming-previous-page="true"
+            disabled={bookingsUpcomingCurrentPage <= 1}
+            onClick={() =>
+              setBookingsUpcomingPage(Math.max(1, bookingsUpcomingCurrentPage - 1))
+            }
+            type="button"
+          >
+            Previous
+          </button>
+          <button
+            className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition enabled:hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            data-bookings-upcoming-next-page="true"
+            disabled={bookingsUpcomingCurrentPage >= bookingsUpcomingPageCount}
+            onClick={() =>
+              setBookingsUpcomingPage(
+                Math.min(bookingsUpcomingPageCount, bookingsUpcomingCurrentPage + 1),
+              )
+            }
+            type="button"
+          >
+            Next
+          </button>
+        </div>
+          </div>
+        </>
       ) : (
         <div
           className="mt-3 rounded-md border border-dashed border-stone-300 bg-white p-4 text-center text-sm text-slate-500"

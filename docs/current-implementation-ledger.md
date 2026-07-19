@@ -1,16 +1,25 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-ebf72eee Fix traveller invoice prefix identity scope
+7c2a97a7 Consolidate invoice reminder payment actions
 
 Latest pushed main/staging runtime checkpoint:
-ea5780da Wire temporary customer invoice pricing
+1e80b1dd Fix customer job public reference display
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
 bc0b49ec Merge pull request #56 from Prestigelimosg/codex/restore-current-workflow-guards
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Admin Bookings Upcoming Pickup Order And Pagination (2026-07-19)
+
+- The existing Admin Bookings `All dates` control is renamed `Upcoming` in place. It continues to use the established active-booking filter, selected-date controls, saved-booking read, typed safe-display merge, and complete monitorable-job coverage; no second booking list, page, panel, route, or read lane is added.
+- Active booking cards are ordered by their scheduled pickup timestamp, earliest first, after the existing safe typed-display merge. The typed display data remains authoritative for safe card fields, but its underlying created-time order no longer overrides the operator's scheduled-pickup view. Missing or malformed pickup timestamps remain visible at the end instead of being assigned a guessed time.
+- The existing Bookings list is paginated in browser memory at 20 jobs per page. Upcoming, selected-date, and search filters reset to page one, while compact Previous/Next controls remain inside the same Bookings panel. The server's latest-record read, monitorable pagination, 10,000-job safety ceiling, and merge behavior are unchanged.
+- Scheduled pickup date and time are bold on the existing admin booking row. This does not alter stored timestamps, Singapore formatting, customer/driver display, Google Calendar behavior, or the separate Completed / History newest-first archive order.
+- No booking read, monitor pagination, API route, database query, booking writer, status writer, card, panel, or table is added or duplicated. No booking, customer, driver, invoice, payment, payout, message, provider, Calendar event, GPS record, environment value, Supabase configuration, or live record is changed by the presentation-only repair.
+- Focused protection remains `scripts/test-bookings-earlier-history-compact-guard.mjs`, registered in `scripts/test-preactivation-verification-suite.mjs`; the existing operational-mapping and alternating-card guards now follow the same visible paginated card array. Runtime acceptance must confirm the existing Bookings panel shows earliest pickup first, no more than 20 rows, working page controls, and bold SGT pickup text.
 
 ### Consolidated Invoice Reminder And Payment Confirmation Lane (2026-07-19)
 
@@ -4874,7 +4883,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Checkpoint state must be recorded by commit hash and task name, not counters.
 - The top latest verified clean runtime checkpoint may be ahead of the latest pushed main/staging runtime checkpoint while tested application commits remain local; each line must record its own actual commit hash and task name.
 - The verified local checkpoint is checked against the newest `HEAD` commit touching the established application, server, database, or runtime-configuration paths, so a newer local runtime change cannot remain hidden behind an older checkpoint.
-- The latest pushed main/staging runtime checkpoint is checked against the newest runtime commit on the closest local `origin/main` or `origin/staging` tracking ref that is an ancestor of `HEAD`, and the guard fails instead of crossing unrelated branch lineages, treating a later docs-only commit as a runtime checkpoint, or accepting one hard-coded historical checkpoint.
+- The latest pushed main/staging runtime checkpoint is checked against the newest runtime commit on the closest local `origin/main` or `origin/staging` tracking ref whose runtime commit is an ancestor of `HEAD`; a later merge-only or docs-only tracking tip does not falsely exclude the runtime lineage already incorporated by the working branch.
 - The top latest remote main/staging deployment checkpoint must remain recorded as the most recent verified deployed reference on the current pushed branch lineage by exact commit hash and task name; its newest reachable runtime commit must not be ahead of the pushed runtime checkpoint.
 - The protected combined-automation Preview pushed docs-only evidence commit `4a318f14 Record combined automation Preview evidence` after runtime commit `5c0f6392 Automate monthly invoice draft preparation`; the guard now validates those separate facts without forcing either checkpoint to carry a false title or hash.
 - At this checkpoint repair, local verified application commit `dffad548 Keep request review on Dashboard` is ahead of pushed and deployed `f7e253b3 Repair mobile automation regression coverage`; no push or deployment is included in this docs/test-only pass.

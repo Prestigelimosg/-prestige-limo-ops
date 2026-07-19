@@ -76,16 +76,27 @@ function assertAncestor(ancestor, descendant, label) {
 function trackedPushedRefForHead() {
   const candidates = ["refs/remotes/origin/main", "refs/remotes/origin/staging"]
     .map((ref) => {
-      const ancestor = spawnSync("git", ["merge-base", "--is-ancestor", ref, "HEAD"]);
+      const runtimeCommit = readLatestRuntimeCommit(
+        ref,
+        `Latest runtime commit reachable from ${ref}`,
+      );
+      const ancestor = spawnSync("git", [
+        "merge-base",
+        "--is-ancestor",
+        runtimeCommit.fullHash,
+        "HEAD",
+      ]);
 
       if (ancestor.status !== 0) {
         return null;
       }
 
       const distance = Number(
-        execFileSync("git", ["rev-list", "--count", `${ref}..HEAD`], {
-          encoding: "utf8",
-        }).trim(),
+        execFileSync(
+          "git",
+          ["rev-list", "--count", `${runtimeCommit.fullHash}..HEAD`],
+          { encoding: "utf8" },
+        ).trim(),
       );
 
       return { distance, ref };
@@ -95,7 +106,7 @@ function trackedPushedRefForHead() {
 
   assert.ok(
     candidates.length > 0,
-    "HEAD must descend from the local origin/main or origin/staging tracking ref.",
+    "HEAD must descend from the latest runtime commit on local origin/main or origin/staging.",
   );
 
   return candidates[0].ref;
@@ -242,7 +253,7 @@ for (const phrase of [
   "Checkpoint state must be recorded by commit hash and task name, not counters.",
   "The top latest verified clean runtime checkpoint may be ahead of the latest pushed main/staging runtime checkpoint while tested application commits remain local; each line must record its own actual commit hash and task name.",
   "The verified local checkpoint is checked against the newest `HEAD` commit touching the established application, server, database, or runtime-configuration paths, so a newer local runtime change cannot remain hidden behind an older checkpoint.",
-  "The latest pushed main/staging runtime checkpoint is checked against the newest runtime commit on the closest local `origin/main` or `origin/staging` tracking ref that is an ancestor of `HEAD`, and the guard fails instead of crossing unrelated branch lineages, treating a later docs-only commit as a runtime checkpoint, or accepting one hard-coded historical checkpoint.",
+  "The latest pushed main/staging runtime checkpoint is checked against the newest runtime commit on the closest local `origin/main` or `origin/staging` tracking ref whose runtime commit is an ancestor of `HEAD`; a later merge-only or docs-only tracking tip does not falsely exclude the runtime lineage already incorporated by the working branch.",
   "The top latest remote main/staging deployment checkpoint must remain recorded as the most recent verified deployed reference on the current pushed branch lineage by exact commit hash and task name; its newest reachable runtime commit must not be ahead of the pushed runtime checkpoint.",
   "The protected combined-automation Preview pushed docs-only evidence commit `4a318f14 Record combined automation Preview evidence` after runtime commit `5c0f6392 Automate monthly invoice draft preparation`; the guard now validates those separate facts without forcing either checkpoint to carry a false title or hash.",
   "No inconsistent checkpoint counters are approved.",

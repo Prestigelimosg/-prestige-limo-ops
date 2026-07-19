@@ -70,6 +70,10 @@ const guardChecks = [
     script: "scripts/test-customer-invoice-multi-recipient-email-guard.mjs",
   },
   {
+    label: "customer invoice reminder and payment action guard",
+    script: "scripts/test-customer-invoice-reminder-payment-actions-guard.mjs",
+  },
+  {
     label: "business-grade forward completion sequence guard",
     script: "scripts/test-business-grade-forward-completion-sequence.mjs",
   },

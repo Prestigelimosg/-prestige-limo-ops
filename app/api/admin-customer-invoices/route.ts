@@ -34,9 +34,7 @@ async function readJsonBody(request: Request): Promise<Record<string, unknown>> 
   try {
     const body = await request.json();
 
-    return body !== null && typeof body === "object" && !Array.isArray(body)
-      ? (body as Record<string, unknown>)
-      : {};
+    return body !== null && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
   } catch {
     return {};
   }
@@ -74,6 +72,7 @@ export async function POST(request: Request) {
       return safeErrorResponse(boundary);
     }
 
+    // prettier-ignore
     const result = await createCustomerInvoiceRecord(await readJsonBody(request), boundary.actor);
 
     if (!result.ok) {
@@ -104,7 +103,10 @@ export async function PATCH(request: Request) {
       ? await archiveAdminCustomerTestInvoiceArtifact(body, boundary.actor)
       : await updateAdminCustomerInvoiceStatus(
           body?.invoiceNumber,
-          body?.status,
+          {
+            paymentMethod: body?.paymentMethod,
+            status: body?.status,
+          },
           boundary.actor,
         );
 

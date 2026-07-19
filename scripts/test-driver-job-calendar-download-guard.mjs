@@ -1,142 +1,186 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const helperPath = "lib/driver-job-calendar-event.ts";
-const persistencePath = "lib/driver-job-status-persistence.ts";
+const eventHelperPath = "lib/driver-job-calendar-event.ts";
+const googleHelperPath = "lib/driver-google-calendar.ts";
+const persistencePath = "lib/admin-driver-job-link-persistence.ts";
 const routePath = "app/api/driver-job/[token]/calendar/route.ts";
+const callbackPath = "app/api/driver-google-calendar-oauth/callback/route.ts";
 const pagePath = "app/driver-job/[token]/page.tsx";
+const migrationPath = "supabase/migrations/20260719214500_driver_google_calendar_connection.sql";
 const ledgerPath = "docs/current-implementation-ledger.md";
 const suitePath = "scripts/test-preactivation-verification-suite.mjs";
 const guardPath = "scripts/test-driver-job-calendar-download-guard.mjs";
-const browserGuardPath = "scripts/test-driver-job-page-browser.mjs";
 
-const [helper, persistence, route, page, ledger, suite, browserGuard] = await Promise.all([
-  readFile(helperPath, "utf8"),
-  readFile(persistencePath, "utf8"),
-  readFile(routePath, "utf8"),
-  readFile(pagePath, "utf8"),
-  readFile(ledgerPath, "utf8"),
-  readFile(suitePath, "utf8"),
-  readFile(browserGuardPath, "utf8"),
-]);
+const [eventHelper, googleHelper, persistence, route, callback, page, migration, ledger, suite] =
+  await Promise.all([
+    readFile(eventHelperPath, "utf8"),
+    readFile(googleHelperPath, "utf8"),
+    readFile(persistencePath, "utf8"),
+    readFile(routePath, "utf8"),
+    readFile(callbackPath, "utf8"),
+    readFile(pagePath, "utf8"),
+    readFile(migrationPath, "utf8"),
+    readFile(ledgerPath, "utf8"),
+    readFile(suitePath, "utf8"),
+  ]);
 
 for (const fragment of [
-  "buildDriverJobCalendarDownload",
-  "calendarSequenceFromUpdatedAt",
-  "payload.scheduleUpdatedAt",
-  'timezone: "Asia/Singapore"',
-  '"TRIGGER:-PT1H"',
-  "UID:",
-  "SEQUENCE:",
-  "BEGIN:VCALENDAR",
-  "BEGIN:VALARM",
-  "driverJobUrl",
+  "buildDriverJobGoogleCalendarEvent",
+  'timeZone: "Asia/Singapore"',
+  'title: "Open Driver Job"',
+  'prestigeSource: "prestige_limo_ops_driver_job"',
+  'overrides: [{ method: "popup", minutes: 60 }]',
+  "prestige-driver:${driverId}:booking:${reference}",
   "Open Driver Job:",
   "Private driver link - do not share this calendar event.",
-  "URL:",
 ]) {
-  assert.equal(helper.includes(fragment), true, `Driver calendar helper must include ${fragment}.`);
+  assert.equal(eventHelper.includes(fragment), true, `Driver event helper must include ${fragment}.`);
 }
 
 assert.doesNotMatch(
-  helper,
+  eventHelper,
   /MIDNIGHT JOB|23:30|buildMidnightCalendarDisplayAdjustment/,
-  "Driver calendar must use the actual pickup time, not the admin midnight display adjustment.",
+  "Driver Google event must keep the actual pickup time, not the admin midnight adjustment.",
 );
 assert.doesNotMatch(
-  helper,
-  /customer_price|billing|invoice|payment|paynow|payout|finance|internal_admin_note|parser_debug|mock_archive|raw_token|token_hash/i,
-  "Driver calendar helper must not include forbidden driver fields or internal token fields.",
+  eventHelper,
+  /BEGIN:VCALENDAR|text\/calendar|buildDriverJobCalendarDownload|\.ics\b/,
+  "Retired driver ICS creation must not remain as a second calendar path.",
+);
+assert.doesNotMatch(
+  eventHelper,
+  /customer_price|billing|invoice|payment|paynow|payout|finance|internal_admin_note|parser_debug|mock_archive|token_hash/i,
+  "Driver Google event must exclude driver-forbidden and internal fields.",
 );
 
 for (const fragment of [
-  "loadCurrentSafeBookingSchedule",
+  'driverGoogleCalendarScope = "https://www.googleapis.com/auth/calendar.events"',
+  'access_type", "offline"',
+  'code_challenge_method", "S256"',
+  'include_granted_scopes", "true"',
+  "aes-256-gcm",
+  "timingSafeEqual",
+  'from("driver_google_calendar_connections")',
+  'from("driver_job_links")',
   'from("bookings")',
-  'eq("booking_reference", link.booking_reference)',
-  "currentSafeSchedule || safePayloadRecordFromLink(link)",
+  '.select("driver_id")',
+  "currentDriverId !== driverId",
+  'calendars/primary/events/${encodeURIComponent(context.event.event.id)}?sendUpdates=none',
+  'google_calendar_event_id: context.event.event.id',
+  'google_calendar_revision: context.event.revision',
+  'request(eventPath, "PUT")',
+  '"POST",',
 ]) {
-  assert.equal(persistence.includes(fragment), true, `Driver payload persistence must include ${fragment}.`);
-}
-
-for (const fragment of [
-  "getProductionDriverJobPayloadForToken",
-  "getDriverJobPayloadForTokenContract",
-  "buildDriverJobCalendarDownload",
-  '"content-type": "text/calendar; charset=utf-8"',
-  '"cache-control": "private, no-store, max-age=0"',
-  '"content-disposition"',
-  '`inline; filename="${calendar.filename}"`',
-  "payloadResult.payload.acknowledged",
-  "Acknowledge this Driver Job before adding it to a calendar.",
-  "request.url",
-  "encodeURIComponent(token)",
-]) {
-  assert.equal(route.includes(fragment), true, `Driver calendar route must include ${fragment}.`);
+  assert.equal(googleHelper.includes(fragment), true, `Driver Google helper must include ${fragment}.`);
 }
 
 assert.doesNotMatch(
-  route,
-  /SUPABASE|service_role|admin-bookings|admin-saved-bookings|customer_price|billing|invoice|payment|paynow|payout/i,
-  "Driver calendar route must stay on the established token-safe payload boundary.",
+  googleHelper,
+  /auth\/calendar(?!\.events)|userinfo\.email|openid|gmail|attendees|sendUpdates=(?:all|externalOnly)/i,
+  "Driver OAuth must use calendar.events only, without identity/email scopes, attendees, or guest sends.",
 );
+
+for (const envName of [
+  "PRESTIGE_DRIVER_GOOGLE_CALENDAR_SYNC_ENABLED",
+  "PRESTIGE_DRIVER_GOOGLE_OAUTH_CLIENT_ID",
+  "PRESTIGE_DRIVER_GOOGLE_OAUTH_CLIENT_SECRET",
+  "PRESTIGE_DRIVER_GOOGLE_OAUTH_REDIRECT_URI",
+  "PRESTIGE_DRIVER_GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY",
+]) {
+  assert.equal(googleHelper.includes(envName), true, `Driver Google helper must require ${envName}.`);
+}
+
+for (const fragment of [
+  'from("bookings")',
+  '.select("driver_id")',
+  "booking_reference: input.booking_reference",
+  "Number.isSafeInteger(verifiedDriverId)",
+  "driver_id:",
+]) {
+  assert.equal(persistence.includes(fragment), true, `Existing link issuer must bind verified driver identity with ${fragment}.`);
+}
+
+for (const fragment of [
+  "readDriverGoogleCalendarStatus",
+  "saveOrAuthorizeDriverGoogleCalendar",
+  "export async function GET",
+  "export async function POST",
+  "isProductionDriverJobLinkMode",
+  'reason: "not_configured"',
+  '"cache-control": "private, no-store, max-age=0"',
+  "driverGoogleCalendarOauthCookieName",
+  "google_consent_url: result.authorization_url",
+  "httpOnly: true",
+  'sameSite: "lax"',
+]) {
+  assert.equal(route.includes(fragment), true, `Existing calendar route must include ${fragment}.`);
+}
+assert.doesNotMatch(route, /text\/calendar|content-disposition|\.ics|buildDriverJobCalendarDownload/);
+
+for (const fragment of [
+  "completeDriverGoogleCalendarOauth",
+  "driverGoogleCalendarOauthCookieName",
+  'searchParams.get("state")',
+  'searchParams.get("code")',
+  "cookieStore.delete",
+  'searchParams.set("calendar", result.ok ? "saved" : "error")',
+  "Response.redirect",
+]) {
+  assert.equal(callback.includes(fragment), true, `OAuth callback must include ${fragment}.`);
+}
 
 for (const fragment of [
   'data-driver-job-calendar-action="true"',
   'data-driver-job-calendar-source="current-driver-job-schedule"',
-  "function openDriverCalendarImport(calendarUrl: string)",
-  'anchor.dataset.driverJobCalendarImport = "true"',
-  "function openDriverJobCalendar()",
-  'openDriverCalendarImport(`/api/driver-job/${encodeURIComponent(token)}/calendar`)',
-  "onClick={openDriverJobCalendar}",
-  'type="button"',
+  'data-driver-job-calendar-saved="true"',
+  'fetch(`/api/driver-job/${encodeURIComponent(token)}/calendar`',
+  'method: "POST"',
+  "safeGoogleConsentUrl",
+  'url.hostname === "accounts.google.com"',
+  "window.location.assign(googleConsentUrl)",
+  "Calendar saved",
   "Add / Update Calendar",
-  "private Open Driver Job shortcut",
-  "Tap Add or Save",
-  "use this same action again to update",
-  "Do not share the calendar event",
-  "/calendar",
+  "no file download",
+  "Open Driver Job for OTW, OTS, POB and",
 ]) {
   assert.equal(page.includes(fragment), true, `Driver Job page must include ${fragment}.`);
 }
-
-for (const forbiddenFragment of [
-  "downloadDriverCalendarBlob",
-  "downloadDriverJobCalendar",
+for (const forbidden of [
+  "openDriverCalendarImport",
+  "document.createElement(\"a\")",
   "window.URL.createObjectURL",
-  ".download = filename",
-  'fetch(`/api/driver-job/${encodeURIComponent(token)}/calendar`',
+  ".download =",
+  "text/calendar",
+  ".ics",
 ]) {
-  assert.equal(
-    page.includes(forbiddenFragment),
-    false,
-    `Driver calendar import must not retain forced-download behavior: ${forbiddenFragment}.`,
-  );
+  assert.equal(page.includes(forbidden), false, `Driver page must not retain download behavior: ${forbidden}.`);
 }
 
 for (const fragment of [
-  "const openDriverJobCalendarImport = async () =>",
-  'document.querySelector("[data-driver-job-calendar-action=\'true\']")',
-  "window.__driverJobCalendarImports",
-  "acknowledged Driver Job calendar import handoff",
+  "add column if not exists driver_id bigint references public.drivers(id)",
+  "create table if not exists public.driver_google_calendar_connections",
+  "booking.booking_reference = link.booking_reference",
+  "booking.driver_id is not null",
+  "encrypted_refresh_token text not null",
+  "enable row level security",
+  "revoke all on table public.driver_google_calendar_connections from anon, authenticated",
+  "to service_role",
 ]) {
-  assert.equal(
-    browserGuard.includes(fragment),
-    true,
-    `Driver calendar browser guard must include ${fragment}.`,
-  );
+  assert.equal(migration.includes(fragment), true, `Driver Google migration must include ${fragment}.`);
 }
+assert.doesNotMatch(migration, /grant .* to (?:anon|authenticated)/i);
 
 assert.equal(
-  ledger.includes("### Driver Job Calendar Add And Amendment Update"),
+  ledger.includes("### Driver Personal Google Calendar Connection"),
   true,
-  "Implementation ledger must record the driver calendar workflow.",
+  "Ledger must record the exact in-place Google Calendar repair.",
 );
-assert.equal(suite.includes(guardPath), true, "Preactivation suite must register the driver calendar guard.");
+assert.equal(suite.includes(guardPath), true, "Preactivation suite must keep the focused calendar guard.");
 
-const { buildDriverJobCalendarDownload } = await import("../lib/driver-job-calendar-event.ts");
-
+const { buildDriverJobGoogleCalendarEvent } = await import("../lib/driver-job-calendar-event.ts");
 const calendarJobUrl = "https://ops.example/driver-job/safe-calendar-token";
-const initial = buildDriverJobCalendarDownload({
+const payload = {
   acknowledged: true,
   assignedDriver: { contact: "", name: "Safe Driver", plate: "SLV1234X", vehicleModel: "V Class" },
   bookingType: "MNG",
@@ -155,115 +199,33 @@ const initial = buildDriverJobCalendarDownload({
   statusHistory: [],
   statusLabel: "Assigned",
   waypoints: [],
-}, calendarJobUrl);
-
+};
+const initial = buildDriverJobGoogleCalendarEvent(payload, 27, calendarJobUrl);
 assert.equal(initial.ok, true);
-assert.match(initial.ics, /DTSTART;TZID=Asia\/Singapore:20260715T003000/);
-assert.match(initial.ics, /DTEND;TZID=Asia\/Singapore:20260715T020000/);
-assert.match(initial.ics, /TRIGGER:-PT1H/);
-assert.match(initial.ics, /UID:driver-job-ADM-20260715003000@prestige-limo-ops/);
-assert.match(initial.ics, /SEQUENCE:[1-9][0-9]*/);
-const unfoldedInitialIcs = initial.ics.replace(/\r\n /g, "");
-assert.match(unfoldedInitialIcs, new RegExp(`URL:${calendarJobUrl}`));
-assert.match(unfoldedInitialIcs, new RegExp(`Open Driver Job: ${calendarJobUrl}`));
-assert.match(unfoldedInitialIcs, /Private driver link - do not share this calendar event\./);
-assert.equal(
-  initial.ics.split("\r\n").find((line) => line.startsWith("SUMMARY:"))?.includes("safe-calendar-token"),
-  false,
-  "Driver Job token must not appear in the calendar title.",
-);
-assert.doesNotMatch(initial.ics, /23:30|customer_price|billing|invoice|payment|paynow|payout/i);
+assert.equal(initial.event.start.dateTime, "2026-07-15T00:30:00+08:00");
+assert.equal(initial.event.end.dateTime, "2026-07-15T02:00:00+08:00");
+assert.equal(initial.event.location, "Changi Airport Terminal 3");
+assert.equal(initial.event.source.url, calendarJobUrl);
+assert.equal(initial.event.reminders.overrides[0].minutes, 60);
+assert.equal(initial.event.summary.includes("safe-calendar-token"), false);
+assert.doesNotMatch(JSON.stringify(initial.event), /customer_price|billing|invoice|payment|paynow|payout/i);
 
-const unsafeShortcut = buildDriverJobCalendarDownload(initial.payload, "javascript:alert(1)");
-assert.equal(unsafeShortcut.ok, false, "Calendar helper must reject an unsafe Driver Job URL.");
-
-const amended = buildDriverJobCalendarDownload({
-  ...initial.payload,
-  pickupDate: "2026-07-15",
+const amended = buildDriverJobGoogleCalendarEvent({
+  ...payload,
   pickupDateTime: "15 Jul 2026, 01:00",
   pickupTime: "0100hrs",
-  scheduleUpdatedAt: "2026-07-13T02:56:44.000Z",
-}, calendarJobUrl);
-
+  pickupLocation: "Changi Airport Terminal 2",
+}, 27, calendarJobUrl);
 assert.equal(amended.ok, true);
-assert.match(amended.ics, /DTSTART;TZID=Asia\/Singapore:20260715T010000/);
-assert.match(amended.ics, /UID:driver-job-ADM-20260715003000@prestige-limo-ops/);
-assert.match(amended.ics, /SEQUENCE:[1-9][0-9]*/);
-assert.equal(amended.sequence > initial.sequence, true, "Amended calendar sequence must increase.");
+assert.equal(amended.event.id, initial.event.id, "Amendment must keep one stable Google event ID.");
+assert.notEqual(amended.revision, initial.revision, "Amendment must require a new event revision.");
+assert.equal(amended.event.start.dateTime, "2026-07-15T01:00:00+08:00");
+assert.equal(amended.event.location, "Changi Airport Terminal 2");
 
-const originalMode = process.env.DRIVER_JOB_LINK_MODE;
-const originalPublicMode = process.env.NEXT_PUBLIC_DRIVER_JOB_LINK_MODE;
-const originalProductionGate = process.env.PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED;
-process.env.DRIVER_JOB_LINK_MODE = "mock";
-process.env.NEXT_PUBLIC_DRIVER_JOB_LINK_MODE = "mock";
-process.env.PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED = "false";
+const otherDriver = buildDriverJobGoogleCalendarEvent(payload, 28, calendarJobUrl);
+assert.equal(otherDriver.ok, true);
+assert.notEqual(otherDriver.event.id, initial.event.id, "Different verified drivers must not share event identity.");
+assert.equal(buildDriverJobGoogleCalendarEvent(payload, 0, calendarJobUrl).ok, false);
+assert.equal(buildDriverJobGoogleCalendarEvent(payload, 27, "javascript:alert(1)").ok, false);
 
-try {
-  const [{ GET }, driverJobRoute, { mockDriverJobTokens }] = await Promise.all([
-    import("../app/api/driver-job/[token]/calendar/route.ts"),
-    import("../app/api/driver-job/[token]/route.ts"),
-    import("../lib/driver-job-link-mock-store.ts"),
-  ]);
-  const context = (token) => ({ params: Promise.resolve({ token }) });
-  const beforeAck = await GET(
-    new Request(`http://localhost/api/driver-job/${mockDriverJobTokens.validA}/calendar`),
-    context(mockDriverJobTokens.validA),
-  );
-
-  assert.equal(beforeAck.status, 409);
-
-  const acknowledged = await driverJobRoute.PATCH(
-    new Request(`http://localhost/api/driver-job/${mockDriverJobTokens.validA}`, {
-      body: JSON.stringify({ driver_name: "Safe Calendar Driver" }),
-      headers: { "content-type": "application/json" },
-      method: "PATCH",
-    }),
-    context(mockDriverJobTokens.validA),
-  );
-  assert.equal(acknowledged.status, 200);
-
-  const response = await GET(
-    new Request(`http://localhost/api/driver-job/${mockDriverJobTokens.validA}/calendar`),
-    context(mockDriverJobTokens.validA),
-  );
-  const routeIcs = await response.text();
-
-  assert.equal(response.status, 200);
-  assert.equal(response.headers.get("content-type"), "text/calendar; charset=utf-8");
-  assert.equal(response.headers.get("cache-control"), "private, no-store, max-age=0");
-  assert.match(response.headers.get("content-disposition") || "", /inline; filename=/);
-  assert.match(routeIcs, /BEGIN:VCALENDAR/);
-  assert.match(routeIcs, /TRIGGER:-PT1H/);
-  const unfoldedRouteIcs = routeIcs.replace(/\r\n /g, "");
-  const expectedJobUrl = `http://localhost/driver-job/${mockDriverJobTokens.validA}`;
-  assert.equal(unfoldedRouteIcs.includes(`URL:${expectedJobUrl}`), true);
-  assert.equal(unfoldedRouteIcs.includes(`Open Driver Job: ${expectedJobUrl}`), true);
-  assert.match(unfoldedRouteIcs, /Private driver link - do not share this calendar event\./);
-
-  const unauthorized = await GET(
-    new Request("http://localhost/api/driver-job/not-a-valid-token/calendar"),
-    context("not-a-valid-token"),
-  );
-  assert.equal(unauthorized.status, 401);
-
-  const revoked = await GET(
-    new Request(`http://localhost/api/driver-job/${mockDriverJobTokens.revoked}/calendar`),
-    context(mockDriverJobTokens.revoked),
-  );
-  assert.equal(revoked.status, 403);
-
-  const expired = await GET(
-    new Request(`http://localhost/api/driver-job/${mockDriverJobTokens.expired}/calendar`),
-    context(mockDriverJobTokens.expired),
-  );
-  assert.equal(expired.status, 410);
-} finally {
-  if (originalMode === undefined) delete process.env.DRIVER_JOB_LINK_MODE;
-  else process.env.DRIVER_JOB_LINK_MODE = originalMode;
-  if (originalPublicMode === undefined) delete process.env.NEXT_PUBLIC_DRIVER_JOB_LINK_MODE;
-  else process.env.NEXT_PUBLIC_DRIVER_JOB_LINK_MODE = originalPublicMode;
-  if (originalProductionGate === undefined) delete process.env.PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED;
-  else process.env.PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED = originalProductionGate;
-}
-
-console.log("Driver Job calendar import/update guard passed");
+console.log("Driver Job personal Google Calendar guard passed");

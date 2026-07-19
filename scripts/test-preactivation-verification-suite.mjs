@@ -847,7 +847,7 @@ const guardChecks = [
     script: "scripts/test-driver-in-app-notification-admin-button-guard.mjs",
   },
   {
-    label: "Driver Job calendar download guard",
+    label: "Driver Job personal Google Calendar guard",
     script: "scripts/test-driver-job-calendar-download-guard.mjs",
   },
   {

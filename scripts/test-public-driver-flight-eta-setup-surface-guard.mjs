@@ -299,8 +299,8 @@ for (const fragment of [
 }
 assertIncludes(
   driverPage,
-  'openDriverCalendarImport(`/api/driver-job/${encodeURIComponent(token)}/calendar`)',
-  "public driver page approved same-origin calendar import handoff",
+  'const response = await fetch(`/api/driver-job/${encodeURIComponent(token)}/calendar`',
+  "public driver page approved same-origin Google Calendar action",
 );
 
 console.log("Public driver Flight ETA setup surface guard passed");

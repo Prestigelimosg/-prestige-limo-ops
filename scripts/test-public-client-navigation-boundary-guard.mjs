@@ -105,11 +105,11 @@ const ledgerSection = sectionBetween(ledger, "### Public Client Navigation Bound
 
 for (const phrase of [
   "Public customer/driver client navigation is guarded across `/book`, `/my-bookings`, `/driver-job/[token]`, and the driver job demo page.",
-  "This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.",
+  "This navigation guard remains default-deny. The later owner-approved Driver Personal Google Calendar lane adds only one bounded source-level exception; it does not approve deployment, Production migration/env configuration, or a live provider write without the separate activation approval recorded in that lane.",
   "`/book` may keep only the existing internal customer portal link to `/my-bookings`.",
   "`/my-bookings` may keep only the existing internal New Booking Request link to `/book`.",
-  "`/driver-job/[token]` and the driver job demo page must not add public outbound links, deep links, app-store/native-app links, admin links, or session-issue links.",
-  "Public client pages must not call `window.open`, imperative navigation helpers, `mailto:`, `tel:`, SMS/WhatsApp deep links, external HTTP URLs, `/api/admin*`, `/api/customer-portal-sessions`, or `/api/admin-saved-bookings`.",
+  "`/driver-job/[token]` may use exactly one imperative navigation only after its existing token-scoped calendar POST returns a URL validated as HTTPS host `accounts.google.com` and path `/o/oauth2/v2/auth`; the driver job demo page has no such exception.",
+  "Public client pages must not otherwise call `window.open`, imperative navigation helpers, `mailto:`, `tel:`, SMS/WhatsApp deep links, external HTTP URLs, `/api/admin*`, `/api/customer-portal-sessions`, or `/api/admin-saved-bookings`. The Google exception cannot accept another host, protocol, path, raw anchor, app deep link, admin link, or session-issue link.",
   "`/my-bookings` may read `window.location.search` only through the bounded owned-booking/tracking deep-link parser; this read-only query inspection is not navigation and must not permit location assignment, redirect, external URL, token, or unowned booking access.",
   "Public navigation contracts must continue coordinating the public route source privacy guard, public API client caller guard, and customer booking page API audit in the preactivation suite.",
   "No Save Booking + CRM change.",
@@ -160,7 +160,30 @@ assertExcludes(
   "/my-bookings must not restore the internal booking-reference query",
 );
 
-for (const [path, source] of publicPagePaths.map((path) => [path, files[path]])) {
+const driverJobPage = files["app/driver-job/[token]/page.tsx"];
+for (const fragment of [
+  'url.protocol === "https:"',
+  'url.hostname === "accounts.google.com"',
+  'url.pathname === "/o/oauth2/v2/auth"',
+  "window.location.assign(googleConsentUrl)",
+]) {
+  assertIncludes(driverJobPage, fragment, `Driver Google consent navigation ${fragment}`);
+}
+assert.equal(
+  countOccurrences(driverJobPage, "window.location.assign(googleConsentUrl)"),
+  1,
+  "Driver Job page must have exactly one bounded Google consent navigation",
+);
+const driverJobPageWithoutGoogleConsent = driverJobPage
+  .replace('url.protocol === "https:"', "")
+  .replace('url.hostname === "accounts.google.com"', "")
+  .replace('url.pathname === "/o/oauth2/v2/auth"', "")
+  .replace("window.location.assign(googleConsentUrl)", "");
+
+for (const [path, sourceValue] of publicPagePaths.map((path) => [path, files[path]])) {
+  const source = path === "app/driver-job/[token]/page.tsx"
+    ? driverJobPageWithoutGoogleConsent
+    : sourceValue;
   assertExcludes(source, /<a\b/i, `${path} raw anchor tags`);
   assertExcludes(source, /\btarget=/i, `${path} target attribute`);
   assertExcludes(source, forbiddenNavigationPattern, `${path} imperative navigation`);

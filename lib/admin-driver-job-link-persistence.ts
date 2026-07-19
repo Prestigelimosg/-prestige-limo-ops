@@ -111,7 +111,7 @@ const maxReadLimit = 100;
 const maxReadPage = 1000;
 const maxTtlHours = defaultDriverJobLinkTtlHours;
 const driverJobLinkSelect =
-  "id, booking_reference, link_status, issued_at, expires_at, revoked_at, source_surface, actor_role, actor_label, safe_link_context, created_at, updated_at";
+  "id, booking_reference, driver_id, link_status, issued_at, expires_at, revoked_at, source_surface, actor_role, actor_label, safe_link_context, created_at, updated_at";
 const disabledDriverJobLinkError =
   "Admin driver job link persistence is not enabled on this server.";
 const safeDriverJobLinkConfigError =
@@ -889,10 +889,26 @@ export async function createAdminDriverJobLink(
   const tokenHash = hashDriverJobLinkToken(token);
   const now = new Date();
   const expiresAt = getDriverJobLinkExpiresAt(now, input.ttl_hours);
+  const { data: bookingData, error: bookingError } = await clientResult.data
+    .from("bookings")
+    .select("driver_id")
+    .eq("booking_reference", input.booking_reference)
+    .maybeSingle();
+  const bookingRecord = asRecord(bookingData);
+  const verifiedDriverId = Number(bookingRecord.driver_id);
+
+  if (bookingError) {
+    return safeAdapterFailure(safeDriverJobLinkCreateError, 500, bookingError);
+  }
+
   const payload = {
     actor_label: actor.actor_label,
     actor_role: actor.actor_role,
     booking_reference: input.booking_reference,
+    driver_id:
+      Number.isSafeInteger(verifiedDriverId) && verifiedDriverId > 0
+        ? verifiedDriverId
+        : null,
     expires_at: expiresAt.toISOString(),
     issued_at: now.toISOString(),
     link_status: "active",

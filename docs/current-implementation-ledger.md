@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-43c2bc29 Keep saved Calendar badges green
+c0f8a2e9 Open driver jobs in phone calendar
 
 Latest pushed main/staging runtime checkpoint:
 1e80b1dd Fix customer job public reference display
@@ -11,6 +11,18 @@ bc0b49ec Merge pull request #56 from Prestigelimosg/codex/restore-current-workfl
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Driver Personal Google Calendar Connection (2026-07-19)
+
+- The owner-approved driver workflow repairs the existing acknowledged Driver Job `Add / Update Calendar` action in place. The page no longer navigates to or downloads an `.ics` response. It calls the same token-scoped calendar route, which either starts a bounded Google OAuth consent on first use or upserts the latest safe job schedule into that driver's primary Google Calendar.
+- The existing private Driver Job page remains the only reporting surface. Each Google event contains the same private `Open Driver Job` URL in its description and Google event source shortcut, so opening it returns to the established OTW, OTS, POB and Job Completed controls and their existing status writer. No second reporting page, status route, job link, acknowledgement lane, booking writer, or status table is added.
+- Personal Calendar authorization is bound only to a verified `drivers.id`. New Driver Job links persist the exact saved booking's server-read `driver_id`; typed names, phone numbers, plates, token payload labels, and driver-entered acknowledgement details are never used as identity. Calendar access fails closed if the link lacks that verified identity or the saved booking is later assigned to a different driver.
+- Google OAuth uses the minimum `calendar.events` scope, offline access, PKCE, encrypted/expiring state, an HttpOnly SameSite=Lax callback cookie, and a fixed configured callback URI. Refresh tokens are encrypted server-side with AES-256-GCM before server-only persistence. The credential table has RLS enabled, revokes anonymous/authenticated access, and grants no browser read/write path.
+- Google event identity is deterministic from verified driver ID plus booking reference. The established current Driver Job safe schedule builds one 90-minute Singapore-time event with pickup location, route/flight safe details, a one-hour popup reminder, no attendee, and `sendUpdates=none`. A changed pickup date, time, route, location, service, or flight changes the stored safe revision while keeping the same provider event ID, so the next existing action updates rather than duplicates the event.
+- The Driver Job card keeps exactly one calendar action. A green `Calendar saved` badge appears after the stored event revision matches the current safe job; an amendment changes it to `Update needed` until the driver uses the same action again. No `.ics`, blob URL, object URL, forced attachment, Driver Companion, Apple/iCloud write, Outlook write, external message, guest/customer email, booking mutation, payment, invoice, payout, PayNow, live-location, OTS/photo, or reporting mutation is part of this calendar action.
+- Source remains default-closed pending separate owner approval to apply `supabase/migrations/20260719214500_driver_google_calendar_connection.sql`, configure the Google OAuth web client/callback, add the named encrypted Vercel values, deploy, and perform one bounded real driver-account event proof. No Production Supabase schema, Google Cloud setting, Vercel environment, calendar, booking, driver status, or external contact is changed by the source pass alone.
+- Signed-in owner Chrome acceptance on the exact local source opened the established mock Driver Job, used its existing acknowledgement action, and showed exactly one `Add / Update Calendar` control. The closed gate returned `Google Calendar is not ready for this job. Contact dispatch.` on the same page, with zero anchors, zero download anchors, zero `Calendar saved` badges, one each of OTW/OTS/POB/Job Completed, and zero Chrome console errors. This changed only the in-memory mock acknowledgement, which was reset to `acknowledged: false` afterward; it did not open Google consent, download an ICS file, write an event, apply the migration, change Production data/configuration, or mutate a real status.
+- Focused protection remains in the established `scripts/test-driver-job-calendar-download-guard.mjs` file (legacy filename), registered in the preactivation suite, alongside the Driver Job browser/privacy guards and the separate admin service-account Calendar guard.
 
 ### Calendar Saved Refresh And Draft Badge Cleanup (2026-07-19)
 
@@ -3842,11 +3854,11 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Public Client Navigation Boundary Guard Lock
 - Public customer/driver client navigation is guarded across `/book`, `/my-bookings`, `/driver-job/[token]`, and the driver job demo page.
-- This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.
+- This navigation guard remains default-deny. The later owner-approved Driver Personal Google Calendar lane adds only one bounded source-level exception; it does not approve deployment, Production migration/env configuration, or a live provider write without the separate activation approval recorded in that lane.
 - `/book` may keep only the existing internal customer portal link to `/my-bookings`.
 - `/my-bookings` may keep only the existing internal New Booking Request link to `/book`.
-- `/driver-job/[token]` and the driver job demo page must not add public outbound links, deep links, app-store/native-app links, admin links, or session-issue links.
-- Public client pages must not call `window.open`, imperative navigation helpers, `mailto:`, `tel:`, SMS/WhatsApp deep links, external HTTP URLs, `/api/admin*`, `/api/customer-portal-sessions`, or `/api/admin-saved-bookings`.
+- `/driver-job/[token]` may use exactly one imperative navigation only after its existing token-scoped calendar POST returns a URL validated as HTTPS host `accounts.google.com` and path `/o/oauth2/v2/auth`; the driver job demo page has no such exception.
+- Public client pages must not otherwise call `window.open`, imperative navigation helpers, `mailto:`, `tel:`, SMS/WhatsApp deep links, external HTTP URLs, `/api/admin*`, `/api/customer-portal-sessions`, or `/api/admin-saved-bookings`. The Google exception cannot accept another host, protocol, path, raw anchor, app deep link, admin link, or session-issue link.
 - `/my-bookings` may read `window.location.search` only through the bounded owned-booking/tracking deep-link parser; this read-only query inspection is not navigation and must not permit location assignment, redirect, external URL, token, or unowned booking access.
 - Public navigation contracts must continue coordinating the public route source privacy guard, public API client caller guard, and customer booking page API audit in the preactivation suite.
 - No Save Booking + CRM change.

@@ -244,6 +244,12 @@ class MockSupabaseClient {
     this.operations = [];
     this.selectHistory = [];
     this.tables = {
+      bookings: [
+        { booking_reference: "JOB-LINK-CONTRACT-001", driver_id: 27 },
+        { booking_reference: "JOB-LINK-CONTRACT-OPTIONAL-DRIVER", driver_id: null },
+        { booking_reference: "JOB-LINK-CONTRACT-BROWSER-DASHBOARD", driver_id: 28 },
+        { booking_reference: "May 2026 / JOB-UBS-042", driver_id: 29 },
+      ],
       driver_live_location_runtime_settings: [],
       driver_job_links: [],
     };
@@ -623,6 +629,11 @@ try {
   assert.equal(createdClients[1].url, supabaseUrlSentinel);
   assert.equal(createdClients[1].serviceRoleKey, serviceRoleSentinel);
   assert.equal(client.tables.driver_job_links.length, 1);
+  assert.equal(
+    client.tables.driver_job_links[0].driver_id,
+    27,
+    "Driver Job link must bind the exact saved booking's verified driver ID server-side.",
+  );
   assert.equal(client.tables.driver_live_location_runtime_settings.length, 1);
   assert.equal(
     client.tables.driver_live_location_runtime_settings[0].setting_name,

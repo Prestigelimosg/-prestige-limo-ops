@@ -576,10 +576,10 @@ assertIncludes(
   "`/api/driver-job/${encodeURIComponent(token)}/notifications?limit=5&page=1`",
   "driver page safe notification GET caller",
 );
-assert.equal(countOccurrences(files[driverPagePath], "fetch("), 10, "driver page fetch count must not grow beyond approved callers");
+assert.equal(countOccurrences(files[driverPagePath], "fetch("), 12, "driver page fetch count must not grow beyond approved callers");
 assert.equal(
   countOccurrences(files[driverPagePath], 'cache: "no-store"'),
-  8,
+  10,
   "driver page no-store fetch count must match existing safe callers",
 );
 assertIncludes(
@@ -604,8 +604,8 @@ assertIncludes(
 );
 assertIncludes(
   files[driverPagePath],
-  'openDriverCalendarImport(`/api/driver-job/${encodeURIComponent(token)}/calendar`)',
-  "driver page approved token-scoped calendar import handoff",
+  'const response = await fetch(`/api/driver-job/${encodeURIComponent(token)}/calendar`',
+  "driver page approved token-scoped Google Calendar action",
 );
 assertIncludes(
   files[driverPagePath],

@@ -1,77 +1,92 @@
-import { buildDriverJobCalendarDownload } from "../../../../../lib/driver-job-calendar-event.ts";
-import { getDriverJobPayloadForTokenContract } from "../../../../../lib/driver-job-link-contract.ts";
+import { cookies } from "next/headers";
+
 import {
-  mockDriverJobBookingsById,
-  mockDriverJobLinks,
-} from "../../../../../lib/driver-job-link-mock-store.ts";
+  driverGoogleCalendarOauthCookieName,
+  driverGoogleCalendarVersion,
+  readDriverGoogleCalendarStatus,
+  saveOrAuthorizeDriverGoogleCalendar,
+} from "../../../../../lib/driver-google-calendar.ts";
 import { isProductionDriverJobLinkMode } from "../../../../../lib/driver-job-link-mode.ts";
-import { getProductionDriverJobPayloadForToken } from "../../../../../lib/driver-job-link-production.ts";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 type DriverJobCalendarRouteContext = {
-  params: Promise<{
-    token: string;
-  }>;
+  params: Promise<{ token: string }>;
 };
 
-const blockedStatusByReason = {
-  expired: 410,
-  not_configured: 503,
-  revoked: 403,
-  unauthorized: 401,
-} as const;
+function safeError(result: { reason: string; status: number }) {
+  return Response.json({
+    error: "Google Calendar is unavailable for this Driver Job.",
+    ok: false,
+    reason: result.reason,
+    version: driverGoogleCalendarVersion,
+  }, {
+    headers: { "cache-control": "private, no-store, max-age=0" },
+    status: result.status,
+  });
+}
 
-export async function GET(request: Request, context: DriverJobCalendarRouteContext) {
+export async function GET(_request: Request, context: DriverJobCalendarRouteContext) {
+  if (!isProductionDriverJobLinkMode()) {
+    return safeError({ reason: "not_configured", status: 503 });
+  }
+
   const { token } = await context.params;
-  const payloadResult = isProductionDriverJobLinkMode()
-    ? await getProductionDriverJobPayloadForToken(token)
-    : getDriverJobPayloadForTokenContract({
-        bookingsById: mockDriverJobBookingsById,
-        links: mockDriverJobLinks,
-        token,
-      });
+  const result = await readDriverGoogleCalendarStatus(token);
 
-  if (!payloadResult.ok) {
-    return Response.json(
-      {
-        error: "Driver calendar is unavailable for this job link.",
-        ok: false,
-      },
-      { status: blockedStatusByReason[payloadResult.reason] },
-    );
+  if (!result.ok) return safeError(result);
+  if (result.action !== "status") {
+    return safeError({ reason: "not_configured", status: 503 });
   }
 
-  if (!payloadResult.payload.acknowledged) {
-    return Response.json(
-      {
-        error: "Acknowledge this Driver Job before adding it to a calendar.",
-        ok: false,
-      },
-      { status: 409 },
-    );
+  return Response.json({
+    connected: result.connected,
+    ok: true,
+    status: result.status,
+    version: driverGoogleCalendarVersion,
+  }, {
+    headers: { "cache-control": "private, no-store, max-age=0" },
+  });
+}
+
+export async function POST(_request: Request, context: DriverJobCalendarRouteContext) {
+  if (!isProductionDriverJobLinkMode()) {
+    return safeError({ reason: "not_configured", status: 503 });
   }
 
-  const driverJobUrl = new URL(`/driver-job/${encodeURIComponent(token)}`, request.url).toString();
-  const calendar = buildDriverJobCalendarDownload(payloadResult.payload, driverJobUrl);
+  const { token } = await context.params;
+  const result = await saveOrAuthorizeDriverGoogleCalendar(token);
 
-  if (!calendar.ok) {
-    return Response.json(
-      {
-        error: calendar.error,
-        ok: false,
-      },
-      { status: calendar.status },
-    );
+  if (!result.ok) return safeError(result);
+
+  if (result.action === "authorize") {
+    const cookieStore = await cookies();
+    cookieStore.set(driverGoogleCalendarOauthCookieName, result.cookie_value, {
+      httpOnly: true,
+      maxAge: 10 * 60,
+      path: "/api/driver-google-calendar-oauth/callback",
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production",
+    });
+
+    return Response.json({
+      action: result.action,
+      google_consent_url: result.authorization_url,
+      ok: true,
+      status: result.status,
+      version: driverGoogleCalendarVersion,
+    }, {
+      headers: { "cache-control": "private, no-store, max-age=0" },
+    });
   }
 
-  return new Response(calendar.ics, {
-    headers: {
-      "cache-control": "private, no-store, max-age=0",
-      "content-disposition": `inline; filename="${calendar.filename}"`,
-      "content-type": "text/calendar; charset=utf-8",
-      "x-content-type-options": "nosniff",
-    },
-    status: 200,
+  return Response.json({
+    action: result.action,
+    ok: true,
+    status: result.status,
+    version: driverGoogleCalendarVersion,
+  }, {
+    headers: { "cache-control": "private, no-store, max-age=0" },
   });
 }

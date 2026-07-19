@@ -1,6 +1,6 @@
-import type { SafeDriverJobPayload } from "./driver-job-link.ts";
+import { createHash } from "node:crypto";
 
-export const driverJobCalendarEventVersion = "driver-job-calendar-v1";
+import type { SafeDriverJobPayload } from "./driver-job-link.ts";
 
 type CalendarParts = {
   day: number;
@@ -10,14 +10,41 @@ type CalendarParts = {
   year: number;
 };
 
-type DriverJobCalendarDownloadResult =
+export type DriverJobGoogleCalendarEvent = {
+  description: string;
+  end: {
+    dateTime: string;
+    timeZone: "Asia/Singapore";
+  };
+  extendedProperties: {
+    private: {
+      prestigeBookingReference: string;
+      prestigeDriverId: string;
+      prestigeSource: "prestige_limo_ops_driver_job";
+    };
+  };
+  id: string;
+  location: string;
+  reminders: {
+    overrides: [{ method: "popup"; minutes: 60 }];
+    useDefault: false;
+  };
+  source: {
+    title: "Open Driver Job";
+    url: string;
+  };
+  start: {
+    dateTime: string;
+    timeZone: "Asia/Singapore";
+  };
+  summary: string;
+};
+
+type DriverJobGoogleCalendarEventResult =
   | {
-      filename: string;
-      ics: string;
+      event: DriverJobGoogleCalendarEvent;
       ok: true;
-      payload: SafeDriverJobPayload;
-      sequence: number;
-      timezone: "Asia/Singapore";
+      revision: string;
     }
   | {
       error: string;
@@ -43,18 +70,6 @@ const monthIndexByName: Record<string, number> = {
 
 function clean(value: unknown) {
   return typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
-}
-
-function safeSlug(value: string) {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80) || "assigned-job";
-}
-
-function safeUidReference(value: string) {
-  return value.replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 100);
 }
 
 function parseDate(value: string): Pick<CalendarParts, "day" | "month" | "year"> | null {
@@ -126,20 +141,8 @@ function pad(value: number) {
   return String(value).padStart(2, "0");
 }
 
-function formatLocal(value: CalendarParts) {
-  return `${value.year}${pad(value.month)}${pad(value.day)}T${pad(value.hour)}${pad(value.minute)}00`;
-}
-
-function formatUtc(value: Date) {
-  return value.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
-}
-
-function escapeIcs(value: string) {
-  return value
-    .replace(/\\/g, "\\\\")
-    .replace(/\r?\n/g, "\\n")
-    .replace(/,/g, "\\,")
-    .replace(/;/g, "\\;");
+function formatGoogleLocal(value: CalendarParts) {
+  return `${value.year}-${pad(value.month)}-${pad(value.day)}T${pad(value.hour)}:${pad(value.minute)}:00+08:00`;
 }
 
 function safeDriverJobUrl(value: string) {
@@ -163,53 +166,8 @@ function safeDriverJobUrl(value: string) {
   }
 }
 
-function foldLine(line: string) {
-  const lines: string[] = [];
-  let remaining = line;
-
-  while (remaining.length > 74) {
-    lines.push(remaining.slice(0, 74));
-    remaining = ` ${remaining.slice(74)}`;
-  }
-
-  lines.push(remaining);
-  return lines;
-}
-
-function calendarSequenceFromUpdatedAt(value: string | undefined) {
-  const updatedAt = new Date(clean(value)).getTime();
-  const sequenceEpoch = Date.UTC(2020, 0, 1);
-
-  if (!Number.isFinite(updatedAt) || updatedAt < sequenceEpoch) {
-    return 0;
-  }
-
-  return Math.min(2_147_483_647, Math.floor((updatedAt - sequenceEpoch) / 1000));
-}
-
-function calendarSequence(payload: SafeDriverJobPayload) {
-  return calendarSequenceFromUpdatedAt(payload.scheduleUpdatedAt);
-}
-
-export function buildDriverJobCalendarDownload(
-  payload: SafeDriverJobPayload,
-  driverJobUrlValue: string,
-  now = new Date(),
-): DriverJobCalendarDownloadResult {
+function calendarEventText(payload: SafeDriverJobPayload, driverJobUrl: string) {
   const reference = clean(payload.reference);
-  const startsAt = pickupParts(payload);
-  const driverJobUrl = safeDriverJobUrl(driverJobUrlValue);
-
-  if (!reference || !startsAt || !driverJobUrl) {
-    return {
-      error: "Driver calendar requires a valid booking reference, pickup date/time, and Driver Job URL.",
-      ok: false,
-      status: 400,
-    };
-  }
-
-  const endsAt = addMinutes(startsAt, 90);
-  const sequence = calendarSequence(payload);
   const title = ["Prestige", clean(payload.bookingTypeLabel) || clean(payload.bookingType), reference]
     .filter(Boolean)
     .join(" - ");
@@ -221,38 +179,77 @@ export function buildDriverJobCalendarDownload(
     "Private driver link - do not share this calendar event.",
     "Use this shortcut or the original Driver Job Link for latest instructions and status reporting.",
   ].filter(Boolean).join("\n");
-  const lines = [
-    "BEGIN:VCALENDAR",
-    "VERSION:2.0",
-    "PRODID:-//Prestige Limo Ops//Driver Job Calendar//EN",
-    "CALSCALE:GREGORIAN",
-    "METHOD:PUBLISH",
-    `X-WR-TIMEZONE:${timezone}`,
-    "BEGIN:VEVENT",
-    `UID:driver-job-${safeUidReference(reference)}@prestige-limo-ops`,
-    `DTSTAMP:${formatUtc(now)}`,
-    `SEQUENCE:${sequence}`,
-    `DTSTART;TZID=${timezone}:${formatLocal(startsAt)}`,
-    `DTEND;TZID=${timezone}:${formatLocal(endsAt)}`,
-    `SUMMARY:${escapeIcs(title)}`,
-    `LOCATION:${escapeIcs(clean(payload.pickupLocation))}`,
-    `DESCRIPTION:${escapeIcs(description)}`,
-    `URL:${driverJobUrl}`,
-    "BEGIN:VALARM",
-    "ACTION:DISPLAY",
-    `DESCRIPTION:${escapeIcs(`Prestige pickup reminder: ${title}`)}`,
-    "TRIGGER:-PT1H",
-    "END:VALARM",
-    "END:VEVENT",
-    "END:VCALENDAR",
-  ];
+
+  return { description, reference, title };
+}
+
+function deterministicGoogleEventId(driverId: number, reference: string) {
+  return createHash("sha256")
+    .update(`prestige-driver:${driverId}:booking:${reference}`)
+    .digest("hex")
+    .slice(0, 52);
+}
+
+export function buildDriverJobGoogleCalendarEvent(
+  payload: SafeDriverJobPayload,
+  driverId: number,
+  driverJobUrlValue: string,
+): DriverJobGoogleCalendarEventResult {
+  const startsAt = pickupParts(payload);
+  const driverJobUrl = safeDriverJobUrl(driverJobUrlValue);
+  const safeDriverId = Number.isSafeInteger(driverId) && driverId > 0 ? driverId : 0;
+  const eventText = calendarEventText(payload, driverJobUrl);
+
+  if (!eventText.reference || !startsAt || !driverJobUrl || !safeDriverId) {
+    return {
+      error: "Driver Google Calendar requires a verified driver, booking reference, pickup date/time, and Driver Job URL.",
+      ok: false,
+      status: 400,
+    };
+  }
+
+  const endsAt = addMinutes(startsAt, 90);
+  const revision = createHash("sha256")
+    .update(JSON.stringify({
+      description: eventText.description,
+      end: formatGoogleLocal(endsAt),
+      location: clean(payload.pickupLocation),
+      start: formatGoogleLocal(startsAt),
+      title: eventText.title,
+    }))
+    .digest("hex");
 
   return {
-    filename: `prestige-driver-job-${safeSlug(reference)}.ics`,
-    ics: `${lines.flatMap(foldLine).join("\r\n")}\r\n`,
+    event: {
+      description: eventText.description,
+      end: {
+        dateTime: formatGoogleLocal(endsAt),
+        timeZone: timezone,
+      },
+      extendedProperties: {
+        private: {
+          prestigeBookingReference: eventText.reference,
+          prestigeDriverId: String(safeDriverId),
+          prestigeSource: "prestige_limo_ops_driver_job",
+        },
+      },
+      id: deterministicGoogleEventId(safeDriverId, eventText.reference),
+      location: clean(payload.pickupLocation),
+      reminders: {
+        overrides: [{ method: "popup", minutes: 60 }],
+        useDefault: false,
+      },
+      source: {
+        title: "Open Driver Job",
+        url: driverJobUrl,
+      },
+      start: {
+        dateTime: formatGoogleLocal(startsAt),
+        timeZone: timezone,
+      },
+      summary: eventText.title,
+    },
     ok: true,
-    payload,
-    sequence,
-    timezone,
+    revision,
   };
 }

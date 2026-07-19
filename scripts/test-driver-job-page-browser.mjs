@@ -209,7 +209,6 @@ async function runChromeTest() {
     await client.send("Page.addScriptToEvaluateOnNewDocument", {
       source: `
         window.__driverJobFetchCalls = [];
-        window.__driverJobCalendarImports = [];
         window.__prestigeErrors = [];
         window.__prestigeConsoleErrors = [];
         window.addEventListener("error", (event) => window.__prestigeErrors.push(event.message));
@@ -220,24 +219,24 @@ async function runChromeTest() {
           originalError.apply(console, args);
         };
         const originalFetch = window.fetch.bind(window);
-        const originalAnchorClick = window.HTMLAnchorElement.prototype.click;
-
-        window.HTMLAnchorElement.prototype.click = function driverJobCalendarImportRecorder() {
-          if (this.dataset.driverJobCalendarImport === "true") {
-            window.__driverJobCalendarImports.push({
-              download: this.download,
-              href: this.href,
-              target: this.target,
-            });
-            return;
-          }
-          return originalAnchorClick.call(this);
-        };
         window.fetch = (...args) => {
           const target = args[0]?.url || args[0];
           const method = args[1]?.method || args[0]?.method || "GET";
           const url = String(target);
           window.__driverJobFetchCalls.push(\`\${method} \${url}\`);
+
+          if (url.includes("/api/driver-job/") && url.endsWith("/calendar")) {
+            return Promise.resolve(
+              new Response(JSON.stringify(
+                method === "POST"
+                  ? { action: "saved", ok: true, status: "cal_saved" }
+                  : { action: "status", connected: false, ok: true, status: "save_to_calendar" },
+              ), {
+                status: 200,
+                headers: { "content-type": "application/json" },
+              }),
+            );
+          }
 
           if (method === "GET" && url.includes("/api/driver-job/") && url.includes("/notifications")) {
             return Promise.resolve(
@@ -296,7 +295,8 @@ async function runChromeTest() {
         errors: window.__prestigeErrors || [],
         fetchCalls: window.__driverJobFetchCalls || [],
         calendarImport: {
-          imports: window.__driverJobCalendarImports || [],
+          feedback: document.querySelector("[data-driver-job-calendar-feedback]")?.textContent?.trim() || "",
+          saved: Boolean(document.querySelector("[data-driver-job-calendar-saved='true']")),
           visible: Boolean(document.querySelector("[data-driver-job-calendar-action='true']")),
         },
         fileInputs: [...document.querySelectorAll("input[type='file'], input[capture], input[accept*='image'], input[accept*='photo']")]
@@ -708,7 +708,7 @@ async function runChromeTest() {
       return state;
     };
 
-    const openDriverJobCalendarImport = async () => {
+    const saveDriverJobGoogleCalendar = async () => {
       const beforeState = await pageState();
       const clicked = await evaluate(`(() => {
         const button = document.querySelector("[data-driver-job-calendar-action='true']");
@@ -720,32 +720,35 @@ async function runChromeTest() {
         button.click();
         return true;
       })()`);
-      assert.equal(clicked, true, "Expected acknowledged Driver Job calendar action to be clickable.");
+      assert.equal(clicked, true, "Expected acknowledged Driver Job Google Calendar action to be clickable.");
 
-      const importState = await waitForCondition(
+      await waitForCondition(
         () =>
           evaluate(`(() => {
-            const imports = window.__driverJobCalendarImports || [];
-            return imports.length === 1 ? imports[0] : false;
+            return Boolean(document.querySelector("[data-driver-job-calendar-saved='true']"));
           })()`),
         10000,
-        "acknowledged Driver Job calendar import handoff",
+        "acknowledged Driver Job Google Calendar saved state",
       );
       const afterState = await pageState();
       const expectedCalendarPath = `/api/driver-job/${mockDriverJobTokens.workflowOrder}/calendar`;
 
       assert.equal(
         afterState.fetchCalls.length,
-        beforeState.fetchCalls.length,
-        "Driver calendar import must use direct browser navigation instead of a JavaScript fetch/blob download.",
+        beforeState.fetchCalls.length + 1,
+        "Driver Google Calendar action must use the one existing token-scoped calendar route.",
       );
-      assert.equal(importState.href, `${appUrl}${expectedCalendarPath}`);
-      assert.equal(importState.download, "", "Calendar import action must not force a downloaded attachment.");
-      assert.equal(importState.target, "", "Calendar import should open through the phone's current browser context.");
+      assert.equal(
+        afterState.fetchCalls.at(-1),
+        `POST ${expectedCalendarPath}`,
+        "Driver Google Calendar save must post only to the existing same-job calendar route.",
+      );
+      assert.equal(afterState.calendarImport.saved, true);
+      assert.match(afterState.calendarImport.feedback, /Calendar saved/);
       assertNoSensitiveText({
         fetchCalls: afterState.fetchCalls,
         resourceCalls: [],
-        visibleText: importState.href,
+        visibleText: afterState.calendarImport.feedback,
       });
       assertNoSensitiveText(afterState);
       return afterState;
@@ -1142,7 +1145,7 @@ async function runChromeTest() {
 
     await clickBlockedStatus("OTW", "Save & Acknowledge Job before updating status.", startingStatusText);
     await saveAndAcknowledgeJob();
-    await openDriverJobCalendarImport();
+    await saveDriverJobGoogleCalendar();
     await clickBlockedStatus("OTS", "Update OTW before OTS.", startingStatusText);
     await clickBlockedStatus("POB", "Update OTW before POB.", startingStatusText);
     await clickBlockedStatus("Job Completed", "Update OTW before Job Completed.", startingStatusText);

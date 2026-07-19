@@ -304,14 +304,14 @@ for (const forbiddenIssuePattern of [
   assertExcludes(issueChoices, forbiddenIssuePattern, "driver issue choices forbidden fields");
 }
 
-assert.equal(countOccurrences(driverPage, "fetch("), 10, "driver page fetch count");
-assert.equal(countOccurrences(driverPage, 'cache: "no-store"'), 8, "driver page no-store count");
-assert.equal(countOccurrences(driverPage, 'method: "POST"'), 4, "driver page POST count");
+assert.equal(countOccurrences(driverPage, "fetch("), 12, "driver page fetch count");
+assert.equal(countOccurrences(driverPage, 'cache: "no-store"'), 10, "driver page no-store count");
+assert.equal(countOccurrences(driverPage, 'method: "POST"'), 5, "driver page POST count");
 assert.equal(countOccurrences(driverPage, 'method: "DELETE"'), 1, "driver page DELETE count");
 assert.equal(countOccurrences(driverPage, 'method: "PATCH"'), 2, "driver page PATCH count");
 assert.equal(countOccurrences(driverPage, "href="), 0, "driver page public link count");
 assert.equal(countOccurrences(driverPage, "anchor.download = filename"), 0, "driver page forced calendar attachment download count");
-assert.equal(countOccurrences(driverPage, 'document.createElement("a")'), 1, "driver page calendar import anchor helper count");
+assert.equal(countOccurrences(driverPage, 'document.createElement("a")'), 0, "driver page must not create a calendar download/import anchor");
 for (const fragment of [
   "fetch(`/api/driver-job/${encodeURIComponent(token)}`",
   "`/api/driver-job/${encodeURIComponent(token)}/notifications?limit=5&page=1`",
@@ -341,10 +341,10 @@ for (const fragment of [
   'method: "DELETE"',
   'method: "PATCH"',
   'data-driver-job-calendar-action="true"',
-  "function openDriverCalendarImport(calendarUrl: string)",
-  'anchor.dataset.driverJobCalendarImport = "true"',
-  "function openDriverJobCalendar()",
-  'openDriverCalendarImport(`/api/driver-job/${encodeURIComponent(token)}/calendar`)',
+  "async function openDriverJobCalendar()",
+  'const response = await fetch(`/api/driver-job/${encodeURIComponent(token)}/calendar`',
+  "safeGoogleConsentUrl",
+  "window.location.assign(googleConsentUrl)",
   "onClick={openDriverJobCalendar}",
 ]) {
   assertIncludes(driverPage, fragment, `driver page action caller ${fragment}`);

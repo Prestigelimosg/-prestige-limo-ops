@@ -456,10 +456,10 @@ for (const [label, source] of [
 ]) {
   assertExcludes(source, forbiddenPublicCallerPattern, `${label} bidding caller/secret exposure`);
 }
-assert.equal(countOccurrences(files[driverPagePath], "fetch("), 10, "driver job page fetch count must not grow beyond approved non-bidding callers");
+assert.equal(countOccurrences(files[driverPagePath], "fetch("), 12, "driver job page fetch count must not grow beyond approved non-bidding callers");
 assert.equal(
   countOccurrences(files[driverPagePath], 'cache: "no-store"'),
-  8,
+  10,
   "driver job page no-store fetch count must match existing safe callers",
 );
 assertIncludes(
@@ -474,8 +474,8 @@ assertIncludes(
 );
 assertIncludes(
   files[driverPagePath],
-  'openDriverCalendarImport(`/api/driver-job/${encodeURIComponent(token)}/calendar`)',
-  "driver job page approved token-scoped calendar import handoff",
+  'const response = await fetch(`/api/driver-job/${encodeURIComponent(token)}/calendar`',
+  "driver job page approved token-scoped Google Calendar action",
 );
 assertIncludes(
   files[driverPagePath],

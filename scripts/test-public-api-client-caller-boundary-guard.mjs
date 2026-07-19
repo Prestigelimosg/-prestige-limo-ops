@@ -296,8 +296,8 @@ for (const [label, source] of [
 }
 
 const driverPage = files[driverPagePath];
-assert.equal(countOccurrences(driverPage, "fetch("), 10, "driver page fetch call count");
-assert.equal(countOccurrences(driverPage, 'cache: "no-store"'), 8, "driver page no-store fetch count");
+assert.equal(countOccurrences(driverPage, "fetch("), 12, "driver page fetch call count");
+assert.equal(countOccurrences(driverPage, 'cache: "no-store"'), 10, "driver page no-store fetch count");
 for (const fragment of [
   "fetch(`/api/driver-job/${encodeURIComponent(token)}`",
   "`/api/driver-job/${encodeURIComponent(token)}/notifications?limit=5&page=1`",
@@ -306,7 +306,10 @@ for (const fragment of [
   "fetch(driverLiveLocationRoute()",
   "fetch(driverOtsPhotoProofRoute()",
   "fetch(`/api/driver-job/${encodeURIComponent(token)}/status`",
-  'openDriverCalendarImport(`/api/driver-job/${encodeURIComponent(token)}/calendar`)',
+  "const calendarResponse = await fetch(",
+  'const response = await fetch(`/api/driver-job/${encodeURIComponent(token)}/calendar`',
+  "safeGoogleConsentUrl",
+  "window.location.assign(googleConsentUrl)",
   "driver_contact: nextDetails.contact",
   "driver_name: nextDetails.name",
   "driver_plate_number: nextDetails.plate",
@@ -331,7 +334,7 @@ for (const fragment of [
 ]) {
   assertIncludes(driverPage, fragment, `driver page caller ${fragment}`);
 }
-assert.equal(countOccurrences(driverPage, 'method: "POST"'), 4, "driver page POST count");
+assert.equal(countOccurrences(driverPage, 'method: "POST"'), 5, "driver page POST count");
 assert.equal(countOccurrences(driverPage, 'method: "DELETE"'), 1, "driver page DELETE count");
 assert.equal(countOccurrences(driverPage, 'method: "PATCH"'), 2, "driver page PATCH count");
 assertIncludes(driverPage, "const driverPaymentDetailLinePattern =", "driver page pasted payment-detail filter");

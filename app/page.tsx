@@ -9317,6 +9317,9 @@ function adminBookingPersistenceRecordToCalendarBookingRecord(
   const bookingReference = clean(record.booking_reference);
   const customerDisplayName = adminBookingPersistenceCustomerDisplayName(record);
   const verifiedCompanyId = adminDispatchVerifiedIdentityId(record.company_id);
+  const calendarCompanyName = verifiedCompanyId
+    ? billingIdentityBaseAccount(customerDisplayName)
+    : "";
 
   return {
     booking_reference: bookingReference,
@@ -9330,9 +9333,9 @@ function adminBookingPersistenceRecordToCalendarBookingRecord(
     created_at: clean(record.created_at) || null,
     customer_display_name: customerDisplayName || null,
     companies:
-      verifiedCompanyId && customerDisplayName
+      verifiedCompanyId && calendarCompanyName
         ? {
-            company_name: customerDisplayName,
+            company_name: calendarCompanyName,
             domain: null,
           }
         : null,
@@ -24086,6 +24089,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           const bookingsListStatus = bookingStatusLabel(savedBooking.status);
           const showBookingsListStatus = ![
             "admin_review_required",
+            "draft",
             "ops_pending_ots",
             "pending_ots",
           ].includes(clean(savedBooking.status).toLowerCase());

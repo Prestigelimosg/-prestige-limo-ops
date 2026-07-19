@@ -171,9 +171,20 @@ for (const fragment of [
   'data-bookings-upcoming-next-page="true"',
   "Page {bookingsUpcomingCurrentPage} of {bookingsUpcomingPageCount}",
   'className="block truncate text-sm font-bold text-slate-900"',
+  '"draft",',
 ]) {
   assertIncludes(appPage, fragment, `bookings upcoming order/pagination fragment ${fragment}`);
 }
+assertIncludes(
+  currentUpcomingPanel,
+  'const showBookingsListStatus = ![',
+  "Bookings must keep one explicit status visibility decision in the established Upcoming card lane",
+);
+assertIncludes(
+  currentUpcomingPanel,
+  '"draft",',
+  "Draft must remain stored but must not render as an Upcoming booking status pill",
+);
 for (const forbidden of [
   'data-bookings-all-dates="true"',
   ">\n          All dates\n        </button>",

@@ -12,6 +12,14 @@ bc0b49ec Merge pull request #56 from Prestigelimosg/codex/restore-current-workfl
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Customers Workspace Public Reference And SGT Row Repair (2026-07-19)
+
+- Production Chrome reproduced that the established `/customers` saved-job list rendered shortened internal operation keys such as `CUST-Y4ONZ5` and `ADM-005324`, while the already-selected invoice correctly rendered the persisted public reference `10835`. The same collapsed job row showed only `20 Jul 2026`, although the saved read already projected the complete pickup timestamp.
+- The guarded saved-bookings API already returns `public_booking_reference` and `pickup_at`; no database, API, route, helper, reference generator, or time-storage lane is added. The repair changes only the existing `/customers` renderer to show the validated saved public reference and the shared `Asia/Singapore` pickup formatter in both collapsed and expanded job display.
+- A missing or malformed public reference continues to fail visibly as `Reference unavailable`; the UI does not derive five digits from an internal booking key or fall back to that key. The internal `booking_reference` remains the immutable exact-operation key for View/Edit, PATCH, delete, selection, and invoice handoff.
+- The collapsed pickup now includes date, 24-hour time, and the explicit `SGT` suffix, matching the established customer-folder display. Offset-bearing timestamps are converted with `Asia/Singapore`; bare stored local timestamps retain their Singapore-local clock face through the same shared formatter.
+- This repair performs no booking, customer, invoice, payment, payout, provider, environment, Supabase, schema, reference, or timestamp write. Focused protection is `scripts/test-completed-history-billing-ready-reference-display-guard.mjs` plus `scripts/test-customer-folder-operator-row-layout-guard.mjs`.
+
 ### Customer Rate Override To Invoice Consumption Verification (2026-07-19)
 
 - Read-only Production database evidence confirmed the existing test account owns verified `company_id = 26` and `traveler_id = 22`, both current `customer_rates` maps are empty, and the established default rate record contains DEP `70` with midnight surcharge `15`. The exact test bookings carry those verified IDs; no name or display label was used as rate ownership evidence.

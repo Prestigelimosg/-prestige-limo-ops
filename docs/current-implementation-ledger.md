@@ -1,13 +1,13 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-124a6919 Rearrange selected-job invoice layout
+ea5780da Wire temporary customer invoice pricing
 
 Latest pushed main/staging runtime checkpoint:
-124a6919 Rearrange selected-job invoice layout
+4e48b207 Complete customer folder billing review
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-759967bd Merge pull request #54 from Prestigelimosg/codex/restore-current-workflow-guards
+b0ba9b1a Merge pull request #55 from Prestigelimosg/codex/restore-current-workflow-guards
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -26,9 +26,11 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Customer-Folder Price Review Before Invoice (2026-07-19)
 
 - Every existing `Jobs not billed yet` row now has one compact `Customer price` tag. The tag opens an inline amount editor in the same table; there is no second calculator, billing card, invoice route, persistence writer, or duplicate Invoice action.
-- DSP tags automatically read the existing exact-booking Driver OTS→JC summary and the existing admin CRM rate setup, then call the same shared customer-only DSP calculation used by Monthly Billing. The proposed tag shows actual minutes, billable hours, the verified customer hourly rate, customer surcharges, and the resolved customer-rate source; no driver payout or payout comparison is returned or rendered.
-- A DSP row with incomplete actual timing or unavailable rate evidence fails visibly to `Review required`. DEP, TRF, and MNG rows are never guessed; they also begin at `Review required` unless an existing saved customer amount is available.
-- Admin clicks the price tag, edits or accepts the SGD amount, then clicks `Save review`. The row turns to `Reviewed`, and its existing `Invoice` action becomes available. Multi-job `Review invoice & email` remains disabled until every selected row has a positive reviewed customer price.
+- Rows with an existing saved customer amount continue loading that amount for review. DEP, TRF, and MNG rows without a saved amount receive a temporary Codex proposal from the existing Prestige rate setup, using the saved service, vehicle category, Singapore pickup time, extra-stop count, child-seat count, and verified company/traveler IDs already returned by the guarded customer-folder booking read. The shared customer-only calculation applies the saved verified traveler rate, then saved verified company rate, then Prestige default rate; no driver payout or payout comparison is returned or rendered. A missing or unsupported saved service never defaults to another service and instead fails visibly to manual review.
+- DSP tags continue reading the existing exact-booking Driver OTS→JC summary before using that same rate resolver and the established DSP whole-hour calculation. The proposed tag shows actual minutes, billable hours, customer hourly rate, customer surcharges, and rate source. A DSP row with incomplete actual timing or any row with unavailable rate evidence fails visibly to `Review required`.
+- The proposal remains in browser memory only until admin clicks `Save price review`; that click marks the exact amount reviewed only for the existing invoice handoff. Merely loading a Codex proposal does not write a booking, invoice, monthly price-review row, or other Supabase record and does not enable Invoice.
+- The existing read-only `GET /api/admin-rate-setup` boundary now accepts the signed-in, same-origin `/customers` and `/customers/{id}` admin surfaces required by this established price-review consumer. The root/settings consumers remain unchanged; driver, public, cross-origin, non-GET, unsupported-purpose, and unverified callers remain blocked, and the projection still excludes customer contacts, invoice/payment data, and internal finance notes.
+- Admin clicks the price tag, edits or accepts the SGD amount, then clicks `Save price review`. The row turns to `Reviewed`, and its existing `Invoice` action becomes available. Multi-job `Review invoice & email` remains disabled until every selected row has a positive reviewed customer price.
 - The exact reviewed cents are paired with each selected booking reference in the existing customer-folder handoff. The established `/customers` workspace revalidates the selected exact references, rejects a missing/malformed/out-of-range price, and populates those same line amounts in the existing selected-job invoice editor. Admin may still make a final edit there before issue/send.
 - Automatic calculation and price editing perform no database write. This pass does not issue/email/pay an invoice, call Stripe, change a booking/customer/driver, expose customer billing to drivers, expose payouts to customers, or change Supabase/provider configuration.
 - Focused protection is `scripts/test-customer-folder-price-review-guard.mjs`, registered in `scripts/test-preactivation-verification-suite.mjs`; the existing multi-job handoff and DSP auto-calculation guards are aligned to the same shared helper.

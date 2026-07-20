@@ -9688,6 +9688,17 @@ export default function MockCustomerDashboardPage() {
                         </p>
                       ) : null}
 
+                      <div
+                        className="mt-6 max-w-lg text-[11px] leading-4 text-slate-600"
+                        data-selected-job-invoice-notes="true"
+                      >
+                        <p className="font-semibold text-slate-800">Notes</p>
+                        <p>Midnight surcharge: $15 applies from 11:00 PM to 6:59 AM.</p>
+                        <p>Waiting time: 15 minutes grace; airport arrivals include 60 minutes grace.</p>
+                        <p>Additional waiting time: $15 per 15-minute block.</p>
+                        <p>Hourly jobs: 15 minutes grace; 16 minutes onward counts as the next hour.</p>
+                      </div>
+
                       <div className="mt-6 max-w-lg" data-selected-job-invoice-signoff="true">
                         <p>Thank you for your business</p>
                         <p className="mt-3">Best Regards,</p>
@@ -9695,36 +9706,22 @@ export default function MockCustomerDashboardPage() {
                         <p>{companyProfile.phone}</p>
                       </div>
 
-                      <details
-                        className="mt-5 max-w-lg rounded-md border border-slate-200 bg-slate-50 px-3 py-2 break-words leading-4"
+                      <div
+                        className="mt-5 max-w-lg break-words leading-4"
                         data-selected-job-invoice-bank="true"
                       >
-                        <summary className="flex cursor-pointer items-center justify-between gap-3 font-bold text-slate-900">
-                          <span>{plainInvoiceCompanyPaymentHeading}</span>
-                          <span className="text-[11px] font-semibold text-slate-500">Click to view</span>
-                        </summary>
-                        <div className="mt-2 border-t border-slate-200 pt-2">
-                          {plainInvoiceCompanyPaymentDetailLines.map((line, index) => (
-                            <p key={`${index}-${line}`}>{line}</p>
-                          ))}
-                        </div>
-                      </details>
+                        <p className="font-bold underline">{plainInvoiceCompanyPaymentHeading}</p>
+                        {plainInvoiceCompanyPaymentDetailLines.map((line, index) => (
+                          <p key={`${index}-${line}`}>{line}</p>
+                        ))}
+                      </div>
 
                       <div
-                        className="mt-6 grid gap-4 border-t border-slate-200 pt-3 text-[11px] leading-4 text-slate-600 md:grid-cols-2"
-                        data-selected-job-invoice-footer="true"
+                        className="mt-6 max-w-3xl break-words border-t border-slate-200 pt-3 text-[11px] leading-4 text-slate-600"
+                        data-selected-job-invoice-terms="true"
                       >
-                        <div data-selected-job-invoice-notes="true">
-                          <p className="font-semibold text-slate-800">Notes</p>
-                          <p>Midnight surcharge: $15 applies from 11:00 PM to 6:59 AM.</p>
-                          <p>Waiting time: 15 minutes grace; airport arrivals include 60 minutes grace.</p>
-                          <p>Additional waiting time: $15 per 15-minute block.</p>
-                          <p>Hourly jobs: 15 minutes grace; 16 minutes onward counts as the next hour.</p>
-                        </div>
-                        <div className="break-words" data-selected-job-invoice-terms="true">
-                          <p className="font-semibold text-slate-800">Terms &amp; Conditions</p>
-                          <p>{companyProfile.invoice_footer_terms}</p>
-                        </div>
+                        <p className="font-semibold text-slate-800">Terms &amp; Conditions</p>
+                        <p>{companyProfile.invoice_footer_terms}</p>
                       </div>
                     </article>
 

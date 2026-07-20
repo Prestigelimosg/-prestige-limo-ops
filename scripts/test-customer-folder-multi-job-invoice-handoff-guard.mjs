@@ -101,7 +101,6 @@ for (const fragment of [
   'data-selected-job-invoice-signoff="true"',
   'data-selected-job-invoice-bank="true"',
   'data-selected-job-invoice-terms="true"',
-  'data-selected-job-invoice-footer="true"',
   '<summary aria-hidden="true" className="hidden">',
   "Selected jobs invoice review",
   "toggleSelectedJobInvoiceEditing",
@@ -113,8 +112,8 @@ for (const fragment of [
   "companyProfile.invoice_signoff_name",
   "companyProfilePaymentSummary(companyProfile)",
   "companyProfile.invoice_footer_terms",
+  "plainInvoiceCompanyPaymentHeading",
   "plainInvoiceCompanyPaymentDetailLines",
-  "Click to view",
   "Allow card payment for this invoice",
   'data-plain-invoice-quantity="true"',
   "plainInvoiceLineItemRateLabel(item)",
@@ -136,20 +135,23 @@ const signoffIndex = selectedReview.indexOf('data-selected-job-invoice-signoff="
 const bankIndex = selectedReview.indexOf('data-selected-job-invoice-bank="true"');
 const termsIndex = selectedReview.indexOf('data-selected-job-invoice-terms="true"');
 assert.equal(
-  signoffIndex < bankIndex && bankIndex < notesIndex && notesIndex < termsIndex,
+  notesIndex < signoffIndex && signoffIndex < bankIndex && bankIndex < termsIndex,
   true,
-  "selected-job invoice lower content must follow signoff, bank, then adjacent notes and terms",
+  "selected-job invoice lower content must preserve the owner-approved Notes, sign-off, bank, then Terms order",
 );
 assert.equal(
-  selectedReview.includes('<details\n                        className="mt-5') &&
-    selectedReview.includes('<summary className="flex cursor-pointer'),
-  true,
-  "selected-job bank details must be a compact closed disclosure",
-);
-assert.equal(
-  selectedReview.includes("<details open"),
+  selectedReview.includes("<details") ||
+    selectedReview.includes("Click to view") ||
+    selectedReview.includes('data-selected-job-invoice-footer="true"'),
   false,
-  "selected-job bank details must remain collapsed until clicked",
+  "selected-job invoice must not collapse bank details or combine Notes and Terms into the later replacement footer",
+);
+assert.equal(
+  selectedReview.includes('className="mt-5 max-w-lg break-words leading-4"') &&
+    selectedReview.includes("{plainInvoiceCompanyPaymentHeading}") &&
+    selectedReview.includes("plainInvoiceCompanyPaymentDetailLines.map"),
+  true,
+  "selected-job bank details must remain fully visible in the owner-approved invoice layout",
 );
 
 const selectedFormSetIndex = customersPage.indexOf("setPlainInvoiceForm(nextPlainInvoiceForm);");
@@ -197,9 +199,10 @@ for (const fragment of [
   'const paymentMadeValue = paidInvoice ? `(-) ${sgdAmount}` : "SGD0.00";',
   'const balanceDueValue = paidInvoice ? "SGD0.00" : sgdAmount;',
   'const [paymentHeading = "Bank Details", ...paymentDetailLines] = paymentLines;',
+  'const notesY = 320;',
   'const signoffY = 245;',
   'const paymentY = 182;',
-  'const footerY = 88;',
+  'const termsY = 55;',
   'pdfRightTextAt("Payment Made"',
   "pdfRightTextAt(balanceDueValue",
   "companyProfile.invoice_signoff_name",
@@ -234,14 +237,14 @@ for (const hardcodedFragment of [
 }
 
 assert.equal(
-  localInvoices.indexOf('pdfTextAt("Thank you for your business", 50, signoffY') <
-    localInvoices.indexOf("pdfTextAt(paymentHeading") &&
+  localInvoices.indexOf('pdfTextAt("Notes", 50, notesY') <
+    localInvoices.indexOf('pdfTextAt("Thank you for your business", 50, signoffY') &&
+    localInvoices.indexOf('pdfTextAt("Thank you for your business", 50, signoffY') <
+      localInvoices.indexOf("pdfTextAt(paymentHeading") &&
     localInvoices.indexOf("pdfTextAt(paymentHeading") <
-      localInvoices.indexOf('pdfTextAt("Notes", 50, footerY') &&
-    localInvoices.indexOf('pdfTextAt("Notes", 50, footerY') <
-      localInvoices.indexOf('pdfTextAt("Terms & Conditions:", 310, footerY'),
+      localInvoices.indexOf('pdfTextAt("Terms & Conditions:", 50, termsY'),
   true,
-  "shared PDF must render signoff and bank above adjacent footer notes and terms",
+  "shared PDF must preserve the owner-approved Notes, sign-off, bank, then Terms order",
 );
 
 for (const fragment of [

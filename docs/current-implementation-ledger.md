@@ -12,6 +12,15 @@ bc0b49ec Merge pull request #56 from Prestigelimosg/codex/restore-current-workfl
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Owner-Approved Final Invoice Layout Restoration (2026-07-20)
+
+- The owner explicitly reported that the final selected-job invoice layout had been changed after approval and requested restoration. Source history reproduced the regression: approved commit `124a6919` established the lower invoice order `Notes` → sign-off → fully visible Bank Details → `Terms & Conditions`, while later commit `4e48b207` moved Notes beside Terms and collapsed Bank Details behind `Click to view`.
+- The existing selected-job invoice review is repaired in place to restore that exact approved order. Bank/payment details are fully visible again, Notes remain a standalone block before the sign-off, and Terms & Conditions remain the final full-width block. No second invoice preview, panel, route, renderer, or action is added.
+- The single stored PDF renderer is aligned to the same approved vertical order and positions: Notes at `notesY = 320`, saved company sign-off at `signoffY = 245`, saved bank/payment details at `paymentY = 182`, and saved Terms & Conditions last at `termsY = 55`.
+- Later approved functionality remains intact: saved Company Profile name/address/phone/sign-off/bank/terms, final proportional logo, verified customer/booker/traveller scope, recipient selection, multiple line items, quantities and rates, card-payment wording controls, invoice issue/download/email paths, and Paid/Unpaid regeneration.
+- This repair changes layout only. It does not create, issue, email, pay, cancel, or modify an invoice or booking; it does not change customer/driver data, pricing calculations, payouts, PayNow, payment providers, messages, Calendar, GPS, authentication, environment values, Supabase configuration, schema, or live records.
+- Focused protection is strengthened in `scripts/test-customer-folder-multi-job-invoice-handoff-guard.mjs`, `scripts/test-customer-local-invoice-issue-pdf-portal-guard.mjs`, and `scripts/test-customer-billing-document-lifecycle-guard.mjs` so the replacement collapsed/side-by-side layout cannot silently return.
+
 ### Google OAuth Public Verification Information (2026-07-20)
 
 - The owner approved the Google OAuth verification preparation required before normal real-driver rollout. Google Search Console domain ownership is verified for `prestigelimo.sg` through one additive DNS TXT record on the existing A2 Hosting zone. The existing SPF and all website/email routing records remained unchanged; the verification TXT must remain present to preserve ownership.

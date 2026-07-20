@@ -113,6 +113,10 @@ for (const fragment of [
   "Payment Made",
   "Sub Total",
   'const [paymentHeading = "Bank Details", ...paymentDetailLines] = paymentLines;',
+  "const notesY = 320;",
+  "const signoffY = 245;",
+  "const paymentY = 182;",
+  "const termsY = 55;",
   'pdfTextAt(paymentHeading, 50, paymentY, 8, "0.35 g")',
   "Terms & Conditions:",
   "Midnight surcharge: $15 applies from 11:00 PM to 6:59 AM.",
@@ -127,6 +131,16 @@ for (const fragment of [
 ]) {
   assertIncludes(localPdfHelper, fragment, `PDF helper fragment ${fragment}`);
 }
+
+assert.ok(
+  localPdfHelper.indexOf('pdfTextAt("Notes", 50, notesY') <
+    localPdfHelper.indexOf('pdfTextAt("Thank you for your business"') &&
+    localPdfHelper.indexOf('pdfTextAt("Thank you for your business"') <
+      localPdfHelper.indexOf("pdfTextAt(paymentHeading") &&
+    localPdfHelper.indexOf("pdfTextAt(paymentHeading") <
+      localPdfHelper.indexOf('pdfTextAt("Terms & Conditions:", 50, termsY'),
+  "Stored invoice PDF must preserve the owner-approved Notes, sign-off, bank, then Terms layout.",
+);
 
 for (const fragment of [
   'const paidInvoice = documentType === "invoice" && invoice.status === "Paid";',

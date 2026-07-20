@@ -43,9 +43,10 @@ assertIncludes(
   "pdfTextAt(documentDateLabel, dateX, billToY - 3, 8",
   "PDF uses document-aware date label",
 );
+assertIncludes(localInvoices, "const notesY = 320;", "owner-approved notes section position");
 assertIncludes(localInvoices, "const signoffY = 245;", "signoff section position");
 assertIncludes(localInvoices, "const paymentY = 182;", "bank section position");
-assertIncludes(localInvoices, "const footerY = 88;", "adjacent notes and terms footer position");
+assertIncludes(localInvoices, "const termsY = 55;", "owner-approved final terms section position");
 assertIncludes(
   localInvoices,
   "companyProfile.invoice_signoff_name",
@@ -53,13 +54,13 @@ assertIncludes(
 );
 assertIncludes(localInvoices, "companyProfile.phone", "PDF uses saved sign-off phone");
 assert.ok(
-  localInvoices.indexOf('pdfTextAt("Thank you for your business"') <
-    localInvoices.indexOf("pdfTextAt(paymentHeading") &&
+  localInvoices.indexOf('pdfTextAt("Notes", 50, notesY') <
+    localInvoices.indexOf('pdfTextAt("Thank you for your business"') &&
+    localInvoices.indexOf('pdfTextAt("Thank you for your business"') <
+      localInvoices.indexOf("pdfTextAt(paymentHeading") &&
     localInvoices.indexOf("pdfTextAt(paymentHeading") <
-      localInvoices.indexOf('pdfTextAt("Notes", 50, footerY') &&
-    localInvoices.indexOf('pdfTextAt("Notes", 50, footerY') <
-      localInvoices.indexOf('pdfTextAt("Terms & Conditions:", 310, footerY'),
-  "PDF order must be signoff, one bank block, then adjacent notes and terms.",
+      localInvoices.indexOf('pdfTextAt("Terms & Conditions:", 50, termsY'),
+  "PDF order must preserve the owner-approved Notes, sign-off, bank, then Terms layout.",
 );
 
 assertIncludes(customersPage, 'data-customer-invoice-document-type="true"', "document type select");

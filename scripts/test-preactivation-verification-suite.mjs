@@ -346,6 +346,10 @@ const guardChecks = [
     script: "scripts/test-admin-device-push-notification-guard.mjs",
   },
   {
+    label: "web app install manifest guard",
+    script: "scripts/test-web-app-install-manifest-guard.mjs",
+  },
+  {
     label: "public customer/driver visibility boundary guard",
     script: "scripts/test-public-customer-driver-visibility-boundary-guard.mjs",
   },

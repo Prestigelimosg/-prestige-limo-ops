@@ -12,6 +12,15 @@ bc0b49ec Merge pull request #56 from Prestigelimosg/codex/restore-current-workfl
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Owner Invoice Workflow And Layout Preservation Lock (2026-07-20)
+
+- The owner explicitly directed that the whole established invoice workflow system and final invoice layout must not be modified. `AGENTS.md` now carries a dedicated owner lock covering the existing `/customers` billing overview, exact-customer folder, saved-job selection, selected-job invoice review, Create Invoice workbench, preview/issue/download/email paths, Paid/Unpaid regeneration, portal consumers, identity scope, numbering, Company Profile inputs, APIs, persistence, and the single PDF renderer.
+- The owner then explicitly confirmed that the complete exact-customer invoice system shown on the Mac is the correct approved baseline. Its visible sequence remains `1 · Customer profile & invoice prefix` → `2 · Total invoices` → `3 · Pending jobs for payment` → `4 · Selected jobs invoice review` → `All booking history`, with the existing controls and handoffs preserved in place. The local `/customers/ubs` demonstration was visual confirmation only; UBS/test data is not a customer-visible contract and must not be hardcoded or exposed.
+- The final lower layout remains locked on both the selected-job review and stored PDF as `Notes → sign-off → fully visible Bank Details → Terms & Conditions`. Bank Details may not return to a collapsed `Click to view` disclosure, and Notes/Terms may not return to the later side-by-side replacement footer.
+- No unrelated request—including AI, messaging, communications, booking, Calendar, driver, customer, dashboard, or general UI work—authorizes an invoice workflow or layout change. Future invoice work requires an explicit invoice-specific owner request, exact runtime reproduction, and approval for one bounded in-place repair; otherwise no invoice application change is permitted.
+- This checkpoint changes instructions and guard coverage only. It does not change invoice application source, layout, PDF output, route, API, persistence, numbering, pricing, payment, payout, PayNow, email, customer/driver data, Company Profile values, environment configuration, Supabase configuration, schema, provider behavior, or live records.
+- The existing `scripts/test-agent-startup-workflow-guard.mjs` now enforces this lock alongside the established invoice layout guards so later agents cannot omit or silently weaken it.
+
 ### Owner-Approved Final Invoice Layout Restoration (2026-07-20)
 
 - The owner explicitly reported that the final selected-job invoice layout had been changed after approval and requested restoration. Source history reproduced the regression: approved commit `124a6919` established the lower invoice order `Notes` → sign-off → fully visible Bank Details → `Terms & Conditions`, while later commit `4e48b207` moved Notes beside Terms and collapsed Bank Details behind `Click to view`.

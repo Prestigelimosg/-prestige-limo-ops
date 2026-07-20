@@ -28,6 +28,18 @@ The Dashboard `Today's Jobs` Driver Reports completion workflow is specifically 
 
 The Driver Calendar system is a separate established workflow. Do not change its action, OAuth, event, credential, route, or UI behavior while diagnosing or repairing Driver Reports or admin completion.
 
+# Owner-locked invoice workflow and final layout — do not modify
+
+The entire established customer billing and invoice system is owner-locked. Do not remove, rename, rearrange, redesign, collapse, expand, simplify, duplicate, replace, or otherwise modify its workflow, layout, controls, routes, APIs, persistence, PDF renderer, email/download paths, payment-status handling, invoice numbering, customer/company identity scope, Company Profile inputs, or established consumers unless the owner explicitly requests an invoice-specific change, the exact invoice defect is first reproduced in the approved runtime surface, and the owner approves that bounded repair. An unrelated feature request, including AI or communications work, is never permission to change the invoice system.
+
+Preserve the existing `/customers` Customer Billing Overview, exact-customer folder, saved-job selection, `Customer invoice layout` review, established Create Invoice workbench, preview, issue, download, email, Paid/Unpaid regeneration, and customer portal invoice consumers in their current lanes. Do not add a second invoice page, workbench, preview, renderer, route, table, helper, control, or write path.
+
+The owner explicitly confirmed that the whole invoice system shown on the Mac at the existing exact-customer folder is correct. Treat that visible system as the approved baseline: `1 · Customer profile & invoice prefix` → `2 · Total invoices` → `3 · Pending jobs for payment` → `4 · Selected jobs invoice review` → `All booking history`. Preserve those sections, their order, their established controls, and their handoffs. The local `/customers/ubs` demonstration only identified the approved existing layout; do not hardcode UBS or expose mock/test records to customers.
+
+The final owner-approved invoice lower layout is locked on both the selected-job invoice review and stored PDF: `Notes → sign-off → fully visible Bank Details → Terms & Conditions`. Bank Details must never be collapsed behind a disclosure or `Click to view` control. Notes and Terms must never be combined into a side-by-side replacement footer. Preserve the approved logo, Company Profile content, line items, quantities, rates, totals, recipient controls, card-payment wording controls, and all current issue/download/email/payment-status behavior without rearranging the layout.
+
+Before any approved invoice repair, read `docs/current-implementation-ledger.md` section `Owner-Approved Final Invoice Layout Restoration` and run `scripts/test-customer-folder-multi-job-invoice-handoff-guard.mjs`, `scripts/test-customer-local-invoice-issue-pdf-portal-guard.mjs`, and `scripts/test-customer-billing-document-lifecycle-guard.mjs`. If no invoice defect is reproduced and specifically approved, make no invoice application change.
+
 # Pre-operation test-data permission
 
 Until the owner explicitly declares that real operations have started, existing booking, driver, and customer records may be reused as test data because the owner will fully clean those records before live operations. Prefer reusing an existing test record over creating a duplicate, and keep every test scoped to the exact workflow under review.

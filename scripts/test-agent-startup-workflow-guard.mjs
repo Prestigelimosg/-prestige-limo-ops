@@ -20,6 +20,22 @@ for (const requiredRule of [
   "Prefer reusing an existing test record over creating a duplicate",
   "This test-data permission does not authorize external sends",
   "payment, payout, PayNow, invoice, billing, GPS, provider, authentication, environment, or Supabase configuration changes",
+  "# Owner-locked invoice workflow and final layout — do not modify",
+  "The entire established customer billing and invoice system is owner-locked",
+  "Notes → sign-off → fully visible Bank Details → Terms & Conditions",
+  "Bank Details must never be collapsed behind a disclosure or `Click to view` control",
+  "Notes and Terms must never be combined into a side-by-side replacement footer",
+  "An unrelated feature request, including AI or communications work, is never permission to change the invoice system",
+  "The owner explicitly confirmed that the whole invoice system shown on the Mac at the existing exact-customer folder is correct",
+  "1 · Customer profile & invoice prefix",
+  "2 · Total invoices",
+  "3 · Pending jobs for payment",
+  "4 · Selected jobs invoice review",
+  "All booking history",
+  "If no invoice defect is reproduced and specifically approved, make no invoice application change",
+  "scripts/test-customer-folder-multi-job-invoice-handoff-guard.mjs",
+  "scripts/test-customer-local-invoice-issue-pdf-portal-guard.mjs",
+  "scripts/test-customer-billing-document-lifecycle-guard.mjs",
 ]) {
   assert.ok(agents.includes(requiredRule), `AGENTS.md missing startup workflow rule: ${requiredRule}`);
 }

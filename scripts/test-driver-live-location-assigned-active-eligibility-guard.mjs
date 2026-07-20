@@ -369,6 +369,14 @@ try {
     true,
   );
   assert.equal(
+    ledger.includes("Vercel Production deployment `dpl_HCNL2MDmbwtXWpcc3C6JpAVwieT9` reached READY"),
+    true,
+  );
+  assert.equal(
+    ledger.includes("displayed `0 live`, and no longer displayed stale job `10833`"),
+    true,
+  );
+  assert.equal(
     agents.includes("# Owner-locked Driver Reports evidence during Live Location cleanup"),
     true,
   );

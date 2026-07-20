@@ -36,6 +36,16 @@ for (const requiredRule of [
   "scripts/test-customer-folder-multi-job-invoice-handoff-guard.mjs",
   "scripts/test-customer-local-invoice-issue-pdf-portal-guard.mjs",
   "scripts/test-customer-billing-document-lifecycle-guard.mjs",
+  "# Owner-locked Driver Calendar workflow — do not modify",
+  "First job: `Save & Acknowledge Job` → `Add / Update Calendar` → approve Google once",
+  "Future jobs: `Save & Acknowledge Job` → `Add / Update Calendar` with no repeated Google consent",
+  "Amendments: acknowledge the amended private link → `Add / Update Calendar` → update the same event without a duplicate",
+  "verified driver ID plus the exact stable booking reference",
+  "Never use driver name, phone, plate, acknowledgement text, or driver ID alone as event identity",
+  "The event must retain the latest private `Open Driver Job` link",
+  "Do not replace this workflow with `.ics`, a forced download, a Google event-template link, a subscription feed, an attendee invitation, or an admin/service-account personal-calendar substitute",
+  "scripts/test-driver-job-calendar-download-guard.mjs",
+  "scripts/test-driver-job-page-browser.mjs",
 ]) {
   assert.ok(agents.includes(requiredRule), `AGENTS.md missing startup workflow rule: ${requiredRule}`);
 }

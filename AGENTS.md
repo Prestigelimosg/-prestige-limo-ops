@@ -28,6 +28,25 @@ The Dashboard `Today's Jobs` Driver Reports completion workflow is specifically 
 
 The Driver Calendar system is a separate established workflow. Do not change its action, OAuth, event, credential, route, or UI behavior while diagnosing or repairing Driver Reports or admin completion.
 
+# Owner-locked Driver Calendar workflow — do not modify
+
+The entire established personal Driver Calendar workflow is owner-locked. Do not remove, rename, rearrange, redesign, duplicate, replace, broaden, or “simplify” its acknowledgement gate, action, Google OAuth connection, encrypted credential reuse, event identity, update behavior, reporting shortcut, routes, persistence, UI, or privacy boundaries unless the owner explicitly requests a Calendar-specific change, the exact defect is first reproduced in the approved runtime surface, and the owner approves one bounded in-place repair.
+
+Preserve this exact workflow:
+
+- First job: `Save & Acknowledge Job` → `Add / Update Calendar` → approve Google once → return to the same private Driver Job page with the event saved.
+- Future jobs: `Save & Acknowledge Job` → `Add / Update Calendar` with no repeated Google consent; reuse the same encrypted server-only Google connection for that verified driver.
+- Amendments: acknowledge the amended private link → `Add / Update Calendar` → update the same event without a duplicate. The driver must not reconnect Google, delete the old event, or perform another approval under normal valid-credential operation.
+- Reauthorization may occur only when the driver removes Prestige permission, changes Google account, Google permanently rejects the saved credential, or the stored connection is intentionally reset. Transient provider failures must not erase a usable connection or force consent.
+
+One verified driver may have any number of different jobs. Calendar connection identity may be bound to the verified driver record, but event identity must remain the verified driver ID plus the exact stable booking reference. Never use driver name, phone, plate, acknowledgement text, or driver ID alone as event identity. Each different booking must create its own event; every amendment retaining the same booking reference must update only that event. Do not turn a booking amendment into a new booking reference merely to drive Calendar behavior.
+
+The event must retain the latest private `Open Driver Job` link in its description and Google event source so opening the calendar event/title leads the driver back to the established OTW, OTS, POB, and Job Completed reporting page. Preserve one personal event per exact driver and booking, the current `Calendar saved`/`Update needed` states, no attendees, `sendUpdates=none`, and the separate admin Operations Calendar lane. The admin event and personal driver event are different established consumers and must not be mistaken for a personal-event duplicate.
+
+Do not replace this workflow with `.ics`, a forced download, a Google event-template link, a subscription feed, an attendee invitation, or an admin/service-account personal-calendar substitute. Do not add another Calendar button, provider, connection table, credential lane, reporting page, or event-ID scheme. Google verification work may remove the unverified warning and 100-new-account cap for the approved scope, but it must not change this workflow or be bypassed by duplicating OAuth projects.
+
+Before any approved Driver Calendar repair, read `docs/current-implementation-ledger.md` sections `Driver Personal Google Calendar Connection` and `Driver Calendar Credential Recovery And Callback Feedback`, then run `scripts/test-driver-job-calendar-download-guard.mjs` and `scripts/test-driver-job-page-browser.mjs`. If no Calendar defect is reproduced and specifically approved, make no Driver Calendar application change.
+
 # Owner-locked invoice workflow and final layout — do not modify
 
 The entire established customer billing and invoice system is owner-locked. Do not remove, rename, rearrange, redesign, collapse, expand, simplify, duplicate, replace, or otherwise modify its workflow, layout, controls, routes, APIs, persistence, PDF renderer, email/download paths, payment-status handling, invoice numbering, customer/company identity scope, Company Profile inputs, or established consumers unless the owner explicitly requests an invoice-specific change, the exact invoice defect is first reproduced in the approved runtime surface, and the owner approves that bounded repair. An unrelated feature request, including AI or communications work, is never permission to change the invoice system.

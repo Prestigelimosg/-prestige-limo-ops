@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-20c93497 Wire driver acknowledgement to calendar identity
+06244b38 Expire stale live dispatch pins
 
 Latest pushed main/staging runtime checkpoint:
 1e80b1dd Fix customer job public reference display

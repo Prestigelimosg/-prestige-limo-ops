@@ -1,23 +1,28 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import {
   createBrowserTestReporter,
   createChromeClient,
   navigateWithLoadEvent,
+  normalizeErrorMessage,
   normalizeConsoleMessages,
   terminateChildProcess,
+  waitForChildExit,
   waitForChromeDebugPort,
   waitForChromePageTarget,
   waitForCondition,
 } from "./browser-test-helpers.mjs";
 
-const appUrl = process.env.APP_URL || "http://localhost:3000";
+const configuredAppUrl = process.env.APP_URL?.trim() || "";
 const chromeBinary =
   process.env.CHROME_BINARY || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const chromeDebugPort = Number(process.env.CHROME_DEBUG_PORT || 9238);
+const configuredChromeDebugPort = process.env.CHROME_DEBUG_PORT
+  ? Number(process.env.CHROME_DEBUG_PORT)
+  : null;
 const dismissedStorageKey = "prestige-admin-dismissed-pending-driver-ack-links";
 const firstLinkId = "11111111-2222-4333-8444-555555555555";
 const secondLinkId = "22222222-3333-4444-8555-666666666666";
@@ -64,6 +69,102 @@ const bookings = [
     driver_plate_number: "SLA1002B",
   },
 ];
+
+async function getFreePort() {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+
+      server.close(() => resolve(port));
+    });
+  });
+}
+
+async function waitForAppReady(appUrl, getServerLogs) {
+  const startedAt = Date.now();
+  let lastError = null;
+
+  while (Date.now() - startedAt < 30000) {
+    try {
+      const response = await fetch(appUrl);
+
+      if (response.ok) {
+        return;
+      }
+
+      lastError = new Error(`HTTP ${response.status}`);
+    } catch (error) {
+      lastError = error;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+
+  throw new Error(
+    `Pending Driver ACK browser test server did not become ready: ${normalizeErrorMessage(
+      lastError,
+    )}\n${getServerLogs()}`,
+  );
+}
+
+async function stopProcessGroup(childProcess) {
+  if (!childProcess?.pid || childProcess.exitCode !== null || childProcess.signalCode !== null) {
+    return;
+  }
+
+  try {
+    process.kill(-childProcess.pid, "SIGTERM");
+  } catch {
+    childProcess.kill("SIGTERM");
+  }
+
+  await waitForChildExit(childProcess);
+}
+
+async function startFocusedTestApp() {
+  if (configuredAppUrl) {
+    return {
+      appUrl: configuredAppUrl,
+      getServerLogs: () => "Using externally managed APP_URL.",
+      server: null,
+    };
+  }
+
+  const appPort = await getFreePort();
+  const appUrl = `http://127.0.0.1:${appPort}`;
+  let stdout = "";
+  let stderr = "";
+  const server = spawn(
+    "npm",
+    ["run", "dev", "--", "--hostname", "127.0.0.1", "--port", String(appPort)],
+    {
+      detached: true,
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+
+  server.stdout.on("data", (chunk) => {
+    stdout += chunk.toString();
+  });
+  server.stderr.on("data", (chunk) => {
+    stderr += chunk.toString();
+  });
+
+  const getServerLogs = () => `stdout:\n${stdout}\nstderr:\n${stderr}`;
+
+  try {
+    await waitForAppReady(appUrl, getServerLogs);
+  } catch (error) {
+    await stopProcessGroup(server);
+    throw error;
+  }
+
+  return { appUrl, getServerLogs, server };
+}
 
 function pageFixtureScript() {
   return `(() => {
@@ -180,6 +281,9 @@ function pageFixtureScript() {
 
 async function runChromeTest() {
   const reporter = createBrowserTestReporter("pending-driver-ack-queue-browser");
+  const app = await startFocusedTestApp();
+  const appUrl = app.appUrl;
+  const chromeDebugPort = configuredChromeDebugPort || (await getFreePort());
   const userDataDir = await mkdtemp(path.join(os.tmpdir(), "prestige-pending-ack-close-chrome-"));
   const chrome = spawn(
     chromeBinary,
@@ -377,6 +481,7 @@ async function runChromeTest() {
     }
     await terminateChildProcess(chrome);
     await rm(userDataDir, { recursive: true, force: true });
+    await stopProcessGroup(app.server);
     if (stderr && process.env.PRESTIGE_BROWSER_TEST_VERBOSE) {
       process.stderr.write(stderr);
     }

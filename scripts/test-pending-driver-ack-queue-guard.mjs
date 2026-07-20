@@ -102,6 +102,13 @@ assertIncludes(
 );
 
 for (const fragment of [
+  'const configuredAppUrl = process.env.APP_URL?.trim() || "";',
+  "const appPort = await getFreePort();",
+  '["run", "dev", "--", "--hostname", "127.0.0.1", "--port", String(appPort)]',
+  "await waitForAppReady(appUrl, getServerLogs);",
+  "const appUrl = app.appUrl;",
+  "const chromeDebugPort = configuredChromeDebugPort || (await getFreePort());",
+  "await stopProcessGroup(app.server);",
   "two independent pending Driver ACK rows",
   "one exact alert dismissed while the second remains",
   "hard refresh retained exact-link dismissal",
@@ -111,7 +118,7 @@ for (const fragment of [
   "Close must leave the exact private link active.",
   "assert.deepEqual(amendedQueue.ids, [amendedLinkId, secondLinkId])",
 ]) {
-  assertIncludes(browserGuard, fragment, "focused pending ACK Close browser coverage");
+  assertIncludes(browserGuard, fragment, "self-contained focused pending ACK Close browser coverage");
 }
 
 assertIncludes(

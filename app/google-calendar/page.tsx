@@ -5,7 +5,7 @@ import { PublicInformationShell } from "../public-information-shell";
 
 export const metadata: Metadata = {
   description: "How Prestige Limo Ops uses Google Calendar for assigned driver jobs.",
-  title: "Google Calendar | Prestige Limo Ops",
+  title: "Prestige Limo Ops",
 };
 
 const steps = [
@@ -18,12 +18,21 @@ const steps = [
 export default function GoogleCalendarInformationPage() {
   return (
     <PublicInformationShell
-      eyebrow="Public app information"
-      intro="Prestige Limo Ops is a limousine operations application. Its optional driver Google Calendar connection keeps an assigned trip schedule and the existing private Driver Job shortcut together in one calendar event."
-      title="Prestige Limo Ops Google Calendar"
+      eyebrow="Public application home page"
+      intro="Prestige Limo Ops is a limousine operations application used to manage bookings, dispatch assigned drivers, share current trip schedules, and collect driver job-status reports."
+      title="Prestige Limo Ops"
     >
       <section>
-        <h2 className="text-xl font-bold text-slate-950">What the integration does</h2>
+        <h2 className="text-xl font-bold text-slate-950">Application purpose</h2>
+        <p className="mt-2">
+          Prestige Limo Ops gives limousine operations staff and their authorized drivers one operational source of
+          truth for assigned trips. The optional Google Calendar connection keeps an assigned pickup schedule and
+          the existing private Driver Job reporting shortcut together in one calendar event.
+        </p>
+      </section>
+
+      <section>
+        <h2 className="text-xl font-bold text-slate-950">What the Google Calendar integration does</h2>
         <ol className="mt-4 grid gap-3">
           {steps.map((step, index) => (
             <li className="flex gap-3 rounded-2xl bg-slate-50 p-4" key={step}>

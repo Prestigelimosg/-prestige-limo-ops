@@ -37,7 +37,9 @@ for (const href of ["/google-calendar", "/privacy", "/terms"]) {
   includes(driverJobPage, `href="${href}"`, `Driver Calendar policy link ${href}`);
 }
 
-includes(calendarPage, "Prestige Limo Ops Google Calendar", "public app identity");
+includes(calendarPage, 'title="Prestige Limo Ops"', "exact public app name heading");
+includes(calendarPage, "Application purpose", "explicit public app purpose heading");
+includes(calendarPage, "manage bookings, dispatch assigned drivers", "explicit public app purpose description");
 includes(calendarPage, "calendar.events", "minimum Google scope disclosure");
 includes(calendarPage, "one assigned-job event", "bounded event behavior disclosure");
 includes(calendarPage, "does not import unrelated calendar events", "unrelated-event boundary");
@@ -75,6 +77,7 @@ assert.equal(
 excludes(driverJobPage, /\btarget=/i, "Driver Calendar same-tab navigation boundary");
 includes(ledger, "### Google OAuth Public Verification Information (2026-07-20)", "ledger section");
 includes(ledger, "Search Console domain ownership is verified", "verified domain record");
+includes(ledger, "Google automated branding check", "branding correction record");
 includes(ledger, "scripts/test-google-calendar-oauth-public-pages-guard.mjs", "focused guard record");
 
 console.log("Google Calendar OAuth public pages guard passed");

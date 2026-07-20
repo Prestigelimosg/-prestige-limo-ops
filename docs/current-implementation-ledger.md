@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-b5a669e7 Recover driver Google Calendar connections
+5534ef84 Add Google OAuth verification pages
 
 Latest pushed main/staging runtime checkpoint:
 1e80b1dd Fix customer job public reference display
@@ -19,6 +19,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The existing acknowledged Driver Job Calendar card now links to those three public pages through the established same-tab public-navigation boundary. The links suppress the private referrer and contain no booking reference, driver identity, private token, customer data, status data, finance data, or provider credential; browser Back returns to the unchanged Driver Job page and Add / Update Calendar action.
 - Google Cloud currently reports the OAuth project as External and In production, with the sensitive `calendar.events` scope still unverified and subject to the 100-user lifetime cap. These public pages prepare branding review only; they do not claim Google approval. Remaining external steps are deployment, saving and publishing the verified branding URLs/logo, entering the scope justification and demonstration-video URL, and submitting the final Google review.
 - Exact application checkpoint `5534ef84` passed the focused public-page, Driver Job action-surface, public-navigation, TypeScript, lint, production build, Driver Job browser, staged-app-change, and complete preactivation verification checks. Vercel Production deployment `dpl_BLaSZCyBGJ1ecYiwM44Nogqnt3XE` reached READY and was aliased to `https://app.prestigelimo.sg`. Read-only live acceptance returned HTTP 200 with the expected page title and H1 at `/google-calendar`, `/privacy`, and `/terms`; no private Driver Job token, Calendar action, status action, database write, provider send, or real-driver test was used.
+- Google Cloud saved the verified-domain homepage, Privacy Policy, Terms of Service, exact square app logo, and factual `calendar.events` justification. Its first Google automated branding check then reported two homepage-recognition issues: purpose not recognized and configured app name not matched. The established `/google-calendar` page is corrected in place with exact H1 `Prestige Limo Ops` plus an explicit `Application purpose` description of limousine booking, dispatch, assigned-driver scheduling, and job-status reporting; no Driver Calendar action, route, credential, scope, or event behavior changed.
 - Focused protection is `scripts/test-google-calendar-oauth-public-pages-guard.mjs`, registered in `scripts/test-preactivation-verification-suite.mjs`, alongside the existing Driver Calendar and public privacy guards.
 
 ### Driver JC Evidence Retention Until Admin Confirmation (2026-07-20)

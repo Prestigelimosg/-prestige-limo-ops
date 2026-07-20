@@ -102,6 +102,10 @@ const guardChecks = [
     script: "scripts/test-admin-driver-acknowledgement-dispatch-release-boundary-guard.mjs",
   },
   {
+    label: "pending Driver ACK Queue guard",
+    script: "scripts/test-pending-driver-ack-queue-guard.mjs",
+  },
+  {
     label: "admin Day-of-Trip Dispatch Monitor existing workflow lock guard",
     script: "scripts/test-admin-day-of-trip-dispatch-monitor-existing-workflow-lock.mjs",
   },

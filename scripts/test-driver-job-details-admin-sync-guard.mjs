@@ -290,9 +290,9 @@ for (const fragment of [
   "refreshDashboardDriverJobLinksRead",
   "while (hasNextPage && Object.keys(linksByReference).length < requestedReferenceSet.size)",
   "result.pagination?.has_next_page === true",
-  "driverJobLinkAcknowledgementStatus",
-  'data-admin-driver-job-link-acknowledgement="true"',
-  'data-admin-driver-job-link-acknowledgement-state=',
+  "pendingDriverAckQueueItems",
+  'data-pending-driver-ack-queue="true"',
+  'data-pending-driver-ack-queue-item="true"',
   "activeJobDriverAcknowledgementState",
   'data-admin-multi-driver-active-job-acknowledgement="true"',
   'data-admin-multi-driver-active-jobs-waiting-count=',
@@ -300,6 +300,12 @@ for (const fragment of [
 ]) {
   assertIncludes(appPage, fragment, `Admin booking details auto-sync fragment ${fragment}`);
 }
+
+assertExcludes(
+  appPage,
+  'data-admin-driver-job-link-acknowledgement="true"',
+  "replaced single-booking Driver Job Link acknowledgement pill",
+);
 
 for (const fragment of [
   "setDriverDetails(loadedDriverDetails)",

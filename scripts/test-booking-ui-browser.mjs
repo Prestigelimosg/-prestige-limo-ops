@@ -7076,6 +7076,7 @@ async function runChromeTest() {
                 acknowledged: false,
                 acknowledged_at: null,
                 assigned_driver: payload.assigned_driver_name || null,
+                job_card_kind: "new",
                 pickup_datetime: payload.pickup_datetime || null,
                 route: payload.route || null,
                 vehicle: payload.assigned_driver_vehicle_model || null,
@@ -10045,23 +10046,28 @@ async function runChromeTest() {
           const feedback = section?.querySelector("[data-driver-job-link-api-feedback='true']");
           const preview = section?.querySelector("[data-copy-preview='driverJobLink']");
           const status = section?.querySelector("[data-driver-job-link-status='true']");
-          const acknowledgement = section?.querySelector(
-            "[data-admin-driver-job-link-acknowledgement='true']",
+          const acknowledgementQueue = document.querySelector(
+            "[data-pending-driver-ack-queue='true']",
+          );
+          const acknowledgementQueueItem = acknowledgementQueue?.querySelector(
+            "[data-pending-driver-ack-queue-item='true']",
           );
           const copyButton = [...(section?.querySelectorAll("button") || [])].find(
             (button) => button.textContent.trim() === "Copy Link",
           );
 
-          return feedback?.textContent.includes("Driver job link created")
+          return feedback?.textContent.includes("Driver job link created") && acknowledgementQueueItem
             ? {
                 copyButtonDisabled: copyButton?.disabled ?? true,
                 feedbackText: feedback.textContent.trim(),
                 previewText: preview?.innerText || "",
                 requests: window.__prestigeAdminDriverJobLinkRequests || [],
-                acknowledgementState:
-                  acknowledgement?.getAttribute("data-admin-driver-job-link-acknowledgement-state") || "",
-                acknowledgementText: acknowledgement?.textContent.replace(/\s+/g, " ").trim() || "",
-                acknowledgementHeight: acknowledgement?.getBoundingClientRect().height || 0,
+                acknowledgementQueueCount:
+                  acknowledgementQueue?.getAttribute("data-pending-driver-ack-queue-count") || "",
+                acknowledgementQueuePulsing:
+                  acknowledgementQueue?.getAttribute("data-pending-driver-ack-queue-pulsing") || "",
+                acknowledgementText:
+                  acknowledgementQueueItem?.textContent.replace(/\s+/g, " ").trim() || "",
                 statusText: status?.textContent.trim() || "",
               }
             : false;
@@ -10072,13 +10078,10 @@ async function runChromeTest() {
     assert.equal(driverJobLinkCreateState.copyButtonDisabled, false);
     assert.match(driverJobLinkCreateState.feedbackText, /Driver job link created/);
     assert.match(driverJobLinkCreateState.statusText, /Active saved link for 10841/);
-    assert.equal(driverJobLinkCreateState.acknowledgementState, "waiting");
-    assert.match(driverJobLinkCreateState.acknowledgementText, /Waiting for driver/);
-    assert.ok(
-      driverJobLinkCreateState.acknowledgementHeight > 0 &&
-        driverJobLinkCreateState.acknowledgementHeight <= 28,
-      `Expected compact Dispatch acknowledgement pill, got ${driverJobLinkCreateState.acknowledgementHeight}px`,
-    );
+    assert.equal(driverJobLinkCreateState.acknowledgementQueueCount, "1");
+    assert.equal(driverJobLinkCreateState.acknowledgementQueuePulsing, "true");
+    assert.match(driverJobLinkCreateState.acknowledgementText, /10841 · New · Link issued/);
+    assert.match(driverJobLinkCreateState.acknowledgementText, /Waiting \d+ min/);
     assert.match(driverJobLinkCreateState.previewText, /https?:\/\/\S+\/driver-job\/browser-created-driver-token/);
     assert.equal(driverJobLinkCreateState.requests.length, 1);
     assert.deepEqual(
@@ -10145,26 +10148,23 @@ async function runChromeTest() {
     const dispatchDriverJobAcknowledgedState = await waitForCondition(
       () =>
         evaluate(`(() => {
-          const acknowledgement = document.querySelector(
-            "[data-admin-driver-job-link-acknowledgement='true']",
+          const acknowledgementQueue = document.querySelector(
+            "[data-pending-driver-ack-queue='true']",
           );
 
-          return acknowledgement?.getAttribute("data-admin-driver-job-link-acknowledgement-state") ===
-            "acknowledged"
+          return acknowledgementQueue?.getAttribute("data-pending-driver-ack-queue-count") === "0"
             ? {
-                height: acknowledgement.getBoundingClientRect().height,
-                text: acknowledgement.textContent.replace(/\s+/g, " ").trim(),
+                pulsing: acknowledgementQueue.getAttribute("data-pending-driver-ack-queue-pulsing"),
+                text: acknowledgementQueue.textContent.replace(/\s+/g, " ").trim(),
               }
             : false;
         })()`),
       10000,
       "automatic Dispatch Driver Job Link acknowledgement refresh",
     );
-    assert.match(dispatchDriverJobAcknowledgedState.text, /Acknowledged 11:20/);
-    assert.ok(
-      dispatchDriverJobAcknowledgedState.height <= 28,
-      `Expected compact acknowledged Dispatch pill, got ${dispatchDriverJobAcknowledgedState.height}px`,
-    );
+    assert.equal(dispatchDriverJobAcknowledgedState.pulsing, "false");
+    assert.match(dispatchDriverJobAcknowledgedState.text, /0 pending/);
+    assert.match(dispatchDriverJobAcknowledgedState.text, /No driver acknowledgements pending/);
 
     const clickedDriverJobLinkCopy = await evaluate(`(() => {
       const section = [...document.querySelectorAll("[data-dispatch-workflow-step='driver-job-link']")][0];

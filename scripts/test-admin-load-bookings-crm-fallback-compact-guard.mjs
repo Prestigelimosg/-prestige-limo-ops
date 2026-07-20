@@ -951,8 +951,13 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  "window.setInterval(() => {\n      for (const bookingReference of bookingReferences) {\n        void refreshDashboardDriverJobStatusRead(bookingReference);\n        void refreshDashboardDriverOtsPhotoProofRead(bookingReference);\n      }\n      void refreshDashboardDriverJobLinksRead(bookingReferences);\n    }, 10 * 1000);",
-  "Dispatch driver report, OTS photo proof, and acknowledgement read-only auto-refresh interval",
+  "window.setInterval(() => {\n      for (const bookingReference of bookingReferences) {\n        void refreshDashboardDriverJobStatusRead(bookingReference);\n        void refreshDashboardDriverOtsPhotoProofRead(bookingReference);\n      }\n    }, 10 * 1000);",
+  "Dispatch driver report and OTS photo proof read-only auto-refresh interval",
+);
+assertIncludes(
+  appPage,
+  "const intervalId = window.setInterval(() => {\n      void refreshDashboardDriverJobLinksRead(bookingReferences);\n    }, 10 * 1000);",
+  "Pending Driver ACK Queue read-only auto-refresh interval",
 );
 assertIncludes(
   appPage,

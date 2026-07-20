@@ -968,6 +968,7 @@ type AdminDriverJobLinkRecord = {
     assigned_driver: string | null;
     assigned_driver_contact: string | null;
     assigned_driver_plate: string | null;
+    job_card_kind: "amendment" | "new" | "reissued" | null;
     pickup_datetime: string | null;
     route: string | null;
     vehicle: string | null;
@@ -9783,6 +9784,33 @@ function adminDriverJobAcknowledgementCompactTimeLabel(value: string | null | un
   return timeMatch?.[1] || "";
 }
 
+function adminDriverJobLinkIssuedCompactTimeLabel(value: string | null | undefined) {
+  return adminDriverJobAcknowledgementCompactTimeLabel(value) || "Time unavailable";
+}
+
+function adminDriverJobLinkWaitingMinutes(
+  value: string | null | undefined,
+  currentTimeMs: number,
+) {
+  const issuedAtMs = new Date(clean(value)).getTime();
+
+  if (!Number.isFinite(issuedAtMs)) {
+    return null;
+  }
+
+  return Math.max(0, Math.floor((currentTimeMs - issuedAtMs) / (60 * 1000)));
+}
+
+function adminDriverJobCardKindLabel(
+  value: AdminDriverJobLinkRecord["safe_summary"]["job_card_kind"],
+) {
+  if (value === "new") return "New";
+  if (value === "amendment") return "Amendment";
+  if (value === "reissued") return "Reissued";
+
+  return "Issued";
+}
+
 function adminAppNotificationFailureMessage(rawError: unknown) {
   const normalizedError =
     rawError instanceof Error ? clean(rawError.message).toLowerCase() : clean(String(rawError || "")).toLowerCase();
@@ -16468,33 +16496,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     : dispatchReleaseLoadedBookingRecord
       ? bookingPublicReference(dispatchReleaseLoadedBookingRecord)
       : "";
-  const driverJobLinkAcknowledgementStatus = !activeAdminDriverJobLink
-    ? {
-        label: "No active link",
-        state: "no-link" as const,
-        title: "Create or load the exact booking’s active Driver Job Link.",
-      }
-    : activeAdminDriverJobLink.safe_summary.acknowledged
-      ? {
-          label: `Acknowledged${
-            adminDriverJobAcknowledgementCompactTimeLabel(
-              activeAdminDriverJobLink.safe_summary.acknowledged_at,
-            )
-              ? ` ${adminDriverJobAcknowledgementCompactTimeLabel(
-                  activeAdminDriverJobLink.safe_summary.acknowledged_at,
-                )}`
-              : ""
-          }`,
-          state: "acknowledged" as const,
-          title: `Driver acknowledged ${adminDriverJobStatusTimeLabel(
-            activeAdminDriverJobLink.safe_summary.acknowledged_at,
-          )}.`,
-        }
-      : {
-          label: "Waiting for driver",
-          state: "waiting" as const,
-          title: "The exact active Driver Job Link has not been acknowledged yet.",
-        };
 
   const customerCopyCard = useMemo(() => {
     const serviceType = customerBookingTypeLabel(booking.bookingType);
@@ -22723,6 +22724,13 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         },
         oneTimeUrl: driverJobUrl,
       });
+      setDashboardDriverJobLinksReadState((current) => ({
+        linksByReference: {
+          ...current.linksByReference,
+          [cleanReferenceText(link.booking_reference)]: link,
+        },
+        status: "loaded",
+      }));
     } catch (error) {
       setAdminDriverJobLinkState((current) => ({
         ...current,
@@ -26123,6 +26131,67 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const activeJobDriverStatusReferenceList = dayOfTripActiveJobVisibleBookings
     .map(getActiveJobBookingReference)
     .filter(Boolean);
+  const pendingDriverAckQueueEligibleBookings = operationalBookings
+    .filter((bookingRecord) => Boolean(getBookingDriverJobStatusReference(bookingRecord)))
+    .filter((bookingRecord) => bookingRecordIsCurrentAssignedActiveJob(bookingRecord, currentTimeMs))
+    .filter((bookingRecord) => {
+      return (
+        !bookingRecordIsCompletedStatus(bookingRecord) &&
+        !bookingRecordIsCancelledStatus(bookingRecord)
+      );
+    })
+    .sort((firstBooking, secondBooking) => {
+      const firstDateBucket = activeJobDateBucket(firstBooking);
+      const secondDateBucket = activeJobDateBucket(secondBooking);
+
+      if (firstDateBucket !== secondDateBucket) {
+        return firstDateBucket - secondDateBucket;
+      }
+
+      const firstDate = getBookingDateKey(firstBooking);
+      const secondDate = getBookingDateKey(secondBooking);
+
+      if (firstDate !== secondDate) {
+        if (firstDateBucket === 1 && secondDateBucket === 1) {
+          return secondDate.localeCompare(firstDate);
+        }
+
+        return firstDate.localeCompare(secondDate);
+      }
+
+      return (
+        normaliseTimeForSort(formatPickupTimeFromRecord(firstBooking)) -
+        normaliseTimeForSort(formatPickupTimeFromRecord(secondBooking))
+      );
+    });
+  const pendingDriverAckQueueReferenceList = [
+    ...new Set(
+      pendingDriverAckQueueEligibleBookings
+        .map(getActiveJobBookingReference)
+        .map(cleanReferenceText)
+        .filter(Boolean),
+    ),
+  ];
+  const pendingDriverAckQueueReferenceKey = pendingDriverAckQueueReferenceList.join("|");
+  const pendingDriverAckQueueItems =
+    dashboardDriverJobLinksReadState.status === "loaded"
+      ? pendingDriverAckQueueEligibleBookings
+          .map((bookingRecord) => {
+            const bookingReference = getActiveJobBookingReference(bookingRecord);
+            const link = dashboardDriverJobLinksReadState.linksByReference[bookingReference] || null;
+
+            return link?.link_status === "active" && !link.safe_summary.acknowledged
+              ? {
+                  bookingReference,
+                  issuedAt: link.issued_at,
+                  jobCardKind: link.safe_summary.job_card_kind,
+                  publicReference: bookingPublicReference(bookingRecord),
+                  waitingMinutes: adminDriverJobLinkWaitingMinutes(link.issued_at, currentTimeMs),
+                }
+              : null;
+          })
+          .filter((item): item is NonNullable<typeof item> => Boolean(item))
+      : [];
   const liveDispatchMapReferenceList = [
     ...new Set(
       liveDispatchMapEligibleBookings
@@ -26155,6 +26224,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const liveDispatchMapReferenceKey = liveDispatchMapReferenceList.join("|");
   const activeJobsMapAllowedReferenceKey = adminActiveJobsMapReadState.allowedBookingReferences.join("|");
   const todayJobsMonitorIsActive = activeTab === "dashboard";
+  const driverAckQueueMonitorIsActive = activeTab === "dashboard" || activeTab === "dispatch";
   const activeJobsMapLocationsByReference = new Map(
     activeJobsMapVisibleJobs
       .map((job) => [cleanReferenceText(job.assigned_job_reference), job] as const)
@@ -26476,7 +26546,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       void refreshDashboardDriverJobStatusRead(bookingReference);
       void refreshDashboardDriverOtsPhotoProofRead(bookingReference);
     }
-    void refreshDashboardDriverJobLinksRead(bookingReferences);
     // The booking reference key is the trigger; the read callback intentionally uses the latest page state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [todayJobsMonitorIsActive, activeJobDriverStatusReferenceKey]);
@@ -26497,13 +26566,30 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         void refreshDashboardDriverJobStatusRead(bookingReference);
         void refreshDashboardDriverOtsPhotoProofRead(bookingReference);
       }
-      void refreshDashboardDriverJobLinksRead(bookingReferences);
     }, 10 * 1000);
 
     return () => window.clearInterval(intervalId);
     // The booking reference key controls interval membership; callback internals read the latest status sync state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [todayJobsMonitorIsActive, activeJobDriverStatusReferenceKey, dashboardDriverJobAutoRefreshEnabled]);
+
+  useEffect(() => {
+    const bookingReferences = pendingDriverAckQueueReferenceKey.split("|").filter(Boolean);
+
+    if (!driverAckQueueMonitorIsActive || bookingReferences.length === 0) {
+      return;
+    }
+
+    void refreshDashboardDriverJobLinksRead(bookingReferences);
+
+    const intervalId = window.setInterval(() => {
+      void refreshDashboardDriverJobLinksRead(bookingReferences);
+    }, 10 * 1000);
+
+    return () => window.clearInterval(intervalId);
+    // The exact active-booking reference key controls queue membership; the read keeps only the newest active link per booking.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [driverAckQueueMonitorIsActive, pendingDriverAckQueueReferenceKey]);
 
   useEffect(() => {
     if (!liveDispatchMapReferenceKey) {
@@ -42631,6 +42717,64 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               </div>
             </details>
 
+            <section
+              className={`order-[54] min-w-0 rounded-md border p-3 transition ${
+                pendingDriverAckQueueItems.length > 0
+                  ? "animate-pulse border-amber-400 bg-amber-50 motion-reduce:animate-none"
+                  : "border-emerald-200 bg-emerald-50"
+              }`}
+              data-pending-driver-ack-queue="true"
+              data-pending-driver-ack-queue-count={String(pendingDriverAckQueueItems.length)}
+              data-pending-driver-ack-queue-pulsing={
+                pendingDriverAckQueueItems.length > 0 ? "true" : "false"
+              }
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-950">
+                    Pending for Driver ACK Queue
+                  </h2>
+                  <p className="text-xs text-slate-600">
+                    Newest active Driver Job Link for each exact booking. Link issued means created in this app.
+                  </p>
+                </div>
+                <span
+                  className={`inline-flex min-h-9 items-center rounded-full border px-3 py-1 text-sm font-bold ${
+                    pendingDriverAckQueueItems.length > 0
+                      ? "border-amber-400 bg-white text-amber-950"
+                      : "border-emerald-300 bg-white text-emerald-900"
+                  }`}
+                  data-pending-driver-ack-queue-count-badge="true"
+                >
+                  {pendingDriverAckQueueItems.length} pending
+                </span>
+              </div>
+              {pendingDriverAckQueueItems.length > 0 ? (
+                <ol
+                  className="mt-3 max-h-64 space-y-2 overflow-y-auto"
+                  data-pending-driver-ack-queue-list="true"
+                >
+                  {pendingDriverAckQueueItems.map((item, index) => (
+                    <li
+                      className="rounded-md border border-amber-300 bg-white px-3 py-2 text-sm font-semibold text-amber-950"
+                      data-pending-driver-ack-queue-booking-reference={item.bookingReference}
+                      data-pending-driver-ack-queue-item="true"
+                      key={item.bookingReference}
+                    >
+                      {index + 1}) {item.publicReference} · {adminDriverJobCardKindLabel(item.jobCardKind)} · Link issued{" "}
+                      {adminDriverJobLinkIssuedCompactTimeLabel(item.issuedAt)} · {item.waitingMinutes === null
+                        ? "Waiting"
+                        : `Waiting ${item.waitingMinutes} min`}
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="mt-3 text-sm font-semibold text-emerald-900">
+                  No driver acknowledgements pending.
+                </p>
+              )}
+            </section>
+
             {showDriverJobLinkCopy ? (
               <div
                 className="order-[55] min-w-0 rounded-md border border-stone-200 bg-white p-3"
@@ -42708,26 +42852,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       >
                         {driverJobLinkRevokeButtonLabel}
                       </button>
-                      <span
-                        className={`inline-flex min-h-9 max-w-full items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${
-                          driverJobLinkAcknowledgementStatus.state === "acknowledged"
-                            ? "border-emerald-300 bg-emerald-100 text-emerald-900"
-                            : driverJobLinkAcknowledgementStatus.state === "waiting"
-                              ? "border-amber-300 bg-amber-100 text-amber-950"
-                              : "border-slate-300 bg-slate-100 text-slate-700"
-                        }`}
-                        data-admin-driver-job-link-acknowledgement="true"
-                        data-admin-driver-job-link-acknowledgement-state={
-                          driverJobLinkAcknowledgementStatus.state
-                        }
-                        title={driverJobLinkAcknowledgementStatus.title}
-                      >
-                        <span className="max-w-[8rem] truncate">
-                          {dispatchPublicBookingReference || "Booking"}
-                        </span>
-                        <span className="mx-1" aria-hidden="true">·</span>
-                        <span>{driverJobLinkAcknowledgementStatus.label}</span>
-                      </span>
                     </div>
                     {driverJobLinkCopyMessage?.tone === "error" ? (
                       <div

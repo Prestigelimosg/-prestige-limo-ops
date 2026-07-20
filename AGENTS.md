@@ -28,6 +28,18 @@ The Dashboard `Today's Jobs` Driver Reports completion workflow is specifically 
 
 The Driver Calendar system is a separate established workflow. Do not change its action, OAuth, event, credential, route, or UI behavior while diagnosing or repairing Driver Reports or admin completion.
 
+# Owner-locked Pending Driver ACK Queue — do not duplicate
+
+The Dispatch `Pending for Driver ACK Queue` replaces only the former selected-booking `Waiting for driver` header pill. Preserve one queue in the existing Dispatch Driver Job Link area. Do not restore the old pill or add another queue, acknowledgement panel, API, table, notification sender, push lane, route, or polling store.
+
+Queue each current non-terminal operational booking only when its exact newest active Driver Job Link is not acknowledged. The queue must not require or display a known driver because the approved private-link acknowledgement workflow may collect the recipient's details after issuance. Key and clear rows by exact booking reference plus newest link record, never by driver ID, driver name, contact, plate, or Google account. One driver may have any number of different pending bookings. An acknowledgement on an older link must never clear a newer amendment row.
+
+Preserve exact safe revision labels: no previous link is `New`, the same safe job-card revision is `Reissued`, a changed safe job-card revision is `Amendment`, and incomplete historic evidence is `Issued` rather than guessed. `Link issued` means created inside the app and must never imply external WhatsApp, Telegram, Email, or SMS delivery.
+
+Do not auto-revoke old Driver Job Links when a new or amended link is issued. Only the established explicit admin `Revoke Link` action may revoke a link. Preserve the owner workflow in which admin resends an amended active link, the driver acknowledges it, and the separate locked Calendar action updates the same booking event.
+
+The whole queue may pulse only while pending count is greater than zero and must support all pending rows without a fixed two-or-three-item cap. Keep the established collapsed Driver Reports disclosure, acknowledgement/OTW/OTS/POB/Job Completed/OTS-photo evidence, Dashboard Active Assigned Jobs, Live Dispatch, explicit `Admin confirm completed`, and Driver Calendar lane unchanged. Before any approved repair, run `scripts/test-pending-driver-ack-queue-guard.mjs`, `scripts/test-admin-driver-job-link-api-contract.mjs`, `scripts/test-admin-active-job-confirm-completed-guard.mjs`, and `scripts/test-driver-job-calendar-download-guard.mjs`.
+
 # Owner-locked Driver Calendar workflow — do not modify
 
 The entire established personal Driver Calendar workflow is owner-locked. Do not remove, rename, rearrange, redesign, duplicate, replace, broaden, or “simplify” its acknowledgement gate, action, Google OAuth connection, encrypted credential reuse, event identity, update behavior, reporting shortcut, routes, persistence, UI, or privacy boundaries unless the owner explicitly requests a Calendar-specific change, the exact defect is first reproduced in the approved runtime surface, and the owner approves one bounded in-place repair.

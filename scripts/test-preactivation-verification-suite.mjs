@@ -442,6 +442,10 @@ const guardChecks = [
     script: "scripts/test-driver-job-details-admin-sync-guard.mjs",
   },
   {
+    label: "driver acknowledgement calendar identity persistence contract",
+    script: "scripts/test-driver-job-status-persistence-api-contract.mjs",
+  },
+  {
     label: "dispatch flight-location copy guard",
     script: "scripts/test-dispatch-flight-location-copy-guard.mjs",
   },

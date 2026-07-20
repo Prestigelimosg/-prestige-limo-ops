@@ -41,6 +41,7 @@ let getProductionDriverJobPayloadForToken;
 let hashDriverJobLinkToken;
 let loadDriverJobPayloadThroughStatusPersistence;
 let productionDriverJobLinksConfigured;
+let saveDriverJobDetailsThroughStatusPersistence;
 let saveDriverJobStatusThroughStatusPersistence;
 let setDriverJobProductionSupabaseClientForTests;
 
@@ -136,6 +137,13 @@ class MockSupabaseQuery {
     return this;
   }
 
+  update(payload) {
+    this.action = "update";
+    this.payload = payload;
+
+    return this;
+  }
+
   delete() {
     this.action = "delete";
 
@@ -169,12 +177,20 @@ class MockSupabaseQuery {
       return this.client.resolveInsert(this);
     }
 
+    if (this.action === "update") {
+      return this.client.resolveUpdate(this, "single");
+    }
+
     return this.client.resolveSelect(this, "single");
   }
 
   then(resolve, reject) {
     if (this.action === "delete") {
       return this.client.resolveDelete(this).then(resolve, reject);
+    }
+
+    if (this.action === "update") {
+      return this.client.resolveUpdate(this, "array").then(resolve, reject);
     }
 
     return this.client.resolveSelect(this, "array").then(resolve, reject);
@@ -187,6 +203,8 @@ class MockSupabaseClient {
     this.operations = [];
     this.selectHistory = [];
     this.tables = {
+      bookings: seed.bookings || [],
+      drivers: seed.drivers || [],
       driver_job_dsp_actual_time_events: seed.driver_job_dsp_actual_time_events || [],
       driver_job_links: seed.driver_job_links || [],
       driver_job_status_events: seed.driver_job_status_events || [],
@@ -206,6 +224,17 @@ class MockSupabaseClient {
       payload: query.payload,
       table: query.table,
     });
+
+    if (query.table === "drivers") {
+      const row = {
+        id: this.tables.drivers.reduce((largest, driver) => Math.max(largest, Number(driver.id) || 0), 0) + 1,
+        ...query.payload,
+      };
+
+      this.tables.drivers.push(row);
+
+      return { data: row, error: null };
+    }
 
     if (
       query.table !== "driver_job_status_events" &&
@@ -240,6 +269,36 @@ class MockSupabaseClient {
       data: row,
       error: null,
     };
+  }
+
+  async resolveUpdate(query, resultMode) {
+    this.operations.push({
+      action: "update",
+      filters: query.filters,
+      payload: query.payload,
+      table: query.table,
+    });
+
+    const updatedRows = [];
+
+    this.tables[query.table] = this.tables[query.table].map((row) => {
+      if (!query.filters.every((filter) => row[filter.column] === filter.value)) {
+        return row;
+      }
+
+      const updated = { ...row, ...query.payload };
+      updatedRows.push(updated);
+      return updated;
+    });
+
+    if (resultMode === "single") {
+      return {
+        data: updatedRows[0] || null,
+        error: updatedRows[0] ? null : { code: "PGRST116" },
+      };
+    }
+
+    return { data: updatedRows, error: null };
   }
 
   async resolveDelete(query) {
@@ -317,6 +376,8 @@ class MockSupabaseClient {
 function createSeededClient({
   actualTimeInsertError = false,
   bookingType = "DEP",
+  bookings = [],
+  drivers = [],
   latestOccurredAt = "2026-06-07T09:00:00.000Z",
   latestSafeStatusNote = null,
   latestStatus = "ots",
@@ -324,10 +385,13 @@ function createSeededClient({
 } = {}) {
   return new MockSupabaseClient({
     actualTimeInsertError,
+    bookings,
+    drivers,
     driver_job_dsp_actual_time_events: [],
     driver_job_links: [
       {
         booking_reference: "DRV-JOB-API-001",
+        driver_id: null,
         expires_at: validExpiresAt,
         id: "91c9d972-6fa5-4f3b-b157-bb56a9366c7c",
         link_status: "active",
@@ -562,7 +626,7 @@ const harness = await loadHarness();
   getProductionDriverJobPayloadForToken,
   setDriverJobProductionSupabaseClientForTests,
 } = harness.production);
-({ driverJobStatusPersistenceVersion, loadDriverJobPayloadThroughStatusPersistence, saveDriverJobStatusThroughStatusPersistence } =
+({ driverJobStatusPersistenceVersion, loadDriverJobPayloadThroughStatusPersistence, saveDriverJobDetailsThroughStatusPersistence, saveDriverJobStatusThroughStatusPersistence } =
   harness.persistence);
 ({ hashDriverJobLinkToken } = harness.link);
 ({ productionDriverJobLinksConfigured } = harness.mode);
@@ -603,6 +667,69 @@ try {
   });
 
   process.env.PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED = "true";
+
+  {
+    const client = createSeededClient({
+      bookings: [{ booking_reference: "DRV-JOB-API-001", driver_id: null }],
+    });
+    const result = await saveDriverJobDetailsThroughStatusPersistence({
+      client,
+      driverContact: "+65 8111 2222",
+      driverName: "Calendar Driver One",
+      driverPlateNumber: "SLA1234X",
+      driverVehicleModel: "Mercedes V Class",
+      now,
+      token: validToken,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(client.tables.drivers.length, 1);
+    assert.deepEqual(client.tables.drivers[0], {
+      availability_status: "available",
+      contact_number: "+65 8111 2222",
+      driver_name: "Calendar Driver One",
+      id: 1,
+      plate_number: "SLA1234X",
+      vehicle_type: "Mercedes V Class",
+    });
+    assert.equal(client.tables.bookings[0].driver_id, 1);
+    assert.equal(client.tables.driver_job_links[0].driver_id, 1);
+    assert.ok(client.tables.driver_job_links[0].safe_link_context.driver_acknowledged_at);
+    assertNoDriverJobLeaks(result);
+  }
+
+  {
+    const client = createSeededClient({
+      bookings: [{ booking_reference: "DRV-JOB-API-001", driver_id: null }],
+      drivers: [{
+        availability_status: "available",
+        contact_number: "+65 8111 2222",
+        driver_name: "Calendar Driver One",
+        id: 27,
+        plate_number: "SLA1234X",
+        vehicle_type: "Mercedes V Class",
+      }],
+    });
+    const result = await saveDriverJobDetailsThroughStatusPersistence({
+      client,
+      driverContact: "+65 8111 2222",
+      driverName: "Calendar Driver One",
+      driverPlateNumber: "SLA1234X",
+      driverVehicleModel: "Mercedes V Class",
+      now,
+      token: validToken,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(client.tables.drivers.length, 1, "Future jobs must reuse the exact driver contact identity.");
+    assert.equal(client.tables.bookings[0].driver_id, 27);
+    assert.equal(client.tables.driver_job_links[0].driver_id, 27);
+    assert.equal(
+      client.operations.filter((operation) => operation.table === "drivers" && operation.action === "insert").length,
+      0,
+    );
+    assertNoDriverJobLeaks(result);
+  }
 
   {
     const client = createSeededClient({

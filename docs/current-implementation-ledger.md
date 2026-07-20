@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-dbb5f789 Use final Prestige invoice logo
+6db3e947 Restore final invoice layout
 
 Latest pushed main/staging runtime checkpoint:
 1e80b1dd Fix customer job public reference display
@@ -11,6 +11,14 @@ bc0b49ec Merge pull request #56 from Prestigelimosg/codex/restore-current-workfl
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Driver Acknowledgement To Calendar Identity Handoff Repair (2026-07-20)
+
+- The owner reproduced the exact existing-lane defect on the private Driver Job page: `Save & Acknowledge Job` successfully saved the visible name, contact, plate, and vehicle, but the immediately available `Add / Update Calendar` action failed with the red unverified-driver instruction. Inspection found one missing handoff: acknowledgement updated the link context and booking display fields but never persisted the hidden `driver_id` required by the established Calendar context check.
+- The bounded repair stays inside the existing acknowledgement persistence function. The driver still enters/confirms the same four visible details and never sees or types an internal ID. A saved booking assignment remains authoritative; when both the booking and link lack an identity, acknowledgement reuses one exact-contact safe driver row or creates one row containing only `driver_name`, `contact_number`, `plate_number`, `vehicle_type`, and `availability_status`. The resolved ID is then written to the exact booking and exact private link before acknowledgement completes.
+- The existing page layout, labels, inputs, `Save & Acknowledge Job` button, single `Add / Update Calendar` button, OAuth route/scope, encrypted credential, Google event writer, deterministic driver-ID-plus-booking-reference event key, amendment behavior, private reporting shortcut, OTW/OTS/POB/Job Completed controls, customer/admin messaging, live location, and separate Operations Calendar lane are unchanged. No invoice, billing, payment, payout, PayNow, customer price, internal note, parser/debug, provider, or environment path is added.
+- Focused executable protection in `scripts/test-driver-job-status-persistence-api-contract.mjs` proves a first acknowledgement creates only the five safe driver fields and binds the same ID to booking and link, while a future job with the exact same saved contact reuses the existing driver row without a duplicate. `scripts/test-driver-job-details-admin-sync-guard.mjs` locks the narrow wiring and forbidden-field exclusions; both run from the preactivation suite.
+- Local Mac Chrome acceptance loaded the existing private Driver Job page without any layout change, used the existing `Save & Acknowledge Job` action, displayed the confirmed four details and the same single `Add / Update Calendar` action, and did not use any status, message, live-location, invoice, payment, payout, or external-provider action. This local visual acceptance does not claim a Production Google mutation or deployment.
 
 ### Owner Driver Calendar Workflow Preservation Lock (2026-07-20)
 

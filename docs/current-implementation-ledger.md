@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-a20423f0 Clarify OAuth app homepage identity
+b8757d90 Use final Prestige app logo
 
 Latest pushed main/staging runtime checkpoint:
 1e80b1dd Fix customer job public reference display

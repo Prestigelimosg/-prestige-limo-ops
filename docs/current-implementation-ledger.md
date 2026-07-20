@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-5534ef84 Add Google OAuth verification pages
+a20423f0 Clarify OAuth app homepage identity
 
 Latest pushed main/staging runtime checkpoint:
 1e80b1dd Fix customer job public reference display

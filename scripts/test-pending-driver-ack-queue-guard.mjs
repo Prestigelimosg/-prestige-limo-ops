@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const app = await readFile("app/page.tsx", "utf8");
+const browserGuard = await readFile("scripts/test-pending-driver-ack-queue-browser.mjs", "utf8");
+const packageJson = await readFile("package.json", "utf8");
 const persistence = await readFile("lib/admin-driver-job-link-persistence.ts", "utf8");
 
 function assertIncludes(source, fragment, label) {
@@ -74,6 +76,49 @@ assert.ok(!dismissBlock.includes("fetch("), "Dismissing an alert must not call a
 assert.ok(!dismissBlock.includes("revokeDriverJobLink"), "Dismissing an alert must not revoke a link.");
 assert.ok(!dismissBlock.includes("bookingReference"), "Dismissal must not key by booking reference.");
 assert.ok(!dismissBlock.includes("driver_id"), "Dismissal must not key by driver identity.");
+
+const dismissedStorageReadStart = app.indexOf(
+  "const [dismissedPendingDriverAckLinkIds, setDismissedPendingDriverAckLinkIds]",
+);
+const dismissedStorageReadEnd = app.indexOf(
+  "const [\n    loadBookingsTypedOperationalCardsById",
+  dismissedStorageReadStart,
+);
+const dismissedStorageReadBlock = app.slice(dismissedStorageReadStart, dismissedStorageReadEnd);
+
+assert.ok(
+  dismissedStorageReadStart > -1 && dismissedStorageReadEnd > dismissedStorageReadStart,
+  "Exact-link local-storage hydration block is missing.",
+);
+assertIncludes(
+  dismissedStorageReadBlock,
+  "window.localStorage.getItem(adminDismissedPendingDriverAckLinksStorageKey)",
+  "exact-link local-storage read",
+);
+assertIncludes(
+  dismissedStorageReadBlock,
+  "parsed.map(cleanReferenceText).filter(Boolean).slice(-500)",
+  "bounded exact-link local-storage hydration",
+);
+
+for (const fragment of [
+  "two independent pending Driver ACK rows",
+  "one exact alert dismissed while the second remains",
+  "hard refresh retained exact-link dismissal",
+  "dismissed exact link remains hidden after hard refresh",
+  "Close must not create POST, PATCH, DELETE, or other mutations.",
+  "new link ID for the same booking appears after older dismissal",
+  "Close must leave the exact private link active.",
+  "assert.deepEqual(amendedQueue.ids, [amendedLinkId, secondLinkId])",
+]) {
+  assertIncludes(browserGuard, fragment, "focused pending ACK Close browser coverage");
+}
+
+assertIncludes(
+  packageJson,
+  '"test:pending-driver-ack-queue-browser": "node scripts/test-pending-driver-ack-queue-browser.mjs"',
+  "focused pending ACK Close browser command",
+);
 
 for (const fragment of [
   'export type AdminDriverJobCardKind = "amendment" | "new" | "reissued";',

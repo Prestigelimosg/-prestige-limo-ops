@@ -29,6 +29,7 @@
     "test:browser": "node scripts/test-booking-browser.mjs",
     "test:app-smoke-browser": "node scripts/test-app-smoke-browser.mjs",
     "test:booking-ui-browser": "node scripts/test-booking-ui-browser.mjs",
+    "test:pending-driver-ack-queue-browser": "node scripts/test-pending-driver-ack-queue-browser.mjs",
     "test:rates-browser": "node scripts/test-rates-browser.mjs",
     "test:safe": "npm run test:parser && npm run test:pricing && npm run test:driver-job-link && npm run test:driver-job-link-contract && npm run test:driver-job-link-api-routes && npm run test:driver-job-link-mode && npm run test:driver-job-link-production-guard && npm run test:driver-job-link-production-adapter && npm run test:ai-parser-schema && npm run test:ai-parse-api-route && npm run lint && npm run build && npm run test:rates-browser && npm run test:booking-ui-browser && npm run test:driver-job-page-browser && npm run test:driver-job-page-production-disabled-browser && npm run test:mobile-usability-browser && npm run test:app-smoke-browser"
   },

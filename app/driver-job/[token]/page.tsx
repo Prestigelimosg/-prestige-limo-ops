@@ -1,7 +1,8 @@
 "use client";
 
-import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
+import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   SafeDriverJobPayload,
   SafeDriverJobStatusHistoryItem,
@@ -2194,6 +2195,20 @@ export default function DriverJobPage() {
                       amendment—no file download. Open the event and tap Open Driver Job for OTW, OTS, POB and
                       Job Completed reporting. Do not share the calendar event.
                     </p>
+                    <div
+                      className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold"
+                      data-driver-job-calendar-policy-links="true"
+                    >
+                      <Link className="text-sky-800 underline" href="/google-calendar" rel="noreferrer">
+                        Calendar data use
+                      </Link>
+                      <Link className="text-sky-800 underline" href="/privacy" rel="noreferrer">
+                        Privacy Policy
+                      </Link>
+                      <Link className="text-sky-800 underline" href="/terms" rel="noreferrer">
+                        Terms of Service
+                      </Link>
+                    </div>
                     {driverCalendar.feedback ? (
                       <p
                         className={`text-xs font-semibold leading-5 ${

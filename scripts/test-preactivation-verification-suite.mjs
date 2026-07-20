@@ -851,6 +851,10 @@ const guardChecks = [
     script: "scripts/test-driver-job-calendar-download-guard.mjs",
   },
   {
+    label: "Google Calendar OAuth public pages guard",
+    script: "scripts/test-google-calendar-oauth-public-pages-guard.mjs",
+  },
+  {
     label: "Customer In-App Notification admin button guard",
     script: "scripts/test-customer-in-app-notification-admin-button-guard.mjs",
   },

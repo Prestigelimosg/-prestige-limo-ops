@@ -109,6 +109,7 @@ for (const phrase of [
   "`/book` may keep only the existing internal customer portal link to `/my-bookings`.",
   "`/my-bookings` may keep only the existing internal New Booking Request link to `/book`.",
   "`/driver-job/[token]` may use exactly one imperative navigation only after its existing token-scoped calendar POST returns a URL validated as HTTPS host `accounts.google.com` and path `/o/oauth2/v2/auth`; the driver job demo page has no such exception.",
+  "`/driver-job/[token]` may also keep only the three same-tab public Google Calendar information links to `/google-calendar`, `/privacy`, and `/terms`; no booking or token value may enter those hrefs.",
   "Public client pages must not otherwise call `window.open`, imperative navigation helpers, `mailto:`, `tel:`, SMS/WhatsApp deep links, external HTTP URLs, `/api/admin*`, `/api/customer-portal-sessions`, or `/api/admin-saved-bookings`. The Google exception cannot accept another host, protocol, path, raw anchor, app deep link, admin link, or session-issue link.",
   "`/my-bookings` may read `window.location.search` only through the bounded owned-booking/tracking deep-link parser; this read-only query inspection is not navigation and must not permit location assignment, redirect, external URL, token, or unowned booking access.",
   "Public navigation contracts must continue coordinating the public route source privacy guard, public API client caller guard, and customer booking page API audit in the preactivation suite.",
@@ -174,6 +175,14 @@ assert.equal(
   1,
   "Driver Job page must have exactly one bounded Google consent navigation",
 );
+assertIncludes(driverJobPage, 'import Link from "next/link";', "Driver Job public information Link import");
+assert.deepEqual(
+  hrefValues(driverJobPage),
+  ["/google-calendar", "/privacy", "/terms"],
+  "Driver Job public information href allowlist",
+);
+assert.equal(countOccurrences(driverJobPage, "<Link"), 3, "Driver Job public information Link count");
+assert.equal(countOccurrences(driverJobPage, "</Link>"), 3, "Driver Job public information Link closing count");
 const driverJobPageWithoutGoogleConsent = driverJobPage
   .replace('url.protocol === "https:"', "")
   .replace('url.hostname === "accounts.google.com"', "")
@@ -194,7 +203,10 @@ for (const [path, sourceValue] of publicPagePaths.map((path) => [path, files[pat
 }
 
 for (const path of publicPagePaths.filter(
-  (path) => path !== "app/book/page.tsx" && path !== "app/my-bookings/page.tsx",
+  (path) =>
+    path !== "app/book/page.tsx" &&
+    path !== "app/my-bookings/page.tsx" &&
+    path !== "app/driver-job/[token]/page.tsx",
 )) {
   const source = files[path];
   assert.deepEqual(hrefValues(source), [], `${path} public href allowlist`);

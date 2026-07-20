@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import ts from "typescript";
 
 const eventHelperPath = "lib/driver-job-calendar-event.ts";
 const googleHelperPath = "lib/driver-google-calendar.ts";
@@ -71,6 +72,8 @@ for (const fragment of [
   'google_calendar_revision: context.event.revision',
   'request(eventPath, "PUT")',
   '"POST",',
+  'input.providerError === "invalid_grant"',
+  "buildAuthorizationResult(config, token)",
 ]) {
   assert.equal(googleHelper.includes(fragment), true, `Driver Google helper must include ${fragment}.`);
 }
@@ -139,6 +142,11 @@ for (const fragment of [
   "safeGoogleConsentUrl",
   'url.hostname === "accounts.google.com"',
   "window.location.assign(googleConsentUrl)",
+  'searchParams.get("calendar")',
+  'searchParams.delete("calendar")',
+  "window.history.replaceState",
+  "Calendar connected and saved. Open the event and tap Open Driver Job for reporting.",
+  "Google Calendar connection was not completed. Try Add / Update Calendar again.",
   "Calendar saved",
   "Add / Update Calendar",
   "no file download",
@@ -190,7 +198,38 @@ for (const productionEvidence of [
 }
 assert.equal(suite.includes(guardPath), true, "Preactivation suite must keep the focused calendar guard.");
 
+const refreshClassifierStart = googleHelper.indexOf(
+  "export function classifyDriverGoogleCalendarRefreshResult",
+);
+const refreshClassifierEnd = googleHelper.indexOf(
+  "\n\nasync function writeGoogleEvent",
+  refreshClassifierStart,
+);
+assert.notEqual(refreshClassifierStart, -1, "Driver Google refresh classifier must exist.");
+assert.notEqual(refreshClassifierEnd, -1, "Driver Google refresh classifier must remain bounded.");
+const refreshClassifierModule = { exports: {} };
+const refreshClassifierSource = googleHelper.slice(refreshClassifierStart, refreshClassifierEnd);
+const refreshClassifierJavascript = ts.transpileModule(refreshClassifierSource, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+}).outputText;
+new Function("exports", refreshClassifierJavascript)(refreshClassifierModule.exports);
+const { classifyDriverGoogleCalendarRefreshResult } = refreshClassifierModule.exports;
 const { buildDriverJobGoogleCalendarEvent } = await import("../lib/driver-job-calendar-event.ts");
+assert.equal(
+  classifyDriverGoogleCalendarRefreshResult({ accessToken: "", providerError: "invalid_grant" }),
+  "reauthorize",
+  "An invalid Google refresh grant must restart the same bounded OAuth flow.",
+);
+assert.equal(
+  classifyDriverGoogleCalendarRefreshResult({ accessToken: "", providerError: "temporarily_unavailable" }),
+  "provider_failed",
+  "A transient Google failure must remain retryable without forcing reconnection.",
+);
+assert.equal(
+  classifyDriverGoogleCalendarRefreshResult({ accessToken: "safe-access-token", providerError: "" }),
+  "use_access_token",
+  "A valid refreshed access token must continue to the existing event upsert.",
+);
 const calendarJobUrl = "https://ops.example/driver-job/safe-calendar-token";
 const payload = {
   acknowledged: true,

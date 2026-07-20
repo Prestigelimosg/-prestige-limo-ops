@@ -398,8 +398,21 @@ async function requestAccessToken(
   });
   const body = await response.json().catch(() => null) as UnknownRecord | null;
   const accessToken = providerToken(body?.access_token);
+  const providerError = text(body?.error);
 
-  return response.ok && accessToken ? accessToken : "";
+  return {
+    accessToken: response.ok && accessToken ? accessToken : "",
+    providerError,
+  };
+}
+
+export function classifyDriverGoogleCalendarRefreshResult(input: {
+  accessToken: string;
+  providerError: string;
+}) {
+  if (input.accessToken) return "use_access_token" as const;
+  if (input.providerError === "invalid_grant") return "reauthorize" as const;
+  return "provider_failed" as const;
 }
 
 async function writeGoogleEvent(
@@ -476,6 +489,21 @@ function buildAuthorization(
   };
 }
 
+function buildAuthorizationResult(
+  config: DriverGoogleCalendarConfig,
+  token: string,
+): DriverGoogleCalendarResult {
+  const authorization = buildAuthorization(config, token);
+
+  return {
+    action: "authorize",
+    authorization_url: authorization.authorizationUrl,
+    cookie_value: authorization.cookieValue,
+    ok: true,
+    status: "save_to_calendar",
+  };
+}
+
 export async function readDriverGoogleCalendarStatus(
   token: string,
 ): Promise<DriverGoogleCalendarResult> {
@@ -521,14 +549,7 @@ export async function saveOrAuthorizeDriverGoogleCalendar(
   const encryptedRefreshToken = text(connection.row?.encrypted_refresh_token);
 
   if (!encryptedRefreshToken) {
-    const authorization = buildAuthorization(config, token);
-    return {
-      action: "authorize",
-      authorization_url: authorization.authorizationUrl,
-      cookie_value: authorization.cookieValue,
-      ok: true,
-      status: "save_to_calendar",
-    };
+    return buildAuthorizationResult(config, token);
   }
 
   const refreshToken = decrypt(
@@ -537,11 +558,16 @@ export async function saveOrAuthorizeDriverGoogleCalendar(
     `prestige-driver-google-calendar-refresh-token-v1:${context.driverId}`,
   );
 
-  if (!refreshToken) return failure("invalid_oauth", 400);
+  if (!refreshToken) return buildAuthorizationResult(config, token);
 
   try {
-    const accessToken = await requestAccessToken(config, refreshToken, fetcher);
-    if (!accessToken) return failure("provider_failed", 502);
+    const { accessToken, providerError } = await requestAccessToken(config, refreshToken, fetcher);
+    const refreshResult = classifyDriverGoogleCalendarRefreshResult({ accessToken, providerError });
+
+    if (refreshResult === "reauthorize") {
+      return buildAuthorizationResult(config, token);
+    }
+    if (refreshResult === "provider_failed") return failure("provider_failed", 502);
     const saved = await writeGoogleEvent(config, accessToken, context, client, fetcher);
     return saved
       ? { action: "saved", ok: true, status: "cal_saved" }

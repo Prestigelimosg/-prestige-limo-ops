@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-9b038b21 Persist verified driver identity on bookings
+a2b611ff Keep driver JC evidence until admin confirms
 
 Latest pushed main/staging runtime checkpoint:
 1e80b1dd Fix customer job public reference display
@@ -19,6 +19,14 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Completed / History now requires the booking's saved completed/cancelled/history classification. A driver JC report alone no longer creates a completed-history fallback row or enables archived-job deletion before admin confirmation. The existing live-map eligibility may still stop at driver JC independently of the retained evidence card.
 - No second card, reporting page, status route, timestamp writer, completion control, provider-send path, or booking writer is added. The Driver Calendar system is unchanged. Customer/driver finance and internal-data privacy boundaries remain unchanged. No live status, booking, Calendar event, OAuth credential, provider configuration, message, invoice, payment, payout, PayNow payout, GPS, photo, or external contact was changed during this source repair.
 - Focused protection is extended in `scripts/test-admin-active-job-confirm-completed-guard.mjs`, `scripts/test-driver-completed-history-grouping-guard.mjs`, and `scripts/test-booking-ui-browser.mjs`; the browser suite reproduces driver JC evidence in the existing card, verifies that no completion PATCH occurs, then exercises the existing admin confirmation transition into Completed / History.
+
+### Driver Calendar Credential Recovery And Callback Feedback (2026-07-20)
+
+- The existing acknowledged Driver Job `Add / Update Calendar` action now restarts its same bounded Google OAuth consent when the stored refresh token cannot be decrypted or Google returns the exact permanent refresh rejection `invalid_grant`. The successful callback overwrites that driver's unusable encrypted credential through the existing server-only upsert and writes the same deterministic event; no disconnect button, credential route, second Calendar action, event identity, event lane, or provider scope is added.
+- Transient token/provider failures remain `provider_failed` and show the existing retry/contact-dispatch error. They do not erase a usable encrypted refresh token or force the driver through consent. The refresh-result classifier is executable in the focused guard so permanent rejection, transient failure, and valid-access-token outcomes remain distinct.
+- The existing OAuth callback's `calendar=saved|error` result is consumed once by the same private Driver Job page and removed with `history.replaceState`, preserving the private route and any unrelated query/hash state. A saved result displays `Calendar connected and saved` only when the existing status read confirms `cal_saved`; an error result displays a specific retry message. Neither result changes booking data or driver reporting status.
+- The existing `calendar.events`-only scope, offline PKCE flow, encrypted refresh-token persistence, verified current-driver assignment check, primary-calendar deterministic upsert, 90-minute Singapore schedule, 60-minute popup, `sendUpdates=none`, no-attendee privacy boundary, and private `Open Driver Job` shortcut remain unchanged. No live Google account, OAuth credential, Calendar event, booking, status, customer/driver message, invoice, payment, payout, PayNow payout, GPS, photo, provider configuration, environment value, deployment, or external contact is changed by this source repair.
+- Focused protection remains in `scripts/test-driver-job-calendar-download-guard.mjs` and `scripts/test-driver-job-page-browser.mjs`, including callback success/error feedback, one-time URL cleanup, exact-route preservation, invalid-grant reauthorization, transient failure behavior, deterministic event identity, and the established public privacy checks.
 
 ### Production Full Driver Profile Same-Origin Session Repair (2026-07-19)
 

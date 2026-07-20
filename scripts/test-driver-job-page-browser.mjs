@@ -211,6 +211,7 @@ async function runChromeTest() {
         window.__driverJobFetchCalls = [];
         window.__prestigeErrors = [];
         window.__prestigeConsoleErrors = [];
+        const driverCalendarReturnState = new URLSearchParams(window.location.search).get("calendar");
         window.addEventListener("error", (event) => window.__prestigeErrors.push(event.message));
         window.addEventListener("unhandledrejection", (event) => window.__prestigeErrors.push(String(event.reason)));
         const originalError = console.error;
@@ -230,7 +231,9 @@ async function runChromeTest() {
               new Response(JSON.stringify(
                 method === "POST"
                   ? { action: "saved", ok: true, status: "cal_saved" }
-                  : { action: "status", connected: false, ok: true, status: "save_to_calendar" },
+                  : driverCalendarReturnState === "saved"
+                    ? { action: "status", connected: true, ok: true, status: "cal_saved" }
+                    : { action: "status", connected: false, ok: true, status: "save_to_calendar" },
               ), {
                 status: 200,
                 headers: { "content-type": "application/json" },
@@ -754,6 +757,40 @@ async function runChromeTest() {
       return afterState;
     };
 
+    const verifyDriverCalendarCallbackFeedback = async ({
+      expectedFeedback,
+      expectedSaved,
+      returnState,
+    }) => {
+      await navigateAndWaitForBodyText(
+        client,
+        evaluate,
+        `${driverJobUrl(mockDriverJobTokens.workflowOrder)}?calendar=${returnState}`,
+        expectedFeedback,
+        `driver Google Calendar ${returnState} callback feedback`,
+      );
+      const state = await pageState();
+      const locationState = await evaluate(`({
+        hash: window.location.hash,
+        pathname: window.location.pathname,
+        search: window.location.search,
+      })`);
+
+      assert.equal(state.calendarImport.feedback, expectedFeedback);
+      assert.equal(state.calendarImport.saved, expectedSaved);
+      assert.equal(
+        locationState.search.includes("calendar="),
+        false,
+        "Driver Google Calendar callback state must be consumed once and removed from the URL.",
+      );
+      assert.equal(
+        locationState.pathname,
+        `/driver-job/${mockDriverJobTokens.workflowOrder}`,
+        "Driver Google Calendar callback cleanup must preserve the private Driver Job route.",
+      );
+      assertNoSensitiveText(state);
+    };
+
     const uploadOtsPhotoProof = async () => {
       const beforeState = await pageState();
       const selected = await evaluate(`(() => {
@@ -1146,6 +1183,16 @@ async function runChromeTest() {
     await clickBlockedStatus("OTW", "Save & Acknowledge Job before updating status.", startingStatusText);
     await saveAndAcknowledgeJob();
     await saveDriverJobGoogleCalendar();
+    await verifyDriverCalendarCallbackFeedback({
+      expectedFeedback: "Calendar connected and saved. Open the event and tap Open Driver Job for reporting.",
+      expectedSaved: true,
+      returnState: "saved",
+    });
+    await verifyDriverCalendarCallbackFeedback({
+      expectedFeedback: "Google Calendar connection was not completed. Try Add / Update Calendar again.",
+      expectedSaved: false,
+      returnState: "error",
+    });
     await clickBlockedStatus("OTS", "Update OTW before OTS.", startingStatusText);
     await clickBlockedStatus("POB", "Update OTW before POB.", startingStatusText);
     await clickBlockedStatus("Job Completed", "Update OTW before Job Completed.", startingStatusText);

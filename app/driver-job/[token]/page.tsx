@@ -797,6 +797,19 @@ export default function DriverJobPage() {
         return;
       }
 
+      const searchParams = new URLSearchParams(window.location.search);
+      const calendarReturnState = searchParams.get("calendar");
+
+      if (calendarReturnState) {
+        searchParams.delete("calendar");
+        const nextSearch = searchParams.toString();
+        window.history.replaceState(
+          window.history.state,
+          "",
+          `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`,
+        );
+      }
+
       setPageState({ kind: "loading" });
       setAcknowledged(false);
       setDetailsFeedback(null);
@@ -864,13 +877,30 @@ export default function DriverJobPage() {
                   ? {
                       action: "idle",
                       connected: calendarResult.connected === true,
-                      feedback: null,
+                      feedback:
+                        calendarReturnState === "saved" && calendarResult.status === "cal_saved"
+                          ? {
+                              tone: "success",
+                              text: "Calendar connected and saved. Open the event and tap Open Driver Job for reporting.",
+                            }
+                          : calendarReturnState === "error"
+                            ? {
+                                tone: "error",
+                                text: "Google Calendar connection was not completed. Try Add / Update Calendar again.",
+                              }
+                            : null,
                       status: calendarResult.status,
                     }
                   : {
                       action: "idle",
                       connected: false,
-                      feedback: null,
+                      feedback:
+                        calendarReturnState === "error"
+                          ? {
+                              tone: "error",
+                              text: "Google Calendar connection was not completed. Try Add / Update Calendar again.",
+                            }
+                          : null,
                       status: "unavailable",
                     },
               );
@@ -880,7 +910,13 @@ export default function DriverJobPage() {
               setDriverCalendar({
                 action: "idle",
                 connected: false,
-                feedback: null,
+                feedback:
+                  calendarReturnState === "error"
+                    ? {
+                        tone: "error",
+                        text: "Google Calendar connection was not completed. Try Add / Update Calendar again.",
+                      }
+                    : null,
                 status: "unavailable",
               });
             }

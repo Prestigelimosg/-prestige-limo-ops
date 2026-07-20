@@ -18,6 +18,16 @@ Before proposing, testing, or editing a feature:
 
 Follow TEST → FIX → REVIEW → COMMIT in one bounded pass. Do not claim runtime behavior works from source inspection or a passing guard alone.
 
+# Verified workflow preservation lock
+
+Everything recorded as completed, deployed, live, or verified in `docs/current-implementation-ledger.md` is an established workflow contract. Do not remove, rename, reorganize, broaden, redesign, reset, reimplement, or “improve” that behavior unless the exact workflow is first reproduced as broken in the approved runtime surface and the owner approves the bounded repair. If no defect is reproduced, make no application change.
+
+Any approved repair must stay inside the existing lane and preserve its established UI location, controls, routes, API and persistence boundaries, consumers, privacy exclusions, and focused regression guards. Do not use an unrelated request as permission to alter another completed workflow.
+
+The Dashboard `Today's Jobs` Driver Reports completion workflow is specifically locked: a persisted driver `Job Completed`/JC report remains visible evidence and must not automatically close the card, mark the saved booking completed, create a Completed / History fallback row, or enable archived-job deletion. Only the existing explicit `Admin confirm completed` action may move the saved booking to Completed / History. The card must remain visible and refreshable with OTW, OTS, POB, and JC evidence until that admin action succeeds. Preserve `scripts/test-admin-active-job-confirm-completed-guard.mjs`, `scripts/test-driver-completed-history-grouping-guard.mjs`, and the corresponding `scripts/test-booking-ui-browser.mjs` coverage.
+
+The Driver Calendar system is a separate established workflow. Do not change its action, OAuth, event, credential, route, or UI behavior while diagnosing or repairing Driver Reports or admin completion.
+
 # Pre-operation test-data permission
 
 Until the owner explicitly declares that real operations have started, existing booking, driver, and customer records may be reused as test data because the owner will fully clean those records before live operations. Prefer reusing an existing test record over creating a duplicate, and keep every test scoped to the exact workflow under review.

@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-b8757d90 Use final Prestige app logo
+dbb5f789 Use final Prestige invoice logo
 
 Latest pushed main/staging runtime checkpoint:
 1e80b1dd Fix customer job public reference display

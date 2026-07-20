@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-a2b611ff Keep driver JC evidence until admin confirms
+b5a669e7 Recover driver Google Calendar connections
 
 Latest pushed main/staging runtime checkpoint:
 1e80b1dd Fix customer job public reference display

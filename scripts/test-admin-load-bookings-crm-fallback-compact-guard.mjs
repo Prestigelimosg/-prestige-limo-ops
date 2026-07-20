@@ -855,8 +855,8 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  "markerCount: activeJobs.length,",
-  "Dispatch live map marker count follows guarded runtime markers",
+  "markerCount: currentDriverCount,",
+  "Dispatch live map marker count follows current guarded runtime movement only",
 );
 assertIncludes(
   appPage,

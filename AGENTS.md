@@ -48,6 +48,12 @@ Do not replace this workflow with `.ics`, a forced download, a Google event-temp
 
 Before any approved Driver Calendar repair, read `docs/current-implementation-ledger.md` sections `Driver Personal Google Calendar Connection` and `Driver Calendar Credential Recovery And Callback Feedback`, then run `scripts/test-driver-job-calendar-download-guard.mjs` and `scripts/test-driver-job-page-browser.mjs`. If no Calendar defect is reproduced and specifically approved, make no Driver Calendar application change.
 
+# Owner-locked Driver Reports evidence during Live Location cleanup
+
+Live Dispatch GPS cleanup and Driver Reports evidence are separate workflows. Automatic or manual stale-pin cleanup may delete only exact `driver_live_location_latest_positions` rows and may change only the existing Live Dispatch Map marker/count presentation. It must never delete or alter `driver_job_status_events`, OTW/OTS/POB/Job Completed timestamps, the visible Driver Reports card, the saved booking completion state, or Completed / History membership.
+
+A driver `Job Completed` report may remove the temporary GPS marker, but the report card and all timestamp evidence must remain visible and refreshable until the owner uses the existing explicit `Admin confirm completed` action. Preserve `scripts/test-admin-active-job-confirm-completed-guard.mjs`, `scripts/test-driver-completed-history-grouping-guard.mjs`, `scripts/test-driver-live-location-assigned-active-eligibility-guard.mjs`, and the corresponding booking UI browser coverage.
+
 # Owner-locked invoice workflow and final layout — do not modify
 
 The entire established customer billing and invoice system is owner-locked. Do not remove, rename, rearrange, redesign, collapse, expand, simplify, duplicate, replace, or otherwise modify its workflow, layout, controls, routes, APIs, persistence, PDF renderer, email/download paths, payment-status handling, invoice numbering, customer/company identity scope, Company Profile inputs, or established consumers unless the owner explicitly requests an invoice-specific change, the exact invoice defect is first reproduced in the approved runtime surface, and the owner approves that bounded repair. An unrelated feature request, including AI or communications work, is never permission to change the invoice system.

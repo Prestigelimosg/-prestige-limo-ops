@@ -21334,6 +21334,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         : [];
       const activeJobs = collapseAdminActiveJobsMapDriverDuplicates(allActiveJobs);
       const duplicateCount = allActiveJobs.length - activeJobs.length;
+      const currentDriverCount = activeJobs.filter((job) => !job.is_stale).length;
+      const stalePinCount = activeJobs.length - currentDriverCount;
       const allowedBookingReferences = Array.isArray(result.allowed_booking_references)
         ? result.allowed_booking_references.map(cleanReferenceText).filter(Boolean)
         : null;
@@ -21344,16 +21346,22 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         activeJobs,
         allowedBookingReferences:
           allowedBookingReferences ?? current.allowedBookingReferences,
-        markerCount: activeJobs.length,
+        markerCount: currentDriverCount,
         message: {
-          tone: activeJobs.length > 0 ? "success" : "info",
+          tone: currentDriverCount > 0 ? "success" : "info",
           text:
-            activeJobs.length > 0
-              ? `Loaded live movement for ${activeJobs.length} driver${activeJobs.length === 1 ? "" : "s"}${
+            currentDriverCount > 0
+              ? `Loaded current live movement for ${currentDriverCount} driver${currentDriverCount === 1 ? "" : "s"}${
+                  stalePinCount > 0
+                    ? `; ${stalePinCount} stale pin${stalePinCount === 1 ? "" : "s"} shown`
+                    : ""
+                }${
                   duplicateCount > 0
-                    ? `; ${duplicateCount} older duplicate${duplicateCount === 1 ? "" : "s"} hidden.`
-                    : "."
-                }`
+                    ? `; ${duplicateCount} older duplicate${duplicateCount === 1 ? "" : "s"} hidden`
+                    : ""
+                }.`
+              : stalePinCount > 0
+                ? `No current live movement; ${stalePinCount} stale pin${stalePinCount === 1 ? " is" : "s are"} awaiting refresh or removal.`
               : "Live location is open, but no driver has shared live movement yet.",
         },
         runtimeStatus: "active",
@@ -21414,7 +21422,12 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             cleanReferenceText(job.assigned_job_reference) !== bookingReference ||
             clean(job.updated_at) !== updatedAt,
         ),
-        markerCount: Math.max(0, current.markerCount - 1),
+        markerCount: current.activeJobs.filter(
+          (job) =>
+            !job.is_stale &&
+            (cleanReferenceText(job.assigned_job_reference) !== bookingReference ||
+              clean(job.updated_at) !== updatedAt),
+        ).length,
         message: {
           tone: "success",
           text: `Removed stale pin for ${adminVisibleBookingReference(bookingReference)}. Booking unchanged.`,
@@ -26119,7 +26132,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     ),
   ];
   const activeJobsMapVisibleJobs = adminActiveJobsMapReadState.activeJobs;
-  const activeJobsMapMarkerCount = activeJobsMapVisibleJobs.length;
+  const activeJobsMapMarkerCount = activeJobsMapVisibleJobs.filter(
+    (job) => !job.is_stale,
+  ).length;
+  const activeJobsMapStalePinCount = activeJobsMapVisibleJobs.length - activeJobsMapMarkerCount;
   const liveDispatchPreparedSlotCount = liveDispatchMapReferenceList.length;
   const liveDispatchSlotSummaryLabel =
     liveDispatchPreparedSlotCount > 0
@@ -27438,8 +27454,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 className="rounded-full bg-lime-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-lime-900 sm:px-2 sm:text-[10px]"
                 data-dispatch-live-driver-map-marker-count={activeJobsMapMarkerCount}
               >
-                {activeJobsMapMarkerCount} driver
-                {activeJobsMapMarkerCount === 1 ? "" : "s"}
+                {activeJobsMapMarkerCount} live
+                {activeJobsMapStalePinCount > 0
+                  ? ` · ${activeJobsMapStalePinCount} stale`
+                  : ""}
               </span>
               <span
                 className="rounded-full bg-sky-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-sky-900 sm:px-2 sm:text-[10px]"

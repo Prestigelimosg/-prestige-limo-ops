@@ -587,6 +587,57 @@ async function readDriverAssignedActiveEligibility({
   return { ok: true } as const;
 }
 
+export function partitionAdminLiveLocationRowsForRetention({
+  bookings,
+  nowMs = Date.now(),
+  retentionMinutes,
+  rows,
+}: {
+  bookings: unknown[];
+  nowMs?: number;
+  retentionMinutes: number;
+  rows: unknown[];
+}) {
+  const retentionMs = Math.max(1, Math.trunc(retentionMinutes)) * 60 * 1000;
+  const expiresBeforeOrAt = nowMs - retentionMs;
+  const bookingsByReference = new Map(
+    bookings
+      .map(asRecord)
+      .map((booking) => [safeIdentifier(booking.booking_reference), booking] as const)
+      .filter(([bookingReference]) => Boolean(bookingReference)),
+  );
+  const cleanupTargets: Array<{
+    bookingReference: string;
+    driverJobLinkId: string;
+    updatedAt: string;
+  }> = [];
+  const visibleRows: UnknownRecord[] = [];
+
+  for (const value of rows) {
+    const row = asRecord(value);
+    const bookingReference = safeIdentifier(row.booking_reference);
+    const driverJobLinkId = safeIdentifier(row.driver_job_link_id);
+    const updatedAt = cleanText(row.updated_at, 80);
+    const updatedAtMs = new Date(updatedAt).getTime();
+    const booking = bookingsByReference.get(bookingReference);
+    const rowExpired = !Number.isFinite(updatedAtMs) || updatedAtMs <= expiresBeforeOrAt;
+    const bookingEligible = Boolean(
+      booking && bookingHasAssignedDriver(booking) && !bookingHasTerminalStatus(booking),
+    );
+
+    if (bookingReference && driverJobLinkId && !rowExpired && bookingEligible) {
+      visibleRows.push(row);
+      continue;
+    }
+
+    if (bookingReference && driverJobLinkId && updatedAt && Number.isFinite(updatedAtMs)) {
+      cleanupTargets.push({ bookingReference, driverJobLinkId, updatedAt });
+    }
+  }
+
+  return { cleanupTargets, visibleRows };
+}
+
 async function safeJsonBody(request: Request) {
   try {
     return asRecord(await request.json());
@@ -672,7 +723,12 @@ async function insertAuditEvent({
   client: DriverLiveLocationClient;
   driverJobLinkId: string | null;
   env: DriverLiveLocationEnv;
-  eventType: "admin_read" | "evidence_cleanup" | "position_updated" | "share_stopped";
+  eventType:
+    | "admin_read"
+    | "evidence_cleanup"
+    | "position_expired"
+    | "position_updated"
+    | "share_stopped";
   sourceSurface: "admin_api" | "driver_job_api";
 }) {
   const { error } = await client.from(auditEventsTable).insert({
@@ -1035,6 +1091,18 @@ export async function handleAdminActiveJobsMapRuntimeRequest({
 
   const allowedReferences = runtimePolicy.policy.allowedJobReferences;
 
+  const { data: bookingData, error: bookingError } = await clientResult.client
+    .from(bookingsTable)
+    .select(
+      "booking_reference, driver_id, driver_name, status, admin_internal_status, customer_facing_status, cancellation_review_status",
+    )
+    .in("booking_reference", allowedReferences)
+    .limit(50);
+
+  if (bookingError) {
+    return blockedResult("driver_live_location_config_not_ready", 503);
+  }
+
   const { data, error } = await clientResult.client
     .from(latestPositionsTable)
     .select(
@@ -1048,9 +1116,44 @@ export async function handleAdminActiveJobsMapRuntimeRequest({
     return blockedResult("driver_live_location_config_not_ready", 503);
   }
 
-  const activeJobs = Array.isArray(data)
-    ? data.map(asRecord).map(normalizeLatestPosition).filter(isNormalizedLatestPosition)
-    : [];
+  const retained = partitionAdminLiveLocationRowsForRetention({
+    bookings: Array.isArray(bookingData) ? bookingData : [],
+    retentionMinutes: runtimePolicy.policy.retentionMinutes,
+    rows: Array.isArray(data) ? data : [],
+  });
+
+  for (const target of retained.cleanupTargets) {
+    const { error: deleteError } = await clientResult.client
+      .from(latestPositionsTable)
+      .delete()
+      .eq("driver_job_link_id", target.driverJobLinkId)
+      .eq("booking_reference", target.bookingReference)
+      .eq("updated_at", target.updatedAt);
+
+    if (deleteError) {
+      return blockedResult("driver_live_location_write_failed", 503);
+    }
+
+    const auditInserted = await insertAuditEvent({
+      actorRole: actorRole === "dispatcher" ? "dispatcher" : "admin",
+      bookingReference: target.bookingReference,
+      client: clientResult.client,
+      driverJobLinkId: target.driverJobLinkId,
+      env,
+      eventType: "position_expired",
+      sourceSurface: "admin_api",
+    });
+
+    if (!auditInserted) {
+      return blockedResult("driver_live_location_write_failed", 503);
+    }
+  }
+
+  const activeJobs = retained.visibleRows
+    .map(normalizeLatestPosition)
+    .filter(isNormalizedLatestPosition);
+  const currentMarkerCount = activeJobs.filter((job) => !job.is_stale).length;
+  const staleMarkerCount = activeJobs.length - currentMarkerCount;
 
   if (activeJobs.length > 0) {
     const auditInserted = await insertAuditEvent({
@@ -1075,8 +1178,9 @@ export async function handleAdminActiveJobsMapRuntimeRequest({
       customerVisible: false,
       external_send: false,
       map_rendered: false,
-      marker_count: activeJobs.length,
+      marker_count: currentMarkerCount,
       ok: true,
+      stale_marker_count: staleMarkerCount,
       version: driverLiveLocationRuntimeVersion,
     },
     status: 200,

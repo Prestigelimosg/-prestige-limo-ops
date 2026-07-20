@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-6db3e947 Restore final invoice layout
+20c93497 Wire driver acknowledgement to calendar identity
 
 Latest pushed main/staging runtime checkpoint:
 1e80b1dd Fix customer job public reference display
@@ -19,6 +19,14 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The existing page layout, labels, inputs, `Save & Acknowledge Job` button, single `Add / Update Calendar` button, OAuth route/scope, encrypted credential, Google event writer, deterministic driver-ID-plus-booking-reference event key, amendment behavior, private reporting shortcut, OTW/OTS/POB/Job Completed controls, customer/admin messaging, live location, and separate Operations Calendar lane are unchanged. No invoice, billing, payment, payout, PayNow, customer price, internal note, parser/debug, provider, or environment path is added.
 - Focused executable protection in `scripts/test-driver-job-status-persistence-api-contract.mjs` proves a first acknowledgement creates only the five safe driver fields and binds the same ID to booking and link, while a future job with the exact same saved contact reuses the existing driver row without a duplicate. `scripts/test-driver-job-details-admin-sync-guard.mjs` locks the narrow wiring and forbidden-field exclusions; both run from the preactivation suite.
 - Local Mac Chrome acceptance loaded the existing private Driver Job page without any layout change, used the existing `Save & Acknowledge Job` action, displayed the confirmed four details and the same single `Add / Update Calendar` action, and did not use any status, message, live-location, invoice, payment, payout, or external-provider action. This local visual acceptance does not claim a Production Google mutation or deployment.
+
+### Live Dispatch Expired Pin Cleanup With Driver Reports Preservation (2026-07-20)
+
+- The owner reproduced public job `10833` remaining in the existing Live Dispatch Map as `Stale` even though the booking could no longer be found in the operational UI. Inspection confirmed the map read used the persisted runtime allowlist and returned both `active` and `stale` latest-position rows; the configured `driver_live_location_retention_minutes` value was read but never enforced. The header also counted stale rows as live drivers.
+- The bounded repair stays inside the existing Live Dispatch Map runtime. Its guarded refresh partitions only allowlisted latest-position rows against the current saved booking records and the configured retention window. An exact GPS row is removed when its last update is older than the configured 120 minutes or its booking is missing, unassigned, completed, or cancelled. Short-term stale rows remain visible with the established admin-only `Remove stale pin` fallback.
+- The cleanup deletes only the exact `driver_live_location_latest_positions` row scoped by driver-job-link ID, booking reference, and last-updated timestamp, then writes the existing bounded audit event as `position_expired`. It does not delete or update the booking, driver assignment, Driver Job Link, `driver_job_status_events`, OTW/OTS/POB/Job Completed timestamps, Driver Reports card, customer/driver message, Calendar, invoice, payment, payout, PayNow, GPS audit history, location configuration, provider, or environment value.
+- The compact map header now counts only current movement as `live` and separately labels any short-term stale pins. The established Driver Reports workflow remains owner-locked: a driver Job Completed report can clear its temporary GPS marker, but all timestamp evidence and the active report card remain visible until the explicit `Admin confirm completed` action succeeds.
+- Focused executable protection in `scripts/test-driver-live-location-assigned-active-eligibility-guard.mjs` covers a retained short-term stale pin, automatic expiry after 120 minutes, missing-booking cleanup, terminal-booking cleanup, exact-row targeting, and the prohibition on deleting Driver Reports evidence. `scripts/test-driver-live-location-active-jobs-map-contract-guard.mjs`, `scripts/test-admin-active-job-confirm-completed-guard.mjs`, and `scripts/test-driver-completed-history-grouping-guard.mjs` preserve the UI and completion boundaries. Local Mac Chrome verified the unchanged Dashboard Live Dispatch location with a current-only `0 live` counter and no Production map/data action.
 
 ### Owner Driver Calendar Workflow Preservation Lock (2026-07-20)
 

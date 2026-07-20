@@ -118,6 +118,8 @@ const completedHandoffActionQueryParam = "completed_action";
 const saveCrmBillingIdentityReviewReadLimit = 200;
 const adminHandledCustomerBookingRequestsStorageKey =
   "prestige-admin-handled-customer-booking-requests";
+const adminDismissedPendingDriverAckLinksStorageKey =
+  "prestige-admin-dismissed-pending-driver-ack-links";
 const adminLoadBookingsTypedReadApiPath = "/api/admin-load-bookings-typed-read";
 const driverJobLinkSuccessFeedbackResetMs = 3_000;
 const adminSavedBookingStatusesApiPath = "/api/admin-saved-booking-statuses";
@@ -13042,6 +13044,25 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       return [];
     }
   });
+  const [dismissedPendingDriverAckLinkIds, setDismissedPendingDriverAckLinkIds] = useState<
+    string[]
+  >(() => {
+    if (typeof window === "undefined") {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(
+        window.localStorage.getItem(adminDismissedPendingDriverAckLinksStorageKey) || "[]",
+      );
+
+      return Array.isArray(parsed)
+        ? parsed.map(cleanReferenceText).filter(Boolean).slice(-500)
+        : [];
+    } catch {
+      return [];
+    }
+  });
   const [
     loadBookingsTypedOperationalCardsById,
     setLoadBookingsTypedOperationalCardsById,
@@ -20033,6 +20054,33 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     });
   }
 
+  function dismissPendingDriverAckAlert(driverJobLinkId: string) {
+    const exactLinkId = cleanReferenceText(driverJobLinkId);
+
+    if (!exactLinkId) {
+      return;
+    }
+
+    setDismissedPendingDriverAckLinkIds((currentIds) => {
+      if (currentIds.includes(exactLinkId)) {
+        return currentIds;
+      }
+
+      const nextIds = [...currentIds, exactLinkId].slice(-500);
+
+      try {
+        window.localStorage.setItem(
+          adminDismissedPendingDriverAckLinksStorageKey,
+          JSON.stringify(nextIds),
+        );
+      } catch {
+        // Alert dismissal is a local admin convenience; the driver link remains active.
+      }
+
+      return nextIds;
+    });
+  }
+
   function loadSelectedBooking(
     bookingRecord: BookingRecord,
     options: {
@@ -26180,11 +26228,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             const bookingReference = getActiveJobBookingReference(bookingRecord);
             const link = dashboardDriverJobLinksReadState.linksByReference[bookingReference] || null;
 
-            return link?.link_status === "active" && !link.safe_summary.acknowledged
+            return link?.link_status === "active" &&
+              !link.safe_summary.acknowledged &&
+              !dismissedPendingDriverAckLinkIds.includes(link.id)
               ? {
                   bookingReference,
                   issuedAt: link.issued_at,
                   jobCardKind: link.safe_summary.job_card_kind,
+                  linkId: link.id,
                   publicReference: bookingPublicReference(bookingRecord),
                   waitingMinutes: adminDriverJobLinkWaitingMinutes(link.issued_at, currentTimeMs),
                 }
@@ -42717,64 +42768,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               </div>
             </details>
 
-            <section
-              className={`order-[54] min-w-0 rounded-md border p-3 transition ${
-                pendingDriverAckQueueItems.length > 0
-                  ? "animate-pulse border-amber-400 bg-amber-50 motion-reduce:animate-none"
-                  : "border-emerald-200 bg-emerald-50"
-              }`}
-              data-pending-driver-ack-queue="true"
-              data-pending-driver-ack-queue-count={String(pendingDriverAckQueueItems.length)}
-              data-pending-driver-ack-queue-pulsing={
-                pendingDriverAckQueueItems.length > 0 ? "true" : "false"
-              }
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <h2 className="text-lg font-semibold text-slate-950">
-                    Pending for Driver ACK Queue
-                  </h2>
-                  <p className="text-xs text-slate-600">
-                    Newest active Driver Job Link for each exact booking. Link issued means created in this app.
-                  </p>
-                </div>
-                <span
-                  className={`inline-flex min-h-9 items-center rounded-full border px-3 py-1 text-sm font-bold ${
-                    pendingDriverAckQueueItems.length > 0
-                      ? "border-amber-400 bg-white text-amber-950"
-                      : "border-emerald-300 bg-white text-emerald-900"
-                  }`}
-                  data-pending-driver-ack-queue-count-badge="true"
-                >
-                  {pendingDriverAckQueueItems.length} pending
-                </span>
-              </div>
-              {pendingDriverAckQueueItems.length > 0 ? (
-                <ol
-                  className="mt-3 max-h-64 space-y-2 overflow-y-auto"
-                  data-pending-driver-ack-queue-list="true"
-                >
-                  {pendingDriverAckQueueItems.map((item, index) => (
-                    <li
-                      className="rounded-md border border-amber-300 bg-white px-3 py-2 text-sm font-semibold text-amber-950"
-                      data-pending-driver-ack-queue-booking-reference={item.bookingReference}
-                      data-pending-driver-ack-queue-item="true"
-                      key={item.bookingReference}
-                    >
-                      {index + 1}) {item.publicReference} · {adminDriverJobCardKindLabel(item.jobCardKind)} · Link issued{" "}
-                      {adminDriverJobLinkIssuedCompactTimeLabel(item.issuedAt)} · {item.waitingMinutes === null
-                        ? "Waiting"
-                        : `Waiting ${item.waitingMinutes} min`}
-                    </li>
-                  ))}
-                </ol>
-              ) : (
-                <p className="mt-3 text-sm font-semibold text-emerald-900">
-                  No driver acknowledgements pending.
-                </p>
-              )}
-            </section>
-
             {showDriverJobLinkCopy ? (
               <div
                 className="order-[55] min-w-0 rounded-md border border-stone-200 bg-white p-3"
@@ -43044,6 +43037,77 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 </details>
               </div>
             ) : null}
+
+            <section
+              className={`order-[55] min-w-0 rounded-md border p-3 transition ${
+                pendingDriverAckQueueItems.length > 0
+                  ? "animate-pulse border-amber-400 bg-amber-50 motion-reduce:animate-none"
+                  : "border-emerald-200 bg-emerald-50"
+              }`}
+              data-pending-driver-ack-queue="true"
+              data-pending-driver-ack-queue-count={String(pendingDriverAckQueueItems.length)}
+              data-pending-driver-ack-queue-pulsing={
+                pendingDriverAckQueueItems.length > 0 ? "true" : "false"
+              }
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-950">
+                    Pending for Driver ACK Queue
+                  </h2>
+                  <p className="text-xs text-slate-600">
+                    Newest active Driver Job Link for each exact booking. Link issued means created in this app.
+                  </p>
+                </div>
+                <span
+                  className={`inline-flex min-h-9 items-center rounded-full border px-3 py-1 text-sm font-bold ${
+                    pendingDriverAckQueueItems.length > 0
+                      ? "border-amber-400 bg-white text-amber-950"
+                      : "border-emerald-300 bg-white text-emerald-900"
+                  }`}
+                  data-pending-driver-ack-queue-count-badge="true"
+                >
+                  {pendingDriverAckQueueItems.length} pending
+                </span>
+              </div>
+              {pendingDriverAckQueueItems.length > 0 ? (
+                <ol
+                  className="mt-3 max-h-64 space-y-2 overflow-y-auto"
+                  data-pending-driver-ack-queue-list="true"
+                >
+                  {pendingDriverAckQueueItems.map((item, index) => (
+                    <li
+                      className="flex flex-col gap-2 rounded-md border border-amber-300 bg-white px-3 py-2 text-sm font-semibold text-amber-950 sm:flex-row sm:items-center sm:justify-between"
+                      data-pending-driver-ack-queue-booking-reference={item.bookingReference}
+                      data-pending-driver-ack-queue-item="true"
+                      data-pending-driver-ack-queue-link-id={item.linkId}
+                      key={item.linkId}
+                    >
+                      <span>
+                        {index + 1}) {item.publicReference} · {adminDriverJobCardKindLabel(item.jobCardKind)} · Link issued{" "}
+                        {adminDriverJobLinkIssuedCompactTimeLabel(item.issuedAt)} · {item.waitingMinutes === null
+                          ? "Waiting"
+                          : `Waiting ${item.waitingMinutes} min`}
+                      </span>
+                      <button
+                        aria-label={`Dismiss ${item.publicReference} pending driver acknowledgement alert`}
+                        className="min-h-11 shrink-0 rounded-md border border-amber-400 bg-white px-4 py-2 text-sm font-bold text-amber-950 transition hover:bg-amber-100"
+                        data-pending-driver-ack-dismiss={item.linkId}
+                        onClick={() => dismissPendingDriverAckAlert(item.linkId)}
+                        title="Dismiss this alert only. The driver job link remains active."
+                        type="button"
+                      >
+                        Close
+                      </button>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="mt-3 text-sm font-semibold text-emerald-900">
+                  No driver acknowledgements pending.
+                </p>
+              )}
+            </section>
 
             <div className="order-[100]" data-dispatch-workflow-step="admin-lower-status">
               {statusPanel}

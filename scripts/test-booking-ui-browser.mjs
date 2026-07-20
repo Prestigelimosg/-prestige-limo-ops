@@ -10130,6 +10130,110 @@ async function runChromeTest() {
       "Expected Driver Job Link create request not to include finance, payout, parser, token, notification, or internal fields",
     );
 
+    const clickedPendingDriverAckDismiss = await evaluate(`(() => {
+      const dismissButton = document.querySelector(
+        "[data-pending-driver-ack-dismiss='11111111-2222-4333-8444-555555555555']",
+      );
+
+      if (!dismissButton || dismissButton.textContent.trim() !== "Close") {
+        return false;
+      }
+
+      dismissButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedPendingDriverAckDismiss,
+      true,
+      "Expected exact pending acknowledgement alert Close button to be clickable",
+    );
+
+    const dismissedPendingDriverAckState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const acknowledgementQueue = document.querySelector(
+            "[data-pending-driver-ack-queue='true']",
+          );
+          const driverJobLinkSection = document.querySelector(
+            "[data-dispatch-workflow-step='driver-job-link']",
+          );
+          const copyButton = driverJobLinkSection
+            ? [...driverJobLinkSection.querySelectorAll("button")].find(
+                (button) => button.textContent.trim() === "Copy Link",
+              )
+            : null;
+          let dismissedLinkIds = [];
+
+          try {
+            dismissedLinkIds = JSON.parse(
+              window.localStorage.getItem("prestige-admin-dismissed-pending-driver-ack-links") || "[]",
+            );
+          } catch {}
+
+          return acknowledgementQueue?.getAttribute("data-pending-driver-ack-queue-count") === "0"
+            ? {
+                copyButtonDisabled: copyButton?.disabled ?? true,
+                dismissedLinkIds,
+                linkStatus: window.__prestigeAdminDriverJobLinks?.[0]?.link_status || "",
+                pulsing: acknowledgementQueue.getAttribute("data-pending-driver-ack-queue-pulsing"),
+                requestCount: window.__prestigeAdminDriverJobLinkRequests?.length || 0,
+                text: acknowledgementQueue.textContent.replace(/\s+/g, " ").trim(),
+              }
+            : false;
+        })()`),
+      10000,
+      "exact pending Driver ACK alert dismissed without revoking its link",
+    );
+    assert.equal(dismissedPendingDriverAckState.pulsing, "false");
+    assert.match(dismissedPendingDriverAckState.text, /0 pending/);
+    assert.equal(dismissedPendingDriverAckState.linkStatus, "active");
+    assert.equal(dismissedPendingDriverAckState.copyButtonDisabled, false);
+    assert.equal(dismissedPendingDriverAckState.requestCount, 1);
+    assert.deepEqual(dismissedPendingDriverAckState.dismissedLinkIds, [
+      "11111111-2222-4333-8444-555555555555",
+    ]);
+
+    await evaluate(`(() => {
+      window.__prestigeAdminDriverJobLinks = (window.__prestigeAdminDriverJobLinks || []).map((link) =>
+        link.booking_reference === "ui-dashboard-driver-assignment-fixture"
+          ? {
+              ...link,
+              id: "66666666-7777-4888-8999-000000000000",
+              safe_summary: {
+                ...link.safe_summary,
+                job_card_kind: "amendment",
+              },
+            }
+          : link,
+      );
+    })()`);
+
+    const freshPendingDriverAckState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const acknowledgementQueue = document.querySelector(
+            "[data-pending-driver-ack-queue='true']",
+          );
+          const acknowledgementQueueItem = acknowledgementQueue?.querySelector(
+            "[data-pending-driver-ack-queue-item='true']",
+          );
+
+          return acknowledgementQueueItem?.getAttribute("data-pending-driver-ack-queue-link-id") ===
+            "66666666-7777-4888-8999-000000000000"
+            ? {
+                count: acknowledgementQueue.getAttribute("data-pending-driver-ack-queue-count"),
+                pulsing: acknowledgementQueue.getAttribute("data-pending-driver-ack-queue-pulsing"),
+                text: acknowledgementQueueItem.textContent.replace(/\s+/g, " ").trim(),
+              }
+            : false;
+        })()`),
+      15000,
+      "new exact Driver Job Link appears after an older alert was dismissed",
+    );
+    assert.equal(freshPendingDriverAckState.count, "1");
+    assert.equal(freshPendingDriverAckState.pulsing, "true");
+    assert.match(freshPendingDriverAckState.text, /10841 · Amendment · Link issued/);
+
     await evaluate(`(() => {
       window.__prestigeAdminDriverJobLinks = (window.__prestigeAdminDriverJobLinks || []).map((link) =>
         link.booking_reference === "ui-dashboard-driver-assignment-fixture"

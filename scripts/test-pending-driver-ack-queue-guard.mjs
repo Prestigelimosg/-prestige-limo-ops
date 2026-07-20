@@ -13,8 +13,8 @@ const driverJobLinkStart = app.indexOf('data-dispatch-workflow-step="driver-job-
 const driverReportsStart = app.indexOf('data-admin-driver-reports-disclosure="true"');
 
 assert.notEqual(queueStart, -1, "Pending Driver ACK Queue is missing.");
-assert.ok(queueStart < driverJobLinkStart, "Queue must replace the old header pill above the established link card.");
 assert.ok(driverJobLinkStart < driverReportsStart, "Established Driver Reports must remain inside Driver Job Link.");
+assert.ok(driverReportsStart < queueStart, "Queue must sit below the complete established Driver Job Link section.");
 assert.ok(
   !app.includes('data-admin-driver-job-link-acknowledgement="true"'),
   "Old per-booking acknowledgement pill must not duplicate the queue.",
@@ -22,6 +22,7 @@ assert.ok(
 
 for (const fragment of [
   "Pending for Driver ACK Queue",
+  'className={`order-[55] min-w-0 rounded-md border p-3 transition',
   'data-pending-driver-ack-queue-count={String(pendingDriverAckQueueItems.length)}',
   'data-pending-driver-ack-queue-pulsing=',
   'pendingDriverAckQueueItems.length > 0\n                  ? "animate-pulse',
@@ -29,6 +30,11 @@ for (const fragment of [
   "pendingDriverAckQueueItems.map((item, index)",
   "{index + 1}) {item.publicReference} · {adminDriverJobCardKindLabel(item.jobCardKind)} · Link issued",
   "`Waiting ${item.waitingMinutes} min`",
+  'data-pending-driver-ack-queue-link-id={item.linkId}',
+  'data-pending-driver-ack-dismiss={item.linkId}',
+  'onClick={() => dismissPendingDriverAckAlert(item.linkId)}',
+  "Dismiss this alert only. The driver job link remains active.",
+  ">\n                        Close\n                      </button>",
   "No driver acknowledgements pending.",
   "const pendingDriverAckQueueEligibleBookings = operationalBookings",
   ".filter((bookingRecord) => Boolean(getBookingDriverJobStatusReference(bookingRecord)))",
@@ -39,14 +45,35 @@ for (const fragment of [
   "[cleanReferenceText(link.booking_reference)]: link",
   "linksByReference[linkReference]",
   "!link.safe_summary.acknowledged",
+  "!dismissedPendingDriverAckLinkIds.includes(link.id)",
+  "linkId: link.id",
+  'const adminDismissedPendingDriverAckLinksStorageKey =',
+  '"prestige-admin-dismissed-pending-driver-ack-links"',
+  "function dismissPendingDriverAckAlert(driverJobLinkId: string)",
+  "window.localStorage.setItem(",
+  "adminDismissedPendingDriverAckLinksStorageKey,",
 ]) {
   assertIncludes(app, fragment, "pending queue wiring");
 }
 
+const queueEnd = app.indexOf('data-dispatch-workflow-step="admin-lower-status"', queueStart);
+const queueBlock = app.slice(queueStart, queueEnd);
+
+assert.ok(queueEnd > queueStart, "Pending queue block boundary is missing.");
 assert.ok(
-  !app.slice(queueStart, driverJobLinkStart).includes(".slice("),
+  !queueBlock.includes(".slice("),
   "Queue must support every pending booking without a fixed two-or-three row cap.",
 );
+
+const dismissStart = app.indexOf("function dismissPendingDriverAckAlert");
+const dismissEnd = app.indexOf("function loadSelectedBooking", dismissStart);
+const dismissBlock = app.slice(dismissStart, dismissEnd);
+
+assert.ok(dismissStart > -1 && dismissEnd > dismissStart, "Exact-link dismiss helper is missing.");
+assert.ok(!dismissBlock.includes("fetch("), "Dismissing an alert must not call an API.");
+assert.ok(!dismissBlock.includes("revokeDriverJobLink"), "Dismissing an alert must not revoke a link.");
+assert.ok(!dismissBlock.includes("bookingReference"), "Dismissal must not key by booking reference.");
+assert.ok(!dismissBlock.includes("driver_id"), "Dismissal must not key by driver identity.");
 
 for (const fragment of [
   'export type AdminDriverJobCardKind = "amendment" | "new" | "reissued";',

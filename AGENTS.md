@@ -30,7 +30,7 @@ The Driver Calendar system is a separate established workflow. Do not change its
 
 # Owner-locked Pending Driver ACK Queue — do not duplicate
 
-The Dispatch `Pending for Driver ACK Queue` replaces only the former selected-booking `Waiting for driver` header pill. Preserve one queue in the existing Dispatch Driver Job Link area. Do not restore the old pill or add another queue, acknowledgement panel, API, table, notification sender, push lane, route, or polling store.
+The Dispatch `Pending for Driver ACK Queue` replaces only the former selected-booking `Waiting for driver` header pill. Preserve one queue directly below the complete existing Dispatch Driver Job Link section. Driver Reports remains unchanged inside the Driver Job Link section above the queue. Do not restore the old pill or add another queue, acknowledgement panel, API, table, notification sender, push lane, route, or polling store.
 
 Queue each current non-terminal operational booking only when its exact newest active Driver Job Link is not acknowledged. The queue must not require or display a known driver because the approved private-link acknowledgement workflow may collect the recipient's details after issuance. Key and clear rows by exact booking reference plus newest link record, never by driver ID, driver name, contact, plate, or Google account. One driver may have any number of different pending bookings. An acknowledgement on an older link must never clear a newer amendment row.
 
@@ -39,6 +39,8 @@ Preserve exact safe revision labels: no previous link is `New`, the same safe jo
 Do not auto-revoke old Driver Job Links when a new or amended link is issued. Only the established explicit admin `Revoke Link` action may revoke a link. Preserve the owner workflow in which admin resends an amended active link, the driver acknowledges it, and the separate locked Calendar action updates the same booking event.
 
 The whole queue may pulse only while pending count is greater than zero and must support all pending rows without a fixed two-or-three-item cap. Keep the established collapsed Driver Reports disclosure, acknowledgement/OTW/OTS/POB/Job Completed/OTS-photo evidence, Dashboard Active Assigned Jobs, Live Dispatch, explicit `Admin confirm completed`, and Driver Calendar lane unchanged. Before any approved repair, run `scripts/test-pending-driver-ack-queue-guard.mjs`, `scripts/test-admin-driver-job-link-api-contract.mjs`, `scripts/test-admin-active-job-confirm-completed-guard.mjs`, and `scripts/test-driver-job-calendar-download-guard.mjs`.
+
+Each pending row has one owner-approved `Close` control. `Close` dismisses only that exact newest-link alert from the current admin browser and must never revoke, expire, acknowledge, mutate, or disable the Driver Job Link or booking. The exact link remains usable by its recipient. Dismissal is stored locally by exact Driver Job Link ID so it survives refresh on that admin browser; never key it by booking reference or driver identity. A later new, amended, or reissued link has a different link ID and must appear as a fresh pending alert.
 
 # Owner-locked Driver Calendar workflow — do not modify
 

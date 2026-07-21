@@ -56,6 +56,9 @@ for (const required of [
   "slice(-6)",
   "PRESTIGE_ADMIN_AI_ENABLED",
   "OPENAI_API_KEY",
+  "MNG is an arrival or meet-and-greet pickup",
+  "TRF is a point-to-point transfer that is not an arrival or departure",
+  "If the text explicitly says arrival or MNG, use MNG",
 ]) {
   assert.match(sources.runtime, new RegExp(required.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 }

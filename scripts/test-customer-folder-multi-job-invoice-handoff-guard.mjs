@@ -28,6 +28,9 @@ for (const fragment of [
   'data-customer-folder-selected-invoice-layout="true"',
   "data-customer-folder-selected-invoice-job",
   "Review invoice &amp; email",
+  "Ticking a job confirms its displayed customer price for this invoice.",
+  "Codex price · tick to confirm",
+  "Load {group.passengerName} invoice",
   "selected_booking_references",
   "selectedUnbilledBookings.map((booking)",
   'limit: "200"',
@@ -89,6 +92,12 @@ for (const fragment of [
   "bookingReference: row.bookingReference",
   "All ${invoiceRows.length} selected job",
   "setPlainInvoiceSelectedJobReviewActive(true)",
+  "setSelectedJobInvoiceHandoffLines(selectedHandoffLines)",
+  'data-selected-job-invoice-coverage="true"',
+  "data-selected-job-invoice-coverage-line={line.bookingReference}",
+  'status: "Blocked"',
+  'status: "Loaded"',
+  "Loaded as an exact line in the final invoice review.",
   "plainInvoicePreviewFromForm(nextPlainInvoiceForm)",
   'data-selected-job-invoice-review="true"',
   'data-selected-job-invoice-actions="true"',
@@ -127,6 +136,55 @@ for (const fragment of [
 ]) {
   includes(customersPage, fragment, `multi-job invoice handoff fragment ${fragment}`);
 }
+
+const selectionToggleStart = folderPage.indexOf("function toggleSelectedBooking(");
+const selectionToggleEnd = folderPage.indexOf("function toggleSavedBookingDescription(", selectionToggleStart);
+const selectionToggle = folderPage.slice(selectionToggleStart, selectionToggleEnd);
+for (const fragment of [
+  "if (selected) {",
+  "const displayedPrice = current[reference];",
+  'message: "Reviewed"',
+  'status: "reviewed"',
+]) {
+  includes(selectionToggle, fragment, `selected displayed price confirmation ${fragment}`);
+}
+
+const saveJobStart = folderPage.indexOf("async function saveInlineBookingDetails(");
+const saveJobEnd = folderPage.indexOf("function openPriceReview(", saveJobStart);
+const saveJob = folderPage.slice(saveJobStart, saveJobEnd);
+for (const fragment of [
+  'setExpandedSavedBookingReference("");',
+  'setEditingPriceReference("");',
+  'setPriceDraft("");',
+  "setInlineEditState(initialInlineEditState);",
+]) {
+  includes(saveJob, fragment, `successful saved-job editor close ${fragment}`);
+}
+
+const savePriceStart = folderPage.indexOf("function savePriceReview(");
+const savePriceEnd = folderPage.indexOf("return (", savePriceStart);
+const savePrice = folderPage.slice(savePriceStart, savePriceEnd);
+for (const fragment of [
+  "Saved customer price for ${publicBookingReferenceDisplay(booking)}.",
+  'setExpandedSavedBookingReference("");',
+  'setEditingPriceReference("");',
+  'setPriceDraft("");',
+  "setInlineEditState(initialInlineEditState);",
+]) {
+  includes(savePrice, fragment, `successful saved-price editor close ${fragment}`);
+}
+
+const selectedCoverageSetIndex = customersPage.indexOf(
+  "setSelectedJobInvoiceHandoffLines(selectedHandoffLines);",
+);
+const missingSelectedJobBlockIndex = customersPage.indexOf(
+  'if (invoiceAction === "create" && (!targetBooking || missingTargetReference))',
+);
+assert.equal(
+  selectedCoverageSetIndex !== -1 && selectedCoverageSetIndex < missingSelectedJobBlockIndex,
+  true,
+  "every selected reference must be represented before an exact-customer blocker can stop billing",
+);
 
 for (const fragment of [
   "const requestedCustomerId = dbIdentifierOrNull(input.booking.customer_id);",

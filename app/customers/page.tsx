@@ -481,6 +481,13 @@ type PlainInvoiceRecipientOption = {
   label: string;
 };
 
+type SelectedJobInvoiceHandoffLine = {
+  bookingReference: string;
+  detail: string;
+  publicReference: string;
+  status: "Blocked" | "Checking" | "Loaded";
+};
+
 type RegularCustomerBookingForm = typeof initialRegularCustomerBookingForm;
 
 type RegularCustomerBookingPreview = RegularCustomerBookingForm & {
@@ -2720,6 +2727,9 @@ export default function MockCustomerDashboardPage() {
     useState<RegularCustomerBookingFeedbackTone>("info");
   const [plainInvoiceSavedBookings, setPlainInvoiceSavedBookings] = useState<
     RegularCustomerSavedBookingReadRecord[]
+  >([]);
+  const [selectedJobInvoiceHandoffLines, setSelectedJobInvoiceHandoffLines] = useState<
+    SelectedJobInvoiceHandoffLine[]
   >([]);
   const [plainInvoiceSavedBookingsLoading, setPlainInvoiceSavedBookingsLoading] = useState(false);
   const [customerInvoiceDrafts, setCustomerInvoiceDrafts] = useState<CustomerInvoiceDraftRecord[]>([]);
@@ -5072,6 +5082,31 @@ export default function MockCustomerDashboardPage() {
       const missingReviewedPriceReference = targetReferences.find(
         (reference) => !reviewedPricesByReference.has(reference),
       );
+      const selectedHandoffLines = targetReferences.map((reference) => {
+        const selectedBooking = targetBookings.find(
+          (booking) => safeCustomerFolderDispatchHandoffReference(booking) === reference,
+        );
+
+        return {
+          bookingReference: reference,
+          detail: selectedBooking
+            ? "Selected and waiting for exact booking verification."
+            : "Selected, but the exact job was not returned for this customer. Repair its verified customer identity before billing.",
+          publicReference: customerFolderPublicBookingReference(selectedBooking) || reference,
+          status: selectedBooking ? ("Checking" as const) : ("Blocked" as const),
+        };
+      });
+
+      if (invoiceAction === "create") {
+        setPlainInvoiceForm(plainInvoiceInitialForm());
+        setPlainInvoicePreview(null);
+        setPlainInvoiceSavedBookings([]);
+        setPlainInvoiceSelectedJobReviewActive(true);
+        setPlainInvoiceSelectedJobEditing(false);
+        setPlainInvoiceIssuedRecord(null);
+        setSelectedJobInvoiceHandoffLines(selectedHandoffLines);
+        setCustomerInvoiceWorkspaceTab("statements");
+      }
 
       setCustomerFolderJobViewState({
         customerId,
@@ -5085,19 +5120,33 @@ export default function MockCustomerDashboardPage() {
         tone: missingTargetReference ? "error" : savedBookings.length > 0 ? "success" : "info",
       });
 
+      if (invoiceAction === "create" && (!targetBooking || missingTargetReference)) {
+        setPlainInvoiceFeedback(
+          `Selected job ${missingTargetReference || targetReferences[0] || "reference unavailable"} remains listed below but is blocked because it was not returned for this exact customer. Repair its verified customer identity before billing.`,
+        );
+        setPlainInvoiceFeedbackTone("error");
+        window.setTimeout(() => {
+          plainInvoicePanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 100);
+        return;
+      }
+
       if (targetBooking && !missingTargetReference) {
         if (invoiceAction === "create") {
-          setPlainInvoiceForm(plainInvoiceInitialForm());
-          setPlainInvoicePreview(null);
-          setPlainInvoiceSavedBookings([]);
-          setPlainInvoiceSelectedJobReviewActive(true);
-          setPlainInvoiceSelectedJobEditing(false);
-          setPlainInvoiceIssuedRecord(null);
-
           if (missingReviewedPriceReference) {
-            setCustomerInvoiceWorkspaceTab("statements");
+            setSelectedJobInvoiceHandoffLines((current) =>
+              current.map((line) =>
+                line.bookingReference === missingReviewedPriceReference
+                  ? {
+                      ...line,
+                      detail: "Selected, but its customer price must be reviewed before billing.",
+                      status: "Blocked",
+                    }
+                  : line,
+              ),
+            );
             setPlainInvoiceFeedback(
-              `Review the customer price for ${missingReviewedPriceReference} in Jobs not billed yet before adding it to the final invoice.`,
+              `Selected job ${missingReviewedPriceReference} remains listed below but is blocked until its customer price is reviewed in Jobs not billed yet.`,
             );
             setPlainInvoiceFeedbackTone("error");
             return;
@@ -5196,6 +5245,18 @@ export default function MockCustomerDashboardPage() {
               missingPublicReference ||
               !firstInvoiceRow
             ) {
+              const selectedJobBlockDetail = missingPublicReference
+                ? "Selected, but its saved five-digit public reference is missing. Repair that reference before billing."
+                : mismatchedTraveler || !exactTravelerId
+                  ? "Selected, but the selected jobs do not share one verified traveller."
+                  : "Selected, but the selected jobs do not share one verified customer and PA / booker.";
+              setSelectedJobInvoiceHandoffLines((current) =>
+                current.map((line) => ({
+                  ...line,
+                  detail: selectedJobBlockDetail,
+                  status: "Blocked",
+                })),
+              );
               setPlainInvoiceFeedback(
                 missingPublicReference
                   ? "A selected job has no saved public booking reference. Repair its five-digit reference before invoice preparation."
@@ -5242,6 +5303,16 @@ export default function MockCustomerDashboardPage() {
             };
 
             setPlainInvoiceSavedBookings(targetBookings);
+            setSelectedJobInvoiceHandoffLines(
+              invoiceRows.map((row) => ({
+                bookingReference: row.bookingReference,
+                detail: exactBookerId
+                  ? "Loaded as an exact line in the final invoice review."
+                  : "Loaded in the final invoice review; a verified PA / booker is still required before Send or PDF Download.",
+                publicReference: row.publicReference,
+                status: "Loaded",
+              })),
+            );
             setPlainInvoiceForm(nextPlainInvoiceForm);
             void loadPlainInvoiceRecipientOptions(exactCustomerName, exactRecipientEmails);
             setPlainInvoicePreview(plainInvoicePreviewFromForm(nextPlainInvoiceForm));
@@ -5265,6 +5336,13 @@ export default function MockCustomerDashboardPage() {
               plainInvoicePanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
             }, 100);
           } else {
+            setSelectedJobInvoiceHandoffLines((current) =>
+              current.map((line) => ({
+                ...line,
+                detail: "Selected, but exact booking verification failed before billing.",
+                status: "Blocked",
+              })),
+            );
             setPlainInvoiceFeedback(
               `Exact booking ${bookingReference} could not be verified for Create Invoice. Issue and Email remain blocked.`,
             );
@@ -5273,6 +5351,19 @@ export default function MockCustomerDashboardPage() {
         }
       }
     } catch (error) {
+      if (invoiceAction === "create") {
+        setSelectedJobInvoiceHandoffLines((current) =>
+          current.map((line) => ({
+            ...line,
+            detail: "Selected, but the exact saved-job read failed safely. Retry before billing.",
+            status: "Blocked",
+          })),
+        );
+        setPlainInvoiceFeedback(
+          "Every selected job remains listed below, but exact saved-job verification failed safely. Retry before billing.",
+        );
+        setPlainInvoiceFeedbackTone("error");
+      }
       setCustomerFolderJobViewState({
         customerId,
         customerName,
@@ -9434,6 +9525,46 @@ export default function MockCustomerDashboardPage() {
                         </button>
                       </div>
                     </div>
+
+                    {selectedJobInvoiceHandoffLines.length > 0 ? (
+                      <div
+                        className="mb-3 rounded-md border border-slate-200 bg-white p-2"
+                        data-selected-job-invoice-coverage="true"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                            Selected job coverage
+                          </p>
+                          <p className="text-xs font-semibold text-slate-700">
+                            {selectedJobInvoiceHandoffLines.filter((line) => line.status === "Loaded").length} of{" "}
+                            {selectedJobInvoiceHandoffLines.length} loaded
+                          </p>
+                        </div>
+                        <div className="mt-2 grid gap-1.5">
+                          {selectedJobInvoiceHandoffLines.map((line) => (
+                            <div
+                              className="grid gap-1 rounded border border-slate-200 bg-slate-50 px-2 py-1.5 sm:grid-cols-[7rem_5rem_minmax(0,1fr)] sm:items-center"
+                              data-selected-job-invoice-coverage-line={line.bookingReference}
+                              key={`selected-job-invoice-coverage-${line.bookingReference}`}
+                            >
+                              <strong className="text-xs text-slate-950">{line.publicReference}</strong>
+                              <span
+                                className={`text-[11px] font-bold ${
+                                  line.status === "Loaded"
+                                    ? "text-emerald-700"
+                                    : line.status === "Blocked"
+                                      ? "text-rose-700"
+                                      : "text-amber-700"
+                                }`}
+                              >
+                                {line.status}
+                              </span>
+                              <span className="text-xs font-semibold leading-5 text-slate-600">{line.detail}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
 
                     {plainInvoiceSelectedJobEditing && !plainInvoiceIssuedRecord ? (
                       <div

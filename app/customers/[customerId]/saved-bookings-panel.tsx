@@ -757,8 +757,8 @@ export function CustomerFolderSavedBookingsPanel({
             reference,
             review: {
               amountCents: calculation.amountCents,
-              breakdown: `${breakdown} Temporary Codex proposal; edit or approve before invoice handoff.`,
-              message: "Codex price · review",
+              breakdown: `${breakdown} Temporary Codex proposal; tick the job to confirm this price for invoice handoff, or edit it first.`,
+              message: "Codex price · tick to confirm",
               status: "proposed",
             } satisfies CustomerFolderBillingReview,
           };
@@ -943,6 +943,25 @@ export function CustomerFolderSavedBookingsPanel({
 
     if (!reference) {
       return;
+    }
+
+    if (selected) {
+      setBillingReviews((current) => {
+        const displayedPrice = current[reference];
+
+        if (!displayedPrice?.amountCents || displayedPrice.status === "reviewed") {
+          return current;
+        }
+
+        return {
+          ...current,
+          [reference]: {
+            ...displayedPrice,
+            message: "Reviewed",
+            status: "reviewed",
+          },
+        };
+      });
     }
 
     setSelectedReferences((current) => ({
@@ -1160,6 +1179,10 @@ export function CustomerFolderSavedBookingsPanel({
         ),
         tone: "success",
       }));
+      setExpandedSavedBookingReference("");
+      setEditingPriceReference("");
+      setPriceDraft("");
+      setInlineEditState(initialInlineEditState);
     } catch {
       setInlineEditState((current) => ({
         ...current,
@@ -1191,7 +1214,15 @@ export function CustomerFolderSavedBookingsPanel({
         status: "reviewed",
       },
     }));
-    setInlineEditState((current) => ({ ...current, message: "Customer price review saved." }));
+    setReadState((current) => ({
+      ...current,
+      message: `Saved customer price for ${publicBookingReferenceDisplay(booking)}.`,
+      tone: "success",
+    }));
+    setExpandedSavedBookingReference("");
+    setEditingPriceReference("");
+    setPriceDraft("");
+    setInlineEditState(initialInlineEditState);
   }
 
   return (
@@ -1245,7 +1276,9 @@ export function CustomerFolderSavedBookingsPanel({
             <p className="text-xs font-bold text-slate-700">
               {selectedUnbilledBookings.length} of {customerFolderInvoiceSelectionLimit} selected for new invoice
             </p>
-            <span className="text-xs font-semibold text-slate-500">Review every price tag before Invoice.</span>
+            <span className="text-xs font-semibold text-slate-500">
+              Ticking a job confirms its displayed customer price for this invoice.
+            </span>
           </div>
           <div
             className="max-h-[32rem] overflow-x-auto overflow-y-auto rounded-lg border border-amber-300 bg-white shadow-inner"
@@ -1580,7 +1613,7 @@ export function CustomerFolderSavedBookingsPanel({
                       href={group.href}
                       key={group.travelerId}
                     >
-                      Review {group.passengerName} invoice
+                      Load {group.passengerName} invoice
                     </Link>
                   ))}
                 </div>
@@ -1597,7 +1630,7 @@ export function CustomerFolderSavedBookingsPanel({
                       ? selectedTravelerInvoiceGrouping.error
                     : !selectedPublicReferencesReady
                       ? "Public reference required"
-                      : "Review every price first"}
+                      : "Customer price required"}
                 </button>
               )}
             </div>
@@ -1609,7 +1642,7 @@ export function CustomerFolderSavedBookingsPanel({
                       <th className="border-b border-slate-200 px-3 py-2">Job</th>
                       <th className="border-b border-slate-200 px-3 py-2">Pickup</th>
                       <th className="border-b border-slate-200 px-3 py-2">Service</th>
-                      <th className="border-b border-slate-200 px-3 py-2 text-right">Reviewed price</th>
+                      <th className="border-b border-slate-200 px-3 py-2 text-right">Confirmed price</th>
                     </tr>
                   </thead>
                   <tbody>

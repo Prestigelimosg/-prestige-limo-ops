@@ -5237,7 +5237,7 @@ async function runChromeTest() {
         );
 
         if (label === "Dispatch") {
-          const dispatchControlsVisible = await evaluate(`document.body.innerText.includes("AI Assist Parse (Mock)") &&
+          const dispatchControlsVisible = await evaluate(`document.body.innerText.includes("AI Parse Booking") &&
             document.body.innerText.includes("Create Job Card") &&
             document.body.innerText.includes("Clear Message")`);
           assert.equal(

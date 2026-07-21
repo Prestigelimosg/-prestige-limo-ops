@@ -363,8 +363,8 @@ for (const forbidden of ["specialRequest", "voiceTranscript", "voice_transcript"
 }
 
 for (const fragment of [
-  "AI parser API route is ready but not connected to OpenAI yet.",
-  "Live AI parsing is not enabled yet. Use AI_PARSE_MODE=mock.",
+  "AI parser remains in local mock mode. No OpenAI request was made.",
+  "requestAdminAiBookingParse",
 ]) {
   assertIncludes(aiParseRoute, fragment, `ai-parse route guard evidence ${fragment}`);
 }

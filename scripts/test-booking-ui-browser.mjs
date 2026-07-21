@@ -3641,7 +3641,7 @@ async function runChromeTest() {
       () =>
         evaluate(`(() => {
           const aiButton = [...document.querySelectorAll("button")].find(
-            (button) => button.textContent.trim() === "AI Assist Parse (Mock)",
+            (button) => button.textContent.trim() === "AI Parse Booking",
           );
           const parseButton = [...document.querySelectorAll("button")].find(
             (button) => button.textContent.trim() === "Create Job Card",
@@ -3656,7 +3656,7 @@ async function runChromeTest() {
           const controlButtonLabels = [...(controls?.querySelectorAll("button") || [])].map(
             (button) => button.textContent.trim(),
           );
-          const promptText = "Tick the AI safety checkbox to enable AI Assist";
+          const promptText = "AI is review-only and cannot change or send anything";
           const textNodes = [];
           const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
           let currentNode = walker.nextNode();
@@ -3694,7 +3694,7 @@ async function runChromeTest() {
     assert.equal(initialAiAssistSafetyState.parseButtonDisabled, false);
     assert.deepEqual(
       initialAiAssistSafetyState.controlButtonLabels.slice(0, 2),
-      ["AI Assist Parse (Mock)", "Create Job Card"],
+      ["AI Parse Booking", "Create Job Card"],
       "Expected AI Assist and Create Job Card button positions to be swapped",
     );
     assert.ok(
@@ -3715,19 +3715,19 @@ async function runChromeTest() {
     );
     assert.equal(
       initialAiAssistSafetyState.checkboxLabelText,
-      "Tick the AI safety checkbox to enable AI Assist",
+      "AI is review-only and cannot change or send anything",
     );
     assert.equal(initialAiAssistSafetyState.helperCount, 0);
     assert.equal(initialAiAssistSafetyState.promptTextCount, 1);
-    assert.match(initialAiAssistSafetyState.gateText, /Tick the AI safety checkbox to enable AI Assist/);
-    assert.match(initialAiAssistSafetyState.gateText, /AI Assist Parse \(Mock\)/);
+    assert.match(initialAiAssistSafetyState.gateText, /AI is review-only and cannot change or send anything/);
+    assert.match(initialAiAssistSafetyState.gateText, /AI Parse Booking/);
 
     const enabledAiAssistSafetyState = await waitForCondition(
       async () => {
         const state = await evaluate(`(() => {
           const checkbox = document.querySelector("[data-ai-assist-safety-checkbox='true']");
           const aiButton = [...document.querySelectorAll("button")].find(
-            (button) => button.textContent.trim() === "AI Assist Parse (Mock)",
+            (button) => button.textContent.trim() === "AI Parse Booking",
           );
 
           if (!checkbox || !aiButton) {
@@ -3754,7 +3754,7 @@ async function runChromeTest() {
 
     const clickedEmptyAiAssist = await evaluate(`(() => {
       const aiButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "AI Assist Parse (Mock)",
+        (button) => button.textContent.trim() === "AI Parse Booking",
       );
 
       if (!aiButton || aiButton.disabled) {
@@ -3764,14 +3764,14 @@ async function runChromeTest() {
       aiButton.click();
       return true;
     })()`);
-    assert.equal(clickedEmptyAiAssist, true, "Expected enabled AI Assist Parse (Mock) button to be clickable");
+    assert.equal(clickedEmptyAiAssist, true, "Expected enabled AI Parse Booking button to be clickable");
 
     const emptyAiAssistPlacement = await waitForCondition(
       () =>
         evaluate(`(() => {
-          const messageText = "Paste a booking message before using AI Assist Parse.";
+          const messageText = "Paste a booking message before using AI Parse Booking.";
           const aiButton = [...document.querySelectorAll("button")].find(
-            (button) => button.textContent.trim() === "AI Assist Parse (Mock)",
+            (button) => button.textContent.trim() === "AI Parse Booking",
           );
           const controls = document.querySelector("[data-ai-assist-controls='true']");
           const feedback = document.querySelector("[data-ai-assist-feedback='true']");
@@ -3800,7 +3800,7 @@ async function runChromeTest() {
       10000,
       "empty AI Assist friendly message near controls",
     );
-    assert.match(emptyAiAssistPlacement.controlsText, /AI Assist Parse \(Mock\)/);
+    assert.match(emptyAiAssistPlacement.controlsText, /AI Parse Booking/);
     assert.equal(
       emptyAiAssistPlacement.directTextCount,
       1,
@@ -3812,7 +3812,7 @@ async function runChromeTest() {
         const state = await evaluate(`(() => {
           const checkbox = document.querySelector("[data-ai-assist-safety-checkbox='true']");
           const aiButton = [...document.querySelectorAll("button")].find(
-            (button) => button.textContent.trim() === "AI Assist Parse (Mock)",
+            (button) => button.textContent.trim() === "AI Parse Booking",
           );
 
           if (!checkbox || !aiButton) {
@@ -3840,7 +3840,7 @@ async function runChromeTest() {
     );
     assert.equal(
       disabledAgainAiAssistSafetyState.checkboxLabelText,
-      "Tick the AI safety checkbox to enable AI Assist",
+      "AI is review-only and cannot change or send anything",
     );
     assert.equal(disabledAgainAiAssistSafetyState.helperCount, 0);
 
@@ -3849,7 +3849,7 @@ async function runChromeTest() {
         const state = await evaluate(`(() => {
           const checkbox = document.querySelector("[data-ai-assist-safety-checkbox='true']");
           const aiButton = [...document.querySelectorAll("button")].find(
-            (button) => button.textContent.trim() === "AI Assist Parse (Mock)",
+            (button) => button.textContent.trim() === "AI Parse Booking",
           );
 
           if (!checkbox || !aiButton) {
@@ -6206,7 +6206,7 @@ async function runChromeTest() {
 
     const clickedMockAiAssist = await evaluate(`(() => {
       const aiButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "AI Assist Parse (Mock)",
+        (button) => button.textContent.trim() === "AI Parse Booking",
       );
 
       if (!aiButton || aiButton.disabled) {
@@ -6216,7 +6216,7 @@ async function runChromeTest() {
       aiButton.click();
       return true;
     })()`);
-    assert.equal(clickedMockAiAssist, true, "Expected AI Assist Parse (Mock) button to be clickable");
+    assert.equal(clickedMockAiAssist, true, "Expected AI Parse Booking button to be clickable");
 
     const aiAssistLoadingText = await waitForCondition(
       () =>
@@ -6224,7 +6224,7 @@ async function runChromeTest() {
       5000,
       "AI Assist loading state",
     );
-    assert.equal(aiAssistLoadingText, "Loading mock AI Assist draft...");
+    assert.equal(aiAssistLoadingText, "Preparing AI review draft...");
 
     const aiDraftState = await waitForCondition(
       async () => {
@@ -6280,7 +6280,7 @@ async function runChromeTest() {
     assert.match(aiDraftState.bodyText, /AI draft is for review only\. It does not save bookings\./);
     assert.match(
       aiDraftState.bodyText,
-      /Mock AI Assist response from local API route\. No OpenAI request was made\./,
+      /AI parser remains in local mock mode\. No OpenAI request was made\./,
     );
     assert.match(aiDraftState.bodyText, /Mock response only — review required/);
     assert.equal(aiDraftState.draftIsNearButtonRow, true, "Expected AI draft panel near AI button row");

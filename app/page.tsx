@@ -2429,6 +2429,13 @@ const adminAccessLinks = [
 
 type AiDraftBooking = AiParseResult["bookings"][number];
 
+type AiAssistMode = "parser" | "conversation";
+
+type AdminAiConversationMessage = {
+  role: "admin" | "assistant";
+  text: string;
+};
+
 type ParsedBooking = Partial<BookingForm> & {
   success?: boolean;
   cleanedLines?: string[];
@@ -13003,7 +13010,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const [parsedDebugBooking, setParsedDebugBooking] = useState<ParsedDebugBooking | null>(null);
   const [showParserDebug, setShowParserDebug] = useState(false);
   const [multiBookingNotice, setMultiBookingNotice] = useState<ParsedBooking | null>(null);
+  const [aiAssistMode, setAiAssistMode] = useState<AiAssistMode>("parser");
   const [aiDraft, setAiDraft] = useState<AiParseResult | null>(null);
+  const [aiConversationMessages, setAiConversationMessages] = useState<AdminAiConversationMessage[]>([]);
   const [aiAssistMessage, setAiAssistMessage] = useState<Message | null>(null);
   const [aiAssistSafetyAccepted, setAiAssistSafetyAccepted] = useState(false);
   const [aiAssistLoading, setAiAssistLoading] = useState(false);
@@ -17617,6 +17626,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
   function clearBookingMessageInput() {
     clearParseArtifacts();
+    setAiConversationMessages([]);
     setBookingMessage("");
     setBookingMessageResetKey((current) => current + 1);
 
@@ -18258,7 +18268,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     await applyParsedBookingMessage(bookingMessage);
   }
 
-  async function handleMockAiAssistParse() {
+  async function handleAiAssistParse() {
     if (!aiAssistSafetyAccepted) {
       setAiDraft(null);
       setAiAssistResponseNote("");
@@ -18274,7 +18284,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       setAiAssistResponseNote("");
       setAiAssistMessage({
         tone: "error",
-        text: "Paste a booking message before using AI Assist Parse.",
+        text: "Paste a booking message before using AI Parse Booking.",
       });
       return;
     }
@@ -18287,13 +18297,20 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     try {
       const response = await fetch("/api/ai-parse", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": "admin-ai-assistant",
+        },
         body: JSON.stringify({ message: clean(bookingMessage) }),
       });
       const responseBody = await response.json().catch(() => ({})) as {
         ok?: unknown;
         error?: unknown;
+        message?: unknown;
+        mode?: unknown;
+        model?: unknown;
         result?: unknown;
+        usage?: { totalTokens?: unknown };
       };
 
       if (!response.ok || responseBody.ok !== true) {
@@ -18302,20 +18319,98 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           tone: "error",
           text: typeof responseBody.error === "string"
             ? responseBody.error
-            : "AI Assist Parse failed. Please try again.",
+            : "AI Parse Booking failed. Please try again.",
         });
         return;
       }
 
       setAiDraft(sanitizeAiParseResult(responseBody.result));
-      setAiAssistResponseNote("Mock AI Assist response from local API route. No OpenAI request was made.");
+      const model = typeof responseBody.model === "string" ? responseBody.model : "";
+      const totalTokens = typeof responseBody.usage?.totalTokens === "number"
+        ? responseBody.usage.totalTokens
+        : 0;
+      setAiAssistResponseNote(
+        responseBody.mode === "live"
+          ? `OpenAI review draft${model ? ` · ${model}` : ""}${totalTokens > 0 ? ` · ${totalTokens} tokens` : ""}. Nothing was saved.`
+          : "",
+      );
       setAiAssistMessage(null);
     } catch {
       setAiDraft(null);
       setAiAssistResponseNote("");
       setAiAssistMessage({
         tone: "error",
-        text: "AI Assist Parse failed. Local mock API route did not respond.",
+        text: "AI Parse Booking did not respond. Please try again.",
+      });
+    } finally {
+      setAiAssistLoading(false);
+    }
+  }
+
+  async function handleAdminAiConversation() {
+    if (!aiAssistSafetyAccepted) {
+      setAiAssistMessage({
+        tone: "error",
+        text: "Tick the AI safety checkbox to enable AI Assist.",
+      });
+      return;
+    }
+
+    const question = clean(bookingMessage);
+
+    if (!question) {
+      setAiAssistMessage({ tone: "error", text: "Enter a question before sending it to AI." });
+      return;
+    }
+
+    setAiAssistMessage(null);
+    setAiAssistLoading(true);
+
+    try {
+      const response = await fetch("/api/admin-ai-assistant", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": "admin-ai-assistant",
+        },
+        body: JSON.stringify({
+          history: aiConversationMessages.slice(-6),
+          message: question,
+        }),
+      });
+      const responseBody = await response.json().catch(() => ({})) as {
+        answer?: unknown;
+        error?: unknown;
+        model?: unknown;
+        ok?: unknown;
+        usage?: { totalTokens?: unknown };
+      };
+
+      if (!response.ok || responseBody.ok !== true || typeof responseBody.answer !== "string") {
+        setAiAssistMessage({
+          tone: "error",
+          text: typeof responseBody.error === "string"
+            ? responseBody.error
+            : "AI conversation failed. Please try again.",
+        });
+        return;
+      }
+
+      setAiConversationMessages((current) => [
+        ...current,
+        { role: "admin", text: question },
+        { role: "assistant", text: responseBody.answer as string },
+      ]);
+      setBookingMessage("");
+      setAiAssistResponseNote(
+        `${typeof responseBody.model === "string" ? responseBody.model : "OpenAI"}`
+          + `${typeof responseBody.usage?.totalTokens === "number" ? ` · ${responseBody.usage.totalTokens} tokens` : ""}`
+          + " · Read-only reply. No app action was taken.",
+      );
+    } catch {
+      setAiAssistMessage({
+        tone: "error",
+        text: "AI conversation did not respond. Please try again.",
       });
     } finally {
       setAiAssistLoading(false);
@@ -37839,9 +37934,41 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             </div>
 
             <div className="mb-2.5 rounded-md border border-stone-200 bg-stone-50 p-2">
+              <div
+                aria-label="AI Assist mode"
+                className="mb-2 grid max-w-md grid-cols-2 gap-1 rounded-md border border-indigo-200 bg-indigo-50 p-1"
+                data-ai-assist-mode-selector="true"
+                role="group"
+              >
+                {([
+                  ["parser", "Booking Parser"],
+                  ["conversation", "Ask AI"],
+                ] as const).map(([mode, label]) => (
+                  <button
+                    aria-pressed={aiAssistMode === mode}
+                    className={`min-h-11 rounded px-3 py-2 text-xs font-semibold transition md:min-h-9 ${
+                      aiAssistMode === mode
+                        ? "bg-indigo-900 text-white shadow-sm"
+                        : aiAssistLoading
+                          ? "cursor-not-allowed bg-white text-indigo-300"
+                          : "bg-white text-indigo-900 hover:bg-indigo-100"
+                    }`}
+                    data-ai-assist-mode={mode}
+                    disabled={aiAssistLoading}
+                    key={mode}
+                    onClick={() => {
+                      setAiAssistMode(mode);
+                      clearParseArtifacts();
+                    }}
+                    type="button"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               <label>
                 <span className="mb-1 block text-sm font-medium text-slate-700">
-                  Paste Booking Message
+                  {aiAssistMode === "parser" ? "Paste Booking Message" : "Ask AI"}
                 </span>
                 <textarea
                   key={bookingMessageResetKey}
@@ -37853,7 +37980,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     setAiAssistMessage(null);
                     setAiAssistResponseNote("");
                   }}
-                  placeholder="Paste WhatsApp, email, or screenshot OCR text here."
+                  placeholder={
+                    aiAssistMode === "parser"
+                      ? "Paste WhatsApp, email, or screenshot OCR text here."
+                      : "Ask a question or paste text for a read-only AI review."
+                  }
                   value={bookingMessage}
                 />
               </label>
@@ -37870,10 +38001,16 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                           : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
                       }`}
                       disabled={!aiAssistSafetyAccepted || aiAssistLoading}
-                      onClick={handleMockAiAssistParse}
+                      onClick={
+                        aiAssistMode === "parser"
+                          ? handleAiAssistParse
+                          : handleAdminAiConversation
+                      }
                       type="button"
                     >
-                      AI Assist Parse (Mock)
+                      {aiAssistLoading
+                        ? aiAssistMode === "parser" ? "Parsing..." : "Sending..."
+                        : aiAssistMode === "parser" ? "AI Parse Booking" : "Send to AI"}
                     </button>
                     <label
                       className="flex min-h-11 w-full items-center gap-2 rounded-md border border-indigo-200 bg-white px-2.5 py-1.5 text-[11px] font-medium leading-tight text-indigo-950 md:min-h-9"
@@ -37891,7 +38028,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                         type="checkbox"
                       />
                       <span>
-                        Tick the AI safety checkbox to enable AI Assist
+                        AI is review-only and cannot change or send anything
                       </span>
                     </label>
                     {aiAssistLoading ? (
@@ -37900,13 +38037,19 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                         className="text-xs font-medium text-indigo-900"
                         data-ai-assist-loading="true"
                       >
-                        Loading mock AI Assist draft...
+                        {aiAssistMode === "parser" ? "Preparing AI review draft..." : "Waiting for AI reply..."}
                       </p>
                     ) : null}
                   </div>
                   <button
-                    className="min-h-11 w-full rounded-md bg-slate-950 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-800 md:min-h-9"
+                    className={`min-h-11 w-full rounded-md px-2.5 py-1.5 text-xs font-semibold transition md:min-h-9 ${
+                      aiAssistMode === "parser"
+                        ? "bg-slate-950 text-white hover:bg-slate-800"
+                        : "cursor-not-allowed bg-slate-200 text-slate-500"
+                    }`}
+                    disabled={aiAssistMode !== "parser"}
                     onClick={handleParseBookingMessage}
+                    title={aiAssistMode === "parser" ? undefined : "Switch to Booking Parser to create a job card."}
                     type="button"
                   >
                     Create Job Card
@@ -37938,7 +38081,39 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   {aiAssistMessage.text}
                 </p>
               ) : null}
-              {aiDraft ? (
+              {aiAssistMode === "conversation" ? (
+                <div
+                  aria-live="polite"
+                  className="mt-3 max-h-96 space-y-2 overflow-y-auto rounded-lg border border-indigo-200 bg-white p-3"
+                  data-admin-ai-conversation="true"
+                >
+                  {aiConversationMessages.length > 0 ? (
+                    aiConversationMessages.map((conversationMessage, index) => (
+                      <div
+                        className={`rounded-md px-3 py-2 text-sm ${
+                          conversationMessage.role === "admin"
+                            ? "ml-6 bg-slate-900 text-white"
+                            : "mr-6 border border-indigo-200 bg-indigo-50 text-indigo-950"
+                        }`}
+                        key={`${conversationMessage.role}-${index}`}
+                      >
+                        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide opacity-70">
+                          {conversationMessage.role === "admin" ? "Admin" : "AI"}
+                        </p>
+                        <p className="whitespace-pre-wrap">{conversationMessage.text}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-slate-600">
+                      Ask about the text you provide. AI cannot access or change live app data.
+                    </p>
+                  )}
+                  {aiAssistResponseNote ? (
+                    <p className="text-xs font-medium text-indigo-900">{aiAssistResponseNote}</p>
+                  ) : null}
+                </div>
+              ) : null}
+              {aiAssistMode === "parser" && aiDraft ? (
                 <div
                   className="mt-3 rounded-lg border-2 border-indigo-300 bg-indigo-50 p-4 shadow-sm"
                   data-ai-assist-draft="true"

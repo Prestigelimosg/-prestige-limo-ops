@@ -398,6 +398,10 @@ const guardChecks = [
     script: "scripts/test-public-client-navigation-boundary-guard.mjs",
   },
   {
+    label: "Driver Job demo Production privacy guard",
+    script: "scripts/test-driver-job-demo-production-privacy-guard.mjs",
+  },
+  {
     label: "public customer form surface boundary guard",
     script: "scripts/test-public-customer-form-surface-boundary-guard.mjs",
   },

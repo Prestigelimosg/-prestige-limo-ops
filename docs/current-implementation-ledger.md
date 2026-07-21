@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-72e0269a Add focused driver ACK close browser guard
+15c41109 Preserve linked booking customer identity
 
 Latest pushed main/staging runtime checkpoint:
 1e80b1dd Fix customer job public reference display
@@ -19,6 +19,9 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Diagnosis isolated the drift to the established admin booking update adapter: ordinary changes to display name, contact text, phone formatting, or passenger text could call the legacy find-or-create customer helper again and replace an already-saved `customer_id`. The in-place repair now preserves the existing customer ID for ordinary updates, accepts an explicit positive customer ID from the established verified CRM selection lane, and uses legacy find-or-create only when neither an explicit nor existing customer ID is available.
 - The exact customer-folder booking edit payload now also carries forward nullable verified `company_id`, `booker_id`, and `traveler_id` fields instead of omitting them during the existing full-record PATCH. The customer booking request API contract proves that one verified PA identity is applied identically to both OUT and RET legs. No second identity panel, booking writer, invoice workbench, route, helper, table, or write path is added.
 - Focused protection is in `scripts/test-customer-folder-multi-job-invoice-handoff-guard.mjs` and `scripts/test-customer-booking-request-api-contract.mjs`, alongside the locked invoice PDF/portal and billing lifecycle guards. The owner-approved final lower layout remains exactly `Notes → sign-off → fully visible Bank Details → Terms & Conditions`; no invoice application source is changed by this repair.
+- Exact source commit `15c41109` was pushed to `origin/codex/restore-current-workflow-guards` and deployed through the linked Vercel Production project as `dpl_8zAuMZW3uqtX8VhFBP6eeAyfWXoi`. The deployment reached READY, was aliased to `https://app.prestigelimo.sg`, returned HTTP 200, and contained build marker `15c41109`.
+- After deployment, one established admin booking PATCH corrected only reproduced job `10831` from legacy `customer_id = 153` to the verified linked value `142`. A fresh exact read confirmed `company_id = 27`, `booker_id = 12`, and `traveler_id = 24` remained unchanged; comparison found no other booking-field, route-value, or service-item-value change. No unverified legacy pair was guessed or rewritten.
+- The booking update correctly made its previous customer-price review stale. The existing exact price-review control re-approved the unchanged displayed `$70.00` proposal so the repair did not leave the invoice handoff blocked by its normal stale-review guard. Signed-in Production Chrome then opened reference `10831` in the established selected-job invoice preview, showed `Invoice# Not issued`, and visibly confirmed `Notes → sign-off → fully visible Bank Details → Terms & Conditions`. No invoice was issued, sent, emailed, downloaded, marked paid, or otherwise changed; no Calendar, driver, messaging, payment, payout, PayNow, GPS, provider, schema, configuration, or other wired lane was used.
 
 ### Booking UI Direct Typed-Read Assertion Timing Repair (2026-07-21)
 

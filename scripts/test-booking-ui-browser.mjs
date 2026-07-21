@@ -16737,6 +16737,15 @@ async function runChromeTest() {
       "Expected LOADED SAVED booking Bookings Load this booking button to be clickable",
     );
 
+    const directLoadedBookingTypedReadCalls = await evaluate(`(window.__prestigeFetchCalls || []).filter(
+      (call) => call.includes("/api/admin-load-bookings-typed-read")
+    )`);
+    assert.deepEqual(
+      directLoadedBookingTypedReadCalls,
+      ["GET /api/admin-load-bookings-typed-read?limit=25"],
+      `Expected Load this booking to make one direct guarded typed-read refresh before background sync, got ${directLoadedBookingTypedReadCalls.join(", ")}`,
+    );
+
     const loadedBookingState = await waitForCondition(
       async () => {
         const candidateState = await evaluate(`(() => {
@@ -17172,11 +17181,11 @@ async function runChromeTest() {
       call.includes("/api/admin-load-bookings-typed-read"),
     );
     assert.ok(
-      loadedBookingTypedReadCalls.length <= 1 &&
+      loadedBookingTypedReadCalls.length >= 1 &&
         loadedBookingTypedReadCalls.every(
           (call) => call === "GET /api/admin-load-bookings-typed-read?limit=25",
         ),
-      `Expected at most one guarded typed-read refresh, got ${loadedBookingTypedReadCalls.join(", ")}`,
+      `Expected direct and background typed-read refreshes to remain guarded GET limit=25 reads, got ${loadedBookingTypedReadCalls.join(", ")}`,
     );
     const loadedBookingFetchCallSet = new Set(
       loadedBookingState.fetchCalls.filter(

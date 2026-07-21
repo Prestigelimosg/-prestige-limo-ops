@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-15c41109 Preserve linked booking customer identity
+adba67dc Confirm selected invoice prices on tick
 
 Latest pushed main/staging runtime checkpoint:
 1e80b1dd Fix customer job public reference display
@@ -20,6 +20,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - After either existing save action succeeds, the exact expanded editor closes, clears its temporary form state, and leaves the saved confirmation in the existing folder feedback banner. Failed saves remain open with their current error for correction.
 - This is an in-place repair to the existing customer-folder selection and selected-job review handoff. The small selected-job coverage list is status evidence inside the established selected-job review, not a second invoice lane. It adds no page, route, API, helper, table, persistence lane, invoice record, or provider action. The owner-approved final invoice and PDF layout remains unchanged as `Notes → sign-off → fully visible Bank Details → Terms & Conditions`; Driver Calendar, Driver Reports, Dispatch, messaging, payment, payout, PayNow, GPS, and every other wired lane remain untouched.
 - Focused protection is in `scripts/test-customer-folder-multi-job-invoice-handoff-guard.mjs` alongside the existing stored-PDF/portal and billing lifecycle guards.
+- Exact source commit `adba67dc` was pushed to `origin/codex/restore-current-workflow-guards` and deployed through the linked Vercel Production project as `dpl_QNj1RdxT2SQB2G97Z7RSgowTf9P9`. The deployment reached READY, was aliased to `https://app.prestigelimo.sg`, returned HTTP 200, and contained build marker `adba67dc`.
+- Signed-in Production Chrome verified the complete narrow workflow with current pending job `10831`: one tick confirmed the displayed `$70.00` price, exposed `Load stanley JULY test invoice`, and loaded one exact `10831` / `$70.00` invoice line with `Selected job coverage · 1 of 1 loaded`. The existing `Save price review` and an unchanged-field `Save job details` test each closed the expanded editor and left their success message in the folder banner. The visible invoice remained `Invoice# Not issued` with the approved `Notes → sign-off → fully visible Bank Details → Terms & Conditions` order. No invoice was issued, sent, emailed, downloaded, marked paid, or otherwise changed; no Calendar, driver, messaging, payment, payout, PayNow, GPS, provider, schema, configuration, or other wired lane was used.
 
 ### Linked Booking Customer Identity Drift Repair (2026-07-21)
 

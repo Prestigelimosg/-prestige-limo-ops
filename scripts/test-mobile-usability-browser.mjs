@@ -49,7 +49,7 @@ const internalQaMockArchiveGroupLabels = [
   "Legacy close-cycle / DSP / receivables / accounting QA",
 ];
 const dispatcherIntakeControlLabels = [
-  "AI Assist Parse (Mock)",
+  "AI Parse Booking",
   "Create Job Card",
   "Clear Message",
 ];
@@ -603,7 +603,7 @@ async function runChromeTest() {
         );
         const row = document.querySelector("[data-dispatcher-intake-action-row='true']");
         const safety = document.querySelector("[data-ai-assist-gate='true'] label");
-        const aiButton = findButton("AI Assist Parse (Mock)");
+        const aiButton = findButton("AI Parse Booking");
         const safetyRect = safety?.getBoundingClientRect();
         const aiRect = aiButton?.getBoundingClientRect();
         const rowRect = row?.getBoundingClientRect();
@@ -687,7 +687,7 @@ async function runChromeTest() {
         `${viewport.label}: expected AI safety checkbox/help to stay near AI Assist`,
       );
       assert.equal(
-        state.safetyText.includes("Tick the AI safety checkbox to enable AI Assist"),
+        state.safetyText.includes("AI is review-only and cannot change or send anything"),
         true,
         `${viewport.label}: expected AI safety help text near AI Assist`,
       );

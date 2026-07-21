@@ -2,13 +2,14 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const guardScript = "scripts/test-customer-folder-multi-job-invoice-handoff-guard.mjs";
-const [folderPage, folderShell, invoiceFolder, savedBookingsRead, customersPage, invoicePersistence, localInvoices, ledger, preactivation, appSmoke] =
+const [folderPage, folderShell, invoiceFolder, savedBookingsRead, customersPage, bookingAdapter, invoicePersistence, localInvoices, ledger, preactivation, appSmoke] =
   await Promise.all([
     readFile("app/customers/[customerId]/saved-bookings-panel.tsx", "utf8"),
     readFile("app/customers/[customerId]/page.tsx", "utf8"),
     readFile("app/customers/[customerId]/customer-invoice-folder-panel.tsx", "utf8"),
     readFile("lib/admin-customer-saved-bookings-read.ts", "utf8"),
     readFile("app/customers/page.tsx", "utf8"),
+    readFile("lib/admin-booking-supabase-adapter.ts", "utf8"),
     readFile("lib/customer-invoice-record-persistence.ts", "utf8"),
     readFile("lib/customer-local-invoices.ts", "utf8"),
     readFile("docs/current-implementation-ledger.md", "utf8"),
@@ -80,6 +81,9 @@ for (const fragment of [
   "readCustomerFolderExactBooking(safeCustomerFolderDispatchHandoffReference(booking))",
   "mismatchedCustomer",
   "mismatchedBooker",
+  "company_id: booking.company_id ?? null",
+  "booker_id: booking.booker_id ?? null",
+  "traveler_id: booking.traveler_id ?? null",
   "setPlainInvoiceSavedBookings(targetBookings)",
   "bookingReference: firstInvoiceRow.bookingReference",
   "bookingReference: row.bookingReference",
@@ -123,6 +127,20 @@ for (const fragment of [
 ]) {
   includes(customersPage, fragment, `multi-job invoice handoff fragment ${fragment}`);
 }
+
+for (const fragment of [
+  "const requestedCustomerId = dbIdentifierOrNull(input.booking.customer_id);",
+  "let customerId = requestedCustomerId || existingCustomerId;",
+  "if (!customerId) {",
+]) {
+  includes(bookingAdapter, fragment, `stable verified booking identity fragment ${fragment}`);
+}
+
+assert.equal(
+  bookingAdapter.includes("bookingCustomerIdentityChanged(existing, input.booking)"),
+  false,
+  "Safe display, contact, passenger, or route edits must not replace an existing customer ID.",
+);
 
 const selectedReviewStart = customersPage.indexOf('data-selected-job-invoice-review="true"');
 const selectedReviewEnd = customersPage.indexOf('data-plain-invoice-crm-account="true"', selectedReviewStart);

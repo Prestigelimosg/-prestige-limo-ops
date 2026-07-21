@@ -1588,9 +1588,11 @@ function customerFolderExactBookingPayload(
         booking_reference: bookingReference,
         cancellation_review_status: cleanCustomerFolderText(booking.cancellation_review_status, 80) || null,
         change_review_status: cleanCustomerFolderText(booking.change_review_status, 80) || null,
+        company_id: booking.company_id ?? null,
         contact_display_name: cleanCustomerFolderText(booking.contact_display_name, 160) || null,
         contact_email: cleanCustomerFolderText(booking.contact_email, 160) || null,
         contact_phone: contactPhone,
+        booker_id: booking.booker_id ?? null,
         customer_display_name: customerDisplayName,
         customer_facing_status: cleanCustomerFolderText(booking.customer_facing_status, 80) || "Received",
         customer_id: booking.customer_id ?? null,
@@ -1619,6 +1621,7 @@ function customerFolderExactBookingPayload(
           cleanCustomerFolderText(booking.source_surface, 80) ||
           cleanCustomerFolderText(booking.source_channel, 80) ||
           "admin-dashboard",
+        traveler_id: booking.traveler_id ?? null,
         vehicle_type_or_category: cleanCustomerFolderText(form.vehicleType, 80) || null,
       },
       route_points: customerFolderExactBookingRoutePoints(booking, form),

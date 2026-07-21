@@ -194,27 +194,6 @@ function customerPortalScopedDisplayName(booking: AdminBookingRecordInput) {
   );
 }
 
-function customerIdentityToken(value: unknown) {
-  return textOrNull(value)?.replace(/\s+/g, " ").trim().toLowerCase() || "";
-}
-
-function bookingCustomerIdentityChanged(
-  existing: AdminBookingRecordInput,
-  next: AdminBookingRecordInput,
-) {
-  const identityFields: Array<keyof AdminBookingRecordInput> = [
-    "customer_display_name",
-    "contact_display_name",
-    "contact_email",
-    "contact_phone",
-    "passenger_name",
-  ];
-
-  return identityFields.some(
-    (field) => customerIdentityToken(existing[field]) !== customerIdentityToken(next[field]),
-  );
-}
-
 function classifyAdapterDatabaseFailure(
   error: unknown,
 ): AdminBookingPersistenceSafeErrorCategory {
@@ -1754,9 +1733,10 @@ export async function updateAdminBookingThroughSupabaseAdapter(
 
   const existing = existingResult.data;
   const existingCustomerId = dbIdentifierOrNull(existing.customer_id);
-  let customerId = existingCustomerId;
+  const requestedCustomerId = dbIdentifierOrNull(input.booking.customer_id);
+  let customerId = requestedCustomerId || existingCustomerId;
 
-  if (!customerId || bookingCustomerIdentityChanged(existing, input.booking)) {
+  if (!customerId) {
     const customerIdResult = await findOrCreateCustomerId(client, input.booking, actor);
 
     if (!customerIdResult.ok) {

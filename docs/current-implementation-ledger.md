@@ -4,13 +4,24 @@ Latest verified clean runtime checkpoint:
 8bfaeaa2 Replace invoice logo artwork
 
 Latest pushed main/staging runtime checkpoint:
-ff9e16d3 Merge pull request #63 from Prestigelimosg/codex/restore-current-workflow-guards
+8bfaeaa2 Replace invoice logo artwork
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-ff9e16d3 Merge pull request #63 from Prestigelimosg/codex/restore-current-workflow-guards
+55f7ec76 Merge pull request #64 from Prestigelimosg/codex/restore-current-workflow-guards
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Final Regression Guard Timing And Wording Alignment (2026-07-21)
+
+- A final clean-checkpoint sweep reproduced two test-only failures against exact merged build `55f7ec76`; neither failure reproduced an application defect or required an application source change.
+- `scripts/test-customer-traveler-invoice-separation-guard.mjs` retained the retired `Review {group.passengerName} invoice` copy after the owner-approved one-tick invoice handoff changed the established control to `Load {group.passengerName} invoice`. The guard now matches the current approved control already protected by `scripts/test-customer-folder-multi-job-invoice-handoff-guard.mjs`.
+- `scripts/test-customer-folder-price-review-guard.mjs` likewise retained the retired `Codex price · review`, `Review every price first`, and pre-coverage blocker copy. It now protects the approved `Codex price · tick to confirm` badge, the explicit one-tick price-confirmation instruction, and the established safe blocked-row explanation without changing invoice behavior.
+- `scripts/test-customer-folder-dispatch-handoff-guard.mjs` still expected the removed display-text identity-change helper after the approved linked-booking identity-drift repair. It now protects the established explicit-requested-ID, otherwise-existing-ID, otherwise-find-or-create order already locked by the newer multi-job invoice handoff guard; no booking adapter or persistence source is changed.
+- The full booking UI browser guard incorrectly required one direct typed-read request from `Load this booking` even when the page retained its intentionally persistent terminal typed-read-unavailable state. The runtime contract is conditional: the action makes no request while terminal-unavailable is latched, otherwise it may make one direct `GET /api/admin-load-bookings-typed-read?limit=25`. The immediate browser assertion now permits only those two valid outcomes, rejects duplicates and every wrong method/route/query shape before background sync, and leaves the focused source guards to lock the established conditional branch itself.
+- Post-repair verification passed the complete pre-activation verification suite, the full booking UI browser suite in 26.4 seconds with zero browser errors, console errors, blocked Supabase reads, or blocked Supabase mutations, and the app smoke browser suite in 8.6 seconds with zero browser or console errors across admin, customer, and driver routes and responsive viewports.
+- Read-only signed-in Production Chrome confirmed build marker `55f7ec76` and exact selected job `10831` with `1 of 1 loaded`, the approved gold logo, `Invoice# Not issued`, and closed Bank Details, Notes, and Terms & Conditions in their established positions. No Edit, Send, PDF, issue, payment, Calendar, booking, driver, or other write action was used.
+- This repair changes tests and this ledger only. Invoice runtime and layout, booking loading, Dispatch auto-sync, APIs, persistence, Driver Calendar, Driver Reports, Pending Driver ACK Queue, Live Dispatch, messaging, payment, payout, PayNow, GPS, provider, environment, Production behavior, and every other wired lane remain unchanged.
 
 ### Owner-Supplied Prestige Limo SG Invoice Logo (2026-07-21)
 

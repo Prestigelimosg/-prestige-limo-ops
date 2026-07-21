@@ -301,9 +301,10 @@ for (const fragment of [
   "const result = await fetchAdminBookingByReference(clientResult.data, bookingReference);",
   "const reloadedBookingId = dbIdentifierOrNull(asRecord(data).id);",
   "id: reloadedBookingId,",
-  "function bookingCustomerIdentityChanged(",
   "const existingCustomerId = dbIdentifierOrNull(existing.customer_id);",
-  "if (!customerId || bookingCustomerIdentityChanged(existing, input.booking))",
+  "const requestedCustomerId = dbIdentifierOrNull(input.booking.customer_id);",
+  "let customerId = requestedCustomerId || existingCustomerId;",
+  "if (!customerId) {",
 ]) {
   assertIncludes(adapter, fragment, `admin booking adapter exact reference ${fragment}`);
 }

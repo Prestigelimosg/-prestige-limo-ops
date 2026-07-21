@@ -1,16 +1,25 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-73489c43 Place invoice notes beside terms
+f03f7385 Restore blank invoice logo fallback
 
 Latest pushed main/staging runtime checkpoint:
 73489c43 Place invoice notes beside terms
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-a112e7b6 Merge pull request #61 from Prestigelimosg/codex/restore-current-workflow-guards
+f03f7385 Restore blank invoice logo fallback
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Blank Saved Company Logo Fallback In Admin Invoice Review (2026-07-21)
+
+- Signed-in Production Chrome reproduced a broken image in the existing selected-job admin invoice review. The rendered logo image was complete but had no `src`/`currentSrc` and reported zero natural dimensions. Read-only Production checks isolated the cause: the approved `/prestige-limo-sg-logo.jpg` asset remained healthy at HTTP 200 with exact 640x300 dimensions and its locked SHA-256, while the saved public Company Profile returned a blank `logo_image_url`.
+- The established selected-job invoice review now uses the existing approved default Company Profile logo only when that saved display value is blank. This is the same fallback already used by the single stored PDF renderer; it adds no asset, upload, profile write, helper, route, renderer, preview, or invoice lane.
+- The repair changes only the image source fallback in the existing admin review. It does not change the invoice layout, Company Profile persistence, saved values, issue/download/email/payment behavior, customer portal, PDF output, pricing, identity scope, booking, Calendar, Driver Reports, Dispatch, messaging, payment, payout, PayNow, GPS, provider, schema, configuration, or any other wired lane.
+- Focused protection is added to `scripts/test-customer-folder-multi-job-invoice-handoff-guard.mjs` alongside the existing company-profile, stored-PDF/portal, and billing lifecycle guards.
+- Exact application commit `f03f7385` was pushed to `origin/codex/restore-current-workflow-guards` and deployed through the linked Vercel Production project as `dpl_GHeXHCDEyVtSL4TvXe2DwwAtBWMq`. The deployment reached READY, was aliased to `https://app.prestigelimo.sg`, returned HTTP 200 with build marker `f03f7385`, and served the approved 640x300 JPEG with its locked SHA-256.
+- Signed-in Production Chrome verified current exact job `10831` with `1 of 1 loaded`. The logo rendered visibly from the existing approved asset with a non-empty optimized `src`/`currentSrc`, `naturalWidth = 192`, and `naturalHeight = 90`; the invoice remained `Invoice# Not issued`, and Bank Details, Notes, and Terms & Conditions remained closed in their established positions. No invoice was edited, issued, sent, emailed, downloaded, paid, or otherwise changed, and no disclosure or other wired lane was used.
 
 ### Admin Invoice Lower-Content Disclosures Without Duplicate Controls (2026-07-21)
 

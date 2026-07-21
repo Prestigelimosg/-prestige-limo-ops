@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-adba67dc Confirm selected invoice prices on tick
+73489c43 Place invoice notes beside terms
 
 Latest pushed main/staging runtime checkpoint:
 1e80b1dd Fix customer job public reference display
@@ -18,6 +18,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - In the established admin selected-job invoice review only, the existing `Notes`, `Bank Details`, and `Terms & Conditions` headings are now the three closed-by-default native disclosures. Each heading directly opens its one existing content block; there is no separate `Click to view` label, button, link, state helper, panel, footer, route, or duplicate content. The public `/terms` route remains the separate Driver Google Calendar Terms of Service and is intentionally not linked from a customer invoice.
 - The owner's follow-up placement keeps the sign-off visible, puts the closed Bank Details disclosure immediately below it, and places the closed Notes and Terms & Conditions disclosures beside each other in one responsive bottom row. The shared stored/customer PDF renderer remains unchanged and continues printing its approved `Notes → sign-off → full Bank Details → Terms & Conditions` order non-interactively. Invoice identity, pricing, totals, Company Profile values, issue/download/email/payment behavior, portal consumers, and every non-invoice wired lane remain unchanged.
 - Focused protection is in `scripts/test-customer-folder-multi-job-invoice-handoff-guard.mjs`, while `scripts/test-customer-local-invoice-issue-pdf-portal-guard.mjs` and `scripts/test-customer-billing-document-lifecycle-guard.mjs` continue protecting the fully rendered stored PDF lifecycle.
+- Exact final source commit `73489c43` was pushed to `origin/codex/restore-current-workflow-guards` and deployed through the linked Vercel Production project as `dpl_G7tvWgxsDZySo6ice7FL6nvBKLHC`. The deployment reached READY, was aliased to `https://app.prestigelimo.sg`, returned HTTP 200, and contained build marker `73489c43`.
+- Signed-in Production Chrome verified current exact job `10831` in the established selected-job review with `1 of 1 loaded`. Bank Details rendered closed beneath the visible sign-off; Notes and Terms & Conditions rendered closed on the same bottom row. Each existing heading was opened and closed in turn, and each exposed only its own saved content. The page was returned to all three disclosures closed. No invoice was issued, sent, emailed, downloaded, marked paid, or otherwise changed; no route, duplicate control, Calendar, driver, messaging, payment, payout, PayNow, GPS, provider, schema, configuration, or other wired lane was used.
 
 ### Mandatory Selected-Job Invoice Coverage And One-Tick Price Confirmation (2026-07-21)
 

@@ -4,10 +4,10 @@ Latest verified clean runtime checkpoint:
 73489c43 Place invoice notes beside terms
 
 Latest pushed main/staging runtime checkpoint:
-1e80b1dd Fix customer job public reference display
+73489c43 Place invoice notes beside terms
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-bc0b49ec Merge pull request #56 from Prestigelimosg/codex/restore-current-workflow-guards
+a112e7b6 Merge pull request #61 from Prestigelimosg/codex/restore-current-workflow-guards
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -20,6 +20,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Focused protection is in `scripts/test-customer-folder-multi-job-invoice-handoff-guard.mjs`, while `scripts/test-customer-local-invoice-issue-pdf-portal-guard.mjs` and `scripts/test-customer-billing-document-lifecycle-guard.mjs` continue protecting the fully rendered stored PDF lifecycle.
 - Exact final source commit `73489c43` was pushed to `origin/codex/restore-current-workflow-guards` and deployed through the linked Vercel Production project as `dpl_G7tvWgxsDZySo6ice7FL6nvBKLHC`. The deployment reached READY, was aliased to `https://app.prestigelimo.sg`, returned HTTP 200, and contained build marker `73489c43`.
 - Signed-in Production Chrome verified current exact job `10831` in the established selected-job review with `1 of 1 loaded`. Bank Details rendered closed beneath the visible sign-off; Notes and Terms & Conditions rendered closed on the same bottom row. Each existing heading was opened and closed in turn, and each exposed only its own saved content. The page was returned to all three disclosures closed. No invoice was issued, sent, emailed, downloaded, marked paid, or otherwise changed; no route, duplicate control, Calendar, driver, messaging, payment, payout, PayNow, GPS, provider, schema, configuration, or other wired lane was used.
+- Ready PR `#61` merged the verified branch into `main` as `a112e7b6`. GitHub reported the PR mergeable and conflict-free with both Vercel checks green before merge. The automatic GitHub Production deployment completed successfully at `https://prestige-limo-ops-staging-ml0tej93q-prestigelimosgs-projects.vercel.app`; `https://app.prestigelimo.sg` returned HTTP 200 with merge build marker `a112e7b6`. A final signed-in Chrome read confirmed job `10831`, `1 of 1 loaded`, closed Bank Details, and closed Notes beside closed Terms & Conditions on the merged Production build without using any write action.
 
 ### Mandatory Selected-Job Invoice Coverage And One-Tick Price Confirmation (2026-07-21)
 

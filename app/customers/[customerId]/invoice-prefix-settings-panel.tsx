@@ -4,8 +4,10 @@ import { useState } from "react";
 
 const adminCustomerInvoicePrefixSettingsApiPath =
   "/api/admin-customer-invoice-prefix-settings";
+const adminCustomerSavedBookingsApiPath = "/api/admin-customer-saved-bookings";
 
 type CustomerInvoicePrefixSettingRecord = {
+  booker_id: number | null;
   customer_account: string;
   invoice_prefix: string;
   last_reserved_invoice_number: string | null;
@@ -14,11 +16,25 @@ type CustomerInvoicePrefixSettingRecord = {
   prefix_locked: boolean;
   sequence_scope: "lifetime";
   sequence_status: "active" | "on_hold" | "archived";
+  traveler_id: number | null;
 };
 
 type CustomerInvoicePrefixSettingsPanelProps = {
   customerAccount: string;
+  customerId: string;
   suggestedPrefix: string;
+};
+
+type CustomerInvoicePrefixTraveler = {
+  bookerId: number;
+  passengerName: string;
+  travelerId: number;
+};
+
+type CustomerInvoicePrefixTravelerReadRecord = {
+  booker_id?: number | null;
+  passenger_name?: string | null;
+  traveler_id?: number | null;
 };
 
 type PrefixSettingsState = {
@@ -35,7 +51,9 @@ function clean(value: string | null | undefined) {
 function safeInitialPrefix(value: string) {
   const cleaned = clean(value).toUpperCase().replace(/[^A-Z0-9]/g, "");
 
-  return /^[A-Z0-9]{2,12}$/.test(cleaned) ? cleaned : "";
+  return /^[A-Z0-9]{2,12}$/.test(cleaned) && !["INV", "QUO", "CN"].includes(cleaned)
+    ? cleaned
+    : "";
 }
 
 function feedbackClass(tone: PrefixSettingsState["tone"]) {
@@ -106,10 +124,19 @@ function prefixSettingsFailureMessage(action: "load" | "save", rawError: unknown
     : "Invoice prefix was not saved. No invoice number was reserved; reload this customer folder and try again.";
 }
 
-export function CustomerInvoicePrefixSettingsPanel({
+function CustomerInvoicePrefixTravelerRow({
+  bookerId,
   customerAccount,
+  passengerName,
   suggestedPrefix,
-}: CustomerInvoicePrefixSettingsPanelProps) {
+  travelerId,
+}: {
+  bookerId: number;
+  customerAccount: string;
+  passengerName: string;
+  suggestedPrefix: string;
+  travelerId: number;
+}) {
   const initialPrefix = safeInitialPrefix(suggestedPrefix);
   const [prefixInput, setPrefixInput] = useState(initialPrefix);
   const [state, setState] = useState<PrefixSettingsState>({
@@ -120,7 +147,8 @@ export function CustomerInvoicePrefixSettingsPanel({
   });
   const account = clean(customerAccount);
   const prefixLocked = Boolean(state.prefixSetting?.prefix_locked);
-  const prefixValid = /^[A-Z0-9]{2,12}$/.test(prefixInput);
+  const prefixValid =
+    /^[A-Z0-9]{2,12}$/.test(prefixInput) && !["INV", "QUO", "CN"].includes(prefixInput);
 
   function updatePrefixInput(value: string) {
     setPrefixInput(value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12));
@@ -128,7 +156,9 @@ export function CustomerInvoicePrefixSettingsPanel({
 
   async function fetchPrefixSetting() {
     const params = new URLSearchParams({
+      booker_id: String(bookerId),
       customer_account: account,
+      traveler_id: String(travelerId),
     });
     const response = await fetch(
       `${adminCustomerInvoicePrefixSettingsApiPath}?${params.toString()}`,
@@ -217,10 +247,12 @@ export function CustomerInvoicePrefixSettingsPanel({
     try {
       const response = await fetch(adminCustomerInvoicePrefixSettingsApiPath, {
         body: JSON.stringify({
+          booker_id: bookerId,
           customer_account: account,
           invoice_prefix: prefixInput,
           safe_sequence_note:
             "Set from admin customer folder prefix settings only.",
+          traveler_id: travelerId,
         }),
         cache: "no-store",
         headers: {
@@ -286,11 +318,11 @@ export function CustomerInvoicePrefixSettingsPanel({
   return (
     <div
       className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2"
-      data-admin-customer-invoice-prefix-settings="true"
+      data-admin-customer-traveler-invoice-prefix="true"
     >
       <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
-          <h3 className="text-sm font-bold text-slate-950">Invoice Prefix Settings</h3>
+          <h3 className="text-sm font-bold text-slate-950">{passengerName}</h3>
           <p
             className="mt-0.5 truncate text-xs font-semibold text-slate-600"
             data-admin-customer-invoice-prefix-account="true"
@@ -313,6 +345,7 @@ export function CustomerInvoicePrefixSettingsPanel({
           <button
             className="min-h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-bold text-slate-800 transition hover:border-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
             data-admin-customer-invoice-prefix-load-action="true"
+            data-admin-customer-traveler-invoice-prefix-load="true"
             disabled={state.status === "loading" || state.status === "saving"}
             onClick={loadPrefixSetting}
             type="button"
@@ -322,6 +355,7 @@ export function CustomerInvoicePrefixSettingsPanel({
           <button
             className="min-h-10 rounded-md border border-slate-900 bg-slate-900 px-3 text-sm font-bold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-100 disabled:text-slate-500"
             data-admin-customer-invoice-prefix-save-action="true"
+            data-admin-customer-traveler-invoice-prefix-save="true"
             disabled={!prefixValid || prefixLocked || state.status === "loading" || state.status === "saving"}
             onClick={savePrefixSetting}
             type="button"
@@ -359,6 +393,137 @@ export function CustomerInvoicePrefixSettingsPanel({
       >
         {state.message}
       </p>
+    </div>
+  );
+}
+
+function verifiedTravelerRows(value: unknown): CustomerInvoicePrefixTraveler[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const travelers = new Map<number, CustomerInvoicePrefixTraveler>();
+
+  value.forEach((rawRow) => {
+    const row = rawRow as CustomerInvoicePrefixTravelerReadRecord;
+    const travelerId = Number(row.traveler_id);
+    const bookerId = Number(row.booker_id);
+    const passengerName = clean(row.passenger_name);
+
+    if (
+      Number.isInteger(travelerId) &&
+      travelerId > 0 &&
+      Number.isInteger(bookerId) &&
+      bookerId > 0 &&
+      passengerName
+    ) {
+      travelers.set(travelerId, { bookerId, passengerName, travelerId });
+    }
+  });
+
+  return [...travelers.values()].sort((first, second) =>
+    first.passengerName.localeCompare(second.passengerName),
+  );
+}
+
+export function CustomerInvoicePrefixSettingsPanel({
+  customerAccount,
+  customerId,
+  suggestedPrefix,
+}: CustomerInvoicePrefixSettingsPanelProps) {
+  const [travelers, setTravelers] = useState<CustomerInvoicePrefixTraveler[]>([]);
+  const [message, setMessage] = useState(
+    "Load the verified travellers for this customer before assigning invoice prefixes.",
+  );
+  const [status, setStatus] = useState<"idle" | "loading" | "loaded" | "error">("idle");
+
+  async function loadVerifiedTravelers() {
+    setStatus("loading");
+    setMessage("Loading verified travellers from this customer folder...");
+
+    try {
+      const params = new URLSearchParams({
+        customer_account: clean(customerAccount),
+        customer_id: clean(customerId),
+        limit: "200",
+      });
+      const response = await fetch(`${adminCustomerSavedBookingsApiPath}?${params.toString()}`, {
+        cache: "no-store",
+        headers: {
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "GET",
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || result?.ok !== true) {
+        throw new Error(result?.error || "verified-traveler-read-blocked");
+      }
+
+      const nextTravelers = verifiedTravelerRows(result.saved_bookings);
+
+      if (nextTravelers.length === 0) {
+        setTravelers([]);
+        setStatus("error");
+        setMessage(
+          "No verified traveller identity is available in this customer folder. Invoice issue remains blocked.",
+        );
+        return;
+      }
+
+      setTravelers(nextTravelers);
+      setStatus("loaded");
+      setMessage(
+        `Loaded ${nextTravelers.length} verified traveller${nextTravelers.length === 1 ? "" : "s"}. Assign one unique prefix to each traveller before invoicing.`,
+      );
+    } catch {
+      setTravelers([]);
+      setStatus("error");
+      setMessage("Verified travellers could not be loaded. Invoice issue remains blocked.");
+    }
+  }
+
+  return (
+    <div
+      className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2"
+      data-admin-customer-invoice-prefix-settings="true"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-bold text-slate-950">Invoice Prefix Settings</h3>
+          <p className="mt-0.5 text-xs font-semibold text-slate-600">
+            One locked lifetime sequence per verified traveller. The PA email may remain shared.
+          </p>
+        </div>
+        <button
+          className="min-h-9 rounded-md border border-slate-300 bg-white px-3 text-xs font-bold text-slate-800 disabled:opacity-60"
+          data-admin-customer-traveler-prefix-list-load="true"
+          disabled={status === "loading"}
+          onClick={loadVerifiedTravelers}
+          type="button"
+        >
+          {status === "loading" ? "Loading" : "Load travellers"}
+        </button>
+      </div>
+
+      <p className="mt-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-950">
+        {message}
+      </p>
+
+      {travelers.length > 0 ? (
+        <div className="mt-2 grid gap-2">
+          {travelers.map((traveler) => (
+            <CustomerInvoicePrefixTravelerRow
+              bookerId={traveler.bookerId}
+              customerAccount={customerAccount}
+              key={traveler.travelerId}
+              passengerName={traveler.passengerName}
+              suggestedPrefix={travelers.length === 1 ? suggestedPrefix : ""}
+              travelerId={traveler.travelerId}
+            />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

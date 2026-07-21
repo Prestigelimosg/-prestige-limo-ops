@@ -147,8 +147,8 @@ async function assertNoRealLocationImplementation() {
   assert.doesNotMatch(source, /supabase\.storage|storage\.from|\.upload\s*\(/i, "Driver pages must not preview or write storage directly.");
   assert.equal(
     (source.match(/window\.URL\.createObjectURL\(blob\)/g) || []).length,
-    1,
-    "Driver page may create one object URL only for the acknowledged calendar attachment download.",
+    0,
+    "Driver calendar import must not create a forced-download blob URL.",
   );
 }
 
@@ -209,12 +209,9 @@ async function runChromeTest() {
     await client.send("Page.addScriptToEvaluateOnNewDocument", {
       source: `
         window.__driverJobFetchCalls = [];
-        window.__driverJobCalendarBlobTexts = [];
-        window.__driverJobCalendarBlobTypes = [];
-        window.__driverJobCalendarDownloads = [];
-        window.__driverJobCalendarRevokedUrls = [];
         window.__prestigeErrors = [];
         window.__prestigeConsoleErrors = [];
+        const driverCalendarReturnState = new URLSearchParams(window.location.search).get("calendar");
         window.addEventListener("error", (event) => window.__prestigeErrors.push(event.message));
         window.addEventListener("unhandledrejection", (event) => window.__prestigeErrors.push(String(event.reason)));
         const originalError = console.error;
@@ -223,33 +220,26 @@ async function runChromeTest() {
           originalError.apply(console, args);
         };
         const originalFetch = window.fetch.bind(window);
-        const originalCreateObjectURL = window.URL.createObjectURL.bind(window.URL);
-        const originalRevokeObjectURL = window.URL.revokeObjectURL.bind(window.URL);
-        const originalAnchorClick = window.HTMLAnchorElement.prototype.click;
-
-        window.URL.createObjectURL = (blob) => {
-          window.__driverJobCalendarBlobTypes.push(blob.type);
-          blob.text().then((text) => window.__driverJobCalendarBlobTexts.push(text));
-          return originalCreateObjectURL(blob);
-        };
-        window.URL.revokeObjectURL = (url) => {
-          window.__driverJobCalendarRevokedUrls.push(String(url));
-          return originalRevokeObjectURL(url);
-        };
-        window.HTMLAnchorElement.prototype.click = function driverJobCalendarDownloadRecorder() {
-          if (this.download) {
-            window.__driverJobCalendarDownloads.push({
-              download: this.download,
-              href: this.href,
-            });
-          }
-          return originalAnchorClick.call(this);
-        };
         window.fetch = (...args) => {
           const target = args[0]?.url || args[0];
           const method = args[1]?.method || args[0]?.method || "GET";
           const url = String(target);
           window.__driverJobFetchCalls.push(\`\${method} \${url}\`);
+
+          if (url.includes("/api/driver-job/") && url.endsWith("/calendar")) {
+            return Promise.resolve(
+              new Response(JSON.stringify(
+                method === "POST"
+                  ? { action: "saved", ok: true, status: "cal_saved" }
+                  : driverCalendarReturnState === "saved"
+                    ? { action: "status", connected: true, ok: true, status: "cal_saved" }
+                    : { action: "status", connected: false, ok: true, status: "save_to_calendar" },
+              ), {
+                status: 200,
+                headers: { "content-type": "application/json" },
+              }),
+            );
+          }
 
           if (method === "GET" && url.includes("/api/driver-job/") && url.includes("/notifications")) {
             return Promise.resolve(
@@ -307,12 +297,9 @@ async function runChromeTest() {
         consoleErrors: window.__prestigeConsoleErrors || [],
         errors: window.__prestigeErrors || [],
         fetchCalls: window.__driverJobFetchCalls || [],
-        calendarDownload: {
-          blobTexts: window.__driverJobCalendarBlobTexts || [],
-          blobTypes: window.__driverJobCalendarBlobTypes || [],
-          downloads: window.__driverJobCalendarDownloads || [],
-          feedback: document.querySelector("[data-driver-job-calendar-feedback]")?.textContent.trim() || "",
-          revokedUrls: window.__driverJobCalendarRevokedUrls || [],
+        calendarImport: {
+          feedback: document.querySelector("[data-driver-job-calendar-feedback]")?.textContent?.trim() || "",
+          saved: Boolean(document.querySelector("[data-driver-job-calendar-saved='true']")),
           visible: Boolean(document.querySelector("[data-driver-job-calendar-action='true']")),
         },
         fileInputs: [...document.querySelectorAll("input[type='file'], input[capture], input[accept*='image'], input[accept*='photo']")]
@@ -724,7 +711,7 @@ async function runChromeTest() {
       return state;
     };
 
-    const downloadDriverJobCalendar = async () => {
+    const saveDriverJobGoogleCalendar = async () => {
       const beforeState = await pageState();
       const clicked = await evaluate(`(() => {
         const button = document.querySelector("[data-driver-job-calendar-action='true']");
@@ -736,27 +723,15 @@ async function runChromeTest() {
         button.click();
         return true;
       })()`);
-      assert.equal(clicked, true, "Expected acknowledged Driver Job calendar action to be clickable.");
+      assert.equal(clicked, true, "Expected acknowledged Driver Job Google Calendar action to be clickable.");
 
-      const downloadState = await waitForCondition(
+      await waitForCondition(
         () =>
           evaluate(`(() => {
-            const downloads = window.__driverJobCalendarDownloads || [];
-            const blobTexts = window.__driverJobCalendarBlobTexts || [];
-            const blobTypes = window.__driverJobCalendarBlobTypes || [];
-            const revokedUrls = window.__driverJobCalendarRevokedUrls || [];
-            const feedback = document.querySelector("[data-driver-job-calendar-feedback]")?.textContent.trim() || "";
-
-            return downloads.length === 1 &&
-              blobTexts.length === 1 &&
-              blobTypes.length === 1 &&
-              revokedUrls.length === 1 &&
-              feedback === "Calendar file downloaded with a private Open Driver Job shortcut. Do not share the calendar event."
-              ? { blobText: blobTexts[0], blobType: blobTypes[0], download: downloads[0], feedback, revokedUrls }
-              : false;
+            return Boolean(document.querySelector("[data-driver-job-calendar-saved='true']"));
           })()`),
         10000,
-        "acknowledged Driver Job calendar attachment download",
+        "acknowledged Driver Job Google Calendar saved state",
       );
       const afterState = await pageState();
       const expectedCalendarPath = `/api/driver-job/${mockDriverJobTokens.workflowOrder}/calendar`;
@@ -764,29 +739,56 @@ async function runChromeTest() {
       assert.equal(
         afterState.fetchCalls.length,
         beforeState.fetchCalls.length + 1,
-        "Driver calendar action should make one token-scoped calendar GET only.",
+        "Driver Google Calendar action must use the one existing token-scoped calendar route.",
       );
-      assert.equal(afterState.fetchCalls.at(-1), `GET ${expectedCalendarPath}`);
-      assert.equal(downloadState.blobType, "text/calendar");
-      assert.equal(downloadState.download.download, "prestige-driver-job-mock-driver-job-workflow.ics");
-      assert.match(downloadState.download.href, /^blob:http:\/\/localhost:3000\//);
-      assert.deepEqual(downloadState.revokedUrls, [downloadState.download.href]);
-      assert.match(downloadState.blobText, /UID:driver-job-MOCK-DRIVER-JOB-WORKFLOW@prestige-limo-ops/);
-      assert.match(downloadState.blobText, /DTSTART;TZID=Asia\/Singapore:20260529T164500/);
-      assert.match(downloadState.blobText, /DTEND;TZID=Asia\/Singapore:20260529T181500/);
-      assert.match(downloadState.blobText, /BEGIN:VALARM[\s\S]*TRIGGER:-PT1H[\s\S]*END:VALARM/);
-      const unfoldedCalendar = downloadState.blobText.replace(/\r\n /g, "");
-      const expectedDriverJobUrl = `${appUrl}/driver-job/${mockDriverJobTokens.workflowOrder}`;
-      assert.equal(unfoldedCalendar.includes(`URL:${expectedDriverJobUrl}`), true);
-      assert.equal(unfoldedCalendar.includes(`Open Driver Job: ${expectedDriverJobUrl}`), true);
-      assert.match(unfoldedCalendar, /Private driver link - do not share this calendar event\./);
+      assert.equal(
+        afterState.fetchCalls.at(-1),
+        `POST ${expectedCalendarPath}`,
+        "Driver Google Calendar save must post only to the existing same-job calendar route.",
+      );
+      assert.equal(afterState.calendarImport.saved, true);
+      assert.match(afterState.calendarImport.feedback, /Calendar saved/);
       assertNoSensitiveText({
         fetchCalls: afterState.fetchCalls,
         resourceCalls: [],
-        visibleText: downloadState.blobText,
+        visibleText: afterState.calendarImport.feedback,
       });
       assertNoSensitiveText(afterState);
       return afterState;
+    };
+
+    const verifyDriverCalendarCallbackFeedback = async ({
+      expectedFeedback,
+      expectedSaved,
+      returnState,
+    }) => {
+      await navigateAndWaitForBodyText(
+        client,
+        evaluate,
+        `${driverJobUrl(mockDriverJobTokens.workflowOrder)}?calendar=${returnState}`,
+        expectedFeedback,
+        `driver Google Calendar ${returnState} callback feedback`,
+      );
+      const state = await pageState();
+      const locationState = await evaluate(`({
+        hash: window.location.hash,
+        pathname: window.location.pathname,
+        search: window.location.search,
+      })`);
+
+      assert.equal(state.calendarImport.feedback, expectedFeedback);
+      assert.equal(state.calendarImport.saved, expectedSaved);
+      assert.equal(
+        locationState.search.includes("calendar="),
+        false,
+        "Driver Google Calendar callback state must be consumed once and removed from the URL.",
+      );
+      assert.equal(
+        locationState.pathname,
+        `/driver-job/${mockDriverJobTokens.workflowOrder}`,
+        "Driver Google Calendar callback cleanup must preserve the private Driver Job route.",
+      );
+      assertNoSensitiveText(state);
     };
 
     const uploadOtsPhotoProof = async () => {
@@ -1180,7 +1182,17 @@ async function runChromeTest() {
 
     await clickBlockedStatus("OTW", "Save & Acknowledge Job before updating status.", startingStatusText);
     await saveAndAcknowledgeJob();
-    await downloadDriverJobCalendar();
+    await saveDriverJobGoogleCalendar();
+    await verifyDriverCalendarCallbackFeedback({
+      expectedFeedback: "Calendar connected and saved. Open the event and tap Open Driver Job for reporting.",
+      expectedSaved: true,
+      returnState: "saved",
+    });
+    await verifyDriverCalendarCallbackFeedback({
+      expectedFeedback: "Google Calendar connection was not completed. Try Add / Update Calendar again.",
+      expectedSaved: false,
+      returnState: "error",
+    });
     await clickBlockedStatus("OTS", "Update OTW before OTS.", startingStatusText);
     await clickBlockedStatus("POB", "Update OTW before POB.", startingStatusText);
     await clickBlockedStatus("Job Completed", "Update OTW before Job Completed.", startingStatusText);

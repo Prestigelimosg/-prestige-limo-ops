@@ -26,6 +26,7 @@ const customerFolderInvoiceSelectionLimit = 4;
 
 type CustomerFolderSavedBookingRecord = {
   admin_status?: string | null;
+  booker_id?: number | null;
   booking_month?: string | null;
   booking_reference?: string | null;
   child_seat_count?: number | null;
@@ -44,6 +45,13 @@ type CustomerFolderSavedBookingRecord = {
   service_type?: string | null;
   traveler_id?: number | null;
   vehicle_type_or_category?: string | null;
+};
+
+type CustomerFolderTravelerInvoiceGroup = {
+  bookings: CustomerFolderSavedBookingRecord[];
+  bookerId: number;
+  passengerName: string;
+  travelerId: number;
 };
 
 type CustomerFolderBillingReview = {
@@ -420,6 +428,23 @@ function customerFolderInvoiceHref(
     return "";
   }
 
+  const travelerId = Number(selectedBookings[0]?.traveler_id);
+  const bookerId = Number(selectedBookings[0]?.booker_id);
+
+  if (
+    !Number.isInteger(travelerId) ||
+    travelerId <= 0 ||
+    !Number.isInteger(bookerId) ||
+    bookerId <= 0 ||
+    selectedBookings.some(
+      (selectedBooking) =>
+        Number(selectedBooking.traveler_id) !== travelerId ||
+        Number(selectedBooking.booker_id) !== bookerId,
+    )
+  ) {
+    return "";
+  }
+
   if (selectedBookings.some((selectedBooking) => !safePublicBookingReference(selectedBooking.public_booking_reference))) {
     return "";
   }
@@ -434,6 +459,51 @@ function customerFolderInvoiceHref(
   );
 
   return `/customers?${params.toString()}`;
+}
+
+function customerFolderTravelerInvoiceGroups(
+  bookings: CustomerFolderSavedBookingRecord[],
+): { error: string; groups: CustomerFolderTravelerInvoiceGroup[] } {
+  const groups = new Map<number, CustomerFolderTravelerInvoiceGroup>();
+
+  for (const booking of bookings) {
+    const travelerId = Number(booking.traveler_id);
+    const bookerId = Number(booking.booker_id);
+    const passengerName = displayText(booking.passenger_name, "Verified traveller");
+
+    if (
+      !Number.isInteger(travelerId) ||
+      travelerId <= 0 ||
+      !Number.isInteger(bookerId) ||
+      bookerId <= 0
+    ) {
+      return {
+        error: "Missing verified traveller identity. Invoice preparation is blocked.",
+        groups: [],
+      };
+    }
+
+    const current = groups.get(travelerId);
+
+    if (current && current.bookerId !== bookerId) {
+      return {
+        error: "Verified traveller and PA ownership do not match. Invoice preparation is blocked.",
+        groups: [],
+      };
+    }
+
+    groups.set(travelerId, {
+      bookings: [...(current?.bookings || []), booking],
+      bookerId,
+      passengerName: current?.passengerName || passengerName,
+      travelerId,
+    });
+  }
+
+  return {
+    error: "",
+    groups: [...groups.values()],
+  };
 }
 
 function customerWorkspaceHref(
@@ -687,8 +757,8 @@ export function CustomerFolderSavedBookingsPanel({
             reference,
             review: {
               amountCents: calculation.amountCents,
-              breakdown: `${breakdown} Temporary Codex proposal; edit or approve before invoice handoff.`,
-              message: "Codex price · review",
+              breakdown: `${breakdown} Temporary Codex proposal; tick the job to confirm this price for invoice handoff, or edit it first.`,
+              message: "Codex price · tick to confirm",
               status: "proposed",
             } satisfies CustomerFolderBillingReview,
           };
@@ -845,16 +915,17 @@ export function CustomerFolderSavedBookingsPanel({
 
     return reference && selectedReferences[reference];
   });
-  const firstSelectedBooking = selectedUnbilledBookings[0] ?? null;
-  const createInvoiceHref = firstSelectedBooking
-    ? customerFolderInvoiceHref(
-        firstSelectedBooking,
-        customerId,
-        customerName,
-        selectedUnbilledBookings,
-        billingReviews,
-      )
-    : "";
+  const selectedTravelerInvoiceGrouping = customerFolderTravelerInvoiceGroups(selectedUnbilledBookings);
+  const selectedTravelerInvoiceGroups = selectedTravelerInvoiceGrouping.groups.map((group) => ({
+    ...group,
+    href: customerFolderInvoiceHref(
+      group.bookings[0],
+      customerId,
+      customerName,
+      group.bookings,
+      billingReviews,
+    ),
+  }));
   const selectedPricesReviewed =
     selectedUnbilledBookings.length > 0 &&
     selectedUnbilledBookings.every((booking) => {
@@ -872,6 +943,25 @@ export function CustomerFolderSavedBookingsPanel({
 
     if (!reference) {
       return;
+    }
+
+    if (selected) {
+      setBillingReviews((current) => {
+        const displayedPrice = current[reference];
+
+        if (!displayedPrice?.amountCents || displayedPrice.status === "reviewed") {
+          return current;
+        }
+
+        return {
+          ...current,
+          [reference]: {
+            ...displayedPrice,
+            message: "Reviewed",
+            status: "reviewed",
+          },
+        };
+      });
     }
 
     setSelectedReferences((current) => ({
@@ -1089,6 +1179,10 @@ export function CustomerFolderSavedBookingsPanel({
         ),
         tone: "success",
       }));
+      setExpandedSavedBookingReference("");
+      setEditingPriceReference("");
+      setPriceDraft("");
+      setInlineEditState(initialInlineEditState);
     } catch {
       setInlineEditState((current) => ({
         ...current,
@@ -1120,7 +1214,15 @@ export function CustomerFolderSavedBookingsPanel({
         status: "reviewed",
       },
     }));
-    setInlineEditState((current) => ({ ...current, message: "Customer price review saved." }));
+    setReadState((current) => ({
+      ...current,
+      message: `Saved customer price for ${publicBookingReferenceDisplay(booking)}.`,
+      tone: "success",
+    }));
+    setExpandedSavedBookingReference("");
+    setEditingPriceReference("");
+    setPriceDraft("");
+    setInlineEditState(initialInlineEditState);
   }
 
   return (
@@ -1174,7 +1276,9 @@ export function CustomerFolderSavedBookingsPanel({
             <p className="text-xs font-bold text-slate-700">
               {selectedUnbilledBookings.length} of {customerFolderInvoiceSelectionLimit} selected for new invoice
             </p>
-            <span className="text-xs font-semibold text-slate-500">Review every price tag before Invoice.</span>
+            <span className="text-xs font-semibold text-slate-500">
+              Ticking a job confirms its displayed customer price for this invoice.
+            </span>
           </div>
           <div
             className="max-h-[32rem] overflow-x-auto overflow-y-auto rounded-lg border border-amber-300 bg-white shadow-inner"
@@ -1493,17 +1597,26 @@ export function CustomerFolderSavedBookingsPanel({
                 </p>
                 <h3 className="mt-1 text-lg font-bold text-slate-950">Customer invoice layout</h3>
                 <p className="mt-0.5 text-xs font-semibold text-slate-600">
-                  Every selected job is carried into the established invoice preview and email lane.
+                  Review invoice &amp; email. Selected jobs are automatically separated by verified traveller.
                 </p>
               </div>
-              {createInvoiceHref && selectedPricesReviewed && selectedPublicReferencesReady ? (
-                <Link
-                  className="inline-flex h-8 items-center justify-center rounded-md border border-sky-800 bg-sky-800 px-2.5 text-[11px] font-bold text-white transition hover:bg-sky-700"
-                  data-customer-folder-create-invoice-selected="true"
-                  href={createInvoiceHref}
-                >
-                  Review invoice &amp; email
-                </Link>
+              {selectedTravelerInvoiceGroups.length > 0 &&
+              selectedTravelerInvoiceGroups.every((group) => group.href) &&
+              selectedPricesReviewed &&
+              selectedPublicReferencesReady ? (
+                <div className="flex flex-wrap gap-2" data-customer-folder-traveler-invoice-groups="true">
+                  {selectedTravelerInvoiceGroups.map((group) => (
+                    <Link
+                      className="inline-flex h-8 items-center justify-center rounded-md border border-sky-800 bg-sky-800 px-2.5 text-[11px] font-bold text-white transition hover:bg-sky-700"
+                      data-customer-folder-create-invoice-selected="true"
+                      data-customer-folder-traveler-invoice-group="true"
+                      href={group.href}
+                      key={group.travelerId}
+                    >
+                      Load {group.passengerName} invoice
+                    </Link>
+                  ))}
+                </div>
               ) : (
                 <button
                   className="inline-flex h-8 cursor-not-allowed items-center justify-center rounded-md border border-slate-200 bg-slate-100 px-2.5 text-[11px] font-bold text-slate-400"
@@ -1513,9 +1626,11 @@ export function CustomerFolderSavedBookingsPanel({
                 >
                   {selectedUnbilledBookings.length === 0
                     ? "Select jobs first"
+                    : selectedTravelerInvoiceGrouping.error
+                      ? selectedTravelerInvoiceGrouping.error
                     : !selectedPublicReferencesReady
                       ? "Public reference required"
-                      : "Review every price first"}
+                      : "Customer price required"}
                 </button>
               )}
             </div>
@@ -1527,7 +1642,7 @@ export function CustomerFolderSavedBookingsPanel({
                       <th className="border-b border-slate-200 px-3 py-2">Job</th>
                       <th className="border-b border-slate-200 px-3 py-2">Pickup</th>
                       <th className="border-b border-slate-200 px-3 py-2">Service</th>
-                      <th className="border-b border-slate-200 px-3 py-2 text-right">Reviewed price</th>
+                      <th className="border-b border-slate-200 px-3 py-2 text-right">Confirmed price</th>
                     </tr>
                   </thead>
                   <tbody>

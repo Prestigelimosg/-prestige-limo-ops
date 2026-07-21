@@ -2,13 +2,14 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const guardScript = "scripts/test-customer-folder-multi-job-invoice-handoff-guard.mjs";
-const [folderPage, folderShell, invoiceFolder, savedBookingsRead, customersPage, invoicePersistence, localInvoices, ledger, preactivation, appSmoke] =
+const [folderPage, folderShell, invoiceFolder, savedBookingsRead, customersPage, bookingAdapter, invoicePersistence, localInvoices, ledger, preactivation, appSmoke] =
   await Promise.all([
     readFile("app/customers/[customerId]/saved-bookings-panel.tsx", "utf8"),
     readFile("app/customers/[customerId]/page.tsx", "utf8"),
     readFile("app/customers/[customerId]/customer-invoice-folder-panel.tsx", "utf8"),
     readFile("lib/admin-customer-saved-bookings-read.ts", "utf8"),
     readFile("app/customers/page.tsx", "utf8"),
+    readFile("lib/admin-booking-supabase-adapter.ts", "utf8"),
     readFile("lib/customer-invoice-record-persistence.ts", "utf8"),
     readFile("lib/customer-local-invoices.ts", "utf8"),
     readFile("docs/current-implementation-ledger.md", "utf8"),
@@ -27,6 +28,9 @@ for (const fragment of [
   'data-customer-folder-selected-invoice-layout="true"',
   "data-customer-folder-selected-invoice-job",
   "Review invoice &amp; email",
+  "Ticking a job confirms its displayed customer price for this invoice.",
+  "Codex price · tick to confirm",
+  "Load {group.passengerName} invoice",
   "selected_booking_references",
   "selectedUnbilledBookings.map((booking)",
   'limit: "200"',
@@ -80,11 +84,20 @@ for (const fragment of [
   "readCustomerFolderExactBooking(safeCustomerFolderDispatchHandoffReference(booking))",
   "mismatchedCustomer",
   "mismatchedBooker",
+  "company_id: booking.company_id ?? null",
+  "booker_id: booking.booker_id ?? null",
+  "traveler_id: booking.traveler_id ?? null",
   "setPlainInvoiceSavedBookings(targetBookings)",
   "bookingReference: firstInvoiceRow.bookingReference",
   "bookingReference: row.bookingReference",
   "All ${invoiceRows.length} selected job",
   "setPlainInvoiceSelectedJobReviewActive(true)",
+  "setSelectedJobInvoiceHandoffLines(selectedHandoffLines)",
+  'data-selected-job-invoice-coverage="true"',
+  "data-selected-job-invoice-coverage-line={line.bookingReference}",
+  'status: "Blocked"',
+  'status: "Loaded"',
+  "Loaded as an exact line in the final invoice review.",
   "plainInvoicePreviewFromForm(nextPlainInvoiceForm)",
   'data-selected-job-invoice-review="true"',
   'data-selected-job-invoice-actions="true"',
@@ -101,7 +114,6 @@ for (const fragment of [
   'data-selected-job-invoice-signoff="true"',
   'data-selected-job-invoice-bank="true"',
   'data-selected-job-invoice-terms="true"',
-  'data-selected-job-invoice-footer="true"',
   '<summary aria-hidden="true" className="hidden">',
   "Selected jobs invoice review",
   "toggleSelectedJobInvoiceEditing",
@@ -113,8 +125,8 @@ for (const fragment of [
   "companyProfile.invoice_signoff_name",
   "companyProfilePaymentSummary(companyProfile)",
   "companyProfile.invoice_footer_terms",
+  "plainInvoiceCompanyPaymentHeading",
   "plainInvoiceCompanyPaymentDetailLines",
-  "Click to view",
   "Allow card payment for this invoice",
   'data-plain-invoice-quantity="true"',
   "plainInvoiceLineItemRateLabel(item)",
@@ -124,6 +136,69 @@ for (const fragment of [
 ]) {
   includes(customersPage, fragment, `multi-job invoice handoff fragment ${fragment}`);
 }
+
+const selectionToggleStart = folderPage.indexOf("function toggleSelectedBooking(");
+const selectionToggleEnd = folderPage.indexOf("function toggleSavedBookingDescription(", selectionToggleStart);
+const selectionToggle = folderPage.slice(selectionToggleStart, selectionToggleEnd);
+for (const fragment of [
+  "if (selected) {",
+  "const displayedPrice = current[reference];",
+  'message: "Reviewed"',
+  'status: "reviewed"',
+]) {
+  includes(selectionToggle, fragment, `selected displayed price confirmation ${fragment}`);
+}
+
+const saveJobStart = folderPage.indexOf("async function saveInlineBookingDetails(");
+const saveJobEnd = folderPage.indexOf("function openPriceReview(", saveJobStart);
+const saveJob = folderPage.slice(saveJobStart, saveJobEnd);
+for (const fragment of [
+  'setExpandedSavedBookingReference("");',
+  'setEditingPriceReference("");',
+  'setPriceDraft("");',
+  "setInlineEditState(initialInlineEditState);",
+]) {
+  includes(saveJob, fragment, `successful saved-job editor close ${fragment}`);
+}
+
+const savePriceStart = folderPage.indexOf("function savePriceReview(");
+const savePriceEnd = folderPage.indexOf("return (", savePriceStart);
+const savePrice = folderPage.slice(savePriceStart, savePriceEnd);
+for (const fragment of [
+  "Saved customer price for ${publicBookingReferenceDisplay(booking)}.",
+  'setExpandedSavedBookingReference("");',
+  'setEditingPriceReference("");',
+  'setPriceDraft("");',
+  "setInlineEditState(initialInlineEditState);",
+]) {
+  includes(savePrice, fragment, `successful saved-price editor close ${fragment}`);
+}
+
+const selectedCoverageSetIndex = customersPage.indexOf(
+  "setSelectedJobInvoiceHandoffLines(selectedHandoffLines);",
+);
+const missingSelectedJobBlockIndex = customersPage.indexOf(
+  'if (invoiceAction === "create" && (!targetBooking || missingTargetReference))',
+);
+assert.equal(
+  selectedCoverageSetIndex !== -1 && selectedCoverageSetIndex < missingSelectedJobBlockIndex,
+  true,
+  "every selected reference must be represented before an exact-customer blocker can stop billing",
+);
+
+for (const fragment of [
+  "const requestedCustomerId = dbIdentifierOrNull(input.booking.customer_id);",
+  "let customerId = requestedCustomerId || existingCustomerId;",
+  "if (!customerId) {",
+]) {
+  includes(bookingAdapter, fragment, `stable verified booking identity fragment ${fragment}`);
+}
+
+assert.equal(
+  bookingAdapter.includes("bookingCustomerIdentityChanged(existing, input.booking)"),
+  false,
+  "Safe display, contact, passenger, or route edits must not replace an existing customer ID.",
+);
 
 const selectedReviewStart = customersPage.indexOf('data-selected-job-invoice-review="true"');
 const selectedReviewEnd = customersPage.indexOf('data-plain-invoice-crm-account="true"', selectedReviewStart);
@@ -138,18 +213,60 @@ const termsIndex = selectedReview.indexOf('data-selected-job-invoice-terms="true
 assert.equal(
   signoffIndex < bankIndex && bankIndex < notesIndex && notesIndex < termsIndex,
   true,
-  "selected-job invoice lower content must follow signoff, bank, then adjacent notes and terms",
+  "admin selected-job review must keep sign-off and Bank Details above the bottom Notes and Terms disclosures",
 );
+const lowerDisclosuresIndex = selectedReview.indexOf('data-selected-job-invoice-lower-disclosures="true"');
 assert.equal(
-  selectedReview.includes('<details\n                        className="mt-5') &&
-    selectedReview.includes('<summary className="flex cursor-pointer'),
+  bankIndex < lowerDisclosuresIndex && lowerDisclosuresIndex < notesIndex && selectedReview.includes("sm:grid-cols-2"),
   true,
-  "selected-job bank details must be a compact closed disclosure",
+  "admin selected-job review must place Notes beside Terms in one responsive bottom row",
 );
 assert.equal(
-  selectedReview.includes("<details open"),
+  selectedReview.includes("Click to view") ||
+    selectedReview.includes('data-selected-job-invoice-footer="true"'),
   false,
-  "selected-job bank details must remain collapsed until clicked",
+  "selected-job invoice disclosures must reuse their headings and must not restore the duplicate replacement footer",
+);
+assert.equal(
+  (selectedReview.match(/<details/g) || []).length === 3 &&
+    (selectedReview.match(/<\/details>/g) || []).length === 3,
+  true,
+  "selected-job invoice review must contain exactly the three approved lower-content disclosures",
+);
+for (const [marker, heading] of [
+  ['data-selected-job-invoice-notes="true"', "Notes"],
+  ['data-selected-job-invoice-bank="true"', "plainInvoiceCompanyPaymentHeading"],
+  ['data-selected-job-invoice-terms="true"', "Terms &amp; Conditions"],
+]) {
+  const markerIndex = selectedReview.indexOf(marker);
+  const detailsStart = selectedReview.lastIndexOf("<details", markerIndex);
+  const detailsEnd = selectedReview.indexOf("</details>", markerIndex);
+  const disclosure = selectedReview.slice(detailsStart, detailsEnd);
+  assert.equal(
+    detailsStart !== -1 && detailsEnd !== -1 && disclosure.includes("<summary") && disclosure.includes(heading),
+    true,
+    `selected-job invoice ${heading} must reuse its existing heading as one disclosure`,
+  );
+  assert.equal(
+    selectedReview.slice(detailsStart, markerIndex).includes(" open"),
+    false,
+    `selected-job invoice ${heading} disclosure must be closed by default`,
+  );
+}
+assert.equal(
+  selectedReview.includes('className="mt-5 max-w-lg break-words leading-4"') &&
+    selectedReview.includes("{plainInvoiceCompanyPaymentHeading}") &&
+    selectedReview.includes("plainInvoiceCompanyPaymentDetailLines.map"),
+  true,
+  "selected-job bank disclosure must retain the saved Company Profile payment lines",
+);
+const lowerDisclosureContent = selectedReview.slice(notesIndex, selectedReview.indexOf("</article>", termsIndex));
+assert.equal(
+  lowerDisclosureContent.includes("<button") ||
+    lowerDisclosureContent.includes("<Link") ||
+    lowerDisclosureContent.includes('href="/terms"'),
+  false,
+  "lower invoice disclosures must not add duplicate buttons, links, routes, or the unrelated Driver Calendar terms page",
 );
 
 const selectedFormSetIndex = customersPage.indexOf("setPlainInvoiceForm(nextPlainInvoiceForm);");
@@ -197,9 +314,10 @@ for (const fragment of [
   'const paymentMadeValue = paidInvoice ? `(-) ${sgdAmount}` : "SGD0.00";',
   'const balanceDueValue = paidInvoice ? "SGD0.00" : sgdAmount;',
   'const [paymentHeading = "Bank Details", ...paymentDetailLines] = paymentLines;',
+  'const notesY = 320;',
   'const signoffY = 245;',
   'const paymentY = 182;',
-  'const footerY = 88;',
+  'const termsY = 55;',
   'pdfRightTextAt("Payment Made"',
   "pdfRightTextAt(balanceDueValue",
   "companyProfile.invoice_signoff_name",
@@ -234,14 +352,14 @@ for (const hardcodedFragment of [
 }
 
 assert.equal(
-  localInvoices.indexOf('pdfTextAt("Thank you for your business", 50, signoffY') <
-    localInvoices.indexOf("pdfTextAt(paymentHeading") &&
+  localInvoices.indexOf('pdfTextAt("Notes", 50, notesY') <
+    localInvoices.indexOf('pdfTextAt("Thank you for your business", 50, signoffY') &&
+    localInvoices.indexOf('pdfTextAt("Thank you for your business", 50, signoffY') <
+      localInvoices.indexOf("pdfTextAt(paymentHeading") &&
     localInvoices.indexOf("pdfTextAt(paymentHeading") <
-      localInvoices.indexOf('pdfTextAt("Notes", 50, footerY') &&
-    localInvoices.indexOf('pdfTextAt("Notes", 50, footerY') <
-      localInvoices.indexOf('pdfTextAt("Terms & Conditions:", 310, footerY'),
+      localInvoices.indexOf('pdfTextAt("Terms & Conditions:", 50, termsY'),
   true,
-  "shared PDF must render signoff and bank above adjacent footer notes and terms",
+  "shared PDF must preserve the owner-approved Notes, sign-off, bank, then Terms order",
 );
 
 for (const fragment of [

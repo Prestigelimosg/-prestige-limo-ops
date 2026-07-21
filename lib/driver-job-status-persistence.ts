@@ -76,6 +76,7 @@ type UnknownRecord = Record<string, unknown>;
 
 type DriverJobLinkPersistenceRow = {
   booking_reference: string;
+  driver_id: number | null;
   expires_at: string;
   id: string | null;
   link_status: "active" | "expired" | "revoked";
@@ -174,7 +175,7 @@ type DriverJobSharingCleanupResult = {
 };
 
 const driverJobLinkSelect =
-  "id, booking_reference, link_status, expires_at, revoked_at, safe_link_context";
+  "id, booking_reference, driver_id, link_status, expires_at, revoked_at, safe_link_context";
 const currentSafeBookingScheduleSelect =
   "booking_reference, public_booking_reference, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, flight_no, admin_internal_status, customer_facing_status, updated_at";
 const currentSafeBookingScheduleSelectWithoutPublicReference =
@@ -442,6 +443,12 @@ function safeIdentifierFromDb(value: unknown) {
   return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(cleaned) ? cleaned : "";
 }
 
+function positiveIntegerFromDb(value: unknown) {
+  const parsed = typeof value === "number" ? value : Number(cleanText(value));
+
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
 function readFirstText(record: UnknownRecord, keys: string[]) {
   for (const key of keys) {
     const value = safeTextFromDb(record[key]);
@@ -519,12 +526,91 @@ function toLinkPersistenceRow(row: UnknownRecord): DriverJobLinkPersistenceRow |
 
   return {
     booking_reference: bookingReference,
+    driver_id: positiveIntegerFromDb(row.driver_id),
     expires_at: expiresAt,
     id,
     link_status: linkStatus as DriverJobLinkPersistenceRow["link_status"],
     revoked_at: revokedAt,
     safe_link_context: asRecord(row.safe_link_context),
   };
+}
+
+async function resolveAcknowledgedDriverIdentity(
+  client: DriverJobStatusPersistenceClient,
+  link: DriverJobLinkPersistenceRow,
+  nextDetails: ReturnType<typeof safeDriverDetailsFromInput>,
+): Promise<
+  | { driverId: number; ok: true }
+  | { ok: false; reason: "invalid_details" | "not_configured" }
+> {
+  const { data: bookingData, error: bookingError } = await client
+    .from("bookings")
+    .select("driver_id")
+    .eq("booking_reference", link.booking_reference)
+    .maybeSingle();
+
+  if (bookingError) {
+    return { ok: false, reason: "not_configured" };
+  }
+
+  const bookingDriverId = positiveIntegerFromDb(asRecord(bookingData).driver_id);
+
+  if (link.driver_id && bookingDriverId && link.driver_id !== bookingDriverId) {
+    return { ok: false, reason: "invalid_details" };
+  }
+
+  if (link.driver_id && !bookingDriverId) {
+    return { ok: false, reason: "invalid_details" };
+  }
+
+  if (bookingDriverId) {
+    return { driverId: bookingDriverId, ok: true };
+  }
+
+  if (!nextDetails.contact) {
+    return { ok: false, reason: "invalid_details" };
+  }
+
+  const { data: matchingDrivers, error: matchingDriversError } = await client
+    .from("drivers")
+    .select("id")
+    .eq("contact_number", nextDetails.contact)
+    .limit(2);
+
+  if (matchingDriversError) {
+    return { ok: false, reason: "not_configured" };
+  }
+
+  const matchedDriverIds = asArray(matchingDrivers)
+    .map((row) => positiveIntegerFromDb(asRecord(row).id))
+    .filter((driverId): driverId is number => driverId !== null);
+
+  if (matchedDriverIds.length === 1) {
+    return { driverId: matchedDriverIds[0], ok: true };
+  }
+
+  if (matchedDriverIds.length > 1) {
+    return { ok: false, reason: "invalid_details" };
+  }
+
+  const { data: insertedDriver, error: insertedDriverError } = await client
+    .from("drivers")
+    .insert({
+      availability_status: "available",
+      contact_number: nextDetails.contact,
+      driver_name: nextDetails.name,
+      plate_number: nextDetails.plate || null,
+      vehicle_type: nextDetails.vehicleModel || null,
+    })
+    .select("id")
+    .single();
+  const insertedDriverId = positiveIntegerFromDb(asRecord(insertedDriver).id);
+
+  if (insertedDriverError || !insertedDriverId) {
+    return { ok: false, reason: "not_configured" };
+  }
+
+  return { driverId: insertedDriverId, ok: true };
 }
 
 function toStatusEventRow(row: UnknownRecord): DriverJobStatusEventRow | null {
@@ -1045,6 +1131,18 @@ export async function saveDriverJobDetailsThroughStatusPersistence(
     return detailsBlockedResult(statusHistory.reason);
   }
 
+  const identity = await resolveAcknowledgedDriverIdentity(
+    input.client,
+    resolvedLink.link,
+    nextDetails,
+  );
+
+  if (!identity.ok) {
+    return detailsBlockedResult(identity.reason);
+  }
+
+  const verifiedDriverId = identity.driverId;
+
   const safeContext = asRecord(resolvedLink.link.safe_link_context);
   const currentPayload = asRecord(safeContext.driver_job_payload);
   const nextDriverJobPayload = {
@@ -1064,42 +1162,9 @@ export async function saveDriverJobDetailsThroughStatusPersistence(
     driver_job_payload: nextDriverJobPayload,
   };
 
-  let updatedLink: DriverJobLinkPersistenceRow | null = null;
-
-  if (resolvedLink.link.id) {
-    const { data, error } = await input.client
-      .from("driver_job_links")
-      .update({ safe_link_context: nextSafeContext })
-      .eq("id", resolvedLink.link.id)
-      .select(driverJobLinkSelect)
-      .single();
-
-    if (error) {
-      return detailsBlockedResult("not_configured");
-    }
-
-    updatedLink = toLinkPersistenceRow(asRecord(data));
-  } else {
-    const { data, error } = await input.client
-      .from("driver_job_links")
-      .update({ safe_link_context: nextSafeContext })
-      .eq("booking_reference", resolvedLink.link.booking_reference)
-      .select(driverJobLinkSelect)
-      .single();
-
-    if (error) {
-      return detailsBlockedResult("not_configured");
-    }
-
-    updatedLink = toLinkPersistenceRow(asRecord(data));
-  }
-
-  if (!updatedLink) {
-    return detailsBlockedResult("not_configured");
-  }
-
-  const bookingDriverDetailsUpdate: Record<string, string | null> = {
+  const bookingDriverDetailsUpdate: Record<string, string | number | null> = {
     driver_contact: nextDetails.contact || null,
+    driver_id: verifiedDriverId,
     driver_name: nextDetails.name,
     driver_plate_number: nextDetails.plate || null,
   };
@@ -1114,6 +1179,44 @@ export async function saveDriverJobDetailsThroughStatusPersistence(
     .eq("booking_reference", resolvedLink.link.booking_reference);
 
   if (bookingUpdateError) {
+    return detailsBlockedResult("not_configured");
+  }
+
+  let updatedLink: DriverJobLinkPersistenceRow | null = null;
+  const linkUpdate = {
+    driver_id: verifiedDriverId,
+    safe_link_context: nextSafeContext,
+  };
+
+  if (resolvedLink.link.id) {
+    const { data, error } = await input.client
+      .from("driver_job_links")
+      .update(linkUpdate)
+      .eq("id", resolvedLink.link.id)
+      .select(driverJobLinkSelect)
+      .single();
+
+    if (error) {
+      return detailsBlockedResult("not_configured");
+    }
+
+    updatedLink = toLinkPersistenceRow(asRecord(data));
+  } else {
+    const { data, error } = await input.client
+      .from("driver_job_links")
+      .update(linkUpdate)
+      .eq("booking_reference", resolvedLink.link.booking_reference)
+      .select(driverJobLinkSelect)
+      .single();
+
+    if (error) {
+      return detailsBlockedResult("not_configured");
+    }
+
+    updatedLink = toLinkPersistenceRow(asRecord(data));
+  }
+
+  if (!updatedLink) {
     return detailsBlockedResult("not_configured");
   }
 

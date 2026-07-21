@@ -349,7 +349,7 @@ assert.equal(
   "Customer booking request persistence must map flightNumber into the safe flight_no booking field.",
 );
 assert.equal(
-  supabaseAdapterSource.includes("passenger_phone, flight_no, driver_name") &&
+  supabaseAdapterSource.includes("passenger_phone, flight_no, driver_id, driver_name") &&
     supabaseAdapterSource.includes("contact_email, flight_no, pax_count") &&
     supabaseAdapterSource.includes("flight_no: textOrNull(booking.flight_no)") &&
     supabaseAdapterSource.includes("flight_no: textOrNull(row.flight_no)"),
@@ -600,6 +600,24 @@ try {
       },
       ok: true,
     },
+    portalBoundary: {
+      data: {
+        auth_user_id: "verified-return-pa",
+        portal_link_revision: "verified-return-link-revision",
+      },
+      ok: true,
+    },
+    verifiedIdentity: {
+      data: {
+        booker_email: "william@prestigelimo.sg",
+        booker_id: 12,
+        company_id: 27,
+        customer_account_reference: "142",
+        traveler_id: 24,
+        traveler_name: "Verified Return Traveller",
+      },
+      ok: true,
+    },
   });
   const returnTripSuccess = await readJson(
     await harness.route.POST(
@@ -623,6 +641,32 @@ try {
     },
   });
   assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.createCalls.length, 2);
+  assert.deepEqual(
+    globalThis.__prestigeCustomerBookingRequestApiMock.createCalls.map((call) => ({
+      booker_id: call.data.booking.booker_id,
+      company_id: call.data.booking.company_id,
+      customer_id: call.data.booking.customer_id,
+      passenger_name: call.data.booking.passenger_name,
+      traveler_id: call.data.booking.traveler_id,
+    })),
+    [
+      {
+        booker_id: 12,
+        company_id: 27,
+        customer_id: "142",
+        passenger_name: "Verified Return Traveller",
+        traveler_id: 24,
+      },
+      {
+        booker_id: 12,
+        company_id: 27,
+        customer_id: "142",
+        passenger_name: "Verified Return Traveller",
+        traveler_id: 24,
+      },
+    ],
+    "A verified linked OUT/RET request must persist one exact identity tuple on both legs.",
+  );
   assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.alertCalls.length, 1);
   assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.adminAppNotificationCalls.length, 1);
   assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.devicePushAlertCalls.length, 1);

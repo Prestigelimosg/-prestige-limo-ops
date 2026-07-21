@@ -107,6 +107,7 @@ const adminFullDriverProfileRuntimeWriteActionApiPath =
 const adminSavedBookingsApiPath = "/api/admin-saved-bookings";
 const adminBookingsApiPath = "/api/admin-bookings";
 const adminLoadBookingsListLimit = "100";
+const adminUpcomingBookingsPageSize = 20;
 const adminMonitorableBookingListScope = "monitorable";
 const adminMonitorableBookingMaxPages = 100;
 const dispatchHandoffReferenceQueryParam = "booking_reference";
@@ -117,6 +118,8 @@ const completedHandoffActionQueryParam = "completed_action";
 const saveCrmBillingIdentityReviewReadLimit = 200;
 const adminHandledCustomerBookingRequestsStorageKey =
   "prestige-admin-handled-customer-booking-requests";
+const adminDismissedPendingDriverAckLinksStorageKey =
+  "prestige-admin-dismissed-pending-driver-ack-links";
 const adminLoadBookingsTypedReadApiPath = "/api/admin-load-bookings-typed-read";
 const driverJobLinkSuccessFeedbackResetMs = 3_000;
 const adminSavedBookingStatusesApiPath = "/api/admin-saved-booking-statuses";
@@ -967,6 +970,7 @@ type AdminDriverJobLinkRecord = {
     assigned_driver: string | null;
     assigned_driver_contact: string | null;
     assigned_driver_plate: string | null;
+    job_card_kind: "amendment" | "new" | "reissued" | null;
     pickup_datetime: string | null;
     route: string | null;
     vehicle: string | null;
@@ -2227,6 +2231,7 @@ type AdminBookingPersistenceRecord = {
   passenger_name?: string | null;
   passenger_phone?: string | null;
   flight_no?: string | null;
+  driver_id?: number | null;
   driver_contact?: string | null;
   driver_name?: string | null;
   driver_plate_number?: string | null;
@@ -2283,6 +2288,7 @@ type AdminBookingPersistenceRequestBody = {
     passenger_name: string | null;
     passenger_phone: string | null;
     flight_no: string | null;
+    driver_id?: number | null;
     driver_contact: string | null;
     driver_name: string | null;
     driver_plate_number: string | null;
@@ -7257,6 +7263,22 @@ function bookingRecordPickupDateTimeMs(bookingRecord: BookingRecord) {
   );
 }
 
+function sortBookingPickupEarliestFirst(
+  firstBooking: BookingRecord,
+  secondBooking: BookingRecord,
+) {
+  const firstPickupTimeMs =
+    bookingRecordPickupDateTimeMs(firstBooking) ?? Number.POSITIVE_INFINITY;
+  const secondPickupTimeMs =
+    bookingRecordPickupDateTimeMs(secondBooking) ?? Number.POSITIVE_INFINITY;
+
+  if (firstPickupTimeMs !== secondPickupTimeMs) {
+    return firstPickupTimeMs - secondPickupTimeMs;
+  }
+
+  return bookingRecordStableKey(firstBooking).localeCompare(bookingRecordStableKey(secondBooking));
+}
+
 function bookingRecordIsPickupWithinNextHours(
   bookingRecord: BookingRecord,
   currentTimeMs: number,
@@ -8723,6 +8745,7 @@ function buildAdminBookingPersistencePayload(
       passenger_name: clean(bookingValue.name) || null,
       passenger_phone: null,
       flight_no: clean(bookingValue.flight) || null,
+      driver_id: adminDispatchVerifiedIdentityId(bookingValue.driverId),
       driver_contact: clean(bookingValue.driverContact) || null,
       driver_name: clean(bookingValue.driverName) || null,
       driver_plate_number: clean(bookingValue.driverPlate) || null,
@@ -9300,6 +9323,9 @@ function adminBookingPersistenceRecordToCalendarBookingRecord(
   const bookingReference = clean(record.booking_reference);
   const customerDisplayName = adminBookingPersistenceCustomerDisplayName(record);
   const verifiedCompanyId = adminDispatchVerifiedIdentityId(record.company_id);
+  const calendarCompanyName = verifiedCompanyId
+    ? billingIdentityBaseAccount(customerDisplayName)
+    : "";
 
   return {
     booking_reference: bookingReference,
@@ -9313,9 +9339,9 @@ function adminBookingPersistenceRecordToCalendarBookingRecord(
     created_at: clean(record.created_at) || null,
     customer_display_name: customerDisplayName || null,
     companies:
-      verifiedCompanyId && customerDisplayName
+      verifiedCompanyId && calendarCompanyName
         ? {
-            company_name: customerDisplayName,
+            company_name: calendarCompanyName,
             domain: null,
           }
         : null,
@@ -9758,6 +9784,33 @@ function adminDriverJobAcknowledgementCompactTimeLabel(value: string | null | un
   const timeMatch = fullLabel.match(/(\d{2}:\d{2}) SGT$/);
 
   return timeMatch?.[1] || "";
+}
+
+function adminDriverJobLinkIssuedCompactTimeLabel(value: string | null | undefined) {
+  return adminDriverJobAcknowledgementCompactTimeLabel(value) || "Time unavailable";
+}
+
+function adminDriverJobLinkWaitingMinutes(
+  value: string | null | undefined,
+  currentTimeMs: number,
+) {
+  const issuedAtMs = new Date(clean(value)).getTime();
+
+  if (!Number.isFinite(issuedAtMs)) {
+    return null;
+  }
+
+  return Math.max(0, Math.floor((currentTimeMs - issuedAtMs) / (60 * 1000)));
+}
+
+function adminDriverJobCardKindLabel(
+  value: AdminDriverJobLinkRecord["safe_summary"]["job_card_kind"],
+) {
+  if (value === "new") return "New";
+  if (value === "amendment") return "Amendment";
+  if (value === "reissued") return "Reissued";
+
+  return "Issued";
 }
 
 function adminAppNotificationFailureMessage(rawError: unknown) {
@@ -12991,6 +13044,25 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       return [];
     }
   });
+  const [dismissedPendingDriverAckLinkIds, setDismissedPendingDriverAckLinkIds] = useState<
+    string[]
+  >(() => {
+    if (typeof window === "undefined") {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(
+        window.localStorage.getItem(adminDismissedPendingDriverAckLinksStorageKey) || "[]",
+      );
+
+      return Array.isArray(parsed)
+        ? parsed.map(cleanReferenceText).filter(Boolean).slice(-500)
+        : [];
+    } catch {
+      return [];
+    }
+  });
   const [
     loadBookingsTypedOperationalCardsById,
     setLoadBookingsTypedOperationalCardsById,
@@ -13041,10 +13113,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     });
   const dashboardDriverJobLinksReadRequestRevisionRef = useRef(0);
   const dashboardDriverJobStatusAutoRequestedRef = useRef<Set<string>>(new Set());
-  const driverCompletedBookingStatusSyncRequestedRef = useRef<Set<string>>(new Set());
   const [bookingsSearchTerm, setBookingsSearchTerm] = useState("");
   const [bookingsSelectedDate, setBookingsSelectedDate] = useState(() => toDateKey(new Date()));
-  const [bookingsShowAllDates, setBookingsShowAllDates] = useState(true);
+  const [bookingsShowUpcoming, setBookingsShowUpcoming] = useState(true);
+  const [bookingsUpcomingPage, setBookingsUpcomingPage] = useState(1);
   const [completedSearchTerm, setCompletedSearchTerm] = useState("");
   const [completedMonthFilter, setCompletedMonthFilter] = useState("");
   const [driverSearchTerm, setDriverSearchTerm] = useState("");
@@ -16413,13 +16485,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       .map(({ displayItem }) => displayItem);
   }
   const assignedDriverId = clean(booking.driverId);
-  const assignedDriverName = clean(booking.driverName).toLowerCase();
-  const assignedDriverRecord = driverAssignmentDisplayDrivers.find(
-    (driver) =>
-      (assignedDriverId && String(driver.id) === assignedDriverId) ||
-      (assignedDriverName && clean(driver.driver_name).toLowerCase() === assignedDriverName),
-  );
-  const assignedDriverSelectValue = assignedDriverId || (assignedDriverRecord ? String(assignedDriverRecord.id) : "");
+  const assignedDriverRecord = assignedDriverId
+    ? driverAssignmentDisplayDrivers.find((driver) => String(driver.id) === assignedDriverId)
+    : undefined;
+  const assignedDriverSelectValue = assignedDriverId;
   const assignedDriverIsInactive = Boolean(assignedDriverRecord && isInactiveDriver(assignedDriverRecord));
   const showSavedAssignedDriverOption = Boolean(
     assignedDriverId && (!assignedDriverRecord || assignedDriverIsInactive),
@@ -16448,33 +16517,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     : dispatchReleaseLoadedBookingRecord
       ? bookingPublicReference(dispatchReleaseLoadedBookingRecord)
       : "";
-  const driverJobLinkAcknowledgementStatus = !activeAdminDriverJobLink
-    ? {
-        label: "No active link",
-        state: "no-link" as const,
-        title: "Create or load the exact booking’s active Driver Job Link.",
-      }
-    : activeAdminDriverJobLink.safe_summary.acknowledged
-      ? {
-          label: `Acknowledged${
-            adminDriverJobAcknowledgementCompactTimeLabel(
-              activeAdminDriverJobLink.safe_summary.acknowledged_at,
-            )
-              ? ` ${adminDriverJobAcknowledgementCompactTimeLabel(
-                  activeAdminDriverJobLink.safe_summary.acknowledged_at,
-                )}`
-              : ""
-          }`,
-          state: "acknowledged" as const,
-          title: `Driver acknowledged ${adminDriverJobStatusTimeLabel(
-            activeAdminDriverJobLink.safe_summary.acknowledged_at,
-          )}.`,
-        }
-      : {
-          label: "Waiting for driver",
-          state: "waiting" as const,
-          title: "The exact active Driver Job Link has not been acknowledged yet.",
-        };
 
   const customerCopyCard = useMemo(() => {
     const serviceType = customerBookingTypeLabel(booking.bookingType);
@@ -16794,25 +16836,24 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       adminDriverJobStatusReadStateIsCompleted(dashboardDriverStatusState)
     );
   }, [adminDriverJobStatusReadState, dashboardDriverJobStatusReadStates]);
-  const bookingRecordBelongsInCompletedHistoryWithDriverReport = useCallback(
+  const bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation = useCallback(
     (bookingRecord: BookingRecord) =>
-      bookingRecordBelongsInCompletedHistory(bookingRecord, todayKey) ||
-      bookingRecordHasCompletedDriverReport(bookingRecord),
-    [bookingRecordHasCompletedDriverReport, todayKey],
+      bookingRecordBelongsInCompletedHistory(bookingRecord, todayKey),
+    [todayKey],
   );
   const earlierHistoryDashboardBookings = useMemo(
     () =>
       dashboardBookings.filter((bookingRecord) =>
-        bookingRecordBelongsInCompletedHistoryWithDriverReport(bookingRecord),
+        bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation(bookingRecord),
       ),
-    [bookingRecordBelongsInCompletedHistoryWithDriverReport, dashboardBookings],
+    [bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation, dashboardBookings],
   );
   const completedBookings = useMemo(
     () =>
       completedHistorySourceBookings
-        .filter((bookingRecord) => bookingRecordBelongsInCompletedHistoryWithDriverReport(bookingRecord))
+        .filter((bookingRecord) => bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation(bookingRecord))
         .sort(sortBookingHistoryNewestFirst),
-    [bookingRecordBelongsInCompletedHistoryWithDriverReport, completedHistorySourceBookings],
+    [bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation, completedHistorySourceBookings],
   );
   const completedBillingAuditBookings = useMemo(
     () => completedBookings.filter(bookingRecordIsCompletedStatus),
@@ -16865,7 +16906,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const urgentUnassignedSavedBookingRequests = useMemo(
     () =>
       operationalBookings
-        .filter((bookingRecord) => !bookingRecordBelongsInCompletedHistoryWithDriverReport(bookingRecord))
+        .filter((bookingRecord) => !bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation(bookingRecord))
         .filter(
           (bookingRecord) =>
             !bookingRecordIsCustomerBookingRequest(bookingRecord) &&
@@ -16878,7 +16919,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
           return firstPickupTimeMs - secondPickupTimeMs;
         }),
-    [bookingRecordBelongsInCompletedHistoryWithDriverReport, currentTimeMs, operationalBookings],
+    [bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation, currentTimeMs, operationalBookings],
   );
   const dashboardUrgentBookingRequestBookings = useMemo(
     () =>
@@ -16908,17 +16949,17 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const filteredRecentBookings = useMemo(
     () =>
       operationalBookings
-        .filter((bookingRecord) => !bookingRecordBelongsInCompletedHistoryWithDriverReport(bookingRecord))
+        .filter((bookingRecord) => !bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation(bookingRecord))
         .filter(
           (bookingRecord) =>
-            bookingsShowAllDates || getBookingDateKey(bookingRecord) === bookingsSelectedDate,
+            bookingsShowUpcoming || getBookingDateKey(bookingRecord) === bookingsSelectedDate,
         )
         .filter((bookingRecord) => bookingMatchesLocalSearch(bookingRecord, bookingsSearchTerm)),
     [
-      bookingRecordBelongsInCompletedHistoryWithDriverReport,
+      bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation,
       bookingsSearchTerm,
       bookingsSelectedDate,
-      bookingsShowAllDates,
+      bookingsShowUpcoming,
       operationalBookings,
     ],
   );
@@ -16972,7 +17013,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   );
   const hasBookingsSearch = Boolean(clean(bookingsSearchTerm));
   const selectedBookingsDateLabel = formatDateWithWeekday(bookingsSelectedDate);
-  const bookingsDateScopeLabel = bookingsShowAllDates ? "all active dates" : selectedBookingsDateLabel;
+  const bookingsDateScopeLabel = bookingsShowUpcoming ? "upcoming active jobs" : selectedBookingsDateLabel;
   const hasCompletedSearch = Boolean(clean(completedSearchTerm));
   const loadedBookingIds = new Set(operationalBookings.map((bookingRecord) => bookingRecordStableKey(bookingRecord)));
   const completedBookingIds = new Set(completedBookings.map((bookingRecord) => bookingRecordStableKey(bookingRecord)));
@@ -17161,8 +17202,29 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     newBookingRequestNotificationCount +
     standaloneUrgentBookingRequestDisplayItems.length +
     customerBookingChangeRequestCount;
-  const filteredRecentBookingDisplayItems =
-    buildLoadBookingsOperationalDisplayItems(filteredRecentBookings, { useTypedOperationalOrder: true });
+  const filteredRecentBookingDisplayItems = buildLoadBookingsOperationalDisplayItems(
+    filteredRecentBookings,
+    { useTypedOperationalOrder: true },
+  ).sort((firstItem, secondItem) =>
+    sortBookingPickupEarliestFirst(firstItem.bookingRecord, secondItem.bookingRecord),
+  );
+  const bookingsUpcomingPageCount = Math.max(
+    1,
+    Math.ceil(filteredRecentBookingDisplayItems.length / adminUpcomingBookingsPageSize),
+  );
+  const bookingsUpcomingCurrentPage = Math.min(bookingsUpcomingPage, bookingsUpcomingPageCount);
+  const bookingsUpcomingPageStartIndex =
+    (bookingsUpcomingCurrentPage - 1) * adminUpcomingBookingsPageSize;
+  const visibleRecentBookingDisplayItems = filteredRecentBookingDisplayItems.slice(
+    bookingsUpcomingPageStartIndex,
+    bookingsUpcomingPageStartIndex + adminUpcomingBookingsPageSize,
+  );
+  const bookingsUpcomingVisibleStart =
+    filteredRecentBookingDisplayItems.length > 0 ? bookingsUpcomingPageStartIndex + 1 : 0;
+  const bookingsUpcomingVisibleEnd = Math.min(
+    bookingsUpcomingPageStartIndex + adminUpcomingBookingsPageSize,
+    filteredRecentBookingDisplayItems.length,
+  );
   const bookingGoogleCalendarStatusPayloadSignature = JSON.stringify(
     operationalBookings.map(buildSavedBookingCalendarEventPayload),
   );
@@ -17183,7 +17245,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         cancelledCount: number;
         completedCount: number;
         displayItems: LoadBookingsOperationalDisplayItem[];
-        driverCompletedCount: number;
         earlierCount: number;
         monthKey: string;
         monthLabel: string;
@@ -17199,7 +17260,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           cancelledCount: 0,
           completedCount: 0,
           displayItems: [],
-          driverCompletedCount: 0,
           earlierCount: 0,
           monthKey,
           monthLabel: completedHistoryMonthLabel(monthKey),
@@ -17208,10 +17268,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
       const isCompletedStatus = bookingRecordIsCompletedStatus(displayItem.bookingRecord);
       const isCancelledStatus = bookingRecordIsCancelledStatus(displayItem.bookingRecord);
-      const isDriverCompletedHistoryJob =
-        !isCompletedStatus &&
-        !isCancelledStatus &&
-        bookingRecordHasCompletedDriverReport(displayItem.bookingRecord);
       const isEarlierHistoryJob = bookingRecordIsEarlierJob(displayItem.bookingRecord, todayKey);
 
       existingGroup.displayItems.push(displayItem);
@@ -17225,10 +17281,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         existingGroup.cancelledCount += 1;
       }
 
-      if (isDriverCompletedHistoryJob) {
-        existingGroup.driverCompletedCount += 1;
-      }
-
       if (!isCompletedStatus && !isCancelledStatus && isEarlierHistoryJob) {
         existingGroup.earlierCount += 1;
       }
@@ -17239,11 +17291,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     return Array.from(groups.values()).sort((firstGroup, secondGroup) =>
       sortCompletedHistoryMonthKeysNewestFirst(firstGroup.monthKey, secondGroup.monthKey),
     );
-  }, [
-    bookingRecordHasCompletedDriverReport,
-    filteredCompletedBookingDisplayItems,
-    todayKey,
-  ]);
+  }, [filteredCompletedBookingDisplayItems, todayKey]);
 
   function update(field: keyof BookingForm, value: string) {
     setCustomerMatchFeedback(null);
@@ -20006,6 +20054,33 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     });
   }
 
+  function dismissPendingDriverAckAlert(driverJobLinkId: string) {
+    const exactLinkId = cleanReferenceText(driverJobLinkId);
+
+    if (!exactLinkId) {
+      return;
+    }
+
+    setDismissedPendingDriverAckLinkIds((currentIds) => {
+      if (currentIds.includes(exactLinkId)) {
+        return currentIds;
+      }
+
+      const nextIds = [...currentIds, exactLinkId].slice(-500);
+
+      try {
+        window.localStorage.setItem(
+          adminDismissedPendingDriverAckLinksStorageKey,
+          JSON.stringify(nextIds),
+        );
+      } catch {
+        // Alert dismissal is a local admin convenience; the driver link remains active.
+      }
+
+      return nextIds;
+    });
+  }
+
   function loadSelectedBooking(
     bookingRecord: BookingRecord,
     options: {
@@ -21106,10 +21181,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         return;
       }
 
-      void syncBookingCompletedStatusFromDriverReport(
-        bookingReference,
-        loadedDriverStatuses.latestStatus,
-      );
       setAdminDriverJobStatusReadState({
         bookingReference,
         latestStatus: loadedDriverStatuses.latestStatus,
@@ -21312,6 +21383,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         : [];
       const activeJobs = collapseAdminActiveJobsMapDriverDuplicates(allActiveJobs);
       const duplicateCount = allActiveJobs.length - activeJobs.length;
+      const currentDriverCount = activeJobs.filter((job) => !job.is_stale).length;
+      const stalePinCount = activeJobs.length - currentDriverCount;
       const allowedBookingReferences = Array.isArray(result.allowed_booking_references)
         ? result.allowed_booking_references.map(cleanReferenceText).filter(Boolean)
         : null;
@@ -21322,16 +21395,22 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         activeJobs,
         allowedBookingReferences:
           allowedBookingReferences ?? current.allowedBookingReferences,
-        markerCount: activeJobs.length,
+        markerCount: currentDriverCount,
         message: {
-          tone: activeJobs.length > 0 ? "success" : "info",
+          tone: currentDriverCount > 0 ? "success" : "info",
           text:
-            activeJobs.length > 0
-              ? `Loaded live movement for ${activeJobs.length} driver${activeJobs.length === 1 ? "" : "s"}${
+            currentDriverCount > 0
+              ? `Loaded current live movement for ${currentDriverCount} driver${currentDriverCount === 1 ? "" : "s"}${
+                  stalePinCount > 0
+                    ? `; ${stalePinCount} stale pin${stalePinCount === 1 ? "" : "s"} shown`
+                    : ""
+                }${
                   duplicateCount > 0
-                    ? `; ${duplicateCount} older duplicate${duplicateCount === 1 ? "" : "s"} hidden.`
-                    : "."
-                }`
+                    ? `; ${duplicateCount} older duplicate${duplicateCount === 1 ? "" : "s"} hidden`
+                    : ""
+                }.`
+              : stalePinCount > 0
+                ? `No current live movement; ${stalePinCount} stale pin${stalePinCount === 1 ? " is" : "s are"} awaiting refresh or removal.`
               : "Live location is open, but no driver has shared live movement yet.",
         },
         runtimeStatus: "active",
@@ -21392,7 +21471,12 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             cleanReferenceText(job.assigned_job_reference) !== bookingReference ||
             clean(job.updated_at) !== updatedAt,
         ),
-        markerCount: Math.max(0, current.markerCount - 1),
+        markerCount: current.activeJobs.filter(
+          (job) =>
+            !job.is_stale &&
+            (cleanReferenceText(job.assigned_job_reference) !== bookingReference ||
+              clean(job.updated_at) !== updatedAt),
+        ).length,
         message: {
           tone: "success",
           text: `Removed stale pin for ${adminVisibleBookingReference(bookingReference)}. Booking unchanged.`,
@@ -21571,10 +21655,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     try {
       const loadedDriverStatuses = await loadAdminDriverJobStatusRead(bookingReference);
 
-      void syncBookingCompletedStatusFromDriverReport(
-        bookingReference,
-        loadedDriverStatuses.latestStatus,
-      );
       setDashboardDriverJobStatusReadStates((currentStates) => ({
         ...currentStates,
         [bookingReference]: {
@@ -22692,6 +22772,13 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         },
         oneTimeUrl: driverJobUrl,
       });
+      setDashboardDriverJobLinksReadState((current) => ({
+        linksByReference: {
+          ...current.linksByReference,
+          [cleanReferenceText(link.booking_reference)]: link,
+        },
+        status: "loaded",
+      }));
     } catch (error) {
       setAdminDriverJobLinkState((current) => ({
         ...current,
@@ -23113,50 +23200,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     }
   }
 
-  async function syncBookingCompletedStatusFromDriverReport(
-    bookingReferenceValue: string,
-    latestStatus: AdminDriverJobStatusEvent | null,
-  ) {
-    if (clean(latestStatus?.status_value).toLowerCase() !== "completed") {
-      return;
-    }
-
-    const bookingStatusReference = cleanReferenceText(bookingReferenceValue);
-
-    if (!bookingStatusReference || driverCompletedBookingStatusSyncRequestedRef.current.has(bookingStatusReference)) {
-      return;
-    }
-
-    const matchingBooking = operationalBookings.find(
-      (bookingRecord) => getBookingDriverJobStatusReference(bookingRecord) === bookingStatusReference,
-    );
-
-    if (
-      !matchingBooking ||
-      bookingRecordIsCompletedStatus(matchingBooking) ||
-      bookingRecordIsCancelledStatus(matchingBooking)
-    ) {
-      return;
-    }
-
-    driverCompletedBookingStatusSyncRequestedRef.current.add(bookingStatusReference);
-    const result = await patchBookingStatusReference(
-      bookingStatusReference,
-      "completed",
-      matchingBooking,
-    );
-
-    if (!result.ok) {
-      driverCompletedBookingStatusSyncRequestedRef.current.delete(bookingStatusReference);
-      setMessage({
-        tone: "error",
-        text: `Driver reported Job Completed for ${adminVisibleBookingReference(
-          bookingStatusReference,
-        )}, but booking status was not changed: ${result.errorText}`,
-      });
-    }
-  }
-
   async function markBookingCompleted(bookingRecord: BookingRecord) {
     return updateBookingStatusOnly(
       bookingRecord,
@@ -23367,10 +23410,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   function bookingRecordCanBeDeletedFromCompletedHistory(bookingRecord: BookingRecord) {
     const isCompletedStatus = bookingRecordIsCompletedStatus(bookingRecord);
     const isCancelledStatus = bookingRecordIsCancelledStatus(bookingRecord);
-    const isDriverCompletedHistoryJob =
-      !isCompletedStatus && !isCancelledStatus && bookingRecordHasCompletedDriverReport(bookingRecord);
 
-    return isCompletedStatus || isCancelledStatus || isDriverCompletedHistoryJob;
+    return isCompletedStatus || isCancelledStatus;
   }
 
   async function resolveCompletedHistoryDeleteBookingId(
@@ -23439,13 +23480,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     const bookingId = bookingRecordStableKey(bookingRecord, operationalCard);
     const isCompletedStatus = bookingRecordIsCompletedStatus(bookingRecord);
     const isCancelledStatus = bookingRecordIsCancelledStatus(bookingRecord);
-    const isDriverCompletedHistoryJob =
-      !isCompletedStatus && !isCancelledStatus && bookingRecordHasCompletedDriverReport(bookingRecord);
 
-    if (!isCompletedStatus && !isCancelledStatus && !isDriverCompletedHistoryJob) {
+    if (!isCompletedStatus && !isCancelledStatus) {
       setBookingCompletionMessage(bookingId, {
         tone: "error",
-        text: "Delete job failed: only completed, cancelled, or driver-completed jobs can be deleted here.",
+        text: "Delete job failed: only completed or cancelled jobs can be deleted here.",
       });
       return;
     }
@@ -23473,18 +23512,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
       if (!deleteBookingId) {
         throw new Error("saved booking id is missing. Reload bookings, then try again.");
-      }
-
-      if (isDriverCompletedHistoryJob) {
-        const statusResult = await patchBookingStatusReference(
-          bookingRecordStatusReference(bookingRecord),
-          "completed",
-          bookingRecord,
-        );
-
-        if (!statusResult.ok) {
-          throw new Error(`Driver completed status update failed: ${statusResult.errorText}`);
-        }
       }
 
       const response = await fetch(adminSavedBookingsApiPath, {
@@ -23867,25 +23894,29 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           </p>
         </div>
         <p className="text-xs font-medium text-slate-500" data-bookings-loaded-filter-summary="true">
-          Showing {filteredRecentBookings.length} of {operationalBookings.length} loaded for {bookingsDateScopeLabel}.
+          Showing {bookingsUpcomingVisibleStart}-{bookingsUpcomingVisibleEnd} of{" "}
+          {filteredRecentBookingDisplayItems.length} for {bookingsDateScopeLabel}.
         </p>
       </div>
       <div className="mt-3 overflow-x-auto rounded-md border border-stone-200 bg-white p-2">
         <div className="flex min-w-[56rem] items-center gap-2">
-        <button
-          aria-pressed={bookingsShowAllDates}
-          className={`h-10 shrink-0 rounded-md border px-3 text-sm font-semibold transition ${
-            bookingsShowAllDates
-              ? "border-slate-950 bg-slate-950 text-white hover:bg-slate-800"
-              : "border-slate-300 bg-white text-slate-800 hover:bg-slate-50"
-          }`}
-          data-bookings-all-dates="true"
-          onClick={() => setBookingsShowAllDates(true)}
-          type="button"
-        >
-          All dates
-        </button>
-        <label className="flex w-44 shrink-0 items-center gap-2 rounded-md border border-stone-300 bg-white px-2">
+          <button
+            aria-pressed={bookingsShowUpcoming}
+            className={`h-10 shrink-0 rounded-md border px-3 text-sm font-semibold transition ${
+              bookingsShowUpcoming
+                ? "border-slate-950 bg-slate-950 text-white hover:bg-slate-800"
+                : "border-slate-300 bg-white text-slate-800 hover:bg-slate-50"
+            }`}
+            data-bookings-upcoming="true"
+            onClick={() => {
+              setBookingsShowUpcoming(true);
+              setBookingsUpcomingPage(1);
+            }}
+            type="button"
+          >
+            Upcoming
+          </button>
+          <label className="flex w-44 shrink-0 items-center gap-2 rounded-md border border-stone-300 bg-white px-2">
           <span className="text-xs font-semibold uppercase text-slate-500">Date</span>
           <span className="sr-only">Booking date</span>
           <input
@@ -23895,72 +23926,82 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               const nextDate = clean(event.target.value);
               if (nextDate) {
                 setBookingsSelectedDate(nextDate);
-                setBookingsShowAllDates(false);
+                setBookingsShowUpcoming(false);
+                setBookingsUpcomingPage(1);
               }
             }}
             type="date"
             value={bookingsSelectedDate}
           />
-        </label>
-        <button
+          </label>
+          <button
           className="h-10 shrink-0 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
           data-bookings-prev-day="true"
           onClick={() => {
             setBookingsSelectedDate((currentDate) => shiftDateKey(currentDate, -1));
-            setBookingsShowAllDates(false);
+            setBookingsShowUpcoming(false);
+            setBookingsUpcomingPage(1);
           }}
           type="button"
         >
           Prev Day
-        </button>
-        <div
+          </button>
+          <div
           className="h-10 w-44 shrink-0 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-center text-sm font-semibold text-slate-950"
           data-bookings-selected-date-label="true"
         >
           {selectedBookingsDateLabel}
-        </div>
-        <button
+          </div>
+          <button
           className="h-10 shrink-0 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
           data-bookings-next-day="true"
           onClick={() => {
             setBookingsSelectedDate((currentDate) => shiftDateKey(currentDate, 1));
-            setBookingsShowAllDates(false);
+            setBookingsShowUpcoming(false);
+            setBookingsUpcomingPage(1);
           }}
           type="button"
         >
           Next Day
-        </button>
-        <button
+          </button>
+          <button
           className="h-10 shrink-0 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
           data-bookings-today="true"
           onClick={() => {
             setBookingsSelectedDate(todayKey);
-            setBookingsShowAllDates(false);
+            setBookingsShowUpcoming(false);
+            setBookingsUpcomingPage(1);
           }}
           type="button"
         >
           Today
-        </button>
-        <label className="relative min-w-72 flex-1">
+          </button>
+          <label className="relative min-w-72 flex-1">
           <span className="sr-only">Quick search loaded jobs</span>
           <input
             className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
             data-bookings-search-input="true"
-            onChange={(event) => setBookingsSearchTerm(event.target.value)}
+            onChange={(event) => {
+              setBookingsSearchTerm(event.target.value);
+              setBookingsUpcomingPage(1);
+            }}
             placeholder="Quick search loaded jobs: ref, passenger, flight, route, driver"
             type="search"
             value={bookingsSearchTerm}
           />
-        </label>
-        {hasBookingsSearch ? (
-          <button
-            className="h-10 shrink-0 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-            onClick={() => setBookingsSearchTerm("")}
-            type="button"
-          >
-            Clear
-          </button>
-        ) : null}
+          </label>
+          {hasBookingsSearch ? (
+            <button
+              className="h-10 shrink-0 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              onClick={() => {
+                setBookingsSearchTerm("");
+                setBookingsUpcomingPage(1);
+              }}
+              type="button"
+            >
+              Clear
+            </button>
+          ) : null}
         </div>
       </div>
     </div>
@@ -23997,8 +24038,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         </p>
       ) : null}
       {filteredRecentBookings.length > 0 ? (
-      <div className="mt-3 max-h-[34rem] space-y-2 overflow-auto" data-current-upcoming-bookings-list="true">
-        {filteredRecentBookingDisplayItems.map(({ bookingRecord: savedBooking, operationalCard }, bookingIndex) => {
+        <>
+          <div className="mt-3 max-h-[34rem] space-y-2 overflow-auto" data-current-upcoming-bookings-list="true">
+        {visibleRecentBookingDisplayItems.map(({ bookingRecord: savedBooking, operationalCard }, bookingIndex) => {
           const routePoints = getRoutePoints(savedBooking);
           const pickup = operationalCard.pickup_address || routePoints[0] || "Pickup";
           const dropoff =
@@ -24032,6 +24074,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           const bookingsListStatus = bookingStatusLabel(savedBooking.status);
           const showBookingsListStatus = ![
             "admin_review_required",
+            "draft",
             "ops_pending_ots",
             "pending_ots",
           ].includes(clean(savedBooking.status).toLowerCase());
@@ -24091,7 +24134,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                           {getLoadBookingsOperationalDisplayTitle(operationalCard)}
                         </AdminOperationalUppercaseValue>
                       </span>
-                      <span className="block truncate text-xs text-slate-500">
+                      <span className="block truncate text-sm font-bold text-slate-900">
                         {pickupMetaText}
                       </span>
                     </span>
@@ -24264,7 +24307,45 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             </article>
           );
         })}
-      </div>
+          </div>
+          <div
+            className="mt-3 flex flex-col gap-2 rounded-md border border-stone-200 bg-white px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+            data-bookings-upcoming-pagination="true"
+          >
+        <p
+          className="text-sm font-bold text-slate-900"
+          data-bookings-upcoming-page-summary="true"
+        >
+          Page {bookingsUpcomingCurrentPage} of {bookingsUpcomingPageCount} · 20 jobs per page
+        </p>
+        <div className="grid grid-cols-2 gap-2 sm:w-64">
+          <button
+            className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition enabled:hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            data-bookings-upcoming-previous-page="true"
+            disabled={bookingsUpcomingCurrentPage <= 1}
+            onClick={() =>
+              setBookingsUpcomingPage(Math.max(1, bookingsUpcomingCurrentPage - 1))
+            }
+            type="button"
+          >
+            Previous
+          </button>
+          <button
+            className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition enabled:hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            data-bookings-upcoming-next-page="true"
+            disabled={bookingsUpcomingCurrentPage >= bookingsUpcomingPageCount}
+            onClick={() =>
+              setBookingsUpcomingPage(
+                Math.min(bookingsUpcomingPageCount, bookingsUpcomingCurrentPage + 1),
+              )
+            }
+            type="button"
+          >
+            Next
+          </button>
+        </div>
+          </div>
+        </>
       ) : (
         <div
           className="mt-3 rounded-md border border-dashed border-stone-300 bg-white p-4 text-center text-sm text-slate-500"
@@ -24471,11 +24552,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               ].filter(Boolean).join(" · ");
               const isCompletedStatus = bookingRecordIsCompletedStatus(savedBooking);
               const isCancelledStatus = bookingRecordIsCancelledStatus(savedBooking);
-              const isDriverCompletedHistoryJob =
-                !isCompletedStatus && !isCancelledStatus && bookingRecordHasCompletedDriverReport(savedBooking);
-              const completedHistoryDisplayStatus = isDriverCompletedHistoryJob
-                ? "completed"
-                : isCancelledStatus
+              const completedHistoryDisplayStatus = isCancelledStatus
                   ? "cancelled"
                   : isCompletedStatus
                     ? "completed"
@@ -24491,8 +24568,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       ? "completed"
                       : isCancelledStatus
                         ? "cancelled"
-                        : isDriverCompletedHistoryJob
-                        ? "driver-completed"
                         : isEarlierHistoryJob
                           ? "earlier"
                           : "history"
@@ -26049,8 +26124,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     .filter((bookingRecord) => {
       return (
         !bookingRecordIsCompletedStatus(bookingRecord) &&
-        !bookingRecordIsCancelledStatus(bookingRecord) &&
-        !bookingRecordHasCompletedDriverReport(bookingRecord)
+        !bookingRecordIsCancelledStatus(bookingRecord)
       );
     })
     .filter((bookingRecord) =>
@@ -26105,6 +26179,70 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const activeJobDriverStatusReferenceList = dayOfTripActiveJobVisibleBookings
     .map(getActiveJobBookingReference)
     .filter(Boolean);
+  const pendingDriverAckQueueEligibleBookings = operationalBookings
+    .filter((bookingRecord) => Boolean(getBookingDriverJobStatusReference(bookingRecord)))
+    .filter((bookingRecord) => bookingRecordIsCurrentAssignedActiveJob(bookingRecord, currentTimeMs))
+    .filter((bookingRecord) => {
+      return (
+        !bookingRecordIsCompletedStatus(bookingRecord) &&
+        !bookingRecordIsCancelledStatus(bookingRecord)
+      );
+    })
+    .sort((firstBooking, secondBooking) => {
+      const firstDateBucket = activeJobDateBucket(firstBooking);
+      const secondDateBucket = activeJobDateBucket(secondBooking);
+
+      if (firstDateBucket !== secondDateBucket) {
+        return firstDateBucket - secondDateBucket;
+      }
+
+      const firstDate = getBookingDateKey(firstBooking);
+      const secondDate = getBookingDateKey(secondBooking);
+
+      if (firstDate !== secondDate) {
+        if (firstDateBucket === 1 && secondDateBucket === 1) {
+          return secondDate.localeCompare(firstDate);
+        }
+
+        return firstDate.localeCompare(secondDate);
+      }
+
+      return (
+        normaliseTimeForSort(formatPickupTimeFromRecord(firstBooking)) -
+        normaliseTimeForSort(formatPickupTimeFromRecord(secondBooking))
+      );
+    });
+  const pendingDriverAckQueueReferenceList = [
+    ...new Set(
+      pendingDriverAckQueueEligibleBookings
+        .map(getActiveJobBookingReference)
+        .map(cleanReferenceText)
+        .filter(Boolean),
+    ),
+  ];
+  const pendingDriverAckQueueReferenceKey = pendingDriverAckQueueReferenceList.join("|");
+  const pendingDriverAckQueueItems =
+    dashboardDriverJobLinksReadState.status === "loaded"
+      ? pendingDriverAckQueueEligibleBookings
+          .map((bookingRecord) => {
+            const bookingReference = getActiveJobBookingReference(bookingRecord);
+            const link = dashboardDriverJobLinksReadState.linksByReference[bookingReference] || null;
+
+            return link?.link_status === "active" &&
+              !link.safe_summary.acknowledged &&
+              !dismissedPendingDriverAckLinkIds.includes(link.id)
+              ? {
+                  bookingReference,
+                  issuedAt: link.issued_at,
+                  jobCardKind: link.safe_summary.job_card_kind,
+                  linkId: link.id,
+                  publicReference: bookingPublicReference(bookingRecord),
+                  waitingMinutes: adminDriverJobLinkWaitingMinutes(link.issued_at, currentTimeMs),
+                }
+              : null;
+          })
+          .filter((item): item is NonNullable<typeof item> => Boolean(item))
+      : [];
   const liveDispatchMapReferenceList = [
     ...new Set(
       liveDispatchMapEligibleBookings
@@ -26114,7 +26252,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     ),
   ];
   const activeJobsMapVisibleJobs = adminActiveJobsMapReadState.activeJobs;
-  const activeJobsMapMarkerCount = activeJobsMapVisibleJobs.length;
+  const activeJobsMapMarkerCount = activeJobsMapVisibleJobs.filter(
+    (job) => !job.is_stale,
+  ).length;
+  const activeJobsMapStalePinCount = activeJobsMapVisibleJobs.length - activeJobsMapMarkerCount;
   const liveDispatchPreparedSlotCount = liveDispatchMapReferenceList.length;
   const liveDispatchSlotSummaryLabel =
     liveDispatchPreparedSlotCount > 0
@@ -26134,6 +26275,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const liveDispatchMapReferenceKey = liveDispatchMapReferenceList.join("|");
   const activeJobsMapAllowedReferenceKey = adminActiveJobsMapReadState.allowedBookingReferences.join("|");
   const todayJobsMonitorIsActive = activeTab === "dashboard";
+  const driverAckQueueMonitorIsActive = activeTab === "dashboard" || activeTab === "dispatch";
   const activeJobsMapLocationsByReference = new Map(
     activeJobsMapVisibleJobs
       .map((job) => [cleanReferenceText(job.assigned_job_reference), job] as const)
@@ -26455,7 +26597,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       void refreshDashboardDriverJobStatusRead(bookingReference);
       void refreshDashboardDriverOtsPhotoProofRead(bookingReference);
     }
-    void refreshDashboardDriverJobLinksRead(bookingReferences);
     // The booking reference key is the trigger; the read callback intentionally uses the latest page state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [todayJobsMonitorIsActive, activeJobDriverStatusReferenceKey]);
@@ -26476,13 +26617,30 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         void refreshDashboardDriverJobStatusRead(bookingReference);
         void refreshDashboardDriverOtsPhotoProofRead(bookingReference);
       }
-      void refreshDashboardDriverJobLinksRead(bookingReferences);
     }, 10 * 1000);
 
     return () => window.clearInterval(intervalId);
     // The booking reference key controls interval membership; callback internals read the latest status sync state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [todayJobsMonitorIsActive, activeJobDriverStatusReferenceKey, dashboardDriverJobAutoRefreshEnabled]);
+
+  useEffect(() => {
+    const bookingReferences = pendingDriverAckQueueReferenceKey.split("|").filter(Boolean);
+
+    if (!driverAckQueueMonitorIsActive || bookingReferences.length === 0) {
+      return;
+    }
+
+    void refreshDashboardDriverJobLinksRead(bookingReferences);
+
+    const intervalId = window.setInterval(() => {
+      void refreshDashboardDriverJobLinksRead(bookingReferences);
+    }, 10 * 1000);
+
+    return () => window.clearInterval(intervalId);
+    // The exact active-booking reference key controls queue membership; the read keeps only the newest active link per booking.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [driverAckQueueMonitorIsActive, pendingDriverAckQueueReferenceKey]);
 
   useEffect(() => {
     if (!liveDispatchMapReferenceKey) {
@@ -27433,8 +27591,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 className="rounded-full bg-lime-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-lime-900 sm:px-2 sm:text-[10px]"
                 data-dispatch-live-driver-map-marker-count={activeJobsMapMarkerCount}
               >
-                {activeJobsMapMarkerCount} driver
-                {activeJobsMapMarkerCount === 1 ? "" : "s"}
+                {activeJobsMapMarkerCount} live
+                {activeJobsMapStalePinCount > 0
+                  ? ` · ${activeJobsMapStalePinCount} stale`
+                  : ""}
               </span>
               <span
                 className="rounded-full bg-sky-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-sky-900 sm:px-2 sm:text-[10px]"
@@ -42685,26 +42845,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       >
                         {driverJobLinkRevokeButtonLabel}
                       </button>
-                      <span
-                        className={`inline-flex min-h-9 max-w-full items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${
-                          driverJobLinkAcknowledgementStatus.state === "acknowledged"
-                            ? "border-emerald-300 bg-emerald-100 text-emerald-900"
-                            : driverJobLinkAcknowledgementStatus.state === "waiting"
-                              ? "border-amber-300 bg-amber-100 text-amber-950"
-                              : "border-slate-300 bg-slate-100 text-slate-700"
-                        }`}
-                        data-admin-driver-job-link-acknowledgement="true"
-                        data-admin-driver-job-link-acknowledgement-state={
-                          driverJobLinkAcknowledgementStatus.state
-                        }
-                        title={driverJobLinkAcknowledgementStatus.title}
-                      >
-                        <span className="max-w-[8rem] truncate">
-                          {dispatchPublicBookingReference || "Booking"}
-                        </span>
-                        <span className="mx-1" aria-hidden="true">·</span>
-                        <span>{driverJobLinkAcknowledgementStatus.label}</span>
-                      </span>
                     </div>
                     {driverJobLinkCopyMessage?.tone === "error" ? (
                       <div
@@ -42897,6 +43037,77 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 </details>
               </div>
             ) : null}
+
+            <section
+              className={`order-[55] min-w-0 rounded-md border p-3 transition ${
+                pendingDriverAckQueueItems.length > 0
+                  ? "animate-pulse border-amber-400 bg-amber-50 motion-reduce:animate-none"
+                  : "border-emerald-200 bg-emerald-50"
+              }`}
+              data-pending-driver-ack-queue="true"
+              data-pending-driver-ack-queue-count={String(pendingDriverAckQueueItems.length)}
+              data-pending-driver-ack-queue-pulsing={
+                pendingDriverAckQueueItems.length > 0 ? "true" : "false"
+              }
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-950">
+                    Pending for Driver ACK Queue
+                  </h2>
+                  <p className="text-xs text-slate-600">
+                    Newest active Driver Job Link for each exact booking. Link issued means created in this app.
+                  </p>
+                </div>
+                <span
+                  className={`inline-flex min-h-9 items-center rounded-full border px-3 py-1 text-sm font-bold ${
+                    pendingDriverAckQueueItems.length > 0
+                      ? "border-amber-400 bg-white text-amber-950"
+                      : "border-emerald-300 bg-white text-emerald-900"
+                  }`}
+                  data-pending-driver-ack-queue-count-badge="true"
+                >
+                  {pendingDriverAckQueueItems.length} pending
+                </span>
+              </div>
+              {pendingDriverAckQueueItems.length > 0 ? (
+                <ol
+                  className="mt-3 max-h-64 space-y-2 overflow-y-auto"
+                  data-pending-driver-ack-queue-list="true"
+                >
+                  {pendingDriverAckQueueItems.map((item, index) => (
+                    <li
+                      className="flex flex-col gap-2 rounded-md border border-amber-300 bg-white px-3 py-2 text-sm font-semibold text-amber-950 sm:flex-row sm:items-center sm:justify-between"
+                      data-pending-driver-ack-queue-booking-reference={item.bookingReference}
+                      data-pending-driver-ack-queue-item="true"
+                      data-pending-driver-ack-queue-link-id={item.linkId}
+                      key={item.linkId}
+                    >
+                      <span>
+                        {index + 1}) {item.publicReference} · {adminDriverJobCardKindLabel(item.jobCardKind)} · Link issued{" "}
+                        {adminDriverJobLinkIssuedCompactTimeLabel(item.issuedAt)} · {item.waitingMinutes === null
+                          ? "Waiting"
+                          : `Waiting ${item.waitingMinutes} min`}
+                      </span>
+                      <button
+                        aria-label={`Dismiss ${item.publicReference} pending driver acknowledgement alert`}
+                        className="min-h-11 shrink-0 rounded-md border border-amber-400 bg-white px-4 py-2 text-sm font-bold text-amber-950 transition hover:bg-amber-100"
+                        data-pending-driver-ack-dismiss={item.linkId}
+                        onClick={() => dismissPendingDriverAckAlert(item.linkId)}
+                        title="Dismiss this alert only. The driver job link remains active."
+                        type="button"
+                      >
+                        Close
+                      </button>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="mt-3 text-sm font-semibold text-emerald-900">
+                  No driver acknowledgements pending.
+                </p>
+              )}
+            </section>
 
             <div className="order-[100]" data-dispatch-workflow-step="admin-lower-status">
               {statusPanel}

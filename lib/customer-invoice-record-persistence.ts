@@ -6,9 +6,7 @@ import path from "node:path";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-import type {
-  AdminBookingPersistenceAdapterActor,
-} from "./admin-booking-supabase-adapter";
+import type { AdminBookingPersistenceAdapterActor } from "./admin-booking-supabase-adapter";
 import {
   checkAdminBookingPersistenceStagingConfigReadiness,
   checkCustomerBookingRequestPersistenceConfigReadiness,
@@ -40,9 +38,18 @@ export type CustomerInvoiceStoredRecord = CustomerLocalInvoiceRecord & {
   customerEmail?: string;
   emailDeliveryStatus: CustomerInvoiceEmailDeliveryStatus;
   emailSentAt?: string | null;
+  lastReminderSentAt?: string | null;
+  paidAt?: string | null;
+  paymentMethod?: CustomerInvoicePaymentMethod;
   pdfFilename: string;
+  reminderSendCount: number;
   storageSource: "server";
+  thankYouSentAt?: string | null;
+  travelerId?: number;
 };
+
+export type CustomerInvoicePaymentMethod = "Bank transfer" | "Card" | "Cash";
+export type CustomerInvoiceActionEmailKind = "payment_thank_you" | "reminder";
 
 export type CustomerInvoiceCreateInput = {
   amountCents?: unknown;
@@ -62,6 +69,7 @@ export type CustomerInvoiceCreateInput = {
   route?: unknown;
   service?: unknown;
   status?: unknown;
+  travelerId?: unknown;
 };
 
 export type CustomerInvoiceTestArtifactArchiveInput = {
@@ -72,7 +80,7 @@ export type CustomerInvoiceTestArtifactArchiveInput = {
 };
 
 type UnknownRecord = Record<string, unknown>;
-type CustomerInvoiceClient = Pick<SupabaseClient, "from">;
+type CustomerInvoiceClient = Pick<SupabaseClient, "from" | "rpc">;
 type CustomerBillingDocumentState = "draft" | "issued";
 
 type CustomerInvoiceResult<T> =
@@ -120,9 +128,8 @@ const customerInvoiceLegacySelect = [
   "created_at",
   "updated_at",
 ].join(", ");
-const customerInvoiceSelect = `${customerInvoiceLegacySelect}, booker_id, document_type, document_state, original_invoice_number, credit_note_reason`;
-const customerInvoiceLegacyPdfSelect =
-  "invoice_number, customer_id, pdf_base64, pdf_content_type, pdf_filename";
+const customerInvoiceSelect = `${customerInvoiceLegacySelect}, booker_id, traveler_id, document_type, document_state, original_invoice_number, credit_note_reason, payment_method, paid_at, reminder_send_count, last_reminder_sent_at, last_reminder_message_id, thank_you_sent_at, thank_you_message_id`;
+const customerInvoiceLegacyPdfSelect = "invoice_number, customer_id, pdf_base64, pdf_content_type, pdf_filename";
 const customerInvoicePdfSelect = `${customerInvoiceLegacyPdfSelect}, document_type, document_state`;
 const maxTextLength = 1000;
 const maxEmailLength = 180;
@@ -171,26 +178,21 @@ const forbiddenCustomerInvoiceFragments = [
   "token_hash",
 ];
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const invoiceNumberPattern = /^(INV|QUO|CN)-\d{8}-\d{4}$/;
-const originalInvoiceNumberPattern = /^INV-\d{8}-\d{4}$/;
+// prettier-ignore
+const invoiceNumberPattern = /^(?:(INV|QUO|CN)-\d{8}-\d{4}|[A-Z0-9]{2,12}-\d{4,})$/;
+const originalInvoiceNumberPattern = /^(?:INV-\d{8}-\d{4}|[A-Z0-9]{2,12}-\d{4,})$/;
 const localJpegLogoPattern = /^\/[a-z0-9][a-z0-9/_-]*\.jpe?g$/i;
 
 function createServerClient() {
-  return createClient(
-    process.env.SUPABASE_URL || "",
-    process.env.SUPABASE_SERVICE_ROLE_KEY || "",
-    {
-      auth: {
-        persistSession: false,
-      },
+  return createClient(process.env.SUPABASE_URL || "", process.env.SUPABASE_SERVICE_ROLE_KEY || "", {
+    auth: {
+      persistSession: false,
     },
-  );
+  });
 }
 
 function asRecord(value: unknown): UnknownRecord {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as UnknownRecord)
-    : {};
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? (value as UnknownRecord) : {};
 }
 
 function asArray(value: unknown): unknown[] {
@@ -198,7 +200,10 @@ function asArray(value: unknown): unknown[] {
 }
 
 function normalizeToken(value: string) {
-  return value.replace(/([a-z])([A-Z])/g, "$1_$2").replace(/[^a-z0-9]+/gi, "_").toLowerCase();
+  return value
+    .replace(/([a-z])([A-Z])/g, "$1_$2")
+    .replace(/[^a-z0-9]+/gi, "_")
+    .toLowerCase();
 }
 
 function includesForbiddenFragment(value: string) {
@@ -248,10 +253,7 @@ function safeLineItemQuantity(value: unknown) {
 
   const quantity = typeof value === "number" ? value : Number(value);
 
-  return Number.isFinite(quantity) &&
-    quantity > 0 &&
-    quantity <= 999 &&
-    Math.round(quantity * 100) === quantity * 100
+  return Number.isFinite(quantity) && quantity > 0 && quantity <= 999 && Math.round(quantity * 100) === quantity * 100
     ? quantity
     : null;
 }
@@ -308,6 +310,16 @@ function documentPrefix(documentType: CustomerBillingDocumentType) {
 
 function safeStatus(value: unknown): CustomerLocalInvoiceStatus | null {
   return value === "Paid" || value === "Unpaid" ? value : null;
+}
+
+function safePaymentMethod(value: unknown): CustomerInvoicePaymentMethod | null {
+  return value === "Bank transfer" || value === "Card" || value === "Cash" ? value : null;
+}
+
+function safeNonNegativeInteger(value: unknown) {
+  const number = typeof value === "number" ? value : Number(value);
+
+  return Number.isInteger(number) && number >= 0 ? number : 0;
 }
 
 function approvedCustomerTestInvoiceArchiveTargetFor(
@@ -373,10 +385,7 @@ function safeLineItems(value: unknown): CustomerLocalInvoiceLineItem[] | null {
 }
 
 function safeActor(actor: AdminBookingPersistenceAdapterActor) {
-  return (
-    actor.source_surface === "admin_api" &&
-    (actor.actor_role === "admin" || actor.actor_role === "dispatcher")
-  );
+  return actor.source_surface === "admin_api" && (actor.actor_role === "admin" || actor.actor_role === "dispatcher");
 }
 
 function dateFromDueDateIso(value: unknown) {
@@ -449,7 +458,10 @@ function toStoredRecord(row: UnknownRecord): CustomerInvoiceStoredRecord | null 
     issueDateIso: safeText(row.issue_date_iso, 80) || new Date().toISOString(),
     issueDateLabel: safeText(row.issue_date_label, 80) || formatInvoiceDate(new Date()),
     lineItems: safeLineItems(row.line_items) || [],
+    lastReminderSentAt: safeText(row.last_reminder_sent_at, 80),
     originalInvoiceNumber: safeOriginalInvoiceNumber(row.original_invoice_number) || undefined,
+    paidAt: safeText(row.paid_at, 80),
+    paymentMethod: safePaymentMethod(row.payment_method) || undefined,
     pdfFilename: safeText(row.pdf_filename, 180) || `${invoiceNumber}.pdf`,
     reference: safeText(row.reference, 160) || invoiceNumber,
     route: safeText(row.route, 600) || "Route to confirm",
@@ -457,6 +469,9 @@ function toStoredRecord(row: UnknownRecord): CustomerInvoiceStoredRecord | null 
     source: "local-admin-issued-invoice-v1",
     status,
     storageSource: "server",
+    reminderSendCount: safeNonNegativeInteger(row.reminder_send_count),
+    thankYouSentAt: safeText(row.thank_you_sent_at, 80),
+    ...(positiveIdentityId(row.traveler_id) ? { travelerId: positiveIdentityId(row.traveler_id) || undefined } : {}),
   };
 }
 
@@ -478,6 +493,7 @@ function sanitizeCreateInput(input: CustomerInvoiceCreateInput): CustomerInvoice
   route: string;
   service: string;
   status: CustomerLocalInvoiceStatus;
+  travelerId: number | null;
 }> {
   const amountCents = safeAmountCents(input.amountCents);
   const bookerId = positiveIdentityId(input.bookerId);
@@ -489,6 +505,7 @@ function sanitizeCreateInput(input: CustomerInvoiceCreateInput): CustomerInvoice
   const route = safeText(input.route, 600);
   const service = safeText(input.service, 160);
   const status = safeStatus(input.status);
+  const travelerId = positiveIdentityId(input.travelerId);
   const lineItems = safeLineItems(input.lineItems);
   const documentType = safeDocumentType(input.documentType) || "invoice";
   const documentState = safeDocumentState(input.documentState) || "issued";
@@ -541,16 +558,14 @@ function sanitizeCreateInput(input: CustomerInvoiceCreateInput): CustomerInvoice
       route,
       service,
       status,
+      travelerId,
     },
     ok: true,
     version: customerInvoiceRecordVersion,
   };
 }
 
-function safeFailure<T>(
-  error: string,
-  status: 400 | 403 | 404 | 409 | 500 | 503,
-): CustomerInvoiceResult<T> {
+function safeFailure<T>(error: string, status: 400 | 403 | 404 | 409 | 500 | 503): CustomerInvoiceResult<T> {
   return {
     error,
     ok: false,
@@ -565,10 +580,7 @@ function uniqueInvoiceBookingReferences(input: {
 }) {
   return Array.from(
     new Set(
-      [
-        input.bookingReference || "",
-        ...input.lineItems.map((item) => item.bookingReference || ""),
-      ]
+      [input.bookingReference || "", ...input.lineItems.map((item) => item.bookingReference || "")]
         .map((reference) => reference.trim())
         .filter(Boolean),
     ),
@@ -581,10 +593,11 @@ async function verifyIssuedInvoiceBookingOwnership(
     bookingReference: string | null;
     customerId: string;
     lineItems: CustomerLocalInvoiceLineItem[];
+    travelerId: number | null;
   },
   invoiceClient: CustomerInvoiceClient,
 ): Promise<CustomerInvoiceResult<true>> {
-  if (!input.bookerId || !input.bookingReference) {
+  if (!input.bookerId || !input.bookingReference || !input.travelerId) {
     return safeFailure(safeValidationError, 400);
   }
 
@@ -604,20 +617,18 @@ async function verifyIssuedInvoiceBookingOwnership(
 
   const { data: ownedBookings, error: ownedBookingsError } = await invoiceClient
     .from("bookings")
-    .select("booking_reference")
+    .select("booking_reference, traveler_id")
     .in("booking_reference", bookingReferences)
     .eq("customer_id", input.customerId)
-    .eq("booker_id", input.bookerId);
+    .eq("booker_id", input.bookerId)
+    .eq("traveler_id", input.travelerId);
   const ownedBookingReferences = new Set(
     asArray(ownedBookings)
       .map((row) => safeText(asRecord(row).booking_reference, 160))
       .filter(Boolean),
   );
 
-  if (
-    ownedBookingsError ||
-    bookingReferences.some((reference) => !ownedBookingReferences.has(reference))
-  ) {
+  if (ownedBookingsError || bookingReferences.some((reference) => !ownedBookingReferences.has(reference))) {
     return safeFailure(safeValidationError, 403);
   }
 
@@ -632,26 +643,28 @@ async function verifyIssuedInvoiceBookingOwnership(
 
   const alreadyInvoicedReferences = new Set<string>();
 
-  asArray(issuedInvoices).map(asRecord).forEach((invoice) => {
-    const documentType = safeText(invoice.document_type, 40) || "invoice";
-    const documentState = safeText(invoice.document_state, 40) || "issued";
+  asArray(issuedInvoices)
+    .map(asRecord)
+    .forEach((invoice) => {
+      const documentType = safeText(invoice.document_type, 40) || "invoice";
+      const documentState = safeText(invoice.document_state, 40) || "issued";
 
-    if (documentType !== "invoice" || documentState !== "issued") {
-      return;
-    }
-
-    const storedReference = safeText(invoice.reference, 160);
-
-    if (storedReference) {
-      alreadyInvoicedReferences.add(storedReference);
-    }
-
-    (safeLineItems(invoice.line_items) || []).forEach((item) => {
-      if (item.bookingReference) {
-        alreadyInvoicedReferences.add(item.bookingReference);
+      if (documentType !== "invoice" || documentState !== "issued") {
+        return;
       }
+
+      const storedReference = safeText(invoice.reference, 160);
+
+      if (storedReference) {
+        alreadyInvoicedReferences.add(storedReference);
+      }
+
+      (safeLineItems(invoice.line_items) || []).forEach((item) => {
+        if (item.bookingReference) {
+          alreadyInvoicedReferences.add(item.bookingReference);
+        }
+      });
     });
-  });
 
   if (bookingReferences.some((reference) => alreadyInvoicedReferences.has(reference))) {
     return safeFailure("Invoice already contains one or more selected jobs.", 409);
@@ -699,9 +712,7 @@ function lifecycleColumnUnavailableError(error: unknown) {
     code === "pgrst204" ||
     code === "pgrst200" ||
     (referencesLifecycleColumn &&
-      (message.includes("could not find") ||
-        message.includes("does not exist") ||
-        message.includes("schema cache")))
+      (message.includes("could not find") || message.includes("does not exist") || message.includes("schema cache")))
   );
 }
 
@@ -750,6 +761,45 @@ async function nextInvoiceNumber(
   return `${prefix}-${dateKey}-${String(sequence).padStart(4, "0")}`;
 }
 
+async function reserveTravelerInvoiceNumber(
+  client: CustomerInvoiceClient,
+  input: {
+    actor: AdminBookingPersistenceAdapterActor;
+    bookerId: number;
+    customerAccount: string;
+    travelerId: number;
+  },
+): Promise<CustomerInvoiceResult<string>> {
+  const { data, error } = await client.rpc("reserve_customer_invoice_number", {
+    p_actor_label: input.actor.actor_label,
+    p_actor_role: input.actor.actor_role,
+    p_booker_id: input.bookerId,
+    p_customer_account: input.customerAccount,
+    p_traveler_id: input.travelerId,
+  });
+  const firstRow = asRecord(asArray(data)[0] ?? data);
+  const invoiceNumber = safeInvoiceNumber(firstRow.invoice_number);
+
+  if (error || !invoiceNumber) {
+    const errorText = Object.values(asRecord(error))
+      .map((value) => String(value ?? "").toLowerCase())
+      .join(" ");
+
+    return safeFailure(
+      errorText.includes("traveler_invoice_prefix_required")
+        ? "Set and lock this verified traveller's invoice prefix before issuing or emailing."
+        : safeWriteError,
+      errorText.includes("traveler_invoice_prefix_required") ? 409 : 503,
+    );
+  }
+
+  return {
+    data: invoiceNumber,
+    ok: true,
+    version: customerInvoiceRecordVersion,
+  };
+}
+
 export async function createCustomerInvoiceRecord(
   input: CustomerInvoiceCreateInput,
   actor: AdminBookingPersistenceAdapterActor,
@@ -787,6 +837,22 @@ export async function createCustomerInvoiceRecord(
       return verification;
     }
   }
+  const travelerInvoiceNumber =
+    sanitized.data.documentState === "issued" &&
+    sanitized.data.travelerId &&
+    sanitized.data.bookerId &&
+    sanitized.data.documentType === "invoice"
+      ? await reserveTravelerInvoiceNumber(invoiceClient, {
+          actor,
+          bookerId: sanitized.data.bookerId,
+          customerAccount: sanitized.data.customerName,
+          travelerId: sanitized.data.travelerId,
+        })
+      : null;
+
+  if (travelerInvoiceNumber && !travelerInvoiceNumber.ok) {
+    return travelerInvoiceNumber;
+  }
   const issueDate = new Date();
   const invoiceDateKey = issueDate.toISOString().slice(0, 10).replace(/-/g, "");
   const amountLabel = formatInvoiceAmount(sanitized.data.amountCents);
@@ -803,12 +869,9 @@ export async function createCustomerInvoiceRecord(
   const { logoImage, profile } = await loadServerLogoImage();
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const invoiceNumber = await nextInvoiceNumber(
-      invoiceClient,
-      invoiceDateKey,
-      attempt,
-      sanitized.data.documentType,
-    );
+    const invoiceNumber = travelerInvoiceNumber?.ok
+      ? travelerInvoiceNumber.data
+      : await nextInvoiceNumber(invoiceClient, invoiceDateKey, attempt, sanitized.data.documentType);
     const invoiceForPdf: CustomerLocalInvoiceRecord = {
       amountCents: sanitized.data.amountCents,
       amountLabel,
@@ -830,6 +893,7 @@ export async function createCustomerInvoiceRecord(
       status: sanitized.data.status,
       originalInvoiceNumber: sanitized.data.originalInvoiceNumber || undefined,
     };
+    // prettier-ignore
     const pdfBytes = createCustomerInvoicePdfBytes(invoiceForPdf, profile, logoImage);
     const pdfBase64 = base64FromBytes(pdfBytes);
     const pdfSha256 = sha256Hex(pdfBytes);
@@ -864,6 +928,7 @@ export async function createCustomerInvoiceRecord(
       service: invoiceForPdf.service,
       source_surface: "admin_api",
       status: invoiceForPdf.status,
+      traveler_id: sanitized.data.travelerId,
       updated_at: new Date().toISOString(),
     };
     const { data, error } = await invoiceClient
@@ -875,14 +940,20 @@ export async function createCustomerInvoiceRecord(
     if (!error && data) {
       const record = toStoredRecord(asRecord(data));
 
-      return record ? {
-        data: record,
-        ok: true,
-        version: customerInvoiceRecordVersion,
-      } : safeFailure(safeWriteError, 500);
+      return record
+        ? {
+            data: record,
+            ok: true,
+            version: customerInvoiceRecordVersion,
+          }
+        : safeFailure(safeWriteError, 500);
     }
 
     if (lifecycleColumnUnavailableError(error)) {
+      if (travelerInvoiceNumber) {
+        return safeFailure(safeWriteError, 503);
+      }
+
       if (sanitized.data.documentType !== "invoice" || sanitized.data.documentState !== "issued") {
         return safeFailure(safeWriteError, 503);
       }
@@ -923,11 +994,13 @@ export async function createCustomerInvoiceRecord(
       if (!legacyError && legacyData) {
         const record = toStoredRecord(asRecord(legacyData));
 
-        return record ? {
-          data: record,
-          ok: true,
-          version: customerInvoiceRecordVersion,
-        } : safeFailure(safeWriteError, 500);
+        return record
+          ? {
+              data: record,
+              ok: true,
+              version: customerInvoiceRecordVersion,
+            }
+          : safeFailure(safeWriteError, 500);
       }
 
       if (!duplicateInvoiceError(legacyError)) {
@@ -939,6 +1012,10 @@ export async function createCustomerInvoiceRecord(
 
     if (!duplicateInvoiceError(error)) {
       return safeFailure(safeWriteError, 500);
+    }
+
+    if (travelerInvoiceNumber) {
+      return safeFailure(safeWriteError, 409);
     }
   }
 
@@ -992,10 +1069,71 @@ export async function loadAdminCustomerInvoiceRecords(
   }
 
   return {
-    data: asArray(data).map(asRecord).map(toStoredRecord).filter((record): record is CustomerInvoiceStoredRecord => Boolean(record)),
+    data: asArray(data)
+      .map(asRecord)
+      .map(toStoredRecord)
+      .filter((record): record is CustomerInvoiceStoredRecord => Boolean(record)),
     ok: true,
     version: customerInvoiceRecordVersion,
   };
+}
+
+export async function loadAdminCustomerInvoiceRecord(
+  invoiceNumberInput: unknown,
+  actor: AdminBookingPersistenceAdapterActor,
+  client?: CustomerInvoiceClient,
+): Promise<CustomerInvoiceResult<CustomerInvoiceStoredRecord>> {
+  if (!safeActor(actor)) {
+    return safeFailure(safePersistenceConfigError, 403);
+  }
+
+  const readiness = checkAdminBookingPersistenceStagingConfigReadiness();
+
+  if (!readiness.ok) {
+    return safeFailure(safePersistenceConfigError, 503);
+  }
+
+  const invoiceNumber = safeInvoiceNumber(invoiceNumberInput);
+
+  if (!invoiceNumber) {
+    return safeFailure(safeValidationError, 400);
+  }
+
+  const invoiceClient = client ?? createServerClient();
+  let { data, error } = await invoiceClient
+    .from(customerInvoiceRecordTableName)
+    .select(customerInvoiceSelect)
+    .eq("invoice_number", invoiceNumber)
+    .maybeSingle();
+
+  if (error) {
+    if (!lifecycleColumnUnavailableError(error)) {
+      return safeFailure(safeReadError, 500);
+    }
+
+    const legacyResult = await invoiceClient
+      .from(customerInvoiceRecordTableName)
+      .select(customerInvoiceLegacySelect)
+      .eq("invoice_number", invoiceNumber)
+      .maybeSingle();
+
+    data = legacyResult.data;
+    error = legacyResult.error;
+
+    if (error) {
+      return safeFailure(safeReadError, 500);
+    }
+  }
+
+  const record = toStoredRecord(asRecord(data));
+
+  return record
+    ? {
+        data: record,
+        ok: true,
+        version: customerInvoiceRecordVersion,
+      }
+    : safeFailure(safeMissingError, 404);
 }
 
 export async function verifyIssuedCustomerInvoiceAccountForPortalAccess(
@@ -1072,18 +1210,28 @@ export async function updateAdminCustomerInvoiceStatus(
   }
 
   const invoiceNumber = safeInvoiceNumber(invoiceNumberInput);
-  const status = safeStatus(statusInput);
+  const statusRecord = asRecord(statusInput);
+  const status = safeStatus(statusRecord.status ?? statusInput);
+  const paymentMethod = safePaymentMethod(statusRecord.paymentMethod) || (status === "Paid" ? "Bank transfer" : null);
 
-  if (!invoiceNumber || !status || inferBillingDocumentType(invoiceNumber) !== "invoice") {
+  if (
+    !invoiceNumber ||
+    !status ||
+    inferBillingDocumentType(invoiceNumber) !== "invoice" ||
+    (status === "Paid" && !paymentMethod)
+  ) {
     return safeFailure(safeValidationError, 400);
   }
 
   const invoiceClient = client ?? createServerClient();
+  const paidAt = status === "Paid" ? new Date().toISOString() : null;
   let { data, error } = await invoiceClient
     .from(customerInvoiceRecordTableName)
     .update({
       actor_label: actor.actor_label,
       actor_role: actor.actor_role,
+      paid_at: paidAt,
+      payment_method: status === "Paid" ? paymentMethod : null,
       status,
       updated_at: new Date().toISOString(),
     })
@@ -1165,11 +1313,87 @@ export async function updateAdminCustomerInvoiceStatus(
 
   const refreshedRecord = toStoredRecord(asRecord(refreshedData));
 
-  return refreshedRecord ? {
-    data: refreshedRecord,
-    ok: true,
-    version: customerInvoiceRecordVersion,
-  } : safeFailure(safeMissingError, 404);
+  return refreshedRecord
+    ? {
+        data: refreshedRecord,
+        ok: true,
+        version: customerInvoiceRecordVersion,
+      }
+    : safeFailure(safeMissingError, 404);
+}
+
+export async function recordCustomerInvoiceActionEmailDelivery(
+  invoiceNumberInput: unknown,
+  kind: CustomerInvoiceActionEmailKind,
+  emailMessageId: string | null,
+  actor: AdminBookingPersistenceAdapterActor,
+  client?: CustomerInvoiceClient,
+): Promise<CustomerInvoiceResult<CustomerInvoiceStoredRecord>> {
+  if (!safeActor(actor)) {
+    return safeFailure(safePersistenceConfigError, 403);
+  }
+
+  const readiness = checkAdminBookingPersistenceStagingConfigReadiness();
+
+  if (!readiness.ok) {
+    return safeFailure(safePersistenceConfigError, 503);
+  }
+
+  const invoiceNumber = safeInvoiceNumber(invoiceNumberInput);
+
+  if (!invoiceNumber || (kind !== "reminder" && kind !== "payment_thank_you")) {
+    return safeFailure(safeValidationError, 400);
+  }
+
+  const current = await loadAdminCustomerInvoiceRecord(invoiceNumber, actor, client);
+
+  if (!current.ok) {
+    return current;
+  }
+
+  if (kind === "payment_thank_you" && current.data.thankYouSentAt) {
+    return safeFailure("Payment thank-you email was already sent for this invoice.", 409);
+  }
+
+  const sentAt = new Date().toISOString();
+  const update =
+    kind === "reminder"
+      ? {
+          actor_label: actor.actor_label,
+          actor_role: actor.actor_role,
+          last_reminder_message_id: emailMessageId,
+          last_reminder_sent_at: sentAt,
+          reminder_send_count: current.data.reminderSendCount + 1,
+          updated_at: sentAt,
+        }
+      : {
+          actor_label: actor.actor_label,
+          actor_role: actor.actor_role,
+          thank_you_message_id: emailMessageId,
+          thank_you_sent_at: sentAt,
+          updated_at: sentAt,
+        };
+  const invoiceClient = client ?? createServerClient();
+  const { data, error } = await invoiceClient
+    .from(customerInvoiceRecordTableName)
+    .update(update)
+    .eq("invoice_number", invoiceNumber)
+    .select(customerInvoiceSelect)
+    .maybeSingle();
+
+  if (error) {
+    return safeFailure(safeWriteError, 500);
+  }
+
+  const record = toStoredRecord(asRecord(data));
+
+  return record
+    ? {
+        data: record,
+        ok: true,
+        version: customerInvoiceRecordVersion,
+      }
+    : safeFailure(safeMissingError, 404);
 }
 
 export async function archiveAdminCustomerTestInvoiceArtifact(
@@ -1330,18 +1554,20 @@ export async function loadAdminCustomerInvoicePdf(
   const documentState = safeDocumentState(row.document_state) || "issued";
   const filename = safeText(row.pdf_filename, 180) || `${invoiceNumber}.pdf`;
 
-  return bytes ? {
-    data: {
-      bytes,
-      contentType: "application/pdf",
-      documentState,
-      documentType,
-      filename,
-      invoiceNumber,
-    },
-    ok: true,
-    version: customerInvoiceRecordVersion,
-  } : safeFailure(safeMissingError, 404);
+  return bytes
+    ? {
+        data: {
+          bytes,
+          contentType: "application/pdf",
+          documentState,
+          documentType,
+          filename,
+          invoiceNumber,
+        },
+        ok: true,
+        version: customerInvoiceRecordVersion,
+      }
+    : safeFailure(safeMissingError, 404);
 }
 
 export async function loadCustomerInvoiceRecordsForPortal(
@@ -1420,7 +1646,10 @@ export async function loadCustomerInvoiceRecordsForPortal(
   }
 
   return {
-    data: asArray(data).map(asRecord).map(toStoredRecord).filter((record): record is CustomerInvoiceStoredRecord => Boolean(record)),
+    data: asArray(data)
+      .map(asRecord)
+      .map(toStoredRecord)
+      .filter((record): record is CustomerInvoiceStoredRecord => Boolean(record)),
     ok: true,
     version: customerInvoiceRecordVersion,
   };
@@ -1511,18 +1740,20 @@ export async function loadCustomerInvoicePdfForPortal(
   const documentState = safeDocumentState(row.document_state) || "issued";
   const filename = safeText(row.pdf_filename, 180) || `${invoiceNumber}.pdf`;
 
-  return bytes ? {
-    data: {
-      bytes,
-      contentType: "application/pdf",
-      documentState,
-      documentType,
-      filename,
-      invoiceNumber,
-    },
-    ok: true,
-    version: customerInvoiceRecordVersion,
-  } : safeFailure(safeMissingError, 404);
+  return bytes
+    ? {
+        data: {
+          bytes,
+          contentType: "application/pdf",
+          documentState,
+          documentType,
+          filename,
+          invoiceNumber,
+        },
+        ok: true,
+        version: customerInvoiceRecordVersion,
+      }
+    : safeFailure(safeMissingError, 404);
 }
 
 export async function updateCustomerInvoiceEmailStatus(
@@ -1592,11 +1823,13 @@ export async function updateCustomerInvoiceEmailStatus(
 
   const record = toStoredRecord(asRecord(data));
 
-  return record ? {
-    data: record,
-    ok: true,
-    version: customerInvoiceRecordVersion,
-  } : safeFailure(safeMissingError, 404);
+  return record
+    ? {
+        data: record,
+        ok: true,
+        version: customerInvoiceRecordVersion,
+      }
+    : safeFailure(safeMissingError, 404);
 }
 
 export function sanitizeCustomerInvoiceRecipientEmail(value: unknown) {

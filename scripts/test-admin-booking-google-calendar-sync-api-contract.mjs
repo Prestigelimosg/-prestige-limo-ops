@@ -418,8 +418,8 @@ try {
   );
   assert.match(
     calendarPersistenceMapperSource,
-    /company_id: verifiedCompanyId,[\s\S]*?customer_display_name: customerDisplayName \|\| null,[\s\S]*?companies:[\s\S]*?verifiedCompanyId && customerDisplayName[\s\S]*?company_name: customerDisplayName,[\s\S]*?domain: null/,
-    "Save + CRM and Update + Cal must carry the saved company into Calendar payloads only when its CRM company ID is verified.",
+    /const calendarCompanyName = verifiedCompanyId[\s\S]*?billingIdentityBaseAccount\(customerDisplayName\)[\s\S]*?company_id: verifiedCompanyId,[\s\S]*?customer_display_name: customerDisplayName \|\| null,[\s\S]*?companies:[\s\S]*?verifiedCompanyId && calendarCompanyName[\s\S]*?company_name: calendarCompanyName,[\s\S]*?domain: null/,
+    "Save + CRM and Update + Cal must carry the canonical verified company into Calendar payloads without the traveller-scoped billing suffix.",
   );
   assert.match(appSource, /await autoSyncSavedBookingGoogleCalendar\(savedBooking\);/);
   assert.match(appSource, /await autoSyncSavedBookingGoogleCalendar\(updatedBooking\);/);
@@ -541,6 +541,10 @@ try {
     const statusBookings = [
       safeBooking({ booking_reference: "PL-CAL-STATUS-CURRENT" }),
       safeBooking({
+        booking_reference: "PL-CAL-STATUS-WRONG-PASSENGER-SUFFIX",
+        pickup_time: "1700hrs",
+      }),
+      safeBooking({
         booking_reference: "PL-CAL-STATUS-OUTDATED",
         pickup_time: "1800hrs",
       }),
@@ -557,15 +561,27 @@ try {
     assert.equal(preparationResponse.status, 200);
     const expectedProviderEvents = calendarCalls(preparationCalls).map(parseJsonBody);
     const providerEventsById = new Map(
-      expectedProviderEvents.slice(0, 2).map((event, index) => [
+      expectedProviderEvents.slice(0, 3).map((event, index) => [
         event.id,
         index === 0
           ? {
               ...event,
+              description: event.description.replace(
+                "Customer: Safe Corporate",
+                "Customer: Safe Corporate [Safe Traveler]",
+              ),
               end: { ...event.end, dateTime: `${event.end.dateTime}+08:00` },
               start: { ...event.start, dateTime: `${event.start.dateTime}+08:00` },
             }
-          : { ...event, summary: `${event.summary} OUTDATED` },
+          : index === 1
+            ? {
+                ...event,
+                description: event.description.replace(
+                  "Customer: Safe Corporate",
+                  "Customer: Safe Corporate [Different Traveler]",
+                ),
+              }
+            : { ...event, summary: `${event.summary} OUTDATED` },
       ]),
     );
     const calls = [];
@@ -605,13 +621,24 @@ try {
     assert.equal(body.ok, true);
     assert.deepEqual(body.statuses, [
       { booking_reference: "PL-CAL-STATUS-CURRENT", status: "cal_saved" },
+      {
+        booking_reference: "PL-CAL-STATUS-WRONG-PASSENGER-SUFFIX",
+        status: "update_calendar",
+      },
       { booking_reference: "PL-CAL-STATUS-OUTDATED", status: "update_calendar" },
       { booking_reference: "PL-CAL-STATUS-MISSING", status: "save_to_calendar" },
     ]);
+    assert.equal(
+      providerEventsById.get(expectedProviderEvents[0].id).description.includes(
+        "Customer: Safe Corporate [Safe Traveler]",
+      ),
+      true,
+      "A successful legacy Calendar write with the exact traveller-scoped company label must stay green after refresh.",
+    );
     assertNoLeaks(body, "Google Calendar status response must not leak provider or unsafe fields");
 
     const providerCalls = calendarCalls(calls);
-    assert.equal(providerCalls.length, 3);
+    assert.equal(providerCalls.length, 4);
     for (const call of providerCalls) {
       assert.equal(call.method, "GET");
       assert.deepEqual(call.searchParams, {});

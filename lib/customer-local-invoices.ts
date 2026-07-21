@@ -594,16 +594,14 @@ export function createCustomerInvoicePdfBytes(
     companyProfile.invoice_footer_terms ||
       defaultCompanyProfile.invoice_footer_terms ||
       "Thank you for choosing our service.",
-    54,
-  ).slice(0, 8);
+    116,
+  ).slice(0, 4);
   const noteLines = [
     "Midnight surcharge: $15 applies from 11:00 PM to 6:59 AM.",
     "Waiting time: 15 minutes grace; airport arrivals include 60 minutes grace.",
     "Additional waiting time: $15 per 15-minute block.",
     "Hourly jobs: 15 minutes grace; 16 minutes onward counts as the next hour.",
-  ]
-    .flatMap((line) => wrapText(line, 54))
-    .slice(0, 8);
+  ];
   const amountValue = invoiceMoneyValue(invoice.amountLabel);
   const sgdAmount = invoiceSgdValue(invoice.amountLabel);
   const paidInvoice = documentType === "invoice" && invoice.status === "Paid";
@@ -679,9 +677,10 @@ export function createCustomerInvoicePdfBytes(
   });
 
   const totalsY = Math.max(360, rowY - 8);
+  const notesY = 320;
   const signoffY = 245;
   const paymentY = 182;
-  const footerY = 88;
+  const termsY = 55;
   const streamLines = [
     ...logoStreamLines,
     pdfRightTextAt(documentTitle, 562, 725, 30),
@@ -706,6 +705,8 @@ export function createCustomerInvoicePdfBytes(
     pdfRightTextAt(balanceLabel, 495, totalsY - 70, 9),
     pdfRightTextAt(balanceDueValue, 562, totalsY - 70, 9),
     pdfLinePath(50, totalsY + 22, 562, totalsY + 22, 0.8, "0.75 G"),
+    pdfTextAt("Notes", 50, notesY, 8, "0.35 g"),
+    ...noteLines.map((line, index) => pdfTextAt(line, 50, notesY - 15 - index * 12, 7)),
     pdfTextAt("Thank you for your business", 50, signoffY, 8),
     pdfTextAt("Best Regards,", 50, signoffY - 21, 8),
     pdfTextAt(companyProfile.invoice_signoff_name, 50, signoffY - 32, 8),
@@ -714,10 +715,8 @@ export function createCustomerInvoicePdfBytes(
     ...paymentDetailLines.map((line, index) =>
       pdfTextAt(line, 50, paymentY - 15 - index * 8, 7),
     ),
-    pdfTextAt("Notes", 50, footerY, 8, "0.35 g"),
-    ...noteLines.map((line, index) => pdfTextAt(line, 50, footerY - 13 - index * 8, 6.5)),
-    pdfTextAt("Terms & Conditions:", 310, footerY, 8, "0.35 g"),
-    ...termsLines.map((line, index) => pdfTextAt(line, 310, footerY - 13 - index * 8, 6.5)),
+    pdfTextAt("Terms & Conditions:", 50, termsY, 8, "0.35 g"),
+    ...termsLines.map((line, index) => pdfTextAt(line, 50, termsY - 13 - index * 9, 6.5)),
   ];
   const stream = streamLines.join("\n");
   const streamBytes = bytesForPdfText(stream);

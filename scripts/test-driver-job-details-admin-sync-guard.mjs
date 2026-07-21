@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 const ledgerPath = "docs/current-implementation-ledger.md";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
 const guardScript = "scripts/test-driver-job-details-admin-sync-guard.mjs";
+const persistenceContractScript = "scripts/test-driver-job-status-persistence-api-contract.mjs";
 
 const appPagePath = "app/page.tsx";
 const driverJobRoutePath = "app/api/driver-job/[token]/route.ts";
@@ -66,7 +67,24 @@ const [
 ]);
 
 const ledgerSection = sectionBetween(ledger, "### Driver Save And Acknowledge Details Admin Sync");
+const calendarIdentityLedgerSection = sectionBetween(
+  ledger,
+  "### Driver Acknowledgement To Calendar Identity Handoff Repair (2026-07-20)",
+);
 const indicatorLedgerSection = sectionBetween(ledger, "### Driver Job Acknowledgement Indicators");
+
+for (const phrase of [
+  "acknowledgement updated the link context and booking display fields but never persisted the hidden `driver_id` required by the established Calendar context check.",
+  "The driver still enters/confirms the same four visible details and never sees or types an internal ID.",
+  "The existing page layout, labels, inputs, `Save & Acknowledge Job` button, single `Add / Update Calendar` button, OAuth route/scope, encrypted credential, Google event writer, deterministic driver-ID-plus-booking-reference event key, amendment behavior, private reporting shortcut, OTW/OTS/POB/Job Completed controls, customer/admin messaging, live location, and separate Operations Calendar lane are unchanged.",
+  "a first acknowledgement creates only the five safe driver fields and binds the same ID to booking and link, while a future job with the exact same saved contact reuses the existing driver row without a duplicate.",
+]) {
+  assertIncludes(
+    calendarIdentityLedgerSection,
+    phrase,
+    `Driver acknowledgement Calendar identity ledger phrase ${phrase}`,
+  );
+}
 
 for (const phrase of [
   "The driver’s established `Save & Acknowledge Job` action remains the only acknowledgement write.",
@@ -113,6 +131,11 @@ for (const forbidden of [
 }
 
 assertIncludes(preactivationSuite, guardScript, "preactivation driver details sync guard registration");
+assertIncludes(
+  preactivationSuite,
+  persistenceContractScript,
+  "preactivation driver acknowledgement Calendar identity persistence contract registration",
+);
 
 assertIncludes(driverJobRoute, "export async function PATCH", "Driver job route details PATCH");
 assertIncludes(driverJobRoute, "readDriverDetailsBody", "Driver job route detail parser");
@@ -148,10 +171,13 @@ const detailsPersistenceBlock = sliceBetween(
 for (const fragment of [
   "safeDriverDetailsFromInput(input)",
   "resolveLinkForToken(input)",
+  "resolveAcknowledgedDriverIdentity(",
   '.from("driver_job_links")',
-  ".update({ safe_link_context: nextSafeContext })",
+  "driver_id: verifiedDriverId",
+  "safe_link_context: nextSafeContext",
   '.from("bookings")',
   "driver_contact: nextDetails.contact || null",
+  "driver_id: verifiedDriverId",
   "driver_name: nextDetails.name",
   "driver_plate_number: nextDetails.plate || null",
   "bookingDriverDetailsUpdate.vehicle_type_or_category = nextDetails.vehicleModel",
@@ -159,6 +185,40 @@ for (const fragment of [
   "payloadForLink(",
 ]) {
   assertIncludes(detailsPersistenceBlock, fragment, `Driver details persistence fragment ${fragment}`);
+}
+
+assertIncludes(
+  driverStatusPersistence,
+  'const driverJobLinkSelect =\n  "id, booking_reference, driver_id, link_status, expires_at, revoked_at, safe_link_context";',
+  "Driver acknowledgement link identity select",
+);
+
+for (const safeDriverIdentityField of [
+  "availability_status: \"available\"",
+  "contact_number: nextDetails.contact",
+  "driver_name: nextDetails.name",
+  "plate_number: nextDetails.plate || null",
+  "vehicle_type: nextDetails.vehicleModel || null",
+]) {
+  assertIncludes(
+    driverStatusPersistence,
+    safeDriverIdentityField,
+    `Driver acknowledgement identity field ${safeDriverIdentityField}`,
+  );
+}
+
+for (const forbiddenIdentityField of [
+  "payout_preferences",
+  "driver_payout_rules",
+  "notes:",
+  "preferred_areas",
+  "airport_permit_notes",
+]) {
+  assertExcludes(
+    driverStatusPersistence,
+    forbiddenIdentityField,
+    `Driver acknowledgement identity forbidden field ${forbiddenIdentityField}`,
+  );
 }
 
 for (const forbidden of [
@@ -230,9 +290,9 @@ for (const fragment of [
   "refreshDashboardDriverJobLinksRead",
   "while (hasNextPage && Object.keys(linksByReference).length < requestedReferenceSet.size)",
   "result.pagination?.has_next_page === true",
-  "driverJobLinkAcknowledgementStatus",
-  'data-admin-driver-job-link-acknowledgement="true"',
-  'data-admin-driver-job-link-acknowledgement-state=',
+  "pendingDriverAckQueueItems",
+  'data-pending-driver-ack-queue="true"',
+  'data-pending-driver-ack-queue-item="true"',
   "activeJobDriverAcknowledgementState",
   'data-admin-multi-driver-active-job-acknowledgement="true"',
   'data-admin-multi-driver-active-jobs-waiting-count=',
@@ -240,6 +300,12 @@ for (const fragment of [
 ]) {
   assertIncludes(appPage, fragment, `Admin booking details auto-sync fragment ${fragment}`);
 }
+
+assertExcludes(
+  appPage,
+  'data-admin-driver-job-link-acknowledgement="true"',
+  "replaced single-booking Driver Job Link acknowledgement pill",
+);
 
 for (const fragment of [
   "setDriverDetails(loadedDriverDetails)",

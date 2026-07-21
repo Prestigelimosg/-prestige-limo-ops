@@ -765,7 +765,7 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  "operationalBookings\n        .filter((bookingRecord) => !bookingRecordBelongsInCompletedHistoryWithDriverReport(bookingRecord))",
+  "operationalBookings\n        .filter((bookingRecord) => !bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation(bookingRecord))",
   "Dashboard urgent saved-job queue uses loaded operational bookings independent of dashboard search",
 );
 assertIncludes(
@@ -855,8 +855,8 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  "markerCount: activeJobs.length,",
-  "Dispatch live map marker count follows guarded runtime markers",
+  "markerCount: currentDriverCount,",
+  "Dispatch live map marker count follows current guarded runtime movement only",
 );
 assertIncludes(
   appPage,
@@ -951,8 +951,13 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  "window.setInterval(() => {\n      for (const bookingReference of bookingReferences) {\n        void refreshDashboardDriverJobStatusRead(bookingReference);\n        void refreshDashboardDriverOtsPhotoProofRead(bookingReference);\n      }\n      void refreshDashboardDriverJobLinksRead(bookingReferences);\n    }, 10 * 1000);",
-  "Dispatch driver report, OTS photo proof, and acknowledgement read-only auto-refresh interval",
+  "window.setInterval(() => {\n      for (const bookingReference of bookingReferences) {\n        void refreshDashboardDriverJobStatusRead(bookingReference);\n        void refreshDashboardDriverOtsPhotoProofRead(bookingReference);\n      }\n    }, 10 * 1000);",
+  "Dispatch driver report and OTS photo proof read-only auto-refresh interval",
+);
+assertIncludes(
+  appPage,
+  "const intervalId = window.setInterval(() => {\n      void refreshDashboardDriverJobLinksRead(bookingReferences);\n    }, 10 * 1000);",
+  "Pending Driver ACK Queue read-only auto-refresh interval",
 );
 assertIncludes(
   appPage,

@@ -512,6 +512,7 @@ function adminPayload(overrides = {}) {
       customer_display_name: "Gate Safe Account",
       customer_facing_status: "pending_review",
       dropoff_location: "Gate Safe Dropoff",
+      driver_id: 8,
       passenger_name: "Gate Passenger",
       passenger_phone: "+65 9000 0102",
       pickup_at: "2026-06-08T10:30:00+08:00",
@@ -669,6 +670,7 @@ function assertSafeCreateOperations(mock, expectedActorRole) {
   assert.equal(insertedOperation(mock, "bookings").payload.pickup_at, "2026-06-08T10:30:00+08:00");
   assert.equal(insertedOperation(mock, "bookings").payload.route_summary, "Gate Safe Pickup > Gate Safe Dropoff");
   assert.equal(insertedOperation(mock, "bookings").payload.service_type, "MNG");
+  assert.equal(insertedOperation(mock, "bookings").payload.driver_id, 8);
   assert.equal(insertedOperation(mock, "bookings").payload.admin_internal_status, "admin_review_required");
   assert.equal(insertedOperation(mock, "audit_logs").payload.actor_role, expectedActorRole);
   assert.equal(insertedOperation(mock, "audit_logs").payload.action_type, "booking_created");
@@ -739,8 +741,14 @@ function enabledWriteEnv(overrides = {}) {
 }
 
 const harness = await loadHarness();
+const appPageSource = await readFile("app/page.tsx", "utf8");
 
 try {
+  assert.equal(
+    appPageSource.includes("driver_id: adminDispatchVerifiedIdentityId(bookingValue.driverId)"),
+    true,
+    "Admin booking persistence UI payload must carry the explicitly selected verified driver ID.",
+  );
   const { adapter, adminRoute, customerRoute, persistence } = harness;
 
   assert.equal(

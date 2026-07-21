@@ -10,6 +10,10 @@ const migration = readFileSync(
   "supabase/migrations/202606300001_customer_billing_document_lifecycle.sql",
   "utf8",
 );
+const travelerInvoiceMigration = readFileSync(
+  "supabase/migrations/20260719064413_traveler_invoice_separation.sql",
+  "utf8",
+);
 
 function assertIncludes(source, fragment, label) {
   assert.ok(source.includes(fragment), `Missing ${label}: ${fragment}`);
@@ -39,9 +43,10 @@ assertIncludes(
   "pdfTextAt(documentDateLabel, dateX, billToY - 3, 8",
   "PDF uses document-aware date label",
 );
+assertIncludes(localInvoices, "const notesY = 320;", "owner-approved notes section position");
 assertIncludes(localInvoices, "const signoffY = 245;", "signoff section position");
 assertIncludes(localInvoices, "const paymentY = 182;", "bank section position");
-assertIncludes(localInvoices, "const footerY = 88;", "adjacent notes and terms footer position");
+assertIncludes(localInvoices, "const termsY = 55;", "owner-approved final terms section position");
 assertIncludes(
   localInvoices,
   "companyProfile.invoice_signoff_name",
@@ -49,13 +54,13 @@ assertIncludes(
 );
 assertIncludes(localInvoices, "companyProfile.phone", "PDF uses saved sign-off phone");
 assert.ok(
-  localInvoices.indexOf('pdfTextAt("Thank you for your business"') <
-    localInvoices.indexOf("pdfTextAt(paymentHeading") &&
+  localInvoices.indexOf('pdfTextAt("Notes", 50, notesY') <
+    localInvoices.indexOf('pdfTextAt("Thank you for your business"') &&
+    localInvoices.indexOf('pdfTextAt("Thank you for your business"') <
+      localInvoices.indexOf("pdfTextAt(paymentHeading") &&
     localInvoices.indexOf("pdfTextAt(paymentHeading") <
-      localInvoices.indexOf('pdfTextAt("Notes", 50, footerY') &&
-    localInvoices.indexOf('pdfTextAt("Notes", 50, footerY') <
-      localInvoices.indexOf('pdfTextAt("Terms & Conditions:", 310, footerY'),
-  "PDF order must be signoff, one bank block, then adjacent notes and terms.",
+      localInvoices.indexOf('pdfTextAt("Terms & Conditions:", 50, termsY'),
+  "PDF order must preserve the owner-approved Notes, sign-off, bank, then Terms layout.",
 );
 
 assertIncludes(customersPage, 'data-customer-invoice-document-type="true"', "document type select");
@@ -136,7 +141,17 @@ assertIncludes(
   "credit note accounting comment",
 );
 
-assertIncludes(invoicePersistence, "const invoiceNumberPattern = /^(INV|QUO|CN)-", "stored INV/QUO/CN number validation");
+assertIncludes(invoicePersistence, "const invoiceNumberPattern = /^(?:(INV|QUO|CN)-", "stored legacy and traveller invoice number validation");
+assertIncludes(
+  travelerInvoiceMigration,
+  "customer_invoice_records_invoice_number_check",
+  "traveller prefix invoice constraint replacement",
+);
+assertIncludes(
+  travelerInvoiceMigration,
+  "[A-Z0-9]{2,12}-[0-9]{4,}",
+  "traveller prefix invoice number format",
+);
 assertIncludes(invoicePersistence, "document_type: sanitized.data.documentType", "stored document type insert");
 assertIncludes(invoicePersistence, "document_state: sanitized.data.documentState", "stored document state insert");
 assertIncludes(invoicePersistence, ".eq(\"document_state\", \"issued\")", "customer portal issued-only invoice records");

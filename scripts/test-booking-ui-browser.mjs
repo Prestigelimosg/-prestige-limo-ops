@@ -1405,7 +1405,6 @@ const forbiddenAdminBookingRequestKeyFragments = [
   "customer_price",
   "customer_rate",
   "customer_rates",
-  "driver_id",
   "driver_notes",
   "driver_dispatch",
   "driver_payout",
@@ -7077,6 +7076,7 @@ async function runChromeTest() {
                 acknowledged: false,
                 acknowledged_at: null,
                 assigned_driver: payload.assigned_driver_name || null,
+                job_card_kind: "new",
                 pickup_datetime: payload.pickup_datetime || null,
                 route: payload.route || null,
                 vehicle: payload.assigned_driver_vehicle_model || null,
@@ -10046,23 +10046,28 @@ async function runChromeTest() {
           const feedback = section?.querySelector("[data-driver-job-link-api-feedback='true']");
           const preview = section?.querySelector("[data-copy-preview='driverJobLink']");
           const status = section?.querySelector("[data-driver-job-link-status='true']");
-          const acknowledgement = section?.querySelector(
-            "[data-admin-driver-job-link-acknowledgement='true']",
+          const acknowledgementQueue = document.querySelector(
+            "[data-pending-driver-ack-queue='true']",
+          );
+          const acknowledgementQueueItem = acknowledgementQueue?.querySelector(
+            "[data-pending-driver-ack-queue-item='true']",
           );
           const copyButton = [...(section?.querySelectorAll("button") || [])].find(
             (button) => button.textContent.trim() === "Copy Link",
           );
 
-          return feedback?.textContent.includes("Driver job link created")
+          return feedback?.textContent.includes("Driver job link created") && acknowledgementQueueItem
             ? {
                 copyButtonDisabled: copyButton?.disabled ?? true,
                 feedbackText: feedback.textContent.trim(),
                 previewText: preview?.innerText || "",
                 requests: window.__prestigeAdminDriverJobLinkRequests || [],
-                acknowledgementState:
-                  acknowledgement?.getAttribute("data-admin-driver-job-link-acknowledgement-state") || "",
-                acknowledgementText: acknowledgement?.textContent.replace(/\s+/g, " ").trim() || "",
-                acknowledgementHeight: acknowledgement?.getBoundingClientRect().height || 0,
+                acknowledgementQueueCount:
+                  acknowledgementQueue?.getAttribute("data-pending-driver-ack-queue-count") || "",
+                acknowledgementQueuePulsing:
+                  acknowledgementQueue?.getAttribute("data-pending-driver-ack-queue-pulsing") || "",
+                acknowledgementText:
+                  acknowledgementQueueItem?.textContent.replace(/\s+/g, " ").trim() || "",
                 statusText: status?.textContent.trim() || "",
               }
             : false;
@@ -10073,13 +10078,10 @@ async function runChromeTest() {
     assert.equal(driverJobLinkCreateState.copyButtonDisabled, false);
     assert.match(driverJobLinkCreateState.feedbackText, /Driver job link created/);
     assert.match(driverJobLinkCreateState.statusText, /Active saved link for 10841/);
-    assert.equal(driverJobLinkCreateState.acknowledgementState, "waiting");
-    assert.match(driverJobLinkCreateState.acknowledgementText, /Waiting for driver/);
-    assert.ok(
-      driverJobLinkCreateState.acknowledgementHeight > 0 &&
-        driverJobLinkCreateState.acknowledgementHeight <= 28,
-      `Expected compact Dispatch acknowledgement pill, got ${driverJobLinkCreateState.acknowledgementHeight}px`,
-    );
+    assert.equal(driverJobLinkCreateState.acknowledgementQueueCount, "1");
+    assert.equal(driverJobLinkCreateState.acknowledgementQueuePulsing, "true");
+    assert.match(driverJobLinkCreateState.acknowledgementText, /10841 · New · Link issued/);
+    assert.match(driverJobLinkCreateState.acknowledgementText, /Waiting \d+ min/);
     assert.match(driverJobLinkCreateState.previewText, /https?:\/\/\S+\/driver-job\/browser-created-driver-token/);
     assert.equal(driverJobLinkCreateState.requests.length, 1);
     assert.deepEqual(
@@ -10128,6 +10130,110 @@ async function runChromeTest() {
       "Expected Driver Job Link create request not to include finance, payout, parser, token, notification, or internal fields",
     );
 
+    const clickedPendingDriverAckDismiss = await evaluate(`(() => {
+      const dismissButton = document.querySelector(
+        "[data-pending-driver-ack-dismiss='11111111-2222-4333-8444-555555555555']",
+      );
+
+      if (!dismissButton || dismissButton.textContent.trim() !== "Close") {
+        return false;
+      }
+
+      dismissButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedPendingDriverAckDismiss,
+      true,
+      "Expected exact pending acknowledgement alert Close button to be clickable",
+    );
+
+    const dismissedPendingDriverAckState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const acknowledgementQueue = document.querySelector(
+            "[data-pending-driver-ack-queue='true']",
+          );
+          const driverJobLinkSection = document.querySelector(
+            "[data-dispatch-workflow-step='driver-job-link']",
+          );
+          const copyButton = driverJobLinkSection
+            ? [...driverJobLinkSection.querySelectorAll("button")].find(
+                (button) => button.textContent.trim() === "Copy Link",
+              )
+            : null;
+          let dismissedLinkIds = [];
+
+          try {
+            dismissedLinkIds = JSON.parse(
+              window.localStorage.getItem("prestige-admin-dismissed-pending-driver-ack-links") || "[]",
+            );
+          } catch {}
+
+          return acknowledgementQueue?.getAttribute("data-pending-driver-ack-queue-count") === "0"
+            ? {
+                copyButtonDisabled: copyButton?.disabled ?? true,
+                dismissedLinkIds,
+                linkStatus: window.__prestigeAdminDriverJobLinks?.[0]?.link_status || "",
+                pulsing: acknowledgementQueue.getAttribute("data-pending-driver-ack-queue-pulsing"),
+                requestCount: window.__prestigeAdminDriverJobLinkRequests?.length || 0,
+                text: acknowledgementQueue.textContent.replace(/\s+/g, " ").trim(),
+              }
+            : false;
+        })()`),
+      10000,
+      "exact pending Driver ACK alert dismissed without revoking its link",
+    );
+    assert.equal(dismissedPendingDriverAckState.pulsing, "false");
+    assert.match(dismissedPendingDriverAckState.text, /0 pending/);
+    assert.equal(dismissedPendingDriverAckState.linkStatus, "active");
+    assert.equal(dismissedPendingDriverAckState.copyButtonDisabled, false);
+    assert.equal(dismissedPendingDriverAckState.requestCount, 1);
+    assert.deepEqual(dismissedPendingDriverAckState.dismissedLinkIds, [
+      "11111111-2222-4333-8444-555555555555",
+    ]);
+
+    await evaluate(`(() => {
+      window.__prestigeAdminDriverJobLinks = (window.__prestigeAdminDriverJobLinks || []).map((link) =>
+        link.booking_reference === "ui-dashboard-driver-assignment-fixture"
+          ? {
+              ...link,
+              id: "66666666-7777-4888-8999-000000000000",
+              safe_summary: {
+                ...link.safe_summary,
+                job_card_kind: "amendment",
+              },
+            }
+          : link,
+      );
+    })()`);
+
+    const freshPendingDriverAckState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const acknowledgementQueue = document.querySelector(
+            "[data-pending-driver-ack-queue='true']",
+          );
+          const acknowledgementQueueItem = acknowledgementQueue?.querySelector(
+            "[data-pending-driver-ack-queue-item='true']",
+          );
+
+          return acknowledgementQueueItem?.getAttribute("data-pending-driver-ack-queue-link-id") ===
+            "66666666-7777-4888-8999-000000000000"
+            ? {
+                count: acknowledgementQueue.getAttribute("data-pending-driver-ack-queue-count"),
+                pulsing: acknowledgementQueue.getAttribute("data-pending-driver-ack-queue-pulsing"),
+                text: acknowledgementQueueItem.textContent.replace(/\s+/g, " ").trim(),
+              }
+            : false;
+        })()`),
+      15000,
+      "new exact Driver Job Link appears after an older alert was dismissed",
+    );
+    assert.equal(freshPendingDriverAckState.count, "1");
+    assert.equal(freshPendingDriverAckState.pulsing, "true");
+    assert.match(freshPendingDriverAckState.text, /10841 · Amendment · Link issued/);
+
     await evaluate(`(() => {
       window.__prestigeAdminDriverJobLinks = (window.__prestigeAdminDriverJobLinks || []).map((link) =>
         link.booking_reference === "ui-dashboard-driver-assignment-fixture"
@@ -10146,26 +10252,23 @@ async function runChromeTest() {
     const dispatchDriverJobAcknowledgedState = await waitForCondition(
       () =>
         evaluate(`(() => {
-          const acknowledgement = document.querySelector(
-            "[data-admin-driver-job-link-acknowledgement='true']",
+          const acknowledgementQueue = document.querySelector(
+            "[data-pending-driver-ack-queue='true']",
           );
 
-          return acknowledgement?.getAttribute("data-admin-driver-job-link-acknowledgement-state") ===
-            "acknowledged"
+          return acknowledgementQueue?.getAttribute("data-pending-driver-ack-queue-count") === "0"
             ? {
-                height: acknowledgement.getBoundingClientRect().height,
-                text: acknowledgement.textContent.replace(/\s+/g, " ").trim(),
+                pulsing: acknowledgementQueue.getAttribute("data-pending-driver-ack-queue-pulsing"),
+                text: acknowledgementQueue.textContent.replace(/\s+/g, " ").trim(),
               }
             : false;
         })()`),
       10000,
       "automatic Dispatch Driver Job Link acknowledgement refresh",
     );
-    assert.match(dispatchDriverJobAcknowledgedState.text, /Acknowledged 11:20/);
-    assert.ok(
-      dispatchDriverJobAcknowledgedState.height <= 28,
-      `Expected compact acknowledged Dispatch pill, got ${dispatchDriverJobAcknowledgedState.height}px`,
-    );
+    assert.equal(dispatchDriverJobAcknowledgedState.pulsing, "false");
+    assert.match(dispatchDriverJobAcknowledgedState.text, /0 pending/);
+    assert.match(dispatchDriverJobAcknowledgedState.text, /No driver acknowledgements pending/);
 
     const clickedDriverJobLinkCopy = await evaluate(`(() => {
       const section = [...document.querySelectorAll("[data-dispatch-workflow-step='driver-job-link']")][0];
@@ -10865,6 +10968,88 @@ async function runChromeTest() {
       expectedStatusLabel: "Driver OTW",
       fixture: dashboardPobRevertFixture,
     });
+
+    await evaluate(`(() => {
+      window.__prestigeDriverJobStatuses["${dashboardCompletionActionFixture.id}"] = [
+        {
+          actor_label: "Browser driver status mock",
+          actor_role: "driver",
+          booking_reference: "${dashboardCompletionActionFixture.id}",
+          created_at: "2026-05-30T11:20:00.000Z",
+          occurred_at: "2026-05-30T11:20:00.000Z",
+          source_surface: "driver_job_api",
+          status_source: "driver_job_api",
+          status_value: "completed",
+        },
+        {
+          actor_label: "Browser driver status mock",
+          actor_role: "driver",
+          booking_reference: "${dashboardCompletionActionFixture.id}",
+          created_at: "2026-05-30T10:40:00.000Z",
+          occurred_at: "2026-05-30T10:40:00.000Z",
+          source_surface: "driver_job_api",
+          status_source: "driver_job_api",
+          status_value: "pob",
+        },
+      ];
+      window.__prestigeFetchCalls = [];
+      window.__prestigeBookingCompletionRequests = [];
+
+      const article = document.querySelector(
+        '[data-admin-multi-driver-active-job="${dashboardCompletionActionFixture.id}"]',
+      );
+      const refreshButton = article?.querySelector(
+        "[data-admin-multi-driver-active-job-driver-report-refresh='true']",
+      );
+      refreshButton?.click();
+    })()`);
+
+    const driverJcEvidenceRetentionState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const article = document.querySelector(
+            '[data-admin-multi-driver-active-job="${dashboardCompletionActionFixture.id}"]',
+          );
+          const report = article?.querySelector(
+            "[data-admin-multi-driver-active-job-driver-report='true']",
+          );
+
+          return article && report?.innerText.includes("Job Completed")
+            ? {
+                articleText: article.innerText,
+                completionRequests: window.__prestigeBookingCompletionRequests || [],
+                fetchCalls: window.__prestigeFetchCalls || [],
+                hasAdminConfirmButton: Boolean(
+                  article.querySelector(
+                    "[data-dashboard-mark-completed='${dashboardCompletionActionFixture.id}']",
+                  ),
+                ),
+                reportText: report.innerText,
+              }
+            : false;
+        })()`),
+      10000,
+      "driver JC evidence retained in Today's Jobs until admin confirmation",
+    );
+    assert.match(driverJcEvidenceRetentionState.reportText, /Latest report:\s*Job Completed/);
+    assert.match(driverJcEvidenceRetentionState.reportText, /POB/);
+    assert.equal(
+      driverJcEvidenceRetentionState.hasAdminConfirmButton,
+      true,
+      "Expected the existing admin completion action to remain available after driver JC evidence arrives",
+    );
+    assert.deepEqual(
+      driverJcEvidenceRetentionState.completionRequests,
+      [],
+      "Expected reading driver JC evidence not to persist admin booking completion",
+    );
+    assert.equal(
+      driverJcEvidenceRetentionState.fetchCalls.some(
+        (call) => call.startsWith("PATCH ") && call.includes("/api/admin-saved-booking-statuses"),
+      ),
+      false,
+      "Expected reading driver JC evidence not to call the admin completion writer",
+    );
 
     await evaluate(`(() => {
       window.__prestigeFetchCalls = [];
@@ -14690,6 +14875,7 @@ async function runChromeTest() {
     assert.equal(updateAfterDriverDeleteState.bookingUpdate?.booking?.company_id, null);
     assert.equal(updateAfterDriverDeleteState.bookingUpdate?.booking?.booker_id, 906102);
     assert.equal(updateAfterDriverDeleteState.bookingUpdate?.booking?.traveler_id, 906103);
+    assert.equal(updateAfterDriverDeleteState.bookingUpdate?.booking?.driver_id, null);
     assert.equal(updateAfterDriverDeleteState.bookingUpdate?.booking?.pax_count, 4);
     assert.equal(updateAfterDriverDeleteState.bookingUpdate?.booking?.source_channel, "admin-dashboard");
     assert.equal(
@@ -16551,6 +16737,15 @@ async function runChromeTest() {
       "Expected LOADED SAVED booking Bookings Load this booking button to be clickable",
     );
 
+    const directLoadedBookingTypedReadCalls = await evaluate(`(window.__prestigeFetchCalls || []).filter(
+      (call) => call.includes("/api/admin-load-bookings-typed-read")
+    )`);
+    assert.deepEqual(
+      directLoadedBookingTypedReadCalls,
+      ["GET /api/admin-load-bookings-typed-read?limit=25"],
+      `Expected Load this booking to make one direct guarded typed-read refresh before background sync, got ${directLoadedBookingTypedReadCalls.join(", ")}`,
+    );
+
     const loadedBookingState = await waitForCondition(
       async () => {
         const candidateState = await evaluate(`(() => {
@@ -16986,11 +17181,11 @@ async function runChromeTest() {
       call.includes("/api/admin-load-bookings-typed-read"),
     );
     assert.ok(
-      loadedBookingTypedReadCalls.length <= 1 &&
+      loadedBookingTypedReadCalls.length >= 1 &&
         loadedBookingTypedReadCalls.every(
           (call) => call === "GET /api/admin-load-bookings-typed-read?limit=25",
         ),
-      `Expected at most one guarded typed-read refresh, got ${loadedBookingTypedReadCalls.join(", ")}`,
+      `Expected direct and background typed-read refreshes to remain guarded GET limit=25 reads, got ${loadedBookingTypedReadCalls.join(", ")}`,
     );
     const loadedBookingFetchCallSet = new Set(
       loadedBookingState.fetchCalls.filter(

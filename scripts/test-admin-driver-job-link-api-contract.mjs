@@ -244,6 +244,12 @@ class MockSupabaseClient {
     this.operations = [];
     this.selectHistory = [];
     this.tables = {
+      bookings: [
+        { booking_reference: "JOB-LINK-CONTRACT-001", driver_id: 27 },
+        { booking_reference: "JOB-LINK-CONTRACT-OPTIONAL-DRIVER", driver_id: null },
+        { booking_reference: "JOB-LINK-CONTRACT-BROWSER-DASHBOARD", driver_id: 28 },
+        { booking_reference: "May 2026 / JOB-UBS-042", driver_id: 29 },
+      ],
       driver_live_location_runtime_settings: [],
       driver_job_links: [],
     };
@@ -605,6 +611,7 @@ try {
   assert.equal(created.body.link.booking_reference, "JOB-LINK-CONTRACT-001");
   assert.equal(created.body.link.link_status, "active");
   assert.equal(created.body.link.safe_summary.assigned_driver, "Contract Driver");
+  assert.equal(created.body.link.safe_summary.job_card_kind, "new");
   assert.equal(created.body.link.safe_summary.vehicle, "Toyota Alphard");
   assert.equal(created.body.live_location.authorized, true);
   assert.equal(created.body.live_location.customerVisible, false);
@@ -623,6 +630,11 @@ try {
   assert.equal(createdClients[1].url, supabaseUrlSentinel);
   assert.equal(createdClients[1].serviceRoleKey, serviceRoleSentinel);
   assert.equal(client.tables.driver_job_links.length, 1);
+  assert.equal(
+    client.tables.driver_job_links[0].driver_id,
+    27,
+    "Driver Job link must bind the exact saved booking's verified driver ID server-side.",
+  );
   assert.equal(client.tables.driver_live_location_runtime_settings.length, 1);
   assert.equal(
     client.tables.driver_live_location_runtime_settings[0].setting_name,
@@ -646,7 +658,39 @@ try {
   assert.match(client.tables.driver_job_links[0].token_hash, /^[a-f0-9]{64}$/);
   assert.equal(client.tables.driver_job_links[0].safe_link_context.driver_job_payload.assigned_driver_name, "Contract Driver");
   assert.equal(client.tables.driver_job_links[0].safe_link_context.driver_job_payload.pickup_location, "Raffles Hotel Singapore");
+  assert.equal(client.tables.driver_job_links[0].safe_link_context.job_card_kind, "new");
+  assert.match(client.tables.driver_job_links[0].safe_link_context.job_card_revision, /^[a-f0-9]{64}$/);
   assert.doesNotMatch(JSON.stringify(client.tables.driver_job_links[0].safe_link_context), /paynow|payout|invoice|payment|pdf|token/i);
+
+  assert.equal(
+    harness.persistence.classifyAdminDriverJobCardKind(null, safeCreatePayload().driver_job_payload),
+    "new",
+  );
+  assert.equal(
+    harness.persistence.classifyAdminDriverJobCardKind(
+      { driver_job_payload: safeCreatePayload().driver_job_payload },
+      safeCreatePayload().driver_job_payload,
+    ),
+    "reissued",
+  );
+  assert.equal(
+    harness.persistence.classifyAdminDriverJobCardKind(
+      { driver_job_payload: safeCreatePayload().driver_job_payload },
+      {
+        ...safeCreatePayload().driver_job_payload,
+        pickup_datetime: "2026-06-12T11:00:00.000+08:00",
+      },
+    ),
+    "amendment",
+  );
+  assert.equal(
+    harness.persistence.classifyAdminDriverJobCardKind(
+      { driver_job_payload: { pickup_location: "Incomplete historic snapshot" } },
+      safeCreatePayload().driver_job_payload,
+    ),
+    null,
+    "Historic unsafe/incomplete snapshots must not be guessed as New or Amendment.",
+  );
 
   const optionalDriverDetailsPayload = safeCreatePayload({
     booking_reference: "JOB-LINK-CONTRACT-OPTIONAL-DRIVER",

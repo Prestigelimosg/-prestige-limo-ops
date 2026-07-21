@@ -460,6 +460,40 @@ function calendarDateTimeMatches(
   );
 }
 
+function calendarEventDescriptionMatches(providerValue: unknown, expectedValue: string) {
+  if (providerValue === expectedValue) {
+    return true;
+  }
+
+  if (typeof providerValue !== "string") {
+    return false;
+  }
+
+  const providerLines = providerValue.split("\n");
+  const expectedLines = expectedValue.split("\n");
+
+  if (providerLines.length !== expectedLines.length) {
+    return false;
+  }
+
+  const expectedPassengerLine = expectedLines.find((line) => line.startsWith("Passenger: "));
+  const expectedPassenger = expectedPassengerLine?.slice("Passenger: ".length).trim() || "";
+
+  return expectedLines.every((expectedLine, index) => {
+    const providerLine = providerLines[index];
+
+    if (providerLine === expectedLine) {
+      return true;
+    }
+
+    return Boolean(
+      expectedPassenger &&
+        expectedLine.startsWith("Customer: ") &&
+        providerLine === `${expectedLine} [${expectedPassenger}]`,
+    );
+  });
+}
+
 function providerEventMatchesExpected(
   value: Record<string, unknown>,
   expected: GoogleCalendarEventResource,
@@ -500,7 +534,7 @@ function providerEventMatchesExpected(
   return (
     value.id === expected.id &&
     value.summary === expected.summary &&
-    value.description === expected.description &&
+    calendarEventDescriptionMatches(value.description, expected.description) &&
     value.location === expected.location &&
     calendarDateTimeMatches(
       start?.dateTime,

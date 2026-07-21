@@ -6,10 +6,16 @@ import {
   selectedCustomerInvoiceRecipients,
 } from "../../../lib/customer-invoice-email-recipients";
 import {
+  loadAdminCustomerInvoiceRecord,
   loadAdminCustomerInvoicePdf,
+  recordCustomerInvoiceActionEmailDelivery,
   sanitizeCustomerInvoiceRecipientEmail,
   updateCustomerInvoiceEmailStatus,
 } from "../../../lib/customer-invoice-record-persistence";
+import {
+  buildCustomerInvoiceActionEmail,
+  type CustomerInvoiceEmailMessageKind,
+} from "../../../lib/customer-invoice-action-email";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -20,6 +26,9 @@ const safeProviderConfigError = "Customer invoice email sending is not configure
 const safeProviderFailureError = "Customer invoice email failed safely.";
 const safeRecipientError = "Customer invoice email recipient is invalid or not allowlisted.";
 const safeDraftDocumentError = "Customer invoice email can only send issued documents.";
+const safeMessageKindError = "Customer invoice email action is invalid.";
+const safeReminderStatusError = "Payment reminders require an unpaid issued invoice.";
+const safeThankYouStatusError = "Payment thank-you email requires a paid issued invoice.";
 
 function safeErrorResponse(result: { error: string; status: number }) {
   return Response.json(
@@ -82,9 +91,7 @@ async function readJsonBody(request: Request): Promise<Record<string, unknown>> 
   try {
     const body = await request.json();
 
-    return body !== null && typeof body === "object" && !Array.isArray(body)
-      ? (body as Record<string, unknown>)
-      : {};
+    return body !== null && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
   } catch {
     return {};
   }
@@ -106,9 +113,12 @@ function buildProviderBody(input: {
   documentLabel: string;
   filename: string;
   from: string;
+  html?: string;
   invoiceNumber: string;
   recipients: string[];
   replyTo: string | null;
+  subject?: string;
+  text?: string;
 }) {
   return JSON.stringify({
     attachments: [
@@ -118,22 +128,34 @@ function buildProviderBody(input: {
       },
     ],
     from: input.from,
-    html: [
-      "<p>Dear Customer,</p>",
-      `<p>Please find attached ${input.documentLabel.toLowerCase()} <strong>${input.invoiceNumber}</strong> from Prestige Limo SG.</p>`,
-      "<p>Thank you for choosing Prestige Limo SG.</p>",
-    ].join(""),
+    html:
+      input.html ||
+      [
+        "<p>Dear Customer,</p>",
+        `<p>Please find attached ${input.documentLabel.toLowerCase()} <strong>${input.invoiceNumber}</strong> from Prestige Limo SG.</p>`,
+        "<p>Thank you for choosing Prestige Limo SG.</p>",
+      ].join(""),
     reply_to: input.replyTo || undefined,
-    subject: `Prestige Limo SG ${input.documentLabel} ${input.invoiceNumber}`,
-    text: [
-      "Dear Customer,",
-      "",
-      `Please find attached ${input.documentLabel.toLowerCase()} ${input.invoiceNumber} from Prestige Limo SG.`,
-      "",
-      "Thank you for choosing Prestige Limo SG.",
-    ].join("\n"),
+    subject: input.subject || `Prestige Limo SG ${input.documentLabel} ${input.invoiceNumber}`,
+    text:
+      input.text ||
+      [
+        "Dear Customer,",
+        "",
+        `Please find attached ${input.documentLabel.toLowerCase()} ${input.invoiceNumber} from Prestige Limo SG.`,
+        "",
+        "Thank you for choosing Prestige Limo SG.",
+      ].join("\n"),
     to: input.recipients,
   });
+}
+
+function safeMessageKind(value: unknown): CustomerInvoiceEmailMessageKind | null {
+  return value === undefined || value === "invoice"
+    ? "invoice"
+    : value === "reminder" || value === "payment_thank_you"
+      ? value
+      : null;
 }
 
 function documentEmailLabel(documentType: string) {
@@ -158,6 +180,7 @@ export async function POST(request: Request) {
 
     const body = await readJsonBody(request);
     const invoiceNumber = body?.invoiceNumber;
+    const messageKind = safeMessageKind(body?.messageKind);
     const recipients = selectedCustomerInvoiceRecipients(
       {
         recipientEmail: body?.recipientEmail,
@@ -166,10 +189,31 @@ export async function POST(request: Request) {
       sanitizeCustomerInvoiceRecipientEmail,
     );
 
-    if (!recipients) {
+    if (!recipients || !messageKind) {
       return safeErrorResponse({
-        error: safeRecipientError,
+        error: messageKind ? safeRecipientError : safeMessageKindError,
         status: 400,
+      });
+    }
+
+    const invoiceResult = await loadAdminCustomerInvoiceRecord(invoiceNumber, boundary.actor);
+
+    if (!invoiceResult.ok) {
+      return safeErrorResponse(invoiceResult);
+    }
+
+    if (messageKind === "reminder" && invoiceResult.data.status !== "Unpaid") {
+      return safeErrorResponse({ error: safeReminderStatusError, status: 409 });
+    }
+
+    if (messageKind === "payment_thank_you" && invoiceResult.data.status !== "Paid") {
+      return safeErrorResponse({ error: safeThankYouStatusError, status: 409 });
+    }
+
+    if (messageKind === "payment_thank_you" && invoiceResult.data.thankYouSentAt) {
+      return safeErrorResponse({
+        error: "Payment thank-you email was already sent for this invoice.",
+        status: 409,
       });
     }
 
@@ -180,12 +224,10 @@ export async function POST(request: Request) {
     }
 
     if (pdfResult.data.documentState !== "issued") {
-      const updated = await updateCustomerInvoiceEmailStatus(
-        pdfResult.data.invoiceNumber,
-        "blocked",
-        null,
-        boundary.actor,
-      );
+      const updated =
+        messageKind === "invoice"
+          ? await updateCustomerInvoiceEmailStatus(pdfResult.data.invoiceNumber, "blocked", null, boundary.actor)
+          : invoiceResult;
 
       return Response.json(
         {
@@ -201,9 +243,7 @@ export async function POST(request: Request) {
     const from = cleanConfigValue(process.env.PRESTIGE_CUSTOMER_INVOICE_EMAIL_FROM);
     const replyTo = cleanConfigValue(process.env.PRESTIGE_CUSTOMER_INVOICE_EMAIL_REPLY_TO);
     const apiKey = cleanConfigValue(process.env.RESEND_API_KEY);
-    const allowlist = parseAllowlist(
-      cleanConfigValue(process.env.PRESTIGE_CUSTOMER_INVOICE_EMAIL_RECIPIENT_ALLOWLIST),
-    );
+    const allowlist = parseAllowlist(cleanConfigValue(process.env.PRESTIGE_CUSTOMER_INVOICE_EMAIL_RECIPIENT_ALLOWLIST));
 
     if (
       process.env.PRESTIGE_CUSTOMER_INVOICE_EMAIL_SEND_ENABLED !== "true" ||
@@ -211,12 +251,10 @@ export async function POST(request: Request) {
       !validConfigValue(from) ||
       !validProviderToken(apiKey)
     ) {
-      const updated = await updateCustomerInvoiceEmailStatus(
-        pdfResult.data.invoiceNumber,
-        "blocked",
-        null,
-        boundary.actor,
-      );
+      const updated =
+        messageKind === "invoice"
+          ? await updateCustomerInvoiceEmailStatus(pdfResult.data.invoiceNumber, "blocked", null, boundary.actor)
+          : invoiceResult;
 
       return Response.json(
         {
@@ -229,12 +267,10 @@ export async function POST(request: Request) {
     }
 
     if (!customerInvoiceRecipientsAllowed(recipients, allowlist)) {
-      const updated = await updateCustomerInvoiceEmailStatus(
-        pdfResult.data.invoiceNumber,
-        "blocked",
-        null,
-        boundary.actor,
-      );
+      const updated =
+        messageKind === "invoice"
+          ? await updateCustomerInvoiceEmailStatus(pdfResult.data.invoiceNumber, "blocked", null, boundary.actor)
+          : invoiceResult;
 
       return Response.json(
         {
@@ -248,6 +284,30 @@ export async function POST(request: Request) {
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8000);
+    const actionMessage =
+      messageKind === "invoice"
+        ? null
+        : buildCustomerInvoiceActionEmail({
+            amountCents: invoiceResult.data.amountCents,
+            dueDateLabel: invoiceResult.data.dueDateLabel,
+            invoiceNumber: invoiceResult.data.invoiceNumber,
+            kind: messageKind,
+            paymentMethod: invoiceResult.data.paymentMethod,
+          });
+    const recipientHash = createHash("sha256")
+      .update([...recipients].sort().join(","))
+      .digest("hex")
+      .slice(0, 24);
+    const idempotencyAction =
+      messageKind === "reminder"
+        ? `reminder-${invoiceResult.data.reminderSendCount + 1}`
+        : messageKind === "payment_thank_you"
+          ? "payment-thank-you"
+          : "invoice";
+    const idempotencyKey =
+      messageKind === "invoice"
+        ? `customer-invoice-${pdfResult.data.invoiceNumber}-${recipientHash}`
+        : `customer-invoice-${idempotencyAction}-${pdfResult.data.invoiceNumber}-${recipientHash}`;
 
     try {
       const response = await fetch(resendEmailApiUrl, {
@@ -256,29 +316,27 @@ export async function POST(request: Request) {
           documentLabel: documentEmailLabel(pdfResult.data.documentType),
           filename: pdfResult.data.filename,
           from: from as string,
+          html: actionMessage?.html,
           invoiceNumber: pdfResult.data.invoiceNumber,
           recipients,
           replyTo,
+          subject: actionMessage?.subject,
+          text: actionMessage?.text,
         }),
         headers: {
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
-          "Idempotency-Key": `customer-invoice-${pdfResult.data.invoiceNumber}-${createHash("sha256")
-            .update([...recipients].sort().join(","))
-            .digest("hex")
-            .slice(0, 24)}`,
+          "Idempotency-Key": idempotencyKey,
         },
         method: "POST",
         signal: controller.signal,
       });
 
       if (!response.ok) {
-        const updated = await updateCustomerInvoiceEmailStatus(
-          pdfResult.data.invoiceNumber,
-          "failed",
-          null,
-          boundary.actor,
-        );
+        const updated =
+          messageKind === "invoice"
+            ? await updateCustomerInvoiceEmailStatus(pdfResult.data.invoiceNumber, "failed", null, boundary.actor)
+            : invoiceResult;
 
         return Response.json(
           {
@@ -291,12 +349,15 @@ export async function POST(request: Request) {
       }
 
       const messageId = await normalizedMessageId(response);
-      const updated = await updateCustomerInvoiceEmailStatus(
-        pdfResult.data.invoiceNumber,
-        "sent",
-        messageId,
-        boundary.actor,
-      );
+      const updated =
+        messageKind === "invoice"
+          ? await updateCustomerInvoiceEmailStatus(pdfResult.data.invoiceNumber, "sent", messageId, boundary.actor)
+          : await recordCustomerInvoiceActionEmailDelivery(
+              pdfResult.data.invoiceNumber,
+              messageKind,
+              messageId,
+              boundary.actor,
+            );
 
       if (!updated.ok) {
         return safeErrorResponse(updated);
@@ -304,16 +365,15 @@ export async function POST(request: Request) {
 
       return Response.json({
         invoice: updated.data,
+        messageKind,
         ok: true,
         recipientEmails: recipients,
       });
     } catch {
-      const updated = await updateCustomerInvoiceEmailStatus(
-        pdfResult.data.invoiceNumber,
-        "failed",
-        null,
-        boundary.actor,
-      );
+      const updated =
+        messageKind === "invoice"
+          ? await updateCustomerInvoiceEmailStatus(pdfResult.data.invoiceNumber, "failed", null, boundary.actor)
+          : invoiceResult;
 
       return Response.json(
         {

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 
 function read(path) {
@@ -36,6 +37,12 @@ const signoffMigration = read(
 const defaultLogoPath = "public/prestige-limo-sg-logo.jpg";
 
 assert(existsSync(defaultLogoPath), "Default company logo asset file is missing.");
+const defaultLogoBytes = readFileSync(defaultLogoPath);
+assert(
+  createHash("sha256").update(defaultLogoBytes).digest("hex") ===
+    "39284dd8296c26ce514af9e4a839ec2151a1d01e016692c5a3416b16931b4b80",
+  "Default company invoice logo must match the owner-approved Prestige wordmark.",
+);
 
 for (const field of [
   "company_name",
@@ -214,6 +221,11 @@ assertIncludes(
   ledger,
   "The default public company profile logo is `/prestige-limo-sg-logo.jpg` and the default address is `10 Anson Rd, #10-11 Prestige Limo SG, International Plaza, Singapore 079903`.",
   "Ledger must record the official logo and address fallback.",
+);
+assertIncludes(
+  ledger,
+  "The same owner-approved black-and-gold Prestige artwork is also installed in the existing company-invoice logo path",
+  "Ledger must record the final company invoice logo.",
 );
 
 for (const customerPage of [

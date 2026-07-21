@@ -54,6 +54,10 @@ const guardChecks = [
     script: "scripts/test-customer-folder-multi-job-invoice-handoff-guard.mjs",
   },
   {
+    label: "customer traveller invoice separation guard",
+    script: "scripts/test-customer-traveler-invoice-separation-guard.mjs",
+  },
+  {
     label: "customer folder public reference and inline job edit guard",
     script: "scripts/test-customer-folder-inline-job-edit-guard.mjs",
   },
@@ -64,6 +68,10 @@ const guardChecks = [
   {
     label: "customer invoice multi-recipient email guard",
     script: "scripts/test-customer-invoice-multi-recipient-email-guard.mjs",
+  },
+  {
+    label: "customer invoice reminder and payment action guard",
+    script: "scripts/test-customer-invoice-reminder-payment-actions-guard.mjs",
   },
   {
     label: "business-grade forward completion sequence guard",
@@ -92,6 +100,10 @@ const guardChecks = [
   {
     label: "admin Driver Acknowledgement Dispatch Release boundary guard",
     script: "scripts/test-admin-driver-acknowledgement-dispatch-release-boundary-guard.mjs",
+  },
+  {
+    label: "pending Driver ACK Queue guard",
+    script: "scripts/test-pending-driver-ack-queue-guard.mjs",
   },
   {
     label: "admin Day-of-Trip Dispatch Monitor existing workflow lock guard",
@@ -338,6 +350,10 @@ const guardChecks = [
     script: "scripts/test-admin-device-push-notification-guard.mjs",
   },
   {
+    label: "web app install manifest guard",
+    script: "scripts/test-web-app-install-manifest-guard.mjs",
+  },
+  {
     label: "public customer/driver visibility boundary guard",
     script: "scripts/test-public-customer-driver-visibility-boundary-guard.mjs",
   },
@@ -428,6 +444,10 @@ const guardChecks = [
   {
     label: "driver job details admin sync guard",
     script: "scripts/test-driver-job-details-admin-sync-guard.mjs",
+  },
+  {
+    label: "driver acknowledgement calendar identity persistence contract",
+    script: "scripts/test-driver-job-status-persistence-api-contract.mjs",
   },
   {
     label: "dispatch flight-location copy guard",
@@ -839,8 +859,12 @@ const guardChecks = [
     script: "scripts/test-driver-in-app-notification-admin-button-guard.mjs",
   },
   {
-    label: "Driver Job calendar download guard",
+    label: "Driver Job personal Google Calendar guard",
     script: "scripts/test-driver-job-calendar-download-guard.mjs",
+  },
+  {
+    label: "Google Calendar OAuth public pages guard",
+    script: "scripts/test-google-calendar-oauth-public-pages-guard.mjs",
   },
   {
     label: "Customer In-App Notification admin button guard",

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 
 const manifestSource = await readFile("app/manifest.ts", "utf8");
@@ -35,14 +36,36 @@ for (const fragment of requiredLayoutFragments) {
   assert.ok(layoutSource.includes(fragment), `Missing app metadata fragment: ${fragment}`);
 }
 
-for (const iconPath of [
-  "public/icons/prestige-ops-icon-192.png",
-  "public/icons/prestige-ops-icon-512.png",
-  "public/icons/prestige-ops-apple-touch-icon.png",
-]) {
+const expectedIconAssets = [
+  {
+    height: 192,
+    path: "public/icons/prestige-ops-icon-192.png",
+    sha256: "e30a809f8fccd2c1cb061044b51396fd022ec78cf800c481752dfec8f5fccd69",
+    width: 192,
+  },
+  {
+    height: 512,
+    path: "public/icons/prestige-ops-icon-512.png",
+    sha256: "08e6148ce03f1f198f68dfd300fcbff6074ff408c22b4d392918890dc56e9803",
+    width: 512,
+  },
+  {
+    height: 180,
+    path: "public/icons/prestige-ops-apple-touch-icon.png",
+    sha256: "6392539f7fc7416020ca92cbd1d47367cb523be5c91dfb976fd707f06ab8be66",
+    width: 180,
+  },
+];
+
+for (const { height, path: iconPath, sha256, width } of expectedIconAssets) {
   const iconStat = await stat(iconPath);
+  const icon = await readFile(iconPath);
 
   assert.ok(iconStat.size > 1000, `${iconPath} should be a real PNG install asset`);
+  assert.equal(icon.subarray(1, 4).toString("ascii"), "PNG", `${iconPath} PNG signature`);
+  assert.equal(icon.readUInt32BE(16), width, `${iconPath} width`);
+  assert.equal(icon.readUInt32BE(20), height, `${iconPath} height`);
+  assert.equal(createHash("sha256").update(icon).digest("hex"), sha256, `${iconPath} approved logo`);
 }
 
 const blockedInstallSideEffects = [

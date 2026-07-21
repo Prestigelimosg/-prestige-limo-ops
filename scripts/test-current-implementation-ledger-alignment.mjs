@@ -91,16 +91,27 @@ function assertAncestor(ancestor, descendant, label) {
 function trackedPushedRefForHead() {
   const candidates = ["refs/remotes/origin/main", "refs/remotes/origin/staging"]
     .map((ref) => {
-      const ancestor = spawnSync("git", ["merge-base", "--is-ancestor", ref, "HEAD"]);
+      const runtimeCommit = readLatestRuntimeCommit(
+        ref,
+        `Latest runtime commit reachable from ${ref}`,
+      );
+      const ancestor = spawnSync("git", [
+        "merge-base",
+        "--is-ancestor",
+        runtimeCommit.fullHash,
+        "HEAD",
+      ]);
 
       if (ancestor.status !== 0) {
         return null;
       }
 
       const distance = Number(
-        execFileSync("git", ["rev-list", "--count", `${ref}..HEAD`], {
-          encoding: "utf8",
-        }).trim(),
+        execFileSync(
+          "git",
+          ["rev-list", "--count", `${runtimeCommit.fullHash}..HEAD`],
+          { encoding: "utf8" },
+        ).trim(),
       );
 
       return { distance, ref };
@@ -110,7 +121,7 @@ function trackedPushedRefForHead() {
 
   assert.ok(
     candidates.length > 0,
-    "HEAD must descend from the local origin/main or origin/staging tracking ref.",
+    "HEAD must descend from the latest runtime commit on local origin/main or origin/staging.",
   );
 
   return candidates[0].ref;

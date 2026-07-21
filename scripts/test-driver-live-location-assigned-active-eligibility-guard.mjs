@@ -9,6 +9,7 @@ const guardScript =
   "scripts/test-driver-live-location-assigned-active-eligibility-guard.mjs";
 const runtimeHelperPath = "lib/driver-live-location-runtime.ts";
 const ledgerPath = "docs/current-implementation-ledger.md";
+const agentsPath = "AGENTS.md";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
 const bookingReference = "CUST-ASSIGNED-ACTIVE-GUARD";
 const token = "assigned-active-eligibility-token";
@@ -173,6 +174,74 @@ function shareRequest() {
 const harness = await loadRuntimeHarness();
 
 try {
+  assert.equal(
+    typeof harness.runtime.partitionAdminLiveLocationRowsForRetention,
+    "function",
+    "Admin map runtime must expose the bounded retention partition for executable guard coverage.",
+  );
+
+  const retentionNowMs = Date.parse("2026-07-20T12:00:00.000Z");
+  const activeBooking = {
+    admin_internal_status: "admin_review_required",
+    booking_reference: bookingReference,
+    cancellation_review_status: null,
+    customer_facing_status: "confirmed",
+    driver_id: 7,
+    driver_name: "Me",
+    status: "admin_review_required",
+  };
+  const locationRow = (updatedAt) => ({
+    booking_reference: bookingReference,
+    driver_job_link_id: "11111111-1111-4111-8111-111111111111",
+    latitude: 1.361,
+    longitude: 103.886,
+    sharing_state: "active",
+    stale_after: "2026-07-20T09:05:00.000Z",
+    updated_at: updatedAt,
+  });
+
+  const retainedStalePin = harness.runtime.partitionAdminLiveLocationRowsForRetention({
+    bookings: [activeBooking],
+    nowMs: retentionNowMs,
+    retentionMinutes: 120,
+    rows: [locationRow("2026-07-20T10:30:00.000Z")],
+  });
+  assert.equal(retainedStalePin.visibleRows.length, 1);
+  assert.equal(retainedStalePin.cleanupTargets.length, 0);
+
+  const expiredPin = harness.runtime.partitionAdminLiveLocationRowsForRetention({
+    bookings: [activeBooking],
+    nowMs: retentionNowMs,
+    retentionMinutes: 120,
+    rows: [locationRow("2026-07-20T09:59:59.000Z")],
+  });
+  assert.equal(expiredPin.visibleRows.length, 0);
+  assert.deepEqual(expiredPin.cleanupTargets, [
+    {
+      bookingReference,
+      driverJobLinkId: "11111111-1111-4111-8111-111111111111",
+      updatedAt: "2026-07-20T09:59:59.000Z",
+    },
+  ]);
+
+  const orphanPin = harness.runtime.partitionAdminLiveLocationRowsForRetention({
+    bookings: [],
+    nowMs: retentionNowMs,
+    retentionMinutes: 120,
+    rows: [locationRow("2026-07-20T11:59:00.000Z")],
+  });
+  assert.equal(orphanPin.visibleRows.length, 0);
+  assert.equal(orphanPin.cleanupTargets.length, 1);
+
+  const terminalPin = harness.runtime.partitionAdminLiveLocationRowsForRetention({
+    bookings: [{ ...activeBooking, admin_internal_status: "completed" }],
+    nowMs: retentionNowMs,
+    retentionMinutes: 120,
+    rows: [locationRow("2026-07-20T11:59:00.000Z")],
+  });
+  assert.equal(terminalPin.visibleRows.length, 0);
+  assert.equal(terminalPin.cleanupTargets.length, 1);
+
   const unassigned = createRuntimeClient({
     admin_internal_status: "admin_review_required",
     booking_reference: bookingReference,
@@ -269,16 +338,50 @@ try {
   assert.equal(unassigned.state.deletes, 1);
   assert.equal(unassigned.state.audits.at(-1)?.event_type, "share_stopped");
 
-  const [runtimeSource, ledger, preactivationSuite] = await Promise.all([
+  const [runtimeSource, ledger, agents, preactivationSuite] = await Promise.all([
     readFile(runtimeHelperPath, "utf8"),
     readFile(ledgerPath, "utf8"),
+    readFile(agentsPath, "utf8"),
     readFile(preactivationSuitePath, "utf8"),
   ]);
   assert.equal(runtimeSource.includes("driver_live_location_job_not_assigned_active"), true);
   assert.equal(runtimeSource.includes('const bookingsTable = "bookings"'), true);
   assert.equal(runtimeSource.includes("readDriverAssignedActiveEligibility"), true);
+  assert.equal(runtimeSource.includes("partitionAdminLiveLocationRowsForRetention"), true);
+  assert.equal(runtimeSource.includes("retained.cleanupTargets"), true);
+  assert.equal(runtimeSource.includes('.from(latestPositionsTable)\n      .delete()'), true);
+  assert.equal(runtimeSource.includes('eventType: "position_expired"'), true);
+  assert.equal(
+    runtimeSource.includes('.from("driver_job_status_events").delete()'),
+    false,
+    "Expired GPS cleanup must never delete Driver Reports timestamp evidence.",
+  );
   assert.equal(
     ledger.includes("### Driver Live Location Assigned-Active Eligibility Repair"),
+    true,
+  );
+  assert.equal(
+    ledger.includes("### Live Dispatch Expired Pin Cleanup With Driver Reports Preservation (2026-07-20)"),
+    true,
+  );
+  assert.equal(
+    ledger.includes("It does not delete or update the booking, driver assignment, Driver Job Link, `driver_job_status_events`, OTW/OTS/POB/Job Completed timestamps, Driver Reports card"),
+    true,
+  );
+  assert.equal(
+    ledger.includes("Vercel Production deployment `dpl_HCNL2MDmbwtXWpcc3C6JpAVwieT9` reached READY"),
+    true,
+  );
+  assert.equal(
+    ledger.includes("displayed `0 live`, and no longer displayed stale job `10833`"),
+    true,
+  );
+  assert.equal(
+    agents.includes("# Owner-locked Driver Reports evidence during Live Location cleanup"),
+    true,
+  );
+  assert.equal(
+    agents.includes("It must never delete or alter `driver_job_status_events`, OTW/OTS/POB/Job Completed timestamps, the visible Driver Reports card"),
     true,
   );
   assert.equal(preactivationSuite.includes(guardScript), true);

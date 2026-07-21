@@ -1,7 +1,8 @@
 "use client";
 
-import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
+import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   SafeDriverJobPayload,
   SafeDriverJobStatusHistoryItem,
@@ -60,6 +61,45 @@ type StatusFeedback = {
 type ControlFeedback = {
   tone: "success" | "error";
   text: string;
+};
+
+type DriverCalendarApiResponse =
+  | {
+      action?: "authorize" | "saved" | "status";
+      google_consent_url?: string;
+      connected?: boolean;
+      ok: true;
+      status: "cal_saved" | "save_to_calendar" | "update_calendar";
+    }
+  | {
+      ok: false;
+      reason?:
+        | "expired"
+        | "invalid_oauth"
+        | "not_acknowledged"
+        | "not_configured"
+        | "provider_failed"
+        | "revoked"
+        | "unauthorized"
+        | "unverified_driver";
+    };
+
+type DriverCalendarBlockedReason =
+  | "expired"
+  | "invalid_oauth"
+  | "not_acknowledged"
+  | "not_configured"
+  | "provider_failed"
+  | "revoked"
+  | "unauthorized"
+  | "unverified_driver"
+  | undefined;
+
+type DriverCalendarState = {
+  action: "idle" | "saving";
+  connected: boolean;
+  feedback: ControlFeedback | null;
+  status: "cal_saved" | "loading" | "save_to_calendar" | "unavailable" | "update_calendar";
 };
 
 type DriverQuickReplyState = {
@@ -248,6 +288,12 @@ const emptyDriverOtsPhotoProofState: DriverOtsPhotoProofState = {
   feedback: null,
   selectedFileName: "",
   uploadedAt: "",
+};
+const emptyDriverCalendarState: DriverCalendarState = {
+  action: "idle",
+  connected: false,
+  feedback: null,
+  status: "loading",
 };
 const driverLiveLocationContinuousShareMinMs = 5000;
 const driverLiveLocationPositionOptions: PositionOptions = {
@@ -591,16 +637,34 @@ function activityTime() {
   });
 }
 
-function downloadDriverCalendarBlob(blob: Blob, filename: string) {
-  const url = window.URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
+function driverCalendarBlockedMessage(reason: DriverCalendarBlockedReason) {
+  if (reason === "unverified_driver") {
+    return "Ask dispatch to confirm your assigned driver profile before connecting Google Calendar.";
+  }
 
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  window.requestAnimationFrame(() => window.URL.revokeObjectURL(url));
+  if (reason === "not_acknowledged") {
+    return "Save & Acknowledge Job before connecting Google Calendar.";
+  }
+
+  if (reason === "provider_failed" || reason === "invalid_oauth") {
+    return "Google Calendar could not be updated. Try again or contact dispatch.";
+  }
+
+  return "Google Calendar is not ready for this job. Contact dispatch.";
+}
+
+function safeGoogleConsentUrl(value: string | undefined) {
+  try {
+    const url = new URL(value || "");
+
+    return url.protocol === "https:" &&
+      url.hostname === "accounts.google.com" &&
+      url.pathname === "/o/oauth2/v2/auth"
+      ? url.toString()
+      : "";
+  } catch {
+    return "";
+  }
 }
 
 export default function DriverJobPage() {
@@ -632,9 +696,9 @@ export default function DriverJobPage() {
     useState<DriverLiveLocationState>(emptyDriverLiveLocationState);
   const [driverOtsPhotoProof, setDriverOtsPhotoProof] =
     useState<DriverOtsPhotoProofState>(emptyDriverOtsPhotoProofState);
+  const [driverCalendar, setDriverCalendar] =
+    useState<DriverCalendarState>(emptyDriverCalendarState);
   const [statusFeedback, setStatusFeedback] = useState<StatusFeedback | null>(null);
-  const [calendarDownloadFeedback, setCalendarDownloadFeedback] = useState<ControlFeedback | null>(null);
-  const [downloadingCalendar, setDownloadingCalendar] = useState(false);
   const [workflowStatus, setWorkflowStatus] = useState("assigned");
   const [updatingStatus, setUpdatingStatus] = useState("");
   const driverOtsPhotoProofInputRef = useRef<HTMLInputElement | null>(null);
@@ -734,6 +798,19 @@ export default function DriverJobPage() {
         return;
       }
 
+      const searchParams = new URLSearchParams(window.location.search);
+      const calendarReturnState = searchParams.get("calendar");
+
+      if (calendarReturnState) {
+        searchParams.delete("calendar");
+        const nextSearch = searchParams.toString();
+        window.history.replaceState(
+          window.history.state,
+          "",
+          `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`,
+        );
+      }
+
       setPageState({ kind: "loading" });
       setAcknowledged(false);
       setDetailsFeedback(null);
@@ -748,6 +825,7 @@ export default function DriverJobPage() {
       stopDriverLiveLocationBrowserWatch();
       setDriverLiveLocation(emptyDriverLiveLocationState);
       setDriverOtsPhotoProof(emptyDriverOtsPhotoProofState);
+      setDriverCalendar(emptyDriverCalendarState);
       setSavedDriverDetails(null);
       setStatusFeedback(null);
       setWorkflowStatus("assigned");
@@ -785,6 +863,66 @@ export default function DriverJobPage() {
         setAcknowledged(result.payload.acknowledged);
         setWorkflowStatus(result.payload.status || "assigned");
         setPageState({ kind: "ready", job: result.payload });
+
+        if (result.payload.acknowledged) {
+          try {
+            const calendarResponse = await fetch(
+              `/api/driver-job/${encodeURIComponent(token)}/calendar`,
+              { cache: "no-store" },
+            );
+            const calendarResult = await calendarResponse.json() as DriverCalendarApiResponse;
+
+            if (active) {
+              setDriverCalendar(
+                calendarResponse.ok && calendarResult.ok
+                  ? {
+                      action: "idle",
+                      connected: calendarResult.connected === true,
+                      feedback:
+                        calendarReturnState === "saved" && calendarResult.status === "cal_saved"
+                          ? {
+                              tone: "success",
+                              text: "Calendar connected and saved. Open the event and tap Open Driver Job for reporting.",
+                            }
+                          : calendarReturnState === "error"
+                            ? {
+                                tone: "error",
+                                text: "Google Calendar connection was not completed. Try Add / Update Calendar again.",
+                              }
+                            : null,
+                      status: calendarResult.status,
+                    }
+                  : {
+                      action: "idle",
+                      connected: false,
+                      feedback:
+                        calendarReturnState === "error"
+                          ? {
+                              tone: "error",
+                              text: "Google Calendar connection was not completed. Try Add / Update Calendar again.",
+                            }
+                          : null,
+                      status: "unavailable",
+                    },
+              );
+            }
+          } catch {
+            if (active) {
+              setDriverCalendar({
+                action: "idle",
+                connected: false,
+                feedback:
+                  calendarReturnState === "error"
+                    ? {
+                        tone: "error",
+                        text: "Google Calendar connection was not completed. Try Add / Update Calendar again.",
+                      }
+                    : null,
+                status: "unavailable",
+              });
+            }
+          }
+        }
 
         try {
           const updateResponse = await fetch(
@@ -967,6 +1105,7 @@ export default function DriverJobPage() {
       setDriverDetails(confirmedDetails);
       setSavedDriverDetails(confirmedDetails);
       setAcknowledged(true);
+      setDriverCalendar(emptyDriverCalendarState);
       setStatusFeedback(null);
       setWorkflowStatus(result.payload.status || "assigned");
       setPageState({ kind: "ready", job: result.payload });
@@ -986,39 +1125,76 @@ export default function DriverJobPage() {
     }
   }
 
-  async function downloadDriverJobCalendar() {
-    if (!acknowledged || !token || downloadingCalendar) {
+  async function openDriverJobCalendar() {
+    if (!acknowledged || !token) {
       return;
     }
 
-    setDownloadingCalendar(true);
-    setCalendarDownloadFeedback(null);
+    setDriverCalendar((current) => ({
+      ...current,
+      action: "saving",
+      feedback: null,
+    }));
 
     try {
       const response = await fetch(`/api/driver-job/${encodeURIComponent(token)}/calendar`, {
-        headers: { accept: "text/calendar" },
+        cache: "no-store",
+        method: "POST",
       });
+      const result = await response.json() as DriverCalendarApiResponse;
 
-      if (!response.ok) {
-        throw new Error("calendar_download_failed");
+      if (!response.ok || !result.ok) {
+        setDriverCalendar((current) => ({
+          ...current,
+          action: "idle",
+          feedback: {
+            tone: "error",
+            text: driverCalendarBlockedMessage(result.ok ? undefined : result.reason),
+          },
+          status: "unavailable",
+        }));
+        return;
       }
 
-      const contentDisposition = response.headers.get("content-disposition") || "";
-      const responseFilename = contentDisposition.match(/filename="?([^";]+)"?/i)?.[1] || "";
-      const filename = responseFilename.trim() || "prestige-driver-job-calendar.ics";
+      if (result.action === "authorize") {
+        const googleConsentUrl = safeGoogleConsentUrl(result.google_consent_url);
 
-      downloadDriverCalendarBlob(await response.blob(), filename);
-      setCalendarDownloadFeedback({
-        tone: "success",
-        text: "Calendar file downloaded with a private Open Driver Job shortcut. Do not share the calendar event.",
+        if (!googleConsentUrl) {
+          setDriverCalendar((current) => ({
+            ...current,
+            action: "idle",
+            feedback: {
+              tone: "error",
+              text: "Google Calendar connection could not start. Contact dispatch.",
+            },
+          }));
+          return;
+        }
+
+        window.location.assign(googleConsentUrl);
+        return;
+      }
+
+      setDriverCalendar({
+        action: "idle",
+        connected: true,
+        feedback: {
+          tone: "success",
+          text: "Calendar saved. Open the event and tap Open Driver Job for reporting.",
+        },
+        status: "cal_saved",
       });
+      addActivity("Calendar saved", "Google Calendar now has the latest pickup schedule and Driver Job shortcut.");
     } catch {
-      setCalendarDownloadFeedback({
-        tone: "error",
-        text: "Calendar download failed. Keep this Driver Job page open and try again.",
-      });
-    } finally {
-      setDownloadingCalendar(false);
+      setDriverCalendar((current) => ({
+        ...current,
+        action: "idle",
+        feedback: {
+          tone: "error",
+          text: "Google Calendar could not be updated. Try again or contact dispatch.",
+        },
+        status: "unavailable",
+      }));
     }
   }
 
@@ -1989,30 +2165,58 @@ export default function DriverJobPage() {
                 ) : null}
                 {acknowledged ? (
                   <div className="space-y-1.5 rounded-md border border-sky-200 bg-sky-50 px-2.5 py-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-sky-950">Google Calendar</p>
+                      {driverCalendar.status === "cal_saved" ? (
+                        <span
+                          className="rounded-full border border-emerald-300 bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-900"
+                          data-driver-job-calendar-saved="true"
+                        >
+                          Calendar saved
+                        </span>
+                      ) : driverCalendar.status === "update_calendar" ? (
+                        <span className="rounded-full border border-amber-300 bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900">
+                          Update needed
+                        </span>
+                      ) : null}
+                    </div>
                     <button
                       className="flex h-11 w-full items-center justify-center rounded-md border border-sky-700 bg-white px-3 text-sm font-semibold text-sky-950 transition hover:bg-sky-100"
                       data-driver-job-calendar-action="true"
                       data-driver-job-calendar-source="current-driver-job-schedule"
-                      disabled={downloadingCalendar}
-                      onClick={downloadDriverJobCalendar}
+                      disabled={driverCalendar.action === "saving"}
+                      onClick={openDriverJobCalendar}
                       type="button"
                     >
-                      {downloadingCalendar ? "Downloading Calendar..." : "Add / Update Calendar"}
+                      {driverCalendar.action === "saving" ? "Saving Calendar..." : "Add / Update Calendar"}
                     </button>
                     <p className="text-xs font-medium leading-5 text-sky-900">
-                      Saves this job with a one-hour reminder and a private Open Driver Job shortcut. Later, use
-                      the calendar shortcut or the original link to report status. After an amendment, return here
-                      and update the calendar. Do not share the calendar event.
+                      First use connects your Google account. The same action updates this one event after an
+                      amendment—no file download. Open the event and tap Open Driver Job for OTW, OTS, POB and
+                      Job Completed reporting. Do not share the calendar event.
                     </p>
-                    {calendarDownloadFeedback ? (
+                    <div
+                      className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold"
+                      data-driver-job-calendar-policy-links="true"
+                    >
+                      <Link className="text-sky-800 underline" href="/google-calendar" rel="noreferrer">
+                        Calendar data use
+                      </Link>
+                      <Link className="text-sky-800 underline" href="/privacy" rel="noreferrer">
+                        Privacy Policy
+                      </Link>
+                      <Link className="text-sky-800 underline" href="/terms" rel="noreferrer">
+                        Terms of Service
+                      </Link>
+                    </div>
+                    {driverCalendar.feedback ? (
                       <p
-                        className={[
-                          "text-xs font-semibold leading-5",
-                          calendarDownloadFeedback.tone === "success" ? "text-emerald-800" : "text-red-700",
-                        ].join(" ")}
-                        data-driver-job-calendar-feedback={calendarDownloadFeedback.tone}
+                        className={`text-xs font-semibold leading-5 ${
+                          driverCalendar.feedback.tone === "success" ? "text-emerald-800" : "text-red-700"
+                        }`}
+                        data-driver-job-calendar-feedback={driverCalendar.feedback.tone}
                       >
-                        {calendarDownloadFeedback.text}
+                        {driverCalendar.feedback.text}
                       </p>
                     ) : null}
                   </div>

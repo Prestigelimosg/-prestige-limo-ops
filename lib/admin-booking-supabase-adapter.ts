@@ -126,11 +126,11 @@ const safeEnableReadinessError =
 const defaultAdminBookingListLimit = 25;
 const maxAdminBookingListLimit = 200;
 const adminBookingCurrentLoadSelect =
-  "id, booking_reference, public_booking_reference, customer_id, company_id, booker_id, traveler_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, dropoff_datetime, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, flight_no, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, admin_internal_status, customer_facing_status, short_notice_review_status, request_review_status, change_review_status, cancellation_review_status, source_surface, created_at, updated_at, booking_route_points(point_type, sequence, location, notes), booking_service_items(item_type, quantity, notes)";
+  "id, booking_reference, public_booking_reference, customer_id, company_id, booker_id, traveler_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, dropoff_datetime, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, flight_no, driver_id, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, admin_internal_status, customer_facing_status, short_notice_review_status, request_review_status, change_review_status, cancellation_review_status, source_surface, created_at, updated_at, booking_route_points(point_type, sequence, location, notes), booking_service_items(item_type, quantity, notes)";
 const adminBookingCurrentLoadSelectWithoutPublicReference =
   adminBookingCurrentLoadSelect.replace("public_booking_reference, ", "");
 const adminBookingFoundationLoadSelect =
-  "id, booking_reference, public_booking_reference, customer_id, company_id, booker_id, traveler_id, source_channel, pickup_datetime, dropoff_datetime, pickup_location, dropoff_location, route_type, customer_display_name, contact_phone, contact_email, flight_no, driver_name, driver_contact, driver_plate_number, pax_count, luggage_count, vehicle_type_or_category, customer_facing_status, admin_internal_status, short_notice_review_status, parser_source_reference, created_at, updated_at, booking_route_points(point_type, sequence_number, location_text, timing_note), booking_service_items(service_item_type, quantity, blocks_count)";
+  "id, booking_reference, public_booking_reference, customer_id, company_id, booker_id, traveler_id, source_channel, pickup_datetime, dropoff_datetime, pickup_location, dropoff_location, route_type, customer_display_name, contact_phone, contact_email, flight_no, driver_id, driver_name, driver_contact, driver_plate_number, pax_count, luggage_count, vehicle_type_or_category, customer_facing_status, admin_internal_status, short_notice_review_status, parser_source_reference, created_at, updated_at, booking_route_points(point_type, sequence_number, location_text, timing_note), booking_service_items(service_item_type, quantity, blocks_count)";
 const adminBookingFoundationLoadSelectWithoutPublicReference =
   adminBookingFoundationLoadSelect.replace("public_booking_reference, ", "");
 const adminBookingFoundationLoadSelectWithoutDriver =
@@ -191,27 +191,6 @@ function customerPortalScopedDisplayName(booking: AdminBookingRecordInput) {
   return `${accountName} / ${scopeParts.length ? scopeParts.join(" / ") : "Unassigned customer contact"}`.slice(
     0,
     maxTextLength,
-  );
-}
-
-function customerIdentityToken(value: unknown) {
-  return textOrNull(value)?.replace(/\s+/g, " ").trim().toLowerCase() || "";
-}
-
-function bookingCustomerIdentityChanged(
-  existing: AdminBookingRecordInput,
-  next: AdminBookingRecordInput,
-) {
-  const identityFields: Array<keyof AdminBookingRecordInput> = [
-    "customer_display_name",
-    "contact_display_name",
-    "contact_email",
-    "contact_phone",
-    "passenger_name",
-  ];
-
-  return identityFields.some(
-    (field) => customerIdentityToken(existing[field]) !== customerIdentityToken(next[field]),
   );
 }
 
@@ -923,6 +902,7 @@ function bookingToDbRow(
   const companyId = dbIdentifierOrNull(booking.company_id);
   const bookerId = dbIdentifierOrNull(booking.booker_id);
   const travelerId = dbIdentifierOrNull(booking.traveler_id);
+  const driverId = integerOrNull(booking.driver_id);
   const pickupAt = textOrNull(booking.pickup_at) || textOrNull(booking.pickup_datetime) || new Date().toISOString();
   const pickupLocation = textOrNull(booking.pickup_location) || "Pickup To Confirm";
   const dropoffLocation = textOrNull(booking.dropoff_location) || "Drop-off To Confirm";
@@ -948,6 +928,7 @@ function bookingToDbRow(
     passenger_name: textOrNull(booking.passenger_name),
     passenger_phone: textOrNull(booking.passenger_phone),
     flight_no: textOrNull(booking.flight_no),
+    driver_id: driverId,
     driver_contact: textOrNull(booking.driver_contact),
     driver_name: textOrNull(booking.driver_name),
     driver_plate_number: textOrNull(booking.driver_plate_number),
@@ -971,6 +952,7 @@ function mergeSuccessfullyUpdatedDriverFields(
 ): AdminBookingPersistenceRecord {
   return {
     ...record,
+    driver_id: record.driver_id ?? bookingRow.driver_id,
     driver_contact: record.driver_contact ?? bookingRow.driver_contact,
     driver_name: record.driver_name ?? bookingRow.driver_name,
     driver_plate_number: record.driver_plate_number ?? bookingRow.driver_plate_number,
@@ -1003,6 +985,7 @@ function bookingToFoundationDbRow(
     contact_phone: currentRow.contact_phone,
     contact_email: currentRow.contact_email,
     flight_no: textOrNull(booking.flight_no),
+    driver_id: currentRow.driver_id,
     driver_contact: currentRow.driver_contact,
     driver_name: currentRow.driver_name,
     driver_plate_number: currentRow.driver_plate_number,
@@ -1022,12 +1005,14 @@ function bookingToFoundationDbRowWithoutDriver(
   actor: AdminBookingPersistenceAdapterActor,
 ) {
   const {
+    driver_id: _driverId,
     driver_contact: _driverContact,
     driver_name: _driverName,
     driver_plate_number: _driverPlateNumber,
     ...row
   } = bookingToFoundationDbRow(booking, customerId, actor);
 
+  void _driverId;
   void _driverContact;
   void _driverName;
   void _driverPlateNumber;
@@ -1149,6 +1134,7 @@ function toAdminBookingDto(row: UnknownRecord): AdminBookingPersistenceRecord {
     passenger_name: textOrNull(row.passenger_name),
     passenger_phone: textOrNull(row.passenger_phone),
     flight_no: textOrNull(row.flight_no),
+    driver_id: integerOrNull(row.driver_id),
     driver_contact: textOrNull(row.driver_contact),
     driver_name: textOrNull(row.driver_name),
     driver_plate_number: textOrNull(row.driver_plate_number),
@@ -1747,9 +1733,10 @@ export async function updateAdminBookingThroughSupabaseAdapter(
 
   const existing = existingResult.data;
   const existingCustomerId = dbIdentifierOrNull(existing.customer_id);
-  let customerId = existingCustomerId;
+  const requestedCustomerId = dbIdentifierOrNull(input.booking.customer_id);
+  let customerId = requestedCustomerId || existingCustomerId;
 
-  if (!customerId || bookingCustomerIdentityChanged(existing, input.booking)) {
+  if (!customerId) {
     const customerIdResult = await findOrCreateCustomerId(client, input.booking, actor);
 
     if (!customerIdResult.ok) {

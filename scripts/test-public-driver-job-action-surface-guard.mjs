@@ -57,6 +57,8 @@ const allowedDriverAppUpdateFields = [
   "updated_at",
 ];
 
+const allowedDriverPublicInformationLinks = ["/google-calendar", "/privacy", "/terms"];
+
 const driverForbiddenVisiblePattern =
   /customer[_ -]?price|quoted[_ -]?price|billing|invoice|paynow|pay\s+now|payment|driver[_ -]?payout|payout|payout comparison|finance|internal[_ -]?(?:admin|finance)|admin[_ -]?note|mock[_ -]?(?:qa|archive)|parser[_ -]?debug|raw_ai|token_hash|server_secret/i;
 
@@ -243,14 +245,14 @@ const ledgerSection = sectionBetween(ledger, "### Public Driver Job Action Surfa
 for (const phrase of [
   "Public driver job display/action surfaces are guarded across `/driver-job/[token]`, the driver job status workflow, issue choices, and driver job action routes.",
   "This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.",
-  "The driver page action surface must stay limited to safe job GET, token-scoped driver-details PATCH, saved app-update GET, issue-alert POST with `issue_type`, fixed-template driver-to-customer quick-reply POST with `template_key`, driver-consented live-location calls, admin-only OTS photo proof POST, and status PATCH with the guarded status value.",
+  "The driver page action surface must stay limited to safe job GET, token-scoped driver-details PATCH, saved app-update GET, one acknowledged same-origin calendar-import navigation, three static same-tab public information links to `/google-calendar`, `/privacy`, and `/terms`, issue-alert POST with `issue_type`, fixed-template driver-to-customer quick-reply POST with `template_key`, driver-consented live-location calls, admin-only OTS photo proof POST, and status PATCH with the guarded status value.",
   "Driver status controls must stay limited to OTW, OTS, POB, and Job Completed, coordinated with `guardDriverJobStatusTransition`.",
   "Driver issue choices must stay limited to operational/safety issue values and must not include finance, billing, payment, PayNow, payout, invoice, PDF, parser/debug, internal admin, or mock QA/archive issue types.",
   "Driver app updates and status timing must render only safe fields: `safe_title`, `safe_message`, notification metadata, and status labels/times; visible activity-log and saved-status-history panels stay hidden from the driver page.",
   "Driver job detail display must stay limited to date/time, service, pickup, drop-off, route, waypoints, flight, and passenger display fields.",
   "Pasted driver details remain local-only and filtered so bank/account/PayNow/payment/payout lines are not parsed into driver-visible details.",
   "The driver page must not attach manual Cookie, Authorization, admin purpose, session-token, service-role, Supabase env, local/session storage, credential, media capture, or object URL plumbing; geolocation and file/FormData stay limited to existing driver-consented live location and admin-only OTS photo proof controls.",
-  "The driver page must not submit forms, create downloads, expose outbound admin links, or call notification PATCH from the public driver UI.",
+  "The driver page must not submit forms, create downloads, expose outbound admin or dynamic links, open the approved public information links in a new tab, or call notification PATCH from the public driver UI.",
   "This guard coordinates the driver job route action contract, driver status persistence safe input contract, public route source privacy guard, public API client caller guard, and public API request input guard in the preactivation suite.",
   "No Save Booking + CRM change.",
   "No `/api/admin-saved-bookings` change.",
@@ -304,14 +306,21 @@ for (const forbiddenIssuePattern of [
   assertExcludes(issueChoices, forbiddenIssuePattern, "driver issue choices forbidden fields");
 }
 
-assert.equal(countOccurrences(driverPage, "fetch("), 11, "driver page fetch count");
-assert.equal(countOccurrences(driverPage, 'cache: "no-store"'), 8, "driver page no-store count");
-assert.equal(countOccurrences(driverPage, 'method: "POST"'), 4, "driver page POST count");
+assert.equal(countOccurrences(driverPage, "fetch("), 12, "driver page fetch count");
+assert.equal(countOccurrences(driverPage, 'cache: "no-store"'), 10, "driver page no-store count");
+assert.equal(countOccurrences(driverPage, 'method: "POST"'), 5, "driver page POST count");
 assert.equal(countOccurrences(driverPage, 'method: "DELETE"'), 1, "driver page DELETE count");
 assert.equal(countOccurrences(driverPage, 'method: "PATCH"'), 2, "driver page PATCH count");
-assert.equal(countOccurrences(driverPage, "href="), 0, "driver page public link count");
-assert.equal(countOccurrences(driverPage, "anchor.download = filename"), 1, "driver page calendar attachment download count");
-assert.equal(countOccurrences(driverPage, 'document.createElement("a")'), 1, "driver page calendar attachment anchor helper count");
+const driverPublicLinks = [...driverPage.matchAll(/\bhref="([^"]+)"/g)].map((match) => match[1]);
+assert.deepEqual(
+  driverPublicLinks,
+  allowedDriverPublicInformationLinks,
+  "driver page static public information links",
+);
+assert.equal(countOccurrences(driverPage, "<Link"), 3, "driver page public information Link count");
+assert.equal(countOccurrences(driverPage, 'target="_blank"'), 0, "driver page new-tab public link count");
+assert.equal(countOccurrences(driverPage, "anchor.download = filename"), 0, "driver page forced calendar attachment download count");
+assert.equal(countOccurrences(driverPage, 'document.createElement("a")'), 0, "driver page must not create a calendar download/import anchor");
 for (const fragment of [
   "fetch(`/api/driver-job/${encodeURIComponent(token)}`",
   "`/api/driver-job/${encodeURIComponent(token)}/notifications?limit=5&page=1`",
@@ -341,10 +350,11 @@ for (const fragment of [
   'method: "DELETE"',
   'method: "PATCH"',
   'data-driver-job-calendar-action="true"',
-  "async function downloadDriverJobCalendar()",
-  'fetch(`/api/driver-job/${encodeURIComponent(token)}/calendar`',
-  "downloadDriverCalendarBlob(await response.blob(), filename)",
-  "onClick={downloadDriverJobCalendar}",
+  "async function openDriverJobCalendar()",
+  'const response = await fetch(`/api/driver-job/${encodeURIComponent(token)}/calendar`',
+  "safeGoogleConsentUrl",
+  "window.location.assign(googleConsentUrl)",
+  "onClick={openDriverJobCalendar}",
 ]) {
   assertIncludes(driverPage, fragment, `driver page action caller ${fragment}`);
 }

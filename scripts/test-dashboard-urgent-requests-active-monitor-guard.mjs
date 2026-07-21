@@ -81,7 +81,7 @@ const saveBookingSection = sliceBetween(
 const bookingStatusUpdateSection = sliceBetween(
   appPage,
   "async function updateBookingStatusOnly(",
-  "async function syncBookingCompletedStatusFromDriverReport(",
+  "async function markBookingCompleted(",
 );
 const dashboardOverdueResolutionSection = sliceBetween(
   appPage,
@@ -309,10 +309,14 @@ for (const monitorFragment of [
   "}, 3 * 1000);",
   "void refreshDashboardDriverJobStatusRead(bookingReference);",
   "}, 10 * 1000);",
-  "syncBookingCompletedStatusFromDriverReport(",
 ]) {
   assertIncludes(appPage, monitorFragment, `established booking monitor fragment ${monitorFragment}`);
 }
+assertExcludes(
+  appPage,
+  "syncBookingCompletedStatusFromDriverReport(",
+  "driver JC evidence must not auto-complete the saved booking",
+);
 for (const fragment of [
   "adminMonitorableBookingListScope",
   "fetchCompleteMonitorableSavedBookingList",

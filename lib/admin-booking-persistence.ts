@@ -30,6 +30,7 @@ export type AdminBookingRecordInput = {
   passenger_name?: string | null;
   passenger_phone?: string | null;
   flight_no?: string | null;
+  driver_id?: number | null;
   driver_contact?: string | null;
   driver_name?: string | null;
   driver_plate_number?: string | null;
@@ -216,6 +217,7 @@ const bookingFields = new Set([
   "passenger_name",
   "passenger_phone",
   "flight_no",
+  "driver_id",
   "driver_contact",
   "driver_name",
   "driver_plate_number",
@@ -501,6 +503,7 @@ function sanitizeBooking(record: UnknownRecord): AdminBookingRecordInput {
     passenger_name: textOrNull(record.passenger_name),
     passenger_phone: textOrNull(record.passenger_phone),
     flight_no: textOrNull(record.flight_no),
+    driver_id: integerOrNull(record.driver_id),
     driver_contact: textOrNull(record.driver_contact),
     driver_name: textOrNull(record.driver_name),
     driver_plate_number: textOrNull(record.driver_plate_number),

@@ -211,9 +211,15 @@ const signoffIndex = selectedReview.indexOf('data-selected-job-invoice-signoff="
 const bankIndex = selectedReview.indexOf('data-selected-job-invoice-bank="true"');
 const termsIndex = selectedReview.indexOf('data-selected-job-invoice-terms="true"');
 assert.equal(
-  notesIndex < signoffIndex && signoffIndex < bankIndex && bankIndex < termsIndex,
+  signoffIndex < bankIndex && bankIndex < notesIndex && notesIndex < termsIndex,
   true,
-  "selected-job invoice lower content must preserve the owner-approved Notes, sign-off, bank, then Terms order",
+  "admin selected-job review must keep sign-off and Bank Details above the bottom Notes and Terms disclosures",
+);
+const lowerDisclosuresIndex = selectedReview.indexOf('data-selected-job-invoice-lower-disclosures="true"');
+assert.equal(
+  bankIndex < lowerDisclosuresIndex && lowerDisclosuresIndex < notesIndex && selectedReview.includes("sm:grid-cols-2"),
+  true,
+  "admin selected-job review must place Notes beside Terms in one responsive bottom row",
 );
 assert.equal(
   selectedReview.includes("Click to view") ||

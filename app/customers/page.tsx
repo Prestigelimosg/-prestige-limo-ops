@@ -9822,21 +9822,6 @@ export default function MockCustomerDashboardPage() {
                         </p>
                       ) : null}
 
-                      <details
-                        className="mt-6 max-w-lg text-[11px] leading-4 text-slate-600"
-                        data-selected-job-invoice-notes="true"
-                      >
-                        <summary className="w-fit cursor-pointer font-semibold text-slate-800 underline underline-offset-2">
-                          Notes
-                        </summary>
-                        <div className="mt-1">
-                          <p>Midnight surcharge: $15 applies from 11:00 PM to 6:59 AM.</p>
-                          <p>Waiting time: 15 minutes grace; airport arrivals include 60 minutes grace.</p>
-                          <p>Additional waiting time: $15 per 15-minute block.</p>
-                          <p>Hourly jobs: 15 minutes grace; 16 minutes onward counts as the next hour.</p>
-                        </div>
-                      </details>
-
                       <div className="mt-6 max-w-lg" data-selected-job-invoice-signoff="true">
                         <p>Thank you for your business</p>
                         <p className="mt-3">Best Regards,</p>
@@ -9858,15 +9843,29 @@ export default function MockCustomerDashboardPage() {
                         </div>
                       </details>
 
-                      <details
-                        className="mt-6 max-w-3xl break-words border-t border-slate-200 pt-3 text-[11px] leading-4 text-slate-600"
-                        data-selected-job-invoice-terms="true"
+                      <div
+                        className="mt-6 grid max-w-3xl gap-3 border-t border-slate-200 pt-3 text-[11px] leading-4 text-slate-600 sm:grid-cols-2"
+                        data-selected-job-invoice-lower-disclosures="true"
                       >
-                        <summary className="w-fit cursor-pointer font-semibold text-slate-800 underline underline-offset-2">
-                          Terms &amp; Conditions
-                        </summary>
-                        <p className="mt-1">{companyProfile.invoice_footer_terms}</p>
-                      </details>
+                        <details data-selected-job-invoice-notes="true">
+                          <summary className="w-fit cursor-pointer font-semibold text-slate-800 underline underline-offset-2">
+                            Notes
+                          </summary>
+                          <div className="mt-1">
+                            <p>Midnight surcharge: $15 applies from 11:00 PM to 6:59 AM.</p>
+                            <p>Waiting time: 15 minutes grace; airport arrivals include 60 minutes grace.</p>
+                            <p>Additional waiting time: $15 per 15-minute block.</p>
+                            <p>Hourly jobs: 15 minutes grace; 16 minutes onward counts as the next hour.</p>
+                          </div>
+                        </details>
+
+                        <details className="break-words" data-selected-job-invoice-terms="true">
+                          <summary className="w-fit cursor-pointer font-semibold text-slate-800 underline underline-offset-2">
+                            Terms &amp; Conditions
+                          </summary>
+                          <p className="mt-1">{companyProfile.invoice_footer_terms}</p>
+                        </details>
+                      </div>
                     </article>
 
                     <p

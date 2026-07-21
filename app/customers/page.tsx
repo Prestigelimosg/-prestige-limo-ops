@@ -9720,7 +9720,7 @@ export default function MockCustomerDashboardPage() {
                             alt={`${companyProfile.company_name} logo`}
                             className="h-auto w-36 object-contain object-left"
                             height={72}
-                            src={companyProfile.logo_image_url}
+                            src={companyProfile.logo_image_url || defaultCompanyProfile.logo_image_url}
                             width={180}
                           />
                           <p className="mt-2 font-bold text-slate-950">{companyProfile.company_name}</p>

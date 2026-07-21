@@ -12,6 +12,13 @@ a112e7b6 Merge pull request #61 from Prestigelimosg/codex/restore-current-workfl
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Blank Saved Company Logo Fallback In Admin Invoice Review (2026-07-21)
+
+- Signed-in Production Chrome reproduced a broken image in the existing selected-job admin invoice review. The rendered logo image was complete but had no `src`/`currentSrc` and reported zero natural dimensions. Read-only Production checks isolated the cause: the approved `/prestige-limo-sg-logo.jpg` asset remained healthy at HTTP 200 with exact 640x300 dimensions and its locked SHA-256, while the saved public Company Profile returned a blank `logo_image_url`.
+- The established selected-job invoice review now uses the existing approved default Company Profile logo only when that saved display value is blank. This is the same fallback already used by the single stored PDF renderer; it adds no asset, upload, profile write, helper, route, renderer, preview, or invoice lane.
+- The repair changes only the image source fallback in the existing admin review. It does not change the invoice layout, Company Profile persistence, saved values, issue/download/email/payment behavior, customer portal, PDF output, pricing, identity scope, booking, Calendar, Driver Reports, Dispatch, messaging, payment, payout, PayNow, GPS, provider, schema, configuration, or any other wired lane.
+- Focused protection is added to `scripts/test-customer-folder-multi-job-invoice-handoff-guard.mjs` alongside the existing company-profile, stored-PDF/portal, and billing lifecycle guards.
+
 ### Admin Invoice Lower-Content Disclosures Without Duplicate Controls (2026-07-21)
 
 - The owner reproduced the selected-job admin review at the approved lower invoice content and requested a narrower screen presentation without the duplicated panels, buttons, links, or feature lanes introduced by earlier repairs. The existing Notes and Bank Details were fully expanded, while the existing Terms & Conditions heading was plain text rather than an interactive disclosure.

@@ -206,6 +206,17 @@ assert.notEqual(selectedReviewStart, -1, "selected-job invoice review must exist
 assert.notEqual(selectedReviewEnd, -1, "selected-job invoice review must end before the generic CRM workbench");
 const selectedReview = customersPage.slice(selectedReviewStart, selectedReviewEnd);
 
+includes(
+  selectedReview,
+  "src={companyProfile.logo_image_url || defaultCompanyProfile.logo_image_url}",
+  "selected-job invoice review must fall back to the approved default logo when the saved URL is blank",
+);
+assert.equal(
+  selectedReview.includes("src={companyProfile.logo_image_url}"),
+  false,
+  "selected-job invoice review must not pass a blank saved logo URL directly to Next Image",
+);
+
 const notesIndex = selectedReview.indexOf('data-selected-job-invoice-notes="true"');
 const signoffIndex = selectedReview.indexOf('data-selected-job-invoice-signoff="true"');
 const bankIndex = selectedReview.indexOf('data-selected-job-invoice-bank="true"');

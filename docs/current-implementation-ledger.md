@@ -12,6 +12,13 @@ bc0b49ec Merge pull request #56 from Prestigelimosg/codex/restore-current-workfl
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Admin Invoice Lower-Content Disclosures Without Duplicate Controls (2026-07-21)
+
+- The owner reproduced the selected-job admin review at the approved lower invoice content and requested a narrower screen presentation without the duplicated panels, buttons, links, or feature lanes introduced by earlier repairs. The existing Notes and Bank Details were fully expanded, while the existing Terms & Conditions heading was plain text rather than an interactive disclosure.
+- In the established admin selected-job invoice review only, the existing `Notes`, `Bank Details`, and `Terms & Conditions` headings are now the three closed-by-default native disclosures. Each heading directly opens its one existing content block; there is no separate `Click to view` label, button, link, state helper, panel, footer, route, or duplicate content. The public `/terms` route remains the separate Driver Google Calendar Terms of Service and is intentionally not linked from a customer invoice.
+- The lower order remains `Notes → sign-off → Bank Details → Terms & Conditions`, and the sign-off remains visible between Notes and Bank Details. The shared stored/customer PDF renderer remains unchanged and continues printing Notes, sign-off, full Bank Details, and Terms & Conditions non-interactively. Invoice identity, pricing, totals, Company Profile values, issue/download/email/payment behavior, portal consumers, and every non-invoice wired lane remain unchanged.
+- Focused protection is in `scripts/test-customer-folder-multi-job-invoice-handoff-guard.mjs`, while `scripts/test-customer-local-invoice-issue-pdf-portal-guard.mjs` and `scripts/test-customer-billing-document-lifecycle-guard.mjs` continue protecting the fully rendered stored PDF lifecycle.
+
 ### Mandatory Selected-Job Invoice Coverage And One-Tick Price Confirmation (2026-07-21)
 
 - The owner reproduced two exact-customer folder defects on the existing `3 · Pending jobs for payment` → `4 · Selected jobs invoice review` handoff. A ticked job could disappear after navigation when an exact customer or identity check failed, and successful `Save price review` / `Save job details` actions left the expanded editor open as though no next action occurred.

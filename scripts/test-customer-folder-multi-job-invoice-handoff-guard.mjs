@@ -216,18 +216,51 @@ assert.equal(
   "selected-job invoice lower content must preserve the owner-approved Notes, sign-off, bank, then Terms order",
 );
 assert.equal(
-  selectedReview.includes("<details") ||
-    selectedReview.includes("Click to view") ||
+  selectedReview.includes("Click to view") ||
     selectedReview.includes('data-selected-job-invoice-footer="true"'),
   false,
-  "selected-job invoice must not collapse bank details or combine Notes and Terms into the later replacement footer",
+  "selected-job invoice disclosures must reuse their headings and must not restore the duplicate replacement footer",
 );
+assert.equal(
+  (selectedReview.match(/<details/g) || []).length === 3 &&
+    (selectedReview.match(/<\/details>/g) || []).length === 3,
+  true,
+  "selected-job invoice review must contain exactly the three approved lower-content disclosures",
+);
+for (const [marker, heading] of [
+  ['data-selected-job-invoice-notes="true"', "Notes"],
+  ['data-selected-job-invoice-bank="true"', "plainInvoiceCompanyPaymentHeading"],
+  ['data-selected-job-invoice-terms="true"', "Terms &amp; Conditions"],
+]) {
+  const markerIndex = selectedReview.indexOf(marker);
+  const detailsStart = selectedReview.lastIndexOf("<details", markerIndex);
+  const detailsEnd = selectedReview.indexOf("</details>", markerIndex);
+  const disclosure = selectedReview.slice(detailsStart, detailsEnd);
+  assert.equal(
+    detailsStart !== -1 && detailsEnd !== -1 && disclosure.includes("<summary") && disclosure.includes(heading),
+    true,
+    `selected-job invoice ${heading} must reuse its existing heading as one disclosure`,
+  );
+  assert.equal(
+    selectedReview.slice(detailsStart, markerIndex).includes(" open"),
+    false,
+    `selected-job invoice ${heading} disclosure must be closed by default`,
+  );
+}
 assert.equal(
   selectedReview.includes('className="mt-5 max-w-lg break-words leading-4"') &&
     selectedReview.includes("{plainInvoiceCompanyPaymentHeading}") &&
     selectedReview.includes("plainInvoiceCompanyPaymentDetailLines.map"),
   true,
-  "selected-job bank details must remain fully visible in the owner-approved invoice layout",
+  "selected-job bank disclosure must retain the saved Company Profile payment lines",
+);
+const lowerDisclosureContent = selectedReview.slice(notesIndex, selectedReview.indexOf("</article>", termsIndex));
+assert.equal(
+  lowerDisclosureContent.includes("<button") ||
+    lowerDisclosureContent.includes("<Link") ||
+    lowerDisclosureContent.includes('href="/terms"'),
+  false,
+  "lower invoice disclosures must not add duplicate buttons, links, routes, or the unrelated Driver Calendar terms page",
 );
 
 const selectedFormSetIndex = customersPage.indexOf("setPlainInvoiceForm(nextPlainInvoiceForm);");

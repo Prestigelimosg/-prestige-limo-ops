@@ -12,6 +12,13 @@ f03f7385 Restore blank invoice logo fallback
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Owner-Supplied Prestige Limo SG Invoice Logo (2026-07-21)
+
+- The owner explicitly supplied and approved a new gold `PRESTIGE LIMO SG` wordmark for invoices. It replaces the image bytes at the one established `/prestige-limo-sg-logo.jpg` company-invoice path; no second asset path, Company Profile field, preview, renderer, route, or logo lane is added.
+- Only unused white canvas around the supplied artwork is mechanically cropped, with the artwork positioned inside the existing canvas so the wordmark stays clear of the existing PDF company-name baseline. The result remains a white-background 640x300 JPEG so the existing admin preview and single proportional stored-PDF renderer retain their established dimensions and layout without stretching or repositioning invoice content.
+- `scripts/test-company-profile-settings-guard.mjs` locks the exact approved replacement SHA-256. The selected-job invoice review continues using its existing saved-logo/default-logo fallback, and stored issued PDF, admin/customer download, email attachment, Paid/Unpaid regeneration, and customer portal consumers remain on their existing paths.
+- This owner-approved asset replacement does not change Company Profile persistence, invoice layout, line items, totals, identity scope, issue/download/email/payment actions, booking, Calendar, Driver Reports, Dispatch, messaging, payment, payout, PayNow, GPS, provider, schema, configuration, or any other wired lane.
+
 ### Blank Saved Company Logo Fallback In Admin Invoice Review (2026-07-21)
 
 - Signed-in Production Chrome reproduced a broken image in the existing selected-job admin invoice review. The rendered logo image was complete but had no `src`/`currentSrc` and reported zero natural dimensions. Read-only Production checks isolated the cause: the approved `/prestige-limo-sg-logo.jpg` asset remained healthy at HTTP 200 with exact 640x300 dimensions and its locked SHA-256, while the saved public Company Profile returned a blank `logo_image_url`.

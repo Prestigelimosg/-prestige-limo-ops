@@ -1,16 +1,26 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-f03f7385 Restore blank invoice logo fallback
+8bfaeaa2 Replace invoice logo artwork
 
 Latest pushed main/staging runtime checkpoint:
-73489c43 Place invoice notes beside terms
+ff9e16d3 Merge pull request #63 from Prestigelimosg/codex/restore-current-workflow-guards
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-f03f7385 Restore blank invoice logo fallback
+ff9e16d3 Merge pull request #63 from Prestigelimosg/codex/restore-current-workflow-guards
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Owner-Supplied Prestige Limo SG Invoice Logo (2026-07-21)
+
+- The owner explicitly supplied and approved a new gold `PRESTIGE LIMO SG` wordmark for invoices. It replaces the image bytes at the one established `/prestige-limo-sg-logo.jpg` company-invoice path; no second asset path, Company Profile field, preview, renderer, route, or logo lane is added.
+- Only unused white canvas around the supplied artwork is mechanically cropped, with the artwork positioned inside the existing canvas so the wordmark stays clear of the existing PDF company-name baseline. The result remains a white-background 640x300 JPEG so the existing admin preview and single proportional stored-PDF renderer retain their established dimensions and layout without stretching or repositioning invoice content.
+- `scripts/test-company-profile-settings-guard.mjs` locks the exact approved replacement SHA-256. The selected-job invoice review continues using its existing saved-logo/default-logo fallback, and stored issued PDF, admin/customer download, email attachment, Paid/Unpaid regeneration, and customer portal consumers remain on their existing paths.
+- This owner-approved asset replacement does not change Company Profile persistence, invoice layout, line items, totals, identity scope, issue/download/email/payment actions, booking, Calendar, Driver Reports, Dispatch, messaging, payment, payout, PayNow, GPS, provider, schema, configuration, or any other wired lane.
+- A temporary one-page invoice was generated directly through the existing shared PDF renderer and rendered to PNG for visual inspection. The replacement logo was sharp and proportional, remained clear of the unchanged company-name baseline, and introduced no clipping, overlap, table movement, or lower-layout change; the temporary files were removed and no invoice record was created.
+- Exact application commit `8bfaeaa2` was pushed to `origin/codex/restore-current-workflow-guards` and deployed through the linked Vercel Production project as `dpl_EwLEkmmXiKVz5cHf2ZqeUqKqWgN3`. The deployment reached READY, was aliased to `https://app.prestigelimo.sg`, returned HTTP 200 with build marker `8bfaeaa2`, and served the exact 640x300 JPEG with SHA-256 `87a094d2f46c7c22484f95b44786909e6184c31239312b521ca91a751a9145ac` from both the direct and optimized image lanes.
+- Signed-in Production Chrome verified exact job `10831` with `1 of 1 loaded`. The new gold `PRESTIGE LIMO SG` wordmark rendered visibly in the existing invoice header; the invoice remained `Invoice# Not issued`, and Bank Details, Notes, and Terms & Conditions remained closed in their established positions. No invoice was edited, issued, sent, emailed, downloaded, paid, or otherwise changed, and no other wired lane was used.
 
 ### Blank Saved Company Logo Fallback In Admin Invoice Review (2026-07-21)
 

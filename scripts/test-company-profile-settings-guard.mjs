@@ -40,8 +40,8 @@ assert(existsSync(defaultLogoPath), "Default company logo asset file is missing.
 const defaultLogoBytes = readFileSync(defaultLogoPath);
 assert(
   createHash("sha256").update(defaultLogoBytes).digest("hex") ===
-    "39284dd8296c26ce514af9e4a839ec2151a1d01e016692c5a3416b16931b4b80",
-  "Default company invoice logo must match the owner-approved Prestige wordmark.",
+    "87a094d2f46c7c22484f95b44786909e6184c31239312b521ca91a751a9145ac",
+  "Default company invoice logo must match the owner-approved Prestige Limo SG wordmark.",
 );
 
 for (const field of [

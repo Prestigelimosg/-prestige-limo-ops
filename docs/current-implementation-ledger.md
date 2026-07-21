@@ -7,7 +7,7 @@ Latest pushed main/staging runtime checkpoint:
 b9b3aacd Correct arrival parser classification
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-f5eea09b Merge pull request #66 from Prestigelimosg/codex/add-admin-ai-conversation
+08713703 Merge pull request #67 from Prestigelimosg/codex/record-admin-ai-production
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -25,6 +25,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The final paid Luna screen retest used the same synthetic arrival message and returned `MNG`, the expected passenger/vehicle/route values, 99% confidence, and the missing flight number as its one review reason. The corrected request completed through only `POST /api/ai-parse`; every other recorded request was GET-only. The synthetic text and draft were cleared from the browser, the temporary local server was stopped, and no booking, external send, or other app write occurred.
 - Ready PR `#66` merged the two bounded AI commits into `main` as `f5eea09b` after both Vercel checks passed. Production deployment `dpl_Cad5b9mJsKDcSoaSqgv3rjAhEJ2Q` reached READY, was aliased to `https://app.prestigelimo.sg`, returned HTTP 200, and displayed build marker `f5eea09b`.
 - Visible Production browser verification used synthetic booking text only. `gpt-5.6-luna` returned a 678-token review draft with explicit arrival correctly classified as `MNG`, the expected passenger, vehicle, pickup, and drop-off, 98% confidence, and the missing flight number as the only review reason. Recorded mutation-shaped traffic contained only `POST /api/ai-parse` with HTTP 200; no booking, messaging, invoice, Calendar, driver, payment, GPS, provider, or other write request occurred. The synthetic input and draft were cleared, the final page had zero console errors, and the verified Production page was left open.
+- Final visible Production `Ask AI` verification ran on build `08713703` with one synthetic operational question. `gpt-5.6-terra` returned a concise 267-token read-only reply, the UI stated that no app action was taken, and the existing `Create Job Card` action remained disabled in conversation mode. Recorded mutation-shaped traffic contained only `POST /api/admin-ai-assistant` with HTTP 200; no booking, messaging, invoice, Calendar, driver, payment, GPS, provider, or other write request occurred. `Clear Message` removed the synthetic turn, the final page had zero console errors, and the cleared Production page was left open.
 - Invoice workflow/layout/PDF, Driver Calendar/OAuth/events, Driver Reports, Pending Driver ACK Queue, Live Dispatch, messaging, customer voice, payment, payout, PayNow, GPS, external provider sends, Supabase schema/data, and every other established wired lane remain unchanged.
 
 ### Final Regression Guard Timing And Wording Alignment (2026-07-21)

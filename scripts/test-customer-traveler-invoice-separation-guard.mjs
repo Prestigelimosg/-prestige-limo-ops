@@ -105,7 +105,7 @@ for (const fragment of [
   "customerFolderTravelerInvoiceGroups",
   "Missing verified traveller identity",
   'data-customer-folder-traveler-invoice-group="true"',
-  "Review {group.passengerName} invoice",
+  "Load {group.passengerName} invoice",
 ]) {
   includes(sources.savedBookingsPanel, fragment, `customer folder traveller grouping ${fragment}`);
 }

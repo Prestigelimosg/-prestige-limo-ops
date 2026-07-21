@@ -54,6 +54,10 @@ const guardChecks = [
     script: "scripts/test-customer-folder-multi-job-invoice-handoff-guard.mjs",
   },
   {
+    label: "customer invoice line-description format tests",
+    script: "scripts/test-customer-invoice-line-description-format.mjs",
+  },
+  {
     label: "customer traveller invoice separation guard",
     script: "scripts/test-customer-traveler-invoice-separation-guard.mjs",
   },

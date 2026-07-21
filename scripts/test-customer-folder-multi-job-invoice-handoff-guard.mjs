@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const guardScript = "scripts/test-customer-folder-multi-job-invoice-handoff-guard.mjs";
-const [folderPage, folderShell, invoiceFolder, savedBookingsRead, customersPage, bookingAdapter, invoicePersistence, localInvoices, ledger, preactivation, appSmoke] =
+const [folderPage, folderShell, invoiceFolder, savedBookingsRead, customersPage, bookingAdapter, invoicePersistence, localInvoices, lineDescriptionFormatter, ledger, preactivation, appSmoke] =
   await Promise.all([
     readFile("app/customers/[customerId]/saved-bookings-panel.tsx", "utf8"),
     readFile("app/customers/[customerId]/page.tsx", "utf8"),
@@ -12,6 +12,7 @@ const [folderPage, folderShell, invoiceFolder, savedBookingsRead, customersPage,
     readFile("lib/admin-booking-supabase-adapter.ts", "utf8"),
     readFile("lib/customer-invoice-record-persistence.ts", "utf8"),
     readFile("lib/customer-local-invoices.ts", "utf8"),
+    readFile("lib/customer-invoice-line-description.ts", "utf8"),
     readFile("docs/current-implementation-ledger.md", "utf8"),
     readFile("scripts/test-preactivation-verification-suite.mjs", "utf8"),
     readFile("scripts/test-app-smoke-browser.mjs", "utf8"),
@@ -133,8 +134,25 @@ for (const fragment of [
   "plainInvoiceQuantityLabel(item.quantity)",
   "whitespace-pre-wrap",
   "<textarea",
+  "formatCustomerInvoiceLineDescription({",
+  "readCustomerInvoiceDriverActualTimeSummary(",
 ]) {
   includes(customersPage, fragment, `multi-job invoice handoff fragment ${fragment}`);
+}
+
+for (const fragment of [
+  'return "AIRPORT ARRIVAL";',
+  'return "AIRPORT DEPARTURE";',
+  'return "CITY TRANSFER";',
+  'return "HOURLY / DISPOSAL";',
+  'AVF: "ALPHARD / VELLFIRE"',
+  '"E / AVF": "MERCEDES E-CLASS / ALPHARD / VELLFIRE"',
+  'VVV: "MERCEDES VIANO / V-CLASS"',
+  'return `${firstLine}\\n${[vehicle, passenger, `REF ${reference}`].join(" | ")}`;',
+  '`${invoiceDescriptionDateTime(input.dspStartedAt)}-${invoiceDescriptionTime(input.dspEndedAt)}`',
+  'const nilLabel = "NIL";',
+]) {
+  includes(lineDescriptionFormatter, fragment, `invoice line-description format ${fragment}`);
 }
 
 const selectionToggleStart = folderPage.indexOf("function toggleSelectedBooking(");

@@ -29,6 +29,7 @@ import {
   calculateCustomerDspInvoiceReview,
   type CustomerInvoiceRateSetupRecord,
 } from "../../lib/customer-dsp-invoice-review";
+import { formatCustomerInvoiceLineDescription } from "../../lib/customer-invoice-line-description";
 import {
   downloadCustomerInvoicePdf,
   formatInvoiceAmount,
@@ -5198,8 +5199,23 @@ export default function MockCustomerDashboardPage() {
               (booking, index) =>
                 (booking.traveler_id ?? targetBookings[index]?.traveler_id ?? null) !== exactTravelerId,
             );
+            const dspActualTimeSummaries = await Promise.all(
+              exactBookings.map((booking, index) => {
+                const selectedBooking = targetBookings[index];
+                const serviceType = String(
+                  booking.service_type ?? selectedBooking?.service_type ?? "",
+                ).trim();
+
+                return normalizeBookingType(serviceType) === "DSP"
+                  ? readCustomerInvoiceDriverActualTimeSummary(
+                      customerFolderExactBookingReference(booking),
+                    )
+                  : Promise.resolve(null);
+              }),
+            );
             const invoiceRows = exactBookings.map((booking, index) => {
               const selectedBooking = targetBookings[index];
+              const dspActualTimeSummary = dspActualTimeSummaries[index];
               const reference = customerFolderExactBookingReference(booking);
               const publicReference =
                 customerFolderPublicBookingReference(booking) ||
@@ -5217,9 +5233,18 @@ export default function MockCustomerDashboardPage() {
               return {
                 amountCents: reviewedPricesByReference.get(reference) ?? null,
                 bookingReference: reference,
-                lineDescription: [service || "Service", publicReference, route]
-                  .filter(Boolean)
-                  .join(" | "),
+                lineDescription: formatCustomerInvoiceLineDescription({
+                  dspEndedAt: dspActualTimeSummary?.dsp_ended_at,
+                  dspStartedAt: dspActualTimeSummary?.dsp_started_at,
+                  flightNumber: booking.flight_no,
+                  passengerName: booking.passenger_name,
+                  pickupAt: booking.pickup_at || booking.pickup_datetime,
+                  pickupLocation: booking.pickup_location,
+                  publicReference,
+                  route,
+                  serviceType: service,
+                  vehicleType: booking.vehicle_type_or_category,
+                }),
                 publicReference,
                 route,
                 service: service || "Service",

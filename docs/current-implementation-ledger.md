@@ -1,16 +1,24 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-b9b3aacd Correct arrival parser classification
+19fba286 Hide driver demo from Production
 
 Latest pushed main/staging runtime checkpoint:
-b9b3aacd Correct arrival parser classification
+19fba286 Hide driver demo from Production
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-08713703 Merge pull request #67 from Prestigelimosg/codex/record-admin-ai-production
+2d41c107 Merge pull request #69 from Prestigelimosg/codex/hide-driver-demo-production
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Customer Invoice Line Description Presentation (2026-07-21)
+
+- The owner approved one presentation-only repair to the existing selected-job invoice line description. MNG, DEP, and TRF use two uppercase lines; DSP uses one uppercase line. The existing selected-job preparation, admin review, stored invoice record, PDF/download, email attachment, and customer portal remain the only wired consumers.
+- MNG renders `AIRPORT ARRIVAL | FLIGHT | DATE/TIME | ROUTE` then the full customer-facing vehicle name, passenger name, and public reference. DEP uses `AIRPORT DEPARTURE` with the same field order. TRF renders `CITY TRANSFER | DATE/TIME | ROUTE` then the full vehicle name, passenger name, and public reference.
+- DSP renders `HOURLY / DISPOSAL | ACTUAL OTS DATE/START-JC END | FULL VEHICLE NAME | PASSENGER | PUBLIC REFERENCE` on one line. It reuses the established read-only DSP actual-time summary and adds no timing event, status action, billing calculation, writer, route, table, or invoice lane.
+- Every blank description field renders `NIL`; no flight, time, route, vehicle, passenger, or reference is inferred. Vehicle codes are expanded to their existing full customer-facing names. The PDF-safe ` | ` and ` > ` separators are used because the established PDF font path is ASCII-only.
+- Focused protection is `scripts/test-customer-invoice-line-description-format.mjs` plus the updated multi-job invoice handoff guard. The locked invoice layout, pricing, totals, issue/download/email/payment behavior, Company Profile content, lower-content order, booking, Driver Calendar, Driver Reports, Pending Driver ACK Queue, Live Dispatch, messaging, payout, PayNow, GPS, and provider lanes remain unchanged.
 
 ### Dispatcher Intake AI Parser And Read-Only Conversation (2026-07-21)
 

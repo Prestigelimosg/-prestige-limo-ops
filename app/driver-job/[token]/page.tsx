@@ -28,8 +28,9 @@ type DriverJobApiBlockedReason =
 
 type DriverJobApiResponse =
   | {
+      device_alerts?: DriverDeviceAlertApiState;
       ok: true;
-      mode: "mock";
+      mode: "mock" | "production";
       payload: SafeDriverJobPayload;
       status?: string;
     }
@@ -181,6 +182,28 @@ type DriverAppUpdateState = {
   updates: DriverAppUpdateRecord[];
 };
 
+type DriverDeviceAlertApiState = {
+  enabled?: boolean;
+  link_key?: string | null;
+  public_key?: string | null;
+  ready?: boolean;
+  reason?: string;
+  subscription_registered?: boolean;
+  version?: string;
+};
+
+type DriverDeviceAlertReadiness = {
+  enabled: boolean;
+  publicKey: string;
+  ready: boolean;
+};
+
+type DriverDeviceAlertPreparation = {
+  permission: "denied" | "granted" | "not_requested" | "unavailable";
+  registration: ServiceWorkerRegistration | null;
+  subscription: PushSubscriptionJSON | null;
+};
+
 type DriverLiveLocationBrowserPosition = {
   coords: {
     accuracy: number;
@@ -273,6 +296,15 @@ const emptyDriverAppUpdateState: DriverAppUpdateState = {
   feedback: null,
   kind: "idle",
   updates: [],
+};
+const emptyDriverDeviceAlertReadiness: DriverDeviceAlertReadiness = {
+  enabled: false,
+  publicKey: "",
+  ready: false,
+};
+const defaultAcknowledgedDetailsFeedback = {
+  tone: "success" as const,
+  text: "Driver details saved and job acknowledged.",
 };
 
 const emptyDriverLiveLocationState: DriverLiveLocationState = {
@@ -667,6 +699,89 @@ function safeGoogleConsentUrl(value: string | undefined) {
   }
 }
 
+function driverDeviceAlertReadinessFromApi(
+  value: DriverDeviceAlertApiState | undefined,
+): DriverDeviceAlertReadiness {
+  return {
+    enabled: value?.enabled === true,
+    publicKey: typeof value?.public_key === "string" ? value.public_key : "",
+    ready: value?.ready === true && typeof value.public_key === "string" && Boolean(value.public_key),
+  };
+}
+
+function driverDeviceAlertApplicationServerKey(value: string) {
+  const padding = "=".repeat((4 - value.length % 4) % 4);
+  const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = window.atob(base64);
+  return Uint8Array.from([...raw].map((character) => character.charCodeAt(0)));
+}
+
+async function prepareDriverDeviceAlert(
+  readiness: DriverDeviceAlertReadiness,
+): Promise<DriverDeviceAlertPreparation> {
+  if (!readiness.ready || !readiness.publicKey) {
+    return { permission: "not_requested", registration: null, subscription: null };
+  }
+
+  if (
+    !("Notification" in window) ||
+    !("serviceWorker" in navigator) ||
+    !("PushManager" in window)
+  ) {
+    return { permission: "unavailable", registration: null, subscription: null };
+  }
+
+  try {
+    const permission = Notification.permission === "granted"
+      ? "granted"
+      : await Notification.requestPermission();
+
+    if (permission !== "granted") {
+      return {
+        permission: permission === "denied" ? "denied" : "not_requested",
+        registration: null,
+        subscription: null,
+      };
+    }
+
+    await navigator.serviceWorker.register("/prestige-driver-push-sw.js", {
+      scope: "/driver-job/",
+    });
+    const registration = await navigator.serviceWorker.ready;
+    const existingSubscription = await registration.pushManager.getSubscription();
+    const subscription = existingSubscription ?? await registration.pushManager.subscribe({
+      applicationServerKey: driverDeviceAlertApplicationServerKey(readiness.publicKey),
+      userVisibleOnly: true,
+    });
+
+    return {
+      permission: "granted",
+      registration,
+      subscription: subscription.toJSON(),
+    };
+  } catch {
+    return { permission: "unavailable", registration: null, subscription: null };
+  }
+}
+
+function rememberAcknowledgedDriverJobLink(
+  registration: ServiceWorkerRegistration,
+  jobKey: string,
+) {
+  if (!/^[0-9a-f]{64}$/.test(jobKey)) {
+    return;
+  }
+  const url = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  if (!url.startsWith("/driver-job/")) {
+    return;
+  }
+  registration.active?.postMessage({
+    jobKey,
+    type: "PRESTIGE_REMEMBER_DRIVER_JOB_LINK",
+    url,
+  });
+}
+
 export default function DriverJobPage() {
   const params = useParams<{ token?: string | string[] }>();
   const token = useMemo(() => {
@@ -688,6 +803,8 @@ export default function DriverJobPage() {
   const [selectedDriverIssue, setSelectedDriverIssue] = useState("");
   const [driverAppUpdates, setDriverAppUpdates] =
     useState<DriverAppUpdateState>(emptyDriverAppUpdateState);
+  const [driverDeviceAlertReadiness, setDriverDeviceAlertReadiness] =
+    useState<DriverDeviceAlertReadiness>(emptyDriverDeviceAlertReadiness);
   const [driverQuickReply, setDriverQuickReply] = useState<DriverQuickReplyState>({
     feedback: null,
     sendingKey: "",
@@ -822,6 +939,7 @@ export default function DriverJobPage() {
       setReportingDriverIssue(false);
       setSelectedDriverIssue("");
       setDriverAppUpdates({ feedback: null, kind: "loading", updates: [] });
+      setDriverDeviceAlertReadiness(emptyDriverDeviceAlertReadiness);
       stopDriverLiveLocationBrowserWatch();
       setDriverLiveLocation(emptyDriverLiveLocationState);
       setDriverOtsPhotoProof(emptyDriverOtsPhotoProofState);
@@ -861,6 +979,9 @@ export default function DriverJobPage() {
         setDriverDetails(loadedDriverDetails);
         setSavedDriverDetails(result.payload.acknowledged ? loadedDriverDetails : null);
         setAcknowledged(result.payload.acknowledged);
+        setDriverDeviceAlertReadiness(
+          driverDeviceAlertReadinessFromApi(result.device_alerts),
+        );
         setWorkflowStatus(result.payload.status || "assigned");
         setPageState({ kind: "ready", job: result.payload });
 
@@ -1069,6 +1190,10 @@ export default function DriverJobPage() {
       text: "Saving driver details...",
     });
 
+    const deviceAlertPreparation = await prepareDriverDeviceAlert(
+      driverDeviceAlertReadiness,
+    );
+
     try {
       const response = await fetch(`/api/driver-job/${encodeURIComponent(token)}`, {
         body: JSON.stringify({
@@ -1076,6 +1201,7 @@ export default function DriverJobPage() {
           driver_name: nextDetails.name,
           driver_plate_number: nextDetails.plate,
           driver_vehicle_model: nextDetails.vehicleModel,
+          device_push_subscription: deviceAlertPreparation.subscription,
         }),
         headers: {
           "Content-Type": "application/json",
@@ -1109,10 +1235,37 @@ export default function DriverJobPage() {
       setStatusFeedback(null);
       setWorkflowStatus(result.payload.status || "assigned");
       setPageState({ kind: "ready", job: result.payload });
-      setDetailsFeedback({
-        tone: "success",
-        text: "Driver details saved and job acknowledged.",
-      });
+      const deviceAlertsRegistered =
+        result.device_alerts?.subscription_registered === true &&
+        typeof result.device_alerts.link_key === "string" &&
+        Boolean(deviceAlertPreparation.registration);
+
+      if (
+        deviceAlertsRegistered &&
+        deviceAlertPreparation.registration &&
+        result.device_alerts?.link_key
+      ) {
+        rememberAcknowledgedDriverJobLink(
+          deviceAlertPreparation.registration,
+          result.device_alerts.link_key,
+        );
+      }
+
+      const deviceAlertFeedback = deviceAlertsRegistered
+        ? " Device alerts are enabled on this device."
+        : driverDeviceAlertReadiness.ready
+          ? deviceAlertPreparation.permission === "denied"
+            ? " Device alerts were not allowed; reopen this page to check App Updates."
+            : " Device alerts could not be enabled; reopen this page to check App Updates."
+          : "";
+      setDetailsFeedback(
+        deviceAlertFeedback
+          ? {
+              tone: "success",
+              text: `Driver details saved and job acknowledged.${deviceAlertFeedback}`,
+            }
+          : defaultAcknowledgedDetailsFeedback,
+      );
       addActivity("Job acknowledged", "Driver and vehicle details were confirmed for this assigned job.");
     } catch {
       setSavedDriverDetails(null);
@@ -2136,6 +2289,12 @@ export default function DriverJobPage() {
                       {detailsFeedback.text}
                     </p>
                   ) : null}
+                  <p
+                    className="text-xs font-medium leading-5 text-slate-500"
+                    data-driver-job-device-alert-helper="true"
+                  >
+                    This same action enables Driver Job alerts on this device when supported and allowed.
+                  </p>
                 </div>
                 {savedDriverDetails ? (
                   <div

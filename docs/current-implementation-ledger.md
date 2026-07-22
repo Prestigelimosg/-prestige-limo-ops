@@ -1,16 +1,27 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-19fba286 Hide driver demo from Production
+40f43b93 Format customer invoice line descriptions
 
 Latest pushed main/staging runtime checkpoint:
-19fba286 Hide driver demo from Production
+40f43b93 Format customer invoice line descriptions
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-2d41c107 Merge pull request #69 from Prestigelimosg/codex/hide-driver-demo-production
+6b9ad12f Merge pull request #70 from Prestigelimosg/codex/invoice-line-description-format
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Driver Job Acknowledgement Device Alerts (2026-07-22)
+
+- The owner explicitly approved adding device alerts to the one existing private Driver Job `Save & Acknowledge Job` action. The exact button, driver-detail save, acknowledgement persistence, hidden verified-driver identity handoff, and subsequent single `Add / Update Calendar` workflow remain in their established positions; no second acknowledgement button, alert panel, message composer, Driver Job page, or notification route is added.
+- The same explicit click feature-detects Web Push, requests browser notification permission, and prepares one driver-scoped service-worker subscription. The existing acknowledgement PATCH carries that optional subscription only after the user action. Driver details and acknowledgement remain authoritative and must still succeed when alerts are unsupported, denied, default-closed, unconfigured, stale, or temporarily unavailable.
+- Registration occurs only after the exact active private link has been acknowledged and bound server-side to a verified positive `drivers.id`. The server stores the browser endpoint and encryption keys in the new RLS-protected, service-role-only `driver_device_push_subscriptions` table. It never stores the raw private Driver Job token, and a device endpoint is rebound only by a later verified acknowledgement on that device.
+- Existing `driver_app` App Updates remain the sole saved message record and read surface. After an approved driver-app notification is saved, one best-effort generic device alert may be delivered to active subscriptions for that exact verified driver. The lock-screen payload says only `Prestige Limo Ops` and `New Driver Job app update. Tap to review.`; it contains no passenger, customer, route, price, billing, invoice, payment, payout, PayNow, internal/admin note, parser/debug, raw token, or private job detail.
+- The driver-scoped service worker stores the already-open private page URL only in that driver's browser IndexedDB under a one-way opaque link key. Tapping the alert can therefore reopen the exact private Driver Job page without placing the raw token in the database or push payload. iPhone/iPad delivery still requires a supported Home Screen web app plus the driver's explicit permission; browser/OS notification settings, Focus mode, connectivity, and provider availability remain outside the app's guarantee.
+- Runtime activation is default-closed behind `PRESTIGE_DRIVER_DEVICE_PUSH_ENABLED` and its three dedicated driver VAPID/contact settings. It does not reuse or change the established admin push table, route, service worker, control, gate, or booking-request sender. The migration and Production configuration remain unapplied until separate explicit action-time approval.
+- Driver Calendar/OAuth/event identity, Driver Reports evidence, Pending Driver ACK Queue, Live Dispatch, explicit Admin confirm-completed, booking, customer portal, invoice, pricing, payment, payout, PayNow, GPS, OTS photo, provider messaging, and every other established wired lane remain unchanged.
+- Focused protection is `scripts/test-driver-job-device-push-alert-guard.mjs`, the updated `scripts/test-driver-job-page-browser.mjs`, the existing customer/driver app-notification API contract, and the unchanged admin device-push guard.
 
 ### Customer Invoice Line Description Presentation (2026-07-21)
 

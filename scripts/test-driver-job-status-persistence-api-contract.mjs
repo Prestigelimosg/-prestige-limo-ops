@@ -13,6 +13,7 @@ const sourceFiles = [
   "lib/driver-job-link-mock-store.ts",
   "lib/driver-job-link-mode.ts",
   "lib/driver-job-status-persistence.ts",
+  "lib/driver-device-push-notification.ts",
   "lib/driver-job-link-production.ts",
   "app/api/driver-job/[token]/route.ts",
   "app/api/driver-job/[token]/status/route.ts",
@@ -70,10 +71,16 @@ async function writeHarnessFile(tempDir, relativePath) {
 async function writeMockModules(tempDir) {
   const serverOnlyPath = path.join(tempDir, "node_modules/server-only/index.js");
   const supabasePath = path.join(tempDir, "node_modules/@supabase/supabase-js/index.js");
+  const webPushPath = path.join(tempDir, "node_modules/web-push/index.js");
 
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await mkdir(path.dirname(supabasePath), { recursive: true });
+  await mkdir(path.dirname(webPushPath), { recursive: true });
   await writeFile(serverOnlyPath, "");
+  await writeFile(
+    webPushPath,
+    "module.exports = { sendNotification: async () => undefined, setVapidDetails: () => undefined };",
+  );
   await writeFile(
     supabasePath,
     [

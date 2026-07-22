@@ -131,7 +131,22 @@ async function assertNoRealLocationImplementation() {
   assert.doesNotMatch(source, /\/api\/[^"')\s]*(?:cancel|reassign|replacement|exception|breakdown|missed|late-driver)/i, "Driver pages must not add dispatcher exception APIs.");
   assert.doesNotMatch(source, /aviationstack|flightaware|flightstats|flightradar|opensky|aeroapi/i, "Driver pages must not add real flight API integrations.");
   assert.doesNotMatch(source, /twilio|messagebird|vonage|nexmo|api\.whatsapp\.com|wa\.me|whatsapp\.send|sendWhatsApp|sendWhatsapp|sendSms|sendSMS|sms\.send/i, "Driver pages must not add WhatsApp/SMS integrations.");
-  assert.doesNotMatch(source, /\b(?:Notification|PushManager|serviceWorker|showNotification|sendNotification)\b/, "Driver pages must not add notification APIs.");
+  assert.match(
+    source,
+    /Notification\.requestPermission\(\)/,
+    "Driver Job acknowledgement may request the owner-approved device-alert permission through its one explicit click.",
+  );
+  assert.match(
+    source,
+    /navigator\.serviceWorker\.register\("\/prestige-driver-push-sw\.js",\s*\{\s*scope:\s*"\/driver-job\/"/,
+    "Driver device alerts must use the one driver-scoped service worker registration.",
+  );
+  assert.match(source, /PushManager/, "Driver device alerts must remain feature-detected.");
+  assert.doesNotMatch(
+    source,
+    /showNotification|sendNotification|prestige-admin-push-sw|admin_device_push_subscriptions/i,
+    "Driver page must not display foreground notifications or reuse the locked admin push lane.",
+  );
   assert.doesNotMatch(source, /google\.maps|maps\.google|mapbox|gps api/i, "Driver pages must not add map or GPS APIs.");
   assert.doesNotMatch(source, /customer live location link/i, "Driver pages must not create fake customer live location links.");
   assert.match(
@@ -219,6 +234,51 @@ async function runChromeTest() {
           window.__prestigeConsoleErrors.push(args.map(String).join(" "));
           originalError.apply(console, args);
         };
+        window.__driverDeviceAlertTest = {
+          permissionRequests: 0,
+          registrations: [],
+          rememberedLinks: [],
+          subscriptionBodies: [],
+        };
+        const driverPushSubscription = {
+          toJSON: () => ({
+            endpoint: "https://push.browser.test/driver-device",
+            keys: { auth: "browser-auth", p256dh: "browser-p256dh" },
+          }),
+        };
+        const driverPushRegistration = {
+          active: {
+            postMessage: (message) => window.__driverDeviceAlertTest.rememberedLinks.push(message),
+          },
+          pushManager: {
+            getSubscription: async () => null,
+            subscribe: async () => driverPushSubscription,
+          },
+        };
+        Object.defineProperty(window, "Notification", {
+          configurable: true,
+          value: {
+            permission: "default",
+            requestPermission: async () => {
+              window.__driverDeviceAlertTest.permissionRequests += 1;
+              return "granted";
+            },
+          },
+        });
+        Object.defineProperty(window, "PushManager", {
+          configurable: true,
+          value: function PushManager() {},
+        });
+        Object.defineProperty(navigator, "serviceWorker", {
+          configurable: true,
+          value: {
+            ready: Promise.resolve(driverPushRegistration),
+            register: async (url, options) => {
+              window.__driverDeviceAlertTest.registrations.push({ options, url });
+              return driverPushRegistration;
+            },
+          },
+        });
         const originalFetch = window.fetch.bind(window);
         window.fetch = (...args) => {
           const target = args[0]?.url || args[0];
@@ -272,6 +332,43 @@ async function runChromeTest() {
             );
           }
 
+          const driverJobPath = new URL(url, window.location.origin).pathname;
+          const driverJobPathParts = driverJobPath.split("/").filter(Boolean);
+          if (
+            driverJobPathParts.length === 3 &&
+            driverJobPathParts[0] === "api" &&
+            driverJobPathParts[1] === "driver-job"
+          ) {
+            if (method === "PATCH" && typeof args[1]?.body === "string") {
+              try {
+                window.__driverDeviceAlertTest.subscriptionBodies.push(JSON.parse(args[1].body));
+              } catch {}
+            }
+
+            return originalFetch(...args).then(async (response) => {
+              const result = await response.json();
+              if (result.ok) {
+                result.device_alerts = method === "PATCH"
+                  ? {
+                      enabled: true,
+                      link_key: "a".repeat(64),
+                      reason: "subscription_registered",
+                      subscription_registered: true,
+                    }
+                  : {
+                      enabled: true,
+                      public_key: "AQIDBA",
+                      ready: true,
+                      reason: "ready",
+                    };
+              }
+              return new Response(JSON.stringify(result), {
+                headers: { "content-type": "application/json" },
+                status: response.status,
+              });
+            });
+          }
+
           return originalFetch(...args);
         };
       `,
@@ -297,6 +394,13 @@ async function runChromeTest() {
         consoleErrors: window.__prestigeConsoleErrors || [],
         errors: window.__prestigeErrors || [],
         fetchCalls: window.__driverJobFetchCalls || [],
+        deviceAlerts: {
+          helper: document.querySelector("[data-driver-job-device-alert-helper]")?.textContent?.trim() || "",
+          permissionRequests: window.__driverDeviceAlertTest?.permissionRequests || 0,
+          registrations: window.__driverDeviceAlertTest?.registrations || [],
+          rememberedLinks: window.__driverDeviceAlertTest?.rememberedLinks || [],
+          subscriptionBodies: window.__driverDeviceAlertTest?.subscriptionBodies || [],
+        },
         calendarImport: {
           feedback: document.querySelector("[data-driver-job-calendar-feedback]")?.textContent?.trim() || "",
           saved: Boolean(document.querySelector("[data-driver-job-calendar-saved='true']")),
@@ -528,6 +632,7 @@ async function runChromeTest() {
 
     const saveAndAcknowledgeJob = async () => {
       const beforeSaveState = await pageState();
+      const expectedDriverJobPagePath = await evaluate("location.pathname");
       const expectedDriverJobPatchPath = await evaluate(`(() => {
         const token = location.pathname.split("/").filter(Boolean).at(-1) || "";
 
@@ -633,7 +738,7 @@ async function runChromeTest() {
             const buttonRect = button?.getBoundingClientRect();
             const messageRect = message?.getBoundingClientRect();
 
-            return message?.textContent.trim() === "Driver details saved and job acknowledged." &&
+            return message?.textContent.trim() === "Driver details saved and job acknowledged. Device alerts are enabled on this device." &&
               acknowledgedState?.textContent.trim() === "Acknowledged" &&
               savedDetails?.innerText.includes("Mock Local Driver A") &&
               savedDetails?.innerText.includes("+65 9123 4567") &&
@@ -662,6 +767,40 @@ async function runChromeTest() {
         afterSaveState.fetchCalls.at(-1),
         `PATCH ${expectedDriverJobPatchPath}`,
         "Expected public driver details Save & Acknowledge to persist through the tokenized driver job route.",
+      );
+      assert.equal(
+        afterSaveState.deviceAlerts.helper,
+        "This same action enables Driver Job alerts on this device when supported and allowed.",
+        "Expected the existing acknowledgement action to explain its bounded device-alert permission.",
+      );
+      assert.equal(
+        afterSaveState.deviceAlerts.permissionRequests,
+        1,
+        "Expected one notification permission request from the explicit Save & Acknowledge click.",
+      );
+      assert.deepEqual(
+        afterSaveState.deviceAlerts.registrations,
+        [{ options: { scope: "/driver-job/" }, url: "/prestige-driver-push-sw.js" }],
+        "Expected one driver-scoped service-worker registration without touching admin push.",
+      );
+      assert.deepEqual(
+        afterSaveState.deviceAlerts.subscriptionBodies.at(-1)?.device_push_subscription,
+        {
+          endpoint: "https://push.browser.test/driver-device",
+          keys: { auth: "browser-auth", p256dh: "browser-p256dh" },
+        },
+        "Expected the optional device subscription to travel only with the existing acknowledgement PATCH.",
+      );
+      assert.deepEqual(
+        afterSaveState.deviceAlerts.rememberedLinks,
+        [
+          {
+            jobKey: "a".repeat(64),
+            type: "PRESTIGE_REMEMBER_DRIVER_JOB_LINK",
+            url: expectedDriverJobPagePath,
+          },
+        ],
+        "Expected the private URL to remain device-local under the opaque acknowledged-link key.",
       );
       assert.deepEqual(
         afterSaveState.activityLogLabels,

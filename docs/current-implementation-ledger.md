@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-4f1a8ff9 Add Driver Job acknowledgement device alerts
+d45739df Separate customer and driver app installs
 
 Latest pushed main/staging runtime checkpoint:
 4f1a8ff9 Add Driver Job acknowledgement device alerts

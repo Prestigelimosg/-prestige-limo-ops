@@ -286,7 +286,7 @@ await writeFile(
 );
 await writeFile(
   tempAccountPath,
-  'exports.assertActiveCustomerPortalAccessAccount = async () => ({ data: { customer_account_reference: "ACCOUNT-1" }, ok: true });\n',
+  'exports.assertActiveCustomerPortalAccessAccount = async () => ({ data: { customer_account_reference: "150" }, ok: true });\n',
 );
 
 try {
@@ -319,7 +319,7 @@ try {
           return this;
         },
         async limit() {
-          return { data: [{ customer_id: "ACCOUNT-1" }], error: null };
+          return { data: [{ customer_id: 150 }], error: null };
         },
       };
     },
@@ -363,7 +363,7 @@ try {
         sentPayload = payload;
       },
       subscriptionLoader: async (accountReference) => {
-        assert.equal(accountReference, "ACCOUNT-1");
+        assert.equal(accountReference, "150");
         return [
           {
             endpoint: "https://push.example.test/customer-device",
@@ -386,7 +386,7 @@ try {
   });
   assertExcludes(
     JSON.stringify(sentPayload),
-    ["PRIVATE-BOOKING-3", "ACCOUNT-1", "passenger", "pickup", "invoice", "payout"],
+    ["PRIVATE-BOOKING-3", "150", "passenger", "pickup", "invoice", "payout"],
     "customer lock-screen payload",
   );
 

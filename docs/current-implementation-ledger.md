@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-4f1a8ff9 Add Driver Job acknowledgement device alerts
+d45739df Separate customer and driver app installs
 
 Latest pushed main/staging runtime checkpoint:
 4f1a8ff9 Add Driver Job acknowledgement device alerts
@@ -11,6 +11,17 @@ ca9cf2f7 Merge pull request #71 from Prestigelimosg/codex/driver-job-ack-push-al
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Customer Portal And Driver Job Home Screen Identities (2026-07-22)
+
+- The owner reproduced one exact iPhone installation defect: the admin Home Screen app installed correctly, while installing from either the private Driver Job page or the customer portal reused the global admin manifest identity and launched `/`. Read-only Production HTML confirmed `/driver-job/[token]`, `/my-bookings`, and `/book` all inherited `/manifest.webmanifest`, `Prestige Ops`, `id: "/"`, and `start_url: "/"`; this was an install-metadata defect, not a Driver Job, customer portal, authentication, or iPhone setting failure.
+- The bounded repair adds only nested metadata for the existing `/driver-job/[token]` page and existing `/my-bookings` portal plus two static manifest assets. The existing admin `app/layout.tsx`, `app/manifest.ts`, admin app identity, page components, controls, routes, APIs, persistence, service workers, and write paths remain unchanged.
+- The private Driver Job page now advertises `Prestige Limo Driver` with stable manifest identity `/prestige-driver-app`, scope `/driver-job/`, standalone display, and the approved existing Prestige icons. Its manifest intentionally has no fixed `start_url`, so standards-based manifest processing retains the current private document URL as the installed launch URL without putting the raw token in a static manifest, database, push payload, or new server route.
+- The customer portal now advertises `Prestige Limo Customer` with stable manifest identity `/prestige-customer-app`, `start_url: "/my-bookings"`, standalone display, and the approved existing Prestige icons. Scope `/` preserves the established in-app `New Booking Request` navigation from `/my-bookings` to the sole `/book` form; manifest navigation scope does not grant access or broaden the existing HttpOnly customer session, account status, allowlist, booker scope, saved-booking, invoice/PDF, Trip Updates, quick-reply, or live-location boundaries.
+- No install button, second app page, portal, Driver Job page, acknowledgement control, notification lane, session, table, helper, booking form, invoice consumer, message composer, service worker, or provider path is added. `Save & Acknowledge Job`, Driver device-alert subscription, Driver Calendar, Driver Reports, Pending Driver ACK Queue, Live Dispatch, explicit Admin confirm-completed, customer portal, `/book`, invoice, pricing, payment, payout, PayNow, GPS, OTS photo, messaging, and every other established workflow remain unchanged.
+- The existing `scripts/test-web-app-install-manifest-guard.mjs` is extended in place to protect all three distinct identities, approved icon hashes, metadata-only boundaries, the driver's current-private-document launch behavior, and absence of API/provider/Calendar/service-worker behavior in the scoped layouts. Driver Job device-alert, Driver Calendar, Driver Job browser, customer portal access, customer invoice portal, public driver action, public customer portal, and public customer/driver privacy guards pass unchanged. TypeScript passes after the normal Production build synchronized generated Next route types; lint completes with the existing warnings only, and the Production build succeeds.
+- Visible local Production-build verification in the owner's Mac Chrome showed `Prestige Limo Ops` with `/manifest.webmanifest`, `Prestige Limo Customer` with `/prestige-customer.webmanifest`, and `Prestige Limo Driver` with `/prestige-driver.webmanifest`; the existing admin, My Bookings, and Driver Job headings remained visible with zero page-console errors. Actual Add to Home Screen behavior still requires post-deployment physical iPhone verification and is not claimed from desktop metadata evidence alone.
+- The broad app-smoke suite reached its unchanged `/book` lane after completing the admin desktop/mobile/tablet sweep, then failed because its booking-memory mock observed two GET calls while the long-standing assertion expects one. This change does not touch `/book`, its booking-memory adapter/API, or that smoke assertion; all five focused customer booking-memory, booking-page audit, public booking-memory, and public customer-form guards pass. Per the owner's preservation instruction, no unrelated booking workflow or broad smoke assertion was changed.
 
 ### Driver Job Acknowledgement Device Alerts (2026-07-22)
 

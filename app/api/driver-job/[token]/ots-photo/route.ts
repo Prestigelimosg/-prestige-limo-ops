@@ -11,6 +11,7 @@ import {
   uploadDriverOtsPhotoProofForToken,
   type DriverOtsPhotoProofBlockedReason,
 } from "../../../../../lib/driver-ots-photo-proof-persistence.ts";
+import { sendAdminDevicePushAlert } from "../../../../../lib/admin-device-push-notification.ts";
 
 type DriverJobOtsPhotoRouteContext = {
   params: Promise<{
@@ -102,6 +103,12 @@ export async function POST(request: Request, context: DriverJobOtsPhotoRouteCont
 
     if (!result.ok) {
       return Response.json(result, { status: blockedStatusByReason[result.reason] });
+    }
+
+    try {
+      await sendAdminDevicePushAlert("driver_ots_photo");
+    } catch {
+      // A saved proof must not fail because Admin device push is unavailable.
     }
 
     return Response.json({

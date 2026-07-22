@@ -2817,6 +2817,17 @@ export async function sendCustomerQuickReplyToDriver(
     return customerDriverQuickReplyError(created.error, created.status);
   }
 
+  try {
+    const { sendAdminDevicePushAlert } = await import("./admin-device-push-notification");
+    if (isDriverDetailsAcknowledgement) {
+      await sendAdminDevicePushAlert("customer_driver_details_acknowledged");
+    } else {
+      await sendAdminDevicePushAlert("customer_to_driver_reply");
+    }
+  } catch {
+    // A saved customer action must not fail because Admin device push is unavailable.
+  }
+
   return customerDriverQuickReplyResult(200, {
     delivery_surface: isDriverDetailsAcknowledgement ? "customer_app" : "driver_app",
     direction: isDriverDetailsAcknowledgement ? "customer_to_admin" : "customer_to_driver",
@@ -2903,6 +2914,13 @@ export async function sendDriverQuickReplyToCustomer(
 
   if (!created.ok) {
     return customerDriverQuickReplyError(created.error, created.status);
+  }
+
+  try {
+    const { sendAdminDevicePushAlert } = await import("./admin-device-push-notification");
+    await sendAdminDevicePushAlert("driver_to_customer_reply");
+  } catch {
+    // A saved driver reply must not fail because Admin device push is unavailable.
   }
 
   return customerDriverQuickReplyResult(200, {

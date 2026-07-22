@@ -142,6 +142,13 @@ export async function applyProductionDriverJobDetailsUpdate({
     token,
   });
 
+  try {
+    const { sendAdminDevicePushAlert } = await import("./admin-device-push-notification.ts");
+    await sendAdminDevicePushAlert("driver_acknowledged");
+  } catch {
+    // A saved acknowledgement must not fail because Admin device push is unavailable.
+  }
+
   return {
     ...detailsResult,
     device_alerts: deviceAlerts,
@@ -169,7 +176,7 @@ export async function applyProductionDriverJobStatusUpdate({
     return clientResult;
   }
 
-  return saveDriverJobStatusThroughStatusPersistence({
+  const result = await saveDriverJobStatusThroughStatusPersistence({
     client: clientResult.client,
     completionNote,
     exceptionReason,
@@ -178,4 +185,15 @@ export async function applyProductionDriverJobStatusUpdate({
     status,
     token,
   });
+
+  if (result.ok) {
+    try {
+      const { sendAdminDevicePushAlert } = await import("./admin-device-push-notification.ts");
+      await sendAdminDevicePushAlert(`driver_${result.status}`);
+    } catch {
+      // A saved driver status must not fail because Admin device push is unavailable.
+    }
+  }
+
+  return result;
 }

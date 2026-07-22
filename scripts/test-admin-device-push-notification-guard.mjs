@@ -7,6 +7,11 @@ import ts from "typescript";
 const helperPath = "lib/admin-device-push-notification.ts";
 const routePath = "app/api/admin-device-push-subscriptions/route.ts";
 const customerBookingRoutePath = "app/api/customer-booking-requests/route.ts";
+const adminAppNotificationPersistencePath = "lib/admin-app-notification-persistence.ts";
+const driverJobProductionPath = "lib/driver-job-link-production.ts";
+const driverOtsPhotoRoutePath = "app/api/driver-job/[token]/ots-photo/route.ts";
+const customerDriverNotificationPersistencePath =
+  "lib/customer-driver-app-notification-persistence.ts";
 const dashboardPath = "app/page.tsx";
 const serviceWorkerPath = "public/prestige-admin-push-sw.js";
 const manifestPath = "app/manifest.ts";
@@ -50,6 +55,10 @@ const [
   helperSource,
   routeSource,
   customerBookingRouteSource,
+  adminAppNotificationPersistenceSource,
+  driverJobProductionSource,
+  driverOtsPhotoRouteSource,
+  customerDriverNotificationPersistenceSource,
   dashboardSource,
   serviceWorkerSource,
   manifestSource,
@@ -62,6 +71,10 @@ const [
     helperPath,
     routePath,
     customerBookingRoutePath,
+    adminAppNotificationPersistencePath,
+    driverJobProductionPath,
+    driverOtsPhotoRoutePath,
+    customerDriverNotificationPersistencePath,
     dashboardPath,
     serviceWorkerPath,
     manifestPath,
@@ -96,6 +109,19 @@ assertIncludes(
     "telegram_enabled: false",
     "sms_enabled: false",
     "email_provider_enabled: false",
+    "sendAdminDevicePushAlert",
+    "customer_booking_amendment",
+    "customer_booking_cancellation",
+    "driver_acknowledged",
+    "driver_otw",
+    "driver_ots",
+    "driver_pob",
+    "driver_completed",
+    "driver_ots_photo",
+    "driver_issue",
+    "customer_to_driver_reply",
+    "driver_to_customer_reply",
+    "customer_driver_details_acknowledged",
   ],
   "admin device push helper",
 );
@@ -143,6 +169,40 @@ assertIncludes(
     "Customer booking intake must not fail because admin device push is unavailable.",
   ],
   "customer booking intake route",
+);
+
+assertIncludes(
+  adminAppNotificationPersistenceSource,
+  [
+    'sendAdminDevicePushAlert("driver_issue")',
+    'sendAdminDevicePushAlert(`customer_booking_${requestKind}`)',
+  ],
+  "existing admin app notification persistence push fan-out",
+);
+
+assertIncludes(
+  driverJobProductionSource,
+  [
+    'sendAdminDevicePushAlert("driver_acknowledged")',
+    "sendAdminDevicePushAlert(`driver_${result.status}`)",
+  ],
+  "existing driver acknowledgement and status success paths",
+);
+
+assertIncludes(
+  driverOtsPhotoRouteSource,
+  ['sendAdminDevicePushAlert("driver_ots_photo")'],
+  "existing OTS photo success path",
+);
+
+assertIncludes(
+  customerDriverNotificationPersistenceSource,
+  [
+    'sendAdminDevicePushAlert("customer_driver_details_acknowledged")',
+    'sendAdminDevicePushAlert("customer_to_driver_reply")',
+    'sendAdminDevicePushAlert("driver_to_customer_reply")',
+  ],
+  "existing customer and driver quick-reply success paths",
 );
 
 assertIncludes(
@@ -238,8 +298,12 @@ assertIncludes(
   ledgerSource,
   [
     "Admin Device Push Notification Runtime Gate",
+    "Admin App Operational Lock-Screen Alert Fan-Out",
     "PRESTIGE_ADMIN_DEVICE_PUSH_ENABLED",
     "New booking request received. Open Dashboard to review.",
+    "customer amendment and cancellation requests",
+    "driver acknowledgement, OTW, OTS, POB, Job Completed, OTS-photo, and issue reports",
+    "Monthly billing and the entire owner-locked invoice system remain untouched.",
     "No WhatsApp, Telegram, SMS, provider fallback, billing, payment, payout, PDF, GPS, live location, or customer data is exposed",
   ],
   "implementation ledger",
@@ -342,6 +406,96 @@ try {
     ["Private Passenger", "Private pickup", "CUST-PRIVATE-003", "private-id"],
     "admin push payload",
   );
+
+  const approvedOperationalEvents = {
+    customer_booking_amendment: [
+      "Customer amendment request",
+      "Customer amendment request received. Open Dashboard to review.",
+    ],
+    customer_booking_cancellation: [
+      "Customer cancellation request",
+      "Customer cancellation request received. Open Dashboard to review.",
+    ],
+    customer_driver_details_acknowledged: [
+      "Driver details acknowledged",
+      "Customer acknowledged the assigned driver details. Open Dashboard to review.",
+    ],
+    customer_to_driver_reply: [
+      "Customer app reply",
+      "Customer sent a driver app reply. Open Dashboard to review.",
+    ],
+    driver_acknowledged: [
+      "Driver acknowledged job",
+      "Driver saved details and acknowledged a job. Open Dashboard to review.",
+    ],
+    driver_completed: [
+      "Driver reported Job Completed",
+      "Driver reported Job Completed. Open Dashboard to review.",
+    ],
+    driver_issue: [
+      "Driver issue alert",
+      "Driver reported an issue. Open Dashboard to review.",
+    ],
+    driver_ots: [
+      "Driver reported OTS",
+      "Driver reported OTS. Open Dashboard to review.",
+    ],
+    driver_ots_photo: [
+      "OTS photo received",
+      "Driver sent an OTS photo. Open Dashboard to review.",
+    ],
+    driver_otw: [
+      "Driver reported OTW",
+      "Driver reported OTW. Open Dashboard to review.",
+    ],
+    driver_pob: [
+      "Driver reported POB",
+      "Driver reported POB. Open Dashboard to review.",
+    ],
+    driver_to_customer_reply: [
+      "Driver app reply",
+      "Driver sent a customer app reply. Open Dashboard to review.",
+    ],
+  };
+
+  for (const [eventType, [title, body]] of Object.entries(approvedOperationalEvents)) {
+    let operationalPayload = null;
+    const operationalAlert = await helper.sendAdminDevicePushAlert(eventType, {
+      env: configuredEnv,
+      subscriptionLoader: async () => [
+        {
+          endpoint: "https://push.example.test/operational-subscription",
+          keys: {
+            auth: "fake-auth-operational",
+            p256dh: "fake-p256dh-operational",
+          },
+        },
+      ],
+      pushSender: async (_subscription, payload) => {
+        operationalPayload = payload;
+      },
+    });
+
+    assert.equal(operationalAlert.ok, true, `${eventType} push must send.`);
+    assert.equal(operationalPayload.title, title);
+    assert.equal(operationalPayload.body, body);
+    assert.equal(operationalPayload.url, "/");
+    assert.equal(operationalPayload.tag, `prestige-admin-${eventType.replaceAll("_", "-")}`);
+    assertExcludes(
+      JSON.stringify(operationalPayload),
+      ["payout", "paynow", "billing", "payment", "invoice", "price", "internal note"],
+      `${eventType} admin push payload`,
+    );
+  }
+
+  const invalidOperationalAlert = await helper.sendAdminDevicePushAlert("monthly_billing", {
+    env: configuredEnv,
+    subscriptionLoader: async () => {
+      throw new Error("invalid events must be rejected before subscription reads");
+    },
+  });
+  assert.equal(invalidOperationalAlert.ok, false);
+  assert.equal(invalidOperationalAlert.reason, "invalid_event");
 
   let resilientSendCount = 0;
   const resilientAlert = await helper.sendAdminNewBookingDevicePushAlert(

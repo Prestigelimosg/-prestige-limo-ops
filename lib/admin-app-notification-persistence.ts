@@ -1020,6 +1020,13 @@ export async function createDriverJobIssueAdminAppNotification(
     return safeAdapterFailure(safeNotificationCreateError, 500, error);
   }
 
+  try {
+    const { sendAdminDevicePushAlert } = await import("./admin-device-push-notification");
+    await sendAdminDevicePushAlert("driver_issue");
+  } catch {
+    // The saved driver issue must remain available in the Admin inbox if push is unavailable.
+  }
+
   return {
     data: normalizeNotificationRecord(asRecord(data)),
     ok: true,
@@ -1147,6 +1154,13 @@ export async function createCustomerBookingChangeRequestAdminAppNotification(
 
   if (error) {
     return safeAdapterFailure(safeNotificationCreateError, 500, error);
+  }
+
+  try {
+    const { sendAdminDevicePushAlert } = await import("./admin-device-push-notification");
+    await sendAdminDevicePushAlert(`customer_booking_${requestKind}`);
+  } catch {
+    // The saved customer request must not fail because Admin device push is unavailable.
   }
 
   return {

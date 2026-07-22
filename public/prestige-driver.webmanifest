@@ -1,0 +1,23 @@
+{
+  "background_color": "#f8fafc",
+  "description": "Prestige Limo private Driver Job.",
+  "display": "standalone",
+  "icons": [
+    {
+      "sizes": "192x192",
+      "src": "/icons/prestige-ops-icon-192.png",
+      "type": "image/png"
+    },
+    {
+      "purpose": "maskable",
+      "sizes": "512x512",
+      "src": "/icons/prestige-ops-icon-512.png",
+      "type": "image/png"
+    }
+  ],
+  "id": "/prestige-driver-app",
+  "name": "Prestige Limo Driver",
+  "scope": "/driver-job/",
+  "short_name": "Prestige Driver",
+  "theme_color": "#020617"
+}

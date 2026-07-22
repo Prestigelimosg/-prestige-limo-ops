@@ -320,7 +320,7 @@ for (const fragment of [
   "result.proof?.customerVisible !== false",
   "result.proof?.external_send !== false",
   "const formData = new FormData();",
-  'formData.append("photo", photoFile);',
+  'formData.append("photo", preparedPhoto.blob, preparedPhoto.fileName);',
   'type="file"',
   "navigator.geolocation.watchPosition",
   "navigator.geolocation.clearWatch",

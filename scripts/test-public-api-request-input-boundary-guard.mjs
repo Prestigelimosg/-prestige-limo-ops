@@ -481,12 +481,22 @@ assertExcludes(driverBidsRoute, "request.json", "blocked driver bids route body 
 assertIncludes(driverBidsRoute, "blockedDriverBidResponse", "blocked driver bids input boundary");
 
 const driverPortalJobsRoute = files["app/api/driver-portal/jobs/route.ts"];
-assertExcludes(driverPortalJobsRoute, "request.json", "driver portal jobs route body parsing");
 assertExcludes(driverPortalJobsRoute, "searchParams", "driver portal jobs route query parsing");
+assertExcludes(driverPortalJobsRoute, /\.\.\.body/, "driver portal jobs route body spreading");
+assertExcludes(
+  driverPortalJobsRoute,
+  /customer_price|driver_payout|paynow|billing|invoice|payment|pdf|internal_note/i,
+  "driver portal jobs route unsafe subscription inputs",
+);
 for (const fragment of [
-  'request.headers.get("x-prestige-driver-purpose") !== "driver-portal-jobs-read"',
+  "async function readJsonBody(request: Request)",
+  'request.headers.get("x-prestige-driver-purpose") !== purpose',
   'refererUrl.pathname === "/driver-portal"',
   'resolveDriverPortalSession(request.headers.get("cookie"))',
+  'sameOriginDriverPortalRequest(request, "driver-portal-jobs-read")',
+  'sameOriginDriverPortalRequest(request, "driver-portal-device-alert-registration")',
+  "const body = await readJsonBody(request);",
+  "subscription: body.device_push_subscription",
 ]) {
   assertIncludes(driverPortalJobsRoute, fragment, `driver portal jobs input fragment ${fragment}`);
 }

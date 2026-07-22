@@ -12,6 +12,13 @@ ca9cf2f7 Merge pull request #71 from Prestigelimosg/codex/driver-job-ack-push-al
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Driver Portal Push Registration Method-Guard Alignment (2026-07-22)
+
+- Read-only inspection reproduced one stale source-guard failure left after the already-deployed installed Driver Portal new-job alert repair. `POST /api/driver-portal/jobs` intentionally changed from a blocked parameterless 405 stub to the existing same-origin, signed Driver Portal session-bound device-push registration action, but the broad public API method-surface guard still required the retired `export async function POST()` text.
+- The method guard now expects `POST(request: Request)` and protects the established exact purpose header, signed-cookie session resolution, verified-driver registration helper, and bounded `device_push_subscription` input. The coordinated public request-input guard now permits the one intentional JSON body, rejects body spreading, query parsing, and financial/internal input fragments, and requires only the bounded subscription handoff. `PUT`, `PATCH`, and `DELETE` remain blocked through the existing 405 helper, and the route's allowed method set is unchanged.
+- This is a test-and-ledger alignment only. No Driver Portal page, route, API behavior, session/cookie, subscription writer/table, push sender, service worker, private link, acknowledgement, Calendar, Driver Reports, Pending ACK Queue, customer portal, Admin alert runtime, booking, invoice, payment, payout, PayNow, GPS, provider, environment, schema, or Production data changed.
+- Focused verification is `scripts/test-public-api-method-surface-boundary-guard.mjs`, `scripts/test-public-api-request-input-boundary-guard.mjs`, `scripts/test-public-customer-driver-app-notification-surface-guard.mjs`, `scripts/test-driver-portal-session-jobs-guard.mjs`, `scripts/test-driver-job-device-push-alert-guard.mjs`, and `scripts/test-public-api-session-cookie-cache-boundary-guard.mjs`.
+
 ### Admin App Operational Lock-Screen Alert Fan-Out (2026-07-22)
 
 - The owner approved one narrow expansion of the established Admin device-push sender behind the single existing compact `Push ON` / `Push OFF` switch beside `Ready`. No button, giant control, panel, page, service worker, subscription route, subscription table, notification inbox, permission request, VAPID setting, or second alert lane is added or moved.

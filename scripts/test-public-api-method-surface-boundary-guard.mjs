@@ -163,7 +163,11 @@ const methodSurfaceChecks = [
     requiredFragments: [
       "export async function GET(request: Request)",
       "function methodNotAllowed()",
-      "export async function POST()",
+      "export async function POST(request: Request)",
+      'sameOriginDriverPortalRequest(request, "driver-portal-device-alert-registration")',
+      'resolveDriverPortalSession(request.headers.get("cookie"))',
+      "registerDriverDevicePushSubscriptionForPortalSession",
+      "subscription: body.device_push_subscription",
       "export async function PUT()",
       "export async function PATCH()",
       "export async function DELETE()",

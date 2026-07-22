@@ -67,6 +67,7 @@ assertIncludes(
 assertIncludes(
   notificationPersistenceSource,
   [
+    "customerAppNotificationUsesAdminBookingStatusTemplate",
     "adminBookingStatusUpdateTemplate",
     'input.workflow_area === "customer_booking_status_updates"',
     'input.safe_context.source === "admin_booking_status"',

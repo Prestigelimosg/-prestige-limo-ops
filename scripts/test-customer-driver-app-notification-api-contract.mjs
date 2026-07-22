@@ -263,6 +263,9 @@ async function loadHarness() {
     customerRoute: require(path.join(tempDir, "app/api/customer-app-notifications/route.js")),
     customerQuickReplyRoute: require(path.join(tempDir, "app/api/customer-driver-quick-replies/route.js")),
     driverRoute: require(path.join(tempDir, "app/api/driver-job/[token]/notifications/route.js")),
+    notificationPersistence: require(
+      path.join(tempDir, "lib/customer-driver-app-notification-persistence.js"),
+    ),
   };
 }
 
@@ -623,9 +626,81 @@ function seededNotification(overrides = {}) {
 }
 
 try {
-  const { adminRoute, cleanup, customerRoute, customerQuickReplyRoute, driverRoute } = await loadHarness();
+  const {
+    adminRoute,
+    cleanup,
+    customerRoute,
+    customerQuickReplyRoute,
+    driverRoute,
+    notificationPersistence,
+  } = await loadHarness();
 
   try {
+    setEnv({
+      ...validEnv(),
+      PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_ACCOUNT_ALLOWLIST: undefined,
+      PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_ENABLED: undefined,
+      PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_MODE: undefined,
+    });
+    const terminalStatusMock = installMockClient({
+      bookings: [
+        {
+          booking_reference: "BOOK-CUSTOMER-STATUS-001",
+          customer_id: 150,
+        },
+      ],
+    });
+    const terminalStatusNotification =
+      await notificationPersistence.createCustomerDriverAppNotification(
+        {
+          booking_reference: "BOOK-CUSTOMER-STATUS-001",
+          delivery_surface: "customer_app",
+          driver_job_link_id: null,
+          event_key:
+            "BOOK-CUSTOMER-STATUS-001:customer_booking_status:cancelled:2026-07-22T14:59:30.938Z",
+          notification_status: "queued",
+          notification_type: "booking_status",
+          priority: "normal",
+          safe_context: {
+            customer_facing_status: "cancelled",
+            external_send: false,
+            provider_send: false,
+            source: "admin_booking_status",
+          },
+          safe_message:
+            "Your Prestige Limo booking has been cancelled. Open My Bookings to review.",
+          safe_title: "Booking cancelled",
+          workflow_area: "customer_booking_status_updates",
+        },
+        {
+          actor_label: "Notification contract admin",
+          actor_role: "admin",
+          boundary_mode: "server-session-role-surface",
+          source_surface: "admin_api",
+        },
+      );
+
+    assert.equal(terminalStatusNotification.ok, true);
+    assert.equal(terminalStatusMock.client.insertHistory.length, 1);
+    assert.deepEqual(
+      {
+        booking_reference:
+          terminalStatusMock.client.insertHistory[0].payload.booking_reference,
+        delivery_surface:
+          terminalStatusMock.client.insertHistory[0].payload.delivery_surface,
+        safe_title: terminalStatusMock.client.insertHistory[0].payload.safe_title,
+        workflow_area:
+          terminalStatusMock.client.insertHistory[0].payload.workflow_area,
+      },
+      {
+        booking_reference: "BOOK-CUSTOMER-STATUS-001",
+        delivery_surface: "customer_app",
+        safe_title: "Booking cancelled",
+        workflow_area: "customer_booking_status_updates",
+      },
+      "Exact Admin cancellation must use the established customer outbox even when the retired pilot allowlist is closed.",
+    );
+
     setEnv(validEnv());
     const postMock = installMockClient({
       bookings: [

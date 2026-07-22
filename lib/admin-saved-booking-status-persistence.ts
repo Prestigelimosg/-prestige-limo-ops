@@ -20,6 +20,7 @@ export type AdminSavedBookingStatusInput = {
 };
 
 export type AdminSavedBookingStatusRecord = {
+  booking_reference: string | null;
   id: string | number;
   status: AdminSavedBookingStatusValue;
   updated_at: string;
@@ -352,6 +353,7 @@ function toStatusRecord(
   }
 
   return {
+    booking_reference: bookingReference,
     id,
     status: requestedStatus,
     updated_at: updatedAt,

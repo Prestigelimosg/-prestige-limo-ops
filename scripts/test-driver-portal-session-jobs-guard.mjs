@@ -285,6 +285,16 @@ try {
   assert.equal(jobs.ok, true);
   assert.equal(jobs.jobs.length, 1, "Only one newest non-terminal exact-driver job may appear.");
   assert.equal(jobs.jobs[0].payload.reference, "10850");
+  assert.equal(
+    jobs.jobs[0].payload.pickupLocation,
+    "Raffles Hotel",
+    "Driver Portal must preserve the saved booking pickup location.",
+  );
+  assert.equal(
+    jobs.jobs[0].payload.dropoffLocation,
+    "Changi Airport",
+    "Driver Portal must preserve the saved booking drop-off location.",
+  );
   assert.equal(jobs.jobs[0].state, "ots");
   assert.equal(jobs.jobs[0].stateLabel, "On site");
   assert.equal(jobs.jobs[0].jobKey, enrolled.jobKey);

@@ -333,6 +333,24 @@ function currentSchemaAdminStatus(status: AdminSavedBookingStatusValue) {
   return status;
 }
 
+function currentSchemaStatusPayload(
+  status: AdminSavedBookingStatusValue,
+  updatedAt: string,
+) {
+  return {
+    admin_internal_status: currentSchemaAdminStatus(status),
+    ...(status === "cancelled"
+      ? {
+          cancellation_review_status: "cancelled",
+          customer_facing_status: "cancelled",
+        }
+      : status === "completed"
+        ? { customer_facing_status: "completed" }
+        : {}),
+    updated_at: updatedAt,
+  };
+}
+
 function toStatusRecord(
   value: unknown,
   targetColumn: "booking_reference" | "id",
@@ -370,10 +388,7 @@ async function updateSavedBookingStatusRow(
 ) {
   const payload =
     storageShape === "current"
-      ? {
-          admin_internal_status: currentSchemaAdminStatus(status),
-          updated_at: updatedAt,
-        }
+      ? currentSchemaStatusPayload(status, updatedAt)
       : {
           status,
           updated_at: updatedAt,

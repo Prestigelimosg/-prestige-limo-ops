@@ -78,6 +78,35 @@ assert.equal(
   "/my-bookings should start empty, clear rows after blocked reads, and use only guarded customer saved-bookings API rows.",
 );
 assert.equal(
+  pageSource.includes("refreshCustomerPortalSavedBookings") &&
+    pageSource.includes('window.addEventListener("focus", refreshOnForeground)') &&
+    pageSource.includes('document.addEventListener("visibilitychange", refreshOnForeground)') &&
+    pageSource.includes('window.removeEventListener("focus", refreshOnForeground)') &&
+    pageSource.includes('document.removeEventListener("visibilitychange", refreshOnForeground)'),
+  true,
+  "/my-bookings should reuse its guarded saved-bookings loader when the installed customer app returns to the foreground.",
+);
+const foregroundRefreshStart = pageSource.indexOf("let activeController: AbortController | null = null;");
+const foregroundRefreshEnd = pageSource.indexOf(
+  "}, [refreshCustomerPortalSavedBookings]);",
+  foregroundRefreshStart,
+);
+assert.notEqual(
+  foregroundRefreshStart,
+  -1,
+  "/my-bookings should keep one bounded foreground saved-bookings refresh effect.",
+);
+assert.notEqual(
+  foregroundRefreshEnd,
+  -1,
+  "/my-bookings should close the bounded foreground saved-bookings refresh effect.",
+);
+assert.equal(
+  /setInterval\s*\(/.test(pageSource.slice(foregroundRefreshStart, foregroundRefreshEnd)),
+  false,
+  "/my-bookings foreground synchronization must not add a polling lane.",
+);
+assert.equal(
   pageSource.includes('"Sign in to view bookings."') &&
     pageSource.includes("portalBookingsLoadState === \"blocked\""),
   true,

@@ -396,6 +396,36 @@ export default function CustomerPortalPage() {
   const companyName = companyProfile.company_name || defaultCompanyProfile.company_name;
   const companyContactLines = companyProfileContactLines(companyProfile);
 
+  const refreshCustomerPortalSavedBookings = useCallback(
+    async ({ resetView = false, signal }: { resetView?: boolean; signal: AbortSignal }) => {
+      const loadedBookings = await loadCustomerPortalSavedBookings({ signal });
+
+      if (signal.aborted) {
+        return;
+      }
+
+      setPortalBookings(loadedBookings || []);
+      setPortalBookingsLoadState(loadedBookings === null ? "blocked" : "ready");
+
+      if (!resetView) {
+        return;
+      }
+
+      setExpandedBookingId("");
+      setChangeFeedback({});
+      setChangeRequestDraft(null);
+      setDriverTrackingByBookingId({});
+      setCheckingDriverTrackingId("");
+      setActiveTrackingBookingId("");
+      setTripUpdatesByBookingId({});
+      setCheckingTripUpdatesId("");
+      setDeepLinkApplied(false);
+      setBookingPages({ ...initialBookingPages });
+      setSelectedBookingMonths({ ...initialSelectedBookingMonths });
+    },
+    [],
+  );
+
   useEffect(() => {
     let cancelled = false;
 
@@ -645,39 +675,41 @@ export default function CustomerPortalPage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    let isCurrent = true;
 
-    async function loadSavedBookings() {
-      const loadedBookings = await loadCustomerPortalSavedBookings({
-        signal: controller.signal,
-      });
+    void refreshCustomerPortalSavedBookings({
+      resetView: true,
+      signal: controller.signal,
+    });
 
-      if (!isCurrent) {
+    return () => {
+      controller.abort();
+    };
+  }, [refreshCustomerPortalSavedBookings]);
+
+  useEffect(() => {
+    let activeController: AbortController | null = null;
+    let lastRefreshAt = Date.now();
+
+    function refreshOnForeground() {
+      if (document.visibilityState !== "visible" || Date.now() - lastRefreshAt < 750) {
         return;
       }
 
-      setPortalBookings(loadedBookings || []);
-      setPortalBookingsLoadState(loadedBookings === null ? "blocked" : "ready");
-      setExpandedBookingId("");
-      setChangeFeedback({});
-      setChangeRequestDraft(null);
-      setDriverTrackingByBookingId({});
-      setCheckingDriverTrackingId("");
-      setActiveTrackingBookingId("");
-      setTripUpdatesByBookingId({});
-      setCheckingTripUpdatesId("");
-      setDeepLinkApplied(false);
-      setBookingPages({ ...initialBookingPages });
-      setSelectedBookingMonths({ ...initialSelectedBookingMonths });
+      lastRefreshAt = Date.now();
+      activeController?.abort();
+      activeController = new AbortController();
+      void refreshCustomerPortalSavedBookings({ signal: activeController.signal });
     }
 
-    loadSavedBookings();
+    window.addEventListener("focus", refreshOnForeground);
+    document.addEventListener("visibilitychange", refreshOnForeground);
 
     return () => {
-      isCurrent = false;
-      controller.abort();
+      activeController?.abort();
+      window.removeEventListener("focus", refreshOnForeground);
+      document.removeEventListener("visibilitychange", refreshOnForeground);
     };
-  }, []);
+  }, [refreshCustomerPortalSavedBookings]);
 
   const filteredBookings = useMemo(() => {
     const query = normalize(searchQuery);

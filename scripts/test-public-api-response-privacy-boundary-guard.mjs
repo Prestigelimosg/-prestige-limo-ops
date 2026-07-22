@@ -140,6 +140,7 @@ const publicApiRoutePaths = [
   "app/api/driver-job/[token]/flight-eta-setup/route.ts",
   "app/api/driver-job/[token]/flight-eta-acknowledgement-setup/route.ts",
   "app/api/driver-job-bids/route.ts",
+  "app/api/driver-portal/jobs/route.ts",
 ];
 
 const responseForbiddenPattern =
@@ -294,6 +295,20 @@ for (const safeStatusFragment of [
 
 const driverJobRoute = files["app/api/driver-job/[token]/route.ts"];
 assertIncludes(driverJobRoute, "payload: result.payload", "driver job route safe payload response");
+
+const driverPortalJobsRoute = files["app/api/driver-portal/jobs/route.ts"];
+for (const safeDriverPortalFragment of [
+  "job_key: job.jobKey",
+  "payload: job.payload",
+  "state: job.state",
+  "state_label: job.stateLabel",
+]) {
+  assertIncludes(
+    driverPortalJobsRoute,
+    safeDriverPortalFragment,
+    `driver portal jobs route ${safeDriverPortalFragment}`,
+  );
+}
 
 const driverJobStatusRoute = files["app/api/driver-job/[token]/status/route.ts"];
 for (const safeDriverStatusFragment of [

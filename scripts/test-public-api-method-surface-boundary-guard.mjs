@@ -157,6 +157,19 @@ const methodSurfaceChecks = [
       "export async function PATCH() {\n  return blockedDriverBidResponse();\n}",
     ],
   },
+  {
+    path: "app/api/driver-portal/jobs/route.ts",
+    allowedMethods: ["DELETE", "GET", "PATCH", "POST", "PUT"],
+    requiredFragments: [
+      "export async function GET(request: Request)",
+      "function methodNotAllowed()",
+      "export async function POST()",
+      "export async function PUT()",
+      "export async function PATCH()",
+      "export async function DELETE()",
+      'reason: "method_not_allowed"',
+    ],
+  },
 ];
 
 const contractChecks = [

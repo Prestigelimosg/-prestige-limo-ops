@@ -358,6 +358,10 @@ const guardChecks = [
     script: "scripts/test-driver-job-device-push-alert-guard.mjs",
   },
   {
+    label: "Driver Portal encrypted session and exact-driver jobs guard",
+    script: "scripts/test-driver-portal-session-jobs-guard.mjs",
+  },
+  {
     label: "web app install manifest guard",
     script: "scripts/test-web-app-install-manifest-guard.mjs",
   },

@@ -84,7 +84,7 @@ const contractChecks = [
     script: "scripts/test-public-api-session-cookie-cache-boundary-guard.mjs",
     requiredFragments: [
       "driver flight ETA setup",
-      "Driver public APIs must remain cookie-free",
+      "Driver public APIs remain cookie-free except the exact acknowledgement PATCH",
       "Public API session cookie/cache boundary guard passed",
     ],
   },

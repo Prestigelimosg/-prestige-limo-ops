@@ -14,6 +14,7 @@ const sourceFiles = [
   "lib/driver-job-link-mode.ts",
   "lib/driver-job-status-persistence.ts",
   "lib/driver-device-push-notification.ts",
+  "lib/driver-portal-session.ts",
   "lib/driver-job-link-production.ts",
   "app/api/driver-job/[token]/route.ts",
   "app/api/driver-job/[token]/status/route.ts",

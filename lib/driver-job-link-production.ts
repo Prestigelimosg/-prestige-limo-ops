@@ -17,9 +17,14 @@ import {
   registerDriverDevicePushSubscriptionForAcknowledgedLink,
   type DriverDevicePushRegistrationResult,
 } from "./driver-device-push-notification.ts";
+import {
+  issueDriverPortalSessionForAcknowledgedToken,
+  type DriverPortalEnrollmentResult,
+} from "./driver-portal-session.ts";
 
 export type ProductionDriverJobDetailsUpdateInput = {
   devicePushSubscription?: unknown;
+  driverPortalCookieHeader?: string | null;
   driverContact?: unknown;
   driverName?: unknown;
   driverPlateNumber?: unknown;
@@ -30,6 +35,7 @@ export type ProductionDriverJobDetailsUpdateInput = {
 export type ProductionDriverJobDetailsUpdateResult =
   | (Extract<DriverJobProductionDetailsUpdateResult, { ok: true }> & {
       device_alerts: DriverDevicePushRegistrationResult;
+      driver_portal: DriverPortalEnrollmentResult;
     })
   | Exclude<DriverJobProductionDetailsUpdateResult, { ok: true }>
   | DriverJobLinkDisabledResult;
@@ -99,6 +105,7 @@ export async function getProductionDriverJobPayloadForToken(
 // billing fields, and it does not send customer/provider messages.
 export async function applyProductionDriverJobDetailsUpdate({
   devicePushSubscription,
+  driverPortalCookieHeader,
   driverContact,
   driverName,
   driverPlateNumber,
@@ -129,10 +136,16 @@ export async function applyProductionDriverJobDetailsUpdate({
     subscription: devicePushSubscription,
     token,
   });
+  const driverPortal = await issueDriverPortalSessionForAcknowledgedToken({
+    client: clientResult.client,
+    cookieHeader: driverPortalCookieHeader ?? null,
+    token,
+  });
 
   return {
     ...detailsResult,
     device_alerts: deviceAlerts,
+    driver_portal: driverPortal,
   };
 }
 

@@ -230,7 +230,7 @@ function linkWasAcknowledged(row: UnknownRecord): boolean {
   return Boolean(safeText(asRecord(row.safe_link_context).driver_acknowledged_at, 80));
 }
 
-function opaqueLinkKey(linkId: string): string {
+export function opaqueDriverJobLinkKey(linkId: string): string {
   return createHash("sha256")
     .update(`prestige-driver-device-alert:${linkId}`)
     .digest("hex");
@@ -340,7 +340,7 @@ export async function registerDriverDevicePushSubscriptionForAcknowledgedLink(
 
   return registrationResult("subscription_registered", {
     enabled: true,
-    linkKey: opaqueLinkKey(linkId),
+    linkKey: opaqueDriverJobLinkKey(linkId),
     ok: true,
     wrote: true,
   });
@@ -410,7 +410,7 @@ function toPushSubscription(row: UnknownRecord): PushSubscription | null {
 }
 
 function safePayload(linkId: string): DriverDevicePushPayload {
-  const jobKey = opaqueLinkKey(linkId);
+  const jobKey = opaqueDriverJobLinkKey(linkId);
   return {
     body: "New Driver Job app update. Tap to review.",
     job_key: jobKey,

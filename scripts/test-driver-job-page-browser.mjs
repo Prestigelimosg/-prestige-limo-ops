@@ -342,6 +342,64 @@ async function runChromeTest() {
             );
           }
 
+          if (method === "GET" && new URL(url, window.location.origin).pathname === "/api/driver-portal/jobs") {
+            return Promise.resolve(
+              new Response(JSON.stringify({
+                jobs: [
+                  {
+                    job_key: "a".repeat(64),
+                    payload: {
+                      assignedDriver: { contact: "", name: "", plate: "", vehicleModel: "" },
+                      bookingType: "MNG",
+                      dropoffLocation: "Mock Arrival Dropoff",
+                      flightNumber: "SQ777",
+                      passengerName: "Mock Arrival Passenger",
+                      pickupDate: "2026-05-29",
+                      pickupDateTime: "2026-05-29T09:15:00.000Z",
+                      pickupLocation: "Mock Arrival Pickup",
+                      pickupTime: "1715hrs",
+                      reference: "MOCK-DRIVER-JOB-ARRIVAL-WORKFLOW",
+                      route: "Mock Arrival Pickup > Mock Arrival Dropoff",
+                      status: "ots",
+                      statusHistory: [],
+                      statusLabel: "I've arrived",
+                      waypoints: [],
+                    },
+                    state: "ots",
+                    state_label: "On site",
+                  },
+                  {
+                    job_key: "b".repeat(64),
+                    payload: {
+                      assignedDriver: { contact: "", name: "", plate: "", vehicleModel: "" },
+                      bookingType: "DEP",
+                      dropoffLocation: "Mock Portal Dropoff",
+                      flightNumber: "SQ888",
+                      passengerName: "Mock Portal Passenger",
+                      pickupDate: "2026-05-30",
+                      pickupDateTime: "2026-05-30T02:00:00.000Z",
+                      pickupLocation: "Mock Portal Pickup",
+                      pickupTime: "1000hrs",
+                      reference: "MOCK-DRIVER-PORTAL-B",
+                      route: "Mock Portal Pickup > Mock Portal Dropoff",
+                      status: "assigned",
+                      statusHistory: [],
+                      statusLabel: "Assigned",
+                      waypoints: [],
+                    },
+                    state: "assigned",
+                    state_label: "Assigned · Awaiting OTW",
+                  },
+                ],
+                ok: true,
+                version: "driver-portal-browser-mock",
+              }), {
+                status: 200,
+                headers: { "content-type": "application/json" },
+              }),
+            );
+          }
+
           const driverJobPath = new URL(url, window.location.origin).pathname;
           const driverJobPathParts = driverJobPath.split("/").filter(Boolean);
           if (
@@ -371,6 +429,12 @@ async function runChromeTest() {
                       ready: true,
                       reason: "ready",
                     };
+                if (method === "PATCH") {
+                  result.driver_portal = {
+                    enrolled: true,
+                    link_key: "a".repeat(64),
+                  };
+                }
               }
               return new Response(JSON.stringify(result), {
                 headers: { "content-type": "application/json" },
@@ -749,7 +813,7 @@ async function runChromeTest() {
             const buttonRect = button?.getBoundingClientRect();
             const messageRect = message?.getBoundingClientRect();
 
-            return message?.textContent.trim() === "Driver details saved and job acknowledged. Device alerts are enabled on this device." &&
+            return message?.textContent.trim() === "Driver details saved and job acknowledged. Driver Portal is ready on this device. Device alerts are enabled on this device." &&
               acknowledgedState?.textContent.trim() === "Acknowledged" &&
               savedDetails?.innerText.includes("Mock Local Driver A") &&
               savedDetails?.innerText.includes("+65 9123 4567") &&
@@ -1495,6 +1559,83 @@ async function runChromeTest() {
     assert.deepEqual(arrivalCompletedState.activityLogLabels, [], "Expected Arrival public driver activity log to stay hidden.");
     assertNoSensitiveText(arrivalCompletedState);
     await resetMockDriverJobData();
+
+    await navigateAndWaitForBodyText(
+      client,
+      evaluate,
+      new URL("/driver-portal", appUrl).toString(),
+      "Upcoming & active jobs",
+      "Driver Portal job list",
+    );
+    const portalState = await waitForCondition(
+      () => evaluate(`(() => {
+        const jobs = [...document.querySelectorAll("[data-driver-portal-job]")];
+        return jobs.length === 2
+          ? {
+              fetchCalls: window.__driverJobFetchCalls || [],
+              jobReferences: jobs.map((job) => job.getAttribute("data-driver-portal-job")),
+              jobStates: jobs.map((job) => job.querySelector("[data-driver-portal-job-state]")?.textContent.trim()),
+              text: document.body?.innerText || "",
+            }
+          : false;
+      })()`),
+      10000,
+      "Driver Portal two-job exact-driver list",
+    );
+    assert.deepEqual(portalState.jobReferences, [
+      "MOCK-DRIVER-JOB-ARRIVAL-WORKFLOW",
+      "MOCK-DRIVER-PORTAL-B",
+    ]);
+    assert.deepEqual(portalState.jobStates, ["On site", "Assigned · Awaiting OTW"]);
+    assert.equal(
+      portalState.fetchCalls.includes("GET /api/driver-portal/jobs"),
+      true,
+      "Installed Driver Portal must use only its same-origin read-only jobs route.",
+    );
+    assertNoSensitiveText({
+      fetchCalls: portalState.fetchCalls,
+      resourceCalls: [],
+      visibleText: portalState.text,
+    });
+
+    const missingShortcutClicked = await evaluate(`(() => {
+      const button = document.querySelector('[data-driver-portal-open-job="${"b".repeat(64)}"]');
+      if (!button) return false;
+      button.click();
+      return true;
+    })()`);
+    assert.equal(missingShortcutClicked, true);
+    const missingShortcutState = await waitForCondition(
+      () => evaluate(`(() => {
+        const feedback = document.querySelector('[data-driver-portal-open-feedback="${"b".repeat(64)}"]');
+        return feedback?.textContent.includes("Open and acknowledge the latest private link from dispatch once on this device.")
+          ? { href: location.href, text: feedback.textContent.trim() }
+          : false;
+      })()`),
+      10000,
+      "Driver Portal missing local private-link fallback",
+    );
+    assert.equal(new URL(missingShortcutState.href).pathname, "/driver-portal");
+
+    const localShortcut = await evaluate(`(async () => {
+      const database = await new Promise((resolve, reject) => {
+        const request = indexedDB.open("prestige-driver-device-alerts", 1);
+        request.addEventListener("success", () => resolve(request.result));
+        request.addEventListener("error", () => reject(request.error));
+      });
+      const result = await new Promise((resolve, reject) => {
+        const transaction = database.transaction("driver-job-links", "readonly");
+        const request = transaction.objectStore("driver-job-links").get("${"a".repeat(64)}");
+        request.addEventListener("success", () => resolve(request.result || null));
+        request.addEventListener("error", () => reject(request.error));
+      });
+      database.close();
+      return result;
+    })()`);
+    assert.deepEqual(localShortcut, {
+      jobKey: "a".repeat(64),
+      url: `/driver-job/${mockDriverJobTokens.arrivalWorkflow}`,
+    });
 
     for (const [token, label] of [
       ["not-a-real-token", "invalid"],

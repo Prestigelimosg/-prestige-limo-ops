@@ -218,9 +218,19 @@ export async function loadDriverPortalJobs({
     }
 
     const contextPayload = asRecord(asRecord(link.safe_link_context).driver_job_payload);
+    const pickupLocation =
+      cleanText(booking.pickup_location) ||
+      cleanText(contextPayload.pickupLocation) ||
+      cleanText(contextPayload.pickup_location);
+    const dropoffLocation =
+      cleanText(booking.dropoff_location) ||
+      cleanText(contextPayload.dropoffLocation) ||
+      cleanText(contextPayload.dropoff_location);
     const payload = mapBookingToSafeDriverJobPayload({
       ...contextPayload,
       ...booking,
+      dropoffLocation,
+      pickupLocation,
       public_reference: cleanText(booking.public_booking_reference, 120) || reference,
       status: state,
     });

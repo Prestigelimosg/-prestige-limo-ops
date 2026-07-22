@@ -12,6 +12,13 @@ ca9cf2f7 Merge pull request #71 from Prestigelimosg/codex/driver-job-ack-push-al
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Driver Portal Pickup And Drop-Off Display Repair (2026-07-22)
+
+- Production Job `10840` reproduced an exact Driver Portal presentation defect: the saved booking and newest acknowledged private-link snapshot both contained pickup `Orange` and drop-off `Airport`, while the existing portal card rendered `—` for both. The portal read selected the correct snake_case booking columns but passed them to the established safe payload mapper only under unsupported field names.
+- The existing `/driver-portal` read now normalizes only its selected pickup and drop-off values before calling the same safe payload mapper. Current saved booking address/location fields remain first priority, followed by the newest acknowledged link's safe snapshot, with no raw token, internal driver ID, customer price, billing, invoice, payment, payout, PayNow, internal/admin note, parser/debug, or mock/archive data added to the response.
+- No portal session, enrolment, cookie, API route, manifest, IndexedDB link, acknowledgement, Driver Calendar, Driver Reports, Pending ACK Queue, status action, Live Dispatch, message, customer portal, invoice, booking persistence, schema, Production record, environment setting, external contact, or other wired lane changed.
+- Focused protection is the updated `scripts/test-driver-portal-session-jobs-guard.mjs`, which now requires saved snake_case pickup and drop-off fields to survive the exact-driver portal read in addition to the existing newest-link, assignment, terminal-state, session, and privacy boundaries.
+
 ### Driver Job 96-Hour And JC Link Expiry (2026-07-22)
 
 - The established private Driver Job link lifetime is extended in place from 48 hours to exactly 96 hours. Dispatch still issues the same one private `/driver-job/[token]` URL through the existing admin route and persistence lane; the server accepts no lifetime beyond 96 hours, stores only the token hash, and continues failing closed for malformed, expired, revoked, or artificially far-future links.

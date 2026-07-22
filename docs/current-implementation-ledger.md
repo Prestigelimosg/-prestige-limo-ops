@@ -1,13 +1,13 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-40f43b93 Format customer invoice line descriptions
+4f1a8ff9 Add Driver Job acknowledgement device alerts
 
 Latest pushed main/staging runtime checkpoint:
-40f43b93 Format customer invoice line descriptions
+4f1a8ff9 Add Driver Job acknowledgement device alerts
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-6b9ad12f Merge pull request #70 from Prestigelimosg/codex/invoice-line-description-format
+ca9cf2f7 Merge pull request #71 from Prestigelimosg/codex/driver-job-ack-push-alerts
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -19,9 +19,12 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Registration occurs only after the exact active private link has been acknowledged and bound server-side to a verified positive `drivers.id`. The server stores the browser endpoint and encryption keys in the new RLS-protected, service-role-only `driver_device_push_subscriptions` table. It never stores the raw private Driver Job token, and a device endpoint is rebound only by a later verified acknowledgement on that device.
 - Existing `driver_app` App Updates remain the sole saved message record and read surface. After an approved driver-app notification is saved, one best-effort generic device alert may be delivered to active subscriptions for that exact verified driver. The lock-screen payload says only `Prestige Limo Ops` and `New Driver Job app update. Tap to review.`; it contains no passenger, customer, route, price, billing, invoice, payment, payout, PayNow, internal/admin note, parser/debug, raw token, or private job detail.
 - The driver-scoped service worker stores the already-open private page URL only in that driver's browser IndexedDB under a one-way opaque link key. Tapping the alert can therefore reopen the exact private Driver Job page without placing the raw token in the database or push payload. iPhone/iPad delivery still requires a supported Home Screen web app plus the driver's explicit permission; browser/OS notification settings, Focus mode, connectivity, and provider availability remain outside the app's guarantee.
-- Runtime activation is default-closed behind `PRESTIGE_DRIVER_DEVICE_PUSH_ENABLED` and its three dedicated driver VAPID/contact settings. It does not reuse or change the established admin push table, route, service worker, control, gate, or booking-request sender. The migration and Production configuration remain unapplied until separate explicit action-time approval.
+- Runtime activation is gated behind `PRESTIGE_DRIVER_DEVICE_PUSH_ENABLED` and its three dedicated driver VAPID/contact settings. It does not reuse or change the established admin push table, route, service worker, control, gate, or booking-request sender.
 - Driver Calendar/OAuth/event identity, Driver Reports evidence, Pending Driver ACK Queue, Live Dispatch, explicit Admin confirm-completed, booking, customer portal, invoice, pricing, payment, payout, PayNow, GPS, OTS photo, provider messaging, and every other established wired lane remain unchanged.
 - Focused protection is `scripts/test-driver-job-device-push-alert-guard.mjs`, the updated `scripts/test-driver-job-page-browser.mjs`, the existing customer/driver app-notification API contract, and the unchanged admin device-push guard.
+- Ready PR `#71` merged the bounded implementation into `main` as `ca9cf2f7` after the Vercel check passed. After the owner's explicit activation approval, Supabase migration history `20260722054158_driver_device_push_subscriptions` was applied to the healthy Singapore Production project. Read-only verification confirmed RLS enabled, no `anon` or `authenticated` read privilege, service-role CRUD privilege, and zero initial subscription rows.
+- A fresh dedicated driver VAPID keypair was generated locally and sent directly to Vercel without printing or committing the private key. Only `PRESTIGE_DRIVER_DEVICE_PUSH_ENABLED`, `PRESTIGE_DRIVER_DEVICE_PUSH_VAPID_PUBLIC_KEY`, `PRESTIGE_DRIVER_DEVICE_PUSH_VAPID_PRIVATE_KEY`, and `PRESTIGE_DRIVER_DEVICE_PUSH_CONTACT_EMAIL` were added as encrypted Production variables; no existing environment variable was read, replaced, or changed.
+- The exact merged Production deployment was rebuilt with those settings as `https://prestige-limo-ops-staging-b7pf94llo-prestigelimosgs-projects.vercel.app`, reached READY, and was aliased to `https://app.prestigelimo.sg`. The live origin returned HTTP 200 with merged build marker `ca9cf2f7`. A real driver-device permission/subscription and received-alert check remains required because server readiness alone cannot prove browser/OS delivery; no alert was sent during this activation verification.
 
 ### Customer Invoice Line Description Presentation (2026-07-21)
 

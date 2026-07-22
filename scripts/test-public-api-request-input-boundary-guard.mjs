@@ -20,6 +20,7 @@ const publicApiRoutePaths = [
   "app/api/driver-job/[token]/flight-eta-setup/route.ts",
   "app/api/driver-job/[token]/flight-eta-acknowledgement-setup/route.ts",
   "app/api/driver-job-bids/route.ts",
+  "app/api/driver-portal/jobs/route.ts",
 ];
 
 const helperPaths = [
@@ -478,6 +479,17 @@ assertExcludes(driverIssueHelper, /payout|payment|invoice|billing|customer_price
 const driverBidsRoute = files["app/api/driver-job-bids/route.ts"];
 assertExcludes(driverBidsRoute, "request.json", "blocked driver bids route body parsing");
 assertIncludes(driverBidsRoute, "blockedDriverBidResponse", "blocked driver bids input boundary");
+
+const driverPortalJobsRoute = files["app/api/driver-portal/jobs/route.ts"];
+assertExcludes(driverPortalJobsRoute, "request.json", "driver portal jobs route body parsing");
+assertExcludes(driverPortalJobsRoute, "searchParams", "driver portal jobs route query parsing");
+for (const fragment of [
+  'request.headers.get("x-prestige-driver-purpose") !== "driver-portal-jobs-read"',
+  'refererUrl.pathname === "/driver-portal"',
+  'resolveDriverPortalSession(request.headers.get("cookie"))',
+]) {
+  assertIncludes(driverPortalJobsRoute, fragment, `driver portal jobs input fragment ${fragment}`);
+}
 
 for (const setupRoutePath of [
   "app/api/driver-job/[token]/flight-eta-setup/route.ts",

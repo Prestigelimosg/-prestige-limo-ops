@@ -29,6 +29,10 @@ type DriverJobApiBlockedReason =
 type DriverJobApiResponse =
   | {
       device_alerts?: DriverDeviceAlertApiState;
+      driver_portal?: {
+        enrolled: boolean;
+        link_key: string | null;
+      };
       ok: true;
       mode: "mock" | "production";
       payload: SafeDriverJobPayload;
@@ -855,6 +859,39 @@ function rememberAcknowledgedDriverJobLink(
   });
 }
 
+async function rememberAcknowledgedDriverPortalLink(jobKey: string) {
+  if (!/^[0-9a-f]{64}$/.test(jobKey) || !("indexedDB" in window)) {
+    return;
+  }
+
+  const url = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  if (!url.startsWith("/driver-job/")) {
+    return;
+  }
+
+  const database = await new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open("prestige-driver-device-alerts", 1);
+    request.addEventListener("upgradeneeded", () => {
+      if (!request.result.objectStoreNames.contains("driver-job-links")) {
+        request.result.createObjectStore("driver-job-links", { keyPath: "jobKey" });
+      }
+    });
+    request.addEventListener("success", () => resolve(request.result));
+    request.addEventListener("error", () => reject(request.error));
+  });
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const transaction = database.transaction("driver-job-links", "readwrite");
+      transaction.objectStore("driver-job-links").put({ jobKey, url });
+      transaction.addEventListener("complete", () => resolve());
+      transaction.addEventListener("error", () => reject(transaction.error));
+    });
+  } finally {
+    database.close();
+  }
+}
+
 export default function DriverJobPage() {
   const params = useParams<{ token?: string | string[] }>();
   const token = useMemo(() => {
@@ -866,6 +903,7 @@ export default function DriverJobPage() {
   const [acknowledged, setAcknowledged] = useState(false);
   const [driverDetails, setDriverDetails] = useState<DriverDetails>(emptyDriverDetails);
   const [driverDetailsRaw, setDriverDetailsRaw] = useState("");
+  const [driverPortalEnrolled, setDriverPortalEnrolled] = useState(false);
   const [detailsFeedback, setDetailsFeedback] = useState<ControlFeedback | null>(null);
   const [parseDetailsFeedback, setParseDetailsFeedback] = useState<ControlFeedback | null>(null);
   const [savingDriverDetails, setSavingDriverDetails] = useState(false);
@@ -1308,6 +1346,14 @@ export default function DriverJobPage() {
       setStatusFeedback(null);
       setWorkflowStatus(result.payload.status || "assigned");
       setPageState({ kind: "ready", job: result.payload });
+      const driverPortalReady =
+        result.driver_portal?.enrolled === true &&
+        typeof result.driver_portal.link_key === "string" &&
+        /^[0-9a-f]{64}$/.test(result.driver_portal.link_key);
+      setDriverPortalEnrolled(driverPortalReady);
+      if (driverPortalReady && result.driver_portal?.link_key) {
+        await rememberAcknowledgedDriverPortalLink(result.driver_portal.link_key).catch(() => undefined);
+      }
       const deviceAlertsRegistered =
         result.device_alerts?.subscription_registered === true &&
         typeof result.device_alerts.link_key === "string" &&
@@ -1331,11 +1377,14 @@ export default function DriverJobPage() {
             ? " Device alerts were not allowed; reopen this page to check App Updates."
             : " Device alerts could not be enabled; reopen this page to check App Updates."
           : "";
+      const driverPortalFeedback = driverPortalReady
+        ? " Driver Portal is ready on this device."
+        : "";
       setDetailsFeedback(
-        deviceAlertFeedback
+        deviceAlertFeedback || driverPortalFeedback
           ? {
               tone: "success",
-              text: `Driver details saved and job acknowledged.${deviceAlertFeedback}`,
+              text: `Driver details saved and job acknowledged.${driverPortalFeedback}${deviceAlertFeedback}`,
             }
           : defaultAcknowledgedDetailsFeedback,
       );
@@ -2385,6 +2434,9 @@ export default function DriverJobPage() {
                   >
                     This same action enables Driver Job alerts on this device when supported and allowed.
                   </p>
+                  <p className="text-xs font-medium leading-5 text-slate-500" data-driver-portal-enrolment-helper="true">
+                    When securely configured, acknowledgement also enrols this device in Driver Portal.
+                  </p>
                 </div>
                 {savedDriverDetails ? (
                   <div
@@ -2468,6 +2520,25 @@ export default function DriverJobPage() {
                         {driverCalendar.feedback.text}
                       </p>
                     ) : null}
+                  </div>
+                ) : null}
+                {driverPortalEnrolled ? (
+                  <div
+                    className="space-y-2 rounded-md border border-violet-200 bg-violet-50 px-2.5 py-2"
+                    data-driver-portal-entry="enrolled"
+                  >
+                    <p className="text-sm font-semibold text-violet-950">Driver Portal</p>
+                    <p className="text-xs font-medium leading-5 text-violet-900">
+                      Open all acknowledged upcoming and active jobs assigned to this verified driver. On
+                      iPhone, use Add to Home Screen from this page to install the reusable Driver Portal.
+                    </p>
+                    <Link
+                      className="flex h-11 w-full items-center justify-center rounded-md border border-violet-700 bg-white px-3 text-sm font-semibold text-violet-950 transition hover:bg-violet-100"
+                      data-driver-portal-open="true"
+                      href="/driver-portal"
+                    >
+                      Open Driver Portal
+                    </Link>
                   </div>
                 ) : null}
               </div>

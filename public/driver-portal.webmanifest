@@ -1,0 +1,24 @@
+{
+  "background_color": "#f8fafc",
+  "description": "Assigned Prestige Limo driver jobs.",
+  "display": "standalone",
+  "icons": [
+    {
+      "src": "/icons/prestige-ops-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "purpose": "maskable",
+      "src": "/icons/prestige-ops-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "id": "/driver-portal",
+  "name": "Prestige Driver Portal",
+  "scope": "/",
+  "short_name": "Prestige Driver",
+  "start_url": "/driver-portal",
+  "theme_color": "#020617"
+}

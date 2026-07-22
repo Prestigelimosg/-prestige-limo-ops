@@ -3,7 +3,10 @@ import {
   applyDriverJobStatusUpdateContract,
   getDriverJobPayloadForTokenContract,
 } from "../lib/driver-job-link-contract.ts";
-import { hashDriverJobLinkToken } from "../lib/driver-job-link.ts";
+import {
+  hashDriverJobLinkToken,
+  isDriverJobLinkExpired,
+} from "../lib/driver-job-link.ts";
 
 const now = "2026-05-22T08:00:00.000Z";
 const validTokenA = "valid-token-a";
@@ -171,6 +174,8 @@ for (const [requestedStatus, expectedStatus] of [
   ["Job Completed", "completed"],
 ]) {
   const { bookingsById, links } = createContractFixture();
+  const revokedLink = links.find((link) => link.revokedAt);
+  const revokedLinkExpiry = revokedLink.expiresAt;
   const result = applyDriverJobStatusUpdateContract({
     token: validTokenA,
     links,
@@ -195,6 +200,28 @@ for (const [requestedStatus, expectedStatus] of [
     },
   ]);
   assertNoSensitiveData(result);
+
+  if (expectedStatus === "completed") {
+    assert.equal(
+      links.every((link) =>
+        String(link.bookingId) !== "booking-a" ||
+        link.revokedAt ||
+        isDriverJobLinkExpired(link.expiresAt, now)
+      ),
+      true,
+      "Driver JC must expire every active private link for that exact booking without changing another booking.",
+    );
+    assert.equal(
+      isDriverJobLinkExpired(links.find((link) => link.bookingId === "booking-b").expiresAt, now),
+      false,
+      "Driver JC must not expire another booking's private link.",
+    );
+    assert.equal(
+      revokedLink.expiresAt,
+      revokedLinkExpiry,
+      "Driver JC must not rewrite an explicit admin-revoked link.",
+    );
+  }
 }
 
 {

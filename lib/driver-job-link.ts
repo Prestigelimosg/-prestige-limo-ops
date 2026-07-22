@@ -9,7 +9,7 @@ export {
 } from "./driver-job-status-workflow.ts";
 
 export const defaultDriverJobLinkTokenByteLength = 32;
-export const defaultDriverJobLinkTtlHours = 48;
+export const defaultDriverJobLinkTtlHours = 96;
 export const defaultDriverJobLinkMaxFutureHours = defaultDriverJobLinkTtlHours;
 
 export type DriverJobBookingLike = Record<string, unknown>;

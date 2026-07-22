@@ -21,6 +21,7 @@
     "test:driver-job-link-mode": "node --experimental-strip-types scripts/test-driver-job-link-mode.mjs",
     "test:driver-job-link-production-guard": "node --experimental-strip-types scripts/test-driver-job-link-production-guard.mjs",
     "test:driver-job-link-production-adapter": "node --experimental-strip-types scripts/test-driver-job-link-production-adapter.mjs",
+    "test:driver-portal": "node scripts/test-driver-portal-session-jobs-guard.mjs",
     "test:driver-job-page-browser": "node --experimental-strip-types scripts/test-driver-job-page-browser.mjs",
     "test:driver-job-page-production-disabled-browser": "node --experimental-strip-types scripts/test-driver-job-page-production-disabled-browser.mjs",
     "test:mobile-usability-browser": "node --experimental-strip-types scripts/test-mobile-usability-browser.mjs",

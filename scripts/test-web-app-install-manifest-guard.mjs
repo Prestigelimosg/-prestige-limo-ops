@@ -4,6 +4,9 @@ import { readFile, stat } from "node:fs/promises";
 
 const manifestSource = await readFile("app/manifest.ts", "utf8");
 const layoutSource = await readFile("app/layout.tsx", "utf8");
+const driverJobLayoutSource = await readFile("app/driver-job/[token]/layout.tsx", "utf8");
+const driverPortalLayoutSource = await readFile("app/driver-portal/layout.tsx", "utf8");
+const driverPortalManifest = JSON.parse(await readFile("public/driver-portal.webmanifest", "utf8"));
 
 const requiredManifestFragments = [
   'display: "standalone"',
@@ -34,6 +37,42 @@ const requiredLayoutFragments = [
 
 for (const fragment of requiredLayoutFragments) {
   assert.ok(layoutSource.includes(fragment), `Missing app metadata fragment: ${fragment}`);
+}
+
+assert.equal(driverPortalManifest.id, "/driver-portal");
+assert.equal(driverPortalManifest.start_url, "/driver-portal");
+assert.equal(driverPortalManifest.scope, "/");
+assert.equal(driverPortalManifest.display, "standalone");
+assert.equal(driverPortalManifest.name, "Prestige Driver Portal");
+assert.deepEqual(
+  driverPortalManifest.icons,
+  [
+    {
+      src: "/icons/prestige-ops-icon-192.png",
+      sizes: "192x192",
+      type: "image/png",
+    },
+    {
+      purpose: "maskable",
+      src: "/icons/prestige-ops-icon-512.png",
+      sizes: "512x512",
+      type: "image/png",
+    },
+  ],
+  "Driver Portal must reuse only the approved Prestige install icons.",
+);
+
+for (const [label, source] of [
+  ["private Driver Job install metadata", driverJobLayoutSource],
+  ["Driver Portal install metadata", driverPortalLayoutSource],
+]) {
+  for (const fragment of [
+    'manifest: "/driver-portal.webmanifest"',
+    'title: "Prestige Driver"',
+    'applicationName: "Prestige Driver Portal"',
+  ]) {
+    assert.ok(source.includes(fragment), `${label} missing ${fragment}`);
+  }
 }
 
 const expectedIconAssets = [
@@ -78,7 +117,11 @@ const blockedInstallSideEffects = [
 
 for (const pattern of blockedInstallSideEffects) {
   assert.equal(
-    pattern.test(manifestSource) || pattern.test(layoutSource),
+    pattern.test(manifestSource) ||
+      pattern.test(layoutSource) ||
+      pattern.test(driverJobLayoutSource) ||
+      pattern.test(driverPortalLayoutSource) ||
+      pattern.test(JSON.stringify(driverPortalManifest)),
     false,
     `Install metadata must not activate provider/calendar side effects: ${pattern}`,
   );

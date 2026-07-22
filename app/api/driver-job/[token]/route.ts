@@ -55,6 +55,16 @@ function publicDriverDeviceAlertRegistration(result: {
   };
 }
 
+function publicDriverPortalEnrollment(result: {
+  jobKey: string | null;
+  ok: boolean;
+}) {
+  return {
+    enrolled: result.ok,
+    link_key: result.ok ? result.jobKey : null,
+  };
+}
+
 function readDriverDetailsBody(body: unknown) {
   const record = body && typeof body === "object" && !Array.isArray(body)
     ? body as Record<string, unknown>
@@ -124,17 +134,28 @@ export async function PATCH(request: Request, context: DriverJobRouteContext) {
 
   if (isProductionDriverJobLinkMode()) {
     const result = await applyProductionDriverJobDetailsUpdate({
+      driverPortalCookieHeader: request.headers.get("cookie"),
       token,
       ...details,
     });
 
     if (result.ok) {
-      return Response.json({
-        device_alerts: publicDriverDeviceAlertRegistration(result.device_alerts),
-        ok: true,
-        mode: "production",
-        payload: result.payload,
+      const headers = new Headers({
+        "Cache-Control": "no-store",
       });
+      if (result.driver_portal.ok) {
+        headers.set("Set-Cookie", result.driver_portal.cookie);
+      }
+      return Response.json(
+        {
+          device_alerts: publicDriverDeviceAlertRegistration(result.device_alerts),
+          driver_portal: publicDriverPortalEnrollment(result.driver_portal),
+          ok: true,
+          mode: "production",
+          payload: result.payload,
+        },
+        { headers },
+      );
     }
 
     return Response.json(result, { status: blockedStatusByReason[result.reason] });
@@ -162,6 +183,10 @@ export async function PATCH(request: Request, context: DriverJobRouteContext) {
     device_alerts: {
       link_key: null,
       subscription_registered: false,
+    },
+    driver_portal: {
+      enrolled: false,
+      link_key: null,
     },
     ok: true,
     mode: "mock",

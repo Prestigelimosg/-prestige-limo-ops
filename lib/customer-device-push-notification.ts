@@ -187,6 +187,14 @@ function safeAccountReference(value: unknown) {
     : null;
 }
 
+function bookingCustomerAccountReference(value: unknown) {
+  if (typeof value === "number" && Number.isSafeInteger(value) && value > 0) {
+    return safeAccountReference(String(value));
+  }
+
+  return safeAccountReference(value);
+}
+
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -458,7 +466,7 @@ async function loadCustomerAccountReferenceForBooking(
 
   const row = Array.isArray(data) ? record(data[0]) : null;
 
-  return safeAccountReference(row?.customer_id);
+  return bookingCustomerAccountReference(row?.customer_id);
 }
 
 async function loadActiveSubscriptions(

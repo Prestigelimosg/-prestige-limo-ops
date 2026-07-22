@@ -107,9 +107,14 @@ async function writeHarnessFile(tempDir, relativePath) {
 async function writeMockModules(tempDir) {
   const serverOnlyPath = path.join(tempDir, "node_modules/server-only/index.js");
   const supabasePath = path.join(tempDir, "node_modules/@supabase/supabase-js/index.js");
+  const customerNotificationPath = path.join(
+    tempDir,
+    "lib/customer-driver-app-notification-persistence.js",
+  );
 
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await mkdir(path.dirname(supabasePath), { recursive: true });
+  await mkdir(path.dirname(customerNotificationPath), { recursive: true });
   await writeFile(serverOnlyPath, "");
   await writeFile(
     supabasePath,
@@ -123,6 +128,15 @@ async function writeMockModules(tempDir) {
       "  return mock.client;",
       "}",
       "module.exports = { createClient };",
+    ].join("\n"),
+  );
+  await writeFile(
+    customerNotificationPath,
+    [
+      "async function createCustomerDriverAppNotification(input) {",
+      "  return { data: { ...input, id: 'status-alert-contract-notification' }, ok: true };",
+      "}",
+      "module.exports = { createCustomerDriverAppNotification };",
     ].join("\n"),
   );
 }
@@ -408,11 +422,16 @@ assert.equal(
   "Saved booking status updates must not reject valid booking-reference responses only because the API identifier shape differs.",
 );
 assert.equal(
+  dashboardSource.includes("syncBookingCompletedStatusFromDriverReport"),
+  false,
+  "Driver Job Completed reports must remain evidence and must not automatically complete the saved booking.",
+);
+assert.equal(
   dashboardSource.includes(
-    'patchBookingStatusReference(\n      bookingStatusReference,\n      "completed",\n      matchingBooking,',
+    'await updateBookingStatusOnly(\n      bookingRecord,\n      "completed",\n      "Admin confirming completion...",',
   ),
   true,
-  "Driver Job Completed reports must persist completed status with the exact matching source booking.",
+  "Only the explicit Admin confirm completed action may persist the saved booking completion.",
 );
 assert.equal(
   dashboardSource.includes("function bookingRecordIsCancelledStatus"),
@@ -704,6 +723,11 @@ try {
       status: "completed",
     },
   );
+  assert.equal(bookingReferenceResult.body.customer_notification.ok, true);
+  assert.equal(
+    bookingReferenceResult.body.customer_notification.notification.safe_title,
+    "Booking completed",
+  );
   assert.equal(bookingReferenceMock.createdClients.length, 1);
   assert.equal(bookingReferenceMock.client.updateHistory.length, 2);
   assert.deepEqual(bookingReferenceMock.client.updateHistory[0].filters, [
@@ -738,6 +762,11 @@ try {
     "CODEX-ACCEPT-20260711212612",
   );
   assert.equal(multiSegmentBookingReferenceResult.body.booking.status, "cancelled");
+  assert.equal(multiSegmentBookingReferenceResult.body.customer_notification.ok, true);
+  assert.equal(
+    multiSegmentBookingReferenceResult.body.customer_notification.notification.safe_title,
+    "Booking cancelled",
+  );
   assert.equal(multiSegmentBookingReferenceMock.client.updateHistory.length, 2);
   assert.deepEqual(multiSegmentBookingReferenceMock.client.updateHistory[0].filters, [
     {

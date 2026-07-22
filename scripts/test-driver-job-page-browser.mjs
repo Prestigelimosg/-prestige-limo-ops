@@ -239,6 +239,7 @@ async function runChromeTest() {
           permissionRequests: 0,
           registrations: [],
           rememberedLinks: [],
+          portalSubscriptionBodies: [],
           subscriptionBodies: [],
         };
         const driverPushSubscription = {
@@ -342,9 +343,28 @@ async function runChromeTest() {
             );
           }
 
-          if (method === "GET" && new URL(url, window.location.origin).pathname === "/api/driver-portal/jobs") {
+          if (new URL(url, window.location.origin).pathname === "/api/driver-portal/jobs") {
+            if (method === "POST") {
+              try {
+                window.__driverDeviceAlertTest.portalSubscriptionBodies.push(JSON.parse(args[1]?.body || "{}"));
+              } catch {}
+              return Promise.resolve(
+                new Response(JSON.stringify({
+                  device_alerts: { subscription_registered: true },
+                  ok: true,
+                }), {
+                  status: 200,
+                  headers: { "content-type": "application/json" },
+                }),
+              );
+            }
             return Promise.resolve(
               new Response(JSON.stringify({
+                device_alerts: {
+                  enabled: true,
+                  public_key: "AQIDBA",
+                  ready: true,
+                },
                 jobs: [
                   {
                     job_key: "a".repeat(64),
@@ -474,6 +494,7 @@ async function runChromeTest() {
           permissionRequests: window.__driverDeviceAlertTest?.permissionRequests || 0,
           registrations: window.__driverDeviceAlertTest?.registrations || [],
           rememberedLinks: window.__driverDeviceAlertTest?.rememberedLinks || [],
+          portalSubscriptionBodies: window.__driverDeviceAlertTest?.portalSubscriptionBodies || [],
           subscriptionBodies: window.__driverDeviceAlertTest?.subscriptionBodies || [],
         },
         calendarImport: {
@@ -1573,6 +1594,9 @@ async function runChromeTest() {
         return jobs.length === 2
           ? {
               fetchCalls: window.__driverJobFetchCalls || [],
+              permissionRequests: window.__driverDeviceAlertTest?.permissionRequests || 0,
+              registrations: window.__driverDeviceAlertTest?.registrations || [],
+              portalSubscriptionBodies: window.__driverDeviceAlertTest?.portalSubscriptionBodies || [],
               jobReferences: jobs.map((job) => job.getAttribute("data-driver-portal-job")),
               jobStates: jobs.map((job) => job.querySelector("[data-driver-portal-job-state]")?.textContent.trim()),
               text: document.body?.innerText || "",
@@ -1590,13 +1614,54 @@ async function runChromeTest() {
     assert.equal(
       portalState.fetchCalls.includes("GET /api/driver-portal/jobs"),
       true,
-      "Installed Driver Portal must use only its same-origin read-only jobs route.",
+      "Installed Driver Portal must use its existing same-origin jobs route.",
     );
     assertNoSensitiveText({
       fetchCalls: portalState.fetchCalls,
       resourceCalls: [],
       visibleText: portalState.text,
     });
+
+    const alertButtonClicked = await evaluate(`(() => {
+      const button = document.querySelector('[data-driver-portal-enable-alerts="true"]');
+      if (!button) return false;
+      button.click();
+      return true;
+    })()`);
+    assert.equal(alertButtonClicked, true, "Installed Driver Portal must expose one alert setup action.");
+    const portalAlertState = await waitForCondition(
+      () => evaluate(`(() => {
+        const setup = document.querySelector("[data-driver-portal-alert-setup]");
+        return setup?.getAttribute("data-driver-portal-alert-setup") === "enabled"
+          ? {
+              fetchCalls: window.__driverJobFetchCalls || [],
+              permissionRequests: window.__driverDeviceAlertTest?.permissionRequests || 0,
+              registrations: window.__driverDeviceAlertTest?.registrations || [],
+              portalSubscriptionBodies: window.__driverDeviceAlertTest?.portalSubscriptionBodies || [],
+              text: setup.textContent.trim(),
+            }
+          : false;
+      })()`),
+      10000,
+      "Driver Portal device alert registration",
+    );
+    assert.equal(portalAlertState.permissionRequests, portalState.permissionRequests + 1);
+    assert.equal(
+      portalAlertState.fetchCalls.includes("POST /api/driver-portal/jobs"),
+      true,
+      "Alert setup must reuse the existing Driver Portal jobs endpoint.",
+    );
+    assert.equal(portalAlertState.portalSubscriptionBodies.length, 1);
+    assert.equal(
+      portalAlertState.portalSubscriptionBodies[0].device_push_subscription.endpoint,
+      "https://push.browser.test/driver-device",
+    );
+    assert.equal(
+      portalAlertState.registrations.at(-1)?.options?.scope,
+      "/driver-job/",
+      "Installed alert setup must reuse the existing driver-scoped service worker.",
+    );
+    assert.equal(portalAlertState.text.includes("This device is ready for Driver Job alerts."), true);
 
     const missingShortcutClicked = await evaluate(`(() => {
       const button = document.querySelector('[data-driver-portal-open-job="${"b".repeat(64)}"]');

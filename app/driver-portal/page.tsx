@@ -15,6 +15,18 @@ type DriverPortalReadState =
   | { kind: "ready"; jobs: DriverPortalJob[] }
   | { kind: "blocked"; reason: "not_configured" | "unauthorized" | "unavailable" };
 
+type DriverPortalAlertReadiness = {
+  publicKey: string;
+  ready: boolean;
+};
+
+type DriverPortalAlertState =
+  | "available"
+  | "blocked"
+  | "enabled"
+  | "enabling"
+  | "unavailable";
+
 const driverAlertDatabaseName = "prestige-driver-device-alerts";
 const driverAlertDatabaseVersion = 1;
 const driverJobLinkStoreName = "driver-job-links";
@@ -25,6 +37,13 @@ function displayValue(value: string | null | undefined) {
 
 function pickupDisplay(job: SafeDriverJobPayload) {
   return [job.pickupDate, job.pickupTime].filter(Boolean).join(" · ") || "Schedule pending";
+}
+
+function driverDeviceAlertApplicationServerKey(value: string) {
+  const padding = "=".repeat((4 - value.length % 4) % 4);
+  const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = window.atob(base64);
+  return Uint8Array.from([...raw].map((character) => character.charCodeAt(0)));
 }
 
 function openDriverAlertDatabase() {
@@ -63,6 +82,11 @@ async function storedDriverJobUrl(jobKey: string) {
 
 export default function DriverPortalPage() {
   const [readState, setReadState] = useState<DriverPortalReadState>({ kind: "loading" });
+  const [alertReadiness, setAlertReadiness] = useState<DriverPortalAlertReadiness>({
+    publicKey: "",
+    ready: false,
+  });
+  const [alertState, setAlertState] = useState<DriverPortalAlertState>("available");
   const [openingJobKey, setOpeningJobKey] = useState("");
   const [openFeedback, setOpenFeedback] = useState<Record<string, string>>({});
 
@@ -76,6 +100,7 @@ export default function DriverPortalPage() {
         },
       });
       const result = await response.json() as {
+        device_alerts?: { public_key?: string | null; ready?: boolean };
         jobs?: DriverPortalJob[];
         ok?: boolean;
         reason?: string;
@@ -92,6 +117,22 @@ export default function DriverPortalPage() {
         return;
       }
 
+      const publicKey = typeof result.device_alerts?.public_key === "string"
+        ? result.device_alerts.public_key
+        : "";
+      setAlertReadiness({
+        publicKey,
+        ready: result.device_alerts?.ready === true && Boolean(publicKey),
+      });
+      if (
+        !("Notification" in window) ||
+        !("serviceWorker" in navigator) ||
+        !("PushManager" in window)
+      ) {
+        setAlertState("unavailable");
+      } else if (Notification.permission === "denied") {
+        setAlertState("blocked");
+      }
       setReadState({ kind: "ready", jobs: Array.isArray(result.jobs) ? result.jobs : [] });
     } catch {
       setReadState({ kind: "blocked", reason: "unavailable" });
@@ -105,6 +146,63 @@ export default function DriverPortalPage() {
 
     return () => window.cancelAnimationFrame(animationFrame);
   }, [loadJobs]);
+
+  async function enableJobAlerts() {
+    if (!alertReadiness.ready || !alertReadiness.publicKey) {
+      setAlertState("unavailable");
+      return;
+    }
+    if (
+      !("Notification" in window) ||
+      !("serviceWorker" in navigator) ||
+      !("PushManager" in window)
+    ) {
+      setAlertState("unavailable");
+      return;
+    }
+
+    setAlertState("enabling");
+    try {
+      const permission = Notification.permission === "granted"
+        ? "granted"
+        : await Notification.requestPermission();
+      if (permission !== "granted") {
+        setAlertState(permission === "denied" ? "blocked" : "available");
+        return;
+      }
+
+      const registration = await navigator.serviceWorker.register(
+        "/prestige-driver-push-sw.js",
+        { scope: "/driver-job/" },
+      );
+      const existingSubscription = await registration.pushManager.getSubscription();
+      const subscription = existingSubscription ?? await registration.pushManager.subscribe({
+        applicationServerKey: driverDeviceAlertApplicationServerKey(alertReadiness.publicKey),
+        userVisibleOnly: true,
+      });
+      const response = await fetch("/api/driver-portal/jobs", {
+        body: JSON.stringify({ device_push_subscription: subscription.toJSON() }),
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: {
+          "content-type": "application/json",
+          "x-prestige-driver-purpose": "driver-portal-device-alert-registration",
+        },
+        method: "POST",
+      });
+      const result = await response.json() as {
+        device_alerts?: { subscription_registered?: boolean };
+        ok?: boolean;
+      };
+      setAlertState(
+        response.ok && result.ok === true && result.device_alerts?.subscription_registered === true
+          ? "enabled"
+          : "unavailable",
+      );
+    } catch {
+      setAlertState("unavailable");
+    }
+  }
 
   async function openJob(job: DriverPortalJob) {
     setOpeningJobKey(job.job_key);
@@ -163,6 +261,39 @@ export default function DriverPortalPage() {
           </section>
         ) : (
           <section className="space-y-3" data-driver-portal-job-count={readState.jobs.length}>
+            <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 shadow-sm" data-driver-portal-alert-setup={alertState}>
+              <h2 className="text-base font-bold text-sky-950">Job alerts</h2>
+              <p className="mt-1 text-sm font-medium leading-6 text-sky-900">
+                Enable once on this iPhone to receive newly issued jobs and Driver Job updates.
+              </p>
+              <button
+                className="mt-3 h-11 w-full rounded-md bg-slate-950 px-4 text-sm font-semibold text-white disabled:bg-slate-400"
+                data-driver-portal-enable-alerts="true"
+                disabled={alertState === "enabled" || alertState === "enabling"}
+                onClick={() => void enableJobAlerts()}
+                type="button"
+              >
+                {alertState === "enabled"
+                  ? "Job Alerts Enabled"
+                  : alertState === "enabling"
+                    ? "Enabling…"
+                    : "Enable Job Alerts"}
+              </button>
+              {alertState === "blocked" ? (
+                <p className="mt-2 text-xs font-semibold leading-5 text-amber-900">
+                  Alerts are blocked. Open iPhone Settings, choose Driver Portal, then allow Notifications.
+                </p>
+              ) : alertState === "unavailable" ? (
+                <p className="mt-2 text-xs font-semibold leading-5 text-amber-900">
+                  Job alerts are unavailable. On iPhone, open this installed Driver Portal from the Home Screen and try again.
+                </p>
+              ) : alertState === "enabled" ? (
+                <p className="mt-2 text-xs font-semibold leading-5 text-emerald-800">
+                  This device is ready for Driver Job alerts.
+                </p>
+              ) : null}
+            </div>
+
             <div className="flex items-center justify-between gap-3 px-1">
               <div>
                 <h2 className="text-lg font-bold text-slate-950">Upcoming &amp; active jobs</h2>

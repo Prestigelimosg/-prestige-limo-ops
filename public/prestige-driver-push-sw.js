@@ -80,11 +80,19 @@ self.addEventListener("push", (event) => {
     typeof payload.tag === "string" && payload.tag.startsWith("prestige-driver-update-")
       ? payload.tag
       : "prestige-driver-update";
+  const targetPath =
+    typeof payload.target_path === "string" &&
+      /^\/driver-job\/[A-Za-z0-9_-]{20,512}$/.test(payload.target_path)
+      ? payload.target_path
+      : "";
+  const body = payload.body === "New Driver Job issued. Tap to review."
+    ? "New Driver Job issued. Tap to review."
+    : "New Driver Job app update. Tap to review.";
 
   event.waitUntil(
     self.registration.showNotification("Prestige Limo Ops", {
-      body: "New Driver Job app update. Tap to review.",
-      data: { jobKey },
+      body,
+      data: { jobKey, targetPath },
       tag,
       renotify: true,
       requireInteraction: true,
@@ -98,12 +106,16 @@ self.addEventListener("notificationclick", (event) => {
     event.notification.data && typeof event.notification.data.jobKey === "string"
       ? event.notification.data.jobKey
       : "";
+  const targetPath =
+    event.notification.data &&
+      typeof event.notification.data.targetPath === "string" &&
+      /^\/driver-job\/[A-Za-z0-9_-]{20,512}$/.test(event.notification.data.targetPath)
+      ? event.notification.data.targetPath
+      : "";
 
   event.waitUntil(
-    loadDriverJobLink(jobKey).then(async (targetUrl) => {
-      if (!targetUrl) {
-        return undefined;
-      }
+    (targetPath ? Promise.resolve(targetPath) : loadDriverJobLink(jobKey)).then(async (storedTargetUrl) => {
+      const targetUrl = storedTargetUrl || "/driver-portal";
 
       const clientList = await self.clients.matchAll({
         includeUncontrolled: true,

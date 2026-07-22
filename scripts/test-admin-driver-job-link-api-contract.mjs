@@ -22,6 +22,7 @@ const sourceFiles = [
   "lib/admin-booking-supabase-adapter.ts",
   "lib/admin-booking-persistence.ts",
   "lib/admin-dispatcher-auth-boundary.ts",
+  "lib/driver-device-push-notification.ts",
   "lib/driver-job-link.ts",
   "lib/driver-job-status-workflow.ts",
   "app/api/admin-driver-job-links/route.ts",
@@ -90,9 +91,11 @@ async function writeHarnessFile(tempDir, relativePath) {
 async function writeMockModules(tempDir) {
   const serverOnlyPath = path.join(tempDir, "node_modules/server-only/index.js");
   const supabasePath = path.join(tempDir, "node_modules/@supabase/supabase-js/index.js");
+  const webPushPath = path.join(tempDir, "node_modules/web-push/index.js");
 
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await mkdir(path.dirname(supabasePath), { recursive: true });
+  await mkdir(path.dirname(webPushPath), { recursive: true });
   await writeFile(serverOnlyPath, "");
   await writeFile(
     supabasePath,
@@ -107,6 +110,10 @@ async function writeMockModules(tempDir) {
       "}",
       "module.exports = { createClient };",
     ].join("\n"),
+  );
+  await writeFile(
+    webPushPath,
+    "module.exports = { sendNotification: async () => undefined, setVapidDetails: () => undefined };",
   );
 }
 
@@ -251,6 +258,7 @@ class MockSupabaseClient {
         { booking_reference: "May 2026 / JOB-UBS-042", driver_id: 29 },
       ],
       driver_live_location_runtime_settings: [],
+      driver_device_push_subscriptions: [],
       driver_job_links: [],
     };
 

@@ -9,6 +9,10 @@ const productionPath = "lib/driver-job-link-production.ts";
 const notificationPath = "lib/customer-driver-app-notification-persistence.ts";
 const routePath = "app/api/driver-job/[token]/route.ts";
 const pagePath = "app/driver-job/[token]/page.tsx";
+const portalRoutePath = "app/api/driver-portal/jobs/route.ts";
+const portalPagePath = "app/driver-portal/page.tsx";
+const adminLinkRoutePath = "app/api/admin-driver-job-links/route.ts";
+const adminLinkPersistencePath = "lib/admin-driver-job-link-persistence.ts";
 const serviceWorkerPath = "public/prestige-driver-push-sw.js";
 const migrationPath = "supabase/migrations/202607220001_driver_device_push_subscriptions.sql";
 const ledgerPath = "docs/current-implementation-ledger.md";
@@ -47,6 +51,10 @@ const [
   notificationSource,
   routeSource,
   pageSource,
+  portalRouteSource,
+  portalPageSource,
+  adminLinkRouteSource,
+  adminLinkPersistenceSource,
   serviceWorkerSource,
   migrationSource,
   ledgerSource,
@@ -58,6 +66,10 @@ const [
     notificationPath,
     routePath,
     pagePath,
+    portalRoutePath,
+    portalPagePath,
+    adminLinkRoutePath,
+    adminLinkPersistencePath,
     serviceWorkerPath,
     migrationPath,
     ledgerPath,
@@ -77,6 +89,10 @@ assertIncludes(
     "driver_device_push_subscriptions",
     "verified_driver",
     "driver_job_acknowledgement",
+    "driver_portal",
+    "registerDriverDevicePushSubscriptionForPortalSession",
+    "sendDriverDevicePushAlertForNewJobLink",
+    "New Driver Job issued. Tap to review.",
     "New Driver Job app update. Tap to review.",
   ],
   "driver device push helper",
@@ -145,6 +161,43 @@ assert.equal(
 );
 
 assertIncludes(
+  portalPageSource,
+  [
+    "Enable Job Alerts",
+    "Notification.requestPermission()",
+    "navigator.serviceWorker.register(",
+    '"/prestige-driver-push-sw.js"',
+    'scope: "/driver-job/"',
+    'fetch("/api/driver-portal/jobs"',
+    '"x-prestige-driver-purpose": "driver-portal-device-alert-registration"',
+    "device_push_subscription",
+    'data-driver-portal-enable-alerts="true"',
+  ],
+  "installed Driver Portal alert setup",
+);
+assertIncludes(
+  portalRouteSource,
+  [
+    "getDriverDevicePushReadiness",
+    "registerDriverDevicePushSubscriptionForPortalSession",
+    "driver-portal-device-alert-registration",
+    "session.claims.driverId",
+    "device_push_subscription",
+  ],
+  "existing Driver Portal jobs route alert registration",
+);
+assertExcludes(
+  portalPageSource + portalRouteSource,
+  ["invoice", "billing", "payment", "payout", "paynow", "customer_price"],
+  "Driver Portal alert isolation",
+);
+assertIncludes(
+  adminLinkRouteSource + adminLinkPersistenceSource,
+  ["sendDriverDevicePushAlertForNewJobLink", ".catch(() => null)"],
+  "successful existing Driver Job Link issuance alert integration",
+);
+
+assertIncludes(
   notificationSource,
   [
     "sendDriverDevicePushAlertForAppUpdate",
@@ -164,6 +217,8 @@ assertIncludes(
     'self.addEventListener("push"',
     'self.registration.showNotification("Prestige Limo Ops"',
     'self.addEventListener("notificationclick"',
+    "target_path",
+    '"/driver-portal"',
   ],
   "driver-scoped service worker",
 );
@@ -258,6 +313,7 @@ function createMockClient({ acknowledged = true, subscriptions = [] } = {}) {
             safe_link_context: acknowledged
               ? { driver_acknowledged_at: "2026-07-22T00:00:00.000Z" }
               : {},
+            token_hash: "hash:NEW-PRIVATE-DRIVER-JOB-TOKEN",
           },
           error: null,
         };
@@ -324,6 +380,28 @@ try {
     false,
   );
 
+  const portalRegistrationClient = createMockClient();
+  const portalRegistration = await helper.registerDriverDevicePushSubscriptionForPortalSession({
+    client: portalRegistrationClient,
+    driverId: 8,
+    env: configuredEnv,
+    subscription: {
+      endpoint: "https://web.push.apple.com/installed-driver-portal",
+      keys: { auth: "portal-auth", p256dh: "portal-p256dh" },
+    },
+  });
+  assert.equal(portalRegistration.ok, true);
+  assert.equal(portalRegistration.reason, "subscription_registered");
+  const portalSubscriptionWrite = portalRegistrationClient.calls.find(
+    (call) =>
+      call.table === "driver_device_push_subscriptions" &&
+      call.operation === "upsert" &&
+      call.value.endpoint.includes("web.push.apple.com"),
+  );
+  assert.equal(portalSubscriptionWrite.value.driver_id, 8);
+  assert.equal(portalSubscriptionWrite.value.last_driver_job_link_id, null);
+  assert.equal(portalSubscriptionWrite.value.source_surface, "driver_portal");
+
   let sentPayload = null;
   const alertClient = createMockClient({
     subscriptions: [
@@ -365,6 +443,64 @@ try {
     ],
     "safe driver push payload",
   );
+
+  let issuedJobPayload = null;
+  const issuedJobClient = createMockClient({
+    acknowledged: false,
+    subscriptions: [
+      {
+        auth: "guard-auth",
+        endpoint: "https://web.push.apple.com/installed-driver-portal",
+        p256dh: "guard-p256dh",
+      },
+    ],
+  });
+  const issuedJobAlert = await helper.sendDriverDevicePushAlertForNewJobLink(
+    issuedJobClient,
+    {
+      driver_job_link_id: "11111111-1111-4111-8111-111111111111",
+      driver_job_token: "NEW-PRIVATE-DRIVER-JOB-TOKEN",
+    },
+    {
+      env: configuredEnv,
+      pushSender: async (_subscription, payload) => { issuedJobPayload = payload; },
+    },
+  );
+  assert.equal(issuedJobAlert.ok, true);
+  assert.equal(issuedJobAlert.reason, "send_succeeded");
+  assert.equal(issuedJobPayload.title, "Prestige Limo Ops");
+  assert.equal(issuedJobPayload.body, "New Driver Job issued. Tap to review.");
+  assert.equal(
+    issuedJobPayload.target_path,
+    "/driver-job/NEW-PRIVATE-DRIVER-JOB-TOKEN",
+    "the encrypted Web Push payload must open the exact newly issued private link",
+  );
+  assertExcludes(
+    JSON.stringify({ ...issuedJobPayload, target_path: "" }),
+    [
+      "PRIVATE-BOOKING-REFERENCE",
+      "11111111-1111-4111-8111-111111111111",
+      "passenger",
+      "customer",
+      "price",
+      "payout",
+      "invoice",
+      "billing",
+      "payment",
+      "paynow",
+    ],
+    "newly issued driver push visible-data privacy",
+  );
+  const mismatchedIssuedJobAlert = await helper.sendDriverDevicePushAlertForNewJobLink(
+    issuedJobClient,
+    {
+      driver_job_link_id: "11111111-1111-4111-8111-111111111111",
+      driver_job_token: "DIFFERENT-PRIVATE-DRIVER-JOB-TOKEN",
+    },
+    { env: configuredEnv, pushSender: async () => undefined },
+  );
+  assert.equal(mismatchedIssuedJobAlert.ok, false);
+  assert.equal(mismatchedIssuedJobAlert.reason, "invalid_driver_link");
 } finally {
   await rm(tempDir, { force: true, recursive: true });
 }

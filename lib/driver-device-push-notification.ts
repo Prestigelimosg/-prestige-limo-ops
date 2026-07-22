@@ -9,7 +9,7 @@ import {
 } from "./driver-job-link.ts";
 
 export const driverDevicePushNotificationVersion =
-  "driver-device-push-notification-v1";
+  "driver-device-push-notification-v2";
 export const driverDevicePushEnabledEnvName =
   "PRESTIGE_DRIVER_DEVICE_PUSH_ENABLED";
 
@@ -21,7 +21,7 @@ const driverDevicePushContactEmailEnvName =
   "PRESTIGE_DRIVER_DEVICE_PUSH_CONTACT_EMAIL";
 const driverDevicePushProviderTimeoutMs = 5000;
 const driverDevicePushLinkSelect =
-  "id, booking_reference, driver_id, link_status, expires_at, revoked_at, safe_link_context, created_at";
+  "id, booking_reference, driver_id, link_status, expires_at, revoked_at, safe_link_context, created_at, token_hash";
 const driverDevicePushSubscriptionSelect = "endpoint, p256dh, auth";
 
 const requiredEnvNames = [
@@ -102,9 +102,12 @@ type DriverDevicePushAlertInput = {
 };
 
 type DriverDevicePushPayload = {
-  body: "New Driver Job app update. Tap to review.";
+  body:
+    | "New Driver Job app update. Tap to review."
+    | "New Driver Job issued. Tap to review.";
   job_key: string;
   tag: string;
+  target_path?: string;
   title: "Prestige Limo Ops";
   version: typeof driverDevicePushNotificationVersion;
 };
@@ -346,6 +349,69 @@ export async function registerDriverDevicePushSubscriptionForAcknowledgedLink(
   });
 }
 
+export async function registerDriverDevicePushSubscriptionForPortalSession(
+  input: {
+    client: DriverDevicePushClient;
+    driverId: unknown;
+    env?: EnvInput;
+    subscription: unknown;
+  },
+): Promise<DriverDevicePushRegistrationResult> {
+  const env = input.env ?? process.env;
+  const enabled = isTruthyGate(cleanEnvValue(env, driverDevicePushEnabledEnvName));
+  const config = resolveProviderConfig(env);
+  if (!config) {
+    return registrationResult(
+      enabled ? "provider_not_configured" : "push_gate_closed",
+      { enabled },
+    );
+  }
+
+  const driverId = safePositiveInteger(input.driverId);
+  if (!driverId) {
+    return registrationResult("unverified_driver", { enabled: true });
+  }
+
+  const subscription = parseSubscription(input.subscription);
+  if (!subscription) {
+    return registrationResult("invalid_subscription", {
+      enabled: true,
+      error: "A valid device push subscription is required.",
+    });
+  }
+
+  const now = new Date().toISOString();
+  const { error: writeError } = await input.client
+    .from("driver_device_push_subscriptions")
+    .upsert(
+      {
+        auth: subscription.keys.auth,
+        driver_id: driverId,
+        endpoint: subscription.endpoint,
+        last_driver_job_link_id: null,
+        p256dh: subscription.keys.p256dh,
+        revoked_at: null,
+        source_surface: "driver_portal",
+        subscription_status: "active",
+        updated_at: now,
+      },
+      { onConflict: "endpoint" },
+    );
+
+  if (writeError) {
+    return registrationResult("subscription_write_failed", {
+      enabled: true,
+      error: "Driver device alert registration failed safely.",
+    });
+  }
+
+  return registrationResult("subscription_registered", {
+    enabled: true,
+    ok: true,
+    wrote: true,
+  });
+}
+
 function alertResult(
   reason: DriverDevicePushAlertResult["reason"],
   options: {
@@ -420,6 +486,23 @@ function safePayload(linkId: string): DriverDevicePushPayload {
   };
 }
 
+function newJobPayload(linkId: string, token: string): DriverDevicePushPayload | null {
+  const cleanToken = safeText(token, 512);
+  if (!cleanToken || !/^[A-Za-z0-9_-]{20,512}$/.test(cleanToken)) {
+    return null;
+  }
+
+  const jobKey = opaqueDriverJobLinkKey(linkId);
+  return {
+    body: "New Driver Job issued. Tap to review.",
+    job_key: jobKey,
+    tag: `prestige-driver-update-${jobKey.slice(0, 24)}`,
+    target_path: `/driver-job/${encodeURIComponent(cleanToken)}`,
+    title: "Prestige Limo Ops",
+    version: driverDevicePushNotificationVersion,
+  };
+}
+
 async function sendWebPush(
   config: DriverDevicePushProviderConfig,
   subscription: PushSubscription,
@@ -472,6 +555,121 @@ async function recordDeliveryHealth(
   }
 }
 
+async function loadActiveDriverSubscriptions(
+  client: DriverDevicePushClient,
+  driverId: number,
+): Promise<{ ok: boolean; subscriptions: PushSubscription[] }> {
+  try {
+    const { data, error } = await client
+      .from("driver_device_push_subscriptions")
+      .select(driverDevicePushSubscriptionSelect)
+      .eq("driver_id", driverId)
+      .eq("subscription_status", "active")
+      .limit(10);
+    if (error) {
+      return { ok: false, subscriptions: [] };
+    }
+    return {
+      ok: true,
+      subscriptions: asRows(data)
+        .map(toPushSubscription)
+        .filter((value): value is PushSubscription => Boolean(value)),
+    };
+  } catch {
+    return { ok: false, subscriptions: [] };
+  }
+}
+
+async function sendPayloadToDriverSubscriptions(
+  client: DriverDevicePushClient,
+  driverId: number,
+  payload: DriverDevicePushPayload,
+  config: DriverDevicePushProviderConfig,
+  options: DriverDevicePushAlertOptions,
+): Promise<DriverDevicePushAlertResult> {
+  const loaded = await loadActiveDriverSubscriptions(client, driverId);
+  if (!loaded.ok) {
+    return alertResult("subscription_load_failed", { enabled: true });
+  }
+  if (loaded.subscriptions.length === 0) {
+    return alertResult("no_active_subscriptions", { enabled: true });
+  }
+
+  const sender = options.pushSender ??
+    ((subscription: PushSubscription, pushPayload: DriverDevicePushPayload) =>
+      sendWebPush(config, subscription, pushPayload));
+  const shouldRecordHealth = !options.pushSender;
+  const results = await Promise.allSettled(
+    loaded.subscriptions.map((subscription) => sender(subscription, payload)),
+  );
+
+  if (shouldRecordHealth) {
+    await Promise.all(
+      loaded.subscriptions.map((subscription, index) =>
+        recordDeliveryHealth(
+          client,
+          subscription,
+          results[index].status === "rejected" ? results[index].reason : null,
+        ),
+      ),
+    );
+  }
+
+  const succeeded = results.filter((result) => result.status === "fulfilled").length;
+  return succeeded > 0
+    ? alertResult("send_succeeded", {
+        enabled: true,
+        ok: true,
+        providerRequestCount: loaded.subscriptions.length,
+        status: "sent",
+      })
+    : alertResult("provider_failure", {
+        enabled: true,
+        providerRequestCount: loaded.subscriptions.length,
+        status: "failed",
+      });
+}
+
+export async function sendDriverDevicePushAlertForNewJobLink(
+  client: DriverDevicePushClient,
+  input: {
+    driver_job_link_id: string;
+    driver_job_token: string;
+  },
+  options: DriverDevicePushAlertOptions = {},
+): Promise<DriverDevicePushAlertResult> {
+  const env = options.env ?? process.env;
+  const enabled = isTruthyGate(cleanEnvValue(env, driverDevicePushEnabledEnvName));
+  const config = resolveProviderConfig(env);
+  if (!config) {
+    return alertResult(enabled ? "provider_not_configured" : "push_gate_closed", {
+      enabled,
+    });
+  }
+
+  let tokenHash: string;
+  try {
+    tokenHash = hashDriverJobLinkToken(input.driver_job_token);
+  } catch {
+    return alertResult("invalid_driver_link", { enabled: true });
+  }
+
+  const link = await resolveAlertDriverLink(client, {
+    booking_reference: null,
+    delivery_surface: "driver_app",
+    driver_job_link_id: input.driver_job_link_id,
+  });
+  const linkId = safeUuid(link?.id);
+  const driverId = safePositiveInteger(link?.driver_id);
+  const exactToken = safeText(link?.token_hash, 128) === tokenHash;
+  const payload = linkId ? newJobPayload(linkId, input.driver_job_token) : null;
+  if (!link || !linkId || !driverId || !exactToken || !payload) {
+    return alertResult("invalid_driver_link", { enabled: true });
+  }
+
+  return sendPayloadToDriverSubscriptions(client, driverId, payload, config, options);
+}
+
 export async function sendDriverDevicePushAlertForAppUpdate(
   client: DriverDevicePushClient,
   input: DriverDevicePushAlertInput,
@@ -497,60 +695,6 @@ export async function sendDriverDevicePushAlertForAppUpdate(
     return alertResult("invalid_driver_link", { enabled: true });
   }
 
-  let subscriptions: PushSubscription[];
-  try {
-    const { data, error } = await client
-      .from("driver_device_push_subscriptions")
-      .select(driverDevicePushSubscriptionSelect)
-      .eq("driver_id", driverId)
-      .eq("subscription_status", "active")
-      .limit(10);
-    if (error) {
-      return alertResult("subscription_load_failed", { enabled: true });
-    }
-    subscriptions = asRows(data)
-      .map(toPushSubscription)
-      .filter((value): value is PushSubscription => Boolean(value));
-  } catch {
-    return alertResult("subscription_load_failed", { enabled: true });
-  }
-
-  if (subscriptions.length === 0) {
-    return alertResult("no_active_subscriptions", { enabled: true });
-  }
-
   const payload = safePayload(linkId);
-  const sender = options.pushSender ??
-    ((subscription: PushSubscription, pushPayload: DriverDevicePushPayload) =>
-      sendWebPush(config, subscription, pushPayload));
-  const shouldRecordHealth = !options.pushSender;
-  const results = await Promise.allSettled(
-    subscriptions.map((subscription) => sender(subscription, payload)),
-  );
-
-  if (shouldRecordHealth) {
-    await Promise.all(
-      subscriptions.map((subscription, index) =>
-        recordDeliveryHealth(
-          client,
-          subscription,
-          results[index].status === "rejected" ? results[index].reason : null,
-        ),
-      ),
-    );
-  }
-
-  const succeeded = results.filter((result) => result.status === "fulfilled").length;
-  return succeeded > 0
-    ? alertResult("send_succeeded", {
-        enabled: true,
-        ok: true,
-        providerRequestCount: subscriptions.length,
-        status: "sent",
-      })
-    : alertResult("provider_failure", {
-        enabled: true,
-        providerRequestCount: subscriptions.length,
-        status: "failed",
-      });
+  return sendPayloadToDriverSubscriptions(client, driverId, payload, config, options);
 }

@@ -17,6 +17,7 @@ import {
   getDriverJobLinkExpiresAt,
   hashDriverJobLinkToken,
 } from "./driver-job-link";
+import { sendDriverDevicePushAlertForNewJobLink } from "./driver-device-push-notification";
 
 export const adminDriverJobLinkPersistenceVersion =
   "admin-driver-job-link-api-v1";
@@ -989,6 +990,14 @@ export async function createAdminDriverJobLink(
   if (error || !link) {
     return safeAdapterFailure(safeDriverJobLinkCreateError, 500, error);
   }
+
+  await sendDriverDevicePushAlertForNewJobLink(
+    clientResult.data,
+    {
+      driver_job_link_id: link.id,
+      driver_job_token: token,
+    },
+  ).catch(() => null);
 
   return {
     data: {

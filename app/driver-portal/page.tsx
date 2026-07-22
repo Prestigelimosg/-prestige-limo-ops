@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { SafeDriverJobPayload } from "../../lib/driver-job-link";
 
 type DriverPortalJob = {
@@ -14,12 +14,6 @@ type DriverPortalReadState =
   | { kind: "loading" }
   | { kind: "ready"; jobs: DriverPortalJob[] }
   | { kind: "blocked"; reason: "not_configured" | "unauthorized" | "unavailable" };
-
-type DriverJobLinkHandoff = {
-  feedback: string;
-  jobKey: string;
-  value: string;
-};
 
 const driverAlertDatabaseName = "prestige-driver-device-alerts";
 const driverAlertDatabaseVersion = 1;
@@ -67,25 +61,10 @@ async function storedDriverJobUrl(jobKey: string) {
   }
 }
 
-function localDriverJobPath(value: string) {
-  try {
-    const url = new URL(value.trim(), window.location.origin);
-    const match = url.pathname.match(/^\/driver-job\/([A-Za-z0-9_-]{16,128})$/);
-    if (url.origin !== window.location.origin || url.search || url.hash || !match) {
-      return null;
-    }
-
-    return `/driver-job/${match[1]}`;
-  } catch {
-    return null;
-  }
-}
-
 export default function DriverPortalPage() {
   const [readState, setReadState] = useState<DriverPortalReadState>({ kind: "loading" });
   const [openingJobKey, setOpeningJobKey] = useState("");
   const [openFeedback, setOpenFeedback] = useState<Record<string, string>>({});
-  const [linkHandoff, setLinkHandoff] = useState<DriverJobLinkHandoff | null>(null);
 
   const loadJobs = useCallback(async () => {
     try {
@@ -137,10 +116,8 @@ export default function DriverPortalPage() {
           ...current,
           [job.job_key]: "Open and acknowledge the latest private link from dispatch once on this device.",
         }));
-        setLinkHandoff({ feedback: "", jobKey: job.job_key, value: "" });
         return;
       }
-      setLinkHandoff(null);
       window.location.assign(url);
     } catch {
       setOpenFeedback((current) => ({
@@ -150,24 +127,6 @@ export default function DriverPortalPage() {
     } finally {
       setOpeningJobKey("");
     }
-  }
-
-  function openPastedDriverJob(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!linkHandoff) {
-      return;
-    }
-
-    const path = localDriverJobPath(linkHandoff.value);
-    if (!path) {
-      setLinkHandoff({
-        ...linkHandoff,
-        feedback: "Paste the exact latest app.prestigelimo.sg Driver Job link from dispatch.",
-      });
-      return;
-    }
-
-    window.location.assign(path);
   }
 
   return (
@@ -270,52 +229,6 @@ export default function DriverPortalPage() {
                   <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-900" data-driver-portal-open-feedback={job.job_key}>
                     {openFeedback[job.job_key]}
                   </p>
-                ) : null}
-                {linkHandoff?.jobKey === job.job_key ? (
-                  <form
-                    className="space-y-2 rounded-md border border-violet-200 bg-violet-50 px-3 py-3"
-                    data-driver-portal-link-handoff={job.job_key}
-                    onSubmit={openPastedDriverJob}
-                  >
-                    <label className="block space-y-1 text-xs font-semibold text-violet-950">
-                      <span>Paste latest private Driver Job link</span>
-                      <input
-                        autoCapitalize="none"
-                        autoComplete="off"
-                        autoCorrect="off"
-                        className="h-11 w-full rounded-md border border-violet-300 bg-white px-3 text-sm text-slate-950 outline-none focus:border-violet-600 focus:ring-2 focus:ring-violet-200"
-                        data-driver-portal-link-input={job.job_key}
-                        inputMode="url"
-                        onChange={(event) => setLinkHandoff({
-                          feedback: "",
-                          jobKey: job.job_key,
-                          value: event.target.value,
-                        })}
-                        placeholder="https://app.prestigelimo.sg/driver-job/…"
-                        spellCheck={false}
-                        type="url"
-                        value={linkHandoff.value}
-                      />
-                    </label>
-                    <p className="text-xs font-medium leading-5 text-violet-900">
-                      Copy the latest link from dispatch and paste it here. It stays on this device and opens
-                      the existing private Driver Job page.
-                    </p>
-                    <button
-                      className="h-11 w-full rounded-md border border-violet-700 bg-white px-4 text-sm font-semibold text-violet-950"
-                      type="submit"
-                    >
-                      Open Pasted Driver Job Link
-                    </button>
-                    {linkHandoff.feedback ? (
-                      <p
-                        className="text-xs font-semibold leading-5 text-red-700"
-                        data-driver-portal-link-handoff-feedback={job.job_key}
-                      >
-                        {linkHandoff.feedback}
-                      </p>
-                    ) : null}
-                  </form>
                 ) : null}
               </article>
             ))}

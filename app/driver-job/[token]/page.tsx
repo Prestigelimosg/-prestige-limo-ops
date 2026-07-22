@@ -352,6 +352,14 @@ const statusLabels: Record<string, string> = {
   ...driverJobStatusDisplayLabels,
 };
 const driverWorkflowStatusOrder = ["driver_otw", "ots", "pob", "completed"];
+const driverOtsPhotoMaxRequestBytes = 4 * 1024 * 1024;
+const driverOtsPhotoMaxDimension = 1600;
+const driverOtsPhotoJpegQualities = [0.82, 0.68, 0.54];
+
+type PreparedDriverOtsPhoto = {
+  blob: Blob;
+  fileName: string;
+};
 
 function normalizeBlockedReason(value: unknown): DriverJobApiBlockedReason {
   return value === "already_completed" ||
@@ -367,6 +375,71 @@ function normalizeBlockedReason(value: unknown): DriverJobApiBlockedReason {
 
 function driverWorkflowHasReachedOts(status: string) {
   return driverWorkflowStatusOrder.indexOf(status) >= driverWorkflowStatusOrder.indexOf("ots");
+}
+
+function driverOtsPhotoReducedFileName(fileName: string) {
+  const stem = fileName
+    .replace(/\.[^.]+$/, "")
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+
+  return `${stem || "ots-photo"}-reduced.jpg`;
+}
+
+function driverOtsPhotoCanvasBlob(canvas: HTMLCanvasElement, quality: number) {
+  return new Promise<Blob | null>((resolve) => {
+    canvas.toBlob(resolve, "image/jpeg", quality);
+  });
+}
+
+async function prepareDriverOtsPhotoForUpload(file: File): Promise<PreparedDriverOtsPhoto | null> {
+  if (file.size <= driverOtsPhotoMaxRequestBytes) {
+    return {
+      blob: file,
+      fileName: file.name || "ots-photo.jpg",
+    };
+  }
+
+  try {
+    const imageBitmap = await createImageBitmap(file);
+
+    try {
+      const largestDimension = Math.max(imageBitmap.width, imageBitmap.height);
+      const scale = Math.min(1, driverOtsPhotoMaxDimension / largestDimension);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(imageBitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(imageBitmap.height * scale));
+      const context = canvas.getContext("2d");
+
+      if (!context) {
+        return null;
+      }
+
+      context.drawImage(imageBitmap, 0, 0, canvas.width, canvas.height);
+
+      for (const quality of driverOtsPhotoJpegQualities) {
+        const reducedPhoto = await driverOtsPhotoCanvasBlob(canvas, quality);
+
+        if (
+          reducedPhoto &&
+          reducedPhoto.size > 0 &&
+          reducedPhoto.size <= driverOtsPhotoMaxRequestBytes
+        ) {
+          return {
+            blob: reducedPhoto,
+            fileName: driverOtsPhotoReducedFileName(file.name),
+          };
+        }
+      }
+
+      return null;
+    } finally {
+      imageBitmap.close();
+    }
+  } catch {
+    return null;
+  }
 }
 
 function otsPhotoProofBlockedMessage(reason: unknown) {
@@ -1784,9 +1857,6 @@ export default function DriverJobPage() {
       return;
     }
 
-    const formData = new FormData();
-    formData.append("photo", photoFile);
-
     setDriverOtsPhotoProof((currentState) => ({
       ...currentState,
       action: "uploading",
@@ -1794,25 +1864,45 @@ export default function DriverJobPage() {
     }));
 
     try {
-      const response = await fetch(driverOtsPhotoProofRoute(), {
-        body: formData,
-        cache: "no-store",
-        method: "POST",
-      });
-      const result = await response.json() as DriverOtsPhotoProofApiResponse;
+      const preparedPhoto = await prepareDriverOtsPhotoForUpload(photoFile);
 
-      if (
-        !response.ok ||
-        !result.ok ||
-        result.proof?.customerVisible !== false ||
-        result.proof?.external_send !== false
-      ) {
+      if (!preparedPhoto) {
         setDriverOtsPhotoProof((currentState) => ({
           ...currentState,
           action: "idle",
           feedback: {
             tone: "error",
-            text: otsPhotoProofBlockedMessage(result.ok ? "unavailable" : result.reason),
+            text: "Photo is too large to prepare. Take a screenshot or choose a smaller photo.",
+          },
+        }));
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("photo", preparedPhoto.blob, preparedPhoto.fileName);
+      const response = await fetch(driverOtsPhotoProofRoute(), {
+        body: formData,
+        cache: "no-store",
+        method: "POST",
+      });
+      const result = await response.json().catch(() => null) as DriverOtsPhotoProofApiResponse | null;
+
+      if (
+        !response.ok ||
+        !result?.ok ||
+        result.proof?.customerVisible !== false ||
+        result.proof?.external_send !== false
+      ) {
+        const blockedReason = response.status === 413 ? "too_large" : result?.ok === false
+          ? result.reason
+          : "unavailable";
+
+        setDriverOtsPhotoProof((currentState) => ({
+          ...currentState,
+          action: "idle",
+          feedback: {
+            tone: "error",
+            text: otsPhotoProofBlockedMessage(blockedReason),
           },
         }));
         return;
@@ -2513,6 +2603,7 @@ export default function DriverJobPage() {
                       <h3 className="text-sm font-semibold text-sky-950">OTS Photo to Admin</h3>
                       <p className="text-xs font-semibold leading-5 text-sky-900">
                         Send one arrival photo after OTS. Admin sees it inside Dispatch.
+                        Large phone photos are reduced automatically before sending.
                       </p>
                     </div>
                     <span

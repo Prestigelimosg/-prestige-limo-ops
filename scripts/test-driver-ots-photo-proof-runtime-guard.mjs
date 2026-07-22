@@ -129,7 +129,15 @@ for (const fragment of [
   "/api/driver-job/${encodeURIComponent(token)}/ots-photo",
   "data-driver-job-ots-photo-proof-input=\"true\"",
   "capture=\"environment\"",
+  "const driverOtsPhotoMaxRequestBytes = 4 * 1024 * 1024",
+  "const driverOtsPhotoMaxDimension = 1600",
+  "prepareDriverOtsPhotoForUpload",
+  "createImageBitmap(file)",
+  "canvas.toBlob",
   "new FormData",
+  'formData.append("photo", preparedPhoto.blob, preparedPhoto.fileName)',
+  'response.status === 413 ? "too_large"',
+  "Large phone photos are reduced automatically before sending.",
   "Admin-only proof. No customer message or external send is created from here.",
 ]) {
   assertIncludes(driverPage, fragment, `driver page approved OTS fragment: ${fragment}`);
@@ -139,6 +147,12 @@ assertExcludes(
   driverOtsApprovedSurface,
   /URL\.createObjectURL|navigator\.mediaDevices|getUserMedia|storage\.from|\.upload\s*\(|x-prestige-admin-session-token|Authorization/i,
   "driver page forbidden OTS behavior",
+);
+
+assertIncludes(
+  persistence,
+  "const maxUploadBytes = 4 * 1024 * 1024",
+  "persistence Vercel-safe maximum upload size",
 );
 
 for (const fragment of [

@@ -224,6 +224,7 @@ async function runChromeTest() {
     await client.send("Page.addScriptToEvaluateOnNewDocument", {
       source: `
         window.__driverJobFetchCalls = [];
+        window.__driverOtsPhotoUploadBodies = [];
         window.__prestigeErrors = [];
         window.__prestigeConsoleErrors = [];
         const driverCalendarReturnState = new URLSearchParams(window.location.search).get("calendar");
@@ -285,6 +286,15 @@ async function runChromeTest() {
           const method = args[1]?.method || args[0]?.method || "GET";
           const url = String(target);
           window.__driverJobFetchCalls.push(\`\${method} \${url}\`);
+
+          if (method === "POST" && url.endsWith("/ots-photo") && args[1]?.body instanceof FormData) {
+            const photo = args[1].body.get("photo");
+            window.__driverOtsPhotoUploadBodies.push({
+              name: photo instanceof File ? photo.name : "",
+              size: photo instanceof Blob ? photo.size : 0,
+              type: photo instanceof Blob ? photo.type : "",
+            });
+          }
 
           if (url.includes("/api/driver-job/") && url.endsWith("/calendar")) {
             return Promise.resolve(
@@ -394,6 +404,7 @@ async function runChromeTest() {
         consoleErrors: window.__prestigeConsoleErrors || [],
         errors: window.__prestigeErrors || [],
         fetchCalls: window.__driverJobFetchCalls || [],
+        otsPhotoUploadBodies: window.__driverOtsPhotoUploadBodies || [],
         deviceAlerts: {
           helper: document.querySelector("[data-driver-job-device-alert-helper]")?.textContent?.trim() || "",
           permissionRequests: window.__driverDeviceAlertTest?.permissionRequests || 0,
@@ -932,23 +943,44 @@ async function runChromeTest() {
 
     const uploadOtsPhotoProof = async () => {
       const beforeState = await pageState();
-      const selected = await evaluate(`(() => {
+      const selected = await evaluate(`(async () => {
         const input = document.querySelector("[data-driver-job-ots-photo-proof-input]");
         const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "files")?.set;
 
         if (!input || !setter) {
-          return false;
+          return { ok: false, size: 0 };
         }
 
+        const canvas = document.createElement("canvas");
+        canvas.width = 24;
+        canvas.height = 24;
+        const context = canvas.getContext("2d");
+        context.fillStyle = "#2384c6";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        const validJpeg = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.9));
+        if (!validJpeg) {
+          return { ok: false, size: 0 };
+        }
+        const oversizedPadding = new Uint8Array(5 * 1024 * 1024);
+        const oversizedPhoto = new File(
+          [validJpeg, oversizedPadding],
+          "oversized-iphone-photo.jpg",
+          { type: "image/jpeg" },
+        );
         const transfer = new DataTransfer();
-        transfer.items.add(new File(["mock-ots-photo"], "ots-photo.jpg", { type: "image/jpeg" }));
+        transfer.items.add(oversizedPhoto);
         setter.call(input, transfer.files);
         input.dispatchEvent(new Event("input", { bubbles: true }));
         input.dispatchEvent(new Event("change", { bubbles: true }));
-        return true;
+        return { ok: true, size: oversizedPhoto.size };
       })()`);
 
-      assert.equal(selected, true, "Expected OTS photo proof input to accept a mock image file.");
+      assert.equal(selected.ok, true, "Expected OTS photo proof input to accept a mock image file.");
+      assert.equal(
+        selected.size > 4.5 * 1024 * 1024,
+        true,
+        "Expected the browser fixture to start with a photo above Vercel's request limit.",
+      );
 
       const clicked = await evaluate(`(() => {
         const button = document.querySelector("[data-driver-job-ots-photo-proof-upload]");
@@ -989,6 +1021,14 @@ async function runChromeTest() {
         beforeState.fetchCalls.length + 1,
         "OTS photo proof should make one internal app POST only.",
       );
+      assert.equal(afterState.otsPhotoUploadBodies.length, 1, "Expected one OTS photo upload body.");
+      assert.equal(
+        afterState.otsPhotoUploadBodies[0].size <= 4 * 1024 * 1024,
+        true,
+        "Oversized phone photo must be reduced below the safe Vercel request ceiling.",
+      );
+      assert.equal(afterState.otsPhotoUploadBodies[0].type, "image/jpeg");
+      assert.match(afterState.otsPhotoUploadBodies[0].name, /\.jpg$/);
       assertNoSensitiveText(afterState);
       return afterState;
     };

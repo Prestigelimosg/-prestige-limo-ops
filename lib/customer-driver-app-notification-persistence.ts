@@ -1754,6 +1754,31 @@ async function verifyControlledCustomerBookingReference(
   };
 }
 
+function customerAppNotificationUsesAdminBookingStatusTemplate(
+  input: CustomerDriverAppNotificationInput,
+) {
+  return (
+    input.delivery_surface === "customer_app" &&
+    input.driver_job_link_id === null &&
+    input.notification_type === "booking_status" &&
+    input.notification_status === "queued" &&
+    input.priority === "normal" &&
+    input.workflow_area === "customer_booking_status_updates" &&
+    input.safe_context.external_send === false &&
+    input.safe_context.provider_send === false &&
+    input.safe_context.source === "admin_booking_status" &&
+    Object.keys(input.safe_context).length === 4 &&
+    ((input.safe_context.customer_facing_status === "cancelled" &&
+      input.safe_title === "Booking cancelled" &&
+      input.safe_message ===
+        "Your Prestige Limo booking has been cancelled. Open My Bookings to review.") ||
+      (input.safe_context.customer_facing_status === "completed" &&
+        input.safe_title === "Booking completed" &&
+        input.safe_message ===
+          "Your Prestige Limo booking has been completed. Open My Bookings to review."))
+  );
+}
+
 function customerAppNotificationUsesApprovedRuntimeTemplate(
   input: CustomerDriverAppNotificationInput,
 ) {
@@ -1774,24 +1799,7 @@ function customerAppNotificationUsesApprovedRuntimeTemplate(
     input.safe_message === "Your booking request has been confirmed by Prestige Limo." &&
     input.workflow_area === "customer_request_review";
   const adminBookingStatusUpdateTemplate =
-    input.delivery_surface === "customer_app" &&
-    input.driver_job_link_id === null &&
-    input.notification_type === "booking_status" &&
-    input.notification_status === "queued" &&
-    input.priority === "normal" &&
-    input.workflow_area === "customer_booking_status_updates" &&
-    input.safe_context.external_send === false &&
-    input.safe_context.provider_send === false &&
-    input.safe_context.source === "admin_booking_status" &&
-    Object.keys(input.safe_context).length === 4 &&
-    ((input.safe_context.customer_facing_status === "cancelled" &&
-      input.safe_title === "Booking cancelled" &&
-      input.safe_message ===
-        "Your Prestige Limo booking has been cancelled. Open My Bookings to review.") ||
-      (input.safe_context.customer_facing_status === "completed" &&
-        input.safe_title === "Booking completed" &&
-        input.safe_message ===
-          "Your Prestige Limo booking has been completed. Open My Bookings to review."));
+    customerAppNotificationUsesAdminBookingStatusTemplate(input);
   const adminCustomerJobMessage =
     input.delivery_surface === "customer_app" &&
     input.driver_job_link_id === null &&
@@ -1882,12 +1890,6 @@ async function assertControlledCustomerAppNotificationWriteAllowed(
     };
   }
 
-  const gate = resolveControlledCustomerInAppNotificationRuntimeGate();
-
-  if (!gate.ok) {
-    return gate;
-  }
-
   if (!input.booking_reference) {
     return customerAppNotificationsRequireAuthResult();
   }
@@ -1907,11 +1909,20 @@ async function assertControlledCustomerAppNotificationWriteAllowed(
     maxBookingReferenceLength,
   );
 
-  if (
-    !customerAccountReference ||
-    !customerAccountAllowedByControlledRuntime(customerAccountReference, gate.data)
-  ) {
+  if (!customerAccountReference) {
     return customerAppNotificationsRequireAuthResult();
+  }
+
+  if (!customerAppNotificationUsesAdminBookingStatusTemplate(input)) {
+    const gate = resolveControlledCustomerInAppNotificationRuntimeGate();
+
+    if (!gate.ok) {
+      return gate;
+    }
+
+    if (!customerAccountAllowedByControlledRuntime(customerAccountReference, gate.data)) {
+      return customerAppNotificationsRequireAuthResult();
+    }
   }
 
   return {

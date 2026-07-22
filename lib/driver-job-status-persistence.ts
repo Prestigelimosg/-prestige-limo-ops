@@ -46,6 +46,7 @@ export type DriverJobProductionPayloadResult =
 export type DriverJobProductionStatusUpdateResult =
   | {
       customer_notification: DriverStatusCustomerInAppFanoutResult;
+      link_expiry: DriverJobLinkExpiryResult;
       ok: true;
       payload: SafeDriverJobPayload;
       reason: "updated";
@@ -172,6 +173,12 @@ type DriverJobSharingCleanupResult = {
     | "completed_marker_cleared"
     | "missing_driver_job_link"
     | "not_terminal_status";
+};
+
+type DriverJobLinkExpiryResult = {
+  no_op: boolean;
+  ok: boolean;
+  reason: "completed_links_expired" | "expiry_unavailable" | "not_terminal_status";
 };
 
 const driverJobLinkSelect =
@@ -941,6 +948,58 @@ async function clearDriverSharingMarkerForCompletedStatus({
   }
 }
 
+async function expireDriverJobLinksForCompletedStatus({
+  client,
+  link,
+  status,
+  occurredAt,
+}: {
+  client: DriverJobStatusPersistenceClient;
+  link: DriverJobLinkPersistenceRow;
+  status: DriverJobStatusUpdate;
+  occurredAt: string;
+}): Promise<DriverJobLinkExpiryResult> {
+  if (status !== "completed") {
+    return {
+      no_op: true,
+      ok: true,
+      reason: "not_terminal_status",
+    };
+  }
+
+  try {
+    const { error } = await client
+      .from("driver_job_links")
+      .update({
+        expires_at: occurredAt,
+        link_status: "expired",
+        updated_at: occurredAt,
+      })
+      .eq("booking_reference", link.booking_reference)
+      .eq("link_status", "active");
+
+    if (error) {
+      return {
+        no_op: false,
+        ok: false,
+        reason: "expiry_unavailable",
+      };
+    }
+
+    return {
+      no_op: false,
+      ok: true,
+      reason: "completed_links_expired",
+    };
+  } catch {
+    return {
+      no_op: false,
+      ok: false,
+      reason: "expiry_unavailable",
+    };
+  }
+}
+
 function configValueOrNull(value: string | undefined) {
   const trimmed = value?.trim();
 
@@ -1034,6 +1093,28 @@ async function resolveLinkForToken({
     isDriverJobLinkExpired(link.expires_at, now) ||
     isDriverJobLinkExpiryOutsideAllowedWindow(link.expires_at, now)
   ) {
+    return {
+      ok: false,
+      reason: "expired",
+    };
+  }
+
+  const { data: completedData, error: completedError } = await client
+    .from("driver_job_status_events")
+    .select("id")
+    .eq("booking_reference", link.booking_reference)
+    .eq("status_value", "completed")
+    .limit(1)
+    .maybeSingle();
+
+  if (completedError) {
+    return {
+      ok: false,
+      reason: "not_configured",
+    };
+  }
+
+  if (asRecord(completedData).id) {
     return {
       ok: false,
       reason: "expired",
@@ -1311,6 +1392,12 @@ export async function saveDriverJobStatusThroughStatusPersistence(
     link: resolvedLink.link,
     status: nextStatus,
   });
+  const linkExpiry = await expireDriverJobLinksForCompletedStatus({
+    client: input.client,
+    link: resolvedLink.link,
+    occurredAt: persistedEvent.occurred_at,
+    status: nextStatus,
+  });
 
   let customerNotification = customerInAppNotificationSkippedResult;
 
@@ -1330,6 +1417,7 @@ export async function saveDriverJobStatusThroughStatusPersistence(
 
   return {
     customer_notification: customerNotification,
+    link_expiry: linkExpiry,
     ok: true,
     payload: payloadForLink(resolvedLink.link, nextStatus, [
       persistedEvent,

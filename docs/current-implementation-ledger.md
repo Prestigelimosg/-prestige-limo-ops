@@ -12,6 +12,14 @@ ca9cf2f7 Merge pull request #71 from Prestigelimosg/codex/driver-job-ack-push-al
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Driver Job 96-Hour And JC Link Expiry (2026-07-22)
+
+- The established private Driver Job link lifetime is extended in place from 48 hours to exactly 96 hours. Dispatch still issues the same one private `/driver-job/[token]` URL through the existing admin route and persistence lane; the server accepts no lifetime beyond 96 hours, stores only the token hash, and continues failing closed for malformed, expired, revoked, or artificially far-future links.
+- A persisted driver `Job Completed`/JC report now expires every still-active private Driver Job link for that exact booking. A newer or older link cannot bypass the JC boundary. The accepted JC response retains the saved OTW, OTS, POB, and JC evidence, then any reload of the private link returns expired. Another booking and an already explicit admin-revoked link are not changed.
+- Driver JC remains evidence only. Link expiry does not mark the saved booking completed, create a Completed / History row, remove the Dashboard Driver Reports card, or replace the existing explicit `Admin confirm completed` action. Driver Reports continues reading `driver_job_status_events`, independently of the now-expired private link.
+- The established Calendar, acknowledgement, Pending Driver ACK Queue, device push, App Updates, customer/driver quick replies, OTS photo, Live Dispatch, GPS cleanup, booking/assignment persistence, Customer Portal, invoice, pricing, billing, payment, payout, PayNow, provider sends, and Google configuration remain unchanged. No schema, environment, deployment, Production data, external contact, photo, location, Calendar event, message, invoice, or payment record is changed by this source repair.
+- Focused protection is the updated `scripts/test-driver-job-link-foundation.mjs`, `scripts/test-driver-job-link-api-contract.mjs`, `scripts/test-driver-job-link-api-routes.mjs`, `scripts/test-driver-job-status-persistence-api-contract.mjs`, and `scripts/test-driver-job-page-browser.mjs`, alongside the unchanged admin completion, completed-history, Calendar, Pending ACK Queue, push, OTS-photo, live-location, messaging, privacy, and install-manifest guards.
+
 ### Driver OTS Photo Oversized iPhone Upload Repair (2026-07-22)
 
 - Production request logs reproduced two exact Driver Job OTS-photo failures at `2026-07-22 15:35` and `15:39` Singapore time. Both requests were rejected with HTTP `413` before the application route ran. The established browser and server accepted photos up to 8 MB, but the hosting function request-body ceiling is 4.5 MB, so a normal large iPhone photo could never reach the existing token-scoped upload handler and the driver saw only the generic contact-dispatch fallback.

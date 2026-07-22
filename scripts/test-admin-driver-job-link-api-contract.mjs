@@ -480,7 +480,7 @@ function safeCreatePayload(overrides = {}) {
       route: "Raffles Hotel Singapore > Changi Airport Terminal 3",
       status: "assigned",
     },
-    ttl_hours: 24,
+    ttl_hours: 96,
     ...overrides,
   };
 }
@@ -597,6 +597,14 @@ try {
   const parsed = harness.persistence.parseAdminDriverJobLinkCreatePayload(safeCreatePayload());
 
   assert.equal(parsed.ok, true);
+  assert.equal(parsed.data.ttl_hours, 96);
+  assert.equal(
+    harness.persistence.parseAdminDriverJobLinkCreatePayload(
+      safeCreatePayload({ ttl_hours: 97 }),
+    ).ok,
+    false,
+    "Admin link creation must reject a private-link lifetime beyond 96 hours.",
+  );
 
   const created = await readResponse(
     await harness.route.POST(

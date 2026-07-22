@@ -22750,7 +22750,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       data: {
         booking_reference: bookingReference,
         driver_job_payload: driverJobPayload,
-        ttl_hours: 48,
+        ttl_hours: 96,
       },
       ok: true as const,
     };

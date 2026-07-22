@@ -143,7 +143,7 @@ const initialMockBookingsById = {
   },
 } satisfies DriverJobLinkContractBookingStore;
 
-export const mockDriverJobLinks: DriverJobLinkContractRecord[] = [
+const initialMockDriverJobLinks: DriverJobLinkContractRecord[] = [
   {
     tokenHash: hashDriverJobLinkToken(mockDriverJobTokens.validA),
     bookingId: "mock-booking-a",
@@ -182,10 +182,19 @@ export const mockDriverJobLinks: DriverJobLinkContractRecord[] = [
   },
 ];
 
+export const mockDriverJobLinks: DriverJobLinkContractRecord[] =
+  structuredClone(initialMockDriverJobLinks);
+
 export const mockDriverJobBookingsById: DriverJobLinkContractBookingStore = cloneMockBookings();
 
 // Mock-backed route skeleton only. Replace with a secure Supabase token table after William approves migration/RLS.
 export function resetMockDriverJobLinkDataForTests() {
+  mockDriverJobLinks.splice(
+    0,
+    mockDriverJobLinks.length,
+    ...structuredClone(initialMockDriverJobLinks),
+  );
+
   for (const key of Object.keys(mockDriverJobBookingsById)) {
     delete mockDriverJobBookingsById[key];
   }

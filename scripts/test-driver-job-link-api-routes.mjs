@@ -160,7 +160,14 @@ for (const [requestedStatus, expectedStatus] of [
   assert.equal(patchResult.body.status, expectedStatus);
   assert.equal(patchResult.body.payload.reference, "MOCK-DRIVER-JOB-A");
   assert.equal(patchResult.body.payload.status, expectedStatus);
-  assert.equal(linkedResult.body.payload.status, expectedStatus);
+  if (expectedStatus === "completed") {
+    assert.equal(linkedResult.status, 410);
+    assert.equal(linkedResult.body.ok, false);
+    assert.equal(linkedResult.body.reason, "expired");
+    assert.equal(linkedResult.body.payload, null);
+  } else {
+    assert.equal(linkedResult.body.payload.status, expectedStatus);
+  }
   assert.equal(unrelatedResult.body.payload.reference, "MOCK-DRIVER-JOB-B");
   assert.equal(unrelatedResult.body.payload.status, "assigned");
   assertNoSensitiveData(patchResult);

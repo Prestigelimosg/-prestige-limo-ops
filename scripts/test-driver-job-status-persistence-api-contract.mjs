@@ -616,6 +616,35 @@ function assertDeletedCompletedSharingMarker(client) {
   assert.equal(client.tables.driver_live_location_latest_positions.length, 0);
 }
 
+function assertExpiredCompletedBookingLinks(client) {
+  const expiryOperations = client.operations.filter(
+    (operation) => operation.table === "driver_job_links" && operation.action === "update",
+  );
+
+  assert.equal(expiryOperations.length, 1);
+  assert.deepEqual(expiryOperations[0].filters, [
+    { column: "booking_reference", value: "DRV-JOB-API-001" },
+    { column: "link_status", value: "active" },
+  ]);
+  assert.equal(expiryOperations[0].payload.link_status, "expired");
+  assert.equal(expiryOperations[0].payload.expires_at, now);
+  assert.equal(expiryOperations[0].payload.updated_at, now);
+  assert.equal(
+    client.tables.driver_job_links
+      .filter((link) => link.booking_reference === "DRV-JOB-API-001")
+      .every((link) => link.link_status === "expired" && link.expires_at === now),
+    true,
+    "Driver JC must expire all active private links for only the completed driver-report booking.",
+  );
+  assert.equal(
+    client.tables.driver_job_links.find(
+      (link) => link.booking_reference === "DRV-JOB-API-REVOKED",
+    ).link_status,
+    "revoked",
+    "Driver JC must not alter another booking or turn an explicit revoke into an expiry.",
+  );
+}
+
 function restoreEnv() {
   for (const [key, value] of Object.entries(originalEnv)) {
     if (value === undefined) {
@@ -787,7 +816,9 @@ try {
       ],
     );
     assert.equal(
-      client.selectHistory.find((query) => query.table === "driver_job_status_events")?.limit,
+      client.selectHistory.find(
+        (query) => query.table === "driver_job_status_events" && query.limit === 10,
+      )?.limit,
       10,
       "Driver token payload should read a compact status history, not only one latest row.",
     );
@@ -884,6 +915,7 @@ try {
           actor_role: "driver",
           booking_reference: "DRV-JOB-API-001",
           driver_job_link_id: oldLinkId,
+          id: "mock-completed-event-from-older-link",
           occurred_at: "2026-06-07T12:00:00.000Z",
           safe_status_context: {},
           safe_status_note: null,
@@ -900,17 +932,19 @@ try {
       token: validToken,
     });
     const statusRead = client.selectHistory.find(
-      (query) => query.table === "driver_job_status_events",
+      (query) => query.table === "driver_job_status_events" && query.limit === 1,
     );
 
-    assert.equal(loaded.ok, true);
-    assert.equal(loaded.payload.reference, "DRV-JOB-API-001");
-    assert.equal(loaded.payload.status, "completed");
-    assert.equal(loaded.payload.statusHistory.length, 1);
+    assert.equal(loaded.ok, false);
+    assert.equal(loaded.reason, "expired");
+    assert.equal(loaded.payload, null);
     assert.deepEqual(
       statusRead?.filters,
-      [{ column: "booking_reference", value: "DRV-JOB-API-001" }],
-      "Fresh driver links must read booking-wide status history so repeated transitions cannot bypass an older link.",
+      [
+        { column: "booking_reference", value: "DRV-JOB-API-001" },
+        { column: "status_value", value: "completed" },
+      ],
+      "Every private link must fail closed when the exact booking already has driver JC evidence.",
     );
     assert.equal(client.operations.length, 0);
     assertNoDriverJobLeaks(loaded);
@@ -926,7 +960,7 @@ try {
     );
 
     assert.equal(updated.ok, false);
-    assert.equal(updated.reason, "already_completed");
+    assert.equal(updated.reason, "expired");
     assert.equal(insertedStatus, undefined);
     assertNoDriverJobLeaks(updated);
   }
@@ -1056,6 +1090,11 @@ try {
 
   {
     const client = createSeededClient({ bookingType: "hourly", latestStatus: "pob" });
+    client.tables.driver_job_links.push({
+      ...client.tables.driver_job_links[0],
+      id: "33333333-3333-4333-8333-333333333333",
+      token_hash: hashDriverJobLinkToken("older-active-link-for-same-booking"),
+    });
     const result = await saveDriverJobStatusThroughStatusPersistence({
       client,
       completionNote: "Passenger dropped at hotel lobby.",
@@ -1080,7 +1119,7 @@ try {
         exception_reason_status: "provided",
       },
       safeStatusNote: "Passenger dropped at hotel lobby.",
-      totalOperations: 3,
+      totalOperations: 4,
     });
     assertInsertedActualTimeEvent(client, "dsp_end", "completed");
     assert.deepEqual(result.sharing_cleanup, {
@@ -1090,7 +1129,13 @@ try {
       ok: true,
       reason: "completed_marker_cleared",
     });
+    assert.deepEqual(result.link_expiry, {
+      no_op: false,
+      ok: true,
+      reason: "completed_links_expired",
+    });
     assertDeletedCompletedSharingMarker(client);
+    assertExpiredCompletedBookingLinks(client);
     assertNoDriverJobLeaks(result);
   }
 
@@ -1254,7 +1299,7 @@ try {
         exception_reason_status: "provided",
       },
       safeStatusNote: "Passenger dropped safely at lobby.",
-      totalOperations: 2,
+      totalOperations: 3,
     });
     assert.deepEqual(result.body.sharing_cleanup, {
       customerVisible: false,
@@ -1263,7 +1308,19 @@ try {
       ok: true,
       reason: "completed_marker_cleared",
     });
+    assert.deepEqual(result.body.link_expiry, {
+      no_op: false,
+      ok: true,
+      reason: "completed_links_expired",
+    });
     assertDeletedCompletedSharingMarker(client);
+    assertExpiredCompletedBookingLinks(client);
+    const reloaded = await getDriverJob(validToken);
+    assert.equal(reloaded.status, 410);
+    assert.equal(reloaded.body.ok, false);
+    assert.equal(reloaded.body.reason, "expired");
+    assert.equal(reloaded.body.payload, null);
+    assertNoDriverJobLeaks(reloaded);
     assertNoDriverJobLeaks(result);
   }
 

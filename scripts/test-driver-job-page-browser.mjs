@@ -1399,8 +1399,8 @@ async function runChromeTest() {
     );
     await clickBlockedStatus("Job Completed", "Update POB before Job Completed.", "I've arrived");
     await clickStatus("POB", "Passenger on board", "Status updated to Passenger on board.");
-    await clickStatus("Job Completed", "Completed", "Status updated to Completed.");
     await clickReportIssue();
+    await clickStatus("Job Completed", "Completed", "Status updated to Completed.");
     const completedState = await pageState();
     assert.deepEqual(
       completedState.statusTiming.rows.map((row) => ({
@@ -1423,6 +1423,12 @@ async function runChromeTest() {
     );
     assert.deepEqual(completedState.statusTiming.controls, [], "Recorded timing evidence must remain read-only.");
     assert.deepEqual(completedState.activityLogLabels, [], "Expected public driver activity log to stay hidden.");
+    const completedReloadState = await navigateToDriverJob(
+      mockDriverJobTokens.valid,
+      "Driver job link unavailable",
+    );
+    assert.equal(completedReloadState.visibleText.includes("Mock Pickup A"), false);
+    assert.equal(completedReloadState.buttonLabels.includes("Job Completed"), false);
     await resetMockDriverJobData();
 
     const arrivalState = await navigateToDriverJob(mockDriverJobTokens.arrivalWorkflow, "Mock Arrival Pickup");

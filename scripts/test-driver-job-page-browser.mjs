@@ -1608,7 +1608,9 @@ async function runChromeTest() {
     const missingShortcutState = await waitForCondition(
       () => evaluate(`(() => {
         const feedback = document.querySelector('[data-driver-portal-open-feedback="${"b".repeat(64)}"]');
+        const handoff = document.querySelector('[data-driver-portal-link-handoff="${"b".repeat(64)}"]');
         return feedback?.textContent.includes("Open and acknowledge the latest private link from dispatch once on this device.")
+          && handoff
           ? { href: location.href, text: feedback.textContent.trim() }
           : false;
       })()`),
@@ -1616,6 +1618,48 @@ async function runChromeTest() {
       "Driver Portal missing local private-link fallback",
     );
     assert.equal(new URL(missingShortcutState.href).pathname, "/driver-portal");
+
+    const rejectedCrossOriginHandoff = await evaluate(`(() => {
+      const input = document.querySelector('[data-driver-portal-link-input="${"b".repeat(64)}"]');
+      const form = document.querySelector('[data-driver-portal-link-handoff="${"b".repeat(64)}"]');
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      if (!input || !form || !setter) return false;
+      setter.call(input, "https://example.com/driver-job/${mockDriverJobTokens.arrivalWorkflow}");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      form.requestSubmit();
+      return true;
+    })()`);
+    assert.equal(rejectedCrossOriginHandoff, true);
+    const rejectedCrossOriginState = await waitForCondition(
+      () => evaluate(`(() => {
+        const feedback = document.querySelector('[data-driver-portal-link-handoff-feedback="${"b".repeat(64)}"]');
+        return feedback?.textContent.includes("Paste the exact latest app.prestigelimo.sg Driver Job link from dispatch.")
+          ? { href: location.href, text: feedback.textContent.trim() }
+          : false;
+      })()`),
+      10000,
+      "Driver Portal cross-origin private-link rejection",
+    );
+    assert.equal(new URL(rejectedCrossOriginState.href).pathname, "/driver-portal");
+
+    const acceptedLocalHandoff = await evaluate(`(() => {
+      const input = document.querySelector('[data-driver-portal-link-input="${"b".repeat(64)}"]');
+      const form = document.querySelector('[data-driver-portal-link-handoff="${"b".repeat(64)}"]');
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      if (!input || !form || !setter) return false;
+      setter.call(input, location.origin + "/driver-job/${mockDriverJobTokens.arrivalWorkflow}");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      form.requestSubmit();
+      return true;
+    })()`);
+    assert.equal(acceptedLocalHandoff, true);
+    await waitForCondition(
+      () => evaluate(`location.pathname === "/driver-job/${mockDriverJobTokens.arrivalWorkflow}"`),
+      10000,
+      "Driver Portal local private-link handoff",
+    );
 
     const localShortcut = await evaluate(`(async () => {
       const database = await new Promise((resolve, reject) => {

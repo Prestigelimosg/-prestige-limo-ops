@@ -28,6 +28,7 @@ import {
   type PublicCompanyProfile,
 } from "../../lib/company-profile-shared";
 import { loadPublicCompanyProfile } from "../../lib/public-company-profile-adapter";
+import { updateCustomerDevicePushSubscription } from "../../lib/customer-device-push-adapter";
 
 type BookingFilter = "Cancelled" | "Completed" | "Upcoming";
 type InvoiceFolder = "Credit Notes" | "Paid Invoices" | "Quotations" | "Unpaid Invoices";
@@ -35,6 +36,21 @@ type InvoiceDownloadState = "downloaded" | "downloading" | "failed";
 type PortalSection = "New Booking Request" | "Invoices" | BookingFilter;
 type PortalBookingsLoadState = "blocked" | "loading" | "ready";
 type PortalInvoicesLoadState = "blocked" | "loading" | "stored";
+type CustomerDevicePushStatus =
+  | "blocked"
+  | "checking"
+  | "disabled"
+  | "enabled"
+  | "error"
+  | "ready"
+  | "saving"
+  | "unsupported";
+type CustomerDevicePushState = {
+  message: string;
+  publicKey: string | null;
+  status: CustomerDevicePushStatus;
+  supported: boolean;
+};
 type DriverTrackingByBookingId = Record<string, CustomerPortalDriverTrackingResult>;
 type TripUpdatesByBookingId = Record<string, CustomerPortalTripUpdatesResult>;
 type CustomerQuickReplyState = Record<
@@ -270,8 +286,87 @@ function downloadBrowserBlob(blob: Blob, filename: string) {
   window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
 }
 
+function customerDevicePushIsSupported() {
+  return (
+    typeof window !== "undefined" &&
+    "serviceWorker" in navigator &&
+    "PushManager" in window &&
+    "Notification" in window
+  );
+}
+
+function customerDevicePushBase64ToUint8Array(base64String: string) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let index = 0; index < rawData.length; index += 1) {
+    outputArray[index] = rawData.charCodeAt(index);
+  }
+
+  return outputArray;
+}
+
+function customerDeviceIsUninstalledIphone() {
+  const navigatorWithStandalone = navigator as Navigator & { standalone?: boolean };
+  const iphoneOrIpad = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const standalone =
+    navigatorWithStandalone.standalone === true ||
+    window.matchMedia("(display-mode: standalone)").matches;
+
+  return iphoneOrIpad && !standalone;
+}
+
+async function customerDevicePushRegistration() {
+  const registrations = await navigator.serviceWorker.getRegistrations();
+
+  return registrations.find((registration) => {
+    const scopePath = new URL(registration.scope).pathname.replace(/\/$/, "");
+    const worker = registration.active || registration.waiting || registration.installing;
+
+    return (
+      scopePath === "/my-bookings" &&
+      worker?.scriptURL.endsWith("/prestige-customer-push-sw.js")
+    );
+  });
+}
+
+function customerDevicePushFailureMessage(error: unknown) {
+  const message =
+    error instanceof Error ? error.message.toLowerCase() : String(error || "").toLowerCase();
+
+  if (/home screen|iphone app/.test(message)) {
+    return "On iPhone, use Share → Add to Home Screen, open My Bookings, then tap Alerts OFF once.";
+  }
+
+  if (/permission|denied|blocked/.test(message)) {
+    return "Alerts are blocked in this device's notification settings.";
+  }
+
+  if (/not enabled|configuration|provider/.test(message)) {
+    return "Customer alerts are not enabled on this server yet.";
+  }
+
+  if (/account|customer|forbidden|access/.test(message)) {
+    return "Open My Bookings from your latest Prestige customer app link, then try again.";
+  }
+
+  return "Alerts could not be changed. Reload My Bookings and try again.";
+}
+
 export default function CustomerPortalPage() {
   const [activeSection, setActiveSection] = useState<PortalSection>("Upcoming");
+  const [customerDevicePushAction, setCustomerDevicePushAction] = useState<
+    "disable" | "enable" | null
+  >(null);
+  const [customerDevicePushState, setCustomerDevicePushState] =
+    useState<CustomerDevicePushState>({
+      message: "Checking customer alerts...",
+      publicKey: null,
+      status: "checking",
+      supported: true,
+    });
   const [companyProfile, setCompanyProfile] =
     useState<PublicCompanyProfile>(defaultCompanyProfile);
   const [expandedBookingId, setExpandedBookingId] = useState("");
@@ -300,6 +395,75 @@ export default function CustomerPortalPage() {
     useState<Record<string, InvoiceDownloadState>>({});
   const companyName = companyProfile.company_name || defaultCompanyProfile.company_name;
   const companyContactLines = companyProfileContactLines(companyProfile);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!customerDevicePushIsSupported()) {
+      setCustomerDevicePushState({
+        message:
+          "On iPhone, use Share → Add to Home Screen, open My Bookings, then tap Alerts OFF once.",
+        publicKey: null,
+        status: "unsupported",
+        supported: false,
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void (async () => {
+      try {
+        const result = await updateCustomerDevicePushSubscription("GET");
+        const readiness = result.readiness || {};
+
+        if (cancelled) {
+          return;
+        }
+
+        if (!readiness.ready || typeof readiness.public_key !== "string") {
+          setCustomerDevicePushState({
+            message: "Customer alerts are not enabled on this server yet.",
+            publicKey: null,
+            status: readiness.enabled ? "blocked" : "disabled",
+            supported: true,
+          });
+          return;
+        }
+
+        const registration = await customerDevicePushRegistration();
+        const subscription = await registration?.pushManager.getSubscription();
+
+        if (cancelled) {
+          return;
+        }
+
+        setCustomerDevicePushState({
+          message: subscription
+            ? "Alerts are enabled on this device."
+            : "Tap once to enable booking alerts on this device.",
+          publicKey: readiness.public_key,
+          status: subscription ? "enabled" : "ready",
+          supported: true,
+        });
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setCustomerDevicePushState({
+          message: customerDevicePushFailureMessage(error),
+          publicKey: null,
+          status: "error",
+          supported: true,
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function sendCustomerDriverQuickReply(
     booking: CustomerPortalBooking,
@@ -1040,6 +1204,127 @@ export default function CustomerPortalPage() {
     }
   }
 
+  async function handleCustomerDevicePushEnable() {
+    if (!customerDevicePushState.supported || !customerDevicePushState.publicKey) {
+      setCustomerDevicePushState((current) => ({
+        ...current,
+        message: "Customer alerts are not ready on this device.",
+      }));
+      return;
+    }
+
+    setCustomerDevicePushAction("enable");
+    setCustomerDevicePushState((current) => ({
+      ...current,
+      message: "Turning on booking alerts...",
+      status: "saving",
+    }));
+
+    let newlyCreatedSubscription: PushSubscription | null = null;
+
+    try {
+      if (customerDeviceIsUninstalledIphone()) {
+        throw new Error("Install the iPhone app from Add to Home Screen first.");
+      }
+
+      const permission = await Notification.requestPermission();
+
+      if (permission !== "granted") {
+        throw new Error("Notification permission was blocked.");
+      }
+
+      const registration = await navigator.serviceWorker.register("/prestige-customer-push-sw.js", {
+        scope: "/my-bookings",
+      });
+      const existingSubscription = await registration.pushManager.getSubscription();
+      const subscription =
+        existingSubscription ||
+        (await registration.pushManager.subscribe({
+          applicationServerKey: customerDevicePushBase64ToUint8Array(
+            customerDevicePushState.publicKey,
+          ),
+          userVisibleOnly: true,
+        }));
+
+      if (!existingSubscription) {
+        newlyCreatedSubscription = subscription;
+      }
+
+      await updateCustomerDevicePushSubscription("POST", subscription);
+
+      setCustomerDevicePushState((current) => ({
+        ...current,
+        message: "Booking alerts are enabled on this device.",
+        status: "enabled",
+      }));
+    } catch (error) {
+      if (newlyCreatedSubscription) {
+        await newlyCreatedSubscription.unsubscribe().catch(() => false);
+      }
+
+      setCustomerDevicePushState((current) => ({
+        ...current,
+        message: customerDevicePushFailureMessage(error),
+        status: "error",
+      }));
+    } finally {
+      setCustomerDevicePushAction(null);
+    }
+  }
+
+  async function handleCustomerDevicePushDisable() {
+    if (!customerDevicePushState.supported) {
+      return;
+    }
+
+    setCustomerDevicePushAction("disable");
+    setCustomerDevicePushState((current) => ({
+      ...current,
+      message: "Turning off booking alerts...",
+      status: "saving",
+    }));
+
+    try {
+      const registration = await customerDevicePushRegistration();
+      const subscription = await registration?.pushManager.getSubscription();
+
+      if (subscription) {
+        let serverCleanupFailed = false;
+
+        try {
+          await updateCustomerDevicePushSubscription("PATCH", subscription);
+        } catch {
+          serverCleanupFailed = true;
+        }
+
+        await subscription.unsubscribe();
+
+        setCustomerDevicePushState((current) => ({
+          ...current,
+          message: serverCleanupFailed
+            ? "Alerts are off on this device. The inactive endpoint will be cleared automatically."
+            : "Booking alerts are off on this device.",
+          status: "ready",
+        }));
+        return;
+      }
+
+      setCustomerDevicePushState((current) => ({
+        ...current,
+        message: "Booking alerts are already off on this device.",
+        status: "ready",
+      }));
+    } catch (error) {
+      setCustomerDevicePushState((current) => ({
+        ...current,
+        message: customerDevicePushFailureMessage(error),
+        status: "error",
+      }));
+    } finally {
+      setCustomerDevicePushAction(null);
+    }
+  }
+
   return (
     <main
       className="min-h-screen overflow-x-hidden bg-stone-50 px-3 py-4 text-slate-950 sm:px-4 lg:px-6"
@@ -1047,19 +1332,52 @@ export default function CustomerPortalPage() {
     >
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-3">
         <header className="border-b border-slate-200 px-1 pb-3 pt-1">
-          <div
-            className="flex min-w-0 items-center gap-2"
-            data-customer-company-profile-brand="true"
-          >
-            {companyProfile.logo_image_url ? (
-              <span
-                aria-label={`${companyName} logo`}
-                className="h-8 w-8 shrink-0 rounded-md bg-contain bg-center bg-no-repeat"
-                role="img"
-                style={{ backgroundImage: `url("${companyProfile.logo_image_url}")` }}
-              />
-            ) : null}
-            <p className="truncate text-sm font-semibold uppercase text-slate-600">{companyName}</p>
+          <div className="flex min-w-0 items-center justify-between gap-2">
+            <div
+              className="flex min-w-0 items-center gap-2"
+              data-customer-company-profile-brand="true"
+            >
+              {companyProfile.logo_image_url ? (
+                <span
+                  aria-label={`${companyName} logo`}
+                  className="h-8 w-8 shrink-0 rounded-md bg-contain bg-center bg-no-repeat"
+                  role="img"
+                  style={{ backgroundImage: `url("${companyProfile.logo_image_url}")` }}
+                />
+              ) : null}
+              <p className="truncate text-sm font-semibold uppercase text-slate-600">{companyName}</p>
+            </div>
+            <button
+              aria-checked={customerDevicePushState.status === "enabled"}
+              className={`h-7 shrink-0 rounded-full border px-2.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:text-slate-400 ${
+                customerDevicePushState.status === "enabled"
+                  ? "border-sky-700 bg-sky-700 text-white hover:bg-sky-600"
+                  : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+              }`}
+              data-customer-device-push-toggle="true"
+              disabled={
+                customerDevicePushAction !== null ||
+                !customerDevicePushState.supported ||
+                (customerDevicePushState.status !== "enabled" &&
+                  !customerDevicePushState.publicKey)
+              }
+              onClick={
+                customerDevicePushState.status === "enabled"
+                  ? handleCustomerDevicePushDisable
+                  : handleCustomerDevicePushEnable
+              }
+              role="switch"
+              title={customerDevicePushState.message}
+              type="button"
+            >
+              {customerDevicePushAction
+                ? customerDevicePushAction === "enable"
+                  ? "Turning ON..."
+                  : "Turning OFF..."
+                : customerDevicePushState.status === "enabled"
+                  ? "Alerts ON"
+                  : "Alerts OFF"}
+            </button>
           </div>
           <h1 className="mt-1 text-2xl font-bold text-slate-950 sm:text-3xl">My Bookings</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-700">
@@ -1071,6 +1389,16 @@ export default function CustomerPortalPage() {
               data-customer-company-profile-contact="true"
             >
               {companyContactLines.join(" | ")}
+            </p>
+          ) : null}
+          {customerDevicePushState.status === "unsupported" ||
+          customerDevicePushState.status === "error" ? (
+            <p
+              aria-live="polite"
+              className="mt-1 text-xs leading-5 text-slate-600"
+              data-customer-device-push-feedback="true"
+            >
+              {customerDevicePushState.message}
             </p>
           ) : null}
         </header>

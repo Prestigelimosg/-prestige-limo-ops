@@ -2501,6 +2501,17 @@ async function insertQuickReplyNotification(
     await sendDriverDevicePushAlertForAppUpdate(client, notification).catch(() => null);
   }
 
+  if (notification.delivery_surface === "customer_app") {
+    try {
+      const { sendCustomerDevicePushAlertForAppUpdate } = await import(
+        "./customer-device-push-notification"
+      );
+      await sendCustomerDevicePushAlertForAppUpdate(client, notification);
+    } catch {
+      // A saved customer app notification must not fail because Customer device push is unavailable.
+    }
+  }
+
   return {
     data: toSafeRecord(notification),
     ok: true,
@@ -3203,6 +3214,17 @@ export async function createCustomerDriverAppNotification(
 
   if (notification.delivery_surface === "driver_app") {
     await sendDriverDevicePushAlertForAppUpdate(clientResult.data, notification).catch(() => null);
+  }
+
+  if (notification.delivery_surface === "customer_app") {
+    try {
+      const { sendCustomerDevicePushAlertForAppUpdate } = await import(
+        "./customer-device-push-notification"
+      );
+      await sendCustomerDevicePushAlertForAppUpdate(clientResult.data, notification);
+    } catch {
+      // A saved customer app notification must not fail because Customer device push is unavailable.
+    }
   }
 
   return {

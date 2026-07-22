@@ -10,6 +10,7 @@ const customerPagePaths = ["app/book/page.tsx", "app/my-bookings/page.tsx"];
 const customerAdapterPaths = [
   "lib/customer-booking-request-adapter.ts",
   "lib/customer-booking-memory-adapter.ts",
+  "lib/customer-device-push-adapter.ts",
   "lib/customer-portal-driver-tracking-adapter.ts",
   "lib/customer-portal-saved-bookings-adapter.ts",
   "lib/customer-portal-trip-updates-adapter.ts",
@@ -234,6 +235,17 @@ for (const fragment of [
   assertIncludes(portalAdapter, fragment, `customer portal saved bookings adapter caller ${fragment}`);
 }
 
+const customerDevicePushAdapter = files["lib/customer-device-push-adapter.ts"];
+for (const fragment of [
+  '"/api/customer-device-push-subscriptions"',
+  "body: JSON.stringify({ subscription: subscription.toJSON() })",
+  'cache: "no-store"',
+  'credentials: "same-origin"',
+  '"x-prestige-customer-purpose": customerDevicePushPurpose',
+]) {
+  assertIncludes(customerDevicePushAdapter, fragment, `customer device push adapter caller ${fragment}`);
+}
+
 const portalDriverTrackingAdapter = files["lib/customer-portal-driver-tracking-adapter.ts"];
 for (const fragment of [
   "fetcher(\n      `${customerPortalDriverTrackingApiPath}?booking_reference=${encodeURIComponent(safeBookingReference)}`",
@@ -284,6 +296,7 @@ for (const [label, source] of [
   ["/my-bookings page", portalPage],
   ["customer booking request adapter", requestAdapter],
   ["customer booking memory adapter", memoryAdapter],
+  ["customer device push adapter", customerDevicePushAdapter],
   ["customer portal saved bookings adapter", portalAdapter],
   ["customer portal driver tracking adapter", portalDriverTrackingAdapter],
   ["customer portal trip updates adapter", portalTripUpdatesAdapter],

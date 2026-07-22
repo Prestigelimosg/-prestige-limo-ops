@@ -354,6 +354,10 @@ const guardChecks = [
     script: "scripts/test-admin-device-push-notification-guard.mjs",
   },
   {
+    label: "customer device push notification guard",
+    script: "scripts/test-customer-device-push-notification-guard.mjs",
+  },
+  {
     label: "Driver Job acknowledgement device push alert guard",
     script: "scripts/test-driver-job-device-push-alert-guard.mjs",
   },

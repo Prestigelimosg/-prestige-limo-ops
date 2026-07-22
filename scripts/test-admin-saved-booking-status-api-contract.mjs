@@ -607,8 +607,13 @@ try {
       value: "status-booking-1",
     },
   ]);
-  assert.deepEqual(Object.keys(validMock.client.updateHistory[0].payload).sort(), ["admin_internal_status", "updated_at"]);
+  assert.deepEqual(Object.keys(validMock.client.updateHistory[0].payload).sort(), [
+    "admin_internal_status",
+    "customer_facing_status",
+    "updated_at",
+  ]);
   assert.equal(validMock.client.updateHistory[0].payload.admin_internal_status, "completed");
+  assert.equal(validMock.client.updateHistory[0].payload.customer_facing_status, "completed");
   assert.equal(validMock.client.updateHistory[0].selectedColumns, "id, booking_reference, admin_internal_status, updated_at");
   assert.deepEqual(Object.keys(validMock.client.updateHistory[1].payload).sort(), ["status", "updated_at"]);
   assert.equal(validMock.client.updateHistory[1].payload.status, "completed");
@@ -633,7 +638,15 @@ try {
   assert.equal(cancelledResult.body.booking.status, "cancelled");
   assert.equal(cancelledMock.createdClients.length, 1);
   assert.equal(cancelledMock.client.updateHistory.length, 2);
+  assert.deepEqual(Object.keys(cancelledMock.client.updateHistory[0].payload).sort(), [
+    "admin_internal_status",
+    "cancellation_review_status",
+    "customer_facing_status",
+    "updated_at",
+  ]);
   assert.equal(cancelledMock.client.updateHistory[0].payload.admin_internal_status, "cancelled");
+  assert.equal(cancelledMock.client.updateHistory[0].payload.cancellation_review_status, "cancelled");
+  assert.equal(cancelledMock.client.updateHistory[0].payload.customer_facing_status, "cancelled");
   assert.equal(cancelledMock.client.updateHistory[1].payload.status, "cancelled");
   assertNoUnsafeResponse(cancelledResult, "cancelled status response");
 

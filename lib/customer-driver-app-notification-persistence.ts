@@ -25,6 +25,7 @@ import {
   productionDriverJobLinksConfigured,
 } from "./driver-job-link-mode";
 import { resolveExactTwoCustomerRuntimeSessionMap } from "./customer-runtime-session-map";
+import { sendDriverDevicePushAlertForAppUpdate } from "./driver-device-push-notification";
 
 export const customerDriverAppNotificationPersistenceVersion =
   "stage-customer-driver-app-notification-api-v1";
@@ -2496,6 +2497,10 @@ async function insertQuickReplyNotification(
     };
   }
 
+  if (notification.delivery_surface === "driver_app") {
+    await sendDriverDevicePushAlertForAppUpdate(client, notification).catch(() => null);
+  }
+
   return {
     data: toSafeRecord(notification),
     ok: true,
@@ -3176,6 +3181,10 @@ export async function createCustomerDriverAppNotification(
       ok: false,
       status: 500,
     };
+  }
+
+  if (notification.delivery_surface === "driver_app") {
+    await sendDriverDevicePushAlertForAppUpdate(clientResult.data, notification).catch(() => null);
   }
 
   return {

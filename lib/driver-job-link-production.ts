@@ -13,14 +13,26 @@ import {
   type DriverJobProductionStatusUpdateResult,
   type DriverJobStatusPersistenceClient,
 } from "./driver-job-status-persistence.ts";
+import {
+  registerDriverDevicePushSubscriptionForAcknowledgedLink,
+  type DriverDevicePushRegistrationResult,
+} from "./driver-device-push-notification.ts";
 
 export type ProductionDriverJobDetailsUpdateInput = {
+  devicePushSubscription?: unknown;
   driverContact?: unknown;
   driverName?: unknown;
   driverPlateNumber?: unknown;
   driverVehicleModel?: unknown;
   token: string;
 };
+
+export type ProductionDriverJobDetailsUpdateResult =
+  | (Extract<DriverJobProductionDetailsUpdateResult, { ok: true }> & {
+      device_alerts: DriverDevicePushRegistrationResult;
+    })
+  | Exclude<DriverJobProductionDetailsUpdateResult, { ok: true }>
+  | DriverJobLinkDisabledResult;
 
 export type ProductionDriverJobStatusUpdateInput = {
   completionNote?: unknown;
@@ -86,21 +98,20 @@ export async function getProductionDriverJobPayloadForToken(
 // verified job token. It does not expose pricing, payout, provider, GPS, or
 // billing fields, and it does not send customer/provider messages.
 export async function applyProductionDriverJobDetailsUpdate({
+  devicePushSubscription,
   driverContact,
   driverName,
   driverPlateNumber,
   driverVehicleModel,
   token,
-}: ProductionDriverJobDetailsUpdateInput): Promise<
-  DriverJobProductionDetailsUpdateResult | DriverJobLinkDisabledResult
-> {
+}: ProductionDriverJobDetailsUpdateInput): Promise<ProductionDriverJobDetailsUpdateResult> {
   const clientResult = resolveProductionClient();
 
   if (!clientResult.ok) {
     return clientResult;
   }
 
-  return saveDriverJobDetailsThroughStatusPersistence({
+  const detailsResult = await saveDriverJobDetailsThroughStatusPersistence({
     client: clientResult.client,
     driverContact,
     driverName,
@@ -108,6 +119,21 @@ export async function applyProductionDriverJobDetailsUpdate({
     driverVehicleModel,
     token,
   });
+
+  if (!detailsResult.ok) {
+    return detailsResult;
+  }
+
+  const deviceAlerts = await registerDriverDevicePushSubscriptionForAcknowledgedLink({
+    client: clientResult.client,
+    subscription: devicePushSubscription,
+    token,
+  });
+
+  return {
+    ...detailsResult,
+    device_alerts: deviceAlerts,
+  };
 }
 
 // Status updates insert one event for the verified token/link only, may queue

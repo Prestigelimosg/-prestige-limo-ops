@@ -680,6 +680,7 @@ const customerBookingRequestApiPattern = /\/api\/customer-booking-requests(?:[/?
 const customerBookingMemoryApiPattern = /\/api\/customer-booking-memory(?:[/?#]|$)/i;
 const customerPortalSavedBookingsApiPattern = /\/api\/customer-saved-bookings(?:[/?#]|$)/i;
 const customerPortalChangeRequestApiPattern = /\/api\/customer-booking-change-requests(?:[/?#]|$)/i;
+const customerPortalDevicePushApiPattern = /\/api\/customer-device-push-subscriptions(?:[/?#]|$)/i;
 const customerPortalInvoicesApiPattern = /\/api\/customer-invoices(?:[/?#]|$)/i;
 const customerPortalTripUpdatesApiPattern = /\/api\/customer-app-notifications(?:[/?#]|$)/i;
 const combineAllowedRuntimePatterns = (...patterns) =>
@@ -701,6 +702,7 @@ const customerPortalRuntimeAllowedPattern = combineAllowedRuntimePatterns(
   publicCompanyProfileApiPattern,
   customerPortalSavedBookingsApiPattern,
   customerPortalChangeRequestApiPattern,
+  customerPortalDevicePushApiPattern,
   customerPortalInvoicesApiPattern,
   customerPortalTripUpdatesApiPattern,
 );
@@ -941,6 +943,7 @@ async function runChromeTest() {
         const savedBookingsPayload = ${JSON.stringify(customerPortalSavedBookingsSmokePayload)};
         const savedBookingsPattern = /\\/api\\/customer-saved-bookings(?:[/?#]|$)/i;
         const changeRequestPattern = /\\/api\\/customer-booking-change-requests(?:[/?#]|$)/i;
+        const devicePushPattern = /\\/api\\/customer-device-push-subscriptions(?:[/?#]|$)/i;
         const tripUpdatesPattern = /\\/api\\/customer-app-notifications(?:[/?#]|$)/i;
         const quickRepliesPattern = /\\/api\\/customer-driver-quick-replies(?:[/?#]|$)/i;
         const isCustomerPortalPage = () => window.location.pathname === "/my-bookings";
@@ -954,6 +957,22 @@ async function runChromeTest() {
           const target = input?.url || input;
           const method = init?.method || input?.method || "GET";
           const url = String(target);
+
+          if (isCustomerPortalPage() && method === "GET" && devicePushPattern.test(url)) {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  ok: true,
+                  readiness: {
+                    enabled: false,
+                    public_key: null,
+                    ready: false,
+                  },
+                }),
+                { headers: { "Content-Type": "application/json" }, status: 200 },
+              ),
+            );
+          }
 
           if (isCustomerPortalPage() && savedBookingsPattern.test(url)) {
             if (Array.isArray(window.__customerPortalIntegrationCalls)) {
@@ -33596,7 +33615,18 @@ async function runChromeTest() {
         "customer booking memory autofill",
       );
       assert.deepEqual(memoryState.bookingMemory.options, ["Boss A", "Boss B"]);
-      assert.equal(memoryState.bookingMemory.calls.length, 1);
+      assert.equal(
+        memoryState.bookingMemory.calls.length >= 1 && memoryState.bookingMemory.calls.length <= 2,
+        true,
+        "Expected one production mount read or the two read-only React development Strict Mode mount attempts.",
+      );
+      assert.equal(
+        memoryState.bookingMemory.calls.every((call) =>
+          /^GET \/api\/customer-booking-memory(?:\?|$)/.test(call),
+        ),
+        true,
+        "Expected every observed customer booking memory attempt to remain an exact read-only GET.",
+      );
       assert.deepEqual(
         {
           dropoffLocation: memoryState.fieldState.dropoffLocation.value,
@@ -39652,6 +39682,9 @@ async function runChromeTest() {
       { context: "/driver-job/[token]", expectedText: "Prestige Limo Driver Job", url: driverJobWorkflowUrl },
     ]) {
       reporter.step(`route leak guards: ${route.context}`);
+      if (route.context === "/driver-job/[token]") {
+        await resetDriverJobWorkflowMock();
+      }
       await navigateWithLoadEvent(client, route.url);
       await waitForBodyText(evaluate, route.expectedText, `${route.context} archive boundary`);
       if (route.context === "/driver-job/[token]") {

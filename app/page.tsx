@@ -1163,7 +1163,9 @@ type AdminTodayJobMessageRecord = {
   created_at?: string | null;
   delivery_surface?: string | null;
   id?: string | null;
+  safe_context?: Record<string, unknown> | null;
   safe_message?: string | null;
+  safe_title?: string | null;
   workflow_area?: string | null;
 };
 
@@ -10614,6 +10616,130 @@ async function updateAdminAppNotificationStatus(
   return result.notification as AdminAppNotificationRecord;
 }
 
+async function queueCustomerBookingConfirmationNotification(input: {
+  bookingReference: string;
+  eventKey: string;
+  failureLabel: string;
+  matchesExisting: (notification: AdminTodayJobMessageRecord) => boolean;
+  safeContext: Record<string, unknown>;
+  safeMessage: string;
+  safeTitle: string;
+  workflowArea: string;
+}) {
+  const params = new URLSearchParams({
+    booking_reference: input.bookingReference,
+    delivery_surface: "customer_app",
+    limit: "100",
+    page: "1",
+  });
+  const existingResponse = await fetch(
+    `${adminCustomerDriverAppNotificationsApiPath}?${params.toString()}`,
+    {
+      cache: "no-store",
+      headers: {
+        "x-prestige-admin-purpose": adminLegacyDataPurpose,
+      },
+      method: "GET",
+    },
+  );
+  const existingResult = await existingResponse.json().catch(() => null);
+
+  if (!existingResponse.ok || !existingResult?.ok || !Array.isArray(existingResult.notifications)) {
+    throw new Error(
+      existingResult?.error || `${input.failureLabel} could not be checked safely.`,
+    );
+  }
+
+  const existingNotification = (existingResult.notifications as AdminTodayJobMessageRecord[]).find(
+    (notification) =>
+      clean(notification.booking_reference) === input.bookingReference &&
+      notification.delivery_surface === "customer_app" &&
+      notification.workflow_area === input.workflowArea &&
+      input.matchesExisting(notification),
+  );
+
+  if (existingNotification) {
+    return existingNotification;
+  }
+
+  const response = await fetch(adminCustomerDriverAppNotificationsApiPath, {
+    body: JSON.stringify({
+      booking_reference: input.bookingReference,
+      delivery_surface: "customer_app",
+      driver_job_link_id: null,
+      event_key: input.eventKey,
+      notification_status: "queued",
+      notification_type: "booking_status",
+      priority: "normal",
+      safe_context: input.safeContext,
+      safe_message: input.safeMessage,
+      safe_title: input.safeTitle,
+      workflow_area: input.workflowArea,
+    }),
+    headers: {
+      "Content-Type": "application/json",
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "POST",
+  });
+  const result = await response.json().catch(() => null);
+
+  if (
+    !response.ok ||
+    !result?.ok ||
+    clean(result?.notification?.booking_reference) !== input.bookingReference ||
+    result?.notification?.delivery_surface !== "customer_app" ||
+    result?.notification?.workflow_area !== input.workflowArea
+  ) {
+    throw new Error(
+      result?.error || `${input.failureLabel} could not be queued safely.`,
+    );
+  }
+
+  return result.notification as AdminTodayJobMessageRecord;
+}
+
+async function queueCustomerBookingAmendmentConfirmedNotification(
+  bookingReference: string,
+  amendmentRequestId: string,
+) {
+  return queueCustomerBookingConfirmationNotification({
+    bookingReference,
+    eventKey: `${bookingReference}:customer-amendment-confirmed:${amendmentRequestId}`,
+    failureLabel: "Customer amendment confirmation",
+    matchesExisting: (notification) =>
+      notification.safe_context?.amendment_request_id === amendmentRequestId,
+    safeContext: {
+      amendment_request_id: amendmentRequestId,
+      external_send: false,
+      provider_send: false,
+      source: "customer_amendment_review",
+    },
+    safeMessage:
+      "Your booking amendment has been confirmed by Prestige Limo. Open My Bookings to review.",
+    safeTitle: "Booking amendment confirmed",
+    workflowArea: "customer_amendment_review",
+  });
+}
+
+async function queueCustomerBookingRequestConfirmedNotification(bookingReference: string) {
+  return queueCustomerBookingConfirmationNotification({
+    bookingReference,
+    eventKey: `${bookingReference}:customer_request_review:approved`,
+    failureLabel: "Customer booking confirmation",
+    matchesExisting: (notification) =>
+      notification.safe_context?.request_review_status === "approved",
+    safeContext: {
+      customer_facing_status: "confirmed",
+      request_review_status: "approved",
+      source: "customer_request_review",
+    },
+    safeMessage: "Your booking request has been confirmed by Prestige Limo.",
+    safeTitle: "Booking request confirmed",
+    workflowArea: "customer_request_review",
+  });
+}
+
 async function loadAdminDevicePushReadiness() {
   const response = await fetch(adminDevicePushSubscriptionsApiPath, {
     headers: {
@@ -14713,6 +14839,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         clean(record.short_notice_review_status) || payload.booking.short_notice_review_status;
       payload.booking.request_review_status =
         clean(record.request_review_status) || payload.booking.request_review_status;
+      payload.booking.change_review_status = "approved";
 
       setAdminBookingPersistenceAction("update");
       setAdminBookingPersistenceMessage({
@@ -14766,6 +14893,30 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         return;
       }
 
+      try {
+        await queueCustomerBookingAmendmentConfirmedNotification(
+          updatedBookingReference,
+          notificationId,
+        );
+      } catch (error) {
+        const message = {
+          tone: "error",
+          text: `Amendment applied for ${updatedBookingReference} and Google Calendar auto-synced, but the customer app confirmation could not be queued: ${
+            error instanceof Error ? error.message : "Customer notification failed safely."
+          } Request remains pending for retry.`,
+        } satisfies Message;
+
+        setMessage(message);
+        setBookingSaveMessage(message);
+        setAdminBookingPersistenceMessage(message);
+        setAdminAppNotificationReadState((current) => ({
+          ...current,
+          message,
+          status: "error",
+        }));
+        return;
+      }
+
       let handledId = notificationId;
 
       try {
@@ -14792,7 +14943,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
       const message = {
         tone: "success",
-        text: `Amendment applied for ${updatedBookingReference}. Google Calendar auto-synced on the same booking reference; request archived. No external message was sent.`,
+        text: `Amendment applied for ${updatedBookingReference}. Google Calendar auto-synced on the same booking reference; customer app confirmation queued; request archived. No external message was sent.`,
       } satisfies Message;
 
       removeHandledAdminAppNotification(handledId, message);
@@ -22342,9 +22493,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       },
     );
     const appliedSnapshot = appliedAdminBookingSnapshot;
+    const acceptingCustomerRequest = appliedAdminBookingSnapshotIsPendingCustomerRequest;
 
     if (appliedSnapshot) {
       payload.booking.source_channel = clean(appliedSnapshot.source_channel) || payload.booking.source_channel;
+      payload.booking.source_surface = clean(appliedSnapshot.source_surface) || payload.booking.source_surface;
       payload.booking.customer_facing_status =
         clean(appliedSnapshot.customer_facing_status) || payload.booking.customer_facing_status;
       payload.booking.admin_internal_status =
@@ -22355,10 +22508,21 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         clean(appliedSnapshot.request_review_status) || payload.booking.request_review_status;
     }
 
+    if (acceptingCustomerRequest) {
+      payload.booking.source_channel = "customer-booking-request";
+      payload.booking.source_surface = "customer_booking_request";
+      payload.booking.request_review_status = "approved";
+      payload.booking.customer_facing_status = "confirmed";
+      payload.booking.admin_internal_status = "Ready for Confirmation";
+      payload.booking.short_notice_review_status = "reviewed";
+    }
+
     setAdminBookingPersistenceAction("update");
     setAdminBookingPersistenceMessage({
       tone: "info",
-      text: "Updating applied operational booking fields...",
+      text: acceptingCustomerRequest
+        ? "Accepting customer booking request and updating Google Calendar..."
+        : "Updating applied operational booking fields...",
     });
 
     try {
@@ -22393,10 +22557,30 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       });
       const calendarSyncResult = await autoSyncSavedBookingGoogleCalendar(updatedBooking);
 
+      if (calendarSyncResult.ok && acceptingCustomerRequest) {
+        try {
+          await queueCustomerBookingRequestConfirmedNotification(updatedBookingReference);
+        } catch (error) {
+          const updateMessage = {
+            tone: "error",
+            text: `Customer booking request accepted: ${updatedBookingReference}. Google Calendar auto-synced, but the customer app confirmation could not be queued: ${
+              error instanceof Error ? error.message : "Customer notification failed safely."
+            }`,
+          } satisfies Message;
+
+          setAdminBookingPersistenceMessage(updateMessage);
+          setMessage(updateMessage);
+          setBookingSaveMessage(updateMessage);
+          return;
+        }
+      }
+
       const updateMessage = {
         tone: calendarSyncResult.ok ? "success" : "error",
         text: calendarSyncResult.ok
-          ? `Operational booking updated: ${updatedBookingReference}.${updateReviewNotice} Google Calendar auto-synced; reminders included; no guest email sent.`
+          ? acceptingCustomerRequest
+            ? `Customer booking request accepted: ${updatedBookingReference}. Google Calendar auto-synced; customer app confirmation queued; no guest email sent.`
+            : `Operational booking updated: ${updatedBookingReference}.${updateReviewNotice} Google Calendar auto-synced; reminders included; no guest email sent.`
           : `Operational booking updated: ${updatedBookingReference}.${updateReviewNotice} ${calendarSyncResult.message}`,
       } satisfies Message;
 
@@ -31151,6 +31335,24 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     : bookingSaveMessage?.tone === "error"
       ? "error"
       : null;
+  const appliedAdminBookingSnapshotHasQueuedCustomerRequestNotification = Boolean(
+    appliedAdminBookingSnapshotReference &&
+      newBookingRequestNotifications.some(
+        (notification) =>
+          adminAppNotificationBookingReference(notification).toLowerCase() ===
+          appliedAdminBookingSnapshotReference.toLowerCase(),
+      ),
+  );
+  const appliedAdminBookingSnapshotRequestReviewStatus = clean(
+    appliedAdminBookingSnapshot?.request_review_status,
+  ).toLowerCase();
+  const appliedAdminBookingSnapshotIsPendingCustomerRequest = Boolean(
+    appliedAdminBookingSnapshot &&
+      (adminBookingPersistenceRecordIsCustomerRequest(appliedAdminBookingSnapshot) ||
+        appliedAdminBookingSnapshotHasQueuedCustomerRequestNotification) &&
+      appliedAdminBookingSnapshotRequestReviewStatus !== "approved" &&
+      appliedAdminBookingSnapshotRequestReviewStatus !== "declined",
+  );
   const bookingSaveButtonLabel = saving
     ? "Saving..."
     : bookingUpdateInFlight
@@ -31158,7 +31360,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     : bookingSaveSucceededForCurrentDraft
       ? "Saved"
       : activeAppliedBookingReference
-        ? "Update + Cal"
+        ? appliedAdminBookingSnapshotIsPendingCustomerRequest
+          ? "Accept + Cal"
+          : "Update + Cal"
       : "Save + CRM";
   function handleJobCardPrimaryBookingAction() {
     if (activeAppliedBookingReference) {

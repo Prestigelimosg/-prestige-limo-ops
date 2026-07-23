@@ -1779,6 +1779,28 @@ function customerAppNotificationUsesAdminBookingStatusTemplate(
   );
 }
 
+function customerAppNotificationUsesAmendmentConfirmedTemplate(
+  input: CustomerDriverAppNotificationInput,
+) {
+  return (
+    input.delivery_surface === "customer_app" &&
+    input.driver_job_link_id === null &&
+    input.notification_type === "booking_status" &&
+    input.notification_status === "queued" &&
+    input.priority === "normal" &&
+    input.workflow_area === "customer_amendment_review" &&
+    input.safe_title === "Booking amendment confirmed" &&
+    input.safe_message ===
+      "Your booking amendment has been confirmed by Prestige Limo. Open My Bookings to review." &&
+    typeof input.safe_context.amendment_request_id === "string" &&
+    input.safe_context.amendment_request_id.length > 0 &&
+    input.safe_context.external_send === false &&
+    input.safe_context.provider_send === false &&
+    input.safe_context.source === "customer_amendment_review" &&
+    Object.keys(input.safe_context).length === 4
+  );
+}
+
 function customerAppNotificationUsesApprovedRuntimeTemplate(
   input: CustomerDriverAppNotificationInput,
 ) {
@@ -1800,6 +1822,8 @@ function customerAppNotificationUsesApprovedRuntimeTemplate(
     input.workflow_area === "customer_request_review";
   const adminBookingStatusUpdateTemplate =
     customerAppNotificationUsesAdminBookingStatusTemplate(input);
+  const amendmentConfirmedTemplate =
+    customerAppNotificationUsesAmendmentConfirmedTemplate(input);
   const adminCustomerJobMessage =
     input.delivery_surface === "customer_app" &&
     input.driver_job_link_id === null &&
@@ -1821,6 +1845,7 @@ function customerAppNotificationUsesApprovedRuntimeTemplate(
   return (
     driverDetailsReadyTemplate ||
     bookingRequestConfirmedTemplate ||
+    amendmentConfirmedTemplate ||
     adminBookingStatusUpdateTemplate ||
     adminCustomerJobMessage
   );

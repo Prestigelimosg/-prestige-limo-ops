@@ -9,6 +9,7 @@ const statusPersistencePath = "lib/admin-saved-booking-status-persistence.ts";
 const notificationPersistencePath =
   "lib/customer-driver-app-notification-persistence.ts";
 const adminBookingRoutePath = "app/api/admin-bookings/route.ts";
+const adminPagePath = "app/page.tsx";
 const driverStatusPersistencePath = "lib/driver-job-status-persistence.ts";
 const ledgerPath = "docs/current-implementation-ledger.md";
 
@@ -29,6 +30,7 @@ const [
   statusPersistenceSource,
   notificationPersistenceSource,
   adminBookingRouteSource,
+  adminPageSource,
   driverStatusPersistenceSource,
   ledgerSource,
 ] = await Promise.all(
@@ -37,6 +39,7 @@ const [
     statusPersistencePath,
     notificationPersistencePath,
     adminBookingRoutePath,
+    adminPagePath,
     driverStatusPersistencePath,
     ledgerPath,
   ].map((relativePath) => readFile(path.join(process.cwd(), relativePath), "utf8")),
@@ -83,8 +86,23 @@ assertIncludes(
   [
     "maybeQueueCustomerRequestDecisionNotification",
     'safe_title: "Booking request confirmed"',
+    "preserveCustomerBookingRequestOrigin",
+    'input.booking.source_surface = "customer_booking_request"',
   ],
   "already-wired accepted customer booking alert lane",
+);
+
+assertIncludes(
+  adminPageSource,
+  [
+    "appliedAdminBookingSnapshotIsPendingCustomerRequest",
+    'payload.booking.request_review_status = "approved"',
+    'payload.booking.customer_facing_status = "confirmed"',
+    'payload.booking.admin_internal_status = "Ready for Confirmation"',
+    "queueCustomerBookingRequestConfirmedNotification",
+    '? "Accept + Cal"',
+  ],
+  "existing Update + Cal pending customer request acceptance handoff",
 );
 
 assertIncludes(

@@ -977,6 +977,20 @@ type AdminDriverJobLinkRecord = {
   };
 };
 
+type AdminDriverJobLinkSafeOperationalPayload = {
+  assigned_driver_contact?: string;
+  assigned_driver_name?: string;
+  assigned_driver_plate?: string;
+  booking_type: string;
+  dropoff_location: string;
+  flight_no: string;
+  passenger_name: string;
+  pickup_date: string;
+  pickup_location: string;
+  pickup_time: string;
+  route: string;
+};
+
 type AdminDriverJobLinkAction = "create" | "load" | "revoke";
 
 type AdminDriverJobLinkState = {
@@ -6941,6 +6955,50 @@ function singaporePickupDateTimePartsFromTimestamp(value: string | null | undefi
         time: `${hour}${minute}`,
       }
     : null;
+}
+
+function adminDriverJobLinkCanonicalOperationalText(value: string | number | null | undefined) {
+  return clean(value).replace(/\s+/g, " ").toLocaleLowerCase("en-SG");
+}
+
+function adminDriverJobLinkCanonicalOperationalRoute(value: string | null | undefined) {
+  return adminDriverJobLinkCanonicalOperationalText(value)
+    .split(">")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join(" > ");
+}
+
+function savedBookingMatchesDriverJobLinkOperationalPayload(
+  record: AdminBookingPersistenceRecord,
+  payload: AdminDriverJobLinkSafeOperationalPayload,
+) {
+  const pickupParts = singaporePickupDateTimePartsFromTimestamp(
+    clean(record.pickup_at) || clean(record.pickup_datetime),
+  );
+  const payloadPickupTime = clean(payload.pickup_time).replace(/[^0-9]/g, "").slice(0, 4);
+  const comparisons = [
+    [adminBookingPersistenceServiceType(record), payload.booking_type],
+    [record.pickup_location, payload.pickup_location],
+    [record.dropoff_location, payload.dropoff_location],
+    [record.passenger_name, payload.passenger_name],
+    [record.flight_no, payload.flight_no],
+    [record.driver_name, payload.assigned_driver_name],
+    [record.driver_contact, payload.assigned_driver_contact],
+    [record.driver_plate_number, payload.assigned_driver_plate],
+  ];
+
+  return (
+    comparisons.every(
+      ([savedValue, linkValue]) =>
+        adminDriverJobLinkCanonicalOperationalText(savedValue) ===
+        adminDriverJobLinkCanonicalOperationalText(linkValue),
+    ) &&
+    adminDriverJobLinkCanonicalOperationalRoute(adminBookingPersistenceRouteSummary(record)) ===
+      adminDriverJobLinkCanonicalOperationalRoute(payload.route) &&
+    pickupParts?.date === clean(payload.pickup_date) &&
+    pickupParts?.time === payloadPickupTime
+  );
 }
 
 function formatPickupTimeFromTimestamp(value: string | null | undefined) {
@@ -22744,6 +22802,19 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
     if (driverPlate) {
       driverJobPayload.assigned_driver_plate = driverPlate;
+    }
+
+    if (
+      !appliedAdminBookingSnapshot ||
+      !savedBookingMatchesDriverJobLinkOperationalPayload(
+        appliedAdminBookingSnapshot,
+        driverJobPayload,
+      )
+    ) {
+      return {
+        error: "Save the booking amendment before creating a Driver Job Link.",
+        ok: false as const,
+      };
     }
 
     return {

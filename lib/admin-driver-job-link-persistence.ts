@@ -126,6 +126,8 @@ const safeDriverJobLinkServerSessionActorError =
   "Admin driver job link persistence requires a verified admin or dispatcher server session.";
 const safeDriverJobLinkLoadError = "Admin driver job link load failed safely.";
 const safeDriverJobLinkCreateError = "Admin driver job link create failed safely.";
+const staleBookingAmendmentError =
+  "Save the booking amendment before creating a Driver Job Link.";
 const safeDriverJobLinkRevokeError = "Admin driver job link revoke failed safely.";
 const allowedLinkStatuses = new Set(["active", "expired", "revoked"]);
 const allowedJobCardKinds = new Set(["amendment", "new", "reissued"]);
@@ -459,6 +461,81 @@ function safeDriverJobPayloadRevision(payload: AdminDriverJobLinkSafePayload) {
   );
 
   return createHash("sha256").update(JSON.stringify(canonicalPayload)).digest("hex");
+}
+
+function canonicalOperationalText(value: unknown) {
+  return optionalSafeText(value)?.replace(/\s+/g, " ").toLocaleLowerCase("en-SG") || "";
+}
+
+function canonicalOperationalRoute(value: unknown) {
+  return canonicalOperationalText(value)
+    .split(">")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join(" > ");
+}
+
+function singaporeDateTimeKey(value: unknown) {
+  const timestamp = Date.parse(optionalSafeText(value) || "");
+
+  if (!Number.isFinite(timestamp)) {
+    return "";
+  }
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+    minute: "2-digit",
+    month: "2-digit",
+    timeZone: "Asia/Singapore",
+    year: "numeric",
+  }).formatToParts(new Date(timestamp));
+  const partValue = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value || "";
+  const date = `${partValue("year")}-${partValue("month")}-${partValue("day")}`;
+  const time = `${partValue("hour")}${partValue("minute")}`;
+
+  return /^\d{4}-\d{2}-\d{2} \d{4}$/.test(`${date} ${time}`) ? `${date} ${time}` : "";
+}
+
+function driverJobPayloadPickupDateTimeKey(payload: AdminDriverJobLinkSafePayload) {
+  const pickupDate = optionalSafeText(payload.pickup_date);
+  const pickupTime = optionalSafeText(payload.pickup_time)?.replace(/[^0-9]/g, "").slice(0, 4);
+
+  if (pickupDate && /^\d{4}$/.test(pickupTime || "")) {
+    return `${pickupDate} ${pickupTime}`;
+  }
+
+  return singaporeDateTimeKey(payload.pickup_datetime);
+}
+
+function savedBookingMatchesDriverJobPayload(
+  bookingRecord: UnknownRecord,
+  payload: AdminDriverJobLinkSafePayload,
+) {
+  const comparisons = [
+    [bookingRecord.service_type, payload.booking_type],
+    [bookingRecord.pickup_location, payload.pickup_location],
+    [bookingRecord.dropoff_location, payload.dropoff_location],
+    [bookingRecord.passenger_name, payload.passenger_name],
+    [bookingRecord.flight_no, payload.flight_no],
+    [bookingRecord.driver_name, payload.assigned_driver_name],
+    [bookingRecord.driver_contact, payload.assigned_driver_contact],
+    [bookingRecord.driver_plate_number, payload.assigned_driver_plate],
+  ];
+
+  return (
+    Object.keys(bookingRecord).length > 0 &&
+    comparisons.every(
+      ([savedValue, linkValue]) =>
+        canonicalOperationalText(savedValue) === canonicalOperationalText(linkValue),
+    ) &&
+    canonicalOperationalRoute(bookingRecord.route_summary) ===
+      canonicalOperationalRoute(payload.route) &&
+    singaporeDateTimeKey(bookingRecord.pickup_at) ===
+      driverJobPayloadPickupDateTimeKey(payload)
+  );
 }
 
 export function classifyAdminDriverJobCardKind(
@@ -924,10 +1001,6 @@ export async function createAdminDriverJobLink(
     return clientResult;
   }
 
-  const token = generateDriverJobLinkToken();
-  const tokenHash = hashDriverJobLinkToken(token);
-  const now = new Date();
-  const expiresAt = getDriverJobLinkExpiresAt(now, input.ttl_hours);
   const { data: bookingData, error: bookingError } = await clientResult.data
     .from("bookings")
     .select("driver_id")
@@ -939,6 +1012,36 @@ export async function createAdminDriverJobLink(
   if (bookingError) {
     return safeAdapterFailure(safeDriverJobLinkCreateError, 500, bookingError);
   }
+
+  const { data: operationalBookingData, error: operationalBookingError } = await clientResult.data
+    .from("bookings")
+    .select(
+      "service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, flight_no, driver_name, driver_contact, driver_plate_number",
+    )
+    .eq("booking_reference", input.booking_reference)
+    .maybeSingle();
+
+  if (operationalBookingError) {
+    return safeAdapterFailure(safeDriverJobLinkCreateError, 500, operationalBookingError);
+  }
+
+  if (
+    !savedBookingMatchesDriverJobPayload(
+      asRecord(operationalBookingData),
+      input.driver_job_payload,
+    )
+  ) {
+    return {
+      error: staleBookingAmendmentError,
+      ok: false,
+      status: 409,
+    };
+  }
+
+  const token = generateDriverJobLinkToken();
+  const tokenHash = hashDriverJobLinkToken(token);
+  const now = new Date();
+  const expiresAt = getDriverJobLinkExpiresAt(now, input.ttl_hours);
 
   const { data: previousLinkData, error: previousLinkError } = await clientResult.data
     .from("driver_job_links")

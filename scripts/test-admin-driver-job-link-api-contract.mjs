@@ -9,6 +9,8 @@ const routeBlockedMessage =
   "Admin booking persistence is available only from the internal admin dashboard.";
 const disabledDriverJobLinkError =
   "Admin driver job link persistence is not enabled on this server.";
+const staleBookingAmendmentError =
+  "Save the booking amendment before creating a Driver Job Link.";
 const serverSessionToken = "mock-admin-driver-job-link-session-token";
 const serviceRoleSentinel = "SUPABASE_SERVICE_ROLE_KEY_DRIVER_JOB_LINK_SENTINEL";
 const supabaseUrlSentinel = "https://driver-job-link-contract.supabase.co";
@@ -252,10 +254,53 @@ class MockSupabaseClient {
     this.selectHistory = [];
     this.tables = {
       bookings: [
-        { booking_reference: "JOB-LINK-CONTRACT-001", driver_id: 27 },
-        { booking_reference: "JOB-LINK-CONTRACT-OPTIONAL-DRIVER", driver_id: null },
-        { booking_reference: "JOB-LINK-CONTRACT-BROWSER-DASHBOARD", driver_id: 28 },
-        { booking_reference: "May 2026 / JOB-UBS-042", driver_id: 29 },
+        {
+          booking_reference: "JOB-LINK-CONTRACT-001",
+          driver_contact: "+65 8777 0000",
+          driver_id: 27,
+          driver_name: "Contract Driver",
+          driver_plate_number: "SLA1234A",
+          dropoff_location: "Changi Airport Terminal 3",
+          flight_no: "SQ321",
+          passenger_name: "Guest Tan",
+          pickup_at: "2026-06-12T10:30:00+08:00",
+          pickup_location: "Raffles Hotel Singapore",
+          route_summary: "Raffles Hotel Singapore > Changi Airport Terminal 3",
+          service_type: "DEP",
+        },
+        {
+          booking_reference: "JOB-LINK-CONTRACT-OPTIONAL-DRIVER",
+          driver_id: null,
+          dropoff_location: "Changi Airport Terminal 3",
+          flight_no: "SQ321",
+          passenger_name: "Guest Tan",
+          pickup_at: "2026-06-12T10:30:00+08:00",
+          pickup_location: "Raffles Hotel Singapore",
+          route_summary: "Raffles Hotel Singapore > Changi Airport Terminal 3",
+          service_type: "DEP",
+        },
+        {
+          booking_reference: "JOB-LINK-CONTRACT-BROWSER-DASHBOARD",
+          driver_id: 28,
+          dropoff_location: "Changi Airport Terminal 3",
+          flight_no: "SQ321",
+          passenger_name: "Guest Tan",
+          pickup_at: "2026-06-12T10:30:00+08:00",
+          pickup_location: "Raffles Hotel Singapore",
+          route_summary: "Raffles Hotel Singapore > Changi Airport Terminal 3",
+          service_type: "DEP",
+        },
+        {
+          booking_reference: "May 2026 / JOB-UBS-042",
+          driver_id: 29,
+          dropoff_location: "Changi Airport Terminal 3",
+          flight_no: "SQ321",
+          passenger_name: "Guest Tan",
+          pickup_at: "2026-06-12T10:30:00+08:00",
+          pickup_location: "Raffles Hotel Singapore",
+          route_summary: "Raffles Hotel Singapore > Changi Airport Terminal 3",
+          service_type: "DEP",
+        },
       ],
       driver_live_location_runtime_settings: [],
       driver_device_push_subscriptions: [],
@@ -614,6 +659,31 @@ try {
     "Admin link creation must reject a private-link lifetime beyond 96 hours.",
   );
 
+  const staleDspAmendment = await readResponse(
+    await harness.route.POST(
+      requestWithJson(
+        "POST",
+        "http://localhost/api/admin-driver-job-links",
+        safeCreatePayload({
+          driver_job_payload: {
+            ...safeCreatePayload().driver_job_payload,
+            booking_type: "DSP",
+            pickup_datetime: "2026-06-12T16:00:00.000+08:00",
+            pickup_location: "8 Cross Street Singapore",
+            route: "8 Cross Street Singapore > Changi Airport Terminal 3",
+          },
+        }),
+      ),
+    ),
+  );
+
+  assert.equal(staleDspAmendment.status, 409);
+  assert.equal(staleDspAmendment.body.ok, false);
+  assert.equal(staleDspAmendment.body.error, staleBookingAmendmentError);
+  assert.equal(client.tables.driver_job_links.length, 0);
+  assert.equal(client.tables.driver_live_location_runtime_settings.length, 0);
+  assertNoApiLeak(staleDspAmendment, "stale DEP to DSP amendment rejection");
+
   const created = await readResponse(
     await harness.route.POST(
       requestWithJson("POST", "http://localhost/api/admin-driver-job-links", safeCreatePayload()),
@@ -640,7 +710,7 @@ try {
   assertNoUnsafeDriverJobLinkLeak(created.body.link, "create link payload");
   assert.doesNotMatch(JSON.stringify(created.body), /token_hash|raw_token|driver_job_token/i);
 
-  assert.equal(createdClients.length, 2);
+  assert.equal(createdClients.length, 3);
   assert.equal(createdClients[0].url, supabaseUrlSentinel);
   assert.equal(createdClients[0].serviceRoleKey, serviceRoleSentinel);
   assert.equal(createdClients[1].url, supabaseUrlSentinel);

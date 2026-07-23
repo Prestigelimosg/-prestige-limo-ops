@@ -18,7 +18,16 @@ const allowedBodyFields = new Set([
   "requested_dropoff_location",
   "requested_pickup_date",
   "requested_pickup_location",
+  "requested_service_type",
   "requested_pickup_time",
+]);
+const customerBookingServiceOptions = new Set([
+  "Airport Arrival",
+  "Airport Departure",
+  "Point-to-Point Transfer",
+  "Hourly / Disposal",
+  "Event / VIP Movement",
+  "Other / Need advice",
 ]);
 const maxBookingReferenceLength = 120;
 const maxSafeTextLength = 240;
@@ -78,6 +87,7 @@ type ParsedBookingChangeRequest = {
   requested_dropoff_location: string | null;
   requested_pickup_date: string | null;
   requested_pickup_location: string | null;
+  requested_service_type: string | null;
   requested_pickup_time: string | null;
 };
 type ParseResult<T> =
@@ -155,6 +165,12 @@ function safePickupTime(value: unknown) {
   return cleaned && /^([01]\d|2[0-3]):[0-5]\d$/.test(cleaned) ? cleaned : null;
 }
 
+function safeCustomerServiceType(value: unknown) {
+  const cleaned = safeText(value, 120);
+
+  return cleaned && customerBookingServiceOptions.has(cleaned) ? cleaned : null;
+}
+
 function parseBookingChangeRequestPayload(value: unknown): ParseResult<ParsedBookingChangeRequest> {
   const record = asRecord(value);
   const unknownKeys = Object.keys(record).filter(
@@ -199,6 +215,9 @@ function parseBookingChangeRequestPayload(value: unknown): ParseResult<ParsedBoo
   const requestedDropoffLocation = record.requested_dropoff_location
     ? safeText(record.requested_dropoff_location)
     : null;
+  const requestedServiceType = record.requested_service_type
+    ? safeCustomerServiceType(record.requested_service_type)
+    : null;
   const requestNote = record.request_note ? safeText(record.request_note, 500) : null;
 
   if (!bookingReference || !requestKind) {
@@ -214,6 +233,7 @@ function parseBookingChangeRequestPayload(value: unknown): ParseResult<ParsedBoo
     (record.requested_pickup_time && !requestedPickupTime) ||
     (record.requested_pickup_location && !requestedPickupLocation) ||
     (record.requested_dropoff_location && !requestedDropoffLocation) ||
+    (record.requested_service_type && !requestedServiceType) ||
     (record.request_note && !requestNote)
   ) {
     return {
@@ -227,7 +247,8 @@ function parseBookingChangeRequestPayload(value: unknown): ParseResult<ParsedBoo
     requestedPickupDate ||
       requestedPickupTime ||
       requestedPickupLocation ||
-      requestedDropoffLocation,
+      requestedDropoffLocation ||
+      requestedServiceType,
   );
 
   if (requestKind === "amendment" && !hasAmendmentValue) {
@@ -246,6 +267,7 @@ function parseBookingChangeRequestPayload(value: unknown): ParseResult<ParsedBoo
       requested_dropoff_location: requestedDropoffLocation,
       requested_pickup_date: requestedPickupDate,
       requested_pickup_location: requestedPickupLocation,
+      requested_service_type: requestedServiceType,
       requested_pickup_time: requestedPickupTime,
     },
     ok: true,
@@ -334,6 +356,7 @@ function adminBookingChangeRequestAlertInput(
     requested_dropoff_location: parsed.requested_dropoff_location,
     requested_pickup_date: parsed.requested_pickup_date,
     requested_pickup_location: parsed.requested_pickup_location,
+    requested_service_type: parsed.requested_service_type,
     requested_pickup_time: parsed.requested_pickup_time,
   };
 }

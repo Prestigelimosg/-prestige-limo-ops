@@ -100,6 +100,7 @@ export type CustomerBookingChangeRequestAdminAppNotificationInput = {
   requested_dropoff_location: string | null;
   requested_pickup_date: string | null;
   requested_pickup_location: string | null;
+  requested_service_type: string | null;
   requested_pickup_time: string | null;
 };
 
@@ -1118,6 +1119,7 @@ export async function createCustomerBookingChangeRequestAdminAppNotification(
       requested_dropoff_location: input.requested_dropoff_location || "not_requested",
       requested_pickup_date: input.requested_pickup_date || "not_requested",
       requested_pickup_location: input.requested_pickup_location || "not_requested",
+      requested_service_type: input.requested_service_type || "not_requested",
       requested_pickup_time: input.requested_pickup_time || "not_requested",
       surface: "customer_booking_change_request",
       workflow_area: "customer_booking_change_request",

@@ -35424,6 +35424,16 @@ async function runChromeTest() {
         "Expected customer portal Edit action to open staff-reviewed form",
       );
       assert.equal(editOpenedState.feedbackRowId, "saved-booking-001", "Expected Edit feedback near the clicked row");
+      assert.equal(
+        editOpenedState.text.includes("New type of service"),
+        true,
+        "Expected customer portal Edit action to show the established service change selector",
+      );
+      assert.equal(
+        editOpenedState.text.includes("Service changes require staff price review before confirmation."),
+        true,
+        "Expected customer portal service change to disclose staff price review",
+      );
 
       await submitCustomerPortalChangeRequest("saved-booking-001");
       const emptyEditState = await waitForCondition(
@@ -35440,7 +35450,7 @@ async function runChromeTest() {
         "Expected empty customer portal Edit request not to submit",
       );
 
-      await setCustomerPortalChangeField("requested-pickup-location", "Customer requested updated pickup");
+      await setCustomerPortalChangeField("requested-service-type", "Hourly / Disposal");
       await submitCustomerPortalChangeRequest("saved-booking-001");
       const editState = await waitForCondition(
         async () => {
@@ -35465,15 +35475,15 @@ async function runChromeTest() {
         {
           booking_reference: editState.customerPortalChangeRequestCalls[0]?.body.booking_reference,
           request_kind: editState.customerPortalChangeRequestCalls[0]?.body.request_kind,
-          requested_pickup_location:
-            editState.customerPortalChangeRequestCalls[0]?.body.requested_pickup_location,
+          requested_service_type:
+            editState.customerPortalChangeRequestCalls[0]?.body.requested_service_type,
         },
         {
           booking_reference: "booking-001",
           request_kind: "amendment",
-          requested_pickup_location: "Customer requested updated pickup",
+          requested_service_type: "Hourly / Disposal",
         },
-        "Expected customer portal Edit submit payload to stay customer-review scoped",
+        "Expected customer portal service Edit submit payload to stay customer-review scoped",
       );
       assert.deepEqual(
         blockedCustomerIntegrationCalls(editState.integrationCalls, customerPortalRuntimeAllowedPattern),

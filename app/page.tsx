@@ -977,6 +977,20 @@ type AdminDriverJobLinkRecord = {
   };
 };
 
+type AdminDriverJobLinkSafeOperationalPayload = {
+  assigned_driver_contact?: string;
+  assigned_driver_name?: string;
+  assigned_driver_plate?: string;
+  booking_type: string;
+  dropoff_location: string;
+  flight_no: string;
+  passenger_name: string;
+  pickup_date: string;
+  pickup_location: string;
+  pickup_time: string;
+  route: string;
+};
+
 type AdminDriverJobLinkAction = "create" | "load" | "revoke";
 
 type AdminDriverJobLinkState = {
@@ -4506,7 +4520,7 @@ function getDispatchReleaseTripWarnings(booking: BookingForm) {
     warnings.push("Pickup missing");
   }
 
-  if (!clean(booking.dropoff)) {
+  if (!clean(booking.dropoff) && bookingType !== "DSP") {
     warnings.push("Drop-off missing");
   }
 
@@ -6941,6 +6955,50 @@ function singaporePickupDateTimePartsFromTimestamp(value: string | null | undefi
         time: `${hour}${minute}`,
       }
     : null;
+}
+
+function adminDriverJobLinkCanonicalOperationalText(value: string | number | null | undefined) {
+  return clean(value).replace(/\s+/g, " ").toLocaleLowerCase("en-SG");
+}
+
+function adminDriverJobLinkCanonicalOperationalRoute(value: string | null | undefined) {
+  return adminDriverJobLinkCanonicalOperationalText(value)
+    .split(">")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join(" > ");
+}
+
+function savedBookingMatchesDriverJobLinkOperationalPayload(
+  record: AdminBookingPersistenceRecord,
+  payload: AdminDriverJobLinkSafeOperationalPayload,
+) {
+  const pickupParts = singaporePickupDateTimePartsFromTimestamp(
+    clean(record.pickup_at) || clean(record.pickup_datetime),
+  );
+  const payloadPickupTime = clean(payload.pickup_time).replace(/[^0-9]/g, "").slice(0, 4);
+  const comparisons = [
+    [adminBookingPersistenceServiceType(record), payload.booking_type],
+    [record.pickup_location, payload.pickup_location],
+    [record.dropoff_location, payload.dropoff_location],
+    [record.passenger_name, payload.passenger_name],
+    [record.flight_no, payload.flight_no],
+    [record.driver_name, payload.assigned_driver_name],
+    [record.driver_contact, payload.assigned_driver_contact],
+    [record.driver_plate_number, payload.assigned_driver_plate],
+  ];
+
+  return (
+    comparisons.every(
+      ([savedValue, linkValue]) =>
+        adminDriverJobLinkCanonicalOperationalText(savedValue) ===
+        adminDriverJobLinkCanonicalOperationalText(linkValue),
+    ) &&
+    adminDriverJobLinkCanonicalOperationalRoute(adminBookingPersistenceRouteSummary(record)) ===
+      adminDriverJobLinkCanonicalOperationalRoute(payload.route) &&
+    pickupParts?.date === clean(payload.pickup_date) &&
+    pickupParts?.time === payloadPickupTime
+  );
 }
 
 function formatPickupTimeFromTimestamp(value: string | null | undefined) {
@@ -22684,7 +22742,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       clean(booking.vehicle);
     const pickupDateTime = formatPickupDateTime(booking.date, booking.time);
     const pickupLocation = clean(booking.pickup);
-    const dropoffLocation = clean(booking.dropoff);
+    const bookingType = normalizeBookingType(booking.bookingType);
+    const dropoffLocation =
+      clean(booking.dropoff) || (bookingType === "DSP" ? adminDraftDropoffFallback : "");
+    const driverJobRoute = [
+      pickupLocation || "Pickup",
+      clean(booking.extraStopLocation),
+      dropoffLocation || "Drop-off",
+    ].filter(Boolean).join(" > ");
     const passengerName = clean(booking.name);
 
     if (!bookingReference) {
@@ -22727,7 +22792,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       pickup_datetime: pickupDateTime,
       pickup_location: pickupLocation,
       pickup_time: formatPickupTime(booking.time),
-      route: route,
+      route: driverJobRoute,
       status: clean(dispatchReleaseAppliedStatus) || "assigned",
       waypoints: isDspItinerary
         ? itineraryDisplayStops.map((stop) => clean(stop.location)).filter(Boolean)
@@ -22744,6 +22809,19 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
     if (driverPlate) {
       driverJobPayload.assigned_driver_plate = driverPlate;
+    }
+
+    if (
+      !appliedAdminBookingSnapshot ||
+      !savedBookingMatchesDriverJobLinkOperationalPayload(
+        appliedAdminBookingSnapshot,
+        driverJobPayload,
+      )
+    ) {
+      return {
+        error: "Save the booking amendment before creating a Driver Job Link.",
+        ok: false as const,
+      };
     }
 
     return {
@@ -23776,6 +23854,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         : "";
     const isServiceTypeField = field === "bookingType";
     const isVehicleTypeField = field === "vehicle";
+    const displayFieldLabel =
+      field === "dropoff" && normalizeBookingType(booking.bookingType) === "DSP"
+        ? `${fieldLabels[field]} (optional for DSP)`
+        : fieldLabels[field];
 
     return (
       <div className={fieldContainerClass} key={field}>
@@ -23811,7 +23893,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           ) : (
             <>
               <span className="mb-0.5 block text-xs font-semibold text-slate-700">
-                {fieldLabels[field]}
+                {displayFieldLabel}
                 {requiredFields.includes(field) ? (
                   <span className="text-red-600"> *</span>
                 ) : null}
@@ -23829,7 +23911,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 data-admin-dispatch-dsp-end-date={field === "dspEndDate" ? "true" : undefined}
                 data-admin-dispatch-dsp-end-time={field === "dspEndTime" ? "true" : undefined}
                 onChange={(event) => update(field, event.target.value)}
-                placeholder={fieldLabels[field]}
+                placeholder={displayFieldLabel}
                 type={
                   field === "date" || field === "returnDate" || field === "dspEndDate"
                     ? "date"

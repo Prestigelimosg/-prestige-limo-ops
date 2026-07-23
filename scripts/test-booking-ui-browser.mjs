@@ -9977,6 +9977,139 @@ async function runChromeTest() {
 
     await evaluate(`window.__prestigeCopiedTexts = []; window.__prestigeAdminDriverJobLinkRequests = []`);
 
+    const staleDriverJobLinkAmendmentBlocked = await evaluate(`(() => {
+      const serviceTypeSelect = document.querySelector(
+        "[data-admin-booking-service-type-select='true']",
+      );
+
+      if (!serviceTypeSelect || serviceTypeSelect.value !== "MNG") {
+        return false;
+      }
+
+      serviceTypeSelect.value = "DSP";
+      serviceTypeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+      return true;
+    })()`);
+    assert.equal(
+      staleDriverJobLinkAmendmentBlocked,
+      true,
+      "Expected the loaded saved booking service type to be amendable for the stale-link regression",
+    );
+
+    const dspBlankDropoffState = await evaluate(`(() => {
+      const dropoffInput = document.querySelector("[data-admin-booking-field='dropoff']");
+
+      if (!dropoffInput) {
+        return null;
+      }
+
+      const originalDropoff = dropoffInput.value;
+      const descriptor = Object.getOwnPropertyDescriptor(dropoffInput.constructor.prototype, "value");
+      descriptor?.set?.call(dropoffInput, "");
+      dropoffInput.dispatchEvent(new Event("input", { bubbles: true }));
+      dropoffInput.dispatchEvent(new Event("change", { bubbles: true }));
+
+      return {
+        label: dropoffInput.closest("label")?.textContent.replace(/\s+/g, " ").trim() || "",
+        originalDropoff,
+      };
+    })()`);
+    assert.ok(dspBlankDropoffState, "Expected the Admin DSP drop-off field to be available for the regression.");
+    assert.match(
+      dspBlankDropoffState.label,
+      /Drop-off \(optional for DSP\)/,
+      "Expected the existing Admin DSP field to identify final drop-off as optional.",
+    );
+
+    const dspBlankDropoffChecklist = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const tripCheck = document.querySelector(
+            "[data-admin-dispatch-release-check='trip-completeness']",
+          );
+          const detail = tripCheck
+            ?.querySelector("[data-admin-dispatch-release-check-detail]")
+            ?.textContent.replace(/\\s+/g, " ")
+            .trim() || "";
+
+          return !detail.includes("Drop-off missing") ? { detail } : false;
+        })()`),
+      10000,
+      "Admin DSP blank drop-off warning suppression",
+    );
+    assert.doesNotMatch(
+      dspBlankDropoffChecklist.detail,
+      /Drop-off missing/,
+      "Expected Admin DSP not to flag a blank final drop-off in red readiness wording.",
+    );
+
+    const clickedStaleDriverJobLinkCreate = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const serviceTypeSelect = document.querySelector(
+            "[data-admin-booking-service-type-select='true']",
+          );
+          const createButton = document.querySelector("[data-create-driver-job-link-button='true']");
+
+          if (serviceTypeSelect?.value !== "DSP" || !createButton || createButton.disabled) {
+            return false;
+          }
+
+          createButton.click();
+          return true;
+        })()`),
+      10000,
+      "stale amended Driver Job Link create attempt",
+    );
+    assert.equal(clickedStaleDriverJobLinkCreate, true);
+
+    const staleDriverJobLinkCreateState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const section = document.querySelector(
+            "[data-dispatch-workflow-step='driver-job-link']",
+          );
+          const feedback = section?.querySelector("[data-driver-job-link-api-feedback='true']");
+          const requests = window.__prestigeAdminDriverJobLinkRequests || [];
+
+          return feedback?.textContent.includes(
+            "Save the booking amendment before creating a Driver Job Link.",
+          )
+            ? { feedbackText: feedback.textContent.trim(), requestCount: requests.length }
+            : false;
+        })()`),
+      10000,
+      "stale amended Driver Job Link blocked before POST",
+    );
+    assert.equal(staleDriverJobLinkCreateState.requestCount, 0);
+    assert.match(
+      staleDriverJobLinkCreateState.feedbackText,
+      /Save the booking amendment before creating a Driver Job Link\./,
+    );
+
+    const restoredSavedDriverJobLinkDraft = await evaluate(`(() => {
+      const serviceTypeSelect = document.querySelector(
+        "[data-admin-booking-service-type-select='true']",
+      );
+
+      if (!serviceTypeSelect) {
+        return false;
+      }
+
+      serviceTypeSelect.value = "MNG";
+      serviceTypeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+
+      const dropoffInput = document.querySelector("[data-admin-booking-field='dropoff']");
+      if (dropoffInput) {
+        const descriptor = Object.getOwnPropertyDescriptor(dropoffInput.constructor.prototype, "value");
+        descriptor?.set?.call(dropoffInput, ${JSON.stringify(dspBlankDropoffState.originalDropoff)});
+        dropoffInput.dispatchEvent(new Event("input", { bubbles: true }));
+        dropoffInput.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      return true;
+    })()`);
+    assert.equal(restoredSavedDriverJobLinkDraft, true);
+
     const clickedCreateDriverJobLink = await waitForCondition(
       () =>
         evaluate(`(() => {

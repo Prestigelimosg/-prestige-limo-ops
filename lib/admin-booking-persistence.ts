@@ -917,6 +917,12 @@ function isCustomerReturnTripRequested(value: unknown) {
   return false;
 }
 
+const customerBookingDropoffFallback = "Drop-off To Confirm";
+
+function customerBookingDropoffIsOptional(serviceType: string | null) {
+  return serviceType === "Hourly / Disposal";
+}
+
 function buildCustomerBookingRequestPayloadForLeg({
   body,
   bookingReference,
@@ -1043,6 +1049,9 @@ export function parseCustomerBookingRequestPayloads(
   const pickupTime = textOrNull(body.pickupTime);
   const pickupLocation = textOrNull(body.pickupLocation);
   const dropoffLocation = textOrNull(body.dropoffLocation);
+  const serviceType = textOrNull(body.serviceType);
+  const dropoffIsOptional = customerBookingDropoffIsOptional(serviceType);
+  const effectiveDropoffLocation = dropoffLocation || (dropoffIsOptional ? customerBookingDropoffFallback : null);
   const pickupDateTime = validCustomerPickupDateTime(pickupDate, pickupTime);
   const missingFields = [
     !contactNo ? "contactNo" : "",
@@ -1051,7 +1060,7 @@ export function parseCustomerBookingRequestPayloads(
     !pickupDate ? "pickupDate" : "",
     !pickupTime ? "pickupTime" : "",
     !pickupLocation ? "pickupLocation" : "",
-    !dropoffLocation ? "dropoffLocation" : "",
+    !effectiveDropoffLocation ? "dropoffLocation" : "",
   ].filter(Boolean);
 
   if (missingFields.length > 0) {
@@ -1084,7 +1093,7 @@ export function parseCustomerBookingRequestPayloads(
   const outbound = buildCustomerBookingRequestPayloadForLeg({
     body,
     bookingReference: returnTripRequested ? `${groupReference}-OUT` : groupReference,
-    dropoffLocation: dropoffLocation || "",
+    dropoffLocation: effectiveDropoffLocation || "",
     flightNumber,
     groupReference,
     legLabel: "OUTBOUND",
@@ -1105,12 +1114,14 @@ export function parseCustomerBookingRequestPayloads(
     const returnPickupTime = textOrNull(body.returnPickupTime);
     const returnPickupLocation = textOrNull(body.returnPickupLocation);
     const returnDropoffLocation = textOrNull(body.returnDropoffLocation);
+    const effectiveReturnDropoffLocation =
+      returnDropoffLocation || (dropoffIsOptional ? customerBookingDropoffFallback : null);
     const returnPickupDateTime = validCustomerPickupDateTime(returnPickupDate, returnPickupTime);
     const returnMissingFields = [
       !returnPickupDate ? "returnPickupDate" : "",
       !returnPickupTime ? "returnPickupTime" : "",
       !returnPickupLocation ? "returnPickupLocation" : "",
-      !returnDropoffLocation ? "returnDropoffLocation" : "",
+      !effectiveReturnDropoffLocation ? "returnDropoffLocation" : "",
     ].filter(Boolean);
 
     if (returnMissingFields.length > 0) {
@@ -1132,7 +1143,7 @@ export function parseCustomerBookingRequestPayloads(
     const returnPayload = buildCustomerBookingRequestPayloadForLeg({
       body,
       bookingReference: `${groupReference}-RET`,
-      dropoffLocation: returnDropoffLocation || "",
+      dropoffLocation: effectiveReturnDropoffLocation || "",
       flightNumber: textOrNull(body.returnFlightNumber),
       groupReference,
       legLabel: "RETURN",

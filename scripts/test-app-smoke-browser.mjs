@@ -32706,6 +32706,7 @@ async function runChromeTest() {
                 field,
                 {
                   control: control?.getAttribute("data-customer-booking-time-control") || "",
+                  ariaInvalid: hidden?.getAttribute("aria-invalid") || "",
                   label: hidden?.closest("label")?.innerText.trim() || "",
                   required: Boolean(hidden?.required),
                   step: hidden?.getAttribute("step") || "",
@@ -32721,6 +32722,7 @@ async function runChromeTest() {
               field,
               {
                 label: input?.closest("label")?.innerText.trim() || "",
+                ariaInvalid: input?.getAttribute("aria-invalid") || "",
                 required: Boolean(input?.required),
                 step: input?.getAttribute("step") || "",
                 value: input?.value || "",
@@ -33404,6 +33406,24 @@ async function runChromeTest() {
       assert.equal(initialState.fieldState.pickupTime.required, true, "Expected pickup time to be required");
       assert.equal(initialState.fieldState.pickupLocation.required, true, "Expected pickup location to be required");
       assert.equal(initialState.fieldState.dropoffLocation.required, true, "Expected drop-off location to be required");
+
+      await setCustomerBookingField("serviceType", "Hourly / Disposal");
+      const hourlyOptionalDropoffState = await readCustomerBookingPageState();
+      assert.equal(
+        hourlyOptionalDropoffState.fieldState.dropoffLocation.required,
+        false,
+        "Expected Hourly / Disposal customer requests not to require a final drop-off.",
+      );
+      assert.match(
+        hourlyOptionalDropoffState.fieldState.dropoffLocation.label,
+        /Drop-off location \(optional\)/,
+      );
+      assert.equal(
+        hourlyOptionalDropoffState.fieldState.dropoffLocation.ariaInvalid,
+        "false",
+        "Expected Hourly / Disposal blank drop-off not to be flagged red.",
+      );
+      await setCustomerBookingField("serviceType", "");
       assert.equal(
         initialState.fieldState.pickupTime.control,
         "compact-selects",

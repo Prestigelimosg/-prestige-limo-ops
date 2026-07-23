@@ -155,6 +155,10 @@ const returnTripRequiredFields: Array<keyof BookingRequestForm> = [
   "returnDropoffLocation",
 ];
 
+function customerBookingDropoffIsOptional(serviceType: string) {
+  return serviceType === "Hourly / Disposal";
+}
+
 const pickupHourOptions = Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, "0"));
 const pickupMinuteOptions = Array.from({ length: 12 }, (_, index) => String(index * 5).padStart(2, "0"));
 
@@ -295,7 +299,17 @@ export default function CustomerBookingPage() {
 
   function updateField(field: keyof BookingRequestForm, value: string) {
     updateForm((current) => ({ ...current, [field]: value }));
-    setMissingFields((current) => current.filter((item) => item !== field));
+    setMissingFields((current) =>
+      current.filter(
+        (item) =>
+          item !== field &&
+          !(
+            field === "serviceType" &&
+            customerBookingDropoffIsOptional(value) &&
+            (item === "dropoffLocation" || item === "returnDropoffLocation")
+          ),
+      ),
+    );
     setConfirmationStatus(null);
   }
 
@@ -486,10 +500,17 @@ export default function CustomerBookingPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    const dropoffIsOptional = customerBookingDropoffIsOptional(form.serviceType);
+    const outboundRequiredFields = dropoffIsOptional
+      ? requiredFields.filter((field) => field !== "dropoffLocation")
+      : requiredFields;
+    const activeReturnRequiredFields = dropoffIsOptional
+      ? returnTripRequiredFields.filter((field) => field !== "returnDropoffLocation")
+      : returnTripRequiredFields;
     const requiredForSubmit =
       form.returnTripRequested === "yes"
-        ? [...requiredFields, ...returnTripRequiredFields]
-        : requiredFields;
+        ? [...outboundRequiredFields, ...activeReturnRequiredFields]
+        : outboundRequiredFields;
     const missing = requiredForSubmit.filter((field) => !form[field].trim());
     if (missing.length > 0) {
       setMissingFields(missing);
@@ -498,8 +519,12 @@ export default function CustomerBookingPage() {
         tone: "error",
         text:
           form.returnTripRequested === "yes"
-            ? "Please complete the outbound and return trip date, time, pickup, and drop-off details before submitting your request."
-            : "Please complete contact no., email address, passenger name, pickup date, pickup time, pickup location, and drop-off location before submitting your request.",
+            ? dropoffIsOptional
+              ? "Please complete the outbound and return trip date, time, and pickup details before submitting your request."
+              : "Please complete the outbound and return trip date, time, pickup, and drop-off details before submitting your request."
+            : dropoffIsOptional
+              ? "Please complete contact no., email address, passenger name, pickup date, pickup time, and pickup location before submitting your request."
+              : "Please complete contact no., email address, passenger name, pickup date, pickup time, pickup location, and drop-off location before submitting your request.",
       });
       return;
     }
@@ -881,7 +906,7 @@ export default function CustomerBookingPage() {
                 </label>
 
                 <label className="text-xs font-semibold text-slate-800 md:col-span-1 xl:col-span-2">
-                  Drop-off location
+                  Drop-off location{customerBookingDropoffIsOptional(form.serviceType) ? " (optional)" : ""}
                   <input
                     aria-invalid={isMissing("dropoffLocation")}
                     className={fieldClass(isMissing("dropoffLocation"))}
@@ -889,7 +914,7 @@ export default function CustomerBookingPage() {
                     name="dropoffLocation"
                     onChange={(event) => updateField("dropoffLocation", event.target.value)}
                     placeholder="Destination hotel, airport terminal, home, or office"
-                    required
+                    required={!customerBookingDropoffIsOptional(form.serviceType)}
                     type="text"
                     value={form.dropoffLocation}
                   />
@@ -1076,7 +1101,7 @@ export default function CustomerBookingPage() {
                     </label>
 
                     <label className="text-xs font-semibold text-slate-800 xl:col-span-2">
-                      Return drop-off location
+                      Return drop-off location{customerBookingDropoffIsOptional(form.serviceType) ? " (optional)" : ""}
                       <input
                         aria-invalid={isMissing("returnDropoffLocation")}
                         className={fieldClass(isMissing("returnDropoffLocation"))}
@@ -1084,7 +1109,7 @@ export default function CustomerBookingPage() {
                         name="returnDropoffLocation"
                         onChange={(event) => updateField("returnDropoffLocation", event.target.value)}
                         placeholder="Return destination"
-                        required
+                        required={!customerBookingDropoffIsOptional(form.serviceType)}
                         type="text"
                         value={form.returnDropoffLocation}
                       />

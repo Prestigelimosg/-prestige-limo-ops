@@ -110,7 +110,9 @@ for (const fragment of [
   "parseCustomerBookingRequestPayloads",
   "for (const requestPayload of parsed.data.requests)",
   "const returnRequest = savedRequests[1] ?? null;",
-  "return_booking_reference: returnRequest?.booking_reference ?? null",
+  "return_booking_reference:",
+  "returnRequest?.public_booking_reference ||",
+  "returnRequest?.booking_reference ||",
   "return_trip_requested: parsed.data.returnTripRequested",
   "await notifyAdminNewBookingRequest(primaryRequest);",
 ]) {

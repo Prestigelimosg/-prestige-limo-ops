@@ -3415,8 +3415,12 @@ async function runChromeTest() {
       const didSetValue = await evaluate(`(() => {
         const normalizeLabel = (candidate) =>
           (candidate || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+        const expectedLabel = ${JSON.stringify(labelText)};
         const label = [...document.querySelectorAll("label")].find(
-          (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === ${JSON.stringify(labelText)},
+          (candidate) => {
+            const candidateLabel = normalizeLabel(candidate.querySelector("span")?.textContent);
+            return candidateLabel === expectedLabel || candidateLabel === expectedLabel + " (optional for DSP)";
+          },
         );
         const control = label?.querySelector("input, select, textarea");
 
@@ -4262,7 +4266,9 @@ async function runChromeTest() {
         extraStopCount: fieldValue("Extra Stops"),
         manualExtraCharges: fieldValue("Extra Charges"),
         manualExtraChargesNote: fieldValue("Extra Charges note / reason"),
-        dropoff: fieldValue("Drop-off"),
+        dropoff:
+          fieldValue("Drop-off (optional for DSP)") ||
+          fieldValue("Drop-off"),
         booker: fieldValue("Booker"),
         bookerContact: fieldValue("Booker WhatsApp / Contact"),
         bookerEmail: fieldValue("Booker email (optional)"),
@@ -9997,7 +10003,7 @@ async function runChromeTest() {
     );
 
     const dspBlankDropoffState = await evaluate(`(() => {
-      const dropoffInput = document.querySelector("[data-admin-booking-field='dropoff']");
+      const dropoffInput = document.querySelector("input[placeholder^='Drop-off']");
 
       if (!dropoffInput) {
         return null;
@@ -10099,7 +10105,7 @@ async function runChromeTest() {
       serviceTypeSelect.value = "MNG";
       serviceTypeSelect.dispatchEvent(new Event("change", { bubbles: true }));
 
-      const dropoffInput = document.querySelector("[data-admin-booking-field='dropoff']");
+      const dropoffInput = document.querySelector("input[placeholder^='Drop-off']");
       if (dropoffInput) {
         const descriptor = Object.getOwnPropertyDescriptor(dropoffInput.constructor.prototype, "value");
         descriptor?.set?.call(dropoffInput, ${JSON.stringify(dspBlankDropoffState.originalDropoff)});
@@ -22352,6 +22358,7 @@ async function runChromeTest() {
         if (
           candidateState?.fields?.bookingType === "DSP" &&
           candidateState?.fields?.pickup === "Grand Hyatt" &&
+          candidateState?.fields?.dropoff === "Ritz-Carlton" &&
           candidateState?.fields?.extraStopCount === "5"
         ) {
           return candidateState;

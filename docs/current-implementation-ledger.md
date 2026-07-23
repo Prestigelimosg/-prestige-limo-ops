@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-af377115 Allow DSP bookings without final drop-off
+889acabe Harden production release boundaries
 
 Latest pushed main/staging runtime checkpoint:
 af377115 Allow DSP bookings without final drop-off

@@ -1,16 +1,23 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-4f1a8ff9 Add Driver Job acknowledgement device alerts
+af377115 Allow DSP bookings without final drop-off
 
 Latest pushed main/staging runtime checkpoint:
-4f1a8ff9 Add Driver Job acknowledgement device alerts
+af377115 Allow DSP bookings without final drop-off
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-ca9cf2f7 Merge pull request #71 from Prestigelimosg/codex/driver-job-ack-push-alerts
+37001971 Merge pull request #88 from Prestigelimosg/codex/fix-customer-push-numeric-account
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Production Permission And Dependency Release Hardening (2026-07-23)
+
+- The final real-operation readiness inspection found three bounded release blockers without reproducing a wired application-lane defect. The live Supabase security advisor reported that the existing `driver_job_dsp_actual_time_summaries` view retained default definer behavior and `SELECT` grants for `anon` and `authenticated`, while the existing privileged `reserve_monthly_invoice_number_for_issue_record` RPC retained `EXECUTE` for those same public roles. The current Production dependency tree also kept Next.js `16.2.6`, for which the current production-only npm audit reported high-severity advisories with a non-major `16.2.11` fix. Finally, the master pre-activation suite stopped on a stale Driver Job public-navigation assertion that omitted the already-deployed owner-approved `/driver-portal` link.
+- The established database objects are hardened in place through one additive migration. The DSP summary view becomes `security_invoker`, public/anonymous/authenticated access is revoked, and only the existing server-side `service_role` consumer retains `SELECT`. The invoice-number function body, identity, inputs, sequencing, write behavior, and server consumer remain unchanged; only public/anonymous/authenticated `EXECUTE` is revoked and the existing server-side `service_role` retains execution. No view, function, table, column, row, invoice record, sequence value, booking, customer, driver, link, event, or other data is created, replaced, or deleted.
+- Next.js and its aligned ESLint configuration move together from exact `16.2.6` to exact patched `16.2.11`. Because that current stable Next release still declares vulnerable nested PostCSS `8.4.31` and Sharp `^0.34.5` ranges, exact package-manager overrides resolve only those two transitive packages to reviewed patched PostCSS `8.5.22` and Sharp `0.35.3`; the production build, image optimization, and browser suites must pass before release. React and every other application dependency remain unchanged. Both stale navigation assertions now recognize the existing conditional Driver Portal shortcut alongside the three established Google Calendar information links and retain the exact four-link boundary. The same public Driver Job action-surface guard now follows the already-protected oversized-photo preparation handoff into the unchanged tokenized OTS-photo route instead of requiring its retired raw-file append text.
+- No application UI, route, helper, API behavior, persistence writer, Driver Calendar action/event/credential, Driver Reports evidence, Pending Driver ACK Queue behavior, messaging lane, GPS, notification sender, provider, pricing, payment, payout, PayNow, customer invoice workflow, invoice layout, renderer, PDF, or billing control is changed. Focused protection is `scripts/test-release-hardening-security-guard.mjs`, registered in the complete pre-activation suite, alongside the existing DSP actual-time, monthly invoice-number, public-navigation, invoice-layout, and billing-lifecycle guards.
 
 ### Unrelated Browser And Source Guard Contract Alignment (2026-07-23)
 
@@ -4501,7 +4508,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Public Driver Job Action Surface Guard Lock
 - Public driver job display/action surfaces are guarded across `/driver-job/[token]`, the driver job status workflow, issue choices, and driver job action routes.
 - This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.
-- The driver page action surface must stay limited to safe job GET, token-scoped driver-details PATCH, saved app-update GET, one acknowledged same-origin calendar-import navigation, three static same-tab public information links to `/google-calendar`, `/privacy`, and `/terms`, issue-alert POST with `issue_type`, fixed-template driver-to-customer quick-reply POST with `template_key`, driver-consented live-location calls, admin-only OTS photo proof POST, and status PATCH with the guarded status value.
+- The driver page action surface must stay limited to safe job GET, token-scoped driver-details PATCH, saved app-update GET, one acknowledged same-origin calendar-import navigation, four static same-tab public links to `/google-calendar`, `/privacy`, `/terms`, and the established `/driver-portal`, issue-alert POST with `issue_type`, fixed-template driver-to-customer quick-reply POST with `template_key`, driver-consented live-location calls, admin-only OTS photo proof POST, and status PATCH with the guarded status value.
 - Driver status controls must stay limited to OTW, OTS, POB, and Job Completed, coordinated with `guardDriverJobStatusTransition`.
 - Driver issue choices must stay limited to operational/safety issue values and must not include finance, billing, payment, PayNow, payout, invoice, PDF, parser/debug, internal admin, or mock QA/archive issue types.
 - Driver app updates and status timing must render only safe fields: `safe_title`, `safe_message`, notification metadata, and status labels/times; visible activity-log and saved-status-history panels stay hidden from the driver page.

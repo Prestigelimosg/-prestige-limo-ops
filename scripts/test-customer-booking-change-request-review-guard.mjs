@@ -6,6 +6,7 @@ const portalPath = "app/my-bookings/page.tsx";
 const portalAdapterPath = "lib/customer-portal-booking-change-request-adapter.ts";
 const adminPagePath = "app/page.tsx";
 const adminNotificationPath = "lib/admin-app-notification-persistence.ts";
+const adminEmailAlertPath = "lib/admin-booking-change-request-email-alert.ts";
 const savedBookingsReadPath = "lib/customer-saved-bookings-read.ts";
 
 function assertIncludes(source, fragment, label = fragment) {
@@ -31,6 +32,7 @@ const [
   portalAdapter,
   adminPage,
   adminNotification,
+  adminEmailAlert,
   savedBookingsRead,
 ] = await Promise.all([
   readFile(routePath, "utf8"),
@@ -38,6 +40,7 @@ const [
   readFile(portalAdapterPath, "utf8"),
   readFile(adminPagePath, "utf8"),
   readFile(adminNotificationPath, "utf8"),
+  readFile(adminEmailAlertPath, "utf8"),
   readFile(savedBookingsReadPath, "utf8"),
 ]);
 
@@ -128,6 +131,15 @@ assertIncludes(
 for (const fragment of [
   "submitCustomerPortalBookingChangeRequest",
   "data-customer-portal-change-request-form",
+  'data-customer-portal-change-field="requested-service-type"',
+  "requestedServiceType",
+  "No change",
+  "Airport Arrival",
+  "Airport Departure",
+  "Point-to-Point Transfer",
+  "Hourly / Disposal",
+  "Event / VIP Movement",
+  "Other / Need advice",
   "data-customer-portal-submit-change-request",
   "booking and calendar are unchanged until Prestige confirms",
 ]) {
@@ -139,6 +151,8 @@ for (const fragment of [
   '"x-prestige-customer-purpose": "customer-booking-change-request"',
   'credentials: "same-origin"',
   'cache: "no-store"',
+  "requestedServiceType: string",
+  "requested_service_type: input.requestedServiceType",
   "calendarUpdate: false",
   "crmUpdate: false",
   "externalSend: false",
@@ -179,6 +193,15 @@ assertExcludes(
 );
 assertExcludes(route, "notification_id", "customer route must not expose internal admin notification id");
 
+for (const fragment of [
+  '"requested_service_type"',
+  "safeCustomerServiceType",
+  "requested_service_type: requestedServiceType",
+  "requested_service_type: parsed.requested_service_type",
+]) {
+  assertIncludes(route, fragment, `customer service amendment route ${fragment}`);
+}
+
 const adminChangeHelper = sliceBetween(
   adminNotification,
   "export async function createCustomerBookingChangeRequestAdminAppNotification",
@@ -195,6 +218,22 @@ for (const fragment of [
 ]) {
   assertIncludes(adminChangeHelper, fragment, `admin change notification helper ${fragment}`);
 }
+
+assertIncludes(
+  adminChangeHelper,
+  "requested_service_type: input.requested_service_type || \"not_requested\"",
+  "admin change notification requested service context",
+);
+assertIncludes(
+  adminEmailAlert,
+  "requested_service_type: string | null",
+  "admin change email requested service type",
+);
+assertIncludes(
+  adminEmailAlert,
+  "Requested service: ${request.requested_service_type}",
+  "admin change email requested service line",
+);
 
 for (const forbidden of [
   "contact_phone",

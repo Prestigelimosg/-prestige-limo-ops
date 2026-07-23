@@ -76,10 +76,19 @@ type BookingChangeRequestDraft = {
   requestedDropoffLocation: string;
   requestedPickupDate: string;
   requestedPickupLocation: string;
+  requestedServiceType: string;
   requestedPickupTime: string;
 };
 
 const visibleBookingLimit = 10;
+const customerBookingChangeServiceOptions = [
+  "Airport Arrival",
+  "Airport Departure",
+  "Point-to-Point Transfer",
+  "Hourly / Disposal",
+  "Event / VIP Movement",
+  "Other / Need advice",
+];
 
 const monthNames = [
   "January",
@@ -1056,6 +1065,7 @@ export default function CustomerPortalPage() {
             requestedDropoffLocation: "",
             requestedPickupDate: "",
             requestedPickupLocation: "",
+            requestedServiceType: "",
             requestedPickupTime: "",
           }
         : null,
@@ -1084,6 +1094,7 @@ export default function CustomerPortalPage() {
             requestedDropoffLocation: "",
             requestedPickupDate: "",
             requestedPickupLocation: "",
+            requestedServiceType: "",
             requestedPickupTime: "",
           }
         : null,
@@ -1141,13 +1152,14 @@ export default function CustomerPortalPage() {
       changeRequestDraft.requestedPickupDate.trim() ||
         changeRequestDraft.requestedPickupTime.trim() ||
         changeRequestDraft.requestedPickupLocation.trim() ||
-        changeRequestDraft.requestedDropoffLocation.trim(),
+        changeRequestDraft.requestedDropoffLocation.trim() ||
+        changeRequestDraft.requestedServiceType.trim(),
     );
 
     if (changeRequestDraft.requestKind === "amendment" && !hasAmendmentValue) {
       setChangeFeedback({
         [booking.id]: {
-          text: "Enter at least one new date, time, pickup, or drop-off value for staff review.",
+          text: "Enter at least one new date, time, pickup, drop-off, or type of service for staff review.",
           tone: "error",
         },
       });
@@ -1171,6 +1183,7 @@ export default function CustomerPortalPage() {
           requestedDropoffLocation: changeRequestDraft.requestedDropoffLocation.trim(),
           requestedPickupDate: changeRequestDraft.requestedPickupDate,
           requestedPickupLocation: changeRequestDraft.requestedPickupLocation.trim(),
+          requestedServiceType: changeRequestDraft.requestedServiceType,
           requestedPickupTime: changeRequestDraft.requestedPickupTime,
         },
       });
@@ -1951,6 +1964,30 @@ export default function CustomerPortalPage() {
                                     type="text"
                                     value={rowChangeDraft.requestedDropoffLocation}
                                   />
+                                </label>
+                                <label className="text-sm font-semibold text-slate-700 md:col-span-2">
+                                  New type of service
+                                  <select
+                                    className={fieldClass()}
+                                    data-customer-portal-change-field="requested-service-type"
+                                    onChange={(event) =>
+                                      updateChangeRequestDraftField(
+                                        "requestedServiceType",
+                                        event.target.value,
+                                      )
+                                    }
+                                    value={rowChangeDraft.requestedServiceType}
+                                  >
+                                    <option value="">No change (current: {booking.serviceType})</option>
+                                    {customerBookingChangeServiceOptions.map((option) => (
+                                      <option key={option} value={option}>
+                                        {option}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <span className="mt-1 block text-xs font-normal text-slate-600">
+                                    Service changes require staff price review before confirmation.
+                                  </span>
                                 </label>
                               </div>
                             ) : null}

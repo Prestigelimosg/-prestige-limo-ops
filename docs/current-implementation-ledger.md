@@ -1889,6 +1889,9 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Admin Customer Amendment Review Apply Lane
 
+- The existing customer `Edit` request form now includes one `New type of service` selector using the same six customer-facing choices as the established new-booking form. Leaving `No change` selected omits the service field; a service-only amendment is valid for staff review.
+- The established customer change-request adapter and API carry only the allowlisted `requested_service_type` value into the existing admin Email/app-notification review context. The customer request still performs no booking, CRM, Calendar, pricing, invoice, payment, or provider write.
+- A requested service change continues through the existing defensive price-review gate described below. No Customer Billing page, invoice route, renderer, layout, stored invoice, or issued-invoice behavior was modified.
 - Admin App Notifications now show exactly three compact admin-only actions for queued customer booking change requests: `Accept + Cal`, `Reject`, and `Dismiss`.
 - The decision paths use the existing admin-only `/api/admin-bookings?limit=200` read to resolve the saved booking/customer account before writing. There is no separate duplicate `Review` / `Apply + Cal` / `Cancel + Cal` button lane. The customer portal still only submits an internal request and does not mutate bookings, CRM, calendar, invoices, payments, providers, GPS/live-location, or external messages.
 - `Accept + Cal` merges only approved amendment fields into the existing saved booking update path, sends a `PATCH` to `/api/admin-bookings`, then uses the existing Google Calendar upsert path keyed by booking reference. The notification is archived only after the Google Calendar sync succeeds, so a failed calendar sync leaves the request pending for admin review.

@@ -55,6 +55,7 @@ function safeChangeRequest(overrides = {}) {
     requested_dropoff_location: "Changi Airport Terminal 2",
     requested_pickup_date: "2026-07-04",
     requested_pickup_location: "Raffles Hotel",
+    requested_service_type: "Hourly / Disposal",
     requested_pickup_time: "15:00",
     ...overrides,
   };
@@ -214,6 +215,7 @@ try {
     "Requested time: 15:00",
     "Requested pickup: Raffles Hotel",
     "Requested drop-off: Changi Airport Terminal 2",
+    "Requested service: Hourly / Disposal",
     "Customer note: Please change pickup time.",
     "Amendment must be reviewed in Prestige before changes are confirmed.",
     "Open dashboard: https://app.prestigelimo.sg/",

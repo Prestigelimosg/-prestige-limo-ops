@@ -33,6 +33,7 @@ export type AdminBookingChangeRequestEmailAlertInput = {
   requested_dropoff_location: string | null;
   requested_pickup_date: string | null;
   requested_pickup_location: string | null;
+  requested_service_type: string | null;
   requested_pickup_time: string | null;
 };
 
@@ -288,6 +289,7 @@ function normalizeRequest(input: AdminBookingChangeRequestEmailAlertInput) {
     requested_dropoff_location: safeText(input.requested_dropoff_location),
     requested_pickup_date: safeText(input.requested_pickup_date, 40),
     requested_pickup_location: safeText(input.requested_pickup_location),
+    requested_service_type: safeText(input.requested_service_type, 120),
     requested_pickup_time: safeText(input.requested_pickup_time, 40),
   };
 }
@@ -312,6 +314,7 @@ function buildEmailText(request: NonNullable<ReturnType<typeof normalizeRequest>
     request.requested_pickup_time ? `Requested time: ${request.requested_pickup_time}` : "",
     request.requested_pickup_location ? `Requested pickup: ${request.requested_pickup_location}` : "",
     request.requested_dropoff_location ? `Requested drop-off: ${request.requested_dropoff_location}` : "",
+    request.requested_service_type ? `Requested service: ${request.requested_service_type}` : "",
     request.request_note ? `Customer note: ${request.request_note}` : "",
     "",
     `${title} must be reviewed in Prestige before changes are confirmed.`,

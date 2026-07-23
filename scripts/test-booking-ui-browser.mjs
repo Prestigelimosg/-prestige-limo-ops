@@ -9996,6 +9996,53 @@ async function runChromeTest() {
       "Expected the loaded saved booking service type to be amendable for the stale-link regression",
     );
 
+    const dspBlankDropoffState = await evaluate(`(() => {
+      const dropoffInput = document.querySelector("[data-admin-booking-field='dropoff']");
+
+      if (!dropoffInput) {
+        return null;
+      }
+
+      const originalDropoff = dropoffInput.value;
+      const descriptor = Object.getOwnPropertyDescriptor(dropoffInput.constructor.prototype, "value");
+      descriptor?.set?.call(dropoffInput, "");
+      dropoffInput.dispatchEvent(new Event("input", { bubbles: true }));
+      dropoffInput.dispatchEvent(new Event("change", { bubbles: true }));
+
+      return {
+        label: dropoffInput.closest("label")?.textContent.replace(/\s+/g, " ").trim() || "",
+        originalDropoff,
+      };
+    })()`);
+    assert.ok(dspBlankDropoffState, "Expected the Admin DSP drop-off field to be available for the regression.");
+    assert.match(
+      dspBlankDropoffState.label,
+      /Drop-off \(optional for DSP\)/,
+      "Expected the existing Admin DSP field to identify final drop-off as optional.",
+    );
+
+    const dspBlankDropoffChecklist = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const tripCheck = document.querySelector(
+            "[data-admin-dispatch-release-check='trip-completeness']",
+          );
+          const detail = tripCheck
+            ?.querySelector("[data-admin-dispatch-release-check-detail]")
+            ?.textContent.replace(/\\s+/g, " ")
+            .trim() || "";
+
+          return !detail.includes("Drop-off missing") ? { detail } : false;
+        })()`),
+      10000,
+      "Admin DSP blank drop-off warning suppression",
+    );
+    assert.doesNotMatch(
+      dspBlankDropoffChecklist.detail,
+      /Drop-off missing/,
+      "Expected Admin DSP not to flag a blank final drop-off in red readiness wording.",
+    );
+
     const clickedStaleDriverJobLinkCreate = await waitForCondition(
       () =>
         evaluate(`(() => {
@@ -10051,6 +10098,14 @@ async function runChromeTest() {
 
       serviceTypeSelect.value = "MNG";
       serviceTypeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+
+      const dropoffInput = document.querySelector("[data-admin-booking-field='dropoff']");
+      if (dropoffInput) {
+        const descriptor = Object.getOwnPropertyDescriptor(dropoffInput.constructor.prototype, "value");
+        descriptor?.set?.call(dropoffInput, ${JSON.stringify(dspBlankDropoffState.originalDropoff)});
+        dropoffInput.dispatchEvent(new Event("input", { bubbles: true }));
+        dropoffInput.dispatchEvent(new Event("change", { bubbles: true }));
+      }
       return true;
     })()`);
     assert.equal(restoredSavedDriverJobLinkDraft, true);

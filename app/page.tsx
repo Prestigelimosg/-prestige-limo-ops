@@ -4520,7 +4520,7 @@ function getDispatchReleaseTripWarnings(booking: BookingForm) {
     warnings.push("Pickup missing");
   }
 
-  if (!clean(booking.dropoff)) {
+  if (!clean(booking.dropoff) && bookingType !== "DSP") {
     warnings.push("Drop-off missing");
   }
 
@@ -22742,7 +22742,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       clean(booking.vehicle);
     const pickupDateTime = formatPickupDateTime(booking.date, booking.time);
     const pickupLocation = clean(booking.pickup);
-    const dropoffLocation = clean(booking.dropoff);
+    const bookingType = normalizeBookingType(booking.bookingType);
+    const dropoffLocation =
+      clean(booking.dropoff) || (bookingType === "DSP" ? adminDraftDropoffFallback : "");
+    const driverJobRoute = [
+      pickupLocation || "Pickup",
+      clean(booking.extraStopLocation),
+      dropoffLocation || "Drop-off",
+    ].filter(Boolean).join(" > ");
     const passengerName = clean(booking.name);
 
     if (!bookingReference) {
@@ -22785,7 +22792,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       pickup_datetime: pickupDateTime,
       pickup_location: pickupLocation,
       pickup_time: formatPickupTime(booking.time),
-      route: route,
+      route: driverJobRoute,
       status: clean(dispatchReleaseAppliedStatus) || "assigned",
       waypoints: isDspItinerary
         ? itineraryDisplayStops.map((stop) => clean(stop.location)).filter(Boolean)
@@ -23847,6 +23854,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         : "";
     const isServiceTypeField = field === "bookingType";
     const isVehicleTypeField = field === "vehicle";
+    const displayFieldLabel =
+      field === "dropoff" && normalizeBookingType(booking.bookingType) === "DSP"
+        ? `${fieldLabels[field]} (optional for DSP)`
+        : fieldLabels[field];
 
     return (
       <div className={fieldContainerClass} key={field}>
@@ -23882,7 +23893,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           ) : (
             <>
               <span className="mb-0.5 block text-xs font-semibold text-slate-700">
-                {fieldLabels[field]}
+                {displayFieldLabel}
                 {requiredFields.includes(field) ? (
                   <span className="text-red-600"> *</span>
                 ) : null}
@@ -23900,7 +23911,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 data-admin-dispatch-dsp-end-date={field === "dspEndDate" ? "true" : undefined}
                 data-admin-dispatch-dsp-end-time={field === "dspEndTime" ? "true" : undefined}
                 onChange={(event) => update(field, event.target.value)}
-                placeholder={fieldLabels[field]}
+                placeholder={displayFieldLabel}
                 type={
                   field === "date" || field === "returnDate" || field === "dspEndDate"
                     ? "date"

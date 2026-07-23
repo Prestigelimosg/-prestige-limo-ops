@@ -760,6 +760,53 @@ try {
     "stage-4a-376-admin-only-safe-operational-adapter-v1",
   );
 
+  const hourlyWithoutDropoff = persistence.parseCustomerBookingRequestPayload(
+    customerPayload({
+      dropoffLocation: "",
+      serviceType: "Hourly / Disposal",
+    }),
+  );
+
+  assert.equal(
+    hourlyWithoutDropoff.ok,
+    true,
+    "Hourly / Disposal customer requests should accept a blank final drop-off.",
+  );
+  assert.equal(hourlyWithoutDropoff.data.booking.dropoff_location, "Drop-off To Confirm");
+  assert.equal(hourlyWithoutDropoff.data.booking.route_summary, "Gate Customer Pickup > Drop-off To Confirm");
+  assert.equal(hourlyWithoutDropoff.data.route_points.at(-1)?.location, "Drop-off To Confirm");
+
+  const returnHourlyWithoutDropoff = persistence.parseCustomerBookingRequestPayloads(
+    customerPayload({
+      dropoffLocation: "",
+      returnDropoffLocation: "",
+      returnPickupDate: "2030-07-09",
+      returnPickupLocation: "Gate Customer Return Pickup",
+      returnPickupTime: "18:30",
+      returnTripRequested: "yes",
+      serviceType: "Hourly / Disposal",
+    }),
+  );
+
+  assert.equal(
+    returnHourlyWithoutDropoff.ok,
+    true,
+    "Hourly / Disposal return requests should accept blank final drop-offs on both legs.",
+  );
+  assert.equal(returnHourlyWithoutDropoff.data.requests.length, 2);
+  assert.equal(returnHourlyWithoutDropoff.data.requests[1].booking.dropoff_location, "Drop-off To Confirm");
+
+  const transferWithoutDropoff = persistence.parseCustomerBookingRequestPayload(
+    customerPayload({
+      dropoffLocation: "",
+      serviceType: "Point-to-Point Transfer",
+    }),
+  );
+
+  assert.equal(transferWithoutDropoff.ok, false);
+  assert.equal(transferWithoutDropoff.status, 400);
+  assert.match(transferWithoutDropoff.error, /dropoffLocation/);
+
   for (const [label, flagValue] of [
     ["missing feature flag", undefined],
     ["false feature flag", "false"],

@@ -178,11 +178,11 @@ assert.equal(
 assertIncludes(driverJobPage, 'import Link from "next/link";', "Driver Job public information Link import");
 assert.deepEqual(
   hrefValues(driverJobPage),
-  ["/google-calendar", "/privacy", "/terms"],
+  ["/driver-portal", "/google-calendar", "/privacy", "/terms"],
   "Driver Job public information href allowlist",
 );
-assert.equal(countOccurrences(driverJobPage, "<Link"), 3, "Driver Job public information Link count");
-assert.equal(countOccurrences(driverJobPage, "</Link>"), 3, "Driver Job public information Link closing count");
+assert.equal(countOccurrences(driverJobPage, "<Link"), 4, "Driver Job public information Link count");
+assert.equal(countOccurrences(driverJobPage, "</Link>"), 4, "Driver Job public information Link closing count");
 const driverJobPageWithoutGoogleConsent = driverJobPage
   .replace('url.protocol === "https:"', "")
   .replace('url.hostname === "accounts.google.com"', "")

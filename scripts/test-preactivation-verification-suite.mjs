@@ -418,6 +418,10 @@ const guardChecks = [
     script: "scripts/test-public-client-navigation-boundary-guard.mjs",
   },
   {
+    label: "release hardening security guard",
+    script: "scripts/test-release-hardening-security-guard.mjs",
+  },
+  {
     label: "Driver Job demo Production privacy guard",
     script: "scripts/test-driver-job-demo-production-privacy-guard.mjs",
   },

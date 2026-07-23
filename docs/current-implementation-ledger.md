@@ -4,10 +4,10 @@ Latest verified clean runtime checkpoint:
 889acabe Harden production release boundaries
 
 Latest pushed main/staging runtime checkpoint:
-af377115 Allow DSP bookings without final drop-off
+889acabe Harden production release boundaries
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-37001971 Merge pull request #88 from Prestigelimosg/codex/fix-customer-push-numeric-account
+9226a28b Merge pull request #89 from Prestigelimosg/codex/fix-customer-push-numeric-account
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.

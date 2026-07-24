@@ -27,6 +27,7 @@ import { loadPublicCompanyProfile } from "../../lib/public-company-profile-adapt
 import { normalizeBookingType } from "../../lib/pricing";
 import {
   calculateCustomerDspInvoiceReview,
+  customerInvoiceCardOptionDefaultEnabled,
   type CustomerInvoiceRateSetupRecord,
 } from "../../lib/customer-dsp-invoice-review";
 import { formatCustomerInvoiceLineDescription } from "../../lib/customer-invoice-line-description";
@@ -2540,6 +2541,7 @@ export default function MockCustomerDashboardPage() {
   const plainInvoiceCrmRequestSequenceRef = useRef(0);
   const plainInvoiceRecipientRequestSequenceRef = useRef(0);
   const plainInvoiceSavedBookingRequestSequenceRef = useRef(0);
+  const plainInvoiceCardDefaultRequestSequenceRef = useRef(0);
   const customerInvoicePrepRowKeyRef = useRef("");
   const customerFolderUrlHandoffRef = useRef("");
   const customerFolderReturnHrefRef = useRef("");
@@ -5185,6 +5187,7 @@ export default function MockCustomerDashboardPage() {
             const exactCustomerName =
               String(exactBooking.customer_display_name ?? customerName).trim() || customerName;
             const exactBookerId = exactBooking.booker_id ?? targetBooking.booker_id ?? null;
+            const exactCompanyId = exactBooking.company_id ?? targetBooking.company_id ?? null;
             const exactTravelerId = exactBooking.traveler_id ?? targetBooking.traveler_id ?? null;
             const mismatchedCustomer = exactBookings.some(
               (booking, index) =>
@@ -5194,6 +5197,11 @@ export default function MockCustomerDashboardPage() {
             const mismatchedBooker = exactBookings.some(
               (booking, index) =>
                 (booking.booker_id ?? targetBookings[index]?.booker_id ?? null) !== exactBookerId,
+            );
+            const mismatchedCompany = exactBookings.some(
+              (booking, index) =>
+                (booking.company_id ?? targetBookings[index]?.company_id ?? null) !==
+                exactCompanyId,
             );
             const mismatchedTraveler = exactBookings.some(
               (booking, index) =>
@@ -5261,7 +5269,6 @@ export default function MockCustomerDashboardPage() {
                   .filter(Boolean),
               ),
             );
-
             if (
               mismatchedCustomer ||
               mismatchedBooker ||
@@ -5293,6 +5300,12 @@ export default function MockCustomerDashboardPage() {
               return;
             }
 
+            const cardOptionDefaultEnabled = mismatchedCompany
+              ? false
+              : await readCustomerInvoiceCardOptionDefault(
+                  exactCompanyId,
+                  exactTravelerId,
+                );
             const nextPlainInvoiceForm: PlainInvoiceForm = {
               ...plainInvoiceInitialForm(),
               amount: firstInvoiceRow.amountCents
@@ -5302,6 +5315,7 @@ export default function MockCustomerDashboardPage() {
               billToName: exactCustomerName,
               bookerId: exactBookerId,
               bookingReference: firstInvoiceRow.bookingReference,
+              cardPaymentEnabled: cardOptionDefaultEnabled,
               crmCustomerId: exactCustomerId,
               crmCustomerName: exactCustomerName,
               lineDescription: firstInvoiceRow.lineDescription,
@@ -5585,6 +5599,26 @@ export default function MockCustomerDashboardPage() {
     return result;
   }
 
+  async function readCustomerInvoiceCardOptionDefault(
+    companyId: number | null | undefined,
+    travelerId: number | null | undefined,
+  ) {
+    if (!companyId) {
+      return false;
+    }
+
+    try {
+      const rateSetup = await readAdminRateSetupForDspInvoice();
+
+      return customerInvoiceCardOptionDefaultEnabled(
+        { companyId, travelerId },
+        rateSetup,
+      );
+    } catch {
+      return false;
+    }
+  }
+
   async function prepareMonthlyBillingDspRowsForInvoice(rows: UnbilledCustomerRow[]) {
     const hasDspRows = rows.some(
       (row) => normalizeBookingType(row.bookingType || row.service) === "DSP",
@@ -5703,6 +5737,10 @@ export default function MockCustomerDashboardPage() {
 
     const overflowCount = Math.max(0, group.rows.length - preparedRows.length);
     const [firstRow, ...additionalRows] = preparedRows;
+    const cardOptionDefaultEnabled = await readCustomerInvoiceCardOptionDefault(
+      firstRow.companyId,
+      exactTravelerId,
+    );
     const referenceList = group.rows.map((row) => row.reference).filter(Boolean);
     const groupLabel = group.accountScopeLabel
       ? `${group.customerName} / ${group.accountScopeLabel}`
@@ -5715,7 +5753,7 @@ export default function MockCustomerDashboardPage() {
       bookerId: firstRow.bookerId,
       bookingReference: firstRow.reference,
       cardFeeApplies: false,
-      cardPaymentEnabled: false,
+      cardPaymentEnabled: cardOptionDefaultEnabled,
       crmCustomerId: group.customerId,
       crmCustomerName: group.customerName,
       dueDateIso: invoiceDateInputDaysFromNow(7),
@@ -5813,19 +5851,28 @@ export default function MockCustomerDashboardPage() {
     const shouldReadDriverActualTime = isHourlyCustomerInvoiceRow(row) && Boolean(bookingReference);
 
     setPreparingUnbilledCustomerRowKey(row.key);
+    customerInvoicePrepRowKeyRef.current = row.key;
+    const cardOptionDefaultEnabled = await readCustomerInvoiceCardOptionDefault(
+      row.companyId,
+      row.travelerId,
+    );
+
+    if (customerInvoicePrepRowKeyRef.current !== row.key) {
+      return;
+    }
+
     setPlainInvoiceSelectedJobReviewActive(false);
     setPlainInvoiceSelectedJobEditing(false);
     setPlainInvoiceIssuedRecord(null);
     setSelectedUnbilledCustomerRowKey(row.key);
     setCustomerInvoicePrepRowKey(row.key);
-    customerInvoicePrepRowKeyRef.current = row.key;
     setCustomerInvoiceWorkspaceTab("statements");
     setCustomerInvoiceIssueAmount(suggestedAmountCents ? row.amount.replace(/^\$/, "") : "");
     setCustomerInvoiceIssueDueDate(invoiceDateInputDaysFromNow(7));
     setCustomerInvoiceIssueStatus("Unpaid");
     setCustomerInvoiceDocumentType("invoice");
     setCustomerInvoiceRecipientEmail("");
-    setCustomerInvoiceCardPaymentEnabled(false);
+    setCustomerInvoiceCardPaymentEnabled(cardOptionDefaultEnabled);
     setCustomerInvoiceCardFeeApplies(false);
     setCustomerInvoicePreview(null);
     setCustomerInvoiceAdjustmentReason("");
@@ -6072,6 +6119,8 @@ export default function MockCustomerDashboardPage() {
       crmCustomerName: selectedAccount?.customerName || "",
       bookerId: null,
       bookingReference: "",
+      cardFeeApplies: false,
+      cardPaymentEnabled: false,
       recipientEmails: [],
       travelerId: null,
     }));
@@ -6115,7 +6164,9 @@ export default function MockCustomerDashboardPage() {
     }
   }
 
-  function updatePlainInvoiceSavedBooking(bookingReference: string) {
+  async function updatePlainInvoiceSavedBooking(bookingReference: string) {
+    const requestId = plainInvoiceCardDefaultRequestSequenceRef.current + 1;
+    plainInvoiceCardDefaultRequestSequenceRef.current = requestId;
     const selectedBooking = plainInvoiceSavedBookingOptions.find(
       (booking) => savedBookingReference(booking) === bookingReference,
     );
@@ -6123,6 +6174,8 @@ export default function MockCustomerDashboardPage() {
       ...currentForm,
       bookerId: selectedBooking?.booker_id ?? null,
       bookingReference: selectedBooking ? bookingReference : "",
+      cardFeeApplies: false,
+      cardPaymentEnabled: false,
       reference: selectedBooking ? bookingReference : currentForm.reference,
       travelerId: selectedBooking?.traveler_id ?? null,
     }));
@@ -6135,6 +6188,28 @@ export default function MockCustomerDashboardPage() {
         : "Choose an exact saved booking before issuing or emailing this invoice.",
     );
     setPlainInvoiceFeedbackTone(selectedBooking && !selectedBooking.booker_id ? "error" : "info");
+
+    if (!selectedBooking) {
+      return;
+    }
+
+    const cardOptionDefaultEnabled = await readCustomerInvoiceCardOptionDefault(
+      selectedBooking.company_id,
+      selectedBooking.traveler_id,
+    );
+
+    if (requestId !== plainInvoiceCardDefaultRequestSequenceRef.current) {
+      return;
+    }
+
+    setPlainInvoiceForm((currentForm) =>
+      currentForm.bookingReference === bookingReference
+        ? {
+            ...currentForm,
+            cardPaymentEnabled: cardOptionDefaultEnabled,
+          }
+        : currentForm,
+    );
   }
 
   function updatePlainInvoiceCrmSearchTerm(value: string) {

@@ -518,7 +518,13 @@ async function runChromeTest() {
           );
           const feedback = document.querySelector("[data-rate-feedback='override']");
 
-          if (!saveOverrideButton || !feedback || !feedback.textContent.includes("Enter at least one customer or driver rate override")) {
+          if (
+            !saveOverrideButton ||
+            !feedback ||
+            !feedback.textContent.includes(
+              "Enter a customer/driver rate or change the invoice card default",
+            )
+          ) {
             return false;
           }
 
@@ -637,6 +643,7 @@ async function runChromeTest() {
       window.__prestigeRateDuplicateStore = {
         companies: [
           {
+            card_option_default_enabled: false,
             id: 9001,
             company_name: duplicateCompanyName,
             domain: null,
@@ -759,9 +766,23 @@ async function runChromeTest() {
           input.dispatchEvent(new Event("change", { bubbles: true }));
           return input.value === value;
         };
+        const setCheckbox = (selector, checked) => {
+          const input = document.querySelector(selector);
+
+          if (!input) {
+            return false;
+          }
+
+          if (input.checked !== checked) {
+            input.click();
+          }
+
+          return input.checked === checked;
+        };
 
         return setLabeledInput("Company / Account", "DUPLICATE RATE SAFETY TEST") &&
           setLabeledInput("Boss / Name", "") &&
+          setCheckbox('[data-rate-card-option-default="true"]', true) &&
           setCustomerOverrideInput("MNG / Arrival E / AVF customer override", ${JSON.stringify(String(customerRate))}) &&
           setCustomerOverrideInput("DEP / Departure E / AVF customer override", "") &&
           setCustomerOverrideInput("TRF / Transfer E / AVF customer override", "") &&
@@ -827,7 +848,9 @@ async function runChromeTest() {
             (element) => element.querySelector("p")?.textContent.trim() === "DUPLICATE RATE SAFETY TEST",
           );
 
-          return rows.length === 1 && rows[0].innerText.includes("Customer: MNG E / AVF 90.00");
+          return rows.length === 1 &&
+            rows[0].innerText.includes("Customer: MNG E / AVF 90.00") &&
+            rows[0].innerText.includes("Card default: On");
         })()`),
       10000,
       "first duplicate rate override save refresh",
@@ -856,7 +879,8 @@ async function runChromeTest() {
             !feedback ||
             !feedback.textContent.includes("Override saved.") ||
             rows.length !== 1 ||
-            !rows[0].innerText.includes("Customer: MNG E / AVF 95.00")
+            !rows[0].innerText.includes("Customer: MNG E / AVF 95.00") ||
+            !rows[0].innerText.includes("Card default: On")
           ) {
             return false;
           }
@@ -881,6 +905,7 @@ async function runChromeTest() {
     );
     assert.equal(duplicateSaveState.rowCount, 1, "Expected same company override to appear once after repeated saves");
     assert.match(duplicateSaveState.rowText, /Customer: MNG E \/ AVF 95\.00/);
+    assert.match(duplicateSaveState.rowText, /Card default: On/);
     assert.equal(
       duplicateSaveState.updateCalls.length,
       2,
@@ -894,6 +919,19 @@ async function runChromeTest() {
     assert.ok(
       duplicateSaveState.updateCalls.every((call) => call.method === "PATCH"),
       `Expected duplicate saves to use PATCH updates, got ${duplicateSaveState.updateCalls.map((call) => call.method).join(", ")}`,
+    );
+    assert.ok(
+      duplicateSaveState.updateCalls.some(
+        (call) => call.payload?.card_option_default_enabled === true,
+      ),
+      "Expected the changed company override to persist the enabled invoice card default.",
+    );
+    assert.equal(
+      duplicateSaveState.updateCalls.some(
+        (call) => call.payload?.card_option_default_enabled === false,
+      ),
+      false,
+      "Expected a later rate-only save to preserve the enabled invoice card default.",
     );
     assert.ok(
       duplicateSaveState.distance <= 80,
@@ -930,13 +968,19 @@ async function runChromeTest() {
             (element) => element.querySelector("p")?.textContent.trim() === "DUPLICATE RATE SAFETY TEST",
           );
 
-          if (rows.length !== 1 || !rows[0].innerText.includes("Customer: MNG E / AVF 95.00")) {
+          if (
+            rows.length !== 1 ||
+            !rows[0].innerText.includes("Customer: MNG E / AVF 95.00") ||
+            !rows[0].innerText.includes("Card default: On")
+          ) {
             return false;
           }
 
           return {
             rowCount: rows.length,
             rowText: rows[0].innerText,
+            storedCardOptionDefault:
+              window.__prestigeRateDuplicateStore?.companies?.[0]?.card_option_default_enabled,
             storedCustomerRates: window.__prestigeRateDuplicateStore?.companies?.[0]?.customer_rates,
           };
         })()`),
@@ -945,6 +989,11 @@ async function runChromeTest() {
     );
     assert.equal(persistedOverrideState.rowCount, 1, "Expected one saved company override after reload");
     assert.match(persistedOverrideState.rowText, /Customer: MNG E \/ AVF 95\.00/);
+    assert.equal(
+      persistedOverrideState.storedCardOptionDefault,
+      true,
+      "Expected the account invoice card default to survive a fresh rate reload",
+    );
     assert.deepEqual(
       persistedOverrideState.storedCustomerRates,
       { MNG: { AVF: 95 } },
@@ -1027,13 +1076,18 @@ async function runChromeTest() {
       {},
       "Expected remove override PATCH to clear driver_payout_rules",
     );
+    assert.equal(
+      removeOverrideState.updateCalls.at(-1)?.payload?.card_option_default_enabled,
+      false,
+      "Expected remove override PATCH to clear the invoice card default",
+    );
     assert.deepEqual(
       removeOverrideState.unexpectedCalls,
       [],
       `Expected remove override mock to avoid inserts/unhandled calls, got ${removeOverrideState.unexpectedCalls.join(", ")}`,
     );
     assert.ok(
-      removeOverrideState.distance <= 120,
+      removeOverrideState.distance <= 140,
       `Expected remove override feedback near the clicked row, got ${removeOverrideState.distance}px`,
     );
     assert.equal(

@@ -554,6 +554,7 @@ type LoadBookingsFinancePayoutInternalFormFields = Pick<
 >;
 
 type CompanyRecord = {
+  card_option_default_enabled?: boolean | null;
   id: number;
   company_name: string | null;
   domain: string | null;
@@ -646,6 +647,7 @@ type AdminSavedBookingStatusResponse = {
 };
 
 type TravelerRecord = {
+  card_option_default_enabled?: boolean | null;
   id: number;
   company_id: number;
   traveler_name: string | null;
@@ -2524,6 +2526,8 @@ type CustomerMatchFeedback = Message & {
 type RateOverrideDraft = {
   companyName: string;
   bossName: string;
+  cardOptionDefaultEnabled: boolean;
+  cardOptionDefaultTouched: boolean;
   customerRates: RateRules;
   driverPayoutRules: DriverPayoutRules;
   transzendExcelPrivacy: boolean;
@@ -2693,6 +2697,8 @@ function dispatchSummaryUppercaseField(label: string): AdminOperationalUppercase
 const initialRateOverrideDraft: RateOverrideDraft = {
   companyName: "",
   bossName: "",
+  cardOptionDefaultEnabled: false,
+  cardOptionDefaultTouched: false,
   customerRates: {},
   driverPayoutRules: {},
   transzendExcelPrivacy: false,
@@ -5932,8 +5938,37 @@ function formatOverrideSummary(
   };
 }
 
-function hasRateOverrideValues(record: Pick<CompanyRecord, "customer_rates" | "driver_payout_rules">) {
-  return formatOverrideSummary(record.customer_rates, record.driver_payout_rules).hasOverrides;
+function hasRateOverrideValues(
+  record: Pick<
+    CompanyRecord,
+    "card_option_default_enabled" | "customer_rates" | "driver_payout_rules"
+  > & { company_id?: number },
+) {
+  const hasCardDefault =
+    record.company_id === undefined
+      ? record.card_option_default_enabled === true
+      : typeof record.card_option_default_enabled === "boolean";
+
+  return (
+    formatOverrideSummary(record.customer_rates, record.driver_payout_rules).hasOverrides ||
+    hasCardDefault
+  );
+}
+
+function cardOptionDefaultSummary(
+  record: Pick<CompanyRecord, "card_option_default_enabled"> & { company_id?: number },
+  companyRecord?: Pick<CompanyRecord, "card_option_default_enabled"> | null,
+) {
+  if (
+    record.company_id !== undefined &&
+    typeof record.card_option_default_enabled !== "boolean"
+  ) {
+    return `Card default: Company default (${
+      companyRecord?.card_option_default_enabled ? "On" : "Off"
+    })`;
+  }
+
+  return `Card default: ${record.card_option_default_enabled ? "On" : "Off"}`;
 }
 
 function hasCustomerRateOverrideValues(rules: RateRules) {
@@ -6189,6 +6224,7 @@ type FullDriverProfileRuntimeWriteResponse = {
 };
 
 type CompanyRateOverridePayloadInput = {
+  cardOptionDefaultEnabled?: boolean | null;
   customerRates: RateRules;
   driverPayoutRules: DriverPayoutRules;
   includeCustomerRates?: boolean;
@@ -6198,6 +6234,7 @@ type CompanyRateOverridePayloadInput = {
 };
 
 type TravelerRateOverridePayloadInput = {
+  cardOptionDefaultEnabled?: boolean | null;
   customerRates: RateRules;
   driverPayoutRules: DriverPayoutRules;
   includeCustomerRates?: boolean;
@@ -6602,6 +6639,7 @@ async function saveFullDriverProfileRuntime(
 }
 
 function buildCompanyRateOverridePayload({
+  cardOptionDefaultEnabled,
   customerRates,
   driverPayoutRules,
   includeCustomerRates = true,
@@ -6613,6 +6651,9 @@ function buildCompanyRateOverridePayload({
   const driverPayoutFields = buildCompanyDriverPayoutOverridePayload({ driverPayoutRules });
 
   return {
+    ...(cardOptionDefaultEnabled === undefined
+      ? {}
+      : { card_option_default_enabled: cardOptionDefaultEnabled }),
     ...(includeCustomerRates ? { customer_rates: customerRateFields.customer_rates } : {}),
     ...(includeDriverPayoutRules
       ? { driver_payout_rules: driverPayoutFields.driver_payout_rules }
@@ -6623,6 +6664,7 @@ function buildCompanyRateOverridePayload({
 }
 
 function buildTravelerRateOverridePayload({
+  cardOptionDefaultEnabled,
   customerRates,
   driverPayoutRules,
   includeCustomerRates = true,
@@ -6633,6 +6675,9 @@ function buildTravelerRateOverridePayload({
   const driverPayoutFields = buildTravelerDriverPayoutOverridePayload({ driverPayoutRules });
 
   return {
+    ...(cardOptionDefaultEnabled === undefined
+      ? {}
+      : { card_option_default_enabled: cardOptionDefaultEnabled }),
     ...(includeCustomerRates ? { customer_rates: customerRateFields.customer_rates } : {}),
     ...(includeDriverPayoutRules
       ? { driver_payout_rules: driverPayoutFields.driver_payout_rules }
@@ -6718,6 +6763,7 @@ function buildTravelerDriverPayoutOverridePayload({
 }
 
 function buildLegacyCompanyRateOverrideInsertPayload({
+  cardOptionDefaultEnabled,
   companyName,
   customerRates,
   driverPayoutRules,
@@ -6728,6 +6774,7 @@ function buildLegacyCompanyRateOverrideInsertPayload({
   return {
     ...buildCompanyCrmIdentityContactPayload(companyName),
     ...buildCompanyRateOverridePayload({
+      cardOptionDefaultEnabled,
       customerRates,
       driverPayoutRules,
       includeCustomerRates,
@@ -6738,6 +6785,7 @@ function buildLegacyCompanyRateOverrideInsertPayload({
 }
 
 function buildLegacyTravelerRateOverrideInsertPayload({
+  cardOptionDefaultEnabled,
   companyId,
   customerRates,
   driverPayoutRules,
@@ -6748,6 +6796,7 @@ function buildLegacyTravelerRateOverrideInsertPayload({
   return {
     ...buildTravelerCrmIdentityContactPayload(companyId, travelerName),
     ...buildTravelerRateOverridePayload({
+      cardOptionDefaultEnabled,
       customerRates,
       driverPayoutRules,
       includeCustomerRates,
@@ -18815,10 +18864,17 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     const overrideDriverPayoutRules = normalizeDriverPayoutRules(rateOverrideDraft.driverPayoutRules);
     const hasCustomerRateOverrides = hasCustomerRateOverrideValues(overrideCustomerRates);
     const hasDriverPayoutOverrides = hasDriverPayoutOverrideValues(overrideDriverPayoutRules);
-    const hasOverrideValues = formatOverrideSummary(
-      overrideCustomerRates,
-      overrideDriverPayoutRules,
-    ).hasOverrides;
+    const hasOverrideValues =
+      formatOverrideSummary(overrideCustomerRates, overrideDriverPayoutRules).hasOverrides ||
+      rateOverrideDraft.cardOptionDefaultTouched;
+    const companyCardOptionDefaultForWrite =
+      !bossName && rateOverrideDraft.cardOptionDefaultTouched
+        ? rateOverrideDraft.cardOptionDefaultEnabled
+        : undefined;
+    const travelerCardOptionDefaultForWrite =
+      bossName && rateOverrideDraft.cardOptionDefaultTouched
+        ? rateOverrideDraft.cardOptionDefaultEnabled
+        : undefined;
 
     if (!companyName && !bossName) {
       setMessage({
@@ -18839,7 +18895,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     if (!hasOverrideValues) {
       setMessage({
         tone: "error",
-        text: "Save rate override failed: Enter at least one customer or driver rate override before saving.",
+        text: "Save rate override failed: Enter a customer/driver rate or change the invoice card default before saving.",
       });
       return;
     }
@@ -18861,7 +18917,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       if (!company) {
         const existingCompany = await adminLegacyDataClient
           .from(adminLegacyTables.companies)
-          .select("id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy")
+          .select("id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy, card_option_default_enabled")
           .ilike("company_name", companyName || "Internal Account")
           .limit(1)
           .maybeSingle();
@@ -18885,6 +18941,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
         if (companyIdentity.recordId) {
           company = {
+            card_option_default_enabled: false,
             company_name: companyName || "Internal Account",
             customer_rates: {},
             domain: null,
@@ -18900,6 +18957,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         const createdCompany = await adminLegacyDataClient
           .from(adminLegacyTables.companies)
           .insert(buildLegacyCompanyRateOverrideInsertPayload({
+            cardOptionDefaultEnabled: companyCardOptionDefaultForWrite,
             companyName: companyName || "Internal Account",
             customerRates: bossName ? {} : overrideCustomerRates,
             driverPayoutRules: bossName ? {} : overrideDriverPayoutRules,
@@ -18907,7 +18965,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             includeDriverPayoutRules: !shouldDeferCompanyDriverPayoutToRuntime,
             transzendExcelPrivacy: rateOverrideDraft.transzendExcelPrivacy,
           }))
-          .select("id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy")
+          .select("id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy, card_option_default_enabled")
           .single();
 
         if (createdCompany.error) {
@@ -18965,6 +19023,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         .from(adminLegacyTables.companies)
         .update(
           buildCompanyRateOverridePayload({
+            cardOptionDefaultEnabled: companyCardOptionDefaultForWrite,
             customerRates: mergedCompanyRates,
             driverPayoutRules: mergedCompanyPayouts,
             includeCustomerRates: !companyCustomerRatesRuntime.saved,
@@ -18974,7 +19033,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           }),
         )
         .eq("id", company.id)
-        .select("id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy")
+        .select("id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy, card_option_default_enabled")
         .single();
 
       if (companyUpdate.error) {
@@ -18986,7 +19045,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       if (bossName) {
         const existingTraveler = await adminLegacyDataClient
           .from(adminLegacyTables.travelers)
-          .select("id, company_id, traveler_name, customer_rates, driver_payout_rules")
+          .select("id, company_id, traveler_name, customer_rates, driver_payout_rules, card_option_default_enabled")
           .eq("company_id", company.id)
           .ilike("traveler_name", bossName)
           .limit(1)
@@ -19040,6 +19099,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             .from(adminLegacyTables.travelers)
             .update(
               buildTravelerRateOverridePayload({
+                cardOptionDefaultEnabled: travelerCardOptionDefaultForWrite,
                 customerRates: mergedTravelerRates,
                 driverPayoutRules: mergedTravelerPayouts,
                 includeCustomerRates: !travelerCustomerRatesRuntime.saved,
@@ -19100,6 +19160,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               .from(adminLegacyTables.travelers)
               .update(
                 buildTravelerRateOverridePayload({
+                  cardOptionDefaultEnabled: travelerCardOptionDefaultForWrite,
                   customerRates: overrideCustomerRates,
                   driverPayoutRules: overrideDriverPayoutRules,
                   includeCustomerRates: !travelerCustomerRatesRuntime.saved,
@@ -19117,6 +19178,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               .from(adminLegacyTables.travelers)
               .insert(
                 buildLegacyTravelerRateOverrideInsertPayload({
+                  cardOptionDefaultEnabled: travelerCardOptionDefaultForWrite,
                   companyId: company.id,
                   customerRates: overrideCustomerRates,
                   driverPayoutRules: overrideDriverPayoutRules,
@@ -19125,7 +19187,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   travelerName: bossName,
                 }),
               )
-              .select("id, company_id, traveler_name, customer_rates, driver_payout_rules")
+              .select("id, company_id, traveler_name, customer_rates, driver_payout_rules, card_option_default_enabled")
               .single();
 
             if (createdTraveler.error) {
@@ -19164,6 +19226,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 .from(adminLegacyTables.travelers)
                 .update(
                   buildTravelerRateOverridePayload({
+                    cardOptionDefaultEnabled: travelerCardOptionDefaultForWrite,
                     customerRates: overrideCustomerRates,
                     driverPayoutRules: overrideDriverPayoutRules,
                     includeCustomerRates: !createdTravelerCustomerRatesRuntime.saved && hasCustomerRateOverrides,
@@ -19185,6 +19248,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       setRateOverrideDraft({
         companyName: companyName || "Internal Account",
         bossName,
+        cardOptionDefaultEnabled: rateOverrideDraft.cardOptionDefaultEnabled,
+        cardOptionDefaultTouched: false,
         customerRates: overrideCustomerRates,
         driverPayoutRules: overrideDriverPayoutRules,
         transzendExcelPrivacy: rateOverrideDraft.transzendExcelPrivacy,
@@ -19260,6 +19325,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       const { error } = await adminLegacyDataClient
         .from(adminLegacyTables.companies)
         .update(buildCompanyRateOverridePayload({
+          cardOptionDefaultEnabled: false,
           customerRates: {},
           driverPayoutRules: {},
           includeCustomerRates: !companyCustomerRatesRuntime.saved,
@@ -19275,7 +19341,12 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       setRateCompanies((current) =>
         current.map((candidate) =>
           candidate.id === companyRecord.id
-            ? { ...candidate, customer_rates: {}, driver_payout_rules: {} }
+            ? {
+                ...candidate,
+                card_option_default_enabled: false,
+                customer_rates: {},
+                driver_payout_rules: {},
+              }
             : candidate,
         ),
       );
@@ -19289,6 +19360,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
         return {
           ...current,
+          cardOptionDefaultEnabled: false,
+          cardOptionDefaultTouched: false,
           customerRates: {},
           driverPayoutRules: {},
         };
@@ -19357,6 +19430,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       const { error } = await adminLegacyDataClient
         .from(adminLegacyTables.travelers)
         .update(buildTravelerRateOverridePayload({
+          cardOptionDefaultEnabled: null,
           customerRates: {},
           driverPayoutRules: {},
           includeCustomerRates: !travelerCustomerRatesRuntime.saved,
@@ -19372,7 +19446,12 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       setRateTravelers((current) =>
         current.map((candidate) =>
           candidate.id === travelerRecord.id
-            ? { ...candidate, customer_rates: {}, driver_payout_rules: {} }
+            ? {
+                ...candidate,
+                card_option_default_enabled: null,
+                customer_rates: {},
+                driver_payout_rules: {},
+              }
             : candidate,
         ),
       );
@@ -19386,6 +19465,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
         return {
           ...current,
+          cardOptionDefaultEnabled: false,
+          cardOptionDefaultTouched: false,
           customerRates: {},
           driverPayoutRules: {},
         };
@@ -44357,7 +44438,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
           <div className="mt-6 border-t border-stone-200 pt-5">
             <h3 className="text-base font-semibold">Company / Boss Overrides</h3>
-            <div className="mt-3 grid gap-3 lg:grid-cols-4">
+            <div className="mt-3 grid gap-3 lg:grid-cols-5">
               <label>
                 <span className="mb-1 block text-sm font-medium text-slate-700">Company / Account</span>
                 <input
@@ -44392,6 +44473,26 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   type="checkbox"
                 />
                 Transzend privacy
+              </label>
+              <label className="flex items-end gap-2 pb-2 text-sm text-slate-700">
+                <input
+                  checked={rateOverrideDraft.cardOptionDefaultEnabled}
+                  data-rate-card-option-default="true"
+                  onChange={(event) =>
+                    setRateOverrideDraft((current) => ({
+                      ...current,
+                      cardOptionDefaultEnabled: event.target.checked,
+                      cardOptionDefaultTouched: true,
+                    }))
+                  }
+                  type="checkbox"
+                />
+                <span>
+                  Invoice card option on by default
+                  <span className="block text-[11px] font-normal text-slate-500">
+                    Company applies to all its invoices. Boss / Name may override it.
+                  </span>
+                </span>
               </label>
               <div className="self-end">
                 <button
@@ -44515,6 +44616,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                             <p className="font-medium">{companyRecord.company_name}</p>
                             <p className="text-xs text-slate-600">{summary.customerText}</p>
                             <p className="text-xs text-slate-600">{summary.driverText}</p>
+                            <p className="text-xs text-slate-600">
+                              {cardOptionDefaultSummary(companyRecord)}
+                            </p>
                             <div className="mt-3 grid gap-2 sm:grid-cols-2">
                               <button
                                 className="h-9 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
@@ -44523,6 +44627,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                                   setRateOverrideDraft({
                                     companyName: clean(companyRecord.company_name),
                                     bossName: "",
+                                    cardOptionDefaultEnabled: Boolean(
+                                      companyRecord.card_option_default_enabled,
+                                    ),
+                                    cardOptionDefaultTouched: false,
                                     customerRates: normalizeCustomerRateRules(companyRecord.customer_rates),
                                     driverPayoutRules: normalizeDriverPayoutRules(companyRecord.driver_payout_rules),
                                     transzendExcelPrivacy: Boolean(companyRecord.transzend_excel_privacy),
@@ -44604,6 +44712,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                             </p>
                             <p className="text-xs text-slate-600">{summary.customerText}</p>
                             <p className="text-xs text-slate-600">{summary.driverText}</p>
+                            <p className="text-xs text-slate-600">
+                              {cardOptionDefaultSummary(travelerRecord, companyRecord)}
+                            </p>
                             <div className="mt-3 grid gap-2 sm:grid-cols-2">
                               <button
                                 className="h-9 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
@@ -44612,6 +44723,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                                   setRateOverrideDraft({
                                     companyName: clean(companyRecord?.company_name),
                                     bossName: clean(travelerRecord.traveler_name),
+                                    cardOptionDefaultEnabled:
+                                      typeof travelerRecord.card_option_default_enabled === "boolean"
+                                        ? travelerRecord.card_option_default_enabled
+                                        : Boolean(companyRecord?.card_option_default_enabled),
+                                    cardOptionDefaultTouched: false,
                                     customerRates: normalizeCustomerRateRules(travelerRecord.customer_rates),
                                     driverPayoutRules: normalizeDriverPayoutRules(travelerRecord.driver_payout_rules),
                                     transzendExcelPrivacy: Boolean(companyRecord?.transzend_excel_privacy),

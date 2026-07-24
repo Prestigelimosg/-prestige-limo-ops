@@ -296,6 +296,7 @@ try {
     const successMock = installMockClient({
       companies: [
         {
+          card_option_default_enabled: true,
           company_name: "Safe Corporate Account",
           customer_rates: { MNG: 88, OTHER: 999 },
           domain: "safe.example",
@@ -325,6 +326,7 @@ try {
       ],
       travelers: [
         {
+          card_option_default_enabled: false,
           company_id: 10,
           customer_rates: { MNG: 95, INTERNAL: 999 },
           driver_payout_rules: { MNG: { max: 80, min: 70 }, INTERNAL: { amount: 2 } },
@@ -344,6 +346,8 @@ try {
     assert.equal(success.status, 200);
     assert.equal(success.body.ok, true);
     assert.equal(success.body.settings.customer_rates.HIDDEN, undefined);
+    assert.equal(success.body.companies[0].card_option_default_enabled, true);
+    assert.equal(success.body.travelers[0].card_option_default_enabled, false);
     assert.equal(success.body.companies[0].customer_rates.OTHER, undefined);
     assert.equal(success.body.travelers[0].driver_payout_rules.INTERNAL, undefined);
     assert.deepEqual(success.body.settings.driver_payout_rules.DSP, {
@@ -370,14 +374,14 @@ try {
           filters: [],
           orderBy: [{ column: "company_name", options: { ascending: true } }],
           selectedColumns:
-            "id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy",
+            "id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy, card_option_default_enabled",
           table: "companies",
         },
         {
           filters: [],
           orderBy: [{ column: "traveler_name", options: { ascending: true } }],
           selectedColumns:
-            "id, company_id, booker_id, booker_name, traveler_name, customer_rates, driver_payout_rules",
+            "id, company_id, booker_id, booker_name, traveler_name, customer_rates, driver_payout_rules, card_option_default_enabled",
           table: "travelers",
         },
       ],

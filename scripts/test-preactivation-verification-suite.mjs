@@ -70,6 +70,10 @@ const guardChecks = [
     script: "scripts/test-customer-folder-price-review-guard.mjs",
   },
   {
+    label: "customer card-option default override guard",
+    script: "scripts/test-customer-card-option-default-override-guard.mjs",
+  },
+  {
     label: "customer invoice multi-recipient email guard",
     script: "scripts/test-customer-invoice-multi-recipient-email-guard.mjs",
   },

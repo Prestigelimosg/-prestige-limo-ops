@@ -10,6 +10,7 @@ import {
 
 export type CustomerInvoiceRateSetupRecord = {
   companies?: Array<{
+    card_option_default_enabled?: boolean | null;
     customer_rates?: RateRules | null;
     driver_payout_rules?: DriverPayoutRules | null;
     id?: number | null;
@@ -25,6 +26,7 @@ export type CustomerInvoiceRateSetupRecord = {
     midnight_surcharge: number | null;
   }> | null;
   travelers?: Array<{
+    card_option_default_enabled?: boolean | null;
     company_id?: number | null;
     customer_rates?: RateRules | null;
     driver_payout_rules?: DriverPayoutRules | null;
@@ -41,6 +43,28 @@ export type CustomerDspInvoiceReviewInput = {
   travelerId: number | null | undefined;
   vehicleType: string | null | undefined;
 };
+
+export function customerInvoiceCardOptionDefaultEnabled(
+  input: Pick<CustomerDspInvoiceReviewInput, "companyId" | "travelerId">,
+  rateSetup: CustomerInvoiceRateSetupRecord,
+) {
+  const companyRecord =
+    rateSetup.companies?.find((company) => company.id === input.companyId) || null;
+  const travelerRecord =
+    input.companyId && input.travelerId
+      ? rateSetup.travelers?.find(
+          (traveler) =>
+            traveler.id === input.travelerId &&
+            traveler.company_id === input.companyId,
+        ) || null
+      : null;
+
+  if (typeof travelerRecord?.card_option_default_enabled === "boolean") {
+    return travelerRecord.card_option_default_enabled;
+  }
+
+  return companyRecord?.card_option_default_enabled === true;
+}
 
 export type CustomerInvoiceRateReviewInput = CustomerDspInvoiceReviewInput & {
   bookingType: string | null | undefined;

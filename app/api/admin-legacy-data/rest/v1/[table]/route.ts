@@ -82,6 +82,7 @@ const allowedColumnsByTable: Record<string, Set<string>> = {
     "booker_email",
     "customer_rates",
     "driver_payout_rules",
+    "card_option_default_enabled",
     "created_at",
     "updated_at",
   ]),

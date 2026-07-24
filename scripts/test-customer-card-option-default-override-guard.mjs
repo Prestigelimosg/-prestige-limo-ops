@@ -58,7 +58,15 @@ for (const fragment of [
   includes(adminPage, fragment, `Rates override ${fragment}`);
 }
 
-includes(legacyRoute, '"card_option_default_enabled"', "legacy exact-column allowlist");
+const travelerAllowlist = legacyRoute.match(
+  /travelers:\s*new Set\(\[([\s\S]*?)\]\),/,
+)?.[1];
+assert.ok(travelerAllowlist, "legacy traveler allowlist must remain present");
+includes(
+  travelerAllowlist,
+  '"card_option_default_enabled"',
+  "legacy traveler card-default PATCH allowlist",
+);
 
 for (const fragment of [
   "export function customerInvoiceCardOptionDefaultEnabled",

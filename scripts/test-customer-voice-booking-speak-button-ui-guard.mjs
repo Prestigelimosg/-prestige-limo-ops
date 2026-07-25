@@ -176,7 +176,7 @@ for (const forbidden of [
 }
 
 for (const fragment of [
-  "submitCustomerBookingRequest(form)",
+  "submitCustomerBookingRequest(form, {",
   'data-customer-booking-submit="true"',
   "type=\"submit\"",
 ]) {

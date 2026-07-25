@@ -322,7 +322,7 @@ for (const fragment of [
   'data-customer-voice-booking-draft-fill="local-only"',
   "voiceTranscriptRef",
   "applyCustomerBookingLocalVoiceDraftFieldFillToForm",
-  "submitCustomerBookingRequest(form)",
+  "submitCustomerBookingRequest(form, {",
 ]) {
   assertIncludes(bookPage, fragment, `/book field-fill evidence ${fragment}`);
 }

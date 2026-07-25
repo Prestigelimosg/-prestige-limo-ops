@@ -33229,6 +33229,8 @@ async function runChromeTest() {
               const rect = trigger?.getBoundingClientRect();
               return Boolean(rect && rect.width > 0 && rect.height >= 40);
             })(),
+            nativeSuggestionList:
+              document.querySelector("[data-customer-booking-new-passenger-input]")?.getAttribute("list") || "",
             newPassengerInputVisible: (() => {
               const input = document.querySelector("[data-customer-booking-new-passenger-input]");
               const rect = input?.getBoundingClientRect();
@@ -33540,6 +33542,7 @@ async function runChromeTest() {
           alignedWithFlightNumber: true,
           fieldValue: "",
           menuTriggerVisible: true,
+          nativeSuggestionList: "",
           newPassengerInputVisible: true,
           required: true,
           value: "",

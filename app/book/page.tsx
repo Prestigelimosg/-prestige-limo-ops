@@ -1115,7 +1115,11 @@ export default function CustomerBookingPage() {
                       data-customer-booking-field="passengerName"
                       data-customer-booking-memory-passenger-input="true"
                       data-customer-booking-new-passenger-input="true"
-                      list={bookingMemorySuggestions.length > 0 ? bookingMemoryPassengerListId : undefined}
+                      list={
+                        registeredTravelers.length === 0 && bookingMemorySuggestions.length > 0
+                          ? bookingMemoryPassengerListId
+                          : undefined
+                      }
                       name="passengerName"
                       onChange={(event) => updatePassengerName(event.target.value)}
                       onFocus={ensureBookingMemorySuggestions}

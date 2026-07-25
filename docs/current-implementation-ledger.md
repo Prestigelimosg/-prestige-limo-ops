@@ -9380,3 +9380,11 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The server-side traveller validation, Customer Portal scope, booking-memory suggestions, booking request payload, CRM/customer creation or reuse, Admin alert, OTP/invitation gates, and booking persistence remain unchanged. A manually typed passenger still does not create, rename, overwrite, or impersonate a CRM traveller.
 - Invoice/billing, payments, payouts, PayNow, Driver Job, acknowledgement, Calendar, GPS, messages, notifications, provider configuration, environment values, Supabase schema/data, and every other established workflow remain unchanged.
 - Focused protection remains `scripts/test-customer-rebooking-permanent-link-receipt-guard.mjs`, with browser runtime coverage in `scripts/test-app-smoke-browser.mjs`.
+
+### Single-Field Passenger Dropdown Collision Repair
+
+- Production Chrome visual inspection reproduced two dropdown systems on the returning-customer Passenger name field: the native booking-memory datalist and the registered-traveller menu opened together, producing two arrows and overlapping suggestion boxes.
+- The same Passenger name input now attaches the native booking-memory datalist only when no registered CRM travellers are available. When registered travellers exist, the established contained registered-traveller menu is the only dropdown attached to the field.
+- The booking-memory datalist remains unchanged for customers without registered travellers. Exact registered-traveller selection still sets the verified `travelerId`, and manual typing still clears it.
+- No API, CRM identity rule, persistence helper, OTP/invitation gate, booking request payload, invoice/billing, pricing, payment, payout, Driver Job, notification, provider, environment value, Supabase schema/data, or other wired lane changed.
+- Focused protection remains `scripts/test-customer-rebooking-permanent-link-receipt-guard.mjs`, with the returning-customer browser assertion in `scripts/test-app-smoke-browser.mjs`.

@@ -136,6 +136,11 @@ assert.match(
   /data-customer-booking-traveler-option=\{traveler\.id\}[\s\S]*?onClick=\{\(\) => selectRegisteredTraveler\(String\(traveler\.id\)\)\}/,
   "A registered traveller ID must be set only by an explicit saved-traveller option click.",
 );
+assert.match(
+  files[bookingPage],
+  /list=\{\s*registeredTravelers\.length === 0 && bookingMemorySuggestions\.length > 0[\s\S]*?\? bookingMemoryPassengerListId\s*:\s*undefined\s*\}/,
+  "The native booking-memory suggestion list must not attach while the registered-traveller menu is available.",
+);
 assert.equal(
   files[bookingPage].includes("Your old saved portal access was cleared."),
   false,
